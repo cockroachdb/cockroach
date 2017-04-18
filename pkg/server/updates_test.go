@@ -64,7 +64,7 @@ func TestCheckVersion(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	s.(*TestServer).checkForUpdates(time.Minute)
 	recorder.Close()
-	s.Stopper().Stop()
+	s.Stopper().Stop(context.TODO())
 
 	if expected, actual := int32(1), atomic.LoadInt32(&updateChecks); actual != expected {
 		t.Fatalf("expected %v update checks, got %v", expected, actual)
@@ -170,6 +170,6 @@ func TestReportUsage(t *testing.T) {
 		return nil
 	})
 
-	ts.Stopper().Stop() // stopper will wait for the update/report loop to finish too.
+	ts.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
 	recorder.Close()
 }

@@ -307,7 +307,7 @@ func main() {
 	edgeSet := make(map[string]edge)
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	n := simulation.NewNetwork(stopper, nodeCount, true)
 	n.SimulateNetwork(

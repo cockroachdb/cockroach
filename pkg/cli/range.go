@@ -74,7 +74,7 @@ func runLsRanges(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 
 	rows, err := kvDB.Scan(context.Background(), startKey, endKey, maxResults)
 	if err != nil {
@@ -117,7 +117,7 @@ func runSplitRange(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 	return errors.Wrap(kvDB.AdminSplit(context.Background(), key), "split failed")
 }
 

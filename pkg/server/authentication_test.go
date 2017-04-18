@@ -18,6 +18,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -86,7 +87,7 @@ func (insecureCtx) HTTPRequestScheme() string {
 func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// HTTPS with client certs for security.RootUser.
 	rootCertsContext := testutils.NewTestBaseContext(security.RootUser)

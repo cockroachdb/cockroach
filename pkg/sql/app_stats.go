@@ -238,7 +238,7 @@ var StmtStatsResetFrequency = envutil.EnvOrDefaultDuration(
 // periodically, so as to avoid memory blow-ups.
 func (s *sqlStats) startResetWorker(stopper *stop.Stopper) {
 	ctx := log.WithLogTag(context.Background(), "sql-stats", nil)
-	stopper.RunWorker(func() {
+	stopper.RunWorker(ctx, func() {
 		ticker := time.NewTicker(StmtStatsResetFrequency)
 		defer ticker.Stop()
 		for {

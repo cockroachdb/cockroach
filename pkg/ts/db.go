@@ -81,7 +81,7 @@ func (db *DB) PollSource(
 // start begins the goroutine for this poller, which will periodically request
 // time series data from the DataSource and store it.
 func (p *poller) start() {
-	p.stopper.RunWorker(func() {
+	p.stopper.RunWorker(context.TODO(), func() {
 		// Poll once immediately.
 		p.poll()
 		ticker := time.NewTicker(p.frequency)
@@ -100,7 +100,7 @@ func (p *poller) start() {
 // poll retrieves data from the underlying DataSource a single time, storing any
 // returned time series data on the server.
 func (p *poller) poll() {
-	if err := p.stopper.RunTask(func() {
+	if err := p.stopper.RunTask(context.TODO(), func() {
 		data := p.source.GetTimeSeriesData()
 		if len(data) == 0 {
 			return

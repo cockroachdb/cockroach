@@ -52,7 +52,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 				UseDatabase: "t",
 			},
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	rowRanges, _ := setupRanges(
 		tc.Conns[0], tc.Servers[0], tc.Servers[0].KVClient().(*client.DB), t)
@@ -198,7 +198,7 @@ func TestSpanResolver(t *testing.T) {
 	s, db, cdb := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "t",
 	})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := distsqlplan.NewSpanResolver(
@@ -291,7 +291,7 @@ func TestMixedDirections(t *testing.T) {
 	s, db, cdb := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "t",
 	})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := distsqlplan.NewSpanResolver(

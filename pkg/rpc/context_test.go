@@ -70,7 +70,7 @@ func TestHeartbeatCB(t *testing.T) {
 	for _, compression := range []bool{false, true} {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
-			defer stopper.Stop()
+			defer stopper.Stop(context.TODO())
 
 			clock := hlc.NewClock(time.Unix(0, 20).UnixNano, time.Nanosecond)
 			serverCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
@@ -112,7 +112,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
@@ -223,7 +223,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	}
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
@@ -248,14 +248,14 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		mu.conns = append(mu.conns, conn)
 		mu.Unlock()
 	}}
-	stopper.RunWorker(func() {
+	stopper.RunWorker(context.TODO(), func() {
 		<-stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
 		<-stopper.ShouldStop()
 		s.Stop()
 	})
 
-	stopper.RunWorker(func() {
+	stopper.RunWorker(context.TODO(), func() {
 		netutil.FatalIfUnexpected(s.Serve(ln))
 	})
 
@@ -344,7 +344,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	serverTime := time.Unix(0, 20)
 	serverClock := hlc.NewClock(serverTime.UnixNano, time.Nanosecond)
@@ -401,7 +401,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
@@ -479,7 +479,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	const maxOffset = 100 * time.Millisecond
 
@@ -563,7 +563,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	clock := hlc.NewClock(time.Unix(0, 20).UnixNano, time.Nanosecond)
 	serverCtx := NewContext(

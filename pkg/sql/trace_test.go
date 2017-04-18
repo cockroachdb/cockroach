@@ -24,6 +24,8 @@ import (
 	"testing"
 	"text/tabwriter"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -84,7 +86,7 @@ func TestExplainTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`CREATE DATABASE test; CREATE TABLE test.foo (id INT PRIMARY KEY)`); err != nil {
 		t.Fatal(err)

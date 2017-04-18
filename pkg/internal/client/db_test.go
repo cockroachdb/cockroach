@@ -77,7 +77,7 @@ func checkLen(t *testing.T, expected, count int) {
 func TestDB_Get(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	result, err := db.Get(context.TODO(), "aa")
 	if err != nil {
@@ -89,7 +89,7 @@ func TestDB_Get(t *testing.T) {
 func TestDB_Put(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
 	if err := db.Put(context.TODO(), "aa", "1"); err != nil {
@@ -105,7 +105,7 @@ func TestDB_Put(t *testing.T) {
 func TestDB_CPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
 	if err := db.Put(ctx, "aa", "1"); err != nil {
@@ -151,7 +151,7 @@ func TestDB_CPut(t *testing.T) {
 func TestDB_InitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
 	if err := db.InitPut(ctx, "aa", "1"); err != nil {
@@ -173,7 +173,7 @@ func TestDB_InitPut(t *testing.T) {
 func TestDB_Inc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
 	if _, err := db.Inc(ctx, "aa", 100); err != nil {
@@ -189,7 +189,7 @@ func TestDB_Inc(t *testing.T) {
 func TestBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	b := &client.Batch{}
 	b.Get("aa")
@@ -208,7 +208,7 @@ func TestBatch(t *testing.T) {
 func TestDB_Scan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	b := &client.Batch{}
 	b.Put("aa", "1")
@@ -233,7 +233,7 @@ func TestDB_Scan(t *testing.T) {
 func TestDB_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	b := &client.Batch{}
 	b.Put("aa", "1")
@@ -258,7 +258,7 @@ func TestDB_ReverseScan(t *testing.T) {
 func TestDB_Del(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	b := &client.Batch{}
 	b.Put("aa", "1")
@@ -285,7 +285,7 @@ func TestDB_Del(t *testing.T) {
 func TestTxn_Commit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
@@ -313,7 +313,7 @@ func TestTxn_Commit(t *testing.T) {
 func TestDB_Put_insecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
 	if err := db.Put(context.TODO(), "aa", "1"); err != nil {
@@ -329,7 +329,7 @@ func TestDB_Put_insecure(t *testing.T) {
 func TestDebugName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		const expected = "unnamed"

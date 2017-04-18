@@ -197,7 +197,7 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 //		params, cmdFilters := createTestServerParams()
 //		params.Knobs.SQLExecutor = aborter.executorKnobs()
 //		s, sqlDB, _ := serverutils.StartServer(t, params)
-//		defer s.Stopper().Stop()
+//		defer s.Stopper().Stop(context.TODO())
 //		{
 //			pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestTxnAutoRetry", url.User(security.RootUser)
 //			defer cleanup()
@@ -430,7 +430,7 @@ func TestTxnAutoRetry(t *testing.T) {
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	{
 		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestTxnAutoRetry", url.User(security.RootUser))
 		defer cleanup()
@@ -588,7 +588,7 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	{
 		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestAbortedTxnOnlyRetriedOnce", url.User(security.RootUser))
 		defer cleanup()
@@ -715,7 +715,7 @@ func TestTxnUserRestart(t *testing.T) {
 	params, cmdFilters := createTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	{
 		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestTxnUserRestart", url.User(security.RootUser))
 		defer cleanup()
@@ -814,7 +814,7 @@ func TestCommitWaitState(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 `); err != nil {
@@ -850,7 +850,7 @@ func TestErrorOnCommitFinalizesTxn(t *testing.T) {
 	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	{
 		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestErrorOnCommitFinalizesTxn", url.User(security.RootUser))
 		defer cleanup()
@@ -931,7 +931,7 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// ROLLBACK TO SAVEPOINT with a wrong name
 	_, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT foo")
@@ -970,7 +970,7 @@ func TestNonRetriableError(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1014,7 +1014,7 @@ func TestRollbackInRestartWait(t *testing.T) {
 	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	{
 		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestRollbackInRestartWait", url.User(security.RootUser))
 		defer cleanup()
@@ -1063,7 +1063,7 @@ func TestNonRetryableError(t *testing.T) {
 
 	params, cmdFilters := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	testKey := []byte("test_key")
 	hitError := false
@@ -1102,7 +1102,7 @@ func TestNonRetryableErrorOnCommit(t *testing.T) {
 
 	params, cmdFilters := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	hitError := false
 	cleanupFilter := cmdFilters.AppendFilter(
@@ -1166,7 +1166,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	params, _ := createTestServerParams()
 	params.Knobs.Store = testingKnobs
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	var restartDone int32
 	cleanupFilter := cmdFilters.AppendFilter(
@@ -1223,7 +1223,7 @@ func TestRetryableErrorForWrongTxn(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);

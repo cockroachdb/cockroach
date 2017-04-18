@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -35,7 +36,7 @@ func TestSettingsRefresh(t *testing.T) {
 	defer cleanup()
 
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	db := sqlutils.MakeSQLRunner(t, rawDB)
 

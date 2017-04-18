@@ -541,7 +541,7 @@ func (t *logicTest) close() {
 	t.cleanupFuncs = nil
 
 	if t.cluster != nil {
-		t.cluster.Stopper().Stop()
+		t.cluster.Stopper().Stop(context.TODO())
 		t.cluster = nil
 	}
 	if t.clients != nil {

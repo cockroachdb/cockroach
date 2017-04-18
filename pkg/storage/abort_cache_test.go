@@ -61,7 +61,7 @@ func createTestAbortCache(
 func TestAbortCachePutGetClearData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 	sc, e := createTestAbortCache(t, 1, stopper)
 	// Start with a get for an uncached id.
 	entry := roachpb.AbortCacheEntry{}
@@ -102,7 +102,7 @@ func TestAbortCachePutGetClearData(t *testing.T) {
 func TestAbortCacheEmptyParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 	sc, e := createTestAbortCache(t, 1, stopper)
 
 	entry := roachpb.AbortCacheEntry{
@@ -121,7 +121,7 @@ func TestAbortCacheEmptyParams(t *testing.T) {
 func TestAbortCacheCopyInto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 	rc1, e := createTestAbortCache(t, 1, stopper)
 	rc2, _ := createTestAbortCache(t, 2, stopper)
 
@@ -155,7 +155,7 @@ func TestAbortCacheCopyInto(t *testing.T) {
 func TestAbortCacheCopyFrom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 	rc1, e := createTestAbortCache(t, 1, stopper)
 	rc2, _ := createTestAbortCache(t, 2, stopper)
 

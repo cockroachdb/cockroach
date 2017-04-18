@@ -26,6 +26,8 @@ import (
 	"syscall"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -61,7 +63,7 @@ func TestRotateCerts(t *testing.T) {
 		SSLCertsDir: certsDir,
 	}
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// Client test function.
 	clientTest := func(httpClient http.Client) error {

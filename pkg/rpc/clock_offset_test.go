@@ -166,7 +166,7 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 func TestClockOffsetMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, 20*time.Nanosecond)
 	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
