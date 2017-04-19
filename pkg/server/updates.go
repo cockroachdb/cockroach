@@ -101,7 +101,7 @@ type storeInfo struct {
 // PeriodicallyCheckForUpdates starts a background worker that periodically
 // phones home to check for updates and report usage.
 func (s *Server) PeriodicallyCheckForUpdates() {
-	s.stopper.RunWorker(context.TODO(), func() {
+	s.stopper.RunWorker(context.TODO(), func(context.Context) {
 		startup := timeutil.Now()
 		var nextUpdateCheck, nextDiagnosticReport time.Time
 

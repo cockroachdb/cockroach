@@ -637,7 +637,7 @@ func (n *Node) connectGossip(ctx context.Context) error {
 // information. Starts a goroutine to loop until the node is closed.
 func (n *Node) startGossip(stopper *stop.Stopper) {
 	ctx := n.AnnotateCtx(context.Background())
-	stopper.RunWorker(ctx, func() {
+	stopper.RunWorker(ctx, func(ctx context.Context) {
 		// This should always return immediately and acts as a sanity check that we
 		// don't try to gossip before we're connected.
 		select {
@@ -693,7 +693,7 @@ func (n *Node) gossipStores(ctx context.Context) {
 // maintained.
 func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.Duration) {
 	ctx := n.AnnotateCtx(context.Background())
-	stopper.RunWorker(ctx, func() {
+	stopper.RunWorker(ctx, func(ctx context.Context) {
 		// Compute periodic stats at the same frequency as metrics are sampled.
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -726,7 +726,7 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 func (n *Node) startWriteSummaries(frequency time.Duration) {
 	ctx := log.WithLogTag(n.AnnotateCtx(context.Background()), "summaries", nil)
 	// Immediately record summaries once on server startup.
-	n.stopper.RunWorker(ctx, func() {
+	n.stopper.RunWorker(ctx, func(ctx context.Context) {
 		// Write a status summary immediately; this helps the UI remain
 		// responsive when new nodes are added.
 		if err := n.writeSummaries(ctx); err != nil {
@@ -751,7 +751,7 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 // NodeStatusRecorder and persists them to the cockroach data store.
 func (n *Node) writeSummaries(ctx context.Context) error {
 	var err error
-	if runErr := n.stopper.RunTask(ctx, func() {
+	if runErr := n.stopper.RunTask(ctx, func(ctx context.Context) {
 		err = n.recorder.WriteStatusSummary(ctx, n.storeCfg.DB)
 	}); runErr != nil {
 		err = runErr
@@ -774,8 +774,8 @@ func (n *Node) recordJoinEvent() {
 		lastUp = n.startedAt
 	}
 
-	n.stopper.RunWorker(context.TODO(), func() {
-		ctx, span := n.AnnotateCtxWithSpan(context.Background(), "record-join-event")
+	n.stopper.RunWorker(context.Background(), func(bgCtx context.Context) {
+		ctx, span := n.AnnotateCtxWithSpan(bgCtx, "record-join-event")
 		defer span.Finish()
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = n.stopper.ShouldStop()
@@ -826,10 +826,9 @@ func (n *Node) batchInternal(
 
 	var br *roachpb.BatchResponse
 
-	if err := n.stopper.RunTaskWithErr(ctx, func() error {
+	if err := n.stopper.RunTaskWithErr(ctx, func(ctx context.Context) error {
 		var finishSpan func(*roachpb.BatchResponse)
 		// Shadow ctx from the outer function. Written like this to pass the linter.
-		ctx := ctx
 		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, args.TraceContext)
 		defer func(br **roachpb.BatchResponse) {
 			finishSpan(*br)

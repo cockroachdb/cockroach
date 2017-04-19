@@ -200,7 +200,7 @@ func NewTxnCoordSender(
 	tc.txnMu.txns = map[uuid.UUID]*txnMetadata{}
 
 	ctx := tc.AnnotateCtx(context.Background())
-	tc.stopper.RunWorker(ctx, func() {
+	tc.stopper.RunWorker(ctx, func(ctx context.Context) {
 		tc.printStatsLoop(ctx)
 	})
 	return tc
