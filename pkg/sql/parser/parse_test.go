@@ -212,6 +212,7 @@ func TestParse(t *testing.T) {
 		{`SHOW SYNTAX`},
 
 		{`SHOW CLUSTER SETTING a`},
+		{`SHOW CLUSTER SETTING all`},
 
 		{`SHOW DATABASES`},
 		{`SHOW TABLES`},
@@ -914,6 +915,8 @@ func TestParse2(t *testing.T) {
 			`BACKUP DATABASE foo TO 'bar.12' INCREMENTAL FROM 'baz.34'`},
 		{`RESTORE DATABASE foo FROM bar`,
 			`RESTORE DATABASE foo FROM 'bar'`},
+
+		{`SHOW ALL CLUSTER SETTINGS`, `SHOW CLUSTER SETTING all`},
 	}
 	for _, d := range testData {
 		stmts, err := parse(d.sql)

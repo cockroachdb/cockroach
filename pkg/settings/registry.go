@@ -27,7 +27,7 @@ import (
 //
 // Registry should never be mutated after init (except in tests), as it is read
 // concurrently by different callers.
-var registry = map[string]value{}
+var registry = map[string]Value{}
 
 // frozen becomes non-zero once the registry is "live".
 // This must be accessed atomically because test clusters spawn multiple
@@ -39,25 +39,25 @@ var frozen int32
 // has started. See settingsworker.go.
 func Freeze() { atomic.StoreInt32(&frozen, 1) }
 
-// value holds the (parsed, typed) value of a setting.
+// Value holds the (parsed, typed) value of a setting.
 // raw settings are stored in system.settings as human-readable strings, but are
 // cached interally after parsing in these appropriately typed fields (which is
 // basically a poor-man's union, without boxing).
-type value struct {
-	typ  ValueType
-	desc string
+type Value struct {
+	Typ         ValueType
+	Description string
 	// Exactly one of these will be set, determined by typ.
-	s string
-	b bool
-	i int
-	f float64
-	d time.Duration
+	S string
+	B bool
+	I int
+	F float64
+	D time.Duration
 }
 
 // TypeOf returns the type of a setting, if it is defined.
 func TypeOf(key string) (ValueType, bool) {
 	d, ok := registry[key]
-	return d.typ, ok
+	return d.Typ, ok
 }
 
 // RegisterBoolSetting defines a new setting with type bool.
@@ -68,7 +68,7 @@ func RegisterBoolSetting(key, desc string, defVal bool) func() bool {
 	if _, ok := registry[key]; ok {
 		panic(fmt.Sprintf("setting already defined: %s", key))
 	}
-	registry[key] = value{typ: BoolValue, desc: desc, b: defVal}
+	registry[key] = Value{Typ: BoolValue, Description: desc, B: defVal}
 	return func() bool { return getBool(key) }
 }
 
@@ -80,7 +80,7 @@ func RegisterIntSetting(key, desc string, defVal int) func() int {
 	if _, ok := registry[key]; ok {
 		panic(fmt.Sprintf("setting already defined: %s", key))
 	}
-	registry[key] = value{typ: IntValue, desc: desc, i: defVal}
+	registry[key] = Value{Typ: IntValue, Description: desc, I: defVal}
 	return func() int { return getInt(key) }
 }
 
@@ -92,7 +92,7 @@ func RegisterStringSetting(key, desc string, defVal string) func() string {
 	if _, ok := registry[key]; ok {
 		panic(fmt.Sprintf("setting already defined: %s", key))
 	}
-	registry[key] = value{typ: StringValue, desc: desc, s: defVal}
+	registry[key] = Value{Typ: StringValue, Description: desc, S: defVal}
 	return func() string { return getString(key) }
 }
 
@@ -104,7 +104,7 @@ func RegisterFloatSetting(key, desc string, defVal float64) func() float64 {
 	if _, ok := registry[key]; ok {
 		panic(fmt.Sprintf("setting already defined: %s", key))
 	}
-	registry[key] = value{typ: FloatValue, desc: desc, f: defVal}
+	registry[key] = Value{Typ: FloatValue, Description: desc, F: defVal}
 	return func() float64 { return getFloat(key) }
 }
 
@@ -116,6 +116,6 @@ func RegisterDurationSetting(key, desc string, defVal time.Duration) func() time
 	if _, ok := registry[key]; ok {
 		panic(fmt.Sprintf("setting already defined: %s", key))
 	}
-	registry[key] = value{typ: DurationValue, desc: desc, d: defVal}
+	registry[key] = Value{Typ: DurationValue, Description: desc, D: defVal}
 	return func() time.Duration { return getDuration(key) }
 }

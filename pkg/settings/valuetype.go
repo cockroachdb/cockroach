@@ -48,20 +48,20 @@ func valueTypeFromStr(s string) (ValueType, error) {
 	}
 }
 
-func parseRaw(raw string, typ ValueType) (value, error) {
-	ret := value{typ: typ}
+func parseRaw(raw string, typ ValueType) (Value, error) {
+	ret := Value{Typ: typ}
 	var err error
 	switch typ {
 	case StringValue:
-		ret.s = raw
+		ret.S = raw
 	case BoolValue:
-		ret.b, err = strconv.ParseBool(raw)
+		ret.B, err = strconv.ParseBool(raw)
 	case IntValue:
-		ret.i, err = strconv.Atoi(raw)
+		ret.I, err = strconv.Atoi(raw)
 	case FloatValue:
-		ret.f, err = strconv.ParseFloat(raw, 64)
+		ret.F, err = strconv.ParseFloat(raw, 64)
 	case DurationValue:
-		ret.d, err = time.ParseDuration(raw)
+		ret.D, err = time.ParseDuration(raw)
 	default:
 		err = errors.Errorf("invalid value type %c", typ)
 	}
