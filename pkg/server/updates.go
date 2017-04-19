@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -62,8 +61,6 @@ const usageReportFrequency = updateCheckFrequency
 const updateCheckPostStartup = time.Minute * 5
 const updateCheckRetryFrequency = time.Hour
 const updateMaxVersionsToReport = 3
-
-const optinKey = serverUIDataKeyPrefix + "optin-reporting"
 
 const updateCheckJitterSeconds = 120
 
@@ -212,28 +209,7 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 }
 
 func (s *Server) usageReportingEnabled() bool {
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usage-reporting")
-	defer span.Finish()
-
-	// Grab the optin value from the database.
-	req := &serverpb.GetUIDataRequest{Keys: []string{optinKey}}
-	resp, err := s.admin.GetUIData(ctx, req)
-	if err != nil {
-		log.Warning(ctx, err)
-		return false
-	}
-
-	val, ok := resp.KeyValues[optinKey]
-	if !ok {
-		// Key wasn't found, so we opt out by default.
-		return false
-	}
-	optin, err := strconv.ParseBool(string(val.Value))
-	if err != nil {
-		log.Warningf(ctx, "could not parse optin value (%q): %v", val.Value, err)
-		return false
-	}
-	return optin
+	return envutil.EnvOrDefaultBool("COCKROACH_STORAGE_DIAGNOSTIC_REPORTING", true)
 }
 
 // mayebReportUsage differs from maybeCheckForUpdates in that it persists the
