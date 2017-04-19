@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -47,7 +48,7 @@ func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.UR
 		t.Fatal(err)
 	}
 
-	tempDir, err := ioutil.TempDir("", prefix)
+	tempDir, err := ioutil.TempDir("", strings.Replace(prefix, "/", "_", -1))
 	if err != nil {
 		t.Fatal(err)
 	}
