@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -30,7 +31,14 @@ import (
 )
 
 func init() {
-	skipPermissionChecks = envutil.EnvOrDefaultBool("COCKROACH_SKIP_KEY_PERMISSION_CHECK", false)
+	if runtime.GOOS == "windows" {
+		// File modes on windows default to 0666 for r/w files:
+		// https://golang.org/src/os/types_windows.go?#L31
+		// This would fail any attempt to load keys, so we need to disable permission checks.
+		skipPermissionChecks = true
+	} else {
+		skipPermissionChecks = envutil.EnvOrDefaultBool("COCKROACH_SKIP_KEY_PERMISSION_CHECK", false)
+	}
 }
 
 var skipPermissionChecks bool
