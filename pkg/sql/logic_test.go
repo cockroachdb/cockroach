@@ -1342,12 +1342,12 @@ func (t *logicTest) setupAndRunFile(path string, config testClusterConfig) {
 	t.logScope.KeepLogs(false)
 }
 
+// Needed for settings logic tests.
+var strValA = settings.RegisterStringSetting("testing.str", "", "<default>")
+var intValA = settings.RegisterIntSetting("testing.int", "", 1)
+
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	// Needed for settings logic tests.
-	_, _, cleanup := settings.TestingAddTestVars()
-	defer cleanup()
 
 	if testutils.Stress() {
 		t.Skip()

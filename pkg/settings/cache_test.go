@@ -22,17 +22,15 @@ import (
 
 var i1, i2 int
 
-func init() {
-	registry = map[string]value{
-		"bool.t":  {typ: BoolValue, b: true},
-		"bool.f":  {typ: BoolValue},
-		"str.foo": {typ: StringValue},
-		"str.bar": {typ: StringValue, s: "bar"},
-		"i.1":     {typ: IntValue},
-		"i.2":     {typ: IntValue, i: 5},
-		"f":       {typ: FloatValue, f: 5.4},
-	}
+var boolTv = RegisterBoolSetting("bool.t", "", true)
+var boolFv = RegisterBoolSetting("bool.f", "", false)
+var strFoov = RegisterStringSetting("str.foo", "", "")
+var strBarv = RegisterStringSetting("str.bar", "", "bar")
+var i1v = RegisterIntSetting("i.1", "", 0)
+var i2v = RegisterIntSetting("i.2", "", 5)
+var fv = RegisterFloatSetting("f", "", 5.4)
 
+func init() {
 	RegisterCallback(func() {
 		i1 = getInt("i.1")
 		i2 = getInt("i.2")
@@ -41,22 +39,22 @@ func init() {
 
 func TestCache(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
-		if expected, actual := false, getBool("bool.f"); expected != actual {
+		if expected, actual := false, boolFv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := true, getBool("bool.t"); expected != actual {
+		if expected, actual := true, boolTv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "", getString("str.foo"); expected != actual {
+		if expected, actual := "", strFoov(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "bar", getString("str.bar"); expected != actual {
+		if expected, actual := "bar", strBarv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 0, getInt("i.1"); expected != actual {
+		if expected, actual := 0, i1v(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 5, getInt("i.2"); expected != actual {
+		if expected, actual := 5, i2v(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		// registering callback should have also run it initially and set default.
@@ -66,7 +64,7 @@ func TestCache(t *testing.T) {
 		if expected, actual := 5, i2; expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 5.4, getFloat("f"); expected != actual {
+		if expected, actual := 5.4, fv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if actual, ok := TypeOf("i.1"); !ok || IntValue != actual {
@@ -99,16 +97,16 @@ func TestCache(t *testing.T) {
 		}
 		u.Apply()
 
-		if expected, actual := false, getBool("bool.t"); expected != actual {
+		if expected, actual := false, boolTv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := true, getBool("bool.f"); expected != actual {
+		if expected, actual := true, boolFv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "baz", getString("str.foo"); expected != actual {
+		if expected, actual := "baz", strFoov(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 3, getInt("i.2"); expected != actual {
+		if expected, actual := 3, i2v(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 0, i1; expected != actual {
@@ -117,12 +115,12 @@ func TestCache(t *testing.T) {
 		if expected, actual := 3, i2; expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 3.1, getFloat("f"); expected != actual {
+		if expected, actual := 3.1, fv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
 		// We didn't change this one, so should still see the default.
-		if expected, actual := "bar", getString("str.bar"); expected != actual {
+		if expected, actual := "bar", strBarv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})
@@ -142,7 +140,7 @@ func TestCache(t *testing.T) {
 			u.Apply()
 		}
 
-		if expected, actual := true, getBool("bool.f"); expected != actual {
+		if expected, actual := true, boolFv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 1, i1; expected != actual {
@@ -155,7 +153,7 @@ func TestCache(t *testing.T) {
 		// applying it from the cache.
 		MakeUpdater().Apply()
 
-		if expected, actual := false, getBool("bool.f"); expected != actual {
+		if expected, actual := false, boolFv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 0, i1; expected != actual {
@@ -176,7 +174,7 @@ func TestCache(t *testing.T) {
 			u.Apply()
 		}
 
-		if expected, actual := false, getBool("bool.f"); expected != actual {
+		if expected, actual := false, boolFv(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})
@@ -189,7 +187,7 @@ func TestCache(t *testing.T) {
 			}
 			u.Apply()
 		}
-		before := getInt("i.2")
+		before := i2v()
 
 		// Applying after attempting to set with wrong type preserves current value.
 		{
@@ -203,7 +201,7 @@ func TestCache(t *testing.T) {
 			u.Apply()
 		}
 
-		if expected, actual := before, getInt("i.2"); expected != actual {
+		if expected, actual := before, i2v(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
@@ -218,7 +216,7 @@ func TestCache(t *testing.T) {
 			u.Apply()
 		}
 
-		if expected, actual := before, getInt("i.2"); expected != actual {
+		if expected, actual := before, i2v(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})

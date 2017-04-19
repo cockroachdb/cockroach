@@ -28,11 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+const strKey = "testing.str"
+const intKey = "testing.int"
+
+var strValA = settings.RegisterStringSetting(strKey, "", "<default>")
+var intValA = settings.RegisterIntSetting(intKey, "", 1)
+
 func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	strKey, intKey, cleanup := settings.TestingAddTestVars()
-	defer cleanup()
 
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
@@ -43,10 +46,10 @@ func TestSettingsRefresh(t *testing.T) {
 		VALUES ($1, $2, NOW(), $3)`
 	deleteQ := "DELETE FROM system.settings WHERE name = $1"
 
-	if expected, actual := "<default>", settings.TestingGetString(); expected != actual {
+	if expected, actual := "<default>", strValA(); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
-	if expected, actual := 1, settings.TestingGetInt(); expected != actual {
+	if expected, actual := 1, intValA(); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
@@ -55,10 +58,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, intKey, settings.EncodeInt(2), "i")
 	// Wait until we observe the gossip-driven update propagating to cache.
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "foo", settings.TestingGetString(); expected != actual {
+		if expected, actual := "foo", strValA(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2, settings.TestingGetInt(); expected != actual {
+		if expected, actual := 2, intValA(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -67,7 +70,7 @@ func TestSettingsRefresh(t *testing.T) {
 	// Setting to empty also works.
 	db.Exec(insertQ, strKey, "", "s")
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "", settings.TestingGetString(); expected != actual {
+		if expected, actual := "", strValA(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -78,10 +81,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "qux", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "qux", settings.TestingGetString(); expected != actual {
+		if expected, actual := "qux", strValA(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2, settings.TestingGetInt(); expected != actual {
+		if expected, actual := 2, intValA(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -93,10 +96,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "after-invalid", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := 2, settings.TestingGetInt(); expected != actual {
+		if expected, actual := 2, intValA(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "after-invalid", settings.TestingGetString(); expected != actual {
+		if expected, actual := "after-invalid", strValA(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -107,10 +110,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "after-mistype", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := 2, settings.TestingGetInt(); expected != actual {
+		if expected, actual := 2, intValA(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "after-mistype", settings.TestingGetString(); expected != actual {
+		if expected, actual := "after-mistype", strValA(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -141,7 +144,7 @@ func TestSettingsRefresh(t *testing.T) {
 	// Deleting a value reverts to default.
 	db.Exec(deleteQ, strKey)
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "<default>", settings.TestingGetString(); expected != actual {
+		if expected, actual := "<default>", strValA(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
