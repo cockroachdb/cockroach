@@ -17,6 +17,7 @@ package settings
 import (
 	"fmt"
 	"sync/atomic"
+	"time"
 )
 
 // registry contains all defined settings, their types and default values.
@@ -50,6 +51,7 @@ type value struct {
 	b bool
 	i int
 	f float64
+	d time.Duration
 }
 
 // TypeOf returns the type of a setting, if it is defined.
@@ -104,4 +106,16 @@ func RegisterFloatSetting(key, desc string, defVal float64) func() float64 {
 	}
 	registry[key] = value{typ: FloatValue, desc: desc, f: defVal}
 	return func() float64 { return getFloat(key) }
+}
+
+// RegisterDurationSetting defines a new setting with type time.Duration.
+func RegisterDurationSetting(key, desc string, defVal time.Duration) func() time.Duration {
+	if atomic.LoadInt32(&frozen) > 0 {
+		panic(fmt.Sprintf("registration must occur before server start: %s", key))
+	}
+	if _, ok := registry[key]; ok {
+		panic(fmt.Sprintf("setting already defined: %s", key))
+	}
+	registry[key] = value{typ: DurationValue, desc: desc, d: defVal}
+	return func() time.Duration { return getDuration(key) }
 }

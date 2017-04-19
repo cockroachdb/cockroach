@@ -15,6 +15,8 @@
 package settings
 
 import (
+	"time"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -68,6 +70,10 @@ func getFloat(key string) float64 {
 	return getVal(key, FloatValue).f
 }
 
+func getDuration(key string) time.Duration {
+	return getVal(key, DurationValue).d
+}
+
 func (v value) String() string {
 	switch v.typ {
 	case StringValue:
@@ -78,6 +84,8 @@ func (v value) String() string {
 		return EncodeInt(v.i)
 	case FloatValue:
 		return EncodeFloat(v.f)
+	case DurationValue:
+		return EncodeDuration(v.d)
 	default:
 		panic("unknown value type " + string(v.typ)) // something something sealed.
 	}
