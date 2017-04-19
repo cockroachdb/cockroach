@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -58,6 +59,10 @@ func connectionsRefused(network *simulation.Network) int64 {
 // As of Jan 2017, this normally takes ~12 cycles and 8-12 refused connections.
 func TestConvergence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testutils.Stress() {
+		t.Skip()
+	}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
@@ -65,15 +70,13 @@ func TestConvergence(t *testing.T) {
 
 	const maxCycles = 100
 	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
-		log.Warningf(context.Background(),
-			"expected a fully-connected network within %d cycles; took %d",
+		t.Errorf("expected a fully-connected network within %d cycles; took %d",
 			maxCycles, connectedCycle)
 	}
 
 	const maxConnsRefused = 50
 	if connsRefused := connectionsRefused(network); connsRefused > maxConnsRefused {
-		log.Warningf(context.Background(),
-			"expected network to fully connect with <= %d connections refused; took %d",
+		t.Errorf("expected network to fully connect with <= %d connections refused; took %d",
 			maxConnsRefused, connsRefused)
 	}
 }
@@ -88,6 +91,10 @@ func TestConvergence(t *testing.T) {
 // As of Jan 2017, this normally takes 8-9 cycles and 50-60 refused connections.
 func TestNetworkReachesEquilibrium(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testutils.Stress() {
+		t.Skip()
+	}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
@@ -114,15 +121,12 @@ func TestNetworkReachesEquilibrium(t *testing.T) {
 
 	const maxCycles = 200
 	if numCycles > maxCycles {
-		log.Warningf(context.Background(),
-			"expected a non-thrashing network within %d cycles; took %d",
-			maxCycles, numCycles)
+		t.Errorf("expected a non-thrashing network within %d cycles; took %d", maxCycles, numCycles)
 	}
 
 	const maxConnsRefused = 500
 	if connsRefused > maxConnsRefused {
-		log.Warningf(context.Background(),
-			"expected thrashing to die down with <= %d connections refused; took %d",
+		t.Errorf("expected thrashing to die down with <= %d connections refused; took %d",
 			maxConnsRefused, connsRefused)
 	}
 }
