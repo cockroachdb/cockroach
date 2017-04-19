@@ -41,7 +41,6 @@ const githubUser = "cockroachdb"
 const githubRepo = "cockroach"
 
 const pkgEnv = "PKG"
-const propEvalKVEnv = "COCKROACH_PROPOSER_EVALUATED_KV"
 const tagsEnv = "TAGS"
 const goFlagsEnv = "GOFLAGS"
 const cockroachPkgPrefix = "github.com/cockroachdb/cockroach/pkg/"
@@ -122,7 +121,6 @@ func runGH(
 
 	var parameters []string
 	for _, parameter := range []string{
-		propEvalKVEnv,
 		tagsEnv,
 		goFlagsEnv,
 	} {
