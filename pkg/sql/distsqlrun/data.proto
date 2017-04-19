@@ -36,8 +36,7 @@ message Error {
 
   oneof detail {
     pgerror.Error pg_error = 1 [(gogoproto.customname) = "PGError"];
-    // TODO(andrei): Add a retryable error here to trigger a retry
-    // of the transaction at the gateway.
+    roachpb.RetryableTxnError retryableTxnError = 2;
   }
 }
 

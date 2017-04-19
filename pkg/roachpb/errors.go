@@ -24,19 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// RetryableTxnError represents a retryable transaction error - the transaction
-// that caused it should be re-run.
-type RetryableTxnError struct {
-	message string
-	TxnID   *uuid.UUID
-
-	// The error that this RetryableTxnError wraps. Useful for tests that want to
-	// assert that they got the expected error.
-	Cause ErrorDetailInterface
-}
-
 func (e *RetryableTxnError) Error() string {
-	return e.message
+	return e.Msg
 }
 
 var _ error = &RetryableTxnError{}
@@ -53,8 +42,8 @@ var _ error = &RetryableTxnError{}
 // transaction through the EvalContext.
 func NewRetryableTxnError(cause string, txnID *uuid.UUID) *RetryableTxnError {
 	return &RetryableTxnError{
-		message: cause,
-		TxnID:   txnID,
+		Msg:   cause,
+		TxnID: txnID,
 	}
 }
 
@@ -165,10 +154,17 @@ func (e *Error) GoError() error {
 		if e.GetTxn() != nil {
 			txnID = e.GetTxn().ID
 		}
+		// Figure out what updated Transaction the error should carry.
+		// TransactionAbortedError will not carry a Transaction, signaling to the
+		// recipient to start a brand new txn.
+		txn := e.GetTxn()
+		if _, ok := e.GetDetail().(*TransactionAbortedError); ok {
+			txn = nil
+		}
 		return &RetryableTxnError{
-			message: e.Message,
-			TxnID:   txnID,
-			Cause:   e.GetDetail(),
+			Msg:         e.Message,
+			TxnID:       txnID,
+			Transaction: txn,
 		}
 	}
 	return e.GetDetail()
