@@ -149,7 +149,7 @@ testrace: TESTTIMEOUT := $(RACETIMEOUT)
 # guaranteed to be irrelevant to save nearly 10s on every Make invocation.
 FIND_RELEVANT := find pkg -name node_modules -prune -o
 
-bin/sql.test: main.go $(shell $(FIND_RELEVANT) -name '*.go')
+bin/sql.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/sql.test ./pkg/sql
 
 bench: BENCHES := .
