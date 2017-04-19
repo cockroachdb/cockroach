@@ -25,20 +25,14 @@ state obviously apply, it is needed to make the package's functionality
 available to a wide variety of callsites, that may or may not have a *Server or
 similar available to plumb though.
 
-To add a new setting, update `registry.go` to define it in the `registry` map,
-then add an exported accessor (wrapping one of the `getBool`, `getString`, etc
-helpers).
+To add a new setting, call one of the `Register` methods in `registry.go` and
+save the accessor created by the register function in the package where the setting
+is to be used. For example, to add an "enterprise" flag, adding
+into license_check.go:
 
-For example, to add an "enterprise" flag:
-var registry = map[string]settingValue{
-	....
-+ "enterprise.enabled": {typ: BoolValue},
+var enterpriseEnabled func() bool = settings.RegisterBoolSetting("enterprise.enabled", false)
 
-...
+Then use with `if enterpriseEnabled() ...`
 
-+// GetEnterpriseEnabled returns the enterprise.enabled setting.
-+func GetEnterpriseEnabled() bool {
-+   return getBool("enterprise.enabled")
-+}
 */
 package settings
