@@ -80,7 +80,19 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 				log.Infof(gCtx, "writebatch [%s,%s)", start, end)
 			}
 
-			return errors.Wrapf(db.WriteBatch(gCtx, start, end, repr), "writebatch [%s,%s)", start, end)
+			const maxWriteBatchRetries = 10
+			for i := 0; ; i++ {
+				err := db.WriteBatch(gCtx, start, end, repr)
+				if err == nil {
+					return nil
+				}
+				if _, ok := err.(*roachpb.AmbiguousResultError); i == maxWriteBatchRetries || !ok {
+					return errors.Wrapf(err, "writebatch [%s,%s)", start, end)
+				}
+				log.Warningf(ctx, "writebatch [%s,%s) attempt %d failed: %+v",
+					start, end, i, err)
+				continue
+			}
 		})
 		b = batchBuilder{}
 	}
