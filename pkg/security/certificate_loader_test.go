@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -67,6 +68,11 @@ func countLoadedCertificates(certsDir string) (int, error) {
 
 func TestNamingScheme(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("file permissions do not exist on windows")
+	}
+
 	// Do not use embedded certs.
 	security.ResetAssetLoader()
 	defer ResetTest()
