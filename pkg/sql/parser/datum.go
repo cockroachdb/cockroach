@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -950,26 +951,49 @@ func NewDDateFromTime(t time.Time, loc *time.Location) *DDate {
 // time.Time formats.
 const (
 	dateFormat                = "2006-01-02"
-	dateFormatWithOffset      = "2006-01-02 -07:00:00"
-	dateFormatNoPadWithOffset = "2006-1-2 -07:00:00"
+	dateFormatWithOffset      = dateFormat + " -070000"
+	dateFormatNoPad           = "2006-1-2"
+	dateFormatNoPadWithOffset = dateFormatNoPad + " -070000"
 )
 
 var dateFormats = []string{
 	dateFormat,
 	dateFormatWithOffset,
+	dateFormatNoPad,
 	dateFormatNoPadWithOffset,
 	time.RFC3339Nano,
 }
+
+var tzMatch = regexp.MustCompile(` [+-]`)
 
 // ParseDDate parses and returns the *DDate Datum value represented by the provided
 // string in the provided location, or an error if parsing is unsuccessful.
 func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 	// No need to ParseInLocation here because we're only parsing dates.
 
+	l := len(s)
 	// HACK: go doesn't handle offsets that are not zero-padded from psql/jdbc.
-	// Thus, if we see `2015-10-05 +0:0:0` we need to change it to `+00:00:00`.
-	if l := len(s); l > 6 && s[l-2] == ':' && s[l-4] == ':' && (s[l-6] == '+' || s[l-6] == '-') {
-		s = fmt.Sprintf("%s %c0%c:0%c:0%c", s[:l-6], s[l-6], s[l-5], s[l-3], s[l-1])
+	// Thus, if we see `2015-10-05 +0:0:0` we need to change it to `+000000`.
+	if l > 6 && s[l-2] == ':' && s[l-4] == ':' && (s[l-6] == '+' || s[l-6] == '-') {
+		s = fmt.Sprintf("%s %c0%c0%c0%c", s[:l-6], s[l-6], s[l-5], s[l-3], s[l-1])
+	}
+
+	if loc := tzMatch.FindStringIndex(s); loc != nil && l > loc[1] {
+		// Remove `:` characters from timezone specifier and pad to 6 digits. A
+		// leading 0 will be added if there are an odd number of digits in the
+		// specifier, since this is short-hand for an offset with number of hours
+		// equal to the leading digit.
+		// This converts all timezone specifiers to the stdNumSecondsTz format in
+		// time/format.go: `-070000`.
+		tzPos := loc[1]
+		tzSpec := strings.Replace(s[tzPos:], ":", "", -1)
+		if len(tzSpec)%2 == 1 {
+			tzSpec = "0" + tzSpec
+		}
+		if len(tzSpec) < 6 {
+			tzSpec += strings.Repeat("0", 6-len(tzSpec))
+		}
+		s = s[:tzPos] + tzSpec
 	}
 
 	for _, format := range dateFormats {
