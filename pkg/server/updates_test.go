@@ -23,8 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -118,7 +116,7 @@ func TestReportUsage(t *testing.T) {
 		expectedUsageReports++
 
 		node := ts.node.recorder.GetStatusSummary()
-		ts.reportUsage(context.TODO())
+		ts.reportDiagnostics()
 
 		keyCounts := make(map[roachpb.StoreID]int)
 		rangeCounts := make(map[roachpb.StoreID]int)
