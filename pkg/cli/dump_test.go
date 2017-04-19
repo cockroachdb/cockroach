@@ -278,13 +278,15 @@ func TestDumpBytes(t *testing.T) {
 	if err := conn.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
-		CREATE TABLE t (b BYTES PRIMARY KEY);
+		CREATE TABLE t (i INT PRIMARY KEY, b BYTES);
 	`, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	for i := int64(0); i < 256; i++ {
-		if err := conn.Exec("INSERT INTO t VALUES ($1)", []driver.Value{[]byte{byte(i)}}); err != nil {
+	// Force multiple pages of data.
+	const rows = limit + 1
+	for i := int64(0); i < rows; i++ {
+		if err := conn.Exec("INSERT INTO t VALUES ($1, $2)", []driver.Value{i, []byte{byte(i)}}); err != nil {
 			t.Fatal(err)
 		}
 	}
