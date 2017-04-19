@@ -65,13 +65,25 @@ func init() {
 const (
 	updateCheckFrequency = time.Hour * 24
 	// TODO(dt): switch to settings.
-	diagnosticReportFrequency = updateCheckFrequency
-	statsResetFrequency       = time.Hour
 	updateCheckPostStartup    = time.Minute * 5
 	updateCheckRetryFrequency = time.Hour
 	updateMaxVersionsToReport = 3
 
 	updateCheckJitterSeconds = 120
+)
+
+var (
+	diagnosticReportFrequency = settings.RegisterDurationSetting(
+		"diagnostics.reporting.interval",
+		"interval at which diagnostics data should be reported",
+		time.Hour*24,
+	)
+
+	statsResetFrequency = settings.RegisterDurationSetting(
+		"sql.metrics.statement_details.reset_interval",
+		"interval at which the collected statement statistics should be reset",
+		time.Hour,
+	)
 )
 
 // randomly shift `d` to be up to `jitterSec` shorter or longer.
@@ -112,8 +124,9 @@ type storeInfo struct {
 func (s *Server) PeriodicallyCheckForUpdates() {
 	s.stopper.RunWorker(context.TODO(), func(ctx context.Context) {
 		startup := timeutil.Now()
-		var nextUpdateCheck, nextDiagnosticReport = startup, startup
-		nextStatsReset := startup.Add(statsResetFrequency)
+		nextUpdateCheck := startup
+		nextDiagnosticReport := startup
+		nextStatsReset := startup.Add(statsResetFrequency.Get())
 
 		var timer timeutil.Timer
 		defer timer.Stop()
@@ -240,7 +253,7 @@ func (s *Server) maybeReportDiagnostics(now, scheduled time.Time, running time.D
 		s.reportDiagnostics(running)
 	}
 
-	return scheduled.Add(diagnosticReportFrequency)
+	return scheduled.Add(diagnosticReportFrequency.Get())
 }
 
 func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
@@ -343,7 +356,7 @@ func (s *Server) maybeResetStats(
 	if scheduledReset.After(now) {
 		return scheduledReset
 	}
-	nextReset := scheduledReset.Add(statsResetFrequency)
+	nextReset := scheduledReset.Add(statsResetFrequency.Get())
 
 	// If the next diag report is within the reset interval, wait to reset then.
 	if scheduledDiagReport.Before(nextReset) {

@@ -18,13 +18,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,36 +53,29 @@ func stubURL(target **url.URL, stubURL *url.URL) func() {
 func TestCheckVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	updateChecks := int32(0)
-	uuid := ""
-	version := ""
+	ctx := context.TODO()
 
-	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-		atomic.AddInt32(&updateChecks, 1)
-		uuid = r.URL.Query().Get("uuid")
-		version = r.URL.Query().Get("version")
-	}))
-	u, err := url.Parse(recorder.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stubURL(&updatesURL, u)()
+	r := makeMockRecorder(t)
+	defer r.Close()
+	defer stubURL(&updatesURL, r.url)()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	s.(*TestServer).checkForUpdates(time.Minute)
-	recorder.Close()
-	s.Stopper().Stop(context.TODO())
+	r.Close()
+	s.Stopper().Stop(ctx)
 
-	if expected, actual := int32(1), atomic.LoadInt32(&updateChecks); actual != expected {
+	r.Lock()
+	defer r.Unlock()
+
+	if expected, actual := 1, r.requests; actual != expected {
 		t.Fatalf("expected %v update checks, got %v", expected, actual)
 	}
 
-	if expected, actual := s.(*TestServer).node.ClusterID.String(), uuid; expected != actual {
+	if expected, actual := s.(*TestServer).node.ClusterID.String(), r.last.uuid; expected != actual {
 		t.Errorf("expected uuid %v, got %v", expected, actual)
 	}
 
-	if expected, actual := build.GetInfo().Tag, version; expected != actual {
+	if expected, actual := build.GetInfo().Tag, r.last.version; expected != actual {
 		t.Errorf("expected version tag %v, got %v", expected, actual)
 	}
 }
@@ -91,28 +85,9 @@ func TestReportUsage(t *testing.T) {
 
 	ctx := context.TODO()
 
-	usageReports := int32(0)
-	var uuid, rawReportBody string
-	reported := reportingInfo{}
-
-	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-		atomic.AddInt32(&usageReports, 1)
-		uuid = r.URL.Query().Get("uuid")
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := json.NewDecoder(bytes.NewReader(body)).Decode(&reported); err != nil {
-			t.Fatal(err)
-		}
-		rawReportBody = string(body)
-	}))
-	u, err := url.Parse(recorder.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stubURL(&reportingURL, u)()
+	r := makeMockRecorder(t)
+	defer stubURL(&reportingURL, r.url)()
+	defer r.Close()
 
 	params := base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
@@ -182,7 +157,8 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	var expectedUsageReports int32
+	expectedUsageReports := 0
+
 	testutils.SucceedsSoon(t, func() error {
 		expectedUsageReports++
 
@@ -209,26 +185,29 @@ func TestReportUsage(t *testing.T) {
 			}
 		}
 
-		if expected, actual := expectedUsageReports, atomic.LoadInt32(&usageReports); expected != actual {
+		r.Lock()
+		defer r.Unlock()
+
+		if expected, actual := expectedUsageReports, r.requests; expected != actual {
 			t.Fatalf("expected %v reports, got %v", expected, actual)
 		}
-		if expected, actual := ts.node.ClusterID.String(), uuid; expected != actual {
+		if expected, actual := ts.node.ClusterID.String(), r.last.uuid; expected != actual {
 			return errors.Errorf("expected cluster id %v got %v", expected, actual)
 		}
-		if expected, actual := ts.node.Descriptor.NodeID, reported.Node.NodeID; expected != actual {
+		if expected, actual := ts.node.Descriptor.NodeID, r.last.Node.NodeID; expected != actual {
 			return errors.Errorf("expected node id %v got %v", expected, actual)
 		}
-		if minExpected, actual := totalKeys, reported.Node.KeyCount; minExpected > actual {
+		if minExpected, actual := totalKeys, r.last.Node.KeyCount; minExpected > actual {
 			return errors.Errorf("expected node keys at least %v got %v", minExpected, actual)
 		}
-		if minExpected, actual := totalRanges, reported.Node.RangeCount; minExpected > actual {
+		if minExpected, actual := totalRanges, r.last.Node.RangeCount; minExpected > actual {
 			return errors.Errorf("expected node ranges at least %v got %v", minExpected, actual)
 		}
-		if minExpected, actual := len(params.StoreSpecs), len(reported.Stores); minExpected > actual {
+		if minExpected, actual := len(params.StoreSpecs), len(r.last.Stores); minExpected > actual {
 			return errors.Errorf("expected at least %v stores got %v", minExpected, actual)
 		}
 
-		for _, store := range reported.Stores {
+		for _, store := range r.last.Stores {
 			if minExpected, actual := keyCounts[store.StoreID], store.KeyCount; minExpected > actual {
 				return errors.Errorf("expected at least %v keys in store %v got %v", minExpected, store.StoreID, actual)
 			}
@@ -239,16 +218,16 @@ func TestReportUsage(t *testing.T) {
 		return nil
 	})
 
-	if strings.Contains(rawReportBody, elemName) {
-		t.Fatalf("%q should not appear in %q", elemName, rawReportBody)
+	if strings.Contains(r.last.rawReportBody, elemName) {
+		t.Fatalf("%q should not appear in %q", elemName, r.last.rawReportBody)
 	}
 
-	if expected, actual := len(tables), len(reported.Schema); expected != actual {
+	if expected, actual := len(tables), len(r.last.Schema); expected != actual {
 		t.Fatalf("expected %d tables in schema, got %d", expected, actual)
 	}
 	reportedByID := make(map[sqlbase.ID]sqlbase.TableDescriptor, len(tables))
-	for _, r := range reported.Schema {
-		reportedByID[r.ID] = r
+	for _, tbl := range r.last.Schema {
+		reportedByID[tbl.ID] = tbl
 	}
 	for _, tbl := range tables {
 		r, ok := reportedByID[tbl.ID]
@@ -260,7 +239,7 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 2, len(reported.QueryStats); expected != actual {
+	if expected, actual := 2, len(r.last.QueryStats); expected != actual {
 		t.Fatalf("expected %d apps in stats report, got %d", expected, actual)
 	}
 
@@ -278,7 +257,7 @@ func TestReportUsage(t *testing.T) {
 			`UPDATE _ SET _ = _ + _`,
 		},
 	} {
-		if app, ok := reported.QueryStats[sql.HashAppName(appName)]; !ok {
+		if app, ok := r.last.QueryStats[sql.HashAppName(appName)]; !ok {
 			t.Fatalf("missing stats for default app")
 		} else {
 			if actual, expected := len(app), len(expectedStatements); expected != actual {
@@ -297,5 +276,50 @@ func TestReportUsage(t *testing.T) {
 	}
 
 	ts.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
-	recorder.Close()
+}
+
+type mockRecorder struct {
+	*httptest.Server
+	url *url.URL
+
+	sync.Mutex
+	requests int
+	last     struct {
+		uuid    string
+		version string
+		reportingInfo
+		rawReportBody string
+	}
+}
+
+func makeMockRecorder(t *testing.T) *mockRecorder {
+	rec := &mockRecorder{}
+
+	rec.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		rec.Lock()
+		defer rec.Unlock()
+
+		rec.requests++
+		rec.last.uuid = r.URL.Query().Get("uuid")
+		rec.last.version = r.URL.Query().Get("version")
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			panic(err)
+		}
+		rec.last.rawReportBody = string(body)
+		// TODO(dt): switch on the request path to handle different request types.
+		if err := json.NewDecoder(bytes.NewReader(body)).Decode(&rec.last.reportingInfo); err != nil && err != io.EOF {
+			panic(err)
+		}
+	}))
+
+	u, err := url.Parse(rec.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.url = u
+
+	return rec
 }
