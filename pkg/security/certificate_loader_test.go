@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -67,9 +68,13 @@ func countLoadedCertificates(certsDir string) (int, error) {
 
 func TestNamingScheme(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	// Do not use embedded certs.
 	security.ResetAssetLoader()
 	defer ResetTest()
+
+	// Some test cases are skipped on windows due to non-UGO permissions.
+	isWindows := runtime.GOOS == "windows"
 
 	// Test non-existent directory.
 	// If the directory exists, we still expect no failures, unless it happens to contain
@@ -103,6 +108,8 @@ func TestNamingScheme(t *testing.T) {
 		certs []security.CertInfo
 		// Set to true to skip permissions checks.
 		skipChecks bool
+		// Skip test case on windows as permissions are always ignored.
+		skipWindows bool
 	}{
 		{
 			// Empty directory.
@@ -147,6 +154,7 @@ func TestNamingScheme(t *testing.T) {
 			certs: []security.CertInfo{
 				{FileUsage: security.CAPem, Filename: "ca.crt"},
 			},
+			skipWindows: true,
 		},
 		{
 			// Everything loads.
@@ -184,6 +192,10 @@ func TestNamingScheme(t *testing.T) {
 	}
 
 	for testNum, data := range testData {
+		if data.skipWindows && isWindows {
+			continue
+		}
+
 		// Write all files.
 		for _, f := range data.files {
 			n := f.name
