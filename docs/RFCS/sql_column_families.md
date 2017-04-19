@@ -172,7 +172,7 @@ no non-NULL/non-primary-key column. For example, we could omit the
 sentinel key in the following table because we know there will always
 be one KV pair:
 
-  ```
+```
 CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT NOT NULL
