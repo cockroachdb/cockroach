@@ -171,6 +171,16 @@ func (p *planner) toSettingString(
 			}
 			return "", errors.Errorf("cannot use %s %T value for float setting", d.ResolvedType(), d)
 		})
+	case settings.DurationValue:
+		return typeCheckAndParse(parser.TypeInterval, func(d parser.Datum) (string, error) {
+			if f, ok := d.(*parser.DInterval); ok {
+				if f.Duration.Months > 0 || f.Duration.Days > 0 {
+					return "", errors.Errorf("cannot use day or month specifiers: %s", d.String())
+				}
+				return settings.EncodeDuration(time.Duration(f.Duration.Nanos) * time.Nanosecond), nil
+			}
+			return "", errors.Errorf("cannot use %s %T value for duration setting", d.ResolvedType(), d)
+		})
 	default:
 		return "", errors.Errorf("unsupported setting type %c", typ)
 	}
