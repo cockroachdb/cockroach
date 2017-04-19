@@ -197,6 +197,8 @@ PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf.src
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb.src
 SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy.src
 
+C_LIBS_SRCS := $(JEMALLOC_SRC_DIR) $(PROTOBUF_SRC_DIR) $(ROCKSDB_SRC_DIR) $(SNAPPY_SRC_DIR)
+
 HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
 
 CONFIGURE_FLAGS :=
