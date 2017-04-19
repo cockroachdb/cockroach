@@ -401,11 +401,10 @@ func GeneratePlanDiagramWithURL(flows map[roachpb.NodeID]FlowSpec) (string, url.
 	if err := encoder.Close(); err != nil {
 		return "", url.URL{}, err
 	}
-	// TODO(radu): using raduberinde.github.io is temporary; #13758.
 	url := url.URL{
 		Scheme:   "https",
-		Host:     "raduberinde.github.io",
-		Path:     "decode.html",
+		Host:     "cockroachdb.github.io",
+		Path:     "distsqlplan/decode.html",
 		RawQuery: compressed.String(),
 	}
 
