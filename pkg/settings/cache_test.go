@@ -16,6 +16,7 @@ package settings
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -29,6 +30,7 @@ var strBarAccessor = RegisterStringSetting("str.bar", "", "bar")
 var i1Accessor = RegisterIntSetting("i.1", "", 0)
 var i2Accessor = RegisterIntSetting("i.2", "", 5)
 var fAccessor = RegisterFloatSetting("f", "", 5.4)
+var dAccessor = RegisterDurationSetting("d", "", time.Second)
 
 func init() {
 	RegisterCallback(func() {
@@ -67,11 +69,17 @@ func TestCache(t *testing.T) {
 		if expected, actual := 5.4, fAccessor(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
+		if expected, actual := time.Second, dAccessor(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
 		if actual, ok := TypeOf("i.1"); !ok || IntValue != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", IntValue, actual, ok)
 		}
 		if actual, ok := TypeOf("f"); !ok || FloatValue != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", FloatValue, actual, ok)
+		}
+		if actual, ok := TypeOf("d"); !ok || DurationValue != actual {
+			t.Fatalf("expected %v, got %v (exists: %v)", DurationValue, actual, ok)
 		}
 		if actual, ok := TypeOf("dne"); ok {
 			t.Fatalf("expected nothing, got %v", actual)
@@ -95,6 +103,9 @@ func TestCache(t *testing.T) {
 		if err := u.Add("f", EncodeFloat(3.1), "f"); err != nil {
 			t.Fatal(err)
 		}
+		if err := u.Add("d", EncodeDuration(2*time.Hour), "d"); err != nil {
+			t.Fatal(err)
+		}
 		u.Apply()
 
 		if expected, actual := false, boolTAccessor(); expected != actual {
@@ -116,6 +127,9 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 3.1, fAccessor(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := 2*time.Hour, dAccessor(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
