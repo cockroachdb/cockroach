@@ -101,6 +101,10 @@ func (rs *replicaStats) getRequestCounts() (perLocalityCounts, time.Duration) {
 
 	rs.maybeRotateLocked(now)
 
+	// Use the fraction of time since the last rotation as a smoothing factor to
+	// avoid jarring changes in request count immediately before/after a rotation.
+	fractionOfRotation := float64(now.Sub(rs.mu.lastRotate)) / float64(rotateInterval)
+
 	counts := make(perLocalityCounts)
 	for i := range rs.mu.requests {
 		// We have to add len(rs.mu.requests) to the numerator to avoid getting a
@@ -108,7 +112,7 @@ func (rs *replicaStats) getRequestCounts() (perLocalityCounts, time.Duration) {
 		requestsIdx := (rs.mu.idx + len(rs.mu.requests) - i) % len(rs.mu.requests)
 		if cur := rs.mu.requests[requestsIdx]; cur != nil {
 			for k, v := range cur {
-				counts[k] += v * math.Pow(decayFactor, float64(i))
+				counts[k] += v * math.Pow(decayFactor, float64(i)+fractionOfRotation)
 			}
 		}
 	}
