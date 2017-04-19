@@ -107,6 +107,7 @@ func TestStartArgChecking(t *testing.T) {
 		{[]string{`--store=size=123gb`}, `no path specified`},
 		{[]string{`--store=type=mem`}, `size must be specified for an in memory store`},
 		{[]string{`--store=type=mem,path=blah`}, `path specified for in memory store`},
+		{[]string{"--store=type=mem,size=1GiB"}, ``},
 	}
 	for i, c := range testCases {
 		// Reset the context and insecure flag for every test case.
