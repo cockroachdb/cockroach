@@ -118,10 +118,16 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 }
 
 func (hj *HashJoinerSpec) summary() (string, []string) {
-	details := []string{
-		fmt.Sprintf(
-			"ON left(%s)=right(%s)", colListStr(hj.LeftEqColumns), colListStr(hj.RightEqColumns),
-		),
+	details := make([]string, 0, 2)
+
+	if len(hj.LeftEqColumns) > 0 {
+		details = append(details, fmt.Sprintf(
+			"left(%s)=right(%s)",
+			colListStr(hj.LeftEqColumns), colListStr(hj.RightEqColumns),
+		))
+	}
+	if hj.OnExpr.Expr != "" {
+		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr.Expr))
 	}
 	return "HashJoiner", details
 }
