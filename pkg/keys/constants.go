@@ -237,9 +237,6 @@ var (
 	// TimeseriesPrefix is the key prefix for all timeseries data.
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
 
-	// ReportUsagePrefix is the key prefix for node usage report times.
-	ReportUsagePrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("update-")))
-
 	// TableDataMin is the start of the range of table data keys.
 	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, 0))
 	// TableDataMin is the end of the range of table data keys.

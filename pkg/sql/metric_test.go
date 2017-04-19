@@ -73,7 +73,10 @@ func TestQueryCounts(t *testing.T) {
 
 	// Initialize accum while accounting for system migrations that may have run
 	// DDL statements.
-	accum := queryCounter{ddlCount: s.MustGetSQLCounter(sql.MetaDdl.Name)}
+	accum := queryCounter{
+		ddlCount:  s.MustGetSQLCounter(sql.MetaDdl.Name),
+		miscCount: s.MustGetSQLCounter(sql.MetaMisc.Name),
+	}
 
 	for _, tc := range testcases {
 		t.Run(tc.query, func(t *testing.T) {
