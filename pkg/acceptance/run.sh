@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -xeuo pipefail
+set -euxo pipefail
 
 "$(dirname "${0}")"/../../build/builder.sh make install TAGS=clockoffset
 
@@ -10,4 +10,4 @@ set -xeuo pipefail
 mkdir -p artifacts/acceptance
 export TMPDIR=$PWD/artifacts/acceptance
 
-go test -tags acceptance ./pkg/acceptance ${GOFLAGS-} -run "${TESTS-.}" -timeout ${TESTTIMEOUT-10m} ${TESTFLAGS--v -nodes 3} -l "$TMPDIR"
+make test PKG=./pkg/acceptance TAGS=acceptance TESTFLAGS="${TESTFLAGS--v -nodes 3} -l $TMPDIR"
