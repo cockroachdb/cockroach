@@ -107,6 +107,8 @@ func (s *Server) refreshSettings() {
 	s.stopper.RunWorker(func() {
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		ctx := s.AnnotateCtx(context.Background())
+		// No new settings can be defined beyond this point.
+		settings.Freeze()
 		for {
 			select {
 			case <-gossipUpdateC:
