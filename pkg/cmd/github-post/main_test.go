@@ -31,17 +31,16 @@ import (
 
 func TestRunGH(t *testing.T) {
 	const (
-		expOwner      = "cockroachdb"
-		expRepo       = "cockroach"
-		envPkg        = "foo/bar/baz"
-		envPropEvalKV = "true"
-		envTags       = "deadlock"
-		envGoFlags    = "race"
-		sha           = "abcd123"
-		serverURL     = "https://teamcity.example.com"
-		buildID       = 8008135
-		issueID       = 1337
-		issueNumber   = 30
+		expOwner    = "cockroachdb"
+		expRepo     = "cockroach"
+		envPkg      = "foo/bar/baz"
+		envTags     = "deadlock"
+		envGoFlags  = "race"
+		sha         = "abcd123"
+		serverURL   = "https://teamcity.example.com"
+		buildID     = 8008135
+		issueID     = 1337
+		issueNumber = 30
 	)
 
 	for key, value := range map[string]string{
@@ -49,10 +48,9 @@ func TestRunGH(t *testing.T) {
 		teamcityServerURLEnv: serverURL,
 		teamcityBuildIDEnv:   strconv.Itoa(buildID),
 
-		pkgEnv:        cockroachPkgPrefix + envPkg,
-		propEvalKVEnv: envPropEvalKV,
-		tagsEnv:       envTags,
-		goFlagsEnv:    envGoFlags,
+		pkgEnv:     cockroachPkgPrefix + envPkg,
+		tagsEnv:    envTags,
+		goFlagsEnv: envGoFlags,
 	} {
 		if val, ok := os.LookupEnv(key); ok {
 			defer func() {
@@ -74,7 +72,6 @@ func TestRunGH(t *testing.T) {
 	}
 
 	parameters := "```\n" + strings.Join([]string{
-		propEvalKVEnv + "=" + envPropEvalKV,
 		tagsEnv + "=" + envTags,
 		goFlagsEnv + "=" + envGoFlags,
 	}, "\n") + "\n```"
