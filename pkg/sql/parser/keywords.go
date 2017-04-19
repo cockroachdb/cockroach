@@ -222,6 +222,7 @@ var keywords = map[string]int{
 	"SESSION_USER":      SESSION_USER,
 	"SET":               SET,
 	"SETTING":           SETTING,
+	"SETTINGS":          SETTINGS,
 	"SHOW":              SHOW,
 	"SIMILAR":           SIMILAR,
 	"SIMPLE":            SIMPLE,

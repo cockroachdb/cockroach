@@ -139,11 +139,49 @@ func queryInfoSchema(
 }
 
 func (p *planner) showClusterSetting(name string) (planNode, error) {
-	_, ok := settings.TypeOf(name)
-	if !ok {
-		return nil, errors.Errorf("unknown setting: %q", name)
+	var columns ResultColumns
+	var populate func(ctx context.Context, v *valuesNode) error
+
+	switch name {
+	case "all":
+		columns = ResultColumns{
+			{Name: "name", Typ: parser.TypeString},
+			{Name: "current_value", Typ: parser.TypeString},
+			{Name: "type", Typ: parser.TypeString},
+			{Name: "description", Typ: parser.TypeString},
+		}
+		populate = func(ctx context.Context, v *valuesNode) error {
+			for _, k := range settings.Keys() {
+				typ, _ := settings.TypeOf(k)
+				value, desc, _ := settings.Show(k)
+				if _, err := v.rows.AddRow(ctx, parser.Datums{
+					parser.NewDString(k),
+					parser.NewDString(value),
+					parser.NewDString(string([]byte{byte(typ)})),
+					parser.NewDString(desc),
+				}); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
+	default:
+		d, desc := settings.GetDatum(name)
+		if d == nil {
+			return nil, errors.Errorf("unknown setting: %q", name)
+		}
+		columns = ResultColumns{
+			{Name: name, Typ: d.ResolvedType()},
+			{Name: "description", Typ: parser.TypeString},
+		}
+		populate = func(ctx context.Context, v *valuesNode) error {
+			if _, err := v.rows.AddRow(ctx, parser.Datums{d, parser.NewDString(desc)}); err != nil {
+				return err
+			}
+			return nil
+		}
 	}
-	columns := ResultColumns{{Name: name, Typ: parser.TypeString}}
 
 	return &delayedNode{
 		name:    "SHOW CLUSTER SETTING " + name,
@@ -151,8 +189,7 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 1)
 
-			value, _ := settings.Show(name)
-			if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
+			if err := populate(ctx, v); err != nil {
 				v.rows.Close(ctx)
 				return nil, err
 			}

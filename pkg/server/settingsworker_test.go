@@ -149,4 +149,25 @@ func TestSettingsRefresh(t *testing.T) {
 		}
 		return nil
 	})
+
+	rows := db.QueryStr("SHOW ALL CLUSTER SETTINGS")
+	if len(rows) < 2 {
+		t.Fatalf("show all returned too few rows (%d)", len(rows))
+	}
+	if len(rows[0]) != 4 {
+		t.Fatal("show all must return 4 columns, found %d", len(rows[0]))
+	}
+	hasIntKey := false
+	hasStrKey := false
+	for _, row := range rows {
+		switch row[0] {
+		case strKey:
+			hasStrKey = true
+		case intKey:
+			hasIntKey = true
+		}
+	}
+	if !hasIntKey || !hasStrKey {
+		t.Fatal("show all did not find the test keys: %q", rows)
+	}
 }

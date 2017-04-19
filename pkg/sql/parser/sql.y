@@ -685,7 +685,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   ROW ROWS RSHIFT
 
 %token <str>   SAVEPOINT SCATTER SEARCH SECOND SELECT
-%token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SETTING SHOW
+%token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SETTING SETTINGS SHOW
 %token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str>   START STATUS STDIN STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
@@ -1604,6 +1604,14 @@ show_stmt:
 | SHOW CLUSTER SETTING any_name
   {
     $$.val = &Show{Name: $4.unresolvedName().String(), ClusterSetting: true}
+  }
+| SHOW CLUSTER SETTING ALL
+  {
+    $$.val = &Show{Name: "all", ClusterSetting: true}
+  }
+| SHOW ALL CLUSTER SETTINGS
+  {
+    $$.val = &Show{Name: "all", ClusterSetting: true}
   }
 | SHOW DATABASE
   {
@@ -5261,6 +5269,7 @@ unreserved_keyword:
 | ROLLUP
 | ROWS
 | SETTING
+| SETTINGS
 | STATUS
 | SAVEPOINT
 | SCATTER

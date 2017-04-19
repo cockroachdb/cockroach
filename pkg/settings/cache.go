@@ -15,8 +15,11 @@
 package settings
 
 import (
+	"sort"
+
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -83,21 +86,52 @@ func (v value) String() string {
 	}
 }
 
-// Show returns a string representation of the current value for a named setting
-// if it exists.
-func Show(key string) (string, bool) {
+// Keys returns a sorted string array with all the known keys.
+func Keys() (res []string) {
+	res = make([]string, 0, len(registry))
+	for k := range registry {
+		res = append(res, k)
+	}
+	sort.Strings(res)
+	return res
+}
+
+// GetDatum returns the value of the setting as a Datum, together with
+// its description.
+func GetDatum(key string) (parser.Datum, string) {
 	def, ok := registry[key]
 	if !ok {
-		return "", false
+		return nil, ""
+	}
+	switch def.typ {
+	case IntValue:
+		return parser.NewDInt(parser.DInt(getInt(key))), def.desc
+	case StringValue:
+		return parser.NewDString(getString(key)), def.desc
+	case BoolValue:
+		return parser.MakeDBool(parser.DBool(getBool(key))), def.desc
+	case FloatValue:
+		return parser.NewDFloat(parser.DFloat(getFloat(key))), def.desc
+	default:
+		return nil, ""
+	}
+}
+
+// Show returns a string representation of the current value for a named setting
+// if it exists. It also reports the description.
+func Show(key string) (string, string, bool) {
+	def, ok := registry[key]
+	if !ok {
+		return "", "", false
 	}
 	cache.RLock()
 	set, ok := cache.values[key]
 	cache.RUnlock()
 
 	if ok {
-		return set.String(), true
+		return set.String(), def.desc, true
 	}
-	return def.String(), true
+	return def.String(), def.desc, true
 }
 
 // Updater is a helper for replacing the global settings map. It is intended to
