@@ -299,13 +299,13 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Backend Statement Execution Latency: SQL, 99th percentile"
-                       tooltip={`The latency of backend statements executed over 10 second periods ${specifier}.`}>
+          <LineGraph title="Backend Statement Service Latency: SQL, 99th percentile"
+                       tooltip={`The latency of backend statements serviced over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
                   <Metric key={node}
-                          name="cr.node.sql.exec.latency-p99"
+                          name="cr.node.sql.service.latency-p99"
                           title={this.nodeAddress(node)}
                           sources={[node]}
                           downsampleMax />,
@@ -314,13 +314,13 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Backend Statement Execution Latency: SQL, 90th percentile"
-                       tooltip={`The latency of backend statements executed over 10 second periods ${specifier}.`}>
+          <LineGraph title="Backend Statement Service Latency: SQL, 90th percentile"
+                       tooltip={`The latency of backend statements serviced over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
                   <Metric key={node}
-                          name="cr.node.sql.exec.latency-p90"
+                          name="cr.node.sql.service.latency-p90"
                           title={this.nodeAddress(node)}
                           sources={[node]}
                           downsampleMax />,
@@ -329,13 +329,13 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Backend Statement Execution Latency: DistSQL, 99th percentile"
-                       tooltip={`The latency of backend statements executed over 10 second periods ${specifier}.`}>
+          <LineGraph title="Backend Statement Service Latency: DistSQL, 99th percentile"
+                       tooltip={`The latency of backend statements serviced over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
                   <Metric key={node}
-                          name="cr.node.sql.distsql.exec.latency-p99"
+                          name="cr.node.sql.distsql.service.latency-p99"
                           title={this.nodeAddress(node)}
                           sources={[node]}
                           downsampleMax />,
@@ -344,13 +344,13 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Backend Statement Execution Latency: DistSQL, 90th percentile"
-                       tooltip={`The latency of backend statements executed over 10 second periods ${specifier}.`}>
+          <LineGraph title="Backend Statement Service Latency: DistSQL, 90th percentile"
+                       tooltip={`The latency of backend statements serviced over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
                   <Metric key={node}
-                          name="cr.node.sql.distsql.exec.latency-p90"
+                          name="cr.node.sql.distsql.service.latency-p90"
                           title={this.nodeAddress(node)}
                           sources={[node]}
                           downsampleMax />,
