@@ -79,12 +79,18 @@ var (
 	MetaSQLExecLatency = metric.Metadata{
 		Name: "sql.exec.latency",
 		Help: "Latency of SQL statement execution"}
+	MetaSQLRequestLatency = metric.Metadata{
+		Name: "sql.request.latency",
+		Help: "Latency of SQL request execution"}
 	MetaDistSQLSelect = metric.Metadata{
 		Name: "sql.distsql.select.count",
 		Help: "Number of dist-SQL SELECT statements"}
 	MetaDistSQLExecLatency = metric.Metadata{
 		Name: "sql.distsql.exec.latency",
 		Help: "Latency of dist-SQL statement execution"}
+	MetaDistSQLRequestLatency = metric.Metadata{
+		Name: "sql.distsql.request.latency",
+		Help: "Latency of dist-SQL request execution"}
 	MetaUpdate = metric.Metadata{
 		Name: "sql.update.count",
 		Help: "Number of SQL UPDATE statements"}
@@ -197,10 +203,12 @@ type Executor struct {
 	// Transient stats.
 	SelectCount *metric.Counter
 	// The subset of SELECTs that are processed through DistSQL.
-	DistSQLSelectCount *metric.Counter
-	DistSQLExecLatency *metric.Histogram
-	SQLExecLatency     *metric.Histogram
-	TxnBeginCount      *metric.Counter
+	DistSQLSelectCount    *metric.Counter
+	DistSQLExecLatency    *metric.Histogram
+	SQLExecLatency        *metric.Histogram
+	DistSQLRequestLatency *metric.Histogram
+	SQLRequestLatency     *metric.Histogram
+	TxnBeginCount         *metric.Counter
 
 	// txnCommitCount counts the number of times a COMMIT was attempted.
 	TxnCommitCount *metric.Counter
@@ -307,6 +315,10 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		DistSQLExecLatency: metric.NewLatency(MetaDistSQLExecLatency,
 			6*metricsSampleInterval),
 		SQLExecLatency: metric.NewLatency(MetaSQLExecLatency,
+			6*metricsSampleInterval),
+		DistSQLRequestLatency: metric.NewLatency(MetaDistSQLRequestLatency,
+			6*metricsSampleInterval),
+		SQLRequestLatency: metric.NewLatency(MetaSQLRequestLatency,
 			6*metricsSampleInterval),
 		UpdateCount: metric.NewCounter(MetaUpdate),
 		InsertCount: metric.NewCounter(MetaInsert),

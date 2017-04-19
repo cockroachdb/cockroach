@@ -83,14 +83,20 @@ func (e *Executor) recordStatementSummary(
 	// server metrics.
 	runLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[plannerStartExecStmt])
 
+	// Compute the request latency, which includes parse and planning time in
+	// addition to the execution time.
+	reqLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[sessionStartParse])
+
 	if automaticRetryCount == 0 {
 		if distSQLUsed {
 			if _, ok := stmt.(*parser.Select); ok {
 				e.DistSQLSelectCount.Inc(1)
 			}
 			e.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+			e.DistSQLRequestLatency.RecordValue(reqLatRaw.Nanoseconds())
 		} else {
 			e.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+			e.SQLRequestLatency.RecordValue(reqLatRaw.Nanoseconds())
 		}
 	}
 
