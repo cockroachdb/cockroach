@@ -19,12 +19,14 @@ package base
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/dustin/go-humanize"
+	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -113,7 +115,7 @@ var fractionRegex = regexp.MustCompile(`^([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-9]+(\
 //   - 0.2             -> 20% of the available space
 // - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
 // Note that commas are forbidden within any field name or value.
-func newStoreSpec(value string) (StoreSpec, error) {
+func NewStoreSpec(value string) (StoreSpec, error) {
 	if len(value) == 0 {
 		return StoreSpec{}, fmt.Errorf("no value specified")
 	}
@@ -150,7 +152,15 @@ func newStoreSpec(value string) (StoreSpec, error) {
 			if value[0] == '~' {
 				return StoreSpec{}, fmt.Errorf("store path cannot start with '~': %s", value)
 			}
-			ss.Path = value
+			// Ensure that the store paths are absolute. This will clarify the
+			// output of the startup messages and ensure that logging doesn't
+			// get confused if the current working directory were to change for
+			// any reason.
+			var err error
+			ss.Path, err = filepath.Abs(value)
+			if err != nil {
+				return StoreSpec{}, errors.Wrapf(err, "could not find absolute path for %s", value)
+			}
 		case "size":
 			if fractionRegex.MatchString(value) {
 				percentFactor := 100.0
@@ -248,7 +258,7 @@ func (ssl *StoreSpecList) Type() string {
 // Set adds a new value to the StoreSpecValue. It is the important part of
 // pflag's value interface.
 func (ssl *StoreSpecList) Set(value string) error {
-	spec, err := newStoreSpec(value)
+	spec, err := NewStoreSpec(value)
 	if err != nil {
 		return err
 	}
