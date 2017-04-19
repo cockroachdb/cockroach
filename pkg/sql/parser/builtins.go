@@ -79,7 +79,6 @@ const (
 	categoryIDGeneration  = "ID Generation"
 	categoryMath          = "Math and Numeric"
 	categoryString        = "String and Byte"
-	categoryBitwise       = "Bitwise"
 	categorySystemInfo    = "System Info"
 )
 
@@ -1411,20 +1410,6 @@ var Builtins = map[string][]Builtin{
 			Info: "Calculates the maximum value of `input` on the provided `array_dimension`. " +
 				"However, because CockroachDB doesn't yet support multi-dimensional arrays, the only " +
 				"supported `array_dimension` is **1**.",
-		},
-	},
-
-	// Bitwise functions.
-
-	"bitwise_not": {
-		Builtin{
-			Types:      ArgTypes{{"x", TypeInt}},
-			ReturnType: fixedReturnType(TypeInt),
-			category:   categoryBitwise,
-			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				return NewDInt(^MustBeDInt(args[0])), nil
-			},
-			Info: "Returns the bitwise not of `x`.",
 		},
 	},
 

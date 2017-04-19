@@ -3783,6 +3783,10 @@ a_expr:
   {
     $$.val = &UnaryExpr{Operator: UnaryMinus, Expr: $2.expr()}
   }
+| '~' a_expr %prec UMINUS
+  {
+    $$.val = &UnaryExpr{Operator: UnaryComplement, Expr: $2.expr()}
+  }
 | a_expr '+' a_expr
   {
     $$.val = &BinaryExpr{Operator: Plus, Left: $1.expr(), Right: $3.expr()}
@@ -4039,6 +4043,10 @@ b_expr:
 | '-' b_expr %prec UMINUS
   {
     $$.val = &UnaryExpr{Operator: UnaryMinus, Expr: $2.expr()}
+  }
+| '~' b_expr %prec UMINUS
+  {
+    $$.val = &UnaryExpr{Operator: UnaryComplement, Expr: $2.expr()}
   }
 | b_expr '+' b_expr
   {
