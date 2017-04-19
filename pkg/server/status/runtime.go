@@ -181,7 +181,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 		if _, ok := err.(gosigar.ErrNotImplemented); ok {
 			if !rsr.fdUsageNotImplemented {
 				rsr.fdUsageNotImplemented = true
-				log.Errorf(ctx, "unable to get file descriptor usage (will not try again): %s", err)
+				log.Warningf(ctx, "unable to get file descriptor usage (will not try again): %s", err)
 			}
 		} else {
 			log.Errorf(ctx, "unable to get file descriptor usage: %s", err)
