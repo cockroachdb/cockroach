@@ -432,13 +432,8 @@ func (p *planner) getAliasedTableName(n parser.TableExpr) (*parser.TableName, er
 }
 
 // notifySchemaChange implements the SchemaAccessor interface.
-func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationID) {
-	sc := SchemaChanger{
-		tableID:    id,
-		mutationID: mutationID,
-		nodeID:     p.evalCtx.NodeID,
-		leaseMgr:   p.LeaseMgr(),
-	}
+func (p *planner) notifySchemaChange(tableID sqlbase.ID, mutationID sqlbase.MutationID) {
+	sc := MakeSchemaChanger(tableID, mutationID, p.evalCtx.NodeID, p.LeaseMgr())
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
 }
 

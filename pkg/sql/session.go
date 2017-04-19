@@ -796,11 +796,9 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	// statements that scheduled them.
 	for _, scEntry := range scc.schemaChangers {
 		sc := &scEntry.sc
-		sc.db = *e.cfg.DB
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
-		sc.distSQLPlanner = e.distSQLPlanner
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			if err := sc.exec(ctx); err != nil {
+			if err := sc.exec(ctx, *e.cfg.DB, e.distSQLPlanner); err != nil {
 				if err != errExistingSchemaChangeLease {
 					log.Warningf(ctx, "Error executing schema change: %s", err)
 				}

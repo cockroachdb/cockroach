@@ -78,7 +78,7 @@ type planner struct {
 // growth in the log.
 var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
 
-// makePlanner creates a new planner instance, referencing a dummy session.
+// makeInternalPlanner creates a new planner instance, referencing a dummy session.
 func makeInternalPlanner(
 	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
 ) *planner {

@@ -53,12 +53,16 @@ type SchemaChanger struct {
 	tableID    sqlbase.ID
 	mutationID sqlbase.MutationID
 	nodeID     roachpb.NodeID
-	db         client.DB
 	leaseMgr   *LeaseManager
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
-	execAfter      time.Time
-	testingKnobs   *SchemaChangerTestingKnobs
+	execAfter    time.Time
+	testingKnobs *SchemaChangerTestingKnobs
+
+	// Member initialized at exec() time below.
+
+	db client.DB
+	// distSQLPlanner is the planner used to execute distributed backfills.
 	distSQLPlanner *distSQLPlanner
 }
 
@@ -73,19 +77,15 @@ func (sc *SchemaChanger) truncateAndDropTable(
 	return truncateAndDropTable(ctx, tableDesc, &sc.db, *sc.testingKnobs)
 }
 
-// NewSchemaChangerForTesting only for tests.
-func NewSchemaChangerForTesting(
-	tableID sqlbase.ID,
-	mutationID sqlbase.MutationID,
-	nodeID roachpb.NodeID,
-	db client.DB,
-	leaseMgr *LeaseManager,
+// MakeSchemaChanger creates a SchemaChanger. None of the args can be empty or
+// nil except in tests that know what they're doing.
+func MakeSchemaChanger(
+	tableID sqlbase.ID, mutationID sqlbase.MutationID, nodeID roachpb.NodeID, leaseMgr *LeaseManager,
 ) SchemaChanger {
 	return SchemaChanger{
 		tableID:    tableID,
 		mutationID: mutationID,
 		nodeID:     nodeID,
-		db:         db,
 		leaseMgr:   leaseMgr,
 	}
 }
@@ -285,7 +285,12 @@ func (sc *SchemaChanger) maybeAddDropRename(
 }
 
 // Execute the entire schema change in steps.
-func (sc *SchemaChanger) exec(ctx context.Context) error {
+func (sc *SchemaChanger) exec(
+	ctx context.Context, db client.DB, distSQLPlanner *distSQLPlanner,
+) error {
+	sc.db = db
+	sc.distSQLPlanner = distSQLPlanner
+
 	// Acquire lease.
 	lease, err := sc.AcquireLease(ctx)
 	if err != nil {
@@ -763,13 +768,6 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				if log.V(2) {
 					log.Info(ctx, "received a new config")
 				}
-				schemaChanger := SchemaChanger{
-					nodeID:         s.leaseMgr.nodeID.Get(),
-					db:             s.db,
-					leaseMgr:       s.leaseMgr,
-					testingKnobs:   s.testingKnobs,
-					distSQLPlanner: s.distSQLPlanner,
-				}
 				// Keep track of existing schema changers.
 				oldSchemaChangers := make(map[sqlbase.ID]struct{}, len(s.schemaChangers))
 				for k := range s.schemaChangers {
@@ -812,12 +810,13 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							// Only track the first schema change. We depend on
 							// gossip to renotify us when a schema change has been
 							// completed.
-							schemaChanger.tableID = table.ID
-							if len(table.Mutations) == 0 {
-								schemaChanger.mutationID = sqlbase.InvalidMutationID
-							} else {
-								schemaChanger.mutationID = table.Mutations[0].MutationID
+							mutationID := sqlbase.InvalidMutationID
+							if len(table.Mutations) != 0 {
+								mutationID = table.Mutations[0].MutationID
 							}
+							schemaChanger := MakeSchemaChanger(
+								table.ID, mutationID, s.leaseMgr.nodeID.Get(), s.leaseMgr)
+							schemaChanger.testingKnobs = s.testingKnobs
 							schemaChanger.execAfter = execAfter
 							// Keep track of this schema change.
 							// Remove from oldSchemaChangers map.
@@ -850,7 +849,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
 						// TODO(andrei): create a proper ctx for executing schema changes.
-						if err := sc.exec(ctx); err != nil {
+						if err := sc.exec(ctx, s.db, s.distSQLPlanner); err != nil {
 							if err != errExistingSchemaChangeLease {
 								log.Warningf(ctx, "Error executing schema change: %s", err)
 							}
@@ -875,4 +874,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 			}
 		}
 	})
+}
+
+// SetDBForTest sets the db member for tests that need to call methods that need
+// it directly, without going through exec().
+func (sc *SchemaChanger) SetDBForTest(db client.DB) {
+	sc.db = db
 }

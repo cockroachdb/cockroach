@@ -75,8 +75,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
-	changer := sql.NewSchemaChangerForTesting(id, 0, node, *kvDB, nil)
-
+	changer := sql.MakeSchemaChanger(id, 0 /* mutationID */, node, nil /* leaseMgr */)
+	changer.SetDBForTest(*kvDB)
 	ctx := context.TODO()
 
 	// Acquire a lease.
@@ -180,7 +180,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		&sql.MemoryMetrics{},
 	)
 	defer stopper.Stop(context.TODO())
-	changer := sql.NewSchemaChangerForTesting(id, 0, node, *kvDB, leaseMgr)
+	changer := sql.MakeSchemaChanger(id, 0 /* mutationID */, node, leaseMgr)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -252,7 +252,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	index.Name = "bar"
 	index.ID = tableDesc.NextIndexID
 	tableDesc.NextIndexID++
-	changer = sql.NewSchemaChangerForTesting(id, tableDesc.NextMutationID, node, *kvDB, leaseMgr)
+	changer = sql.MakeSchemaChanger(id, tableDesc.NextMutationID, node, leaseMgr)
+	changer.SetDBForTest(*kvDB)
 	tableDesc.Mutations = append(tableDesc.Mutations, sqlbase.DescriptorMutation{
 		Descriptor_: &sqlbase.DescriptorMutation_Index{Index: index},
 		Direction:   sqlbase.DescriptorMutation_ADD,
@@ -451,8 +452,10 @@ func runSchemaChangeWithOperations(
 
 	// Grabbing a schema change lease on the table will fail, disallowing
 	// another schema change from being simultaneously executed.
-	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil)
-	if l, err := sc.AcquireLease(ctx); err == nil {
+	changer := sql.MakeSchemaChanger(
+		tableDesc.ID, 0 /* mutationID */, 0 /* nodeID */, nil /* leaseMgr */)
+	changer.SetDBForTest(*kvDB)
+	if l, err := changer.AcquireLease(ctx); err == nil {
 		t.Fatalf("schema change lease acquisition on table %d succeeded: %v", tableDesc.ID, l)
 	}
 
