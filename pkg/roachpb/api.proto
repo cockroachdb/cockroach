@@ -832,6 +832,7 @@ message ImportRequest {
 // ImportResponse is the response to a Import() operation.
 message ImportResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional int64 data_size = 2 [(gogoproto.nullable) = false];
 }
 
 // AdminScatterRequest is the argument to the AdminScatter() method, which moves

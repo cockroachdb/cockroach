@@ -196,24 +196,19 @@ func backupRestoreTestSetup(
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, base.TestClusterArgs{})
 }
 
-func TestBackupStatementResult(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	const numAccounts = 1
-
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
-	defer cleanupFn()
-
-	rows := sqlDB.Query("BACKUP DATABASE bench TO $1", dir)
+func verifyBackupRestoreStatementResult(
+	sqlDB *sqlutils.SQLRunner, query string, args ...interface{},
+) error {
+	rows := sqlDB.Query(query, args...)
 
 	columns, err := rows.Columns()
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	if e, a := columns, []string{
 		"job_id", "status", "fraction_completed", "bytes",
 	}; !reflect.DeepEqual(e, a) {
-		t.Fatalf("unexpected backup columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
+		return errors.Errorf("unexpected columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
 	}
 
 	type job struct {
@@ -227,13 +222,13 @@ func TestBackupStatementResult(t *testing.T) {
 	var unused int64
 
 	if !rows.Next() {
-		t.Fatal("zero rows in backup result")
+		return errors.New("zero rows in result")
 	}
 	if err := rows.Scan(&actualJob.id, &actualJob.status, &actualJob.fractionCompleted, &unused); err != nil {
-		t.Fatal(err)
+		return err
 	}
 	if rows.Next() {
-		t.Fatal("more than one row in backup result")
+		return errors.New("more than one row in result")
 	}
 
 	sqlDB.QueryRow(
@@ -243,7 +238,33 @@ func TestBackupStatementResult(t *testing.T) {
 	)
 
 	if e, a := expectedJob, actualJob; !reflect.DeepEqual(e, a) {
-		t.Fatalf("backup output does not match system.jobs:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
+		return errors.Errorf("result does not match system.jobs:\n%s",
+			strings.Join(pretty.Diff(e, a), "\n"))
+	}
+
+	return nil
+}
+
+func TestBackupRestoreStatementResult(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+
+	if err := verifyBackupRestoreStatementResult(
+		sqlDB, "BACKUP DATABASE bench TO $1", dir,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlDB.Exec("CREATE DATABASE bench2")
+
+	if err := verifyBackupRestoreStatementResult(
+		sqlDB, "RESTORE bench.* FROM $1 WITH OPTIONS ('into_db'='bench2')", dir,
+	); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -304,7 +325,15 @@ func backupAndRestore(
 		// Force the ID of the restored bank table to be different.
 		sqlDBRestore.Exec(`CREATE TABLE bench.empty (a INT PRIMARY KEY)`)
 
-		sqlDBRestore.Exec(`RESTORE bench.* FROM $1`, dest)
+		var unused string
+		var bytes int64
+		sqlDBRestore.QueryRow(`RESTORE bench.* FROM $1`, dest).Scan(
+			&unused, &unused, &unused, &bytes,
+		)
+		approxBytes := int64(backupRestoreRowPayloadSize) * numAccounts
+		if max := approxBytes * 2; bytes < approxBytes || bytes > max {
+			t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, bytes)
+		}
 
 		var rowCount int64
 		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
