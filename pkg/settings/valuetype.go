@@ -16,6 +16,7 @@ package settings
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -27,10 +28,11 @@ type ValueType byte
 // NB: We don't reuse sql/parser.Types here, to avoid deps which would then make
 // `settings` unusable in a whole subtree of packages.
 const (
-	StringValue ValueType = 's'
-	BoolValue             = 'b'
-	IntValue              = 'i'
-	FloatValue            = 'f'
+	StringValue   ValueType = 's'
+	BoolValue               = 'b'
+	IntValue                = 'i'
+	FloatValue              = 'f'
+	DurationValue           = 'd'
 )
 
 func valueTypeFromStr(s string) (ValueType, error) {
@@ -39,7 +41,7 @@ func valueTypeFromStr(s string) (ValueType, error) {
 	}
 
 	switch t := ValueType(s[0]); t {
-	case StringValue, BoolValue, IntValue, FloatValue:
+	case StringValue, BoolValue, IntValue, FloatValue, DurationValue:
 		return t, nil
 	default:
 		return 0, errors.Errorf("invalid value type %c", t)
@@ -58,10 +60,17 @@ func parseRaw(raw string, typ ValueType) (value, error) {
 		ret.i, err = strconv.Atoi(raw)
 	case FloatValue:
 		ret.f, err = strconv.ParseFloat(raw, 64)
+	case DurationValue:
+		ret.d, err = time.ParseDuration(raw)
 	default:
 		err = errors.Errorf("invalid value type %c", typ)
 	}
 	return ret, err
+}
+
+// EncodeDuration encodes a duration in the format parseRaw expects.
+func EncodeDuration(d time.Duration) string {
+	return d.String()
 }
 
 // EncodeBool encodes a bool in the format parseRaw expects.

@@ -16,6 +16,7 @@ package settings
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -29,6 +30,7 @@ var strBarAccessor = RegisterStringSetting("str.bar", "", "bar")
 var i1Accessor = RegisterIntSetting("i.1", "", 0)
 var i2Accessor = RegisterIntSetting("i.2", "", 5)
 var fAccessor = RegisterFloatSetting("f", "", 5.4)
+var dAccessor = RegisterDurationSetting("d", "", time.Second)
 
 func init() {
 	RegisterCallback(func() {
@@ -65,6 +67,9 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 5.4, fAccessor(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := time.Second, dAccessor(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if actual, ok := TypeOf("i.1"); !ok || IntValue != actual {
@@ -116,6 +121,9 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 3.1, fAccessor(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := time.Second, dAccessor(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
