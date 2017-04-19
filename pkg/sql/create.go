@@ -112,6 +112,7 @@ func (n *createDatabaseNode) Start(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
+		n.p.session.leases.addUncommittedDatabase(desc.Name, desc.ID)
 	}
 	return nil
 }

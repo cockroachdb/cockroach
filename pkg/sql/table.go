@@ -256,9 +256,22 @@ func (lc *LeaseCollection) getTableLease(
 		return tbl, nil
 	}
 
-	dbID, err := lc.databaseCache.getDatabaseID(ctx, txn, vt, tn.Database())
-	if err != nil {
-		return nil, err
+	var dbID sqlbase.ID
+	for _, db := range lc.uncommittedDatabases {
+		if tn.Database() == db.name {
+			dbID = db.id
+			break
+		}
+	}
+	if dbID == 0 {
+		if err := lc.leaseMgr.LeaseStore.db.Txn(
+			ctx, func(ctx context.Context, txn *client.Txn) error {
+				var err error
+				dbID, err = lc.databaseCache.getDatabaseID(ctx, txn, vt, tn.Database())
+				return err
+			}); err != nil {
+			return nil, err
+		}
 	}
 
 	for _, l := range lc.uncommittedLeases {

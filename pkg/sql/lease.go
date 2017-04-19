@@ -1282,6 +1282,11 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 	})
 }
 
+type uncommittedDatabase struct {
+	name string
+	id   sqlbase.ID
+}
+
 // LeaseCollection is a collection of leases held by a single session that
 // serves SQL requests, or a background job using a table descriptor.
 type LeaseCollection struct {
@@ -1296,6 +1301,8 @@ type LeaseCollection struct {
 	// to other transactions. These dummy leases allow a transaction to
 	// use an uncommitted table descriptor created within the transaction.
 	uncommittedLeases []*LeaseState
+
+	uncommittedDatabases []uncommittedDatabase
 
 	// leaseMgr manages acquiring and releasing per-table leases.
 	leaseMgr *LeaseManager
@@ -1316,4 +1323,8 @@ func (lc *LeaseCollection) addUncommittedLease(
 	}
 
 	lc.uncommittedLeases = append(lc.uncommittedLeases, lease)
+}
+
+func (lc *LeaseCollection) addUncommittedDatabase(name string, id sqlbase.ID) {
+	lc.uncommittedDatabases = append(lc.uncommittedDatabases, uncommittedDatabase{name: name, id: id})
 }
