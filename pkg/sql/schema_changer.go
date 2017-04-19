@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -56,7 +55,6 @@ type SchemaChanger struct {
 	nodeID     roachpb.NodeID
 	db         client.DB
 	leaseMgr   *LeaseManager
-	evalCtx    parser.EvalContext
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
 	execAfter      time.Time
@@ -488,7 +486,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 			txn,
 			EventLogFinishSchemaChange,
 			int32(sc.tableID),
-			int32(sc.evalCtx.NodeID),
+			int32(sc.nodeID),
 			struct {
 				MutationID uint32
 			}{uint32(sc.mutationID)},
@@ -564,7 +562,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			txn,
 			EventLogReverseSchemaChange,
 			int32(sc.tableID),
-			int32(sc.evalCtx.NodeID),
+			int32(sc.nodeID),
 			struct {
 				Error      string
 				MutationID uint32
