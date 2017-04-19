@@ -81,7 +81,7 @@ func (db *DB) PollSource(
 // start begins the goroutine for this poller, which will periodically request
 // time series data from the DataSource and store it.
 func (p *poller) start() {
-	p.stopper.RunWorker(context.TODO(), func() {
+	p.stopper.RunWorker(context.TODO(), func(context.Context) {
 		// Poll once immediately.
 		p.poll()
 		ticker := time.NewTicker(p.frequency)
@@ -100,20 +100,21 @@ func (p *poller) start() {
 // poll retrieves data from the underlying DataSource a single time, storing any
 // returned time series data on the server.
 func (p *poller) poll() {
-	if err := p.stopper.RunTask(context.TODO(), func() {
+	bgCtx := p.AnnotateCtx(context.Background())
+	if err := p.stopper.RunTask(bgCtx, func(bgCtx context.Context) {
 		data := p.source.GetTimeSeriesData()
 		if len(data) == 0 {
 			return
 		}
 
-		ctx, span := p.AnnotateCtxWithSpan(context.Background(), "ts-poll")
+		ctx, span := p.AnnotateCtxWithSpan(bgCtx, "ts-poll")
 		defer span.Finish()
 
 		if err := p.db.StoreData(ctx, p.r, data); err != nil {
 			log.Warningf(ctx, "error writing time series data: %s", err)
 		}
 	}); err != nil {
-		log.Warning(p.AnnotateCtx(context.TODO()), err)
+		log.Warning(bgCtx, err)
 	}
 }
 

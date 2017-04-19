@@ -4394,7 +4394,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 	}
 	var hasLease bool
 	var pErr *roachpb.Error
-	if err := r.store.Stopper().RunTask(ctx, func() {
+	if err := r.store.Stopper().RunTask(ctx, func(ctx context.Context) {
 		// Check for or obtain the lease, if none active.
 		_, pErr = r.redirectOnOrAcquireLease(ctx)
 		hasLease = pErr == nil

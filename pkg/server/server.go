@@ -493,7 +493,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	workersCtx := s.AnnotateCtx(context.Background())
 
-	s.stopper.RunWorker(workersCtx, func() {
+	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 		<-s.stopper.ShouldQuiesce()
 		if err := httpLn.Close(); err != nil {
 			log.Fatal(workersCtx, err)
@@ -505,22 +505,22 @@ func (s *Server) Start(ctx context.Context) error {
 		clearL := httpMux.Match(cmux.HTTP1())
 		tlsL := httpMux.Match(cmux.Any())
 
-		s.stopper.RunWorker(workersCtx, func() {
+		s.stopper.RunWorker(workersCtx, func(context.Context) {
 			netutil.FatalIfUnexpected(httpMux.Serve())
 		})
 
-		s.stopper.RunWorker(workersCtx, func() {
+		s.stopper.RunWorker(workersCtx, func(context.Context) {
 			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
 		})
 
 		httpLn = tls.NewListener(tlsL, tlsConfig)
 	}
 
-	s.stopper.RunWorker(workersCtx, func() {
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		netutil.FatalIfUnexpected(httpServer.Serve(httpLn))
 	})
 
-	s.stopper.RunWorker(workersCtx, func() {
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(anyL.Close())
 		<-s.stopper.ShouldStop()
@@ -531,7 +531,7 @@ func (s *Server) Start(ctx context.Context) error {
 		})
 	})
 
-	s.stopper.RunWorker(workersCtx, func() {
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
 	})
 
@@ -580,7 +580,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
-	s.stopper.RunWorker(pgCtx, func() {
+	s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
 		select {
 		case <-serveSQL:
 		case <-s.stopper.ShouldQuiesce():
@@ -701,7 +701,7 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
-	s.stopper.RunWorker(workersCtx, func() {
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		serveOnMux.Do(func() {
 			netutil.FatalIfUnexpected(m.Serve())
 		})
@@ -716,7 +716,7 @@ func (s *Server) Start(ctx context.Context) error {
 			return err
 		}
 
-		s.stopper.RunWorker(workersCtx, func() {
+		s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 			<-s.stopper.ShouldQuiesce()
 			if err := unixLn.Close(); err != nil {
 				log.Fatal(workersCtx, err)
@@ -724,7 +724,7 @@ func (s *Server) Start(ctx context.Context) error {
 		})
 
 		pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
-		s.stopper.RunWorker(pgCtx, func() {
+		s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
 			select {
 			case <-serveSQL:
 			case <-s.stopper.ShouldQuiesce():
@@ -890,7 +890,7 @@ func (s *Server) Undrain(off []serverpb.DrainMode) []serverpb.DrainMode {
 func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	// Immediately record summaries once on server startup.
 	ctx := s.AnnotateCtx(context.Background())
-	s.stopper.RunWorker(ctx, func() {
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		ticker := time.NewTicker(frequency)
 		defer ticker.Stop()
 		for {

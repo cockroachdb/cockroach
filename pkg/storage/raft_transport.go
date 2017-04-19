@@ -183,7 +183,7 @@ func NewRaftTransport(
 
 	if t.rpcContext != nil && log.V(1) {
 		ctx := t.AnnotateCtx(context.Background())
-		t.rpcContext.Stopper.RunWorker(ctx, func() {
+		t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			lastStats := make(map[roachpb.NodeID]raftTransportStats)
@@ -292,8 +292,8 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
-	if err := t.rpcContext.Stopper.RunTask(stream.Context(), func() {
-		t.rpcContext.Stopper.RunWorker(stream.Context(), func() {
+	if err := t.rpcContext.Stopper.RunTask(stream.Context(), func(ctx context.Context) {
+		t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
 			errCh <- func() error {
 				var stats *raftTransportStats
 				for {
@@ -312,7 +312,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					for i := range batch.Requests {
 						req := &batch.Requests[i]
 						atomic.AddInt64(&stats.serverRecv, 1)
-						if pErr := t.handleRaftRequest(stream.Context(), req, stream); pErr != nil {
+						if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
 							atomic.AddInt64(&stats.serverSent, 1)
 							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
 								return err
@@ -459,8 +459,8 @@ func (t *RaftTransport) processQueue(
 	errCh := make(chan error, 1)
 
 	// Starting workers in a task prevents data races during shutdown.
-	if err := t.rpcContext.Stopper.RunTask(stream.Context(), func() {
-		t.rpcContext.Stopper.RunWorker(stream.Context(), func() {
+	if err := t.rpcContext.Stopper.RunTask(stream.Context(), func(ctx context.Context) {
+		t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
 			errCh <- func() error {
 				for {
 					resp, err := stream.Recv()
@@ -472,11 +472,11 @@ func (t *RaftTransport) processQueue(
 					handler, ok := t.recvMu.handlers[resp.ToReplica.StoreID]
 					t.recvMu.Unlock()
 					if !ok {
-						log.Warningf(stream.Context(), "no handler found for store %s in response %s",
+						log.Warningf(ctx, "no handler found for store %s in response %s",
 							resp.ToReplica.StoreID, resp)
 						continue
 					}
-					if err := handler.HandleRaftResponse(stream.Context(), resp); err != nil {
+					if err := handler.HandleRaftResponse(ctx, resp); err != nil {
 						return err
 					}
 				}
@@ -569,8 +569,8 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		}
 		// Starting workers in a task prevents data races during shutdown.
 		ctx := t.AnnotateCtx(context.Background())
-		if err := t.rpcContext.Stopper.RunTask(ctx, func() {
-			t.rpcContext.Stopper.RunWorker(ctx, func() {
+		if err := t.rpcContext.Stopper.RunTask(ctx, func(ctx context.Context) {
+			t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
 				t.connectAndProcess(ctx, toNodeID, ch, stats)
 				deleteQueue()
 			})

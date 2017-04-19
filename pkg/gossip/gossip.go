@@ -1015,12 +1015,12 @@ func (g *Gossip) getNextBootstrapAddressLocked() net.Addr {
 // lost and requires re-bootstrapping.
 func (g *Gossip) bootstrap() {
 	ctx := g.AnnotateCtx(context.Background())
-	g.server.stopper.RunWorker(ctx, func() {
+	g.server.stopper.RunWorker(ctx, func(ctx context.Context) {
 		ctx = log.WithLogTag(ctx, "bootstrap", nil)
 		var bootstrapTimer timeutil.Timer
 		defer bootstrapTimer.Stop()
 		for {
-			if g.server.stopper.RunTask(ctx, func() {
+			if g.server.stopper.RunTask(ctx, func(ctx context.Context) {
 				g.mu.Lock()
 				defer g.mu.Unlock()
 				haveClients := g.outgoing.len() > 0
@@ -1080,7 +1080,7 @@ func (g *Gossip) bootstrap() {
 // is notified via the stalled conditional variable.
 func (g *Gossip) manage() {
 	ctx := g.AnnotateCtx(context.Background())
-	g.server.stopper.RunWorker(ctx, func() {
+	g.server.stopper.RunWorker(ctx, func(ctx context.Context) {
 		cullTicker := time.NewTicker(g.jitteredInterval(g.cullInterval))
 		stallTicker := time.NewTicker(g.jitteredInterval(g.stallInterval))
 		defer cullTicker.Stop()

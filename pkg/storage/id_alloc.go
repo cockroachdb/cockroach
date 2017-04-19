@@ -93,7 +93,7 @@ func (ia *idAllocator) Allocate() (uint32, error) {
 
 func (ia *idAllocator) start() {
 	ctx := ia.AnnotateCtx(context.Background())
-	ia.stopper.RunWorker(ctx, func() {
+	ia.stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer close(ia.ids)
 
 		for {
@@ -103,7 +103,7 @@ func (ia *idAllocator) start() {
 				var res client.KeyValue
 				for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 					idKey := ia.idKey.Load().(roachpb.Key)
-					if err := ia.stopper.RunTask(ctx, func() {
+					if err := ia.stopper.RunTask(ctx, func(ctx context.Context) {
 						res, err = ia.db.Inc(ctx, idKey, int64(ia.blockSize))
 					}); err != nil {
 						log.Warning(ctx, err)

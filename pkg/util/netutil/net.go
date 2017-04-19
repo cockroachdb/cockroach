@@ -47,14 +47,14 @@ func ListenAndServeGRPC(
 
 	ctx := context.TODO()
 
-	stopper.RunWorker(ctx, func() {
+	stopper.RunWorker(ctx, func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		FatalIfUnexpected(ln.Close())
 		<-stopper.ShouldStop()
 		server.Stop()
 	})
 
-	stopper.RunWorker(ctx, func() {
+	stopper.RunWorker(ctx, func(context.Context) {
 		FatalIfUnexpected(server.Serve(ln))
 	})
 	return ln, nil
@@ -98,7 +98,7 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 		log.Fatal(ctx, err)
 	}
 
-	stopper.RunWorker(ctx, func() {
+	stopper.RunWorker(ctx, func(context.Context) {
 		<-stopper.ShouldStop()
 
 		mu.Lock()

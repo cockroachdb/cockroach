@@ -42,7 +42,7 @@ func TestStopper(t *testing.T) {
 	cleanup := make(chan struct{})
 	ctx := context.Background()
 
-	s.RunWorker(ctx, func() {
+	s.RunWorker(ctx, func(context.Context) {
 		<-running
 	})
 
@@ -119,7 +119,7 @@ func TestStopperMultipleStopees(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < count; i++ {
-		s.RunWorker(ctx, func() {
+		s.RunWorker(ctx, func(context.Context) {
 			<-s.ShouldStop()
 		})
 	}
@@ -138,7 +138,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 	s := stop.NewStopper()
 	ctx := context.Background()
 
-	if err := s.RunTask(ctx, func() {
+	if err := s.RunTask(ctx, func(ctx context.Context) {
 		go s.Stop(ctx)
 
 		select {
@@ -162,7 +162,7 @@ func TestStopperRunWorker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	ctx := context.Background()
-	s.RunWorker(ctx, func() {
+	s.RunWorker(ctx, func(context.Context) {
 		<-s.ShouldStop()
 	})
 	closer := make(chan struct{})
@@ -195,10 +195,10 @@ func TestStopperQuiesce(t *testing.T) {
 		quiesceDone = append(quiesceDone, qc)
 		sc := make(chan struct{})
 		runTaskDone = append(runTaskDone, sc)
-		thisStopper.RunWorker(ctx, func() {
+		thisStopper.RunWorker(ctx, func(ctx context.Context) {
 			// Wait until Quiesce() is called.
 			<-qc
-			err := thisStopper.RunTask(ctx, func() {})
+			err := thisStopper.RunTask(ctx, func(context.Context) {})
 			if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
 				t.Error(err)
 			}
@@ -319,21 +319,21 @@ func TestStopperRunTaskPanic(t *testing.T) {
 	}))
 	// If RunTask were not panic-safe, Stop() would deadlock.
 	type testFn func()
-	explode := func() { panic(ch) }
+	explode := func(context.Context) { panic(ch) }
 	ctx := context.Background()
 	for i, test := range []testFn{
 		func() {
 			_ = s.RunTask(ctx, explode)
 		},
 		func() {
-			_ = s.RunAsyncTask(ctx, func(_ context.Context) { explode() })
+			_ = s.RunAsyncTask(ctx, func(ctx context.Context) { explode(ctx) })
 		},
 		func() {
 			_ = s.RunLimitedAsyncTask(
 				context.Background(),
 				make(chan struct{}, 1),
 				true, /* wait */
-				func(_ context.Context) { explode() },
+				func(ctx context.Context) { explode(ctx) },
 			)
 		},
 		func() {
@@ -370,7 +370,7 @@ func TestStopperShouldQuiesce(t *testing.T) {
 	// Run a worker. A call to stopper.Stop(context.Background()) will not close until all workers
 	// have completed, and this worker will complete when the "running" channel
 	// is closed.
-	s.RunWorker(ctx, func() {
+	s.RunWorker(ctx, func(context.Context) {
 		<-running
 	})
 	// Run an asynchronous task. A stopper which has been Stop()ed will not
@@ -548,7 +548,7 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	}
 }
 
-func maybePrint() {
+func maybePrint(context.Context) {
 	if testing.Verbose() { // This just needs to be complicated enough not to inline.
 		fmt.Println("blah")
 	}
@@ -557,9 +557,10 @@ func maybePrint() {
 func BenchmarkDirectCall(b *testing.B) {
 	defer leaktest.AfterTest(b)
 	s := stop.NewStopper()
-	defer s.Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stop(ctx)
 	for i := 0; i < b.N; i++ {
-		maybePrint()
+		maybePrint(ctx)
 	}
 }
 
@@ -577,10 +578,11 @@ func BenchmarkStopper(b *testing.B) {
 func BenchmarkDirectCallPar(b *testing.B) {
 	defer leaktest.AfterTest(b)
 	s := stop.NewStopper()
-	defer s.Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stop(ctx)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			maybePrint()
+			maybePrint(ctx)
 		}
 	})
 }
