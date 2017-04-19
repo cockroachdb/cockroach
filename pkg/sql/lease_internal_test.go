@@ -28,7 +28,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -361,12 +360,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Populate the name cache.
-	var lease *LeaseState
-	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		lease, err = leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
-		return err
-	}); err != nil {
+
+	lease, err := leaseManager.AcquireByName(context.TODO(), leaseManager.Now(), tableDesc.ParentID, "test")
+	if err != nil {
 		t.Fatal(err)
 	}
 	if err := leaseManager.Release(lease); err != nil {
@@ -392,62 +388,57 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}()
 
 	for i := 0; i < 50; i++ {
-		var leaseByName *LeaseState
-		if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-			var err error
-			lease, err := leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
-			if err != nil {
-				t.Fatal(err)
-			}
-			// This test will need to wait until leases are removed from the store
-			// before creating new leases because the jitter used in the leases'
-			// expiration causes duplicate key errors when trying to create new
-			// leases. This is not a problem in production, since leases are not
-			// removed from the store until they expire, and the jitter is small
-			// compared to their lifetime, but it is a problem in this test because
-			// we churn through leases quickly.
-			tracker := removalTracker.TrackRemoval(lease)
-			// Start the race: signal the other guy to release, and we do another
-			// acquire at the same time.
-			leaseChan <- lease
-			leaseByName, err = leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
-			if err != nil {
-				t.Fatal(err)
-			}
-			tracker2 := removalTracker.TrackRemoval(leaseByName)
-			// See if there was an error releasing lease.
-			err = <-errChan
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// Depending on how the race went, there are two cases - either the
-			// AcquireByName ran first, and got the same lease as we already had,
-			// or the Release ran first and so we got a new lease.
-			if leaseByName == lease {
-				if lease.Refcount() != 1 {
-					t.Fatalf("expected refcount 1, got %d", lease.Refcount())
-				}
-				if err := leaseManager.Release(lease); err != nil {
-					t.Fatal(err)
-				}
-				if err := tracker.WaitForRemoval(); err != nil {
-					t.Fatal(err)
-				}
-			} else {
-				if lease.Refcount() != 0 {
-					t.Fatalf("expected refcount 0, got %d", lease.Refcount())
-				}
-				if err := leaseManager.Release(leaseByName); err != nil {
-					t.Fatal(err)
-				}
-				if err := tracker2.WaitForRemoval(); err != nil {
-					t.Fatal(err)
-				}
-			}
-			return nil
-		}); err != nil {
+		now := leaseManager.Now()
+		ctx := context.TODO()
+		lease, err := leaseManager.AcquireByName(ctx, now, tableDesc.ParentID, "test")
+		if err != nil {
 			t.Fatal(err)
+		}
+		// This test will need to wait until leases are removed from the store
+		// before creating new leases because the jitter used in the leases'
+		// expiration causes duplicate key errors when trying to create new
+		// leases. This is not a problem in production, since leases are not
+		// removed from the store until they expire, and the jitter is small
+		// compared to their lifetime, but it is a problem in this test because
+		// we churn through leases quickly.
+		tracker := removalTracker.TrackRemoval(lease)
+		// Start the race: signal the other guy to release, and we do another
+		// acquire at the same time.
+		leaseChan <- lease
+		leaseByName, err := leaseManager.AcquireByName(ctx, now, tableDesc.ParentID, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		tracker2 := removalTracker.TrackRemoval(leaseByName)
+		// See if there was an error releasing lease.
+		err = <-errChan
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Depending on how the race went, there are two cases - either the
+		// AcquireByName ran first, and got the same lease as we already had,
+		// or the Release ran first and so we got a new lease.
+		if leaseByName == lease {
+			if lease.Refcount() != 1 {
+				t.Fatalf("expected refcount 1, got %d", lease.Refcount())
+			}
+			if err := leaseManager.Release(lease); err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.WaitForRemoval(); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if lease.Refcount() != 0 {
+				t.Fatalf("expected refcount 0, got %d", lease.Refcount())
+			}
+			if err := leaseManager.Release(leaseByName); err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker2.WaitForRemoval(); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	close(leaseChan)

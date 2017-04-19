@@ -291,7 +291,7 @@ func (lc *LeaseCollection) getTableLease(
 	// If we didn't find a lease or the lease is about to expire, acquire one.
 	if lease == nil || lc.removeLeaseIfExpiring(ctx, txn, lease) {
 		var err error
-		lease, err = lc.leaseMgr.AcquireByName(ctx, txn, dbID, tn.Table())
+		lease, err = lc.leaseMgr.AcquireByName(ctx, txn.OrigTimestamp(), dbID, tn.Table())
 		if err != nil {
 			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
@@ -356,7 +356,7 @@ func (lc *LeaseCollection) getTableLeaseByID(
 	// If we didn't find a lease or the lease is about to expire, acquire one.
 	if lease == nil || lc.removeLeaseIfExpiring(ctx, txn, lease) {
 		var err error
-		lease, err = lc.leaseMgr.Acquire(ctx, txn, tableID, 0)
+		lease, err = lc.leaseMgr.Acquire(ctx, txn.OrigTimestamp(), tableID, 0)
 		if err != nil {
 			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the

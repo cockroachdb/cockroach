@@ -110,13 +110,8 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*sql.LeaseState, error) {
-	var lease *sql.LeaseState
-	err := t.kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		lease, err = t.node(nodeID).Acquire(ctx, txn, descID, version)
-		return err
-	})
-	return lease, err
+	leaseMgr := t.node(nodeID)
+	return leaseMgr.Acquire(context.TODO(), leaseMgr.Now(), descID, version)
 }
 
 func (t *leaseTest) mustAcquire(
@@ -557,13 +552,8 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*sql.LeaseState, error) {
-	var lease *sql.LeaseState
-	err := s.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		lease, err = s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, txn, descID, version)
-		return err
-	})
-	return lease, err
+	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
+	return leaseMgr.Acquire(context.TODO(), leaseMgr.Now(), descID, version)
 }
 
 // Test that once a table is marked as deleted, a lease's refcount dropping to 0

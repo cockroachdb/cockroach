@@ -129,6 +129,11 @@ type LeaseStore struct {
 	memMetrics   *MemoryMetrics
 }
 
+// Now returns the current time.
+func (s LeaseStore) Now() hlc.Timestamp {
+	return s.clock.Now()
+}
+
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
 // [0.75 * leaseDuration, 1.25 * leaseDuration].
 func jitteredLeaseDuration() time.Duration {
@@ -1031,9 +1036,9 @@ func nameMatchesLease(lease *LeaseState, dbID sqlbase.ID, tableName string) bool
 
 // AcquireByName acquires a read lease for the specified table.
 // The lease is grabbed for the most recent version of the descriptor that the
-// lease manager knows about.
+// lease manager knows about. The lease is valid for the timestamp.
 func (m *LeaseManager) AcquireByName(
-	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, tableName string,
+	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (*LeaseState, error) {
 	// Check if we have cached an ID for this name.
 	lease := m.tableNames.get(dbID, tableName, m.clock)
@@ -1046,11 +1051,11 @@ func (m *LeaseManager) AcquireByName(
 	// lease with at least a bit of lifetime left in it. So, we do it the hard
 	// way: look in the database to resolve the name, then acquire a new lease.
 	var err error
-	tableID, err := m.resolveName(ctx, txn, dbID, tableName)
+	tableID, err := m.resolveName(ctx, dbID, tableName)
 	if err != nil {
 		return nil, err
 	}
-	lease, err = m.Acquire(ctx, txn, tableID, 0)
+	lease, err = m.Acquire(ctx, timestamp, tableID, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -1108,11 +1113,11 @@ func (m *LeaseManager) AcquireByName(
 // resolveName resolves a table name to a descriptor ID by looking in the
 // database. If the mapping is not found, sqlbase.ErrDescriptorNotFound is returned.
 func (m *LeaseManager) resolveName(
-	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, tableName string,
+	ctx context.Context, dbID sqlbase.ID, tableName string,
 ) (sqlbase.ID, error) {
 	nameKey := tableKey{dbID, tableName}
 	key := nameKey.Key()
-	gr, err := txn.Get(ctx, key)
+	gr, err := m.LeaseStore.db.Get(ctx, key)
 	if err != nil {
 		return 0, err
 	}
@@ -1125,14 +1130,17 @@ func (m *LeaseManager) resolveName(
 // Acquire acquires a read lease for the specified table ID. If version is
 // non-zero the lease is grabbed for the specified version. Otherwise it is
 // grabbed for the most recent version of the descriptor that the lease manager
-// knows about.
+// knows about. The lease is valid for the timestamp.
 // TODO(andrei): move the tests that use this to the sql package and un-export
 // it.
 func (m *LeaseManager) Acquire(
-	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, version sqlbase.DescriptorVersion,
+	ctx context.Context,
+	timestamp hlc.Timestamp,
+	tableID sqlbase.ID,
+	version sqlbase.DescriptorVersion,
 ) (*LeaseState, error) {
 	t := m.findTableState(tableID, true)
-	lease, err := t.acquire(ctx, txn.OrigTimestamp(), version, m)
+	lease, err := t.acquire(ctx, timestamp, version, m)
 	if m.LeaseStore.testingKnobs.LeaseAcquiredEvent != nil {
 		m.LeaseStore.testingKnobs.LeaseAcquiredEvent(lease, err)
 	}
