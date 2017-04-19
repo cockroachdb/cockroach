@@ -82,7 +82,7 @@ query II
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'finish_schema_change'
 ----
-51 0
+51 1
 
 query II
 SELECT targetID, reportingID FROM system.eventlog
@@ -121,14 +121,14 @@ query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'finish_schema_change'
 ----
-51 0
-51 0
+51 1
+51 1
 
 query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'reverse_schema_change'
 ----
-51 0
+51 1
 
 # Create an Index on the table
 #################
@@ -147,9 +147,9 @@ query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'finish_schema_change'
 ----
-51 0
-51 0
-51 0
+51 1
+51 1
+51 1
 
 # Drop the index
 #################
@@ -168,10 +168,10 @@ query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'finish_schema_change'
 ----
-51 0
-51 0
-51 0
-51 0
+51 1
+51 1
+51 1
+51 1
 
 # Drop both tables + superfluous "IF EXISTS"
 ##################
