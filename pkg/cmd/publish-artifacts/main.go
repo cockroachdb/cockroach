@@ -165,16 +165,16 @@ func main() {
 	}
 
 	for _, target := range []struct {
-		buildType  string
-		baseSuffix string
+		releaseConfig string
+		baseSuffix    string
 	}{
 		// TODO(tamird): consider shifting this information into the builder
 		// image; it's conceivable that we'll want to target multiple versions
 		// of a given triple.
-		{buildType: "release-darwin", baseSuffix: "darwin-10.9-amd64"},
-		{buildType: "release-linux-gnu", baseSuffix: "linux-2.6.32-gnu-amd64"},
-		{buildType: "release-linux-musl", baseSuffix: "linux-2.6.32-musl-amd64"},
-		{buildType: "release-windows", baseSuffix: "windows-6.2-amd64.exe"},
+		{releaseConfig: "darwin", baseSuffix: "darwin-10.9-amd64"},
+		{releaseConfig: "linux-gnu", baseSuffix: "linux-2.6.32-gnu-amd64"},
+		{releaseConfig: "linux-musl", baseSuffix: "linux-2.6.32-musl-amd64"},
+		{releaseConfig: "windows", baseSuffix: "windows-6.2-amd64.exe"},
 	} {
 		for i, extraArgs := range []struct {
 			goflags string
@@ -182,35 +182,33 @@ func main() {
 			tags    string
 		}{
 			{},
-			// TODO(tamird): re-enable deadlock builds. This really wants its
-			// own install suffix; it currently pollutes the normal release
-			// build cache.
-			//
-			// {suffix: ".deadlock", tags: "deadlock"},
+			{suffix: ".deadlock", tags: "deadlock"},
 			{suffix: ".race", goflags: "-race"},
 		} {
 			// TODO(tamird): build deadlock,race binaries for all targets?
-			if i > 0 && (*isRelease || !strings.HasSuffix(target.buildType, "linux-gnu")) {
+			if i > 0 && (*isRelease || target.releaseConfig != "linux-gnu") {
 				continue
 			}
 			// race doesn't work without glibc on Linux. See
 			// https://github.com/golang/go/issues/14481.
-			if strings.HasSuffix(target.buildType, "linux-musl") && strings.Contains(extraArgs.goflags, "-race") {
+			if target.releaseConfig == "linux-musl" && strings.Contains(extraArgs.goflags, "-race") {
 				continue
 			}
 
 			{
 				recipe := "build"
 				// TODO(tamird, #14673): make CCL compile on Windows.
-				if strings.HasSuffix(target.buildType, "windows") {
+				if target.releaseConfig == "windows" {
 					recipe = "buildoss"
 				}
-				args := []string{recipe}
-				args = append(args, fmt.Sprintf("%s=%s", "TYPE", target.buildType))
-				args = append(args, fmt.Sprintf("%s=%s", "GOFLAGS", extraArgs.goflags))
-				args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", extraArgs.suffix))
-				args = append(args, fmt.Sprintf("%s=%s", "TAGS", extraArgs.tags))
-				cmd := exec.Command("make", args...)
+				cmd := exec.Command(
+					"crdb-build-release",
+					target.releaseConfig,
+					recipe,
+					"GOFLAGS="+extraArgs.goflags,
+					"SUFFIX="+extraArgs.suffix,
+					"TAGS="+extraArgs.tags,
+				)
 				cmd.Dir = pkg.Dir
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
@@ -220,7 +218,7 @@ func main() {
 				}
 			}
 
-			if strings.Contains(target.buildType, "linux") {
+			if strings.Contains(target.releaseConfig, "linux") {
 				binaryName := fmt.Sprintf("./cockroach%s-%s", extraArgs.suffix, target.baseSuffix)
 
 				cmd := exec.Command(binaryName, "version")
@@ -238,7 +236,7 @@ func main() {
 				// non-zero.
 				//
 				// TODO(tamird): implement this for all targets.
-				if !strings.HasSuffix(target.buildType, "linux-musl") {
+				if target.releaseConfig == "linux-musl" {
 					cmd := exec.Command("ldd", binaryName)
 					cmd.Dir = pkg.Dir
 					log.Printf("%s %s", cmd.Env, cmd.Args)
@@ -315,7 +313,7 @@ func main() {
 				targetSuffix := strings.TrimSuffix(target.baseSuffix, dotExe)
 				// TODO(tamird): remove this weirdness. Requires updating
 				// "users" e.g. docs, cockroachdb/cockroach-go, maybe others.
-				if strings.Contains(target.buildType, "linux") {
+				if strings.Contains(target.releaseConfig, "linux") {
 					targetSuffix = strings.Replace(targetSuffix, "gnu-", "", -1)
 					targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
 				}

@@ -79,8 +79,8 @@ GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 override make-lazy = $(eval $1 = $$(eval $1 := $(value $1))$$($1))
 
 UNAME := $(shell uname)
-MACOS := $(findstring Darwin,$(UNAME))
-MINGW := $(findstring MINGW,$(UNAME))
+HOST_MACOS := $(findstring Darwin,$(UNAME))
+HOST_MINGW := $(findstring MINGW,$(UNAME))
 
 NCPUS = $(shell $(LOCAL_BIN)/ncpus)
 $(call make-lazy,NCPUS)
@@ -195,77 +195,69 @@ $(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/Makefile $(REPO_ROOT)/.go-version 
 # The following section handles building our C/C++ dependencies. These are
 # common because both the root Makefile and protobuf.mk have C dependencies.
 
+HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
+
+# Cross-compilation occurs when you set TARGET_TRIPLE to something other than
+# HOST_TRIPLE. You'll need to ensure the cross-compiling toolchain is on your
+# path and override the rest of the variables that immediately follow as
+# necessary. For an example, see build/cmd/crdb-build-release, which sets these
+# variables appropriately for the toolchains baked into the builder image.
+TARGET_TRIPLE := $(HOST_TRIPLE)
+XCMAKE_SYSTEM_NAME :=
+XGOOS :=
+XGOARCH :=
+XCC :=
+XCXX :=
+
+CONFIGURE_FLAGS :=
+CMAKE_FLAGS := $(if $(HOST_MINGW),-G 'MSYS Makefiles')
+
+# If we're cross-compiling, inform Autotools and CMake.
+ifneq ($(HOST_TRIPLE),$(TARGET_TRIPLE))
+CONFIGURE_FLAGS += --host=$(TARGET_TRIPLE)
+CMAKE_FLAGS += -DCMAKE_SYSTEM_NAME=$(XCMAKE_SYSTEM_NAME) -DCMAKE_C_COMPILER=$(XCC) -DCMAKE_CXX_COMPILER=$(XCXX)
+endif
+
 C_DEPS_DIR := $(abspath $(REPO_ROOT)/c-deps)
 JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc.src
 PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf.src
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb.src
 SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy.src
-
 C_LIBS_SRCS := $(JEMALLOC_SRC_DIR) $(PROTOBUF_SRC_DIR) $(ROCKSDB_SRC_DIR) $(SNAPPY_SRC_DIR)
 
-HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
-
-CONFIGURE_FLAGS :=
-CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
-
-# override so that no one is tempted to make USE_STDMALLOC=1 instead of make
-# TAGS=stdmalloc; without TAGS=stdmalloc, Go will still try to link jemalloc.
+# Derive whether we're building a race/msan/stdmalloc build from GOFLAGS and
+# TAGS so we can propogate that information to the C/C++ dependencies. Only Go
+# packages respect GOFLAGS and TAGS.
+#
+# We `override` these assignments so that no one is tempted to set these
+# variables directly from the command line. We want the source of truth to be
+# either GOFLAGS or TAGS.
+override USE_RACE := $(findstring -race,$(GOFLAGS))
+override USE_MSAN := $(findstring -msan,$(GOFLAGS))
 override USE_STDMALLOC := $(findstring stdmalloc,$(TAGS))
-STDMALLOC_SUFFIX := $(if $(USE_STDMALLOC),_stdmalloc)
+override USE_DEADLOCK  := $(findstring deadlock,$(TAGS))
 
-ENABLE_ROCKSDB_ASSERTIONS := $(findstring race,$(TAGS))
+# We want at least one build configuration that runs tests with RocksDB
+# assertions enabled. Roll this into race builds for now; race builds are a)
+# already slow, so the overhead of RocksDB assertions is negligible, and b)
+# already run on TeamCity.
+USE_ROCKSDB_ASSERTIONS := $(USE_RACE)
 
-ifdef XHOST_TRIPLE
-
-# Darwin wants clang, so special treatment is in order.
-ISDARWIN := $(findstring darwin,$(XHOST_TRIPLE))
-
-XHOST_BIN_DIR := /x-tools/$(XHOST_TRIPLE)/bin
-
-export PATH := $(XHOST_BIN_DIR):$(PATH)
-
-CC_PATH  := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
-CXX_PATH := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
-ifdef ISDARWIN
-CC_PATH  := $(CC_PATH)-clang
-CXX_PATH := $(CXX_PATH)-clang++
-else
-CC_PATH  := $(CC_PATH)-gcc
-CXX_PATH := $(CXX_PATH)-g++
-endif
-
-ifdef ISDARWIN
-CMAKE_SYSTEM_NAME := Darwin
-else ifneq ($(findstring linux,$(XHOST_TRIPLE)),)
-CMAKE_SYSTEM_NAME := Linux
-else ifneq ($(findstring mingw,$(XHOST_TRIPLE)),)
-CMAKE_SYSTEM_NAME := Windows
-endif
-
-CONFIGURE_FLAGS += --host=$(XHOST_TRIPLE)
-CMAKE_FLAGS += -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME)
-
-TARGET_TRIPLE := $(XHOST_TRIPLE)
-else
-TARGET_TRIPLE := $(HOST_TRIPLE)
-endif
-
-NATIVE_SPECIFIER := $(TARGET_TRIPLE)$(NATIVE_SUFFIX)
-BUILD_DIR := $(GOPATH)/native/$(NATIVE_SPECIFIER)
+BUILD_DIR := $(GOPATH)/native/$(TARGET_TRIPLE)
 
 # In MinGW, cgo flags don't handle Unix-style paths, so convert our base path to
 # a Windows-style path.
 #
 # TODO(benesch): Figure out why. MinGW transparently converts Unix-style paths
 # everywhere else.
-ifdef MINGW
+ifdef HOST_MINGW
 BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
 endif
 
-JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
-PROTOBUF_DIR := $(BUILD_DIR)/protobuf
-ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(STDMALLOC_SUFFIX)$(if $(ENABLE_ROCKSDB_ASSERTIONS),_assert)
-SNAPPY_DIR   := $(BUILD_DIR)/snappy
+JEMALLOC_DIR := $(BUILD_DIR)/jemalloc$(if $(USE_MSAN),_msan)
+PROTOBUF_DIR := $(BUILD_DIR)/protobuf$(if $(USE_MSAN),_msan)
+ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(if $(USE_STDMALLOC),_stdmalloc)$(if $(USE_ROCKSDB_ASSERTIONS),_assert)
+SNAPPY_DIR   := $(BUILD_DIR)/snappy$(if $(USE_MSAN),_msan)
 # Can't share with protobuf because protoc is always built for the host.
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 PROTOC 		 := $(PROTOC_DIR)/protoc
@@ -273,31 +265,31 @@ PROTOC 		 := $(PROTOC_DIR)/protoc
 C_LIBS := $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb
 
 # Go does not permit dashes in build tags. This is undocumented. Fun!
-NATIVE_SPECIFIER_TAG := $(subst -,_,$(NATIVE_SPECIFIER))$(STDMALLOC_SUFFIX)
+NATIVE_TAG := $(subst -,_,$(TARGET_TRIPLE))$(if $(USE_STDMALLOC),_stdmalloc)$(if $(USE_DEADLOCK),_deadlock)$(if $(USE_RACE),_race)$(if $(USE_MSAN),_msan)
 
-# In each package that uses cgo, we inject include and library search paths
-# into files named zcgo_flags[_arch_vendor_os_abi].go. The logic for this is
-# complicated so that Make-driven builds can cache the state of builds for
-# multiple architectures at once, while still allowing the use of `go build`
-# and `go test` for the architecture most recently built with Make.
+# In each package that uses cgo, we inject include and library search paths into
+# files named zcgo_flags.go and zcgo_flags_{NATIVE_TAG}.go. The logic for this
+# is complicated so that Make-driven builds can cache the state of builds for
+# multiple configurations at once, while still allowing the use of `go build`
+# and `go test` for the configuration most recently built with Make.
 #
-# Building with Make always adds the `make` and `arch_vendor_os_abi` tags to
-# the build.
+# Building with Make always adds the `make` and `NATIVE_TAG` tags to the build.
 #
-# Unsuffixed flags files (zcgo_flags.cgo) have the build constraint `!make`
-# and are only compiled when invoking the Go toolchain directly on a package--
-# i.e., when the `make` build tag is not specified. These files are rebuilt on
-# every Make invocation, and so reflect the target triple that Make was most
-# recently invoked with.
+# Unsuffixed flags files (zcgo_flags.cgo) have the build constraint `!make` and
+# are only compiled when invoking the Go toolchain directly on a package-- i.e.,
+# when the `make` build tag is not specified. These files are rebuilt on every
+# Make invocation, and so reflect the target triple that Make was most recently
+# invoked with.
 #
 # Suffixed flags files (e.g. zcgo_flags_arch_vendor_os_abi.go) have the build
 # constraint `arch_vendor_os_abi` and are built the first time a Make-driven
-# build encounters a given `arch_vendor_os_abi` target triple. The Go
-# toolchain does not automatically set target-triple build tags, so these
-# files are only compiled when building with Make.
+# build encounters a given `arch_vendor_os_abi` target triple. The Go toolchain
+# does not automatically set target-triple build tags, so these files are only
+# compiled when building with Make.
+
 CGO_PKGS := cli server/status storage/engine ccl/storageccl/engineccl
 CGO_UNSUFFIXED_FLAGS_FILES := $(addprefix $(PKG_ROOT)/,$(addsuffix /zcgo_flags.go,$(CGO_PKGS)))
-CGO_SUFFIXED_FLAGS_FILES   := $(addprefix $(PKG_ROOT)/,$(addsuffix /zcgo_flags_$(NATIVE_SPECIFIER_TAG).go,$(CGO_PKGS)))
+CGO_SUFFIXED_FLAGS_FILES   := $(addprefix $(PKG_ROOT)/,$(addsuffix /zcgo_flags_$(NATIVE_TAG).go,$(CGO_PKGS)))
 CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 
 $(CGO_UNSUFFIXED_FLAGS_FILES): .ALWAYS_REBUILD
@@ -306,7 +298,7 @@ $(CGO_FLAGS_FILES):
 	@echo 'GEN $@'
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
-	@echo '// +build $(if $(findstring $(NATIVE_SPECIFIER_TAG),$@),$(NATIVE_SPECIFIER_TAG),!make)' >> $@
+	@echo '// +build $(if $(findstring $(NATIVE_TAG),$@),$(NATIVE_TAG),!make)' >> $@
 	@echo >> $@
 	@echo 'package $(notdir $(@D))' >> $@
 	@echo >> $@
@@ -386,7 +378,7 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(ROCKSDB_SRC_DIR)/.extra
 	  $(if $(findstring release,$(TYPE)),,-DWITH_$(if $(findstring mingw,$(TARGET_TRIPLE)),AVX2,SSE42)=OFF) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
 	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
-	  $(if $(ENABLE_ROCKSDB_ASSERTIONS),,-DCMAKE_CXX_FLAGS=-DNDEBUG)
+	  $(if $(USE_ROCKSDB_ASSERTIONS),,-DCMAKE_CXX_FLAGS=-DNDEBUG)
 	@# TODO(benesch): Tweak how we pass -DNDEBUG above when we upgrade to a
 	@# RocksDB release that includes https://github.com/facebook/rocksdb/pull/2300.
 

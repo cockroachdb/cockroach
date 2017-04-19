@@ -15,7 +15,7 @@ if [ "$TC_BUILD_BRANCH" != master ]; then
 	cp cockroach-linux-2.6.32-gnu-amd64 build/deploy/cockroach
 	docker build --tag=$image:{latest,"$TC_BUILD_BRANCH"} build/deploy
 
-	build/builder.sh make TYPE=release-linux-gnu testbuild TAGS=acceptance PKG=./pkg/acceptance
+	build/builder.sh crdb-build-release linux-gnu testbuild TAGS=acceptance PKG=./pkg/acceptance
 	(cd pkg/acceptance && ./acceptance.test -i $image -b /cockroach/cockroach -nodes 3 -test.v -test.timeout -5m)
 
 	sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < build/.dockercfg.in > ~/.dockercfg

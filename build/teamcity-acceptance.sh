@@ -12,6 +12,6 @@ export BUILDER_HIDE_GOPATH_SRC=1
 mkdir -p artifacts/acceptance
 export TMPDIR=$PWD/artifacts/acceptance
 
-build/builder.sh make TYPE=release-linux-gnu testbuild TAGS=acceptance PKG=./pkg/acceptance
+build/builder.sh crdb-build-release linux-gnu testbuild TAGS=acceptance PKG=./pkg/acceptance
 cd pkg/acceptance
 ./acceptance.test -nodes 3 -l "$TMPDIR" -test.v -test.timeout 10m 2>&1 | tee "$TMPDIR/acceptance.log" | go-test-teamcity

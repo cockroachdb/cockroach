@@ -48,7 +48,7 @@ var (
 	platform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
 	Distribution = "OSS"
-	typ          string // Type of this build; <empty>, "release", or "musl"
+	typ          = "development" // Type of this build; <empty>, "release", or "musl"
 )
 
 // IsRelease returns true if the binary was produced by a "release" build.
