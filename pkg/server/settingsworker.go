@@ -105,7 +105,7 @@ func (s *Server) refreshSettings() {
 	}
 
 	ctx := s.AnnotateCtx(context.Background())
-	s.stopper.RunWorker(ctx, func() {
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		// No new settings can be defined beyond this point.
 		settings.Freeze()

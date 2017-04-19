@@ -125,7 +125,7 @@ func (tq *testQueue) setDisabled(d bool) {
 }
 
 func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
-	stopper.RunWorker(context.TODO(), func() {
+	stopper.RunWorker(context.TODO(), func(context.Context) {
 		for {
 			select {
 			case <-time.After(1 * time.Millisecond):

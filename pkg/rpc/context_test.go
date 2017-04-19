@@ -249,14 +249,14 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		mu.conns = append(mu.conns, conn)
 		mu.Unlock()
 	}}
-	stopper.RunWorker(context.TODO(), func() {
+	stopper.RunWorker(context.TODO(), func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
 		<-stopper.ShouldStop()
 		s.Stop()
 	})
 
-	stopper.RunWorker(context.TODO(), func() {
+	stopper.RunWorker(context.TODO(), func(context.Context) {
 		netutil.FatalIfUnexpected(s.Serve(ln))
 	})
 
