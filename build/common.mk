@@ -78,7 +78,9 @@ GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 # used. See: http://blog.jgc.org/2016/07/lazy-gnu-make-variables.html
 override make-lazy = $(eval $1 = $$(eval $1 := $(value $1))$$($1))
 
-MINGW := $(findstring MINGW,$(shell uname))
+UNAME := $(shell uname)
+MACOS := $(findstring Darwin,$(UNAME))
+MINGW := $(findstring MINGW,$(UNAME))
 
 NCPUS = $(shell $(LOCAL_BIN)/ncpus)
 $(call make-lazy,NCPUS)
@@ -190,6 +192,14 @@ $(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/Makefile $(REPO_ROOT)/.go-version 
 
 # The following section handles building our C/C++ dependencies. These are
 # common because both the root Makefile and protobuf.mk have C dependencies.
+
+# On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
+# symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
+# to the host machine's actual macOS version works around this. See:
+# https://github.com/jemalloc/jemalloc/issues/494.
+ifdef MACOS
+export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion | grep -oE '\d+\.\d+')
+endif
 
 C_DEPS_DIR := $(abspath $(REPO_ROOT)/c-deps)
 JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc.src
