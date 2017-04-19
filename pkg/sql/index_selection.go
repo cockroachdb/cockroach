@@ -96,7 +96,7 @@ func (p *planner) selectIndex(
 		var err error
 		s.spans, err = makeSpans(nil, &s.desc, s.index)
 		if err != nil {
-			return nil, errors.Wrap(err, "makeSpans")
+			return nil, errors.Wrapf(err, "table ID = %d, index ID = %d", s.desc.ID, s.index.ID)
 		}
 		return s, nil
 	}
@@ -215,7 +215,8 @@ func (p *planner) selectIndex(
 	var err error
 	s.spans, err = makeSpans(c.constraints, c.desc, c.index)
 	if err != nil {
-		return nil, errors.Wrap(err, "makeSpans")
+		return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
+			c.constraints, s.desc.ID, s.index.ID)
 	}
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
@@ -1053,7 +1054,7 @@ func spansFromLogicalSpans(
 	interstices := make([][]byte, len(index.ColumnDirections)+1)
 	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
 	if len(index.Interleave.Ancestors) > 0 {
-		// TODO(eisen): too much of this code is shared with EncodePartialIndexKey.
+		// TODO(eisen): too much of this code is copied from EncodePartialIndexKey.
 		sharedPrefixLen := 0
 		for i, ancestor := range index.Interleave.Ancestors {
 			// The first ancestor is already encoded in interstices[0].
@@ -1084,7 +1085,7 @@ func spansFromLogicalSpans(
 
 func spanFromLogicalSpan(ls logicalSpan, interstices [][]byte) (roachpb.Span, error) {
 	var s roachpb.Span
-	for i := 0; true; i++ {
+	for i := 0; ; i++ {
 		s.Key = append(s.Key, interstices[i]...)
 		if i >= len(ls.start) {
 			break
@@ -1120,7 +1121,7 @@ func spanFromLogicalSpan(ls logicalSpan, interstices [][]byte) (roachpb.Span, er
 			last.inclusive = false
 		}
 	}
-	for i := 0; true; i++ {
+	for i := 0; ; i++ {
 		s.EndKey = append(s.EndKey, interstices[i]...)
 		if i >= len(ls.end) {
 			break
