@@ -1221,7 +1221,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// This may trigger splits along structured boundaries,
 		// and update max range bytes.
 		gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
-		s.stopper.RunWorker(ctx, func() {
+		s.stopper.RunWorker(ctx, func(context.Context) {
 			for {
 				select {
 				case <-gossipUpdateC:
@@ -1242,7 +1242,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start
 		// from returning (as doing so might prevent Gossip from ever connecting).
-		s.stopper.RunWorker(ctx, func() {
+		s.stopper.RunWorker(ctx, func(context.Context) {
 			select {
 			case <-s.cfg.Gossip.Connected:
 				s.scanner.Start(s.cfg.Clock, s.stopper)
@@ -1326,7 +1326,7 @@ func (s *Store) startGossip() {
 	s.initComplete.Add(len(gossipFns))
 	for _, gossipFn := range gossipFns {
 		gossipFn := gossipFn // per-iteration copy
-		s.stopper.RunWorker(context.Background(), func() {
+		s.stopper.RunWorker(context.Background(), func(ctx context.Context) {
 			ticker := time.NewTicker(gossipFn.interval)
 			defer ticker.Stop()
 			for first := true; ; {
@@ -1338,9 +1338,9 @@ func (s *Store) startGossip() {
 				retryOptions.Closer = s.stopper.ShouldStop()
 				for r := retry.Start(retryOptions); r.Next(); {
 					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key), nil); repl != nil {
-						ctx := repl.AnnotateCtx(context.Background())
-						if err := gossipFn.fn(ctx, repl); err != nil {
-							log.Warningf(ctx, "could not gossip %s: %s", gossipFn.description, err)
+						annotatedCtx := repl.AnnotateCtx(ctx)
+						if err := gossipFn.fn(annotatedCtx, repl); err != nil {
+							log.Warningf(annotatedCtx, "could not gossip %s: %s", gossipFn.description, err)
 							if err != errPeriodicGossipsDisabled {
 								continue
 							}
@@ -3462,7 +3462,7 @@ func (s *Store) processRaft() {
 }
 
 func (s *Store) raftTickLoop() {
-	s.stopper.RunWorker(context.TODO(), func() {
+	s.stopper.RunWorker(context.TODO(), func(context.Context) {
 		ticker := time.NewTicker(s.cfg.RaftTickInterval)
 		defer func() {
 			ticker.Stop()
@@ -3496,7 +3496,7 @@ func (s *Store) raftTickLoop() {
 // beneficial to have it run on a faster cycle than once per tick, so that
 // the delay does not impact latency-sensitive features such as quiescence.
 func (s *Store) startCoalescedHeartbeatsLoop() {
-	s.stopper.RunWorker(context.TODO(), func() {
+	s.stopper.RunWorker(context.TODO(), func(context.Context) {
 		ticker := time.NewTicker(s.cfg.CoalescedHeartbeatsInterval)
 		defer func() {
 			ticker.Stop()

@@ -83,7 +83,7 @@ func (fs *flowScheduler) runFlowNow(ctx context.Context, f *Flow) {
 // ScheduleFlow is the main interface of the flow scheduler: it runs or enqueues
 // the given flow.
 func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f *Flow) error {
-	return fs.stopper.RunTask(ctx, func() {
+	return fs.stopper.RunTask(ctx, func(ctx context.Context) {
 		fs.mu.Lock()
 		defer fs.mu.Unlock()
 
@@ -101,7 +101,7 @@ func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f *Flow) error {
 // Start launches the main loop of the scheduler.
 func (fs *flowScheduler) Start() {
 	ctx := fs.AnnotateCtx(context.Background())
-	fs.stopper.RunWorker(ctx, func() {
+	fs.stopper.RunWorker(ctx, func(context.Context) {
 		stopped := false
 		fs.mu.Lock()
 		defer fs.mu.Unlock()
@@ -120,6 +120,9 @@ func (fs *flowScheduler) Start() {
 					if frElem := fs.mu.queue.Front(); frElem != nil {
 						n := frElem.Value.(*flowWithCtx)
 						fs.mu.queue.Remove(frElem)
+						// Note: we use the flow's context instead of the worker
+						// context, to ensure that logging etc is relative to the
+						// specific flow.
 						fs.runFlowNow(n.ctx, n.flow)
 					}
 				}

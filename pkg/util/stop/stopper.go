@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 )
 
 // ErrThrottled is returned from RunLimitedAsyncTask in the event that there
@@ -202,12 +203,16 @@ func (s *Stopper) Recover(ctx context.Context) {
 
 // RunWorker runs the supplied function as a "worker" to be stopped
 // by the stopper. The function <f> is run in a goroutine.
-func (s *Stopper) RunWorker(ctx context.Context, f func()) {
+func (s *Stopper) RunWorker(ctx context.Context, f func(context.Context)) {
 	s.stop.Add(1)
 	go func() {
+		// Remove any associated span; we need to ensure this because the
+		// worker may run longer than the caller which presumably closes
+		// any spans it has created.
+		ctx = opentracing.ContextWithSpan(ctx, nil)
 		defer s.Recover(ctx)
 		defer s.stop.Done()
-		f()
+		f(ctx)
 	}()
 }
 
@@ -226,7 +231,7 @@ func (s *Stopper) AddCloser(c Closer) {
 //
 // Returns an error to indicate that the system is currently quiescing and
 // function f was not called.
-func (s *Stopper) RunTask(ctx context.Context, f func()) error {
+func (s *Stopper) RunTask(ctx context.Context, f func(context.Context)) error {
 	key := taskKey{"???", 1}
 	if s.trackTasks {
 		key.file, key.line, _ = caller.Lookup(1)
@@ -234,10 +239,15 @@ func (s *Stopper) RunTask(ctx context.Context, f func()) error {
 	if !s.runPrelude(key) {
 		return errUnavailable
 	}
+
+	ctx, span := tracing.ForkCtxSpan(ctx, key.String())
+
 	// Call f.
 	defer s.Recover(ctx)
 	defer s.runPostlude(key)
-	f()
+	defer tracing.FinishSpan(span)
+
+	f(ctx)
 	return nil
 }
 
@@ -249,7 +259,7 @@ func (s *Stopper) RunTask(ctx context.Context, f func()) error {
 //
 // If the system is currently quiescing and function f was not called, returns
 // an error indicating this condition. Otherwise, returns whatever f returns.
-func (s *Stopper) RunTaskWithErr(ctx context.Context, f func() error) error {
+func (s *Stopper) RunTaskWithErr(ctx context.Context, f func(context.Context) error) error {
 	key := taskKey{"???", 1}
 	if s.trackTasks {
 		key.file, key.line, _ = caller.Lookup(1)
@@ -257,10 +267,15 @@ func (s *Stopper) RunTaskWithErr(ctx context.Context, f func() error) error {
 	if !s.runPrelude(key) {
 		return errUnavailable
 	}
+
+	ctx, span := tracing.ForkCtxSpan(ctx, key.String())
+
 	// Call f.
 	defer s.Recover(ctx)
 	defer s.runPostlude(key)
-	return f()
+	defer tracing.FinishSpan(span)
+
+	return f(ctx)
 }
 
 // RunAsyncTask runs function f in a goroutine. It returns an error when the
@@ -281,6 +296,7 @@ func (s *Stopper) RunAsyncTask(ctx context.Context, f func(context.Context)) err
 		defer s.Recover(ctx)
 		defer s.runPostlude(key)
 		defer tracing.FinishSpan(span)
+
 		f(ctx)
 	}()
 	return nil
@@ -345,6 +361,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 		defer s.runPostlude(key)
 		defer func() { <-sem }()
 		defer tracing.FinishSpan(span)
+
 		f(ctx)
 	}()
 	return nil
