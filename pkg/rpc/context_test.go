@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -627,23 +628,14 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	// We'll expect any of the errors which tests revealed that the RPC call might
-	// return when an RPC's transport connection is closed because of the
-	// heartbeats timing out.
-	gRPCErrorsRegex := "transport is closing|" +
-		"rpc error: code = Unavailable desc = grpc: the connection is unavailable|" +
-		"rpc error: code = Internal desc = transport: io: read/write on closed pipe|" +
-		"rpc error: code = Internal desc = transport: tls: use of closed connection|" +
-		"rpc error: code = Internal desc = transport: EOF|" +
-		"use of closed network connection"
-
 	// Perform an RPC so that a connection gets opened. In theory this RPC should
 	// succeed (and it does when running without too much stress), but we can't
-	// rely on that - see comment on the timeout above.
+	// rely on that - it's possible that the RPC call could return earlier due to
+	// its transport connection being closed because of heartbeats timing out.
 	heartbeatClient := NewHeartbeatClient(conn)
 	request := PingRequest{}
 	if _, err := heartbeatClient.Ping(context.TODO(), &request); err != nil {
-		if !testutils.IsError(err, gRPCErrorsRegex) {
+		if !grpcutil.IsClosedConnection(err) {
 			t.Fatal(err)
 		}
 		// In the rare eventuality that we got the expected error, this test
@@ -665,8 +657,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 
 	transportConn.PartitionC2S()
 
-	if _, err := heartbeatClient.Ping(context.TODO(), &request); !testutils.IsError(
-		err, gRPCErrorsRegex) {
+	if _, err := heartbeatClient.Ping(context.TODO(), &request); !grpcutil.IsClosedConnection(err) {
 		t.Fatal(err)
 	}
 
