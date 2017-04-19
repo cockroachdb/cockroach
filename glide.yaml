@@ -27,19 +27,13 @@ import:
 - package: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
 - package: github.com/cockroachdb/apd
-  version: 4c0c15263a45c631e8f0310f0acbc1e89c722ac2
-- package: github.com/cockroachdb/c-jemalloc
-  version: 5fc986390622939c1f0e6df236040deca8c821b0
-- package: github.com/cockroachdb/c-protobuf
-  version: 323984796a7b4794ee62a00e12456743a5b66765
-- package: github.com/cockroachdb/c-rocksdb
-  version: 7def73c53db126b0e62552e97629784d5317e932
+  version: 0ccdf9dd91d85d9f95d131fd2420c78c56f76c1f
 - package: github.com/cockroachdb/cmux
   version: 30d10be492927e2dcae0089c374c455d42414fcb
 - package: github.com/cockroachdb/cockroach-go
   version: 6fd53f6d2eea06acb0c7f7aa88e0547acb32441b
 - package: github.com/coreos/etcd
-  version: 7b541f90039c625d8242f90816066ecd5cf78744
+  version: 6dd807481cebac062e82c5ecaecdb2c3d0f605ad
 - package: github.com/gogo/protobuf
   version: 100ba4e885062801d56799d78530b73b178a78f3
 - package: github.com/golang/protobuf

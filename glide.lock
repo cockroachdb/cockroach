@@ -1,5 +1,5 @@
-hash: 1ce713b585756a466971b31de22349c663db83d3aa75d2175d4ccd9f10fb4dba
-updated: 2017-04-17T17:46:52.324179903Z
+hash: ed1063398b86b5d46f97337f7e816645f275282f96f13b2ceccc91a06c1a3e35
+updated: 2017-04-18T17:02:26.996981026-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -42,17 +42,7 @@ imports:
   subpackages:
   - cmd/misspell
 - name: github.com/cockroachdb/apd
-  version: 4c0c15263a45c631e8f0310f0acbc1e89c722ac2
-- name: github.com/cockroachdb/c-jemalloc
-  version: 5fc986390622939c1f0e6df236040deca8c821b0
-- name: github.com/cockroachdb/c-protobuf
-  version: 323984796a7b4794ee62a00e12456743a5b66765
-  subpackages:
-  - cmd/protoc
-- name: github.com/cockroachdb/c-rocksdb
-  version: 7def73c53db126b0e62552e97629784d5317e932
-- name: github.com/cockroachdb/c-snappy
-  version: c0cd3c9ce92f195001595e1fbbe66f045daad34f
+  version: 0ccdf9dd91d85d9f95d131fd2420c78c56f76c1f
 - name: github.com/cockroachdb/cmux
   version: 30d10be492927e2dcae0089c374c455d42414fcb
 - name: github.com/cockroachdb/cockroach-go
@@ -70,7 +60,7 @@ imports:
 - name: github.com/codegangsta/cli
   version: 0bdeddeeb0f650497d603c4ad7b20cfe685682f6
 - name: github.com/coreos/etcd
-  version: 7b541f90039c625d8242f90816066ecd5cf78744
+  version: 6dd807481cebac062e82c5ecaecdb2c3d0f605ad
   subpackages:
   - raft
   - raft/raftpb
@@ -191,7 +181,7 @@ imports:
   subpackages:
   - query
 - name: github.com/google/pprof
-  version: e48932ed15d832ff9444525c5888be176e8731a1
+  version: 813536d15e1777e55ba62a8644ccb355ab5db409
   subpackages:
   - driver
   - internal/binutils
@@ -353,11 +343,11 @@ imports:
   subpackages:
   - doc
 - name: github.com/spf13/pflag
-  version: 9e4c21054fa135711121b557932b1887f2405d92
+  version: 2300d0f8576fe575f71aaa5b9bbe4e1b0dc2eb51
 - name: github.com/StackExchange/wmi
   version: ea383cf3ba6ec950874b8486cd72356d007c768f
 - name: github.com/tebeka/go2xunit
-  version: 13c29c7515e660c2d5ccc1a2122b9ca38826a949
+  version: ca9f945db336cbce0d742a84282c53d6a4a70a21
   subpackages:
   - lib
 - name: github.com/VividCortex/ewma
@@ -437,7 +427,7 @@ imports:
   - imports
   - refactor/importgraph
 - name: google.golang.org/api
-  version: 48e49d1645e228d1c50c3d54fb476b2224477303
+  version: 0b0f5a5147930d092abd132cf09fafa23e8c3942
   subpackages:
   - gensupport
   - googleapi

@@ -78,6 +78,11 @@ GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 # used. See: http://blog.jgc.org/2016/07/lazy-gnu-make-variables.html
 override make-lazy = $(eval $1 = $$(eval $1 := $(value $1))$$($1))
 
+MINGW := $(findstring MINGW,$(shell uname))
+
+NCPUS = $(shell $(LOCAL_BIN)/ncpus)
+$(call make-lazy,NCPUS)
+
 # GNU tar and BSD tar both support transforming filenames according to a regular
 # expression, but have different flags to do so.
 TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform='flags=r;s'" || echo "-s")
@@ -95,8 +100,11 @@ space := $(eval) $(eval)
 # message, if any, would get mixed in with noise from other targets if Make was
 # executed in parallel job mode. This check, by contrast, is guaranteed to print
 # its error message before any noisy output.
+#
+# Note that word boundary markers (\b, \<, [[:<:]]) are not portable, but `grep
+# -w`, though not required by POSIX, exists on all tested platforms.
 include $(REPO_ROOT)/.go-version
-ifeq ($(shell $(GO) version | grep -q -E '\b$(GOVERS)\b' && echo y),)
+ifeq ($(shell $(GO) version | grep -qwE '$(GOVERS)' && echo y),)
 $(error "$(GOVERS) required (see CONTRIBUTING.md): $(shell $(GO) version)")
 endif
 
@@ -159,8 +167,8 @@ $(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/glide.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
-	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/metacheck $(PKG_ROOT)/cmd/returncheck \
-	$(shell $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build | grep -vF protoc)
+	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/{metacheck,ncpus,returncheck} \
+	$(shell $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build)
 	touch $@
 
 # Make doesn't expose a list of the variables declared in a given file, so we
@@ -179,3 +187,191 @@ $(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/Makefile $(REPO_ROOT)/.go-version 
 	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([^ ]+)[ ]*[:?+]?=.*/  \3/p' $^ \
 	  | LC_COLLATE=C sort -u >> $@
 	@echo 'endef' >> $@
+
+# The following section handles building our C/C++ dependencies. These are
+# common because both the root Makefile and protobuf.mk have C dependencies.
+
+C_DEPS_DIR := $(abspath $(REPO_ROOT)/c-deps)
+JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc.src
+PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf.src
+ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb.src
+SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy.src
+
+HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
+
+CONFIGURE_FLAGS :=
+CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
+
+ifdef XHOST_TRIPLE
+
+# Darwin wants clang, so special treatment is in order.
+ISDARWIN := $(findstring darwin,$(XHOST_TRIPLE))
+
+XHOST_BIN_DIR := /x-tools/$(XHOST_TRIPLE)/bin
+
+export PATH := $(XHOST_BIN_DIR):$(PATH)
+# TODO(tamird): setting these in the builder image is terrible. Stop doing it.
+#
+# We need to unexport these variables to allow autoconf to find the right
+# compilers and tools.
+unexport CC CXX
+
+CC_PATH  := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
+CXX_PATH := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
+ifdef ISDARWIN
+CC_PATH  := $(CC_PATH)-clang
+CXX_PATH := $(CXX_PATH)-clang++
+else
+CC_PATH  := $(CC_PATH)-gcc
+CXX_PATH := $(CXX_PATH)-g++
+endif
+
+ifdef ISDARWIN
+CMAKE_SYSTEM_NAME := Darwin
+else ifneq ($(findstring linux,$(XHOST_TRIPLE)),)
+CMAKE_SYSTEM_NAME := Linux
+else ifneq ($(findstring mingw,$(XHOST_TRIPLE)),)
+CMAKE_SYSTEM_NAME := Windows
+endif
+
+CONFIGURE_FLAGS += --host=$(XHOST_TRIPLE)
+CMAKE_FLAGS += -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME)
+
+TARGET_TRIPLE := $(XHOST_TRIPLE)
+else
+TARGET_TRIPLE := $(HOST_TRIPLE)
+endif
+
+ISWINDOWS := $(findstring mingw,$(TARGET_TRIPLE))
+ifdef ISWINDOWS
+SUFFIX := $(SUFFIX).exe
+endif
+
+BUILD_DIR := $(GOPATH)/native/$(TARGET_TRIPLE)
+
+# In MinGW, cgo flags don't handle Unix-style paths, so convert our base path to
+# a Windows-style path.
+#
+# TODO(benesch): Figure out why. MinGW transparently converts Unix-style paths
+# everywhere else.
+ifdef MINGW
+BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
+endif
+
+JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
+PROTOBUF_DIR := $(BUILD_DIR)/protobuf
+ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb
+SNAPPY_DIR   := $(BUILD_DIR)/snappy
+# Can't share with protobuf because protoc is always built for the host.
+PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
+PROTOC 		 := $(PROTOC_DIR)/protoc
+
+C_LIBS := libjemalloc libprotobuf libsnappy librocksdb
+
+# Go does not permit dashes in build tags. This is undocumented. Fun!
+TARGET_TRIPLE_TAG := $(subst -,_,$(TARGET_TRIPLE))
+
+# In each package that uses cgo, we inject include and library search paths
+# into files named zcgo_flags[_arch_vendor_os_abi].go. The logic for this is
+# complicated so that Make-driven builds can cache the state of builds for
+# multiple architectures at once, while still allowing the use of `go build`
+# and `go test` for the architecture most recently built with Make.
+#
+# Building with Make always adds the `make` and `arch_vendor_os_abi` tags to
+# the build.
+#
+# Unsuffixed flags files (zcgo_flags.cgo) have the build constraint `!make`
+# and are only compiled when invoking the Go toolchain directly on a package--
+# i.e., when the `make` build tag is not specified. These files are rebuilt on
+# every Make invocation, and so reflect the target triple that Make was most
+# recently invoked with.
+#
+# Suffixed flags files (e.g. zcgo_flags_arch_vendor_os_abi.go) have the build
+# constraint `arch_vendor_os_abi` and are built the first time a Make-driven
+# build encounters a given `arch_vendor_os_abi` target triple. The Go
+# toolchain does not automatically set target-triple build tags, so these
+# files are only compiled when building with Make.
+CGO_PKGS := cli server/status storage/engine ccl/storageccl/engineccl
+CGO_UNSUFFIXED_FLAGS_FILES := $(addprefix $(PKG_ROOT)/,$(addsuffix /zcgo_flags.go,$(CGO_PKGS)))
+CGO_SUFFIXED_FLAGS_FILES   := $(addprefix $(PKG_ROOT)/,$(addsuffix /zcgo_flags_$(TARGET_TRIPLE_TAG).go,$(CGO_PKGS)))
+CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
+
+$(CGO_UNSUFFIXED_FLAGS_FILES): .ALWAYS_REBUILD
+
+$(CGO_FLAGS_FILES):
+	@echo 'GEN $@'
+	@echo '// GENERATED FILE DO NOT EDIT' > $@
+	@echo >> $@
+	@echo '// +build $(if $(findstring $(TARGET_TRIPLE_TAG),$@),$(TARGET_TRIPLE_TAG),!make)' >> $@
+	@echo >> $@
+	@echo 'package $(notdir $(@D))' >> $@
+	@echo >> $@
+	@echo '// #cgo CPPFLAGS: -I$(JEMALLOC_DIR)/include' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR)/.libs $(ROCKSDB_DIR))' >> $@
+	@echo 'import "C"' >> $@
+
+# We package tarballs in c-deps so that DEP.src.tar.xz is guaranteed to extract to
+# folder DEP.src.
+#
+# NB: `tar -xJ` is not widely supported, so we use `xz` directly instead.
+$(C_DEPS_DIR)/%.src: $(C_DEPS_DIR)/%.src.tar.xz
+	rm -rf $@
+	xz --decompress --stdout $< | tar -C $(C_DEPS_DIR) -xf -
+	touch $@
+
+$(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc.src.tar.xz | $(JEMALLOC_SRC_DIR)
+	mkdir -p $(JEMALLOC_DIR)
+	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(CONFIGURE_FLAGS)
+
+$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz | $(PROTOBUF_SRC_DIR)
+	mkdir -p $(PROTOBUF_DIR)
+	cd $(PROTOBUF_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
+
+ifneq ($(PROTOC_DIR),$(PROTOBUF_DIR))
+$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz | $(PROTOBUF_SRC_DIR)
+	mkdir -p $(PROTOC_DIR)
+	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
+endif
+
+$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb.src.tar.xz | libsnappy libjemalloc $(ROCKSDB_SRC_DIR)
+	mkdir -p $(ROCKSDB_DIR)
+	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
+	  -DWITH_$(if $(ISWINDOWS),AVX2,SSE42)=ON \
+	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
+	  -DJEMALLOC_ROOT_DIR=$(JEMALLOC_DIR) -DWITH_JEMALLOC=ON
+
+$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy.src.tar.xz | $(SNAPPY_SRC_DIR)
+	mkdir -p $(SNAPPY_DIR)
+	cd $(SNAPPY_DIR) && $(SNAPPY_SRC_DIR)/configure $(CONFIGURE_FLAGS) --disable-shared
+
+# We mark C and C++ dependencies as .PHONY (or .ALWAYS_REBUILD) to avoid
+# having to name the artifact (for .PHONY), which can vary by platform, and so
+# the child Makefile can determine whether the target is up to date (for both
+# .PHONY and .ALWAYS_REBUILD). We don't have the targets' prerequisites here,
+# and we certainly don't want to duplicate them.
+
+$(PROTOC): $(PROTOC_DIR)/Makefile $(BOOTSTRAP_TARGET) .ALWAYS_REBUILD
+	@$(MAKE) --no-print-directory -C $(PROTOC_DIR) -j$(NCPUS) protoc
+
+.PHONY: libjemalloc
+libjemalloc: $(JEMALLOC_DIR)/Makefile $(BOOTSTRAP_TARGET)
+	@$(MAKE) --no-print-directory -C $(JEMALLOC_DIR) -j$(NCPUS) build_lib_static
+
+.PHONY: libprotobuf
+libprotobuf: $(PROTOBUF_DIR)/Makefile $(BOOTSTRAP_TARGET)
+	@$(MAKE) --no-print-directory -C $(PROTOBUF_DIR) -j$(NCPUS) libprotobuf
+
+.PHONY: libsnappy
+libsnappy: $(SNAPPY_DIR)/Makefile $(BOOTSTRAP_TARGET)
+	@$(MAKE) --no-print-directory -C $(SNAPPY_DIR) -j$(NCPUS)
+
+.PHONY: librocksdb
+librocksdb: $(ROCKSDB_DIR)/Makefile $(BOOTSTRAP_TARGET)
+	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) -j$(NCPUS) rocksdb
+
+.PHONY: clean-c-deps
+clean-c-deps:
+	rm -rf $(JEMALLOC_DIR)
+	rm -rf $(PROTOBUF_DIR)
+	rm -rf $(ROCKSDB_DIR)
+	rm -rf $(SNAPPY_DIR)

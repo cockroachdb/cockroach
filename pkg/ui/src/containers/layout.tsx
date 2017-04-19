@@ -6,7 +6,7 @@ import { StickyContainer } from "react-sticky";
 import { TitledComponent } from "../interfaces/layout";
 import NavigationBar from "../components/layoutSidebar";
 import TimeWindowManager from "../containers/timewindow";
-import Banner from "../containers/banner/bannerContainer";
+import AlertBanner from "./alertBanner";
 
 function isTitledComponent(obj: Object | TitledComponent): obj is TitledComponent {
   return obj && _.isFunction((obj as TitledComponent).title);
@@ -36,7 +36,7 @@ export default class extends React.Component<RouterState, {}> {
 
     return <div>
       <TimeWindowManager/>
-      <Banner/>
+      <AlertBanner/>
       <NavigationBar/>
       <StickyContainer className="page">
         {

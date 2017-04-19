@@ -17,6 +17,9 @@ package log
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
+
+	"golang.org/x/net/context"
 )
 
 // OrigStderr points to the original stderr stream.
@@ -60,22 +63,20 @@ func RecoverAndReportPanic() {
 
 // ReportPanic reports a panic has occurred on the real stderr.
 func ReportPanic(r interface{}) {
+	Shout(context.Background(), Severity_ERROR, "a panic has occurred!")
+
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
 	Flush()
 
+	// We do not use Shout() to print the panic details here, because
+	// if stderr is not redirected (e.g. when logging to file is
+	// disabled) Shout() would copy its argument to stderr
+	// unconditionally, and we don't want that: Go's runtime system
+	// already unconditonally copies the panic details to stderr.
+	// Instead, we copy manually the details to stderr, only when stderr
+	// is redirected to a file otherwise.
 	if stderrRedirected {
-		// The panic message will go to "stderr" which is actually the log
-		// file. Copy it to the real stderr to give the user a chance to
-		// see it.
-		fmt.Fprintln(OrigStderr, r)
-	} else {
-		// We're not redirecting stderr at this point, so the panic
-		// message should be printed below. However we're not very strict
-		// in this package about whether "stderrRedirected" is accurate,
-		// so hint the user that they may still need to look at the log
-		// file.
-		fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
-			"If no details are printed below, check the log file for details.")
+		fmt.Fprintf(OrigStderr, "%v\n\n%s\n", r, debug.Stack())
 	}
 }
