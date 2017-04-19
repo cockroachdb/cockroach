@@ -299,18 +299,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 	sp := tracer.StartSpan("server start")
 	startCtx := opentracing.ContextWithSpan(context.Background(), sp)
 
-	// Ensure that the store paths are absolute. This will clarify the
-	// output of the startup messages below, and ensure that logging
-	// doesn't get confused if any future change in the code introduces
-	// a call to `os.Chdir`.
-	for i, spec := range serverCfg.Stores.Specs {
-		absPath, err := filepath.Abs(spec.Path)
-		if err != nil {
-			return err
-		}
-		serverCfg.Stores.Specs[i].Path = absPath
-	}
-
 	// Default user for servers.
 	serverCfg.User = security.NodeUser
 
