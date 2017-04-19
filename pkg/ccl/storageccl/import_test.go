@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -167,8 +170,25 @@ func TestImport(t *testing.T) {
 		t.Fatalf("failed to rewrite key: %s", reqEndKey)
 	}
 
+	// Make the first few WriteBatch calls return AmbiguousResultError. Import
+	// should be resilient to this.
+	const initialAmbiguousWriteBatches = 3
+	remainingAmbiguousWriteBatches := int64(initialAmbiguousWriteBatches)
+	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+		TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if _, ok := filterArgs.Req.(*roachpb.WriteBatchRequest); !ok {
+				return nil
+			}
+			r := atomic.AddInt64(&remainingAmbiguousWriteBatches, -1)
+			if r < 0 {
+				return nil
+			}
+			return roachpb.NewError(roachpb.NewAmbiguousResultError(strconv.Itoa(int(r))))
+		},
+	}}
+
 	ctx := context.Background()
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
 	defer s.Stopper().Stop()
 
 	storage, err := ExportStorageConfFromURI("nodelocal://" + dir)
@@ -176,8 +196,10 @@ func TestImport(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 
-	for i := 0; i <= len(files); i++ {
+	for i := 1; i <= len(files); i++ {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			atomic.StoreInt64(&remainingAmbiguousWriteBatches, initialAmbiguousWriteBatches)
+
 			req := &roachpb.ImportRequest{
 				Span:        roachpb.Span{Key: reqStartKey},
 				DataSpan:    roachpb.Span{Key: dataStartKey, EndKey: dataEndKey},
@@ -209,6 +231,10 @@ func TestImport(t *testing.T) {
 					}
 					t.Fatalf("got %+v expected %+v", kvs, expectedKVs)
 				}
+			}
+
+			if r := atomic.LoadInt64(&remainingAmbiguousWriteBatches); r > 0 {
+				t.Errorf("expected ambiguous write batches to be depleted got %d", r)
 			}
 		})
 	}
