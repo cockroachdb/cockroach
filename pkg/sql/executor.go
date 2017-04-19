@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -566,7 +567,7 @@ func (e *Executor) execRequest(
 	var err error
 	txnState := &session.TxnState
 
-	if log.V(2) {
+	if log.V(2) || atomic.LoadInt32(&logStatementsExecuteEnabled) != 0 {
 		log.Infof(session.Ctx(), "execRequest: %s", sql)
 	}
 
@@ -582,7 +583,7 @@ func (e *Executor) execRequest(
 	session.phaseTimes[sessionEndParse] = timeutil.Now()
 
 	if err != nil {
-		if log.V(2) {
+		if log.V(2) || atomic.LoadInt32(&logStatementsExecuteEnabled) != 0 {
 			log.Infof(session.Ctx(), "execRequest: error: %v", err)
 		}
 		// A parse error occurred: we can't determine if there were multiple
@@ -719,7 +720,7 @@ func (e *Executor) execRequest(
 			lastRes.Err = convertToErrWithPGCode(err)
 		}
 
-		if err != nil && log.V(2) {
+		if err != nil && (log.V(2) || atomic.LoadInt32(&logStatementsExecuteEnabled) != 0) {
 			log.Infof(session.Ctx(), "execRequest: error: %v", err)
 		}
 
@@ -918,7 +919,8 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
-		if log.V(2) || log.HasSpanOrEvent(session.Ctx()) {
+		if log.V(2) || atomic.LoadInt32(&logStatementsExecuteEnabled) != 0 ||
+			log.HasSpanOrEvent(session.Ctx()) {
 			log.VEventf(session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
 

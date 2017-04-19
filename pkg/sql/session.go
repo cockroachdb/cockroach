@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -44,24 +46,60 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// COCKROACH_TRACE_SQL=duration can be used to log SQL transactions that take
-// longer than duration to complete. For example, COCKROACH_TRACE_SQL=1s will
-// log the trace for any transaction that takes 1s or longer. To log traces for
-// all transactions use COCKROACH_TRACE_SQL=1ns. Note that any positive
-// duration will enable tracing and will slow down all execution because traces
-// are gathered for all transactions even if they are not output.
-var traceSQLDuration = envutil.EnvOrDefaultDuration("COCKROACH_TRACE_SQL", 0)
-var traceSQL = traceSQLDuration > 0
+// traceTxnThreshold can be used to log SQL transactions that take
+// longer than duration to complete. For example, traceTxnThreshold=1s
+// will log the trace for any transaction that takes 1s or longer. To
+// log traces for all transactions use traceTxnThreshold=1ns. Note
+// that any positive duration will enable tracing and will slow down
+// all execution because traces are gathered for all transactions even
+// if they are not output.
+var traceTxnThreshold int64
 
-// COCKROACH_ENABLE_SQL_EVENT_LOG can be used to enable the event log that is
-// normally kept for every SQL connection. The event log has a non-trivial
-// performance impact and also reveals SQL statements which may be a privacy
-// concern.
-var enableSQLEventLog = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_SQL_EVENT_LOG", false)
+// The following variables ought to be bools however Go's atomic
+// package does not yet provide LoadBool/StoreBool.
 
-// COCKROACH_TRACE_7881 can be used to trace all SQL transactions, in the hope
-// that we'll catch #7881 and dump the current trace for debugging.
-var traceSQLFor7881 = envutil.EnvOrDefaultBool("COCKROACH_TRACE_7881", false)
+// traceSessionEventLogEnabled can be used to enable the event log
+// that is normally kept for every SQL connection. The event log has a
+// non-trivial performance impact and also reveals SQL statements
+// which may be a privacy concern.
+var traceSessionEventLogEnabled int32
+
+// debugTrace7881Enabled causes all SQL transactions to be traced using their
+// own tracer and log, in the hope that we'll catch #7881 and dump the
+// current trace for debugging.
+var debugTrace7881Enabled int32
+
+// logStatementsExecuteEnabled causes the Executor to log executed
+// statements and, if any, resulting errors.
+var logStatementsExecuteEnabled int32
+
+func init() {
+	traceTxnThresholdA := settings.RegisterDurationSetting(
+		"sql.trace.txn.threshold",
+		"duration beyond which all transactions are traced (set to 0 to disable)", 0)
+	traceSessionEventLogEnabledA := settings.RegisterBoolSetting(
+		"sql.trace.session.eventlog.enabled",
+		"set to true to enable session tracing", false)
+	debugTrace7881EnabledA := settings.RegisterBoolSetting(
+		"debug.sql.trace.7881.enabled",
+		"#7881", false)
+	logExecutedStatementsEnabledA := settings.RegisterBoolSetting(
+		"sql.log.statements.execute.enabled",
+		"set to true to enable logging of executed statements", false)
+
+	settings.RegisterCallback(func() {
+		toInt := func(x bool) int32 {
+			if x {
+				return 1
+			}
+			return 0
+		}
+		atomic.StoreInt64(&traceTxnThreshold, traceTxnThresholdA().Nanoseconds())
+		atomic.StoreInt32(&traceSessionEventLogEnabled, toInt(traceSessionEventLogEnabledA()))
+		atomic.StoreInt32(&debugTrace7881Enabled, toInt(debugTrace7881EnabledA()))
+		atomic.StoreInt32(&logStatementsExecuteEnabled, toInt(logExecutedStatementsEnabledA()))
+	})
+}
 
 // span baggage key used for marking a span
 const keyFor7881Sample = "found#7881"
@@ -278,7 +316,7 @@ func NewSession(
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
 
-	if enableSQLEventLog {
+	if atomic.LoadInt32(&traceSessionEventLogEnabled) != 0 {
 		remoteStr := "<admin>"
 		if remote != nil {
 			remoteStr = remote.String()
@@ -541,7 +579,7 @@ type txnState struct {
 	schemaChangers schemaChangerCollection
 
 	sp opentracing.Span
-	// When COCKROACH_TRACE_SQL is enabled, trace accumulates spans as
+	// When sql.trace.txn.threshold is >0, trace accumulates spans as
 	// they're closed. All the spans pertain to the current txn.
 	trace *tracing.RecordedTrace
 
@@ -577,13 +615,13 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
 	// into a larger discussion about how to drain SQL and rollback open txns.
 	ctx := s.context
-	if traceSQL {
+	if atomic.LoadInt64(&traceTxnThreshold) > 0 {
 		var err error
 		ctx, ts.trace, err = tracing.StartSnowballTrace(ctx, "traceSQL")
 		if err != nil {
 			log.Fatalf(ctx, "unable to create snowball tracer: %s", err)
 		}
-	} else if traceSQLFor7881 {
+	} else if atomic.LoadInt32(&debugTrace7881Enabled) != 0 {
 		var err error
 		ctx, ts.trace, err = tracing.NewTracerAndSpanFor7881(ctx)
 		if err != nil {
@@ -652,11 +690,13 @@ func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 	sampledFor7881 := (ts.sp.BaggageItem(keyFor7881Sample) != "")
 	ts.sp.Finish()
 	ts.sp = nil
-	if (traceSQL && timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration) ||
-		(traceSQLFor7881 && sampledFor7881) {
-		dump := tracing.FormatRawSpans(ts.trace.GetSpans())
-		if len(dump) > 0 {
-			log.Infof(sessionCtx, "SQL trace:\n%s", dump)
+	if ts.trace != nil {
+		durThreshold := time.Duration(atomic.LoadInt64(&traceTxnThreshold))
+		if sampledFor7881 || (durThreshold > 0 && timeutil.Since(ts.sqlTimestamp) >= durThreshold) {
+			dump := tracing.FormatRawSpans(ts.trace.GetSpans())
+			if len(dump) > 0 {
+				log.Infof(sessionCtx, "SQL trace:\n%s", dump)
+			}
 		}
 	}
 }
