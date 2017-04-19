@@ -890,12 +890,16 @@ func encodeEndConstraintAscending(c *parser.ComparisonExpr) logicalKeyPart {
 			dir:       encoding.Ascending,
 			inclusive: true,
 		}
-	default:
+	case parser.NE:
+		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
+	case parser.LE, parser.EQ, parser.LT:
 		return logicalKeyPart{
 			val:       c.Right.(parser.Datum),
 			dir:       encoding.Ascending,
 			inclusive: c.Operator != parser.LT,
 		}
+	default:
+		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
 }
 
@@ -912,12 +916,16 @@ func encodeEndConstraintDescending(c *parser.ComparisonExpr) logicalKeyPart {
 			dir:       encoding.Descending,
 			inclusive: false,
 		}
-	default:
+	case parser.NE:
+		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
+	case parser.GE, parser.EQ, parser.GT:
 		return logicalKeyPart{
 			val:       c.Right.(parser.Datum),
 			dir:       encoding.Descending,
 			inclusive: c.Operator != parser.GT,
 		}
+	default:
+		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
 }
 
@@ -1036,7 +1044,9 @@ func makeSpans(
 }
 
 // logicalSpan is a higher-level representation of a span that uses Datums
-// instead of bytes.
+// instead of bytes. TODO(radu): In the future, I think we probably want to
+// remove the expressions in indexConstraints as well and directly put in
+// logicalKeyParts.
 type logicalSpan struct {
 	start, end []logicalKeyPart
 }
@@ -1083,6 +1093,8 @@ func spansFromLogicalSpans(
 	return spans, nil
 }
 
+// interstices[i] is inserted right before the ith key part. The last element of
+// interstices is inserted at the end (if all key parts are present).
 func spanFromLogicalSpan(ls logicalSpan, interstices [][]byte) (roachpb.Span, error) {
 	var s roachpb.Span
 	for i := 0; ; i++ {
