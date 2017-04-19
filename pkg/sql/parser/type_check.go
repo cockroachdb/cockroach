@@ -161,9 +161,11 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 	} else {
 		// If expr.Expr is nil, the WHEN clauses contain boolean expressions.
 		for i, when := range expr.Whens {
-			if expr.Whens[i].Cond, err = typeCheckAndRequireBoolean(ctx, when.Cond, "condition"); err != nil {
+			typedCond, err := typeCheckAndRequireBoolean(ctx, when.Cond, "condition")
+			if err != nil {
 				return nil, err
 			}
+			expr.Whens[i].Cond = typedCond
 		}
 	}
 
@@ -403,11 +405,11 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 	}
 
 	if expr.Filter != nil {
-		var err error
-		expr.Filter, err = typeCheckAndRequireBoolean(ctx, expr.Filter, "FILTER expression")
+		typedFilter, err := typeCheckAndRequireBoolean(ctx, expr.Filter, "FILTER expression")
 		if err != nil {
 			return nil, err
 		}
+		expr.Filter = typedFilter
 	}
 
 	builtin := fn.(Builtin)
@@ -451,8 +453,8 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 
 // TypeCheck implements the Expr interface.
 func (expr *IfExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	var err error
-	if expr.Cond, err = typeCheckAndRequireBoolean(ctx, expr.Cond, "IF condition"); err != nil {
+	typedCond, err := typeCheckAndRequireBoolean(ctx, expr.Cond, "IF condition")
+	if err != nil {
 		return nil, err
 	}
 
@@ -461,6 +463,7 @@ func (expr *IfExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error)
 		return nil, decorateTypeCheckError(err, "incompatible IF expressions")
 	}
 
+	expr.Cond = typedCond
 	expr.True, expr.Else = typedSubExprs[0], typedSubExprs[1]
 	expr.typ = retType
 	return expr, nil

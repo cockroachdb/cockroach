@@ -132,3 +132,11 @@ query T
 SELECT ts FROM untyped WHERE ts != '2015-09-18 00:00:00'
 ----
 2010-09-28 12:00:00.1 +0000 +0000
+
+# Regression tests for #15050
+
+statement error error type checking constant value: could not parse '2017-04-18 18:00' as type timestamp
+CREATE TABLE t15050a (c DECIMAL DEFAULT CASE WHEN NOW() < '2017-04-18 18:00' THEN 2 ELSE 2 END);
+
+statement error error type checking constant value: could not parse '2017-04-18 18:00' as type timestamp
+CREATE TABLE t15050b (c DECIMAL DEFAULT IF(NOW() < '2017-04-18 18:00', 2, 2));
