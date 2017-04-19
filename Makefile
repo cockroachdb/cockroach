@@ -42,84 +42,8 @@ INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
 
-# Possible values:
-# <empty>: use the default toolchain
-# release-linux-gnu:  target Linux 2.6.32, dynamically link GLIBC 2.12.2
-# release-linux-musl: target Linux 2.6.32, statically link musl 1.1.16
-# release-darwin:     target OS X 10.9
-# release-windows:    target Windows 8, statically link all non-Windows libraries
-#
-# All non-empty variants only work in the cockroachdb/builder docker image, as
-# they depend on cross-compilation toolchains available there.
-# The name of the cockroach binary depends on the release type.
-TYPE :=
-
-# We intentionally use LINKFLAGS instead of the more traditional LDFLAGS
-# because LDFLAGS has built-in semantics that don't make sense with the Go
-# toolchain.
-LINKFLAGS ?=
-
-BUILD_TYPE := development
-ifeq ($(TYPE),)
-else ifeq ($(TYPE),msan)
-NATIVE_SUFFIX := _msan
-override GOFLAGS += -msan
-# NB: using jemalloc with msan causes segfaults. See
-# https://github.com/jemalloc/jemalloc/issues/821.
-override TAGS += stdmalloc
-MSAN_CPPFLAGS := -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -I/libcxx_msan/include -I/libcxx_msan/include/c++/v1
-MSAN_LDFLAGS  := -fsanitize=memory -stdlib=libc++ -L/libcxx_msan/lib -lc++abi -Wl,-rpath,/libcxx_msan/lib
-override CGO_CPPFLAGS += $(MSAN_CPPFLAGS)
-override CGO_LDFLAGS += $(MSAN_LDFLAGS)
-export CGO_CPPFLAGS
-export CGO_LDFLAGS
-# NB: CMake doesn't respect CPPFLAGS (!)
-#
-# See https://bugs.launchpad.net/pantheon-terminal/+bug/1325329.
-override CFLAGS += $(MSAN_CPPFLAGS)
-override CXXFLAGS += $(MSAN_CPPFLAGS)
-override LDFLAGS += $(MSAN_LDFLAGS)
-export CFLAGS
-export CXXFLAGS
-export LDFLAGS
-else ifeq ($(TYPE),release-linux-gnu)
-# We use a custom toolchain to target old Linux and glibc versions. However,
-# this toolchain's libstdc++ version is quite recent and must be statically
-# linked to avoid depending on the target's available libstdc++.
-XHOST_TRIPLE := x86_64-unknown-linux-gnu
-override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++"
-override GOFLAGS += -installsuffix release-gnu
-override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
-BUILD_TYPE := release-gnu
-else ifeq ($(TYPE),release-linux-musl)
-BUILD_TYPE := release-musl
-XHOST_TRIPLE := x86_64-unknown-linux-musl
-override LINKFLAGS += -s -w -extldflags "-static"
-override GOFLAGS += -installsuffix release-musl
-override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
-else ifeq ($(TYPE),release-darwin)
-XGOOS := darwin
-export CGO_ENABLED := 1
-XHOST_TRIPLE := x86_64-apple-darwin13
-override SUFFIX := $(SUFFIX)-darwin-10.9-amd64
-override LINKFLAGS += -s -w
-BUILD_TYPE := release
-else ifeq ($(TYPE),release-windows)
-XGOOS := windows
-export CGO_ENABLED := 1
-XHOST_TRIPLE := x86_64-w64-mingw32
-override SUFFIX := $(SUFFIX)-windows-6.2-amd64
-override LINKFLAGS += -s -w -extldflags "-static"
-BUILD_TYPE := release
-else
-$(error unknown build type $(TYPE))
-endif
-
-override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILD_TYPE)
-
 REPO_ROOT := .
 include $(REPO_ROOT)/build/common.mk
-override TAGS += make $(NATIVE_SPECIFIER_TAG)
 
 # On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
 # symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
@@ -128,6 +52,24 @@ override TAGS += make $(NATIVE_SPECIFIER_TAG)
 ifdef MACOS
 export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion)
 endif
+
+# We intentionally use LINKFLAGS instead of the more traditional LDFLAGS
+# because LDFLAGS has built-in semantics that don't make sense with the Go
+# toolchain.
+LINKFLAGS ?=
+
+# TYPE=release builds a release build, which omit debug information to produce a
+# smaller binary.
+TYPE :=
+ifeq ($(TYPE),)
+else ifeq ($(TYPE),release)
+override LINKFLAGS += -s -w -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILD_TYPE)
+else
+$(error unknown build type $(TYPE))
+endif
+
+override GOFLAGS += -installsuffix $(INSTALLSUFFIX)
+override TAGS += make $(NATIVE_TAG)
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
 

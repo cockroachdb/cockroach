@@ -132,3 +132,6 @@ RUN curl -fsSL https://releases.hashicorp.com/terraform/0.8.7/terraform_0.8.7_li
  && rm terraform.zip
 
 ENV PATH /opt/backtrace/bin:$PATH
+
+COPY cmd /go/src/cmd
+RUN GOBIN=/usr/local/bin go install ./src/cmd/... && rm -rf ./src/cmd
