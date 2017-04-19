@@ -13,11 +13,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+var enterpriseEnabled = settings.RegisterBoolSetting(
+	"enterprise.enabled", "set to true to enable Enterprise features", false,
+)
+
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
 // feature is not enabled, including information or a link explaining how to
 // enable it.
 func CheckEnterpriseEnabled(feature string) error {
-	if settings.EnterpriseEnabled() {
+	if enterpriseEnabled() {
 		return nil
 	}
 	// TODO(dt): link to some stable URL that then redirects to a helpful page
