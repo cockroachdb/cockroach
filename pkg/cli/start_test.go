@@ -56,6 +56,7 @@ func TestInitInsecure(t *testing.T) {
 		{[]string{"--host", "::1", "--advertise-host", "192.168.1.1"}, true, ""},
 		{[]string{"--insecure", "--host", "192.168.1.1", "--advertise-host", "192.168.1.1"}, true, ""},
 		{[]string{"--insecure", "--host", "192.168.1.1", "--advertise-host", "192.168.2.2"}, true, ""},
+		{[]string{"-s=type=mem,size=1GiB"}, true, ""},
 		// Clear out the flags when done to avoid affecting other tests that rely on the flag state.
 		{[]string{"--host", "", "--advertise-host", ""}, true, ""},
 	}
