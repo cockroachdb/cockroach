@@ -83,17 +83,6 @@ func (e *Executor) recordStatementSummary(
 	// server metrics.
 	runLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[plannerStartExecStmt])
 
-	if automaticRetryCount == 0 {
-		if distSQLUsed {
-			if _, ok := stmt.(*parser.Select); ok {
-				e.DistSQLSelectCount.Inc(1)
-			}
-			e.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-		} else {
-			e.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-		}
-	}
-
 	// Collect the statistics.
 	numRows := result.RowsAffected
 	if result.Type == parser.Rows {
@@ -107,14 +96,27 @@ func (e *Executor) recordStatementSummary(
 	planLat := phaseTimes[plannerEndLogicalPlan].
 		Sub(phaseTimes[plannerStartLogicalPlan]).Seconds()
 	// service latency: start to parse to end of run
-	svcLat := phaseTimes[plannerEndExecStmt].
-		Sub(phaseTimes[sessionStartParse]).Seconds()
+	svcLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[sessionStartParse])
+	svcLat := svcLatRaw.Seconds()
 
 	// processing latency: contributing towards SQL results.
 	processingLat := parseLat + planLat + runLat
 
 	// overhead latency: txn/retry management, error checking, etc
 	execOverhead := svcLat - processingLat
+
+	if automaticRetryCount == 0 {
+		if distSQLUsed {
+			if _, ok := stmt.(*parser.Select); ok {
+				e.DistSQLSelectCount.Inc(1)
+			}
+			e.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+			e.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+		} else {
+			e.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+			e.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+		}
+	}
 
 	planner.session.appStats.recordStatement(
 		stmt, distSQLUsed, automaticRetryCount, numRows, err,
