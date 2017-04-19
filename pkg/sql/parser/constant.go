@@ -451,6 +451,9 @@ var unaryOpToToken = map[UnaryOperator]token.Token{
 	UnaryPlus:  token.ADD,
 	UnaryMinus: token.SUB,
 }
+var unaryOpToTokenIntOnly = map[UnaryOperator]token.Token{
+	UnaryComplement: token.XOR,
+}
 var binaryOpToToken = map[BinaryOperator]token.Token{
 	Plus:  token.ADD,
 	Minus: token.SUB,
@@ -498,6 +501,11 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 		case *NumVal:
 			if token, ok := unaryOpToToken[t.Operator]; ok {
 				return &NumVal{Value: constant.UnaryOp(token, cv.Value, 0)}
+			}
+			if token, ok := unaryOpToTokenIntOnly[t.Operator]; ok {
+				if intVal, ok := cv.asConstantInt(); ok {
+					return &NumVal{Value: constant.UnaryOp(token, intVal, 0)}
+				}
 			}
 		}
 	case *BinaryExpr:
