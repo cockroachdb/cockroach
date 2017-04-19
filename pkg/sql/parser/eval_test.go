@@ -93,6 +93,9 @@ func TestEval(t *testing.T) {
 		{`-3`, `-3`},
 		{`-4.1`, `-4.1`},
 		{`-6.1:::float`, `-6.1`},
+		// Ones complement operates on signed integers.
+		{`~0`, `-1`},
+		{`~0 - 1`, `-2`},
 		// Hexadecimal numbers.
 		{`0xa`, `10`},
 		{`0xcafe1111`, `3405648145`},
@@ -1048,6 +1051,8 @@ func TestEvalError(t *testing.T) {
 		{`ARRAY[NULL, ARRAY[1, 2]]`, `multidimensional arrays must have array expressions with matching dimensions`},
 		{`ARRAY[ARRAY[1, 2], NULL]`, `multidimensional arrays must have array expressions with matching dimensions`},
 		{`ARRAY[ARRAY[1, 2], ARRAY[1]]`, `multidimensional arrays must have array expressions with matching dimensions`},
+		// TODO(pmattis): Check for overflow.
+		// {`~0 + 1`, `0`},
 		{`9223372036854775807::int + 1::int`, `integer out of range`},
 		{`-9223372036854775807::int + -2::int`, `integer out of range`},
 		{`-9223372036854775807::int + -9223372036854775807::int`, `integer out of range`},

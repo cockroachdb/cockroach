@@ -758,7 +758,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT DATE '2001-01-02' + ($1 + $1:::int)": {
 			baseTest.SetArgs(12).Results("2001-01-26T00:00:00Z"),
 		},
-		"SELECT TO_HEX(bitwise_not(bitwise_not($1)))": {
+		"SELECT TO_HEX(~(~$1))": {
 			baseTest.SetArgs(12).Results("c"),
 		},
 		"SELECT $1::INT": {
@@ -778,8 +778,8 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(1).Results(-1),
 			baseTest.SetArgs(-999).Results(999),
 		},
-		"INSERT INTO d.two (a, b) VALUES (-$1, $1 + $2) RETURNING a, b": {
-			baseTest.SetArgs(5, 6).Results(-5, 11),
+		"INSERT INTO d.two (a, b) VALUES (~$1, $1 + $2) RETURNING a, b": {
+			baseTest.SetArgs(5, 6).Results(-6, 11),
 		},
 		"INSERT INTO d.str (s) VALUES (LEFT($1, 3)) RETURNING s": {
 			baseTest.SetArgs("abcdef").Results("abc"),
