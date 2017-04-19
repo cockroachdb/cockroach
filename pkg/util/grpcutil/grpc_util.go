@@ -17,6 +17,7 @@
 package grpcutil
 
 import (
+	"io"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -50,7 +51,10 @@ func IsClosedConnection(err error) bool {
 		grpc.Code(err) == codes.Unavailable ||
 		grpc.ErrorDesc(err) == grpc.ErrClientConnClosing.Error() ||
 		strings.Contains(err.Error(), "is closing") ||
+		strings.Contains(err.Error(), "use of closed connection") ||
 		strings.Contains(err.Error(), "use of closed network connection") ||
+		strings.Contains(err.Error(), io.ErrClosedPipe.Error()) ||
+		strings.Contains(err.Error(), io.EOF.Error()) ||
 		strings.Contains(err.Error(), "node unavailable") {
 		return true
 	}
