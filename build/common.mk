@@ -78,7 +78,9 @@ GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 # used. See: http://blog.jgc.org/2016/07/lazy-gnu-make-variables.html
 override make-lazy = $(eval $1 = $$(eval $1 := $(value $1))$$($1))
 
-MINGW := $(findstring MINGW,$(shell uname))
+UNAME := $(shell uname)
+MACOS := $(findstring Darwin,$(UNAME))
+MINGW := $(findstring MINGW,$(UNAME))
 
 NCPUS = $(shell $(LOCAL_BIN)/ncpus)
 $(call make-lazy,NCPUS)
