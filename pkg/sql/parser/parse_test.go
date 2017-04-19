@@ -1301,16 +1301,15 @@ func TestParsePanic(t *testing.T) {
 func TestParsePrecedence(t *testing.T) {
 	// Precedence levels (highest first):
 	//   0: -
-	//   1: * / // %
-	//   2: + -
-	//   3: << >>
-	//   4: &
-	//   5: ^
-	//   6: |
-	//   7: = != > >= < <=
-	//   8: NOT
-	//   9: AND
-	//  10: OR
+	//   1: ^
+	//   2: * / // %
+	//   3: + -
+	//   4: << >>
+	//   5: & | #
+	//   6: = != > >= < <=
+	//   7: NOT
+	//   8: AND
+	//   9: OR
 
 	unary := func(op UnaryOperator, expr Expr) Expr {
 		return &UnaryExpr{Operator: op, Expr: expr}
@@ -1400,15 +1399,15 @@ func TestParsePrecedence(t *testing.T) {
 		// Bit-and combined with self (left associative)
 		{`1&2&3`, binary(Bitand, binary(Bitand, one, two), three)},
 
-		// Bit-xor combined with higher precedence.
-		{`1#2&3`, binary(Bitxor, one, binary(Bitand, two, three))},
+		// Bit-xor combined with same precedence (left associative).
+		{`1#2&3`, binary(Bitand, binary(Bitxor, one, two), three)},
 		{`1&2#3`, binary(Bitxor, binary(Bitand, one, two), three)},
 
 		// Bit-xor combined with self (left associative)
 		{`1#2#3`, binary(Bitxor, binary(Bitxor, one, two), three)},
 
-		// Bit-or combined with higher precedence.
-		{`1|2#3`, binary(Bitor, one, binary(Bitxor, two, three))},
+		// Bit-or combined with same precedence (left associative).
+		{`1|2#3`, binary(Bitxor, binary(Bitor, one, two), three)},
 		{`1#2|3`, binary(Bitor, binary(Bitxor, one, two), three)},
 
 		// Bit-or combined with self (left associative)
