@@ -16,6 +16,9 @@
 # Author: Shawn Morel (shawnmorel@gmail.com)
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 
+REPO_ROOT := .
+include $(REPO_ROOT)/build/common.mk
+
 # Variables to be overridden on the command line only, e.g.
 #
 #   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
@@ -32,67 +35,25 @@ BENCHTIMEOUT := 5m
 TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
-XGOFLAGS     :=
 COCKROACH    := ./cockroach
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
 BUILDMODE    := install
 BUILDTARGET  := .
 SUFFIX       :=
-
-# Possible values:
-# <empty>: use the default toolchain
-# release-linux-gnu:  target Linux 2.6.32, dynamically link GLIBC 2.12.2
-# release-linux-musl: target Linux 2.6.32, statically link musl 1.1.16
-# release-darwin:     target OS X 10.9
-# release-windows:    target Windows 8, statically link all non-Windows libraries
-#
-# All non-empty variants only work in the cockroachdb/builder docker image, as
-# they depend on cross-compilation toolchains available there.
-TYPE :=
+TYPE         :=
 
 # We intentionally use LINKFLAGS instead of the more traditional LDFLAGS
 # because LDFLAGS has built-in semantics that don't make sense with the Go
 # toolchain.
 LINKFLAGS ?=
 
-ifeq ($(TYPE),)
-override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
-# Temporary shim to prevent build pollution in CI, which may still have agents
-# with caches populated with the release toolchain.
-#
-# TODO(tamird): replace with `else ifeq ($(TYPE),release-linux-gnu)` when
-# sufficient time has passed.
-else ifeq ($(TYPE),$(filter $(TYPE),release release-linux-gnu))
-# We use a custom toolchain to target old Linux and glibc versions. However,
-# this toolchain's libstdc++ version is quite recent and must be statically
-# linked to avoid depending on the target's available libstdc++.
-XHOST_TRIPLE := x86_64-unknown-linux-gnu
-override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
-override GOFLAGS += -installsuffix release
-else ifeq ($(TYPE),release-linux-musl)
-XHOST_TRIPLE := x86_64-unknown-linux-musl
-override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
-override GOFLAGS += -installsuffix release-musl
-override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
-else ifeq ($(TYPE),release-darwin)
-XGOOS := darwin
-export CGO_ENABLED := 1
-XHOST_TRIPLE := x86_64-apple-darwin13
-override SUFFIX := $(SUFFIX)-darwin-10.9-amd64
-override LINKFLAGS += -s -w -X github.com/cockroachdb/cockroach/pkg/build.typ=release
-else ifeq ($(TYPE),release-windows)
-XGOOS := windows
-export CGO_ENABLED := 1
-XHOST_TRIPLE := x86_64-w64-mingw32
-override SUFFIX := $(SUFFIX)-windows-6.2-amd64
-override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
-else
-$(error unknown build type $(TYPE))
+override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=$(if $(TYPE),$(TYPE),development)
+
+ifeq ($(filter release%,$(TYPE)),$(TYPE))
+override LINKFLAGS += -s -w
 endif
 
-REPO_ROOT := .
-include $(REPO_ROOT)/build/common.mk
 override TAGS += make $(TARGET_TRIPLE_TAG)
 
 # On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
@@ -103,6 +64,8 @@ ifdef MACOS
 export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion)
 endif
 
+XGO := $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XCC),CC=$(XCC)) $(if $(XCXX),CXX=$(XCXX)) $(GO)
+
 .DEFAULT_GOAL := all
 .PHONY: all
 all: build test check
@@ -112,15 +75,13 @@ short: build testshort checkshort
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 
-build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)
+build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 build buildoss install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
-
-XGO := $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO)
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when

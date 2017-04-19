@@ -79,8 +79,8 @@ GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 override make-lazy = $(eval $1 = $$(eval $1 := $(value $1))$$($1))
 
 UNAME := $(shell uname)
-MACOS := $(findstring Darwin,$(UNAME))
-MINGW := $(findstring MINGW,$(UNAME))
+HOST_MACOS := $(findstring Darwin,$(UNAME))
+HOST_MINGW := $(findstring MINGW,$(UNAME))
 
 NCPUS = $(shell $(LOCAL_BIN)/ncpus)
 $(call make-lazy,NCPUS)
@@ -193,57 +193,31 @@ $(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/Makefile $(REPO_ROOT)/.go-version 
 # The following section handles building our C/C++ dependencies. These are
 # common because both the root Makefile and protobuf.mk have C dependencies.
 
-C_DEPS_DIR := $(abspath $(REPO_ROOT)/c-deps)
-JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc.src
-PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf.src
-ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb.src
-SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy.src
-
-C_LIBS_SRCS := $(JEMALLOC_SRC_DIR) $(PROTOBUF_SRC_DIR) $(ROCKSDB_SRC_DIR) $(SNAPPY_SRC_DIR)
-
 HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
 
 CONFIGURE_FLAGS :=
-CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
+CMAKE_FLAGS := $(if $(HOST_MINGW),-G 'MSYS Makefiles')
 
-ifdef XHOST_TRIPLE
-
-# Darwin wants clang, so special treatment is in order.
-ISDARWIN := $(findstring darwin,$(XHOST_TRIPLE))
-
-XHOST_BIN_DIR := /x-tools/$(XHOST_TRIPLE)/bin
-
-export PATH := $(XHOST_BIN_DIR):$(PATH)
-
-CC_PATH  := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
-CXX_PATH := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
-ifdef ISDARWIN
-CC_PATH  := $(CC_PATH)-clang
-CXX_PATH := $(CXX_PATH)-clang++
-else
-CC_PATH  := $(CC_PATH)-gcc
-CXX_PATH := $(CXX_PATH)-g++
-endif
-
-ifdef ISDARWIN
-CMAKE_SYSTEM_NAME := Darwin
-else ifneq ($(findstring linux,$(XHOST_TRIPLE)),)
-CMAKE_SYSTEM_NAME := Linux
-else ifneq ($(findstring mingw,$(XHOST_TRIPLE)),)
-CMAKE_SYSTEM_NAME := Windows
-endif
-
-CONFIGURE_FLAGS += --host=$(XHOST_TRIPLE)
-CMAKE_FLAGS += -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME)
-
-TARGET_TRIPLE := $(XHOST_TRIPLE)
-else
+# Cross-compilation occurs when you set TARGET_TRIPLE to something other than
+# HOST_TRIPLE. You'll need to ensure the cross-compiling toolchain is on your
+# path and override the rest of these variables as necessary. For an example,
+# see build/build-release.sh.
 TARGET_TRIPLE := $(HOST_TRIPLE)
-endif
+XCMAKE_SYSTEM_NAME :=
+XGOOS :=
+XGOARCH :=
+XCC :=
+XCXX :=
 
-ISWINDOWS := $(findstring mingw,$(TARGET_TRIPLE))
-ifdef ISWINDOWS
-override SUFFIX := $(SUFFIX).exe
+TARGET_WINDOWS := $(findstring mingw,$(TARGET_TRIPLE))
+
+# Go does not permit dashes in build tags. This is undocumented. Fun!
+TARGET_TRIPLE_TAG := $(subst -,_,$(TARGET_TRIPLE))
+
+ifneq ($(HOST_TRIPLE),$(TARGET_TRIPLE))
+GOFLAGS += -installsuffix $(TARGET_TRIPLE_TAG)
+CONFIGURE_FLAGS += --host=$(TARGET_TRIPLE)
+CMAKE_FLAGS += -DCMAKE_SYSTEM_NAME=$(XCMAKE_SYSTEM_NAME) -DCMAKE_C_COMPILER=$(XCC) -DCMAKE_CXX_COMPILER=$(XCXX)
 endif
 
 BUILD_DIR := $(GOPATH)/native/$(TARGET_TRIPLE)
@@ -253,7 +227,7 @@ BUILD_DIR := $(GOPATH)/native/$(TARGET_TRIPLE)
 #
 # TODO(benesch): Figure out why. MinGW transparently converts Unix-style paths
 # everywhere else.
-ifdef MINGW
+ifdef HOST_MINGW
 BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
 endif
 
@@ -265,10 +239,15 @@ SNAPPY_DIR   := $(BUILD_DIR)/snappy
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 PROTOC 		 := $(PROTOC_DIR)/protoc
 
-C_LIBS := libjemalloc libprotobuf libsnappy librocksdb
+C_DEPS_DIR := $(abspath $(REPO_ROOT)/c-deps)
+JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc.src
+PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf.src
+ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb.src
+SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy.src
 
-# Go does not permit dashes in build tags. This is undocumented. Fun!
-TARGET_TRIPLE_TAG := $(subst -,_,$(TARGET_TRIPLE))
+C_LIBS_SRCS := $(JEMALLOC_SRC_DIR) $(PROTOBUF_SRC_DIR) $(ROCKSDB_SRC_DIR) $(SNAPPY_SRC_DIR)
+
+C_LIBS := libjemalloc libprotobuf libsnappy librocksdb
 
 # In each package that uses cgo, we inject include and library search paths
 # into files named zcgo_flags[_arch_vendor_os_abi].go. The logic for this is
@@ -335,7 +314,7 @@ endif
 $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb.src.tar.xz | libsnappy libjemalloc $(ROCKSDB_SRC_DIR)
 	mkdir -p $(ROCKSDB_DIR)
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
-	  $(if $(findstring release,$(TYPE)),,-DWITH_$(if $(ISWINDOWS),AVX2,SSE42)=OFF) \
+	  $(if $(findstring release,$(TYPE)),,-DWITH_$(if $(TARGET_WINDOWS),AVX2,SSE42)=OFF) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
 	  -DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON
 
