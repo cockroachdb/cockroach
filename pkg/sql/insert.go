@@ -132,7 +132,7 @@ func (p *planner) Insert(
 	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
-	ri, err := sqlbase.MakeRowInserter(p.txn, en.tableDesc, fkTables, cols, sqlbase.CheckFKs)
+	ri, err := sqlbase.MakeRowInserter(p.txn, &p.sc, en.tableDesc, fkTables, cols, sqlbase.CheckFKs)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +293,7 @@ func (n *insertNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	return n.run.tw.init(n.p.txn)
+	return n.run.tw.init(n.p.txn, &n.p.sc)
 }
 
 func (n *insertNode) Close(ctx context.Context) {

@@ -70,14 +70,9 @@ type phaseTimes [sessionNumPhases]time.Time
 // - result is the result set computed by the query/statement.
 // - err is the error encountered, if any.
 func (e *Executor) recordStatementSummary(
-	planner *planner,
-	stmt parser.Statement,
-	distSQLUsed bool,
-	automaticRetryCount int,
-	result Result,
-	err error,
+	p plan, distSQLUsed bool, automaticRetryCount int, result Result, err error,
 ) {
-	phaseTimes := &planner.phaseTimes
+	phaseTimes := &p.planner.phaseTimes
 
 	// Compute the run latency. This is always recorded in the
 	// server metrics.
@@ -85,7 +80,7 @@ func (e *Executor) recordStatementSummary(
 
 	if automaticRetryCount == 0 {
 		if distSQLUsed {
-			if _, ok := stmt.(*parser.Select); ok {
+			if _, ok := p.stmt.(*parser.Select); ok {
 				e.DistSQLSelectCount.Inc(1)
 			}
 			e.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
@@ -116,8 +111,8 @@ func (e *Executor) recordStatementSummary(
 	// overhead latency: txn/retry management, error checking, etc
 	execOverhead := svcLat - processingLat
 
-	planner.session.appStats.recordStatement(
-		stmt, distSQLUsed, automaticRetryCount, numRows, err,
+	p.planner.session.appStats.recordStatement(
+		p.stmt, distSQLUsed, automaticRetryCount, numRows, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)
 
@@ -128,7 +123,7 @@ func (e *Executor) recordStatementSummary(
 		sessionAge := phaseTimes[plannerEndExecStmt].
 			Sub(phaseTimes[sessionInit]).Seconds()
 
-		log.Infof(planner.session.Ctx(),
+		log.Infof(p.planner.session.Ctx(),
 			"query stats: %d rows, %d retries, "+
 				"parse %.2fµs (%.1f%%), "+
 				"plan %.2fµs (%.1f%%), "+

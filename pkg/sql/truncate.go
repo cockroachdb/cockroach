@@ -94,7 +94,7 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 	}
 
 	for _, tableDesc := range toTruncate {
-		if err := truncateTable(tableDesc, p.txn); err != nil {
+		if err := truncateTable(p, tableDesc); err != nil {
 			return nil, err
 		}
 	}
@@ -105,13 +105,13 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 // truncateTable truncates the data of a table in a single transaction. It
 // deletes a range of data for the table, which includes the PK and all
 // indexes.
-func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
-	rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false)
+func truncateTable(p *planner, tableDesc *sqlbase.TableDescriptor) error {
+	rd, err := sqlbase.MakeRowDeleter(p.txn, &p.sc, tableDesc, nil, nil, false)
 	if err != nil {
 		return err
 	}
 	td := tableDeleter{rd: rd}
-	if err := td.init(txn); err != nil {
+	if err := td.init(p.txn, &p.sc); err != nil {
 		return err
 	}
 	_, err = td.deleteAllRows(context.TODO(), roachpb.Span{}, math.MaxInt64)
@@ -131,12 +131,12 @@ func truncateTableInChunks(
 			log.Infof(ctx, "table %s truncate at row: %d, span: %s", tableDesc.Name, row, resume)
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false)
+			rd, err := sqlbase.MakeRowDeleter(txn, nil, tableDesc, nil, nil, false)
 			if err != nil {
 				return err
 			}
 			td := tableDeleter{rd: rd}
-			if err := td.init(txn); err != nil {
+			if err := td.init(txn, nil); err != nil {
 				return err
 			}
 			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize)

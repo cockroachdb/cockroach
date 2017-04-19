@@ -33,8 +33,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func newPlanNode() planNode {
-	return &emptyNode{}
+func newPlan() plan {
+	return plan{queryPlan: &emptyNode{}}
 }
 
 // assertLen asserts the number of plans in the ParallelizeQueue.
@@ -83,20 +83,20 @@ func TestParallelizeQueueNoDependencies(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlan(), func(p plan) error {
 		<-run1
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		close(run3)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlan(), func(p plan) error {
 		<-run2
 		res = append(res, 2)
 		assertLenEventually(t, &pq, 1)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlan(), func(p plan) error {
 		<-run3
 		res = append(res, 3)
 		assertLenEventually(t, &pq, 2)
@@ -121,24 +121,24 @@ func TestParallelizeQueueAllDependent(t *testing.T) {
 
 	var res []int
 	run := make(chan struct{})
-	analyzer := dependencyAnalyzerFunc(func(p1 planNode, p2 planNode) bool {
+	analyzer := dependencyAnalyzerFunc(func(p1 plan, p2 plan) bool {
 		return false
 	})
 
 	// Executes: plan1 -> plan2 -> plan3.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlan(), func(p plan) error {
 		<-run
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlan(), func(p plan) error {
 		res = append(res, 2)
 		assertLen(t, &pq, 2)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlan(), func(p plan) error {
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
 		return nil
@@ -160,9 +160,9 @@ func TestParallelizeQueueSingleDependency(t *testing.T) {
 	ctx := context.Background()
 
 	var res []int
-	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
+	plan1, plan2, plan3 := newPlan(), newPlan(), newPlan()
 	run1, run3 := make(chan struct{}), make(chan struct{})
-	analyzer := dependencyAnalyzerFunc(func(p1 planNode, p2 planNode) bool {
+	analyzer := dependencyAnalyzerFunc(func(p1 plan, p2 plan) bool {
 		if (p1 == plan1 && p2 == plan2) || (p1 == plan2 && p2 == plan1) {
 			// plan1 and plan2 are dependent
 			return false
@@ -172,18 +172,18 @@ func TestParallelizeQueueSingleDependency(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.Add(ctx, plan1, func(plan planNode) error {
+	pq.Add(ctx, plan1, func(p plan) error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return nil
 	})
-	pq.Add(ctx, plan2, func(plan planNode) error {
+	pq.Add(ctx, plan2, func(p plan) error {
 		res = append(res, 2)
 		assertLen(t, &pq, 1)
 		return nil
 	})
-	pq.Add(ctx, plan3, func(plan planNode) error {
+	pq.Add(ctx, plan3, func(p plan) error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -206,10 +206,10 @@ func TestParallelizeQueueError(t *testing.T) {
 	ctx := context.Background()
 
 	var res []int
-	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
+	plan1, plan2, plan3 := newPlan(), newPlan(), newPlan()
 	run1, run3 := make(chan struct{}), make(chan struct{})
 	planErr := errors.Errorf("plan1 will throw this error")
-	analyzer := dependencyAnalyzerFunc(func(p1 planNode, p2 planNode) bool {
+	analyzer := dependencyAnalyzerFunc(func(p1 plan, p2 plan) bool {
 		if (p1 == plan1 && p2 == plan2) || (p1 == plan2 && p2 == plan1) {
 			// plan1 and plan2 are dependent
 			return false
@@ -219,19 +219,19 @@ func TestParallelizeQueueError(t *testing.T) {
 
 	// Executes: plan3 -> plan1 (error!) -> plan2 (dropped).
 	pq := MakeParallelizeQueue(analyzer)
-	pq.Add(ctx, plan1, func(plan planNode) error {
+	pq.Add(ctx, plan1, func(p plan) error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return planErr
 	})
-	pq.Add(ctx, plan2, func(plan planNode) error {
+	pq.Add(ctx, plan2, func(p plan) error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
 		return nil
 	})
-	pq.Add(ctx, plan3, func(plan planNode) error {
+	pq.Add(ctx, plan3, func(p plan) error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -260,12 +260,12 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 	ctx := context.Background()
 
 	var res []int
-	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
+	plan1, plan2, plan3 := newPlan(), newPlan(), newPlan()
 	planErr := errors.Errorf("plan1 will throw this error")
 
 	// Executes: plan1 (error!) -> plan2 (dropped) -> plan3.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.Add(ctx, plan1, func(plan planNode) error {
+	pq.Add(ctx, plan1, func(p plan) error {
 		res = append(res, 1)
 		assertLen(t, &pq, 1)
 		return planErr
@@ -279,7 +279,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 		return nil
 	})
 
-	pq.Add(ctx, plan2, func(plan planNode) error {
+	pq.Add(ctx, plan2, func(p plan) error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
@@ -293,7 +293,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErr)
 	}
 
-	pq.Add(ctx, plan3, func(plan planNode) error {
+	pq.Add(ctx, plan3, func(p plan) error {
 		// Will be called, because the error is cleared when Wait is called.
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
@@ -307,17 +307,15 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 	}
 }
 
-func planNodeForQuery(
-	t *testing.T, s serverutils.TestServerInterface, sql string,
-) (planNode, func()) {
+func planForQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (plan, func()) {
 	kvDB := s.KVClient().(*client.DB)
 	txn := client.NewTxn(kvDB)
 	txn.Proto().OrigTimestamp = s.Clock().Now()
-	p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
-	p.session.leases.leaseMgr = s.LeaseManager().(*LeaseManager)
-	p.session.Database = "test"
+	planner := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
+	planner.session.leases.leaseMgr = s.LeaseManager().(*LeaseManager)
+	planner.session.Database = "test"
 
-	stmts, err := p.parser.Parse(sql, parser.Traditional)
+	stmts, err := planner.parser.Parse(sql, parser.Traditional)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,12 +323,13 @@ func planNodeForQuery(
 		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
 	}
 	stmt := stmts[0]
-	plan, err := p.makePlan(context.TODO(), stmt, false /* autoCommit */)
+	queryPlan, err := planner.makePlan(context.TODO(), stmt, false /* autoCommit */)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return plan, func() {
-		finishInternalPlanner(p)
+	p := plan{planner: planner, queryPlan: queryPlan}
+	return p, func() {
+		finishInternalPlanner(planner)
 	}
 }
 
@@ -426,12 +425,18 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				da := NewSpanBasedDependencyAnalyzer()
 
-				plan1, finish1 := planNodeForQuery(t, s, q1)
+				plan1, finish1 := planForQuery(t, s, q1)
+				plan2, finish2 := planForQuery(t, s, q2)
 				defer finish1()
-				plan2, finish2 := planNodeForQuery(t, s, q2)
 				defer finish2()
 
-				indep := da.Independent(context.TODO(), plan1, plan2)
+				ctx := context.TODO()
+				da.Analyze(ctx, plan1)
+				da.Analyze(ctx, plan2)
+				defer da.Clear(plan1)
+				defer da.Clear(plan2)
+
+				indep := da.Independent(plan1, plan2)
 				if exp := test.independent; indep != exp {
 					t.Errorf("expected da.Independent(%q, %q) = %t, but found %t",
 						q1, q2, exp, indep)

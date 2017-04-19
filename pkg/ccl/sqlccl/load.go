@@ -157,7 +157,7 @@ func Load(
 				Union: &sqlbase.Descriptor_Table{Table: tableDesc},
 			})
 
-			ri, err = sqlbase.MakeRowInserter(nil, tableDesc, nil, tableDesc.Columns, true)
+			ri, err = sqlbase.MakeRowInserter(nil, nil, tableDesc, nil, tableDesc.Columns, true)
 			if err != nil {
 				return BackupDescriptor{}, errors.Wrap(err, "make row inserter")
 			}
