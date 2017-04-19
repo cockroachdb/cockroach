@@ -19,6 +19,7 @@ package parser
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 func prepareExpr(t *testing.T, datumExpr string) TypedExpr {
@@ -316,6 +317,45 @@ func TestParseDIntervalWithField(t *testing.T) {
 		}
 		if expected.Compare(&EvalContext{}, actual) != 0 {
 			t.Errorf("INTERVAL %s %v: got %s, expected %s", td.str, td.field, actual, expected)
+		}
+	}
+}
+
+func TestParseDDate(t *testing.T) {
+	testData := []struct {
+		str      string
+		expected string
+	}{
+		{"2017-03-03 -01:00:00", "2017-03-03"},
+		{"2017-03-03 -1:0:0", "2017-03-03"},
+		{"2017-03-03 -01:00", "2017-03-03"},
+		{"2017-03-03 -01", "2017-03-03"},
+		{"2017-03-03 -010000", "2017-03-03"},
+		{"2017-03-03 -0100", "2017-03-03"},
+		{"2017-03-03 -1", "2017-03-03"},
+		{"2017-03-03", "2017-03-03"},
+		{"2017-3-3 -01:00:00", "2017-03-03"},
+		{"2017-3-3 -1:0:0", "2017-03-03"},
+		{"2017-3-3 -01:00", "2017-03-03"},
+		{"2017-3-3 -01", "2017-03-03"},
+		{"2017-3-3 -010000", "2017-03-03"},
+		{"2017-3-3 -0100", "2017-03-03"},
+		{"2017-3-3 -1", "2017-03-03"},
+		{"2017-3-3", "2017-03-03"},
+	}
+	for _, td := range testData {
+		actual, err := ParseDDate(td.str, time.UTC)
+		if err != nil {
+			t.Errorf("unexpected error while parsing DATE %s: %s", td.str, err)
+			continue
+		}
+		expected, err := ParseDDate(td.expected, time.UTC)
+		if err != nil {
+			t.Errorf("unexpected error while parsing expected value DATE %s: %s", td.expected, err)
+			continue
+		}
+		if expected.Compare(&EvalContext{}, actual) != 0 {
+			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
 		}
 	}
 }
