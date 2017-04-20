@@ -963,7 +963,6 @@ EXPLAIN (EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 2  render
 2                 render 0     v
 2                 render 1     k
-2                 render 2     v
 3  scan
 3                 table        kv@primary
 3                 spans        ALL
@@ -981,7 +980,6 @@ EXPLAIN (EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 2  render
 2                 render 0     v
 2                 render 1     *
-2                 render 2     v
 3  scan
 3                 table        kv@primary
 3                 spans        ALL
@@ -999,7 +997,6 @@ EXPLAIN (EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 2  render
 2                 render 0     v
 2                 render 1     1
-2                 render 2     v
 3  scan
 3                 table        kv@primary
 3                 spans        ALL

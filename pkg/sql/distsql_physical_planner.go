@@ -767,16 +767,9 @@ func (dsp *distSQLPlanner) addAggregators(
 
 	inputTypes := p.ResultTypes
 
-	// The way our planNode construction currently orders columns between
-	// groupNode and its source is that the first len(n.funcs) columns are the
-	// arguments for the aggregation functions. The remaining columns are
-	// columns we group by.
-	// For 'SELECT 1, SUM(k) GROUP BY k', the output schema of groupNode's
-	// source will be [1 k k], with 1, k being arguments fed to the aggregation
-	// functions and k being the column we group by.
-	groupCols := make([]uint32, 0, len(n.plan.Columns())-len(n.funcs))
-	for i := len(n.funcs); i < len(n.plan.Columns()); i++ {
-		groupCols = append(groupCols, uint32(p.planToStreamColMap[i]))
+	groupCols := make([]uint32, len(n.groupByIdx))
+	for i, idx := range n.groupByIdx {
+		groupCols[i] = uint32(p.planToStreamColMap[idx])
 	}
 
 	// We either have a local stage on each stream followed by a final stage, or
@@ -885,8 +878,8 @@ func (dsp *distSQLPlanner) addAggregators(
 			}
 		}
 
-		localAgg := make([]distsqlrun.AggregatorSpec_Aggregation, numAgg+len(groupCols))
-		intermediateTypes := make([]sqlbase.ColumnType, numAgg+len(groupCols))
+		localAgg := make([]distsqlrun.AggregatorSpec_Aggregation, numAgg, numAgg+len(groupCols))
+		intermediateTypes := make([]sqlbase.ColumnType, numAgg, numAgg+len(groupCols))
 		finalAgg := make([]distsqlrun.AggregatorSpec_Aggregation, numAgg)
 		finalGroupCols := make([]uint32, len(groupCols))
 		var finalPreRenderTypes []sqlbase.ColumnType
@@ -933,13 +926,25 @@ func (dsp *distSQLPlanner) addAggregators(
 		// Add IDENT expressions for the group columns; these need to be part of the
 		// output of the local stage because the final stage needs them.
 		for i, groupColIdx := range groupCols {
-			localAgg[aIdx] = distsqlrun.AggregatorSpec_Aggregation{
+			agg := distsqlrun.AggregatorSpec_Aggregation{
 				Func:   distsqlrun.AggregatorSpec_IDENT,
 				ColIdx: groupColIdx,
 			}
-			intermediateTypes[aIdx] = inputTypes[groupColIdx]
-			finalGroupCols[i] = uint32(aIdx)
-			aIdx++
+			// See if there already is an aggregation like the one we want to add.
+			idx := -1
+			for j, jAgg := range localAgg {
+				if jAgg == agg {
+					idx = j
+					break
+				}
+			}
+			if idx == -1 {
+				// Not already there, add it.
+				idx = len(localAgg)
+				localAgg = append(localAgg, agg)
+				intermediateTypes = append(intermediateTypes, inputTypes[groupColIdx])
+			}
+			finalGroupCols[i] = uint32(idx)
 		}
 
 		localAggSpec := distsqlrun.AggregatorSpec{
