@@ -244,7 +244,10 @@ func EncodePartialIndexKey(
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
 	colIDs := index.ColumnIDs[:numCols]
-	key = keyPrefix
+	// We know we will append to the key which will cause the capacity to grow so
+	// make it bigger from the get-go.
+	key = make([]byte, len(keyPrefix), 2*len(keyPrefix))
+	copy(key, keyPrefix)
 	dirs := directions(index.ColumnDirections)[:numCols]
 
 	if len(index.Interleave.Ancestors) > 0 {
@@ -297,8 +300,9 @@ func (d directions) get(i int) (encoding.Direction, error) {
 	return encoding.Ascending, nil
 }
 
-// EncodeColumns is a version of EncodeIndexKey that takes ColumnIDs and
-// directions explicitly.
+// EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
+// directions explicitly. WARNING: unlike EncodePartialIndexKey, EncodeColumns
+// appends directly to keyPrefix.
 func EncodeColumns(
 	columnIDs []ColumnID,
 	directions directions,
@@ -306,14 +310,7 @@ func EncodeColumns(
 	values []parser.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
-	if len(columnIDs) == 0 {
-		return keyPrefix, false, nil
-	}
-	// We know we will append to the key which will cause the capacity to grow
-	// so make it bigger from the get-go.
-	key = make([]byte, len(keyPrefix), 2*len(keyPrefix))
-	copy(key, keyPrefix)
-
+	key = keyPrefix
 	for colIdx, id := range columnIDs {
 		var val parser.Datum
 		if i, ok := colMap[id]; ok {
