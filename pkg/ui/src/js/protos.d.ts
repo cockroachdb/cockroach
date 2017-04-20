@@ -3468,6 +3468,362 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type SettingsRequest$Properties = {
+                keys?: string[];
+            };
+
+            /**
+             * Constructs a new SettingsRequest.
+             * @exports cockroach.server.serverpb.SettingsRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.SettingsRequest$Properties=} [properties] Properties to set
+             */
+            class SettingsRequest {
+
+                /**
+                 * Constructs a new SettingsRequest.
+                 * @exports cockroach.server.serverpb.SettingsRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.SettingsRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.SettingsRequest$Properties);
+
+                /**
+                 * SettingsRequest keys.
+                 * @type {Array.<string>}
+                 */
+                public keys: string[];
+
+                /**
+                 * Creates a new SettingsRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.SettingsRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.SettingsRequest} SettingsRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.SettingsRequest$Properties): cockroach.server.serverpb.SettingsRequest;
+
+                /**
+                 * Encodes the specified SettingsRequest message. Does not implicitly {@link cockroach.server.serverpb.SettingsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SettingsRequest$Properties} message SettingsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.SettingsRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified SettingsRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SettingsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SettingsRequest$Properties} message SettingsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.SettingsRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a SettingsRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.SettingsRequest} SettingsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.SettingsRequest;
+
+                /**
+                 * Decodes a SettingsRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.SettingsRequest} SettingsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.SettingsRequest;
+
+                /**
+                 * Verifies a SettingsRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a SettingsRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SettingsRequest} SettingsRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.SettingsRequest;
+
+                /**
+                 * Creates a SettingsRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.SettingsRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SettingsRequest} SettingsRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.SettingsRequest;
+
+                /**
+                 * Creates a plain object from a SettingsRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.SettingsRequest} message SettingsRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.SettingsRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this SettingsRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this SettingsRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type SettingsResponse$Properties = {
+                key_values?: { [k: string]: cockroach.server.serverpb.SettingsResponse.Value$Properties };
+            };
+
+            /**
+             * Constructs a new SettingsResponse.
+             * @exports cockroach.server.serverpb.SettingsResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.SettingsResponse$Properties=} [properties] Properties to set
+             */
+            class SettingsResponse {
+
+                /**
+                 * Constructs a new SettingsResponse.
+                 * @exports cockroach.server.serverpb.SettingsResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.SettingsResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.SettingsResponse$Properties);
+
+                /**
+                 * SettingsResponse key_values.
+                 * @type {Object.<string,cockroach.server.serverpb.SettingsResponse.Value$Properties>}
+                 */
+                public key_values: { [k: string]: cockroach.server.serverpb.SettingsResponse.Value$Properties };
+
+                /**
+                 * Creates a new SettingsResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.SettingsResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.SettingsResponse} SettingsResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.SettingsResponse$Properties): cockroach.server.serverpb.SettingsResponse;
+
+                /**
+                 * Encodes the specified SettingsResponse message. Does not implicitly {@link cockroach.server.serverpb.SettingsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SettingsResponse$Properties} message SettingsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.SettingsResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified SettingsResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SettingsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SettingsResponse$Properties} message SettingsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.SettingsResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a SettingsResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.SettingsResponse} SettingsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.SettingsResponse;
+
+                /**
+                 * Decodes a SettingsResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.SettingsResponse} SettingsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.SettingsResponse;
+
+                /**
+                 * Verifies a SettingsResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a SettingsResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SettingsResponse} SettingsResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.SettingsResponse;
+
+                /**
+                 * Creates a SettingsResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.SettingsResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SettingsResponse} SettingsResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.SettingsResponse;
+
+                /**
+                 * Creates a plain object from a SettingsResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.SettingsResponse} message SettingsResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.SettingsResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this SettingsResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this SettingsResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace SettingsResponse {
+
+                type Value$Properties = {
+                    value?: string;
+                    type?: string;
+                    description?: string;
+                };
+
+                /**
+                 * Constructs a new Value.
+                 * @exports cockroach.server.serverpb.SettingsResponse.Value
+                 * @constructor
+                 * @param {cockroach.server.serverpb.SettingsResponse.Value$Properties=} [properties] Properties to set
+                 */
+                class Value {
+
+                    /**
+                     * Constructs a new Value.
+                     * @exports cockroach.server.serverpb.SettingsResponse.Value
+                     * @constructor
+                     * @param {cockroach.server.serverpb.SettingsResponse.Value$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.server.serverpb.SettingsResponse.Value$Properties);
+
+                    /**
+                     * Value value.
+                     * @type {string}
+                     */
+                    public value: string;
+
+                    /**
+                     * Value type.
+                     * @type {string}
+                     */
+                    public type: string;
+
+                    /**
+                     * Value description.
+                     * @type {string}
+                     */
+                    public description: string;
+
+                    /**
+                     * Creates a new Value instance using the specified properties.
+                     * @param {cockroach.server.serverpb.SettingsResponse.Value$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.SettingsResponse.Value} Value instance
+                     */
+                    public static create(properties?: cockroach.server.serverpb.SettingsResponse.Value$Properties): cockroach.server.serverpb.SettingsResponse.Value;
+
+                    /**
+                     * Encodes the specified Value message. Does not implicitly {@link cockroach.server.serverpb.SettingsResponse.Value.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.SettingsResponse.Value$Properties} message Value message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.server.serverpb.SettingsResponse.Value$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified Value message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SettingsResponse.Value.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.SettingsResponse.Value$Properties} message Value message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.server.serverpb.SettingsResponse.Value$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a Value message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.SettingsResponse.Value} Value
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.SettingsResponse.Value;
+
+                    /**
+                     * Decodes a Value message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.SettingsResponse.Value} Value
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.SettingsResponse.Value;
+
+                    /**
+                     * Verifies a Value message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a Value message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.SettingsResponse.Value} Value
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.SettingsResponse.Value;
+
+                    /**
+                     * Creates a Value message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.SettingsResponse.Value.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.SettingsResponse.Value} Value
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.server.serverpb.SettingsResponse.Value;
+
+                    /**
+                     * Creates a plain object from a Value message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.SettingsResponse.Value} message Value
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.server.serverpb.SettingsResponse.Value, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this Value message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this Value to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+            }
+
             type HealthRequest$Properties = {};
 
             /**
@@ -3998,6 +4354,14 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public cluster(request: (cockroach.server.serverpb.ClusterRequest|{ [k: string]: any }), callback: Admin_cluster_Callback): void;
+
+                /**
+                 * Calls Settings.
+                 * @param {cockroach.server.serverpb.SettingsRequest|Object.<string,*>} request SettingsRequest message or plain object
+                 * @param {Admin_settings_Callback} callback Node-style callback called with the error, if any, and SettingsResponse
+                 * @returns {undefined}
+                 */
+                public settings(request: (cockroach.server.serverpb.SettingsRequest|{ [k: string]: any }), callback: Admin_settings_Callback): void;
 
                 /**
                  * Calls Health.
@@ -15581,6 +15945,8 @@ type Admin_setUIData_Callback = (error: Error, response?: cockroach.server.serve
 type Admin_getUIData_Callback = (error: Error, response?: cockroach.server.serverpb.GetUIDataResponse) => void;
 
 type Admin_cluster_Callback = (error: Error, response?: cockroach.server.serverpb.ClusterResponse) => void;
+
+type Admin_settings_Callback = (error: Error, response?: cockroach.server.serverpb.SettingsResponse) => void;
 
 type Admin_health_Callback = (error: Error, response?: cockroach.server.serverpb.HealthResponse) => void;
 
