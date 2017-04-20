@@ -60,9 +60,10 @@ type cliTest struct {
 }
 
 type cliTestParams struct {
-	t        *testing.T
-	insecure bool
-	noServer bool
+	t          *testing.T
+	insecure   bool
+	noServer   bool
+	storeSpecs []base.StoreSpec
 }
 
 func newCLITest(params cliTestParams) cliTest {
@@ -126,6 +127,7 @@ func newCLITest(params cliTestParams) cliTest {
 		s, err := serverutils.StartServerRaw(base.TestServerArgs{
 			Insecure:    params.insecure,
 			SSLCertsDir: certsDir,
+			StoreSpecs:  params.storeSpecs,
 		})
 		if err != nil {
 			fail(err)
@@ -1543,4 +1545,27 @@ writing ` + os.DevNull + `
 	if out != expected {
 		t.Errorf("expected:\n%s\ngot:\n%s", expected, out)
 	}
+}
+
+func Example_in_memory() {
+	spec, err := base.NewStoreSpec("type=mem,size=1GiB")
+	if err != nil {
+		panic(err)
+	}
+	c := newCLITest(cliTestParams{
+		storeSpecs: []base.StoreSpec{spec},
+	})
+	defer c.cleanup()
+
+	// Test some sql to ensure that the in memory store is working.
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
+	c.RunWithArgs([]string{"node", "ls"})
+
+	// Output:
+	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
+	// INSERT 1
+	// node ls
+	// 1 row
+	// id
+	// 1
 }

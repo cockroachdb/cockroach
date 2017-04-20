@@ -25,11 +25,10 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
@@ -298,6 +297,10 @@ func SetOpenFileLimitForOneStore() (int, error) {
 
 // MakeConfig returns a Context with default values.
 func MakeConfig() Config {
+	storeSpec, err := base.NewStoreSpec(defaultStorePath)
+	if err != nil {
+		panic(err)
+	}
 	cfg := Config{
 		Config:                   new(base.Config),
 		MaxOffset:                base.DefaultMaxClockOffset,
@@ -311,7 +314,7 @@ func MakeConfig() Config {
 		SendNextTimeout:          base.DefaultSendNextTimeout,
 		EventLogEnabled:          defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
-			Specs: []base.StoreSpec{{Path: defaultStorePath}},
+			Specs: []base.StoreSpec{storeSpec},
 		},
 	}
 	cfg.Config.InitDefaults()
