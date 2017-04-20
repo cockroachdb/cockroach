@@ -543,6 +543,80 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           </LineGraph>
         </GraphGroup>
 
+        <GraphGroup groupId="node.distributed" hide={dashboard !== "distributed"}>
+          <LineGraph title="Batches" sources={nodeSources}>
+            <Axis>
+              <Metric name="cr.node.distsender.batches" title="Batches" nonNegativeRate />
+              <Metric name="cr.node.distsender.batches.partial" title="Partial Batches" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="RPCs" sources={nodeSources}>
+            <Axis>
+              <Metric name="cr.node.distsender.rpc.sent" title="RPCs Sent" nonNegativeRate />
+              <Metric name="cr.node.distsender.rpc.sent.local" title="Local Fast-path" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="RPC Errors" sources={nodeSources}>
+            <Axis>
+              <Metric name="cr.node.distsender.rpc.sent.sendnexttimeout" title="RPC Timeouts" nonNegativeRate />
+              <Metric name="cr.node.distsender.rpc.sent.nextreplicaerror" title="Replica Errors" nonNegativeRate />
+              <Metric name="cr.node.distsender.errors.notleaseholder" title="Not Leaseholder Errors" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="KV Transactions" sources={nodeSources}>
+            <Axis>
+              <Metric name="cr.node.txn.commits" title="Committed" nonNegativeRate />
+              <Metric name="cr.node.txn.commits1PC" title="Fast-path Committed" nonNegativeRate />
+              <Metric name="cr.node.txn.aborts" title="Aborted" nonNegativeRate />
+              <Metric name="cr.node.txn.abandons" title="Abandoned" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="KV Transaction Restarts" sources={nodeSources}>
+            <Axis>
+              <Metric name="cr.node.txn.restarts.writetooold" title="Write Too Old" nonNegativeRate />
+              <Metric name="cr.node.txn.restarts.deleterange" title="Forwarded Timestamp (delete range)" nonNegativeRate />
+              <Metric name="cr.node.txn.restarts.serializable" title="Forwarded Timestamp (iso=serializable)" nonNegativeRate />
+              <Metric name="cr.node.txn.restarts.possiblereplay" title="Possible Replay" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="KV Transaction Durations: 99th percentile"
+                    tooltip={`The 99th percentile of transaction durations over a 1 minute period.
+                              Values are displayed individually for each node on each node.`}>
+            <Axis units={ AxisUnits.Duration }>
+              {
+                _.map(nodeIDs, (node) =>
+                  <Metric key={node}
+                          name="cr.node.txn.durations-p99"
+                          title={this.nodeAddress(node)}
+                          sources={[node]}
+                          downsampleMax />,
+                )
+              }
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="KV Transaction Durations: 90th percentile"
+                    tooltip={`The 90th percentile of transaction durations over a 1 minute period.
+                              Values are displayed individually for each node on each node.`}>
+            <Axis units={ AxisUnits.Duration }>
+              {
+                _.map(nodeIDs, (node) =>
+                  <Metric key={node}
+                          name="cr.node.txn.durations-p90"
+                          title={this.nodeAddress(node)}
+                          sources={[node]}
+                          downsampleMax />,
+                )
+              }
+            </Axis>
+          </LineGraph>
+      </GraphGroup>
+
         <GraphGroup groupId="node.queues" hide={dashboard !== "queues"}>
           <LineGraph title="Queue Processing Failures" sources={storeSources}>
             <Axis>

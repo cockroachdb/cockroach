@@ -1079,7 +1079,7 @@ func mvccPutInternal(
 					(txn.Sequence == meta.Txn.Sequence && txn.BatchIndex <= meta.Txn.BatchIndex)) {
 				// Replay error if we encounter an older sequence number or
 				// the same (or earlier) batch index for the same sequence.
-				return roachpb.NewTransactionRetryError()
+				return roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
 			}
 			// Make sure we process valueFn before clearing any earlier
 			// version.  For example, a conditional put within same
