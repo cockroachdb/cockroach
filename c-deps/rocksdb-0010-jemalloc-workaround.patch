@@ -1,0 +1,203 @@
+commit 40fd3a049ed4482313619d2307f792430e862431
+Author: Tamir Duberstein <tamird@gmail.com>
+Date:   Thu Apr 20 10:26:37 2017 -0400
+
+    db: avoid `#include`ing malloc and jemalloc simultaneously
+    
+    This fixes a compilation failure on Linux when the system libc is not
+    glibc. jemalloc's configure script incorrectly assumes that glibc is
+    always used on Linux systems, producing glibc-style signatures; when
+    the system libc is e.g. musl, the following error is observed:
+    
+      [  0%] Building CXX object CMakeFiles/rocksdb.dir/db/db_impl.cc.o
+      In file included from /go/src/github.com/cockroachdb/cockroach/c-deps/rocksdb.src/table/block.h:19:0,
+                       from /go/src/github.com/cockroachdb/cockroach/c-deps/rocksdb.src/db/db_impl.cc:77:
+      /x-tools/x86_64-unknown-linux-musl/x86_64-unknown-linux-musl/sysroot/usr/include/malloc.h:19:8: error: declaration of 'size_t malloc_usable_size(void*)' has a different exception specifier
+       size_t malloc_usable_size(void *);
+              ^~~~~~~~~~~~~~~~~~
+      In file included from /go/src/github.com/cockroachdb/cockroach/c-deps/rocksdb.src/db/db_impl.cc:20:0:
+      /go/native/x86_64-unknown-linux-musl/jemalloc/include/jemalloc/jemalloc.h:78:33: note: from previous declaration 'size_t malloc_usable_size(void*) throw ()'
+       #  define je_malloc_usable_size malloc_usable_size
+                                       ^
+      /go/native/x86_64-unknown-linux-musl/jemalloc/include/jemalloc/jemalloc.h:239:41: note: in expansion of macro 'je_malloc_usable_size'
+       JEMALLOC_EXPORT size_t JEMALLOC_NOTHROW je_malloc_usable_size(
+                                               ^~~~~~~~~~~~~~~~~~~~~
+      CMakeFiles/rocksdb.dir/build.make:350: recipe for target 'CMakeFiles/rocksdb.dir/db/db_impl.cc.o' failed
+    
+    This works around the issue by rearranging the sources such that
+    jemalloc's headers are never in the same scope as the system's malloc
+    header. The jemalloc issue has been reported as well, see:
+    https://github.com/jemalloc/jemalloc/issues/778.
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 460d13a3..4ce0979a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -275,6 +275,7 @@ set(SOURCES
+         db/internal_stats.cc
+         db/log_reader.cc
+         db/log_writer.cc
++        db/malloc_stats.cc
+         db/managed_iterator.cc
+         db/memtable.cc
+         db/memtable_allocator.cc
+diff --git a/db/db_impl.cc b/db/db_impl.cc
+index 578fe7cb..26fe2f28 100644
+--- a/db/db_impl.cc
++++ b/db/db_impl.cc
+@@ -16,9 +16,6 @@
+ #ifdef OS_SOLARIS
+ #include <alloca.h>
+ #endif
+-#ifdef ROCKSDB_JEMALLOC
+-#include "jemalloc/jemalloc.h"
+-#endif
+ 
+ #include <algorithm>
+ #include <climits>
+@@ -46,6 +43,7 @@
+ #include "db/job_context.h"
+ #include "db/log_reader.h"
+ #include "db/log_writer.h"
++#include "db/malloc_stats.h"
+ #include "db/managed_iterator.h"
+ #include "db/memtable.h"
+ #include "db/memtable_list.h"
+@@ -578,39 +576,6 @@ void DBImpl::PrintStatistics() {
+   }
+ }
+ 
+-#ifndef ROCKSDB_LITE
+-#ifdef ROCKSDB_JEMALLOC
+-typedef struct {
+-  char* cur;
+-  char* end;
+-} MallocStatus;
+-
+-static void GetJemallocStatus(void* mstat_arg, const char* status) {
+-  MallocStatus* mstat = reinterpret_cast<MallocStatus*>(mstat_arg);
+-  size_t status_len = status ? strlen(status) : 0;
+-  size_t buf_size = (size_t)(mstat->end - mstat->cur);
+-  if (!status_len || status_len > buf_size) {
+-    return;
+-  }
+-
+-  snprintf(mstat->cur, buf_size, "%s", status);
+-  mstat->cur += status_len;
+-}
+-#endif  // ROCKSDB_JEMALLOC
+-
+-static void DumpMallocStats(std::string* stats) {
+-#ifdef ROCKSDB_JEMALLOC
+-  MallocStatus mstat;
+-  const unsigned int kMallocStatusLen = 1000000;
+-  std::unique_ptr<char> buf{new char[kMallocStatusLen + 1]};
+-  mstat.cur = buf.get();
+-  mstat.end = buf.get() + kMallocStatusLen;
+-  je_malloc_stats_print(GetJemallocStatus, &mstat, "");
+-  stats->append(buf.get());
+-#endif  // ROCKSDB_JEMALLOC
+-}
+-#endif  // !ROCKSDB_LITE
+-
+ void DBImpl::MaybeDumpStats() {
+   if (immutable_db_options_.stats_dump_period_sec == 0) return;
+ 
+diff --git a/db/malloc_stats.cc b/db/malloc_stats.cc
+new file mode 100644
+index 00000000..539a7b33
+--- /dev/null
++++ b/db/malloc_stats.cc
+@@ -0,0 +1,52 @@
++//  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
++//  This source code is licensed under the BSD-style license found in the
++//  LICENSE file in the root directory of this source tree. An additional grant
++//  of patent rights can be found in the PATENTS file in the same directory.
++//
++// Copyright (c) 2011 The LevelDB Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file. See the AUTHORS file for names of contributors.
++
++#include "db/malloc_stats.h"
++
++#ifndef ROCKSDB_LITE
++#include <memory>
++#include <string.h>
++
++namespace rocksdb {
++
++#ifdef ROCKSDB_JEMALLOC
++#include "jemalloc/jemalloc.h"
++
++typedef struct {
++  char* cur;
++  char* end;
++} MallocStatus;
++
++static void GetJemallocStatus(void* mstat_arg, const char* status) {
++  MallocStatus* mstat = reinterpret_cast<MallocStatus*>(mstat_arg);
++  size_t status_len = status ? strlen(status) : 0;
++  size_t buf_size = (size_t)(mstat->end - mstat->cur);
++  if (!status_len || status_len > buf_size) {
++    return;
++  }
++
++  snprintf(mstat->cur, buf_size, "%s", status);
++  mstat->cur += status_len;
++}
++#endif  // ROCKSDB_JEMALLOC
++
++void DumpMallocStats(std::string* stats) {
++#ifdef ROCKSDB_JEMALLOC
++  MallocStatus mstat;
++  const unsigned int kMallocStatusLen = 1000000;
++  std::unique_ptr<char> buf{new char[kMallocStatusLen + 1]};
++  mstat.cur = buf.get();
++  mstat.end = buf.get() + kMallocStatusLen;
++  je_malloc_stats_print(GetJemallocStatus, &mstat, "");
++  stats->append(buf.get());
++#endif  // ROCKSDB_JEMALLOC
++}
++
++}
++#endif  // !ROCKSDB_LITE
+diff --git a/db/malloc_stats.h b/db/malloc_stats.h
+new file mode 100644
+index 00000000..212d447e
+--- /dev/null
++++ b/db/malloc_stats.h
+@@ -0,0 +1,22 @@
++//  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
++//  This source code is licensed under the BSD-style license found in the
++//  LICENSE file in the root directory of this source tree. An additional grant
++//  of patent rights can be found in the PATENTS file in the same directory.
++//
++// Copyright (c) 2011 The LevelDB Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file. See the AUTHORS file for names of contributors.
++
++#pragma once
++
++#ifndef ROCKSDB_LITE
++
++#include <string>
++
++namespace rocksdb {
++
++void DumpMallocStats(std::string*);
++
++}
++
++#endif  // !ROCKSDB_LITE
+diff --git a/src.mk b/src.mk
+index 2a4d48b8..629ca141 100644
+--- a/src.mk
++++ b/src.mk
+@@ -30,6 +30,7 @@ LIB_SOURCES =                                                   \
+   db/internal_stats.cc                                          \
+   db/log_reader.cc                                              \
+   db/log_writer.cc                                              \
++  db/malloc_stats.cc                                            \
+   db/managed_iterator.cc                                        \
+   db/memtable_allocator.cc                                      \
+   db/memtable.cc                                                \
