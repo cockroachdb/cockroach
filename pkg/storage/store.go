@@ -2442,6 +2442,7 @@ func (s *Store) Send(
 			if pErr != nil {
 				pErr.OriginNode = ba.Replica.NodeID
 				if txn := pErr.GetTxn(); txn != nil {
+					// Clone the txn, as we'll modify it.
 					pErr.SetTxn(txn)
 				} else {
 					pErr.SetTxn(ba.Txn)
