@@ -32,6 +32,10 @@ const (
 	// it may be aborted by conflicting txns.
 	DefaultHeartbeatInterval = 1 * time.Second
 
+	// DefaultSendNextTimeout is the amount wait duration before trying
+	// another replica to send a KV batch.
+	DefaultSendNextTimeout = 500 * time.Millisecond
+
 	// SlowRequestThreshold is the amount of time to wait before considering a
 	// request to be "slow".
 	SlowRequestThreshold = 60 * time.Second

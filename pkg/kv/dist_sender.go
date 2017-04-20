@@ -44,9 +44,6 @@ import (
 
 // Default constants for timeouts.
 const (
-	// TODO(bdarnell): make SendNextTimeout configurable.
-	// https://github.com/cockroachdb/cockroach/issues/6719
-	defaultSendNextTimeout   = 500 * time.Millisecond
 	defaultClientTimeout     = 10 * time.Second
 	defaultPendingRPCTimeout = 500 * time.Millisecond
 
@@ -239,7 +236,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if cfg.SendNextTimeout != 0 {
 		ds.sendNextTimeout = cfg.SendNextTimeout
 	} else {
-		ds.sendNextTimeout = defaultSendNextTimeout
+		ds.sendNextTimeout = base.DefaultSendNextTimeout
 	}
 	if cfg.SenderConcurrency != 0 {
 		ds.asyncSenderSem = make(chan struct{}, cfg.SenderConcurrency)
@@ -1166,10 +1163,10 @@ func (ds *DistSender) sendToReplicas(
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
-		if !transport.IsExhausted() {
+		if timeout, ok := transport.SendNextTimeout(opts.SendNextTimeout); ok {
 			// Only start the send-next timer if we haven't exhausted the transport
 			// (i.e. there is another replica to send to).
-			sendNextTimer.Reset(opts.SendNextTimeout)
+			sendNextTimer.Reset(timeout)
 		}
 
 		select {
@@ -1204,7 +1201,6 @@ func (ds *DistSender) sendToReplicas(
 					if lh := tErr.LeaseHolder; lh != nil {
 						// If the replica we contacted knows the new lease holder, update the cache.
 						ds.updateLeaseHolderCache(ctx, rangeID, *lh)
-
 						// Move the new lease holder to the head of the queue for the next retry.
 						transport.MoveToFront(*lh)
 					}
