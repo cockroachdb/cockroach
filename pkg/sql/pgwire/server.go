@@ -152,7 +152,7 @@ func MakeServer(
 	cfg *base.Config,
 	executor *sql.Executor,
 	internalMemMetrics *sql.MemoryMetrics,
-	maxSQLMem int64,
+	parentMemoryMonitor *mon.MemoryMonitor,
 	histogramWindow time.Duration,
 ) *Server {
 	server := &Server{
@@ -165,7 +165,7 @@ func MakeServer(
 		server.metrics.SQLMemMetrics.CurBytesCount,
 		server.metrics.SQLMemMetrics.MaxBytesHist,
 		0, noteworthySQLMemoryUsageBytes)
-	server.sqlMemoryPool.Start(context.Background(), nil, mon.MakeStandaloneBudget(maxSQLMem))
+	server.sqlMemoryPool.Start(context.Background(), parentMemoryMonitor, mon.BoundAccount{})
 
 	server.connMonitor = mon.MakeMonitor("conn",
 		server.metrics.ConnMemMetrics.CurBytesCount,
