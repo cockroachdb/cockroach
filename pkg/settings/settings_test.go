@@ -190,4 +190,23 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})
+
+	t.Run("mocks", func(t *testing.T) {
+		if expected, actual := true, TestingBoolSetting(true).Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := "true", TestingStringSetting("true").Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := 9, TestingIntSetting(9).Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := 9.4, TestingFloatSetting(9.4).Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := time.Hour, TestingDurationSetting(time.Hour).Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+
+	})
 }
