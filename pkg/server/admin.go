@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -845,6 +846,31 @@ func (s *adminServer) GetUIData(
 	return resp, nil
 }
 
+// Settings returns settings associated with the given keys.
+func (s *adminServer) Settings(
+	ctx context.Context, req *serverpb.SettingsRequest,
+) (*serverpb.SettingsResponse, error) {
+	keys := req.Keys
+	if len(keys) == 0 {
+		keys = settings.Keys()
+	}
+
+	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
+	for _, k := range keys {
+		v, ok := settings.GetValue(k)
+		if !ok {
+			continue
+		}
+		resp.KeyValues[k] = serverpb.SettingsResponse_Value{
+			Type:        string([]byte{byte(v.Typ)}),
+			Value:       v.String(),
+			Description: v.Description,
+		}
+	}
+
+	return &resp, nil
+}
+
 // Cluster returns cluster metadata.
 func (s *adminServer) Cluster(
 	_ context.Context, req *serverpb.ClusterRequest,
@@ -856,6 +882,7 @@ func (s *adminServer) Cluster(
 	return &serverpb.ClusterResponse{ClusterID: clusterID.String()}, nil
 }
 
+// Health returns liveness for the node target of the request.
 func (s *adminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {
@@ -869,6 +896,7 @@ func (s *adminServer) Health(
 	return &serverpb.HealthResponse{}, nil
 }
 
+// Liveness returns the liveness state of all nodes on the cluster.
 func (s *adminServer) Liveness(
 	context.Context, *serverpb.LivenessRequest,
 ) (*serverpb.LivenessResponse, error) {
@@ -877,6 +905,8 @@ func (s *adminServer) Liveness(
 	}, nil
 }
 
+// Drain puts the node into the specified drain mode(s) and optionally
+// instructs the process to terminate.
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
 	on := make([]serverpb.DrainMode, len(req.On))
 	for i := range req.On {

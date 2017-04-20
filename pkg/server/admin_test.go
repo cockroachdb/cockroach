@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -803,6 +804,104 @@ func TestAdminAPIEvents(t *testing.T) {
 			}
 		}
 	}
+}
+
+const settingKey = "testing.b"
+
+var _ = settings.RegisterBoolSetting(settingKey, "", true)
+
+func TestAdminAPISettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := log.Scope(t)
+	defer sc.Close(t)
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	allKeys := settings.Keys()
+
+	t.Run("all", func(t *testing.T) {
+		var resp serverpb.SettingsResponse
+
+		if err := getAdminJSONProto(s, "settings", &resp); err != nil {
+			t.Fatal(err)
+		}
+
+		// Check that all expected keys were returned
+		if len(allKeys) != len(resp.KeyValues) {
+			t.Fatalf("expected %d keys, got %d", len(allKeys), len(resp.KeyValues))
+		}
+		for _, k := range allKeys {
+			if _, ok := resp.KeyValues[k]; !ok {
+				t.Fatalf("expected key %s not found in response", k)
+			}
+		}
+
+		// Check that the test key is listed.
+		seenRef := false
+		for k, v := range resp.KeyValues {
+			if k == settingKey {
+				seenRef = true
+				if v.Value != "true" {
+					t.Errorf("%s: expected true, got %s", k, v.Value)
+				}
+				break
+			}
+		}
+
+		if !seenRef {
+			t.Fatalf("failed to observe test setting %s, got %q", settingKey, resp.KeyValues)
+		}
+	})
+
+	t.Run("one-by-one", func(t *testing.T) {
+		var resp serverpb.SettingsResponse
+		seenRef := false
+
+		// All the settings keys must be retrievable, and their
+		// type and description must match.
+		for _, k := range allKeys {
+			q := make(url.Values)
+			q.Add("keys", k)
+			url := "settings?" + q.Encode()
+			if err := getAdminJSONProto(s, url, &resp); err != nil {
+				t.Fatalf("%s: %v", k, err)
+			}
+			if len(resp.KeyValues) != 1 {
+				t.Fatalf("%s: expected 1 response, got %d", k, len(resp.KeyValues))
+			}
+			v, ok := resp.KeyValues[k]
+			if !ok {
+				t.Fatalf("%s: response does not contain key", k)
+			}
+
+			ref, desc, _ := settings.Show(k)
+			typ, _ := settings.TypeOf(k)
+
+			if ref != v.Value {
+				t.Errorf("%s: expected value %s, got %s", k, ref, v.Value)
+			}
+
+			if k == settingKey {
+				seenRef = true
+				if v.Value != "true" {
+					t.Errorf("%s: expected true, got %s", k, v.Value)
+				}
+			}
+
+			if desc != v.Description {
+				t.Errorf("%s: expected description %s, got %s", k, desc, v.Description)
+			}
+			if byte(typ) != v.Type[0] {
+				t.Errorf("%s: expected type %c, got %c", k, typ, v.Type[0])
+			}
+		}
+
+		if !seenRef {
+			t.Fatalf("failed to observe test setting %s", settingKey)
+		}
+	})
 }
 
 func TestAdminAPIUIData(t *testing.T) {

@@ -326,12 +326,28 @@ message DrainResponse {
   repeated int32 on = 1;
 }
 
+// SettingsRequest inquires what are the current settings in the cluster.
+// An empty keys array means "all".
+message SettingsRequest {
+  repeated string keys = 1;
+}
+
+// SettingsResponse is the response to SettingsRequest.
+message SettingsResponse {
+   message Value {
+      string value = 1;
+      string type = 2;
+      string description = 3;
+   }
+   map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
+}
+
 // HealthRequest inquires whether the addressed node is healthy.
 message HealthRequest {
 }
 
 // HealthResponse is the response to HealthRequest. It currently does not
-// contain any information.
+// contain any information. The request fails however if the node is not live.
 // TODO(tschottdorf): Should it contain information, and if so, what?
 message HealthResponse {
 }
@@ -436,6 +452,14 @@ service Admin {
     };
   }
 
+  // Settings returns the cluster-wide settings for the cluster.
+  rpc Settings(SettingsRequest) returns (SettingsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/settings"
+    };
+  }
+
+  // Health returns liveness for the node target of the request.
   rpc Health(HealthRequest) returns (HealthResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/health"

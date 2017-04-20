@@ -112,6 +112,7 @@ func GetValue(key string) (Value, bool) {
 	set, ok := cache.values[key]
 	cache.RUnlock()
 	if ok {
+		set.Description = def.Description
 		return set, true
 	}
 	return def, true
