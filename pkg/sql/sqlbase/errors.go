@@ -186,6 +186,23 @@ func NewWindowingError(in string) error {
 	return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", in)
 }
 
+// NewStatementCompletionUnknownError creates an error with the corresponding pg
+// code. This is used to inform the client that it's unknown whether a statement
+// succeeded or not. Of particular interest to clients is when this error is
+// returned for a statement outside of a transaction or for a COMMIT/RELEASE
+// SAVEPOINT - there manual inspection may be necessary to check whether the
+// statement/transaction committed. When this is returned for other
+// transactional statements, the transaction has been rolled back (like it is
+// for any errors).
+//
+// NOTE(andrei): When introducing this error, I haven't verified the exact
+// conditions under which Postgres returns this code, nor its relationship to
+// code CodeTransactionResolutionUnknownError. I couldn't find good
+// documentation on these codes.
+func NewStatementCompletionUnknownError(err *roachpb.AmbiguousResultError) error {
+	return pgerror.NewErrorf(pgerror.CodeStatementCompletionUnknownError, err.Error())
+}
+
 func errHasCode(err error, code string) bool {
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		return pgErr.Code == code

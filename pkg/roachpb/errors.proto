@@ -172,9 +172,8 @@ message SendError {
   reserved 2;
 }
 
-// An AmbiguousResultError indicates that an EndTransaction request or a
-// non-transactional write batch may have succeeded or failed, but the response
-// was not received and the final result is ambiguous.
+// An AmbiguousResultError indicates that a request may have succeeded or
+// failed, but the response was not received and the final result is ambiguous.
 message AmbiguousResultError {
   optional string message = 1 [(gogoproto.nullable) = false];
   // This can be set to give extra information about which error was converted

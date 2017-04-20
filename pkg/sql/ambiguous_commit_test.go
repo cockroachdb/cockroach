@@ -26,11 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq"
 )
 
 // TestAmbiguousCommitDueToLeadershipChange verifies that an ambiguous
@@ -143,8 +144,14 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 	}
 
 	// Wait for the error from the pending SQL insert.
-	if err := <-sqlErrCh; !testutils.IsError(err, "result is ambiguous") {
-		t.Errorf("expected ambiguous commit error; got %v", err)
+	err = <-sqlErrCh
+	if pqErr, ok := err.(*pq.Error); !ok {
+		t.Errorf("expected ambiguous commit error with correct code; got %v", err)
+	} else {
+		if pqErr.Code != pgerror.CodeStatementCompletionUnknownError {
+			t.Errorf("expected code %q, got %q (err: %s)",
+				pgerror.CodeStatementCompletionUnknownError, pqErr.Code, err)
+		}
 	}
 
 	// Verify a single row exists in the table.
