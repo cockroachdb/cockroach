@@ -71,6 +71,13 @@ func RegisterBoolSetting(key, desc string, defVal bool) *BoolSetting {
 	return setting
 }
 
+// TestingBoolSetting returns a mock, unregistered bool setting for testing.
+func TestingBoolSetting(b bool) *BoolSetting {
+	s := &BoolSetting{defaultValue: b}
+	s.setToDefault()
+	return s
+}
+
 // IntSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
 // of type "int" is updated.
@@ -106,6 +113,13 @@ func RegisterIntSetting(key, desc string, defVal int) *IntSetting {
 	setting := &IntSetting{defaultValue: defVal}
 	register(key, desc, setting)
 	return setting
+}
+
+// TestingIntSetting returns a mock, unregistered int setting for testing.
+func TestingIntSetting(i int) *IntSetting {
+	s := &IntSetting{defaultValue: i}
+	s.setToDefault()
+	return s
 }
 
 // FloatSetting is the interface of a setting variable that will be
@@ -182,6 +196,13 @@ func RegisterDurationSetting(key, desc string, defVal time.Duration) *DurationSe
 	return setting
 }
 
+// TestingDurationSetting returns a mock, unregistered string setting for testing.
+func TestingDurationSetting(d time.Duration) *DurationSetting {
+	s := &DurationSetting{defaultValue: d}
+	s.setToDefault()
+	return s
+}
+
 // StringSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
 // of type "string" is updated.
@@ -217,6 +238,13 @@ func RegisterStringSetting(key, desc string, defVal string) *StringSetting {
 	setting := &StringSetting{defaultValue: defVal}
 	register(key, desc, setting)
 	return setting
+}
+
+// TestingStringSetting returns a mock, unregistered string setting for testing.
+func TestingStringSetting(v string) *StringSetting {
+	s := &StringSetting{defaultValue: v}
+	s.setToDefault()
+	return s
 }
 
 // registry contains all defined settings, their types and default values.
