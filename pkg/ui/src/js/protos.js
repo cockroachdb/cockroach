@@ -6189,6 +6189,613 @@ export const cockroach = $root.cockroach = (() => {
                 return DrainResponse;
             })();
 
+            serverpb.SettingsRequest = (function() {
+
+                /**
+                 * Properties of a SettingsRequest.
+                 * @typedef cockroach.server.serverpb.SettingsRequest$Properties
+                 * @type {Object}
+                 * @property {Array.<string>} [keys] SettingsRequest keys.
+                 */
+
+                /**
+                 * Constructs a new SettingsRequest.
+                 * @exports cockroach.server.serverpb.SettingsRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.SettingsRequest$Properties=} [properties] Properties to set
+                 */
+                function SettingsRequest(properties) {
+                    this.keys = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * SettingsRequest keys.
+                 * @type {Array.<string>}
+                 */
+                SettingsRequest.prototype.keys = $util.emptyArray;
+
+                /**
+                 * Creates a new SettingsRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.SettingsRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.SettingsRequest} SettingsRequest instance
+                 */
+                SettingsRequest.create = function create(properties) {
+                    return new SettingsRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified SettingsRequest message. Does not implicitly {@link cockroach.server.serverpb.SettingsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SettingsRequest$Properties} message SettingsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SettingsRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.keys != null && message.keys.length)
+                        for (let i = 0; i < message.keys.length; ++i)
+                            writer.uint32(/* id 1, wireType 2 =*/10).string(message.keys[i]);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified SettingsRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SettingsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SettingsRequest$Properties} message SettingsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SettingsRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a SettingsRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.SettingsRequest} SettingsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SettingsRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.SettingsRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            if (!(message.keys && message.keys.length))
+                                message.keys = [];
+                            message.keys.push(reader.string());
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a SettingsRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.SettingsRequest} SettingsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SettingsRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a SettingsRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                SettingsRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.keys != null && message.hasOwnProperty("keys")) {
+                        if (!Array.isArray(message.keys))
+                            return "keys: array expected";
+                        for (let i = 0; i < message.keys.length; ++i)
+                            if (!$util.isString(message.keys[i]))
+                                return "keys: string[] expected";
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a SettingsRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SettingsRequest} SettingsRequest
+                 */
+                SettingsRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.SettingsRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.SettingsRequest();
+                    if (object.keys) {
+                        if (!Array.isArray(object.keys))
+                            throw TypeError(".cockroach.server.serverpb.SettingsRequest.keys: array expected");
+                        message.keys = [];
+                        for (let i = 0; i < object.keys.length; ++i)
+                            message.keys[i] = String(object.keys[i]);
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a SettingsRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.SettingsRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SettingsRequest} SettingsRequest
+                 */
+                SettingsRequest.from = SettingsRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a SettingsRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.SettingsRequest} message SettingsRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SettingsRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.keys = [];
+                    if (message.keys && message.keys.length) {
+                        object.keys = [];
+                        for (let j = 0; j < message.keys.length; ++j)
+                            object.keys[j] = message.keys[j];
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this SettingsRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SettingsRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this SettingsRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                SettingsRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return SettingsRequest;
+            })();
+
+            serverpb.SettingsResponse = (function() {
+
+                /**
+                 * Properties of a SettingsResponse.
+                 * @typedef cockroach.server.serverpb.SettingsResponse$Properties
+                 * @type {Object}
+                 * @property {Object.<string,cockroach.server.serverpb.SettingsResponse.Value$Properties>} [key_values] SettingsResponse key_values.
+                 */
+
+                /**
+                 * Constructs a new SettingsResponse.
+                 * @exports cockroach.server.serverpb.SettingsResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.SettingsResponse$Properties=} [properties] Properties to set
+                 */
+                function SettingsResponse(properties) {
+                    this.key_values = {};
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * SettingsResponse key_values.
+                 * @type {Object.<string,cockroach.server.serverpb.SettingsResponse.Value$Properties>}
+                 */
+                SettingsResponse.prototype.key_values = $util.emptyObject;
+
+                /**
+                 * Creates a new SettingsResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.SettingsResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.SettingsResponse} SettingsResponse instance
+                 */
+                SettingsResponse.create = function create(properties) {
+                    return new SettingsResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified SettingsResponse message. Does not implicitly {@link cockroach.server.serverpb.SettingsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SettingsResponse$Properties} message SettingsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SettingsResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.key_values != null && message.hasOwnProperty("key_values"))
+                        for (let keys = Object.keys(message.key_values), i = 0; i < keys.length; ++i) {
+                            writer.uint32(/* id 1, wireType 2 =*/10).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]);
+                            $root.cockroach.server.serverpb.SettingsResponse.Value.encode(message.key_values[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
+                        }
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified SettingsResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SettingsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SettingsResponse$Properties} message SettingsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SettingsResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a SettingsResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.SettingsResponse} SettingsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SettingsResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.SettingsResponse(), key;
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            reader.skip().pos++;
+                            if (message.key_values === $util.emptyObject)
+                                message.key_values = {};
+                            key = reader.string();
+                            reader.pos++;
+                            message.key_values[key] = $root.cockroach.server.serverpb.SettingsResponse.Value.decode(reader, reader.uint32());
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a SettingsResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.SettingsResponse} SettingsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SettingsResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a SettingsResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                SettingsResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.key_values != null && message.hasOwnProperty("key_values")) {
+                        if (!$util.isObject(message.key_values))
+                            return "key_values: object expected";
+                        let key = Object.keys(message.key_values);
+                        for (let i = 0; i < key.length; ++i) {
+                            let error = $root.cockroach.server.serverpb.SettingsResponse.Value.verify(message.key_values[key[i]]);
+                            if (error)
+                                return "key_values." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a SettingsResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SettingsResponse} SettingsResponse
+                 */
+                SettingsResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.SettingsResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.SettingsResponse();
+                    if (object.key_values) {
+                        if (typeof object.key_values !== "object")
+                            throw TypeError(".cockroach.server.serverpb.SettingsResponse.key_values: object expected");
+                        message.key_values = {};
+                        for (let keys = Object.keys(object.key_values), i = 0; i < keys.length; ++i) {
+                            if (typeof object.key_values[keys[i]] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.SettingsResponse.key_values: object expected");
+                            message.key_values[keys[i]] = $root.cockroach.server.serverpb.SettingsResponse.Value.fromObject(object.key_values[keys[i]]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a SettingsResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.SettingsResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SettingsResponse} SettingsResponse
+                 */
+                SettingsResponse.from = SettingsResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a SettingsResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.SettingsResponse} message SettingsResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SettingsResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.objects || options.defaults)
+                        object.key_values = {};
+                    let keys2;
+                    if (message.key_values && (keys2 = Object.keys(message.key_values)).length) {
+                        object.key_values = {};
+                        for (let j = 0; j < keys2.length; ++j)
+                            object.key_values[keys2[j]] = $root.cockroach.server.serverpb.SettingsResponse.Value.toObject(message.key_values[keys2[j]], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this SettingsResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SettingsResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this SettingsResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                SettingsResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                SettingsResponse.Value = (function() {
+
+                    /**
+                     * Properties of a Value.
+                     * @typedef cockroach.server.serverpb.SettingsResponse.Value$Properties
+                     * @type {Object}
+                     * @property {string} [value] Value value.
+                     * @property {string} [type] Value type.
+                     * @property {string} [description] Value description.
+                     */
+
+                    /**
+                     * Constructs a new Value.
+                     * @exports cockroach.server.serverpb.SettingsResponse.Value
+                     * @constructor
+                     * @param {cockroach.server.serverpb.SettingsResponse.Value$Properties=} [properties] Properties to set
+                     */
+                    function Value(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * Value value.
+                     * @type {string}
+                     */
+                    Value.prototype.value = "";
+
+                    /**
+                     * Value type.
+                     * @type {string}
+                     */
+                    Value.prototype.type = "";
+
+                    /**
+                     * Value description.
+                     * @type {string}
+                     */
+                    Value.prototype.description = "";
+
+                    /**
+                     * Creates a new Value instance using the specified properties.
+                     * @param {cockroach.server.serverpb.SettingsResponse.Value$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.SettingsResponse.Value} Value instance
+                     */
+                    Value.create = function create(properties) {
+                        return new Value(properties);
+                    };
+
+                    /**
+                     * Encodes the specified Value message. Does not implicitly {@link cockroach.server.serverpb.SettingsResponse.Value.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.SettingsResponse.Value$Properties} message Value message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Value.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.value != null && message.hasOwnProperty("value"))
+                            writer.uint32(/* id 1, wireType 2 =*/10).string(message.value);
+                        if (message.type != null && message.hasOwnProperty("type"))
+                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.type);
+                        if (message.description != null && message.hasOwnProperty("description"))
+                            writer.uint32(/* id 3, wireType 2 =*/26).string(message.description);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified Value message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SettingsResponse.Value.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.SettingsResponse.Value$Properties} message Value message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Value.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a Value message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.SettingsResponse.Value} Value
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Value.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.SettingsResponse.Value();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.value = reader.string();
+                                break;
+                            case 2:
+                                message.type = reader.string();
+                                break;
+                            case 3:
+                                message.description = reader.string();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a Value message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.SettingsResponse.Value} Value
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Value.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a Value message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    Value.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.value != null && message.hasOwnProperty("value"))
+                            if (!$util.isString(message.value))
+                                return "value: string expected";
+                        if (message.type != null && message.hasOwnProperty("type"))
+                            if (!$util.isString(message.type))
+                                return "type: string expected";
+                        if (message.description != null && message.hasOwnProperty("description"))
+                            if (!$util.isString(message.description))
+                                return "description: string expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a Value message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.SettingsResponse.Value} Value
+                     */
+                    Value.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.server.serverpb.SettingsResponse.Value)
+                            return object;
+                        let message = new $root.cockroach.server.serverpb.SettingsResponse.Value();
+                        if (object.value != null)
+                            message.value = String(object.value);
+                        if (object.type != null)
+                            message.type = String(object.type);
+                        if (object.description != null)
+                            message.description = String(object.description);
+                        return message;
+                    };
+
+                    /**
+                     * Creates a Value message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.SettingsResponse.Value.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.SettingsResponse.Value} Value
+                     */
+                    Value.from = Value.fromObject;
+
+                    /**
+                     * Creates a plain object from a Value message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.SettingsResponse.Value} message Value
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Value.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.value = "";
+                            object.type = "";
+                            object.description = "";
+                        }
+                        if (message.value != null && message.hasOwnProperty("value"))
+                            object.value = message.value;
+                        if (message.type != null && message.hasOwnProperty("type"))
+                            object.type = message.type;
+                        if (message.description != null && message.hasOwnProperty("description"))
+                            object.description = message.description;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this Value message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Value.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this Value to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    Value.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return Value;
+                })();
+
+                return SettingsResponse;
+            })();
+
             serverpb.HealthRequest = (function() {
 
                 /**
@@ -7099,6 +7706,33 @@ export const cockroach = $root.cockroach = (() => {
                  * @function
                  * @param {cockroach.server.serverpb.ClusterRequest|Object.<string,*>} request ClusterRequest message or plain object
                  * @returns {Promise<cockroach.server.serverpb.ClusterResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Admin#settings}.
+                 * @typedef Admin_settings_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.SettingsResponse} [response] SettingsResponse
+                 */
+
+                /**
+                 * Calls Settings.
+                 * @param {cockroach.server.serverpb.SettingsRequest|Object.<string,*>} request SettingsRequest message or plain object
+                 * @param {Admin_settings_Callback} callback Node-style callback called with the error, if any, and SettingsResponse
+                 * @returns {undefined}
+                 */
+                Admin.prototype.settings = function settings(request, callback) {
+                    return this.rpcCall(settings, $root.cockroach.server.serverpb.SettingsRequest, $root.cockroach.server.serverpb.SettingsResponse, request, callback);
+                };
+
+                /**
+                 * Calls Settings.
+                 * @name Admin#settings
+                 * @function
+                 * @param {cockroach.server.serverpb.SettingsRequest|Object.<string,*>} request SettingsRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.SettingsResponse>} Promise
                  * @variation 2
                  */
 
