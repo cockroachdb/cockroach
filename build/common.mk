@@ -248,7 +248,7 @@ endif
 
 ISWINDOWS := $(findstring mingw,$(TARGET_TRIPLE))
 ifdef ISWINDOWS
-SUFFIX := $(SUFFIX).exe
+override SUFFIX := $(SUFFIX).exe
 endif
 
 BUILD_DIR := $(GOPATH)/native/$(TARGET_TRIPLE)
