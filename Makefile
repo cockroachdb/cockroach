@@ -91,6 +91,10 @@ else
 $(error unknown build type $(TYPE))
 endif
 
+REPO_ROOT := .
+include $(REPO_ROOT)/build/common.mk
+override TAGS += make $(TARGET_TRIPLE_TAG)
+
 # On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
 # symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
 # to the host machine's actual macOS version works around this. See:
@@ -98,10 +102,6 @@ endif
 ifdef MACOS
 export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion)
 endif
-
-REPO_ROOT := .
-include $(REPO_ROOT)/build/common.mk
-override TAGS += make $(TARGET_TRIPLE_TAG)
 
 .DEFAULT_GOAL := all
 .PHONY: all
