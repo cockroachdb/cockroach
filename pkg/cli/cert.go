@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -168,26 +167,23 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(os.Stdout, "Certificate directory: %s\n", baseCfg.SSLCertsDir)
 
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetAutoFormatHeaders(false)
-	table.SetAutoWrapText(false)
-	table.SetHeader([]string{"Usage", "Certificate File", "Key File", "Notes"})
+	certTableHeaders := []string{"Usage", "Certificate File", "Key File", "Notes"}
+	var rows [][]string
 
 	if ca := cm.CACert(); ca != nil {
-		table.Append([]string{ca.FileUsage.String(), ca.Filename, ca.KeyFilename})
+		rows = append(rows, []string{ca.FileUsage.String(), ca.Filename, ca.KeyFilename, ""})
 	}
 
 	if node := cm.NodeCert(); node != nil {
-		table.Append([]string{node.FileUsage.String(), node.Filename, node.KeyFilename})
+		rows = append(rows, []string{node.FileUsage.String(), node.Filename, node.KeyFilename, ""})
 	}
 
 	for name, cert := range cm.ClientCerts() {
-		table.Append([]string{cert.FileUsage.String(), cert.Filename, cert.KeyFilename,
+		rows = append(rows, []string{cert.FileUsage.String(), cert.Filename, cert.KeyFilename,
 			fmt.Sprintf("user=%s", name)})
 	}
 
-	table.Render()
-
+	printQueryOutput(os.Stdout, certTableHeaders, rows, "", cliCtx.tableDisplayFormat)
 	return nil
 }
 
