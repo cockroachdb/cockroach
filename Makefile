@@ -74,18 +74,18 @@ else ifeq ($(TYPE),release-linux-musl)
 XHOST_TRIPLE := x86_64-unknown-linux-musl
 override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
 override GOFLAGS += -installsuffix release-musl
-SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
+override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
 else ifeq ($(TYPE),release-darwin)
 XGOOS := darwin
 export CGO_ENABLED := 1
 XHOST_TRIPLE := x86_64-apple-darwin13
-SUFFIX := $(SUFFIX)-darwin-10.9-amd64
+override SUFFIX := $(SUFFIX)-darwin-10.9-amd64
 override LINKFLAGS += -s -w -X github.com/cockroachdb/cockroach/pkg/build.typ=release
 else ifeq ($(TYPE),release-windows)
 XGOOS := windows
 export CGO_ENABLED := 1
 XHOST_TRIPLE := x86_64-w64-mingw32
-SUFFIX := $(SUFFIX)-windows-6.2-amd64
+override SUFFIX := $(SUFFIX)-windows-6.2-amd64
 override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
 else
 $(error unknown build type $(TYPE))
