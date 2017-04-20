@@ -32,8 +32,8 @@ import (
 const strKey = "testing.str"
 const intKey = "testing.int"
 
-var strAccessor = settings.RegisterStringSetting(strKey, "", "<default>")
-var intAccessor = settings.RegisterIntSetting(intKey, "", 1)
+var strA = settings.RegisterStringSetting(strKey, "", "<default>")
+var intA = settings.RegisterIntSetting(intKey, "", 1)
 
 func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -47,10 +47,10 @@ func TestSettingsRefresh(t *testing.T) {
 		VALUES ($1, $2, NOW(), $3)`
 	deleteQ := "DELETE FROM system.settings WHERE name = $1"
 
-	if expected, actual := "<default>", strAccessor(); expected != actual {
+	if expected, actual := "<default>", strA.Get(); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
-	if expected, actual := 1, intAccessor(); expected != actual {
+	if expected, actual := 1, intA.Get(); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
@@ -59,10 +59,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, intKey, settings.EncodeInt(2), "i")
 	// Wait until we observe the gossip-driven update propagating to cache.
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "foo", strAccessor(); expected != actual {
+		if expected, actual := "foo", strA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2, intAccessor(); expected != actual {
+		if expected, actual := 2, intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -71,7 +71,7 @@ func TestSettingsRefresh(t *testing.T) {
 	// Setting to empty also works.
 	db.Exec(insertQ, strKey, "", "s")
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "", strAccessor(); expected != actual {
+		if expected, actual := "", strA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -82,10 +82,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "qux", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "qux", strAccessor(); expected != actual {
+		if expected, actual := "qux", strA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2, intAccessor(); expected != actual {
+		if expected, actual := 2, intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -97,10 +97,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "after-invalid", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := 2, intAccessor(); expected != actual {
+		if expected, actual := 2, intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "after-invalid", strAccessor(); expected != actual {
+		if expected, actual := "after-invalid", strA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -111,10 +111,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "after-mistype", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := 2, intAccessor(); expected != actual {
+		if expected, actual := 2, intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "after-mistype", strAccessor(); expected != actual {
+		if expected, actual := "after-mistype", strA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -145,7 +145,7 @@ func TestSettingsRefresh(t *testing.T) {
 	// Deleting a value reverts to default.
 	db.Exec(deleteQ, strKey)
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "<default>", strAccessor(); expected != actual {
+		if expected, actual := "<default>", strA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
