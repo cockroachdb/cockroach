@@ -98,7 +98,7 @@ func (s *Server) refreshSettings() {
 			}
 		}
 
-		if err := u.Add(k, v, t); err != nil {
+		if err := u.Set(k, v, t); err != nil {
 			log.Warning(ctx, err)
 		}
 		return nil
@@ -125,7 +125,7 @@ func (s *Server) refreshSettings() {
 					}
 				}
 				if ok {
-					u.Apply()
+					u.Done()
 				}
 			case <-s.stopper.ShouldStop():
 				return
