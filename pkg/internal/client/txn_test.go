@@ -45,7 +45,7 @@ var (
 
 // An example of snowball tracing being used to dump a trace around a
 // transaction. Use something similar whenever you cannot use
-// COCKROACH_TRACE_SQL.
+// sql.trace.txn.threshold.
 func TestTxnSnowballTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

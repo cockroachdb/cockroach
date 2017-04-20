@@ -34,7 +34,7 @@ var enterpriseEnabled = settings.RegisterBoolSetting(
    "enterprise.enabled", "some doc for the setting", false,
 )
 
-Then use with `if enterpriseEnabled() ...`
+Then use with `if enterpriseEnabled.Get() ...`
 
 Settings should always be defined with "safe" default values -- until a node
 receives values via gossip, or even after that, if it cannot read them for some
