@@ -77,7 +77,7 @@ func init() {
 func TestRangeIterForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
 	ds := NewDistSender(DistSenderConfig{
@@ -107,7 +107,7 @@ func TestRangeIterForward(t *testing.T) {
 func TestRangeIterSeekForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
 	ds := NewDistSender(DistSenderConfig{
@@ -140,7 +140,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 func TestRangeIterReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
 	ds := NewDistSender(DistSenderConfig{
@@ -170,7 +170,7 @@ func TestRangeIterReverse(t *testing.T) {
 func TestRangeIterSeekReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
 	ds := NewDistSender(DistSenderConfig{

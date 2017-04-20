@@ -125,7 +125,7 @@ func (tq *testQueue) setDisabled(d bool) {
 }
 
 func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
-	stopper.RunWorker(func() {
+	stopper.RunWorker(context.TODO(), func(context.Context) {
 		for {
 			select {
 			case <-time.After(1 * time.Millisecond):
@@ -223,7 +223,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	})
 
 	// Stop scanner and verify both queues are stopped.
-	stopper.Stop()
+	stopper.Stop(context.TODO())
 	if !q1.isDone() || !q2.isDone() {
 		t.Errorf("expected all queues to stop; got %t, %t", q1.isDone(), q2.isDone())
 	}
@@ -251,7 +251,7 @@ func TestScannerTiming(t *testing.T) {
 			stopper := stop.NewStopper()
 			s.Start(clock, stopper)
 			time.Sleep(runTime)
-			stopper.Stop()
+			stopper.Stop(context.TODO())
 
 			avg := s.avgScan()
 			log.Infof(context.Background(), "%d: average scan: %s", i, avg)
@@ -313,7 +313,7 @@ func TestScannerDisabled(t *testing.T) {
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	s.Start(clock, stopper)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// Verify queue gets all ranges.
 	testutils.SucceedsSoon(t, func() error {
@@ -375,7 +375,7 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	s.Start(clock, stopper)
 	time.Sleep(time.Millisecond) // give it some time to (not) busy loop
 	if count := s.scanCount(); count > 1 {

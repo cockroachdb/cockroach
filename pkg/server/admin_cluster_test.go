@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,7 +46,7 @@ func TestAdminAPITableStats(t *testing.T) {
 			ScanMaxIdleTime: time.Millisecond,
 		},
 	})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 	server0 := tc.Server(0)
 
 	// Create clients (SQL, HTTP) connected to server 0.
@@ -147,7 +148,7 @@ func TestAdminAPITableStats(t *testing.T) {
 func TestLivenessAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	startTime := tc.Server(0).Clock().PhysicalNow()
 

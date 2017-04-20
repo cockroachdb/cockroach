@@ -35,7 +35,7 @@ func TestServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
 	if err != nil {
 		t.Fatal(err)

@@ -104,7 +104,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	cfg.TestingKnobs.DisableSplitQueue = true
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, cfg)
 
 	// Generate several splits.
@@ -226,7 +226,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	tsrv := s.(*server.TestServer)
 	tsdb := tsrv.TsDB()
 

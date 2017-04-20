@@ -46,7 +46,7 @@ func TestWriteResumeSpan(t *testing.T) {
 			},
 		},
 	})
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;

@@ -251,8 +251,8 @@ func (rs *replicaScanner) removeReplica(repl *Replica) {
 // the replica set, or until the scanner is stopped. The iteration
 // is paced to complete a full scan in approximately the scan interval.
 func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
-	stopper.RunWorker(func() {
-		ctx := rs.AnnotateCtx(context.Background())
+	ctx := rs.AnnotateCtx(context.Background())
+	stopper.RunWorker(ctx, func(ctx context.Context) {
 		start := timeutil.Now()
 
 		// waitTimer is reset in each call to waitAndProcess.
@@ -277,7 +277,7 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				shouldStop = rs.waitAndProcess(ctx, start, clock, stopper, nil)
 			}
 
-			shouldStop = shouldStop || nil != stopper.RunTask(func() {
+			shouldStop = shouldStop || nil != stopper.RunTask(ctx, func(ctx context.Context) {
 				// Increment iteration count.
 				rs.mu.Lock()
 				defer rs.mu.Unlock()

@@ -1014,13 +1014,13 @@ func (g *Gossip) getNextBootstrapAddressLocked() net.Addr {
 // receives notifications that gossip network connectivity has been
 // lost and requires re-bootstrapping.
 func (g *Gossip) bootstrap() {
-	g.server.stopper.RunWorker(func() {
-		ctx := g.AnnotateCtx(context.Background())
+	ctx := g.AnnotateCtx(context.Background())
+	g.server.stopper.RunWorker(ctx, func(ctx context.Context) {
 		ctx = log.WithLogTag(ctx, "bootstrap", nil)
 		var bootstrapTimer timeutil.Timer
 		defer bootstrapTimer.Stop()
 		for {
-			if g.server.stopper.RunTask(func() {
+			if g.server.stopper.RunTask(ctx, func(ctx context.Context) {
 				g.mu.Lock()
 				defer g.mu.Unlock()
 				haveClients := g.outgoing.len() > 0
@@ -1079,8 +1079,8 @@ func (g *Gossip) bootstrap() {
 // connections or the sentinel gossip is unavailable, the bootstrapper
 // is notified via the stalled conditional variable.
 func (g *Gossip) manage() {
-	g.server.stopper.RunWorker(func() {
-		ctx := g.AnnotateCtx(context.Background())
+	ctx := g.AnnotateCtx(context.Background())
+	g.server.stopper.RunWorker(ctx, func(ctx context.Context) {
 		cullTicker := time.NewTicker(g.jitteredInterval(g.cullInterval))
 		stallTicker := time.NewTicker(g.jitteredInterval(g.stallInterval))
 		defer cullTicker.Stop()

@@ -76,7 +76,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	params.ScanInterval = time.Millisecond
 	params.ScanMaxIdleTime = time.Millisecond
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	expectedInitialRanges, err := server.ExpectedInitialRangeCount(kvDB)
 	if err != nil {

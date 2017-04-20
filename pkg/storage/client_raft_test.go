@@ -73,7 +73,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	key2 := roachpb.Key("z")
 
 	engineStopper := stop.NewStopper()
-	defer engineStopper.Stop()
+	defer engineStopper.Stop(context.TODO())
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(eng)
 	var rangeID2 roachpb.RangeID
@@ -101,7 +101,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// that both predate and postdate the split.
 	func() {
 		stopper := stop.NewStopper()
-		defer stopper.Stop()
+		defer stopper.Stop(context.TODO())
 		store := createTestStoreWithEngine(t, eng, true, storeCfg, stopper)
 
 		increment := func(rangeID roachpb.RangeID, key roachpb.Key, value int64) (*roachpb.IncrementResponse, *roachpb.Error) {
@@ -173,7 +173,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	func() {
 		stopper := stop.NewStopper()
-		defer stopper.Stop()
+		defer stopper.Stop(context.TODO())
 		keyA := roachpb.Key("a")
 		storeCfg := storeCfg // copy
 		storeCfg.TestingKnobs.TestingEvalFilter =
@@ -205,7 +205,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	}
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// Recover from the engine.
 	store := createTestStoreWithEngine(t, eng, false, storeCfg, stopper)

@@ -749,7 +749,7 @@ func (s *SchemaChangeManager) newTimer() *time.Timer {
 // Start starts a goroutine that runs outstanding schema changes
 // for tables received in the latest system configuration via gossip.
 func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
-	stopper.RunWorker(func() {
+	stopper.RunWorker(context.TODO(), func(ctx context.Context) {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
@@ -763,7 +763,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				cfg, _ := s.gossip.GetSystemConfig()
 				// Read all tables and their versions
 				if log.V(2) {
-					log.Info(context.TODO(), "received a new config")
+					log.Info(ctx, "received a new config")
 				}
 				schemaChanger := SchemaChanger{
 					nodeID:         s.leaseMgr.nodeID.Get(),
@@ -786,7 +786,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					// Attempt to unmarshal config into a table/database descriptor.
 					var descriptor sqlbase.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
-						log.Warningf(context.TODO(), "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
+						log.Warningf(ctx, "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
 						continue
 					}
 					switch union := descriptor.Union.(type) {
@@ -794,7 +794,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
 						if err := table.ValidateTable(); err != nil {
-							log.Errorf(context.TODO(), "%s: received invalid table descriptor: %v", kv.Key, table)
+							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
 							continue
 						}
 
@@ -807,7 +807,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						if table.UpVersion || table.Dropped() || table.Adding() ||
 							table.Renamed() || len(table.Mutations) > 0 {
 							if log.V(2) {
-								log.Infof(context.TODO(), "%s: queue up pending schema change; table: %d, version: %d",
+								log.Infof(ctx, "%s: queue up pending schema change; table: %d, version: %d",
 									kv.Key, table.ID, table.Version)
 							}
 
@@ -852,9 +852,9 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
 						// TODO(andrei): create a proper ctx for executing schema changes.
-						if err := sc.exec(context.TODO()); err != nil {
+						if err := sc.exec(ctx); err != nil {
 							if err != errExistingSchemaChangeLease {
-								log.Warningf(context.TODO(), "Error executing schema change: %s", err)
+								log.Warningf(ctx, "Error executing schema change: %s", err)
 							}
 							if err == sqlbase.ErrDescriptorNotFound {
 								// Someone deleted this table. Don't try to run the schema

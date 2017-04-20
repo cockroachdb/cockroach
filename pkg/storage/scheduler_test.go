@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -196,7 +197,7 @@ func TestSchedulerLoop(t *testing.T) {
 	p := newTestProcessor()
 	s := newRaftScheduler(log.AmbientContext{}, nil, p, 1)
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	s.Start(stopper)
 	s.EnqueueRaftTick(1, 2, 3)
 
@@ -217,7 +218,7 @@ func TestSchedulerBuffering(t *testing.T) {
 	p := newTestProcessor()
 	s := newRaftScheduler(log.AmbientContext{}, nil, p, 1)
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	s.Start(stopper)
 
 	testCases := []struct {

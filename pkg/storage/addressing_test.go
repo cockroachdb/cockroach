@@ -72,7 +72,7 @@ func metaKey(key roachpb.RKey) []byte {
 func TestUpdateRangeAddressing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 
 	// When split is false, merging treats the right range as the merged

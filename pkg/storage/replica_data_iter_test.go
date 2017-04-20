@@ -117,7 +117,7 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 		bootstrapMode: bootstrapRangeOnly,
 	}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	// Adjust the range descriptor to avoid existing data such as meta
@@ -154,7 +154,7 @@ func TestReplicaDataIterator(t *testing.T) {
 		bootstrapMode: bootstrapRangeOnly,
 	}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	// See notes in EmptyRange test method for adjustment to descriptor.

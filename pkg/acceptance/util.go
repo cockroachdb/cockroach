@@ -149,7 +149,7 @@ func RunTests(m *testing.M) {
 		default:
 			// There is a very tiny race here: the cluster might be closing
 			// the stopper simultaneously.
-			stopper.Stop()
+			stopper.Stop(context.TODO())
 		}
 	}()
 	os.Exit(m.Run())

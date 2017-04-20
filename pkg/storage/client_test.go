@@ -319,7 +319,7 @@ func (m *multiTestContext) Stop() {
 					// any test (TestRaftAfterRemove is a good example) results
 					// in deadlocks where a task can't finish because of
 					// getting stuck in addWriteCommand.
-					s.Quiesce()
+					s.Quiesce(context.TODO())
 				}
 			}(s)
 		}
@@ -330,13 +330,13 @@ func (m *multiTestContext) Stop() {
 		defer m.mu.RUnlock()
 		for _, stopper := range m.stoppers {
 			if stopper != nil {
-				stopper.Stop()
+				stopper.Stop(context.TODO())
 			}
 		}
-		m.transportStopper.Stop()
+		m.transportStopper.Stop(context.TODO())
 
 		for _, s := range m.engineStoppers {
-			s.Stop()
+			s.Stop(context.TODO())
 		}
 		close(done)
 	}()
@@ -844,7 +844,7 @@ func (m *multiTestContext) stopStore(i int) {
 	stopper := m.stoppers[i]
 	m.mu.RUnlock()
 
-	stopper.Stop()
+	stopper.Stop(context.TODO())
 
 	m.mu.Lock()
 	m.stoppers[i] = nil

@@ -59,13 +59,13 @@ func grpcTransportFactory(
 	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {
-		rpcContext.Stopper.RunWorker(func() {
+		rpcContext.Stopper.RunWorker(context.TODO(), func(ctx context.Context) {
 			var iters int
 			var curIdx int
 			defer func() {
 				atomic.StoreInt32(&running, 0)
 				log.Infof(
-					context.TODO(),
+					ctx,
 					"transport race promotion: ran %d iterations on up to %d requests",
 					iters, curIdx+1,
 				)

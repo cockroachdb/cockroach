@@ -24,6 +24,8 @@ import (
 	"net/http"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -86,7 +88,7 @@ func (insecureCtx) HTTPRequestScheme() string {
 func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// HTTPS with client certs for security.RootUser.
 	rootCertsContext := testutils.NewTestBaseContext(security.RootUser)

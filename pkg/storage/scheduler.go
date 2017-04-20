@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -151,7 +153,8 @@ func newRaftScheduler(
 }
 
 func (s *raftScheduler) Start(stopper *stop.Stopper) {
-	stopper.RunWorker(func() {
+	ctx := context.TODO()
+	stopper.RunWorker(ctx, func(context.Context) {
 		<-stopper.ShouldStop()
 		s.mu.Lock()
 		s.mu.stopped = true
@@ -161,13 +164,13 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 
 	s.done.Add(s.numWorkers)
 	for i := 0; i < s.numWorkers; i++ {
-		stopper.RunWorker(func() {
+		stopper.RunWorker(ctx, func(context.Context) {
 			s.worker(stopper)
 		})
 	}
 }
 
-func (s *raftScheduler) Wait() {
+func (s *raftScheduler) Wait(context.Context) {
 	s.done.Wait()
 }
 
