@@ -101,6 +101,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		livenessName = base + "/liveness"
 		nodesPrefix  = base + "/nodes"
 		schemaPrefix = base + "/schema"
+		settingsName = base + "/settings"
 	)
 
 	if len(args) != 1 {
@@ -143,6 +144,16 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		if err := z.createJSON(livenessName, liveness); err != nil {
+			return err
+		}
+	}
+
+	if settings, err := admin.Settings(ctx, &serverpb.SettingsRequest{}); err != nil {
+		if err := z.createError(settingsName, err); err != nil {
+			return err
+		}
+	} else {
+		if err := z.createJSON(settingsName, settings); err != nil {
 			return err
 		}
 	}
