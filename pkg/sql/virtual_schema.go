@@ -188,7 +188,7 @@ func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 func initVirtualTableDesc(
 	ctx context.Context, p *planner, t virtualSchemaTable,
 ) (sqlbase.TableDescriptor, error) {
-	stmt, err := parser.ParseOneTraditional(t.schema)
+	stmt, err := parser.ParseOne(t.schema)
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}

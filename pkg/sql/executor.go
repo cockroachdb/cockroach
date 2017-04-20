@@ -400,7 +400,7 @@ func (e *Executor) Prepare(
 	sessionEventf(session, "preparing: %s", query)
 
 	var parser parser.Parser
-	stmts, err := parser.Parse(query, session.Syntax)
+	stmts, err := parser.Parse(query)
 	if err != nil {
 		return nil, err
 	}
@@ -577,7 +577,7 @@ func (e *Executor) execRequest(
 		err = fmt.Errorf("unexpected copy command")
 	} else {
 		var parser parser.Parser
-		stmts, err = parser.Parse(sql, session.Syntax)
+		stmts, err = parser.Parse(sql)
 	}
 	session.phaseTimes[sessionEndParse] = timeutil.Now()
 

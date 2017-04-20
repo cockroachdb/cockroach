@@ -65,7 +65,7 @@ func TestParseColumnType(t *testing.T) {
 	}
 	for i, d := range testData {
 		sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
-		stmt, err := ParseOneTraditional(sql)
+		stmt, err := ParseOne(sql)
 		if err != nil {
 			t.Errorf("%d: %s", i, err)
 			continue

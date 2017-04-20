@@ -101,7 +101,7 @@ func TestScanner(t *testing.T) {
 		{`1e-1`, []int{FCONST}},
 	}
 	for i, d := range testData {
-		s := MakeScanner(d.sql, Traditional)
+		s := MakeScanner(d.sql)
 		var tokens []int
 		for {
 			var lval sqlSymType
@@ -114,42 +114,6 @@ func TestScanner(t *testing.T) {
 
 		if !reflect.DeepEqual(d.expected, tokens) {
 			t.Errorf("%d: %q: expected %d, but found %d", i, d.sql, d.expected, tokens)
-		}
-	}
-}
-
-func TestScannerModern(t *testing.T) {
-	testData := []struct {
-		sql      string
-		expected []int
-	}{
-		{"`a`", []int{IDENT}},
-		{`foo + bar`, []int{IDENT, '+', IDENT}},
-		{`'a' "a"`, []int{SCONST, SCONST}},
-		{`b'a' b"a"`, []int{BCONST, BCONST}},
-		{`B'a' B"a"`, []int{BCONST, BCONST}},
-		{`br'a' bR"a" Br'a' BR"a"`, []int{BCONST, BCONST, BCONST, BCONST}},
-		{`rb'a' Rb"a" rB'a' RB"a"`, []int{BCONST, BCONST, BCONST, BCONST}},
-		{`e'a' e"a"`, []int{SCONST, SCONST}},
-		{`E'a' E"a"`, []int{SCONST, SCONST}},
-		{`r'a' r"a"`, []int{SCONST, SCONST}},
-		{`R'a' R"a"`, []int{SCONST, SCONST}},
-		{`$1 $foo $select`, []int{PLACEHOLDER, PLACEHOLDER, PLACEHOLDER}},
-	}
-	for i, d := range testData {
-		s := MakeScanner(d.sql, Modern)
-		var tokens []int
-		for {
-			var lval sqlSymType
-			id := s.Lex(&lval)
-			if id == 0 {
-				break
-			}
-			tokens = append(tokens, id)
-		}
-
-		if !reflect.DeepEqual(d.expected, tokens) {
-			t.Errorf("%d: expected %d, but found %d", i, d.expected, tokens)
 		}
 	}
 }
@@ -174,31 +138,7 @@ foo`, "", "foo"},
 		{`/* /* */`, "unterminated comment", ""},
 	}
 	for i, d := range testData {
-		s := MakeScanner(d.sql, Traditional)
-		var lval sqlSymType
-		present, ok := s.scanComment(&lval)
-		if d.err == "" && (!present || !ok) {
-			t.Fatalf("%d: expected success, but found %s", i, lval.str)
-		} else if d.err != "" && (present || ok || d.err != lval.str) {
-			t.Fatalf("%d: expected %s, but found %s", i, d.err, lval.str)
-		}
-		if r := s.in[s.pos:]; d.remainder != r {
-			t.Fatalf("%d: expected '%s', but found '%s'", i, d.remainder, r)
-		}
-	}
-}
-
-func TestScanCommentModern(t *testing.T) {
-	testData := []struct {
-		sql       string
-		err       string
-		remainder string
-	}{
-		{`# hello world
-foo`, "", "foo"},
-	}
-	for i, d := range testData {
-		s := MakeScanner(d.sql, Modern)
+		s := MakeScanner(d.sql)
 		var lval sqlSymType
 		present, ok := s.scanComment(&lval)
 		if d.err == "" && (!present || !ok) {
@@ -214,7 +154,7 @@ foo`, "", "foo"},
 
 func TestScanKeyword(t *testing.T) {
 	for kwName, kwID := range keywords {
-		s := MakeScanner(kwName, Traditional)
+		s := MakeScanner(kwName)
 		var lval sqlSymType
 		id := s.Lex(&lval)
 		if kwID != id {
@@ -254,7 +194,7 @@ func TestScanNumber(t *testing.T) {
 		{`9223372036854775809`, `9223372036854775809`, ICONST},
 	}
 	for _, d := range testData {
-		s := MakeScanner(d.sql, Traditional)
+		s := MakeScanner(d.sql)
 		var lval sqlSymType
 		id := s.Lex(&lval)
 		if d.id != id {
@@ -276,7 +216,7 @@ func TestScanPlaceholder(t *testing.T) {
 		{`$123`, 123},
 	}
 	for _, d := range testData {
-		s := MakeScanner(d.sql, Traditional)
+		s := MakeScanner(d.sql)
 		var lval sqlSymType
 		id := s.Lex(&lval)
 		if id != PLACEHOLDER {
@@ -353,45 +293,7 @@ world`},
 		{`X'FF'`, "\xff"},
 	}
 	for _, d := range testData {
-		s := MakeScanner(d.sql, Traditional)
-		var lval sqlSymType
-		_ = s.Lex(&lval)
-		if d.expected != lval.str {
-			t.Errorf("%s: expected %q, but found %q", d.sql, d.expected, lval.str)
-		}
-	}
-}
-
-func TestScanStringModern(t *testing.T) {
-	testData := []struct {
-		sql      string
-		expected string
-	}{
-		// Modern syntax allows escapes without the 'e' or 'E' specifier.
-		{`"\x41"`, `A`},
-		{`'\x41'`, `A`},
-		{`b"\x41"`, `A`},
-		{`B'\x41'`, `A`},
-		{`e"\x41"`, `A`},
-		{`E'\x41'`, `A`},
-		{`e"\xff"`, `invalid UTF-8 byte sequence`},
-		{`E'\xff'`, `invalid UTF-8 byte sequence`},
-		// Disable escapes with raw strings.
-		{`r"\x41"`, `\x41`},
-		{`R'\x41'`, `\x41`},
-		// Triple-quoted strings allow non-escaped quotes.
-		{`"""hello"world"""`, `hello"world`},
-		{`'''hello''world'''`, `hello''world`},
-		// Triple-quoted strings allow embedded newlines.
-		{`'''hello
-world'''`, `hello
-world`},
-		// Single/double-quoted strings do not allow newlines.
-		{`'hello
-world'`, `invalid syntax: embedded newline`},
-	}
-	for _, d := range testData {
-		s := MakeScanner(d.sql, Modern)
+		s := MakeScanner(d.sql)
 		var lval sqlSymType
 		_ = s.Lex(&lval)
 		if d.expected != lval.str {
@@ -422,7 +324,7 @@ func TestScanError(t *testing.T) {
 		{`$9223372036854775809`, "integer value out of range"},
 	}
 	for _, d := range testData {
-		s := MakeScanner(d.sql, Traditional)
+		s := MakeScanner(d.sql)
 		var lval sqlSymType
 		id := s.Lex(&lval)
 		if id != ERROR {

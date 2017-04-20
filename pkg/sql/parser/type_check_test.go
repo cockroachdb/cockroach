@@ -110,7 +110,7 @@ func TestTypeCheck(t *testing.T) {
 		{`'-Inf'::decimal`, `'-Inf':::STRING::DECIMAL`},
 	}
 	for _, d := range testData {
-		expr, err := ParseExprTraditional(d.expr)
+		expr, err := ParseExpr(d.expr)
 		if err != nil {
 			t.Errorf("%s: %v", d.expr, err)
 			continue
@@ -137,7 +137,7 @@ func TestTypeCheckNormalize(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
-			expr, err := ParseExprTraditional(d.expr)
+			expr, err := ParseExpr(d.expr)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -206,7 +206,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
 	}
 	for _, d := range testData {
-		expr, err := ParseExprTraditional(d.expr)
+		expr, err := ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

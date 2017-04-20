@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -317,7 +316,7 @@ func planNodeForQuery(
 	p.session.leases.leaseMgr = s.LeaseManager().(*LeaseManager)
 	p.session.Database = "test"
 
-	stmts, err := p.parser.Parse(sql, parser.Traditional)
+	stmts, err := p.parser.Parse(sql)
 	if err != nil {
 		t.Fatal(err)
 	}

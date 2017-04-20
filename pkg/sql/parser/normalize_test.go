@@ -178,7 +178,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`-1 + a < 9223372036854775806`, `a < 9223372036854775807`},
 	}
 	for _, d := range testData {
-		expr, err := ParseExprTraditional(d.expr)
+		expr, err := ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

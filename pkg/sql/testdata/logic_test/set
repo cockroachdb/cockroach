@@ -61,42 +61,6 @@ SHOW TABLES from foo
 Table
 bar
 
-statement ok
-SET SYNTAX = traditional
-
-query T colnames
-SHOW SYNTAX
-----
-syntax
-Traditional
-
-statement ok
-SET SYNTAX = modern
-
-query T colnames
-SHOW SYNTAX
-----
-syntax
-Modern
-
-statement error set syntax: "a" is not in \("Modern", "Traditional"\)
-SET SYNTAX = a
-
-query T colnames
-SHOW SYNTAX
-----
-syntax
-Modern
-
-statement error set syntax: requires a single string value
-SET SYNTAX = a, b
-
-query T colnames
-SHOW SYNTAX
-----
-syntax
-Modern
-
 statement error invalid statement
 SET ROW (1, TRUE, NULL)
 
@@ -124,7 +88,6 @@ search_path                    pg_catalog
 server_version                 9.5.0
 session_user                   root
 standard_conforming_strings    on
-syntax                         Modern
 time zone                      UTC
 transaction isolation level    SERIALIZABLE
 transaction priority           NORMAL

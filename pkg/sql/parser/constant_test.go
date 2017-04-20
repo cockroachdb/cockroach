@@ -337,7 +337,7 @@ type constantLiteralFoldingTestCase struct {
 
 func testConstantLiteralFolding(t *testing.T, testData []constantLiteralFoldingTestCase) {
 	for _, d := range testData {
-		expr, err := ParseExprTraditional(d.expr)
+		expr, err := ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
