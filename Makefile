@@ -238,7 +238,7 @@ checkshort: gotestdashi
 .PHONY: clean
 clean: clean-c-deps
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
-	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test*' \) -exec rm {} +
+	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	rm -f $(BOOTSTRAP_TARGET) $(ARCHIVE)
 
 .PHONY: protobuf
