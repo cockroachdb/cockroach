@@ -153,12 +153,11 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 		}
 		populate = func(ctx context.Context, v *valuesNode) error {
 			for _, k := range settings.Keys() {
-				typ, _ := settings.TypeOf(k)
-				value, desc, _ := settings.Show(k)
+				setting, desc, _ := settings.Lookup(k)
 				if _, err := v.rows.AddRow(ctx, parser.Datums{
 					parser.NewDString(k),
-					parser.NewDString(value),
-					parser.NewDString(string([]byte{byte(typ)})),
+					parser.NewDString(setting.String()),
+					parser.NewDString(setting.Typ()),
 					parser.NewDString(desc),
 				}); err != nil {
 					return err
@@ -168,24 +167,24 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 		}
 
 	default:
-		val, ok := settings.GetValue(name)
+		val, _, ok := settings.Lookup(name)
 		if !ok {
 			return nil, errors.Errorf("unknown setting: %q", name)
 		}
 		var d parser.Datum
-		switch val.Typ {
-		case settings.IntValue:
-			d = parser.NewDInt(parser.DInt(val.I))
-		case settings.StringValue:
-			d = parser.NewDString(val.S)
-		case settings.BoolValue:
-			d = parser.MakeDBool(parser.DBool(val.B))
-		case settings.FloatValue:
-			d = parser.NewDFloat(parser.DFloat(val.F))
-		case settings.DurationValue:
-			d = &parser.DInterval{Duration: duration.Duration{Nanos: val.D.Nanoseconds()}}
+		switch s := val.(type) {
+		case *settings.IntSetting:
+			d = parser.NewDInt(parser.DInt(s.Get()))
+		case *settings.StringSetting:
+			d = parser.NewDString(s.Get())
+		case *settings.BoolSetting:
+			d = parser.MakeDBool(parser.DBool(s.Get()))
+		case *settings.FloatSetting:
+			d = parser.NewDFloat(parser.DFloat(s.Get()))
+		case *settings.DurationSetting:
+			d = &parser.DInterval{Duration: duration.Duration{Nanos: s.Get().Nanoseconds()}}
 		default:
-			return nil, errors.Errorf("unknown setting type for %s: %c", name, val.Typ)
+			return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 		}
 		columns = ResultColumns{{Name: name, Typ: d.ResolvedType()}}
 		populate = func(ctx context.Context, v *valuesNode) error {

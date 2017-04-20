@@ -94,7 +94,7 @@ func (p *planner) setClusterSetting(
 	if err := p.RequireSuperUser("SET CLUSTER SETTING"); err != nil {
 		return nil, err
 	}
-	typ, ok := settings.TypeOf(name)
+	typ, _, ok := settings.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
 	}
@@ -117,7 +117,7 @@ func (p *planner) setClusterSetting(
 		}
 		upsertQ := "UPSERT INTO system.settings (name, value, lastUpdated, valueType) VALUES ($1, $2, NOW(), $3)"
 		if _, err := ie.ExecuteStatementInTransaction(
-			ctx, "update-setting", p.txn, upsertQ, name, encoded, string(typ),
+			ctx, "update-setting", p.txn, upsertQ, name, encoded, typ.Typ(),
 		); err != nil {
 			return nil, err
 		}
@@ -128,7 +128,7 @@ func (p *planner) setClusterSetting(
 }
 
 func (p *planner) toSettingString(
-	name string, typ settings.ValueType, raw parser.Expr,
+	name string, setting settings.Setting, raw parser.Expr,
 ) (string, error) {
 	typeCheckAndParse := func(t parser.Type, f func(parser.Datum) (string, error)) (string, error) {
 		typed, err := parser.TypeCheckAndRequire(raw, nil, t, name)
@@ -142,36 +142,36 @@ func (p *planner) toSettingString(
 		return f(d)
 	}
 
-	switch typ {
-	case settings.StringValue:
+	switch setting.(type) {
+	case *settings.StringSetting:
 		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
 			if s, ok := d.(*parser.DString); ok {
 				return string(*s), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 		})
-	case settings.BoolValue:
+	case *settings.BoolSetting:
 		return typeCheckAndParse(parser.TypeBool, func(d parser.Datum) (string, error) {
 			if b, ok := d.(*parser.DBool); ok {
 				return settings.EncodeBool(bool(*b)), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for bool setting", d.ResolvedType(), d)
 		})
-	case settings.IntValue:
+	case *settings.IntSetting:
 		return typeCheckAndParse(parser.TypeInt, func(d parser.Datum) (string, error) {
 			if i, ok := d.(*parser.DInt); ok {
 				return settings.EncodeInt(int(*i)), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for int setting", d.ResolvedType(), d)
 		})
-	case settings.FloatValue:
+	case *settings.FloatSetting:
 		return typeCheckAndParse(parser.TypeFloat, func(d parser.Datum) (string, error) {
 			if f, ok := d.(*parser.DFloat); ok {
 				return settings.EncodeFloat(float64(*f)), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for float setting", d.ResolvedType(), d)
 		})
-	case settings.DurationValue:
+	case *settings.DurationSetting:
 		return typeCheckAndParse(parser.TypeInterval, func(d parser.Datum) (string, error) {
 			if f, ok := d.(*parser.DInterval); ok {
 				if f.Duration.Months > 0 || f.Duration.Days > 0 {
@@ -182,7 +182,7 @@ func (p *planner) toSettingString(
 			return "", errors.Errorf("cannot use %s %T value for duration setting", d.ResolvedType(), d)
 		})
 	default:
-		return "", errors.Errorf("unsupported setting type %c", typ)
+		return "", errors.Errorf("unsupported setting type %T", setting)
 	}
 }
 

@@ -529,7 +529,7 @@ func TestStyle(t *testing.T) {
 			case strings.HasSuffix(s, " syscall"):
 				t.Errorf(`%s <- please use "golang.org/x/sys" instead of "syscall"`, s)
 			case strings.HasPrefix(s, settingsPkgPrefix+"github.com/cockroachdb/cockroach"):
-				if !strings.HasSuffix(s, "testutils") && !strings.HasSuffix(s, "syncutil") {
+				if !strings.HasSuffix(s, "testutils") {
 					t.Errorf("%s <- please don't add CRDB dependencies to settings pkg", s)
 				}
 			}
