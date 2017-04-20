@@ -100,22 +100,21 @@ func evalExport(
 	localPath := temp.LocalFile()
 	defer temp.Close(ctx)
 
-	sstWriter := engine.MakeRocksDBSstFileWriter()
-	sst := &sstWriter
+	sst := engine.MakeRocksDBSstFileWriter()
 	if err := sst.Open(localPath); err != nil {
 		return storage.EvalResult{}, err
 	}
 	defer func() {
-		if sst != nil {
-			if closeErr := sst.Close(); closeErr != nil {
-				log.Warningf(ctx, "could not close sst writer %s: %+v", localPath, closeErr)
-			}
+		// Close is idempotent, so it's safe to call it again in the success
+		// path. If the sstable was empty, ignore the error because empty
+		// sstables are not allowed.
+		if closeErr := sst.Close(); sst.DataSize > 0 && closeErr != nil {
+			log.Warningf(ctx, "could not close sst writer %s: %+v", localPath, closeErr)
 		}
 	}()
 
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
-	var entries int64
 	iter := engineccl.NewMVCCIncrementalIterator(batch)
 	defer iter.Close()
 	iter.Reset(args.Key, args.EndKey, args.StartTime, h.Timestamp)
@@ -124,7 +123,6 @@ func evalExport(
 			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
 			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
 		}
-		entries++
 		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
 			return storage.EvalResult{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
 		}
@@ -135,12 +133,8 @@ func evalExport(
 		return storage.EvalResult{}, err
 	}
 
-	if entries == 0 {
-		// The defer above `Close`s sst if it's not nil, which in turn finishes
-		// the SSTable. However, our SSTable library errors if there is not at
-		// least one entry, so set `sst = nil` to avoid the `Close` and the log
-		// spam when it fails.
-		sst = nil
+	if sst.DataSize == 0 {
+		// Let the defer Close the sstable.
 		reply.Files = []roachpb.ExportResponse_File{}
 		return storage.EvalResult{}, nil
 	}
@@ -149,7 +143,6 @@ func evalExport(
 		return storage.EvalResult{}, err
 	}
 	size := sst.DataSize
-	sst = nil
 
 	// Compute the checksum before we upload and remove the local file.
 	checksum, err := sha512ChecksumFile(localPath)
