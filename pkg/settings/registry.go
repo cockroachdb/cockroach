@@ -15,7 +15,6 @@
 package settings
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
 )
@@ -58,64 +57,4 @@ type value struct {
 func TypeOf(key string) (ValueType, bool) {
 	d, ok := registry[key]
 	return d.typ, ok
-}
-
-// RegisterBoolSetting defines a new setting with type bool.
-func RegisterBoolSetting(key, desc string, defVal bool) func() bool {
-	if atomic.LoadInt32(&frozen) > 0 {
-		panic(fmt.Sprintf("registration must occur before server start: %s", key))
-	}
-	if _, ok := registry[key]; ok {
-		panic(fmt.Sprintf("setting already defined: %s", key))
-	}
-	registry[key] = value{typ: BoolValue, desc: desc, b: defVal}
-	return func() bool { return getBool(key) }
-}
-
-// RegisterIntSetting defines a new setting with type int.
-func RegisterIntSetting(key, desc string, defVal int) func() int {
-	if atomic.LoadInt32(&frozen) > 0 {
-		panic(fmt.Sprintf("registration must occur before server start: %s", key))
-	}
-	if _, ok := registry[key]; ok {
-		panic(fmt.Sprintf("setting already defined: %s", key))
-	}
-	registry[key] = value{typ: IntValue, desc: desc, i: defVal}
-	return func() int { return getInt(key) }
-}
-
-// RegisterStringSetting defines a new setting with type string.
-func RegisterStringSetting(key, desc string, defVal string) func() string {
-	if atomic.LoadInt32(&frozen) > 0 {
-		panic(fmt.Sprintf("registration must occur before server start: %s", key))
-	}
-	if _, ok := registry[key]; ok {
-		panic(fmt.Sprintf("setting already defined: %s", key))
-	}
-	registry[key] = value{typ: StringValue, desc: desc, s: defVal}
-	return func() string { return getString(key) }
-}
-
-// RegisterFloatSetting defines a new setting with type float.
-func RegisterFloatSetting(key, desc string, defVal float64) func() float64 {
-	if atomic.LoadInt32(&frozen) > 0 {
-		panic(fmt.Sprintf("registration must occur before server start: %s", key))
-	}
-	if _, ok := registry[key]; ok {
-		panic(fmt.Sprintf("setting already defined: %s", key))
-	}
-	registry[key] = value{typ: FloatValue, desc: desc, f: defVal}
-	return func() float64 { return getFloat(key) }
-}
-
-// RegisterDurationSetting defines a new setting with type time.Duration.
-func RegisterDurationSetting(key, desc string, defVal time.Duration) func() time.Duration {
-	if atomic.LoadInt32(&frozen) > 0 {
-		panic(fmt.Sprintf("registration must occur before server start: %s", key))
-	}
-	if _, ok := registry[key]; ok {
-		panic(fmt.Sprintf("setting already defined: %s", key))
-	}
-	registry[key] = value{typ: DurationValue, desc: desc, d: defVal}
-	return func() time.Duration { return getDuration(key) }
 }
