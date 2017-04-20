@@ -1,0 +1,159 @@
+# Test index selection for deeply interleaved tables.
+# These tests are in their own file because table IDs appear in the EXPLAIN output.
+
+statement ok
+CREATE TABLE level1 (
+  k1 INT,
+  PRIMARY KEY (k1)
+)
+
+statement ok
+CREATE TABLE level2 (
+  k1 INT,
+  PRIMARY KEY (k1),
+  CONSTRAINT fk1 FOREIGN KEY (k1) REFERENCES level1
+) INTERLEAVE IN PARENT level1 (k1)
+
+statement ok
+CREATE TABLE level3 (
+  k1 INT,
+  k2 INT,
+  k3 INT,
+  PRIMARY KEY (k1, k2, k3),
+  CONSTRAINT fk2 FOREIGN KEY (k1) REFERENCES level2
+) INTERLEAVE IN PARENT level2 (k1)
+
+statement ok
+CREATE TABLE level4 (
+  k1 INT,
+  k2 INT,
+  k3 INT,
+  PRIMARY KEY (k1, k2, k3),
+  CONSTRAINT fk3 FOREIGN KEY (k1, k2, k3) REFERENCES level3
+) INTERLEAVE IN PARENT level3 (k1, k2, k3)
+
+statement ok
+INSERT INTO level1 VALUES (1), (2), (3)
+
+statement ok
+INSERT INTO level2 VALUES (1), (2), (3)
+
+statement ok
+INSERT INTO level3 VALUES
+  (1, 10, 100), (1, 10, 200), (1, 10, 300),
+  (1, 20, 100), (1, 20, 200), (1, 20, 300),
+  (1, 30, 100), (1, 30, 200), (1, 30, 300),
+  (2, 10, 100), (2, 10, 200), (2, 10, 300),
+  (2, 20, 100), (2, 20, 200), (2, 20, 300),
+  (2, 30, 100), (2, 30, 200), (2, 30, 300),
+  (3, 10, 100), (3, 10, 200), (3, 10, 300),
+  (3, 20, 100), (3, 20, 200), (3, 20, 300),
+  (3, 30, 100), (3, 30, 200), (3, 30, 300)
+
+statement ok
+INSERT INTO level4 VALUES
+  (1, 10, 100), (1, 10, 200), (1, 10, 300),
+  (1, 20, 100), (1, 20, 200), (1, 20, 300),
+  (1, 30, 100), (1, 30, 200), (1, 30, 300),
+  (2, 10, 100), (2, 10, 200), (2, 10, 300),
+  (2, 20, 100), (2, 20, 200), (2, 20, 300),
+  (2, 30, 100), (2, 30, 200), (2, 30, 300),
+  (3, 10, 100), (3, 10, 200), (3, 10, 300),
+  (3, 20, 100), (3, 20, 200), (3, 20, 300),
+  (3, 30, 100), (3, 30, 200), (3, 30, 300)
+
+query ITTT
+EXPLAIN SELECT * FROM level4
+----
+0  scan
+0        table  level4@primary
+0        spans  ALL
+
+query III
+SELECT * FROM level4
+----
+1  10  100
+1  10  200
+1  10  300
+1  20  100
+1  20  200
+1  20  300
+1  30  100
+1  30  200
+1  30  300
+2  10  100
+2  10  200
+2  10  300
+2  20  100
+2  20  200
+2  20  300
+2  30  100
+2  30  200
+2  30  300
+3  10  100
+3  10  200
+3  10  300
+3  20  100
+3  20  200
+3  20  300
+3  30  100
+3  30  200
+3  30  300
+
+query ITTT
+EXPLAIN SELECT * FROM level4 WHERE k1 > 1 AND k1 < 3
+----
+0  scan
+0        table  level4@primary
+0        spans  /2/#/52/1/#/53/1-/3
+
+query III
+SELECT * FROM level4 WHERE k1 > 1 AND k1 < 3
+----
+2  10  100
+2  10  200
+2  10  300
+2  20  100
+2  20  200
+2  20  300
+2  30  100
+2  30  200
+2  30  300
+
+query ITTT
+EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 > 10 AND k2 < 30
+----
+0  scan
+0        table  level4@primary
+0        spans  /2/#/52/1/#/53/1/11-/2/#/52/1/#/53/1/30
+
+query III
+SELECT * FROM level4 WHERE k1 = 2 AND k2 > 10 AND k2 < 30
+----
+2  20  100
+2  20  200
+2  20  300
+
+query ITTT
+EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
+----
+0  scan
+0        table  level4@primary
+0        spans  /2/#/52/1/#/53/1/20/101/#/54/1-/2/#/52/1/#/53/1/20/300
+
+query III
+SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
+----
+2  20  200
+
+query ITTT
+EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
+----
+0  scan
+0        table  level4@primary
+0        spans  /2/#/52/1/#/53/1/20/200/#/54/1-/2/#/52/1/#/53/1/20/201
+
+query III
+SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
+----
+2  20  200
