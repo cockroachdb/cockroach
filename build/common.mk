@@ -320,7 +320,7 @@ $(CGO_FLAGS_FILES):
 # NB: `tar -xJ` is not widely supported, so we use `xz` directly instead.
 $(C_DEPS_DIR)/%.src: $(C_DEPS_DIR)/%.src.tar.xz
 	rm -rf $@
-	xz --decompress --stdout $< | tar -C $(C_DEPS_DIR) -xf -
+	$(REPO_ROOT)/scripts/untarxz.sh $< -C $(C_DEPS_DIR)
 	touch $@
 
 $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc.src.tar.xz | $(JEMALLOC_SRC_DIR)
