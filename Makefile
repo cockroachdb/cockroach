@@ -269,7 +269,7 @@ $(ARCHIVE): $(ARCHIVE).tmp
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
 .INTERMEDIATE: $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
-$(ARCHIVE).tmp: $(C_LIBS_SRCS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
+$(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev
 	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
 	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
