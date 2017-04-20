@@ -412,17 +412,16 @@ func (sc *SchemaChanger) distBackfill(
 					otherTableDescs = append(otherTableDescs, *table)
 				}
 			}
-			// TODO(andrei): pass the right caches. I think this will crash without
-			// them.
 			recv, err := makeDistSQLReceiver(
-				ctx,
-				nil, /* sink */
-				nil, /* rangeCache */
-				nil, /* leaseCache */
+				ctx, 
+				nil /* sink */, 
+				sc.rangeCache, 
+				sc.leaseCache,
 				nil, /* txn - the flow does not run wholly in a txn */
 				// updateClock - the flow will not generate errors with time signal.
 				// TODO(andrei): plumb a clock update handler here regardless of whether
 				// it will actually be used or not.
+				// !!! address this in this PR
 				nil,
 			)
 			if err != nil {

@@ -64,6 +64,10 @@ type SchemaChanger struct {
 	db client.DB
 	// distSQLPlanner is the planner used to execute distributed backfills.
 	distSQLPlanner *distSQLPlanner
+
+	// Caches to be updated. Initialized by exec().
+	rangeCache *kv.RangeDescriptorCache
+	leaseCache *kv.LeaseHolderCache
 }
 
 func (sc *SchemaChanger) truncateAndDropTable(
@@ -286,10 +290,16 @@ func (sc *SchemaChanger) maybeAddDropRename(
 
 // Execute the entire schema change in steps.
 func (sc *SchemaChanger) exec(
-	ctx context.Context, db client.DB, distSQLPlanner *distSQLPlanner,
+	ctx context.Context,
+	db client.DB,
+	distSQLPlanner *distSQLPlanner,
+	rangeCache *kv.RangeDescriptorCache,
+	leaseCache *kv.LeaseHolderCache,
 ) error {
 	sc.db = db
 	sc.distSQLPlanner = distSQLPlanner
+	sc.rangeCache = rangeCache
+	sc.leaseCache = leaseCache
 
 	// Acquire lease.
 	lease, err := sc.AcquireLease(ctx)
@@ -706,6 +716,10 @@ type SchemaChangeManager struct {
 	// Create a schema changer for every outstanding schema change seen.
 	schemaChangers map[sqlbase.ID]SchemaChanger
 	distSQLPlanner *distSQLPlanner
+
+	// Caches to be by updated by SchemaChangers in light of new information.
+	rangeCache *kv.RangeDescriptorCache
+	leaseCache *kv.LeaseHolderCache
 }
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
@@ -728,6 +742,8 @@ func NewSchemaChangeManager(
 		distSQLPlanner: newDistSQLPlanner(
 			nodeDesc, rpcContext, distSQLServ, distSender, gossip, leaseMgr.stopper,
 		),
+		rangeCache: distSender.RangeDescriptorCache(),
+		leaseCache: distSender.LeaseHolderCache(),
 	}
 }
 
@@ -849,7 +865,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
 						// TODO(andrei): create a proper ctx for executing schema changes.
-						if err := sc.exec(ctx, s.db, s.distSQLPlanner); err != nil {
+						if err := sc.exec(ctx, s.db, s.distSQLPlanner, s.rangeCache, s.leaseCache); err != nil {
 							if err != errExistingSchemaChangeLease {
 								log.Warningf(ctx, "Error executing schema change: %s", err)
 							}
