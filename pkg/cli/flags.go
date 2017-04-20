@@ -50,6 +50,7 @@ var zoneDisableReplication bool
 
 var serverCfg = server.MakeConfig()
 var baseCfg = serverCfg.Config
+var serverInsecure bool
 var cliCtx = cliContext{Config: baseCfg}
 var sqlCtx = sqlContext{cliContext: &cliCtx}
 var dumpCtx = dumpContext{cliContext: &cliCtx, dumpMode: dumpBoth}
@@ -245,7 +246,9 @@ func init() {
 
 		stringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, "")
 
-		boolFlag(f, &serverCfg.Insecure, cliflags.Insecure, serverCfg.Insecure)
+		// Use a separate variable to store the value of ServerInsecure.
+		// We share the default with the ClientInsecure flag.
+		boolFlag(f, &serverInsecure, cliflags.ServerInsecure, baseCfg.Insecure)
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
@@ -314,7 +317,7 @@ func init() {
 		stringFlag(f, &clientConnHost, cliflags.ClientHost, "")
 		stringFlag(f, &clientConnPort, cliflags.ClientPort, base.DefaultPort)
 
-		boolFlag(f, &baseCfg.Insecure, cliflags.Insecure, serverCfg.Insecure)
+		boolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure, baseCfg.Insecure)
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)

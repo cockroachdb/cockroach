@@ -6,6 +6,7 @@ set env(TERM) vt100
 # developer's own history file.
 set histfile ".cockroachdb_history_test"
 set ::env(COCKROACH_SQL_CLI_HISTORY) $histfile
+# Set client commands as insecure. The server uses --insecure.
 set ::env(COCKROACH_INSECURE) "true"
 system "rm -f $histfile"
 
@@ -40,7 +41,7 @@ proc interrupt {} {
 # Preserves the invariant that the server's PID is saved
 # in `server_pid`.
 proc start_server {argv} {
-    system "mkfifo pid_fifo || true; $argv start --pid-file=pid_fifo --background >>stdout.log 2>>stderr.log & cat pid_fifo > server_pid"
+    system "mkfifo pid_fifo || true; $argv start --insecure --pid-file=pid_fifo --background >>stdout.log 2>>stderr.log & cat pid_fifo > server_pid"
 }
 proc stop_server {argv} {
     system "set -e; if kill -CONT `cat server_pid`; then $argv quit || true & sleep 1; kill -9 `cat server_pid` || true; else $argv quit || true; fi"
