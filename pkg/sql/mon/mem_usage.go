@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -542,12 +542,17 @@ func (mm *MemoryMonitor) releaseMemory(ctx context.Context, sz int64) {
 	}
 }
 
+func newMemoryError(name string, requested int64, budget int64) error {
+	return pgerror.NewErrorf(pgerror.CodeOutOfMemoryError,
+		"%s: memory budget exceeded: %d bytes requested, %d bytes in budget",
+		name, requested, budget)
+}
+
 // increaseBudget requests more memory from the pool.
 func (mm *MemoryMonitor) increaseBudget(ctx context.Context, minExtra int64) error {
 	// NB: mm.mu Already locked by reserveMemory().
 	if mm.pool == nil {
-		return errors.Errorf("%s: memory budget exceeded: %d bytes requested, %d bytes in budget",
-			mm.name, minExtra, mm.reserved.curAllocated)
+		return newMemoryError(mm.name, minExtra, mm.reserved.curAllocated)
 	}
 	minExtra = mm.roundSize(minExtra)
 	if log.V(2) {

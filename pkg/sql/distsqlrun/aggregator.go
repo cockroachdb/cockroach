@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,7 +33,11 @@ import (
 // the given aggregate function when applied on the given type.
 func GetAggregateInfo(
 	fn AggregatorSpec_Func, inputType sqlbase.ColumnType,
-) (aggregateConstructor func() parser.AggregateFunc, returnType sqlbase.ColumnType, err error) {
+) (
+	aggregateConstructor func(*parser.EvalContext) parser.AggregateFunc,
+	returnType sqlbase.ColumnType,
+	err error,
+) {
 	if fn == AggregatorSpec_IDENT {
 		return parser.NewIdentAggregate, inputType, nil
 	}
@@ -43,8 +48,8 @@ func GetAggregateInfo(
 		for _, t := range b.Types.Types() {
 			if inputDatumType.Equivalent(t) {
 				// Found!
-				constructAgg := func() parser.AggregateFunc {
-					return b.AggregateFunc([]parser.Type{inputDatumType})
+				constructAgg := func(evalCtx *parser.EvalContext) parser.AggregateFunc {
+					return b.AggregateFunc([]parser.Type{inputDatumType}, evalCtx)
 				}
 				return constructAgg, sqlbase.DatumTypeToColumnType(b.FixedReturnType()), nil
 			}
@@ -68,6 +73,7 @@ type aggregator struct {
 	funcs       []*aggregateFuncHolder
 	outputTypes []sqlbase.ColumnType
 	datumAlloc  sqlbase.DatumAlloc
+	acc         *mon.MemoryAccount
 
 	groupCols columns
 	inputCols columns
@@ -93,7 +99,9 @@ func newAggregator(
 		funcs:       make([]*aggregateFuncHolder, len(spec.Aggregations)),
 		outputTypes: make([]sqlbase.ColumnType, len(spec.Aggregations)),
 		groupCols:   make(columns, len(spec.GroupCols)),
+		acc:         &mon.MemoryAccount{},
 	}
+	flowCtx.evalCtx.Mon.OpenAccount(ag.acc)
 
 	for i, aggInfo := range spec.Aggregations {
 		ag.inputCols[i] = aggInfo.ColIdx
@@ -229,7 +237,7 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 			if err := row[colIdx].EnsureDecoded(&ag.datumAlloc); err != nil {
 				return err
 			}
-			if err := ag.funcs[i].add(encoded, row[colIdx].Datum); err != nil {
+			if err := ag.funcs[i].add(ctx, encoded, row[colIdx].Datum); err != nil {
 				return err
 			}
 		}
@@ -238,14 +246,14 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 }
 
 type aggregateFuncHolder struct {
-	create  func() parser.AggregateFunc
+	create  func(*parser.EvalContext) parser.AggregateFunc
 	group   *aggregator
 	buckets map[string]parser.AggregateFunc
 	seen    map[string]struct{}
 }
 
 func (ag *aggregator) newAggregateFuncHolder(
-	create func() parser.AggregateFunc,
+	create func(*parser.EvalContext) parser.AggregateFunc,
 ) *aggregateFuncHolder {
 	return &aggregateFuncHolder{
 		create:  create,
@@ -254,7 +262,7 @@ func (ag *aggregator) newAggregateFuncHolder(
 	}
 }
 
-func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
+func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, d parser.Datum) error {
 	if a.seen != nil {
 		encoded, err := sqlbase.EncodeDatum(bucket, d)
 		if err != nil {
@@ -269,18 +277,17 @@ func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
 
 	impl, ok := a.buckets[string(bucket)]
 	if !ok {
-		impl = a.create()
+		impl = a.create(&a.group.flowCtx.evalCtx)
 		a.buckets[string(bucket)] = impl
 	}
 
-	impl.Add(&a.group.flowCtx.evalCtx, d)
-	return nil
+	return impl.Add(ctx, d)
 }
 
 func (a *aggregateFuncHolder) get(bucket string) parser.Datum {
 	found, ok := a.buckets[bucket]
 	if !ok {
-		found = a.create()
+		found = a.create(&a.group.flowCtx.evalCtx)
 	}
 
 	return found.Result()

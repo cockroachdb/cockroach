@@ -421,6 +421,7 @@ func (s *Session) evalCtx() parser.EvalContext {
 		Database:   s.Database,
 		SearchPath: s.SearchPath,
 		Ctx:        s.Ctx,
+		Mon:        &s.TxnState.mon,
 	}
 }
 
