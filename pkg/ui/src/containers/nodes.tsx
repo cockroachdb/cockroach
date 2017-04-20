@@ -34,6 +34,7 @@ let dashboards = [
   { value: "sql", label: "SQL" },
   { value: "storage", label: "Storage" },
   { value: "replication", label: "Replication" },
+  { value: "distributed", label: "Distributed" },
   { value: "queues", label: "Queues" },
   { value: "requests", label: "Slow Requests" },
 ];

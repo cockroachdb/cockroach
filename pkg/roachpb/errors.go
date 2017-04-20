@@ -380,8 +380,10 @@ func (*TransactionPushError) canRestartTransaction() TransactionRestart {
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
-func NewTransactionRetryError() *TransactionRetryError {
-	return &TransactionRetryError{}
+func NewTransactionRetryError(reason TransactionRetryReason) *TransactionRetryError {
+	return &TransactionRetryError{
+		Reason: reason,
+	}
 }
 
 func (e *TransactionRetryError) Error() string {

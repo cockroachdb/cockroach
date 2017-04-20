@@ -106,9 +106,28 @@ message TransactionPushError {
   optional Transaction pushee_txn = 1 [(gogoproto.nullable) = false];
 }
 
+// TransactionRetryReason specifies what caused a transaction retry.
+enum TransactionRetryReason {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // For backwards compatibility.
+  RETRY_REASON_UNKNOWN = 0;
+  // A concurrent writer finished first, causing restart.
+  RETRY_WRITE_TOO_OLD = 1;
+  // A transaction containing a delete range command had its timestamp
+  // moved forward.
+  RETRY_DELETE_RANGE = 2;
+  // A SERIALIZABLE transaction had its timestamp moved forward.
+  RETRY_SERIALIZABLE = 3;
+  // A possible replay caused by duplicate begin txn or out-of-order
+  // txn sequence number.
+  RETRY_POSSIBLE_REPLAY = 4;
+}
+
 // A TransactionRetryError indicates that the transaction must be
 // retried, usually with an increased transaction timestamp.
 message TransactionRetryError {
+  optional TransactionRetryReason reason = 1 [(gogoproto.nullable) = false];
 }
 
 // A TransactionReplayError indicates that a BeginTransaction request
