@@ -73,12 +73,6 @@ uid_gid="$(id -u):$(id -g)"
 mkdir -p "${host_home}"
 echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 
-# Ensure that all directories to which the container must be able to write are
-# created as the invoking user. Docker would otherwise create them when
-# mounting, but that would deny write access to the invoking user since docker
-# runs as root.
-mkdir -p "${HOME}"/.yarn-cache "${gocache}"/native/x86_64-pc-docker-gnu "${gocache}"/pkg/{darwin_amd64,windows_amd64,docker_amd64{,_release{,-musl}}{,_msan,_race}} "${gocache}"/bin/docker_amd64 "${cockroach_toplevel}"/bin.docker_amd64
-
 # Since we're mounting both /root and its subdirectories in our container,
 # Docker will create the subdirectories on the host side under the directory
 # that we're mounting as /root, as the root user. This creates problems for CI
@@ -113,6 +107,11 @@ mkdir -p "${host_home}"/.yarn-cache
 # container. This setting is useful to prevent missing vendored dependencies
 # from being accidentally resolved to the hosts's copy of those dependencies.
 
+# Ensure that all directories to which the container must be able to write are
+# created as the invoking user. Docker would otherwise create them when
+# mounting, but that would deny write access to the invoking user since docker
+# runs as root.
+
 vols=""
 vols="${vols} --volume=${passwd_file}:/etc/passwd"
 vols="${vols} --volume=${host_home}:${container_home}"
@@ -120,21 +119,26 @@ if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
   vols="${vols} --volume=${gopath0}/src:/go/src"
 fi
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
+mkdir -p "${cockroach_toplevel}"/bin.docker_amd64
 vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin"
+mkdir -p "${gocache}"/native/x86_64-pc-docker-gnu
 vols="${vols} --volume=${gocache}/native:/go/native"
 vols="${vols} --volume=${gocache}/native/x86_64-pc-docker-gnu:/go/native/x86_64-pc-linux-gnu"
+mkdir -p "${gocache}"/pkg/darwin_amd64
+mkdir -p "${gocache}"/pkg/windows_amd64
 vols="${vols} --volume=${gocache}/pkg:/go/pkg"
-vols="${vols} --volume=${gocache}/pkg/docker_amd64:/go/pkg/linux_amd64"
 vols="${vols} --volume=${gocache}/pkg/darwin_amd64:/usr/local/go/pkg/darwin_amd64"
 vols="${vols} --volume=${gocache}/pkg/windows_amd64:/usr/local/go/pkg/windows_amd64"
 # NB: it would be slightly more natural to move "amd64" inside the loop body,
 # but the shell discards empty strings in this expansion, which would elide
 # the unsuffixed case.
 for suffix in amd64{,_release{,-musl}}{,_msan,_race}; do
+  mkdir -p "${gocache}/pkg/docker_${suffix}"
   vols="${vols} --volume=${gocache}/pkg/docker_${suffix}:/go/pkg/linux_${suffix}"
   vols="${vols} --volume=${gocache}/pkg/docker_${suffix}:/usr/local/go/pkg/linux_${suffix}"
 done
 vols="${vols} --volume=${gocache}/bin/docker_amd64:/go/bin"
+mkdir -p "${HOME}"/.yarn-cache
 vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
 
 backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
