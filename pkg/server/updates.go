@@ -38,23 +38,17 @@ import (
 const baseUpdatesURL = `https://register.cockroachdb.com/api/clusters/updates`
 const baseReportingURL = `https://register.cockroachdb.com/api/report`
 
-var updatesURL, reportingURL *url.URL
+var updatesURL = settings.RegisterStringSetting(
+	"updatechecks.url",
+	"URL of the check-for-updates endpoint",
+	envutil.EnvOrDefaultString("COCKROACH_UPDATE_CHECK_URL", baseUpdatesURL),
+)
 
-func init() {
-	var err error
-	updatesURL, err = url.Parse(
-		envutil.EnvOrDefaultString("COCKROACH_UPDATE_CHECK_URL", baseUpdatesURL),
-	)
-	if err != nil {
-		panic(err)
-	}
-	reportingURL, err = url.Parse(
-		envutil.EnvOrDefaultString("COCKROACH_USAGE_REPORT_URL", baseReportingURL),
-	)
-	if err != nil {
-		panic(err)
-	}
-}
+var reportingURL = settings.RegisterStringSetting(
+	"diagnostics.reporting.url",
+	"URL of the diagnostic reporting endpoint",
+	envutil.EnvOrDefaultString("COCKROACH_USAGE_REPORT_URL", baseReportingURL),
+)
 
 const (
 	updateCheckFrequency = time.Hour * 24
@@ -161,16 +155,21 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "checkForUpdates")
 	defer span.Finish()
 
-	q := updatesURL.Query()
+	u := updatesURL.Get()
+	parsed, err := url.Parse(u)
+	if err != nil {
+		log.Warningf(ctx, "failed to parse updates URL %q: %v", u, err)
+		return false
+	}
+	q := parsed.Query()
 	b := build.GetInfo()
 	q.Set("version", b.Tag)
 	q.Set("platform", b.Platform)
 	q.Set("uuid", s.node.ClusterID.String())
 	q.Set("nodeid", s.NodeID().String())
 	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
-	updatesURL.RawQuery = q.Encode()
-
-	res, err := http.Get(updatesURL.String())
+	parsed.RawQuery = q.Encode()
+	res, err := http.Get(parsed.String())
 	if err != nil {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.
@@ -266,12 +265,17 @@ func (s *Server) reportDiagnostics() {
 		return
 	}
 
-	q := reportingURL.Query()
+	u := reportingURL.Get()
+	parsed, err := url.Parse(u)
+	if err != nil {
+		log.Warningf(ctx, "failed to parse reporting URL %q: %v", u, err)
+		return
+	}
+	q := parsed.Query()
 	q.Set("version", build.GetInfo().Tag)
 	q.Set("uuid", s.node.ClusterID.String())
-	reportingURL.RawQuery = q.Encode()
-
-	res, err := http.Post(reportingURL.String(), "application/json", b)
+	parsed.RawQuery = q.Encode()
+	res, err := http.Post(parsed.String(), "application/json", b)
 
 	if err != nil {
 		if log.V(2) {
