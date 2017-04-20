@@ -35,6 +35,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -938,6 +940,43 @@ CREATE TABLE d.empty ();`
 		runTests(query, false, tests, func(args ...interface{}) (*gosql.Rows, error) {
 			return db.Query(query, args...)
 		})
+	}
+
+	i := 0
+	for query, tests := range queryTests {
+		i++
+		if _, err := db.Exec(fmt.Sprintf("PREPARE \"%d\" as "+query, i)); err != nil {
+			t.Errorf("%s: prepare error: %s", query, err)
+		}
+		runTests(query, false, tests, func(args ...interface{}) (*gosql.Rows, error) {
+			var executeStmt string
+			if len(args) == 0 {
+				executeStmt = fmt.Sprintf("EXECUTE \"%d\"", i)
+			} else {
+				executeArgs := make([]string, len(args))
+				for i, arg := range args {
+					if arg == nil {
+						executeArgs[i] = "NULL"
+						continue
+					}
+					switch arg := arg.(type) {
+					case driver.Valuer:
+						v, err := arg.Value()
+						if err != nil {
+							return nil, err
+						}
+						executeArgs[i] = fmt.Sprintf("%v", v)
+					default:
+						executeArgs[i] = fmt.Sprintf("%v", arg)
+					}
+					executeStmt = fmt.Sprintf("EXECUTE \"%d\"(%s)", i, strings.Join(executeArgs, ","))
+				}
+			}
+			return db.Query(executeStmt)
+		})
+		if _, err := db.Exec(fmt.Sprintf("DEALLOCATE \"%d\"", i)); err != nil {
+			t.Errorf("%s: deallocate error: %s", query, err)
+		}
 	}
 
 	for query, tests := range queryTests {

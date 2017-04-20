@@ -39,8 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1210,11 +1210,54 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 		return Result{}, err
 	case *parser.Prepare:
-		return Result{}, util.UnimplementedWithIssueErrorf(7568,
-			"Prepared statements are supported only via the Postgres wire protocol")
+		name := s.Name.String()
+		if session.PreparedStatements.Exists(name) {
+			return Result{}, pgerror.NewErrorf(pgerror.CodeDuplicateDatabaseError,
+				"prepared statement %q already exists", name)
+		}
+		typeHints := make(parser.PlaceholderTypes, len(s.Types))
+		for i, t := range s.Types {
+			typeHints[strconv.Itoa(i+1)] = parser.CastTargetToDatumType(t)
+		}
+		_, err := session.PreparedStatements.New(e, name, s.Statement.String(), typeHints)
+		if err != nil {
+			return Result{}, err
+		}
+		return Result{}, nil
 	case *parser.Execute:
-		return Result{}, util.UnimplementedWithIssueErrorf(7568,
-			"Executing prepared statements is supported only via the Postgres wire protocol")
+		name := s.Name.String()
+		prepared, ok := session.PreparedStatements.Get(name)
+		if !ok {
+			return Result{}, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
+				"prepared statement %q does not exist", name)
+		}
+		if len(prepared.SQLTypes) != len(s.Params) {
+			return Result{}, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				"wrong number of parameters for prepared statement %q: expected %d, got %d",
+				name, len(prepared.SQLTypes), len(s.Params))
+		}
+		qArgs := make(parser.QueryArguments, len(s.Params))
+		for i, e := range s.Params {
+			idx := strconv.Itoa(i + 1)
+			typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.SQLTypes[idx], "EXECUTE parameter", session.SearchPath)
+			if err != nil {
+				return Result{}, pgerror.NewError(pgerror.CodeFeatureNotSupportedError, err.Error())
+			}
+			var p parser.Parser
+			if err := p.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
+				return Result{}, err
+			}
+			qArgs[idx] = typedExpr
+		}
+		results := e.ExecuteStatements(session, prepared.Query, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
+		if results.Empty {
+			return Result{}, nil
+		}
+		if len(results.ResultList) > 1 {
+			return Result{}, errors.Errorf("invalid prepared statement had %d statements, expected 1", len(results.ResultList))
+		}
+		return results.ResultList[0], nil
+
 	case *parser.Deallocate:
 		if s.Name == "" {
 			session.PreparedStatements.DeleteAll(session.Ctx())
@@ -1222,7 +1265,8 @@ func (e *Executor) execStmtInOpenTxn(
 			if found := session.PreparedStatements.Delete(
 				session.Ctx(), string(s.Name),
 			); !found {
-				return Result{}, errors.Errorf("prepared statement %s does not exist", s.Name)
+				return Result{}, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
+					"prepared statement %q does not exist", s.Name)
 			}
 		}
 		return Result{PGTag: s.StatementTag()}, nil
