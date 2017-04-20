@@ -82,9 +82,11 @@ func (d DurationSetting) Get() time.Duration {
 // StringSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
 // of type "string" is updated.
-type StringSetting struct {
-	// Get retrieves the string value in the setting.
-	Get func() string
+type StringSetting struct{ v *atomic.Value }
+
+// Get retrieves the string value in the setting.
+func (s StringSetting) Get() string {
+	return s.v.Load().(string)
 }
 
 // checkAdd validates that it is indeed possible to add a setting with
@@ -137,9 +139,13 @@ func RegisterIntSetting(key, desc string, defVal int) IntSetting {
 func RegisterStringSetting(key, desc string, defVal string) StringSetting {
 	checkAdd(key)
 
-	registry[key] = Value{Typ: StringValue, Description: desc, S: defVal}
+	setting := StringSetting{v: &atomic.Value{}}
+	f := func() { setting.v.Store(getString(key)) }
 
-	return StringSetting{Get: func() string { return getString(key) }}
+	registry[key] = Value{Typ: StringValue, Description: desc, S: defVal, asyncUpdate: f}
+	f()
+
+	return setting
 }
 
 // RegisterFloatSetting defines a new setting with type float.
