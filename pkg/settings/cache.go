@@ -205,11 +205,21 @@ func (u Updater) Apply() {
 	cache.values = u
 	cache.Unlock()
 
+	for _, def := range registry {
+		if def.asyncUpdate != nil {
+			def.asyncUpdate()
+		}
+	}
+
+	// Note: it is useful to run the hooks after the asynchronous
+	// updates above so that the hook can observe the latest values in
+	// the settings variables.
 	afterApply.Lock()
 	for _, f := range afterApply.hooks {
 		f()
 	}
 	afterApply.Unlock()
+
 }
 
 var afterApply struct {

@@ -23,14 +23,14 @@ import (
 
 var i1, i2 int
 
-var boolTAccessor = RegisterBoolSetting("bool.t", "", true)
-var boolFAccessor = RegisterBoolSetting("bool.f", "", false)
-var strFooAccessor = RegisterStringSetting("str.foo", "", "")
-var strBarAccessor = RegisterStringSetting("str.bar", "", "bar")
-var i1Accessor = RegisterIntSetting("i.1", "", 0)
-var i2Accessor = RegisterIntSetting("i.2", "", 5)
-var fAccessor = RegisterFloatSetting("f", "", 5.4)
-var dAccessor = RegisterDurationSetting("d", "", time.Second)
+var boolTA = RegisterBoolSetting("bool.t", "", true)
+var boolFA = RegisterBoolSetting("bool.f", "", false)
+var strFooA = RegisterStringSetting("str.foo", "", "")
+var strBarA = RegisterStringSetting("str.bar", "", "bar")
+var i1A = RegisterIntSetting("i.1", "", 0)
+var i2A = RegisterIntSetting("i.2", "", 5)
+var fA = RegisterFloatSetting("f", "", 5.4)
+var dA = RegisterDurationSetting("d", "", time.Second)
 
 func init() {
 	RegisterCallback(func() {
@@ -41,22 +41,22 @@ func init() {
 
 func TestCache(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
-		if expected, actual := false, boolFAccessor(); expected != actual {
+		if expected, actual := false, boolFA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := true, boolTAccessor(); expected != actual {
+		if expected, actual := true, boolTA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "", strFooAccessor(); expected != actual {
+		if expected, actual := "", strFooA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "bar", strBarAccessor(); expected != actual {
+		if expected, actual := "bar", strBarA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 0, i1Accessor(); expected != actual {
+		if expected, actual := 0, i1A.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 5, i2Accessor(); expected != actual {
+		if expected, actual := 5, i2A.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		// registering callback should have also run it initially and set default.
@@ -66,10 +66,10 @@ func TestCache(t *testing.T) {
 		if expected, actual := 5, i2; expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 5.4, fAccessor(); expected != actual {
+		if expected, actual := 5.4, fA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := time.Second, dAccessor(); expected != actual {
+		if expected, actual := time.Second, dA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if actual, ok := TypeOf("i.1"); !ok || IntValue != actual {
@@ -108,16 +108,16 @@ func TestCache(t *testing.T) {
 		}
 		u.Apply()
 
-		if expected, actual := false, boolTAccessor(); expected != actual {
+		if expected, actual := false, boolTA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := true, boolFAccessor(); expected != actual {
+		if expected, actual := true, boolFA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "baz", strFooAccessor(); expected != actual {
+		if expected, actual := "baz", strFooA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 3, i2Accessor(); expected != actual {
+		if expected, actual := 3, i2A.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 0, i1; expected != actual {
@@ -126,15 +126,15 @@ func TestCache(t *testing.T) {
 		if expected, actual := 3, i2; expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 3.1, fAccessor(); expected != actual {
+		if expected, actual := 3.1, fA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2*time.Hour, dAccessor(); expected != actual {
+		if expected, actual := 2*time.Hour, dA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
 		// We didn't change this one, so should still see the default.
-		if expected, actual := "bar", strBarAccessor(); expected != actual {
+		if expected, actual := "bar", strBarA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})
@@ -154,7 +154,7 @@ func TestCache(t *testing.T) {
 			u.Apply()
 		}
 
-		if expected, actual := true, boolFAccessor(); expected != actual {
+		if expected, actual := true, boolFA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 1, i1; expected != actual {
@@ -167,7 +167,7 @@ func TestCache(t *testing.T) {
 		// applying it from the cache.
 		MakeUpdater().Apply()
 
-		if expected, actual := false, boolFAccessor(); expected != actual {
+		if expected, actual := false, boolFA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 0, i1; expected != actual {
@@ -188,7 +188,7 @@ func TestCache(t *testing.T) {
 			u.Apply()
 		}
 
-		if expected, actual := false, boolFAccessor(); expected != actual {
+		if expected, actual := false, boolFA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})
@@ -201,7 +201,7 @@ func TestCache(t *testing.T) {
 			}
 			u.Apply()
 		}
-		before := i2Accessor()
+		before := i2A.Get()
 
 		// Applying after attempting to set with wrong type preserves current value.
 		{
@@ -215,7 +215,7 @@ func TestCache(t *testing.T) {
 			u.Apply()
 		}
 
-		if expected, actual := before, i2Accessor(); expected != actual {
+		if expected, actual := before, i2A.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
@@ -230,7 +230,7 @@ func TestCache(t *testing.T) {
 			u.Apply()
 		}
 
-		if expected, actual := before, i2Accessor(); expected != actual {
+		if expected, actual := before, i2A.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})

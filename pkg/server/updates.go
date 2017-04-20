@@ -229,7 +229,7 @@ func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Durati
 		return scheduled
 	}
 
-	if diagnosticsReportingEnabled() {
+	if diagnosticsReportingEnabled.Get() {
 		s.reportDiagnostics()
 	}
 
