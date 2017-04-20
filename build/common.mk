@@ -342,7 +342,7 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb.src.tar.xz | libsnappy libjemallo
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
 	  $(if $(findstring release,$(TYPE)),-DWITH_$(if $(ISWINDOWS),AVX2,SSE42)=ON) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
-	  -DJEMALLOC_ROOT_DIR=$(JEMALLOC_DIR) -DWITH_JEMALLOC=ON
+	  -DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON
 
 $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy.src.tar.xz | $(SNAPPY_SRC_DIR)
 	mkdir -p $(SNAPPY_DIR)
