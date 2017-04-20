@@ -292,6 +292,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Use the server-specific Insecure flag.
+	serverCfg.Insecure = serverInsecure
+	// Default user for servers.
+	serverCfg.User = security.NodeUser
+
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -310,9 +315,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 		}
 		serverCfg.Stores.Specs[i].Path = absPath
 	}
-
-	// Default user for servers.
-	serverCfg.User = security.NodeUser
 
 	// Set up the logging and profiling output.
 	// It is important that no logging occurs before this point or the log files

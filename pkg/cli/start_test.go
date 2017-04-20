@@ -34,41 +34,39 @@ func TestInitInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	f := startCmd.Flags()
-	ctx := serverCfg
 
 	testCases := []struct {
 		args     []string
 		insecure bool
 		expected string
 	}{
-		{[]string{}, true, ""},
+		{[]string{}, false, ""},
 		{[]string{"--insecure"}, true, ""},
 		{[]string{"--insecure=true"}, true, ""},
 		{[]string{"--insecure=false"}, false, ""},
-		{[]string{"--host", "localhost"}, true, ""},
-		{[]string{"--host", "127.0.0.1"}, true, ""},
-		{[]string{"--host", "::1"}, true, ""},
-		{[]string{"--host", "192.168.1.1"}, true,
+		{[]string{"--host", "localhost"}, false, ""},
+		{[]string{"--host", "127.0.0.1"}, false, ""},
+		{[]string{"--host", "::1"}, false, ""},
+		{[]string{"--host", "192.168.1.1"}, false,
 			`specify --insecure to listen on external address 192\.168\.1\.1`},
 		{[]string{"--insecure", "--host", "192.168.1.1"}, true, ""},
-		{[]string{"--host", "localhost", "--advertise-host", "192.168.1.1"}, true, ""},
-		{[]string{"--host", "127.0.0.1", "--advertise-host", "192.168.1.1"}, true, ""},
-		{[]string{"--host", "::1", "--advertise-host", "192.168.1.1"}, true, ""},
+		{[]string{"--host", "localhost", "--advertise-host", "192.168.1.1"}, false, ""},
+		{[]string{"--host", "127.0.0.1", "--advertise-host", "192.168.1.1"}, false, ""},
+		{[]string{"--host", "::1", "--advertise-host", "192.168.1.1"}, false, ""},
 		{[]string{"--insecure", "--host", "192.168.1.1", "--advertise-host", "192.168.1.1"}, true, ""},
 		{[]string{"--insecure", "--host", "192.168.1.1", "--advertise-host", "192.168.2.2"}, true, ""},
 		// Clear out the flags when done to avoid affecting other tests that rely on the flag state.
-		{[]string{"--host", "", "--advertise-host", ""}, true, ""},
+		{[]string{"--host", "", "--advertise-host", ""}, false, ""},
 	}
 	for i, c := range testCases {
-		// Reset the context and insecure flag for every test case.
-		ctx.InitDefaults()
-		ctx.Insecure = true
+		// Reset the context and for every test case.
+		serverInsecure = false
 
 		if err := f.Parse(c.args); err != nil {
 			t.Fatal(err)
 		}
-		if c.insecure != ctx.Insecure {
-			t.Fatalf("%d: expected %v, but found %v", i, c.insecure, ctx.Insecure)
+		if c.insecure != serverInsecure {
+			t.Fatalf("%d: expected %v, but found %v", i, c.insecure, serverInsecure)
 		}
 	}
 }
