@@ -103,15 +103,23 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaseHolder, err := tc.FindRangeLeaseHolder(
-		tableRangeDesc,
-		&roachpb.ReplicationTarget{
-			NodeID:  tc.Servers[0].GetNode().Descriptor.NodeID,
-			StoreID: tc.Servers[0].GetFirstStoreID(),
-		})
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Loop until we can get the lease holder. We query in the loop to
+	// ensure that the lease is acquired.
+	var leaseHolder roachpb.ReplicationTarget
+	testutils.SucceedsSoon(t, func() error {
+		rows := sqlDB.Query(`SELECT * FROM test.t`)
+		rows.Close()
+		leaseHolder, err = tc.FindRangeLeaseHolder(
+			tableRangeDesc,
+			&roachpb.ReplicationTarget{
+				NodeID:  tc.Servers[0].GetNode().Descriptor.NodeID,
+				StoreID: tc.Servers[0].GetFirstStoreID(),
+			})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 
 	// In a goroutine, send an insert which will commit but not return
 	// from the leader (due to the command filter we installed on node 0).

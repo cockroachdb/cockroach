@@ -1037,6 +1037,14 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc))
 				}
 
+				// If the lease is in stasis, we can't serve requests until we've
+				// renewed the lease, so we return the channel to block on renewal.
+				// Otherwise, we don't need to wait for the extension and simply
+				// ignore the returned channel (which is buffered) and continue.
+				if status.state == leaseStasis {
+					return r.requestLeaseLocked(ctx, status), nil
+				}
+
 				// Extend the lease if this range uses expiration-based
 				// leases, the lease is in need of renewal, and there's not
 				// already an extension pending.
@@ -1048,15 +1056,9 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 							log.Infof(ctx, "extending lease %s at %s", status.lease, timestamp)
 						}
 						// We had an active lease to begin with, but we want to trigger
-						// a lease extension.
-						llChan := r.requestLeaseLocked(ctx, status)
-						// If the lease is in stasis, we can't serve requests until we've
-						// renewed the lease, so we return the channel to block on renewal.
-						// Otherwise, we don't need to wait for the extension and simply
-						// ignore the returned channel (which is buffered) and continue.
-						if status.state == leaseStasis {
-							return llChan, nil
-						}
+						// a lease extension. We explicitly ignore the returned channel
+						// as we won't block on it.
+						_ = r.requestLeaseLocked(ctx, status)
 					}
 				}
 

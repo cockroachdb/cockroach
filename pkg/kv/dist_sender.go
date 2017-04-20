@@ -1166,10 +1166,10 @@ func (ds *DistSender) sendToReplicas(
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
-		if !transport.IsExhausted() {
+		if timeout, ok := transport.SendNextTimeout(opts.SendNextTimeout); ok {
 			// Only start the send-next timer if we haven't exhausted the transport
 			// (i.e. there is another replica to send to).
-			sendNextTimer.Reset(opts.SendNextTimeout)
+			sendNextTimer.Reset(timeout)
 		}
 
 		select {
@@ -1204,7 +1204,6 @@ func (ds *DistSender) sendToReplicas(
 					if lh := tErr.LeaseHolder; lh != nil {
 						// If the replica we contacted knows the new lease holder, update the cache.
 						ds.updateLeaseHolderCache(ctx, rangeID, *lh)
-
 						// Move the new lease holder to the head of the queue for the next retry.
 						transport.MoveToFront(*lh)
 					}

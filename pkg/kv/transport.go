@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
 )
@@ -53,8 +54,9 @@ type batchClient struct {
 	client     roachpb.InternalClient
 	args       roachpb.BatchRequest
 	healthy    bool
-	retried    bool
 	pending    bool
+	retryable  bool
+	timeout    time.Time
 }
 
 // BatchCall contains a response and an RPC error (note that the
@@ -86,6 +88,11 @@ type TransportFactory func(
 type Transport interface {
 	// IsExhausted returns true if there are no more replicas to try.
 	IsExhausted() bool
+
+	// SendNextTimeout returns the timeout after which the next untried,
+	// or retryable, replica may be attempted. Returns a bool indicating
+	// whether another replica will be available, and a duration for when.
+	SendNextTimeout(time.Duration) (time.Duration, bool)
 
 	// SendNext sends the rpc (captured at creation time) to the next
 	// replica. May panic if the transport is exhausted. Should not
@@ -148,8 +155,57 @@ type grpcTransport struct {
 	clientPendingMu syncutil.Mutex // protects access to all batchClient pending flags
 }
 
+// IsExhausted first attempts to resurrect any replicas which were
+// tried but failed with a retryable error and have a timeout set
+// which has elapsed.
 func (gt *grpcTransport) IsExhausted() bool {
-	return gt.clientIndex == len(gt.orderedClients)
+	gt.clientPendingMu.Lock()
+	defer gt.clientPendingMu.Unlock()
+	if gt.clientIndex < len(gt.orderedClients) {
+		return false
+	}
+	return !gt.maybeResurrectRetryables()
+}
+
+// maybeResurrectRetryables moves already-tried replicas which
+// experienced a retryable error (currently this means a
+// NotLeaseHolderError) into a newly-active state so that they can be
+// retried. Returns true if any replicas were moved to active.
+func (gt *grpcTransport) maybeResurrectRetryables() bool {
+	var resurrect []batchClient
+	for i := 0; i < gt.clientIndex; i++ {
+		if c := gt.orderedClients[i]; !c.pending && c.retryable && timeutil.Since(c.timeout) >= 0 {
+			resurrect = append(resurrect, c)
+		}
+	}
+	for _, c := range resurrect {
+		gt.moveToFrontLocked(c.args.Replica)
+	}
+	return len(resurrect) > 0
+}
+
+// SendNextTimeout returns the default SendOpts.SendNextTimeout if
+// there are any untried replicas in the transport. Otherwise, it
+// returns the earliest timeout of any replicas which experienced
+// retryable errors.
+func (gt *grpcTransport) SendNextTimeout(defaultTimeout time.Duration) (time.Duration, bool) {
+	gt.clientPendingMu.Lock()
+	defer gt.clientPendingMu.Unlock()
+	if gt.clientIndex < len(gt.orderedClients) {
+		return defaultTimeout, true
+	}
+	var timeout time.Time
+	for i := 0; i < gt.clientIndex; i++ {
+		if c := gt.orderedClients[i]; !c.pending && c.retryable {
+			if (timeout == time.Time{}) || c.timeout.Sub(timeout) < 0 {
+				timeout = c.timeout
+			}
+		}
+	}
+	if (timeout == time.Time{}) {
+		return 0, false
+	}
+	return timeout.Sub(timeutil.Now()), true
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
@@ -158,7 +214,7 @@ func (gt *grpcTransport) IsExhausted() bool {
 func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	client := gt.orderedClients[gt.clientIndex]
 	gt.clientIndex++
-	gt.setPending(client.args.Replica, true)
+	gt.setState(client.args.Replica, true /* pending */, false /* retryable */)
 
 	// Fork the original context as this async send may outlast the
 	// caller's context.
@@ -203,7 +259,14 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 			}
 			return reply, err
 		}()
-		gt.setPending(client.args.Replica, false)
+		// NotLeaseHolderErrors can be retried.
+		var retryable bool
+		if reply != nil && reply.Error != nil {
+			if _, ok := reply.Error.GetDetail().(*roachpb.NotLeaseHolderError); ok {
+				retryable = true
+			}
+		}
+		gt.setState(client.args.Replica, false /* pending */, retryable)
 		tracing.FinishSpan(sp)
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
@@ -212,16 +275,22 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 	gt.clientPendingMu.Lock()
 	defer gt.clientPendingMu.Unlock()
+	gt.moveToFrontLocked(replica)
+}
+
+func (gt *grpcTransport) moveToFrontLocked(replica roachpb.ReplicaDescriptor) {
 	for i := range gt.orderedClients {
 		if gt.orderedClients[i].args.Replica == replica {
-			// If a call to this replica is active or retried, don't move it.
-			if gt.orderedClients[i].pending || gt.orderedClients[i].retried {
+			// If a call to this replica is active, don't move it.
+			if gt.orderedClients[i].pending {
 				return
 			}
+			// Clear the retryable bit and timeout, as this replica is being made available.
+			gt.orderedClients[i].retryable = false
+			gt.orderedClients[i].timeout = time.Time{}
 			// If we've already processed the replica, decrement the current
 			// index before we swap.
 			if i < gt.clientIndex {
-				gt.orderedClients[i].retried = true
 				gt.clientIndex--
 			}
 			// Swap the client representing this replica to the front.
@@ -242,12 +311,16 @@ func (*grpcTransport) Close() {
 // mutate, but the clients reside in a slice which is shuffled via
 // MoveToFront, making it unsafe to mutate the client through a reference to
 // the slice.
-func (gt *grpcTransport) setPending(replica roachpb.ReplicaDescriptor, pending bool) {
+func (gt *grpcTransport) setState(replica roachpb.ReplicaDescriptor, pending, retryable bool) {
 	gt.clientPendingMu.Lock()
 	defer gt.clientPendingMu.Unlock()
 	for i := range gt.orderedClients {
 		if gt.orderedClients[i].args.Replica == replica {
 			gt.orderedClients[i].pending = pending
+			gt.orderedClients[i].retryable = retryable
+			if retryable {
+				gt.orderedClients[i].timeout = timeutil.Now().Add(gt.opts.SendNextTimeout)
+			}
 			return
 		}
 	}
@@ -297,6 +370,13 @@ type senderTransport struct {
 
 func (s *senderTransport) IsExhausted() bool {
 	return s.called
+}
+
+func (s *senderTransport) SendNextTimeout(defaultTimeout time.Duration) (time.Duration, bool) {
+	if s.IsExhausted() {
+		return 0, false
+	}
+	return defaultTimeout, true
 }
 
 func (s *senderTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
