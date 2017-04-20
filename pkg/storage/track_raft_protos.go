@@ -29,15 +29,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+func funcName(f interface{}) string {
+	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
+}
+
 // TrackRaftProtos instruments proto marshalling to track protos which are
 // marshalled downstream of raft. It returns a function that removes the
 // instrumentation and returns the list of downstream-of-raft protos.
 func TrackRaftProtos() func() []reflect.Type {
 	// Grab the name of the function that roots all raft operations.
-	applyRaftFunc := runtime.FuncForPC(reflect.ValueOf(evaluateBatch).Pointer()).Name()
-	// Some raft operations trigger gossip, but we don't care about proto
-	// serialization in gossip, so we're going to ignore it.
-	addInfoFunc := runtime.FuncForPC(reflect.ValueOf((*gossip.Gossip).AddInfoProto).Pointer()).Name()
+	processRaftFunc := funcName((*Replica).processRaftCommand)
+	// We only need to track protos that could cause replica divergence
+	// by being written to disk downstream of raft.
+	whitelist := []string{
+		// Some raft operations trigger gossip, but we don't require
+		// strict consistency there.
+		funcName((*gossip.Gossip).AddInfoProto),
+		// Replica destroyed errors are written to disk, but they are
+		// deliberately per-replica values.
+		funcName((replicaStateLoader).setReplicaDestroyedError),
+	}
 
 	belowRaftProtos := struct {
 		syncutil.Mutex
@@ -63,10 +74,19 @@ func TrackRaftProtos() func() []reflect.Type {
 		frames := runtime.CallersFrames(pcs[:])
 		for {
 			f, more := frames.Next()
-			if strings.Contains(f.Function, addInfoFunc) {
+
+			whitelisted := false
+			for _, s := range whitelist {
+				if strings.Contains(f.Function, s) {
+					whitelisted = true
+					break
+				}
+			}
+			if whitelisted {
 				break
 			}
-			if strings.Contains(f.Function, applyRaftFunc) {
+
+			if strings.Contains(f.Function, processRaftFunc) {
 				belowRaftProtos.Lock()
 				belowRaftProtos.inner[t] = struct{}{}
 				belowRaftProtos.Unlock()
