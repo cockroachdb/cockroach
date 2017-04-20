@@ -244,3 +244,46 @@ CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (i) CASCADE
 
 statement error unimplemented: unsupported shorthand RESTRICT
 CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (i) RESTRICT
+
+# Regression test for #13451
+
+statement ok
+CREATE TABLE customers (
+  id INT PRIMARY KEY,
+  name STRING (50)
+)
+
+statement ok
+CREATE TABLE orders (
+  customer INT,
+  id INT,
+  total DECIMAL (20, 5),
+  PRIMARY KEY (customer, id),
+  CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers
+) INTERLEAVE IN PARENT customers (customer)
+
+statement ok
+INSERT INTO customers
+  (id, name) VALUES
+  (1, 'Ha-Yun'),
+  (2, 'Emanuela')
+
+statement ok
+INSERT INTO orders
+  (customer, id, total) VALUES
+  (1, 1000, 100.00),
+  (2, 1001, 90.00),
+  (1, 1002, 80.00),
+  (2, 1003, 70.00)
+
+query IIR
+SELECT * FROM orders WHERE customer = 1 AND id = 1000
+----
+1 1000 100.00000
+
+query ITTT
+EXPLAIN SELECT * FROM orders WHERE customer = 1 AND id = 1000
+----
+0  scan
+0        table  orders@primary
+0        spans  /1/#/57/1/1000-/1/#/57/1/1001
