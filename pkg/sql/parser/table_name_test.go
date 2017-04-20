@@ -44,7 +44,7 @@ func TestNormalizeTableName(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tn, err := ParseTableNameTraditional(tc.in)
+		tn, err := ParseTableName(tc.in)
 		if err == nil {
 			err = tn.QualifyWithDatabase(tc.db)
 		}

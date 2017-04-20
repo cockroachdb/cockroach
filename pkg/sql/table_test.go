@@ -41,7 +41,7 @@ func CreateTestTableDescriptor(
 	schema string,
 	privileges *sqlbase.PrivilegeDescriptor,
 ) (sqlbase.TableDescriptor, error) {
-	stmt, err := parser.ParseOneTraditional(schema)
+	stmt, err := parser.ParseOne(schema)
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}

@@ -45,16 +45,6 @@ func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-// Syntax is an enum of the various syntax types.
-type Syntax int
-
-//go:generate stringer -type=Syntax
-const (
-	// Implicit default, must stay in the zero-value position.
-	Traditional Syntax = iota
-	Modern
-)
-
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
@@ -66,8 +56,8 @@ type Parser struct {
 }
 
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string, syntax Syntax) (stmts StatementList, err error) {
-	p.scanner.init(sql, syntax)
+func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
+	p.scanner.init(sql)
 	if p.parserImpl.Parse(&p.scanner) != 0 {
 		return nil, errors.New(p.scanner.lastError)
 	}
@@ -125,19 +115,14 @@ func (p *Parser) NormalizeExpr(ctx *EvalContext, typedExpr TypedExpr) (TypedExpr
 }
 
 // parse parses the sql and returns a list of statements.
-func parse(sql string, syntax Syntax) (StatementList, error) {
+func parse(sql string) (StatementList, error) {
 	var p Parser
-	return p.Parse(sql, syntax)
-}
-
-// parseTraditional is short-hand for parse(sql, Traditional)
-func parseTraditional(sql string) (StatementList, error) {
-	return parse(sql, Traditional)
+	return p.Parse(sql)
 }
 
 // ParseOne parses a sql statement.
-func ParseOne(sql string, syntax Syntax) (Statement, error) {
-	stmts, err := parse(sql, syntax)
+func ParseOne(sql string) (Statement, error) {
+	stmts, err := parse(sql)
 	if err != nil {
 		return nil, err
 	}
@@ -147,14 +132,9 @@ func ParseOne(sql string, syntax Syntax) (Statement, error) {
 	return stmts[0], nil
 }
 
-// ParseOneTraditional is short-hand for ParseOne(sql, Traditional)
-func ParseOneTraditional(sql string) (Statement, error) {
-	return ParseOne(sql, Traditional)
-}
-
-// ParseTableNameTraditional parses a table name.
-func ParseTableNameTraditional(sql string) (*TableName, error) {
-	stmt, err := ParseOneTraditional(fmt.Sprintf("ALTER TABLE %s RENAME TO x", sql))
+// ParseTableName parses a table name.
+func ParseTableName(sql string) (*TableName, error) {
+	stmt, err := ParseOne(fmt.Sprintf("ALTER TABLE %s RENAME TO x", sql))
 	if err != nil {
 		return nil, err
 	}
@@ -166,8 +146,8 @@ func ParseTableNameTraditional(sql string) (*TableName, error) {
 }
 
 // parseExprs parses one or more sql expression.
-func parseExprs(exprs []string, syntax Syntax) (Exprs, error) {
-	stmt, err := ParseOne(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), syntax)
+func parseExprs(exprs []string) (Exprs, error) {
+	stmt, err := ParseOne(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")))
 	if err != nil {
 		return nil, err
 	}
@@ -178,17 +158,17 @@ func parseExprs(exprs []string, syntax Syntax) (Exprs, error) {
 	return set.Values, nil
 }
 
-// ParseExprsTraditional is a short-hand for parseExprs(sql, Traditional)
-func ParseExprsTraditional(sql []string) (Exprs, error) {
+// ParseExprs is a short-hand for parseExprs(sql)
+func ParseExprs(sql []string) (Exprs, error) {
 	if len(sql) == 0 {
 		return Exprs{}, nil
 	}
-	return parseExprs(sql, Traditional)
+	return parseExprs(sql)
 }
 
-// ParseExprTraditional is a short-hand for parseExprs([]string{sql}, Traditional)
-func ParseExprTraditional(sql string) (Expr, error) {
-	exprs, err := parseExprs([]string{sql}, Traditional)
+// ParseExpr is a short-hand for parseExprs([]string{sql})
+func ParseExpr(sql string) (Expr, error) {
+	exprs, err := parseExprs([]string{sql})
 	if err != nil {
 		return nil, err
 	}

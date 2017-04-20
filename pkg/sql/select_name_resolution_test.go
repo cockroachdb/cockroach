@@ -46,7 +46,7 @@ func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *renderNode {
 func TestRetryResolveNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	expr, err := parser.ParseExprTraditional(`count(a)`)
+	expr, err := parser.ParseExpr(`count(a)`)
 	if err != nil {
 		t.Fatal(err)
 	}
