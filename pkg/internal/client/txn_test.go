@@ -459,7 +459,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 				// Return an immediate txn retry error. We need to go through the pErr
 				// and back to get a RetryableTxnError.
 				return roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionRetryError(), txn.Proto()).GoError()
+					roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN), txn.Proto()).GoError()
 			}
 			if !success {
 				return errors.New("aborting on purpose")
@@ -508,7 +508,8 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		if attempt == 0 {
 			// Abort the first attempt so that we need to retry with
 			// a new transaction proto.
-			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
+			return nil, roachpb.NewErrorWithTxn(
+				roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN), ba.Txn)
 		}
 		return ba.CreateReply(), nil
 	}), clock)

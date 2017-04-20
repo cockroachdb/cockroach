@@ -408,8 +408,10 @@ func (*TransactionPushError) canRestartTransaction() TransactionRestart {
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
-func NewTransactionRetryError() *TransactionRetryError {
-	return &TransactionRetryError{}
+func NewTransactionRetryError(reason TransactionRetryReason) *TransactionRetryError {
+	return &TransactionRetryError{
+		Reason: reason,
+	}
 }
 
 // TODO(kaneda): Delete this method once we fully unimplement error for every
