@@ -323,7 +323,7 @@ $(C_DEPS_DIR)/%.src: $(C_DEPS_DIR)/%.src.tar.xz
 
 $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc.src.tar.xz | $(JEMALLOC_SRC_DIR)
 	mkdir -p $(JEMALLOC_DIR)
-	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(CONFIGURE_FLAGS)
+	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(CONFIGURE_FLAGS) --enable-prof
 
 $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz | $(PROTOBUF_SRC_DIR)
 	mkdir -p $(PROTOBUF_DIR)
