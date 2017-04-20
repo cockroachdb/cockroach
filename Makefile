@@ -74,6 +74,7 @@ else ifeq ($(TYPE),release-linux-musl)
 XHOST_TRIPLE := x86_64-unknown-linux-musl
 override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
 override GOFLAGS += -installsuffix release-musl
+SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
 else ifeq ($(TYPE),release-darwin)
 XGOOS := darwin
 export CGO_ENABLED := 1
