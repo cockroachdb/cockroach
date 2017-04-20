@@ -594,7 +594,7 @@ func makeGossip(t *testing.T, stopper *stop.Stopper) (*gossip.Gossip, *hlc.Clock
 	server := rpc.NewServer(rpcContext)
 
 	const nodeID = 1
-	g := gossip.NewTest(nodeID, rpcContext, server, nil, stopper, metric.NewRegistry())
+	g := gossip.NewTest(nodeID, rpcContext, server, stopper, metric.NewRegistry())
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr("tcp", "neverused:9999"),
