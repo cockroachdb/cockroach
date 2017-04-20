@@ -1843,7 +1843,8 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 					// If it's really a replay, it won't retry.
 					txn := ba.Txn.Clone()
 					bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
-					return bumped, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), &txn)
+					err = roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
+					return bumped, roachpb.NewErrorWithTxn(err, &txn)
 				}
 				continue
 			}
@@ -4119,7 +4120,11 @@ func (r *Replica) evaluateTxnWriteBatch(
 			if pErr != nil {
 				return nil, ms, nil, EvalResult{}, pErr
 			} else if ba.Timestamp != br.Timestamp {
-				return nil, ms, nil, EvalResult{}, roachpb.NewError(roachpb.NewTransactionRetryError())
+				reason := roachpb.RETRY_SERIALIZABLE
+				if ba.Txn.Isolation == enginepb.SNAPSHOT {
+					reason = roachpb.RETRY_SNAPSHOT
+				}
+				return nil, ms, nil, EvalResult{}, roachpb.NewError(roachpb.NewTransactionRetryError(reason))
 			}
 			panic("unreachable")
 		}
@@ -4143,7 +4148,10 @@ func (r *Replica) evaluateTxnWriteBatch(
 // (2) if isolation is serializable and the commit timestamp has been
 // forwarded, or (3) the transaction exceeded its deadline.
 func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
-	if ba.Txn == nil || isEndTransactionTriggeringRetryError(ba.Txn, ba.Txn) {
+	if ba.Txn == nil {
+		return false
+	}
+	if retry, _ := isEndTransactionTriggeringRetryError(ba.Txn, ba.Txn); retry {
 		return false
 	}
 	if _, hasBegin := ba.GetArg(roachpb.BeginTransaction); !hasBegin {

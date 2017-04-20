@@ -502,6 +502,57 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           </LineGraph>
         </GraphGroup>
 
+        <GraphGroup groupId="node.transactions" hide={dashboard !== "transactions"}>
+          <LineGraph title="Transactions" sources={nodeSources}>
+            <Axis>
+              <Metric name="cr.node.txn.commits" title="Committed" nonNegativeRate />
+              <Metric name="cr.node.txn.commits1PC" title="Fast-path Committed" nonNegativeRate />
+              <Metric name="cr.node.txn.aborts" title="Aborted" nonNegativeRate />
+              <Metric name="cr.node.txn.abandons" title="Abandoned" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="Restarts" sources={nodeSources}>
+            <Axis>
+              <Metric name="cr.node.txn.restarts.writetooold" title="Write Too Old" nonNegativeRate />
+              <Metric name="cr.node.txn.restarts.snapshot" title="Forwarded Timestamp (iso=snapshot)" nonNegativeRate />
+              <Metric name="cr.node.txn.restarts.serializable" title="Forwarded Timestamp (iso=serializable)" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="Duration: 99th percentile"
+                    tooltip={`The 99th percentile of transaction durations over a 1 minute period.
+                              Values are displayed individually for each node on each node.`}>
+            <Axis units={ AxisUnits.Duration }>
+              {
+                _.map(nodeIDs, (node) =>
+                  <Metric key={node}
+                          name="cr.node.txn.durations-p99"
+                          title={this.nodeAddress(node)}
+                          sources={[node]}
+                          downsampleMax />,
+                )
+              }
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="Duration: 95th percentile"
+                    tooltip={`The 95th percentile of transaction durations over a 1 minute period.
+                              Values are displayed individually for each node on each node.`}>
+            <Axis units={ AxisUnits.Duration }>
+              {
+                _.map(nodeIDs, (node) =>
+                  <Metric key={node}
+                          name="cr.node.txn.durations-p95"
+                          title={this.nodeAddress(node)}
+                          sources={[node]}
+                          downsampleMax />,
+                )
+              }
+            </Axis>
+          </LineGraph>
+      </GraphGroup>
+
         <GraphGroup groupId="node.queues" hide={dashboard !== "queues"}>
           <LineGraph title="Queue Processing Failures" sources={storeSources}>
             <Axis>

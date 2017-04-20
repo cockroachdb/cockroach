@@ -2572,7 +2572,7 @@ func (s *Store) Send(
 				// only), return an txn retry error after the first failure
 				// to guarantee a retry.
 				if ba.Txn != nil {
-					return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
+					return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(0), ba.Txn)
 				}
 				return nil, pErr
 			}
