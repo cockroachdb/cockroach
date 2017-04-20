@@ -33,8 +33,16 @@ make_and_deploy_tarball() {
   tmpdir=$(mktemp -d /tmp/cockroach-push.XXXXXX)
   mkdir -p "${tmpdir}/${tarball_base}"
 
-  # Make sure the binary is named 'cockroach'.
-  cp "${rel_path}" "${tmpdir}/${tarball_base}/cockroach"
+  # Make sure the binary is named 'cockroach' (or 'cockroach.exe' for the
+  # windows binary).
+  case "${rel_path}" in
+  *.exe)
+    cp "${rel_path}" "${tmpdir}/${tarball_base}/cockroach.exe"
+    ;;
+  *)
+    cp "${rel_path}" "${tmpdir}/${tarball_base}/cockroach"
+    ;;
+  esac
   time tar cz -C "${tmpdir}" -f "${tarball_base}".tgz "${tarball_base}"
   deploy_file "${tarball_base}.tgz"
   rm -rf "${tmpdir}"
@@ -47,8 +55,8 @@ make_and_deploy_tarball cockroach-linux-2.6.32-musl-amd64 cockroach-"${VERSION}"
 make_and_deploy_tarball cockroach-linux-2.6.32-musl-amd64 cockroach-latest.linux-musl-amd64
 make_and_deploy_tarball cockroach-darwin-10.9-amd64 cockroach-"${VERSION}".darwin-10.9-amd64
 make_and_deploy_tarball cockroach-darwin-10.9-amd64 cockroach-latest.darwin-10.9-amd64
-make_and_deploy_tarball cockroach-windows-6.2-amd64.exe cockroach-"${VERSION}".windows-6.2-amd64.exe
-make_and_deploy_tarball cockroach-windows-6.2-amd64.exe cockroach-latest.windows-6.2-amd64.exe
+make_and_deploy_tarball cockroach-windows-6.2-amd64.exe cockroach-"${VERSION}".windows-6.2-amd64
+make_and_deploy_tarball cockroach-windows-6.2-amd64.exe cockroach-latest.windows-6.2-amd64
 
 # Push source tarball for Homebrew and other package managers that like
 # tarballs. One tagged, one called "latest".
