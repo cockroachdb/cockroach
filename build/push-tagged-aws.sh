@@ -43,6 +43,8 @@ make_and_deploy_tarball() {
 # Tar up and push binaries. One tagged, one called "latest".
 make_and_deploy_tarball cockroach cockroach-"${VERSION}".linux-amd64
 make_and_deploy_tarball cockroach cockroach-latest.linux-amd64
+make_and_deploy_tarball cockroach-linux-2.6.32-musl-amd64 cockroach-"${VERSION}".linux-musl-amd64
+make_and_deploy_tarball cockroach-linux-2.6.32-musl-amd64 cockroach-latest.linux-musl-amd64
 make_and_deploy_tarball cockroach-darwin-10.9-amd64 cockroach-"${VERSION}".darwin-10.9-amd64
 make_and_deploy_tarball cockroach-darwin-10.9-amd64 cockroach-latest.darwin-10.9-amd64
 make_and_deploy_tarball cockroach-windows-6.2-amd64.exe cockroach-"${VERSION}".windows-6.2-amd64.exe
