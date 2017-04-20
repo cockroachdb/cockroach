@@ -245,7 +245,7 @@ func EncodePartialIndexKey(
 ) (key []byte, containsNull bool, err error) {
 	colIDs := index.ColumnIDs[:numCols]
 	key = keyPrefix
-	dirs := directions(index.ColumnDirections)
+	dirs := directions(index.ColumnDirections)[:numCols]
 
 	if len(index.Interleave.Ancestors) > 0 {
 		for i, ancestor := range index.Interleave.Ancestors {
@@ -255,15 +255,25 @@ func EncodePartialIndexKey(
 				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.IndexID))
 			}
 
+			partial := false
 			length := int(ancestor.SharedPrefixLen)
+			if length > len(colIDs) {
+				length = len(colIDs)
+				partial = true
+			}
 			var n bool
 			key, n, err = EncodeColumns(colIDs[:length], dirs[:length], colMap, values, key)
 			if err != nil {
 				return key, containsNull, err
 			}
-			colIDs, dirs = colIDs[length:], dirs[length:]
 			containsNull = containsNull || n
-
+			if partial {
+				// Early stop. Note that if we had exactly SharedPrefixLen columns
+				// remaining, we want to append the next tableID/indexID pair because
+				// that results in a more specific key.
+				return key, containsNull, nil
+			}
+			colIDs, dirs = colIDs[length:], dirs[length:]
 			// We reuse NotNullDescending (0xfe) as the interleave sentinel.
 			key = encoding.EncodeNotNullDescending(key)
 		}
@@ -296,6 +306,9 @@ func EncodeColumns(
 	values []parser.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
+	if len(columnIDs) == 0 {
+		return keyPrefix, false, nil
+	}
 	// We know we will append to the key which will cause the capacity to grow
 	// so make it bigger from the get-go.
 	key = make([]byte, len(keyPrefix), 2*len(keyPrefix))
