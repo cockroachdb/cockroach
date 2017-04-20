@@ -15,6 +15,7 @@
 package settings
 
 import (
+	"sort"
 	"time"
 
 	"github.com/pkg/errors"
@@ -26,13 +27,13 @@ import (
 // `cache.values` override entries in `registry`, as implemented by `getVal`.
 var cache struct {
 	syncutil.RWMutex
-	values map[string]value
+	values map[string]Value
 }
 
 // getVal gets the current value for key if it is set or the default value.
 // `key` _must_ be a defined setting and _must_ be of the type requested (any
 // invalid usage is a panic).
-func getVal(key string, t ValueType) value {
+func getVal(key string, t ValueType) Value {
 	// We consult `registry` first as it serves as the canonical list of defined
 	// settings and their types, and can thus verify usage is valid even before we
 	// look at the applied settings in `cache`.
@@ -40,8 +41,8 @@ func getVal(key string, t ValueType) value {
 	if !ok {
 		panic(errors.Errorf("invalid setting '%s'", key))
 	}
-	if d.typ != t {
-		panic(errors.Errorf("setting '%s' is defined as %c, not %c)", key, d.typ, t))
+	if d.Typ != t {
+		panic(errors.Errorf("setting '%s' is defined as %c, not %c)", key, d.Typ, t))
 	}
 
 	cache.RLock()
@@ -55,57 +56,82 @@ func getVal(key string, t ValueType) value {
 }
 
 func getString(key string) string {
-	return getVal(key, StringValue).s
+	return getVal(key, StringValue).S
 }
 
 func getBool(key string) bool {
-	return getVal(key, BoolValue).b
+	return getVal(key, BoolValue).B
 }
 
 func getInt(key string) int {
-	return getVal(key, IntValue).i
+	return getVal(key, IntValue).I
 }
 
 func getFloat(key string) float64 {
-	return getVal(key, FloatValue).f
+	return getVal(key, FloatValue).F
 }
 
 func getDuration(key string) time.Duration {
-	return getVal(key, DurationValue).d
+	return getVal(key, DurationValue).D
 }
 
-func (v value) String() string {
-	switch v.typ {
+func (v Value) String() string {
+	switch v.Typ {
 	case StringValue:
-		return v.s
+		return v.S
 	case BoolValue:
-		return EncodeBool(v.b)
+		return EncodeBool(v.B)
 	case IntValue:
-		return EncodeInt(v.i)
+		return EncodeInt(v.I)
 	case FloatValue:
-		return EncodeFloat(v.f)
+		return EncodeFloat(v.F)
 	case DurationValue:
-		return EncodeDuration(v.d)
+		return EncodeDuration(v.D)
 	default:
-		panic("unknown value type " + string(v.typ)) // something something sealed.
+		panic("unknown value type " + string(v.Typ)) // something something sealed.
 	}
 }
 
-// Show returns a string representation of the current value for a named setting
-// if it exists.
-func Show(key string) (string, bool) {
+// Keys returns a sorted string array with all the known keys.
+func Keys() (res []string) {
+	res = make([]string, 0, len(registry))
+	for k := range registry {
+		res = append(res, k)
+	}
+	sort.Strings(res)
+	return res
+}
+
+// GetValue returns the Value of a setting.
+func GetValue(key string) (Value, bool) {
 	def, ok := registry[key]
 	if !ok {
-		return "", false
+		return Value{}, false
+	}
+	cache.RLock()
+	set, ok := cache.values[key]
+	cache.RUnlock()
+	if ok {
+		return set, true
+	}
+	return def, true
+}
+
+// Show returns a string representation of the current value for a named setting
+// if it exists. It also reports the description.
+func Show(key string) (string, string, bool) {
+	def, ok := registry[key]
+	if !ok {
+		return "", "", false
 	}
 	cache.RLock()
 	set, ok := cache.values[key]
 	cache.RUnlock()
 
 	if ok {
-		return set.String(), true
+		return set.String(), def.Description, true
 	}
-	return def.String(), true
+	return def.String(), def.Description, true
 }
 
 // Updater is a helper for replacing the global settings map. It is intended to
@@ -117,7 +143,7 @@ func Show(key string) (string, bool) {
 // RefreshSettings passes the serialized representations of all individual
 // settings -- e.g. the rows read from the system.settings table -- to Add(),
 // one at a time, before then calling Apply() to swap the global cache.
-type Updater map[string]value
+type Updater map[string]Value
 
 // MakeUpdater returns a new Updater, pre-alloced based on the current settings.
 func MakeUpdater() Updater {
@@ -161,8 +187,8 @@ func (u Updater) Add(key, rawValue, vt string) error {
 	if err != nil {
 		return err
 	}
-	if typ != d.typ {
-		return errors.Errorf("setting '%s' defined as type %c, not %c", key, d.typ, typ)
+	if typ != d.Typ {
+		return errors.Errorf("setting '%s' defined as type %c, not %c", key, d.Typ, typ)
 	}
 
 	parsed, err := parseRaw(rawValue, typ)

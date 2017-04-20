@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -139,11 +140,59 @@ func queryInfoSchema(
 }
 
 func (p *planner) showClusterSetting(name string) (planNode, error) {
-	_, ok := settings.TypeOf(name)
-	if !ok {
-		return nil, errors.Errorf("unknown setting: %q", name)
+	var columns ResultColumns
+	var populate func(ctx context.Context, v *valuesNode) error
+
+	switch name {
+	case "all":
+		columns = ResultColumns{
+			{Name: "name", Typ: parser.TypeString},
+			{Name: "current_value", Typ: parser.TypeString},
+			{Name: "type", Typ: parser.TypeString},
+			{Name: "description", Typ: parser.TypeString},
+		}
+		populate = func(ctx context.Context, v *valuesNode) error {
+			for _, k := range settings.Keys() {
+				typ, _ := settings.TypeOf(k)
+				value, desc, _ := settings.Show(k)
+				if _, err := v.rows.AddRow(ctx, parser.Datums{
+					parser.NewDString(k),
+					parser.NewDString(value),
+					parser.NewDString(string([]byte{byte(typ)})),
+					parser.NewDString(desc),
+				}); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
+	default:
+		val, ok := settings.GetValue(name)
+		if !ok {
+			return nil, errors.Errorf("unknown setting: %q", name)
+		}
+		var d parser.Datum
+		switch val.Typ {
+		case settings.IntValue:
+			d = parser.NewDInt(parser.DInt(val.I))
+		case settings.StringValue:
+			d = parser.NewDString(val.S)
+		case settings.BoolValue:
+			d = parser.MakeDBool(parser.DBool(val.B))
+		case settings.FloatValue:
+			d = parser.NewDFloat(parser.DFloat(val.F))
+		case settings.DurationValue:
+			d = &parser.DInterval{Duration: duration.Duration{Nanos: val.D.Nanoseconds()}}
+		default:
+			return nil, errors.Errorf("unknown setting type for %s: %c", name, val.Typ)
+		}
+		columns = ResultColumns{{Name: name, Typ: d.ResolvedType()}}
+		populate = func(ctx context.Context, v *valuesNode) error {
+			_, err := v.rows.AddRow(ctx, parser.Datums{d})
+			return err
+		}
 	}
-	columns := ResultColumns{{Name: name, Typ: parser.TypeString}}
 
 	return &delayedNode{
 		name:    "SHOW CLUSTER SETTING " + name,
@@ -151,8 +200,7 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 1)
 
-			value, _ := settings.Show(name)
-			if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
+			if err := populate(ctx, v); err != nil {
 				v.rows.Close(ctx)
 				return nil, err
 			}
