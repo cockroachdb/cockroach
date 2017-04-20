@@ -8,7 +8,7 @@ eexpect ":/# "
 
 # Check that a server started with only in-memory stores automatically
 # logs to stderr.
-send "$argv start --store=type=mem,size=1GiB\r"
+send "$argv start --insecure --store=type=mem,size=1GiB\r"
 eexpect "CockroachDB"
 eexpect "starting cockroach node"
 
@@ -25,7 +25,7 @@ stop_server $argv
 
 # Check that a server started with --logtostderr
 # logs even info messages to stderr.
-send "$argv start --logtostderr\r"
+send "$argv start --insecure --logtostderr\r"
 eexpect "CockroachDB"
 eexpect "starting cockroach node"
 
@@ -34,7 +34,7 @@ interrupt
 eexpect ":/# "
 
 # Check that --logtostderr can override the threshold but no error is printed on startup
-send "echo marker; $argv start --logtostderr=ERROR 2>&1 | grep -v '^\\*'\r"
+send "echo marker; $argv start --insecure --logtostderr=ERROR 2>&1 | grep -v '^\\*'\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.

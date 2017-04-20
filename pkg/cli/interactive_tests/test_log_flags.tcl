@@ -13,7 +13,7 @@ eexpect ":/# "
 # to exit entirely (it has errorHandling set to ExitOnError).
 
 # Check that log files are created by default in the store directory.
-send "$argv start --store=path=mystore\r"
+send "$argv start --insecure --store=path=mystore\r"
 eexpect "node starting"
 send "\003"
 eexpect ":/# "
@@ -22,7 +22,7 @@ eexpect "cockroach.log"
 eexpect ":/# "
 
 # Check that an empty `-log-dir` disables file logging.
-send "$argv start --store=path=mystore2 --log-dir=\r"
+send "$argv start --insecure --store=path=mystore2 --log-dir=\r"
 eexpect "node starting"
 send "\003"
 eexpect ":/# "
@@ -31,30 +31,30 @@ eexpect "0"
 eexpect ":/# "
 
 # Check that leading tildes are properly rejected.
-send "$argv start --log-dir=\~/blah\r"
+send "$argv start --insecure --log-dir=\~/blah\r"
 eexpect "log directory cannot start with '~'"
 eexpect ":/# "
 
 # Check that the user can override.
-send "$argv start --log-dir=blah/\~/blah\r"
+send "$argv start --insecure --log-dir=blah/\~/blah\r"
 eexpect "logs: *blah/~/blah"
 send "\003"
 eexpect ":/# "
 
 # Check that TRUE and FALSE are valid values for the severity flags.
-send "$argv start --logtostderr=false\r"
+send "$argv start --insecure --logtostderr=false\r"
 eexpect "node starting"
 send "\003"
 eexpect ":/# "
-send "$argv start --logtostderr=true\r"
+send "$argv start --insecure --logtostderr=true\r"
 eexpect "node starting"
 send "\003"
 eexpect ":/# "
-send "$argv start --logtostderr=2\r"
+send "$argv start --insecure --logtostderr=2\r"
 eexpect "node starting"
 send "\003"
 eexpect ":/# "
-send "$argv start --logtostderr=cantparse\r"
+send "$argv start --insecure --logtostderr=cantparse\r"
 eexpect "parsing \"cantparse\": invalid syntax"
 eexpect ":/# "
 
