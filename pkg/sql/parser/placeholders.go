@@ -28,7 +28,7 @@ import (
 type PlaceholderTypes map[string]Type
 
 // QueryArguments relates placeholder names to their provided query argument.
-type QueryArguments map[string]Datum
+type QueryArguments map[string]TypedExpr
 
 // PlaceholderInfo defines the interface to SQL placeholders.
 type PlaceholderInfo struct {
@@ -98,7 +98,7 @@ func (p *PlaceholderInfo) Type(name string) (Type, bool) {
 
 // Value returns the known value of a placeholder.  Returns false in
 // the 2nd value if the placeholder does not have a value.
-func (p *PlaceholderInfo) Value(name string) (Datum, bool) {
+func (p *PlaceholderInfo) Value(name string) (TypedExpr, bool) {
 	if v, ok := p.Values[name]; ok {
 		return v, true
 	}
