@@ -1516,6 +1516,7 @@ func TestZip(t *testing.T) {
 writing ` + os.DevNull + `
   debug/events
   debug/liveness
+  debug/settings
   debug/nodes/1/status
   debug/nodes/1/gossip
   debug/nodes/1/stacks
