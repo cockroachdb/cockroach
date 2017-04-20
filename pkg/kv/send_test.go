@@ -111,6 +111,13 @@ func (c *channelSaveTransport) IsExhausted() bool {
 	return c.remaining <= 0
 }
 
+func (c *channelSaveTransport) SendNextTimeout(defaultTimeout time.Duration) (time.Duration, bool) {
+	if c.IsExhausted() {
+		return 0, false
+	}
+	return defaultTimeout, true
+}
+
 func (c *channelSaveTransport) SendNext(_ context.Context, done chan<- BatchCall) {
 	c.remaining--
 	c.ch <- done
@@ -364,6 +371,13 @@ type firstNErrorTransport struct {
 
 func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
+}
+
+func (f *firstNErrorTransport) SendNextTimeout(defaultTimeout time.Duration) (time.Duration, bool) {
+	if f.IsExhausted() {
+		return 0, false
+	}
+	return defaultTimeout, true
 }
 
 func (f *firstNErrorTransport) SendNext(_ context.Context, done chan<- BatchCall) {
