@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -80,7 +82,7 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 	}
 	const numReplicas = 3
 	tc := testcluster.StartTestCluster(t, numReplicas, testClusterArgs)
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 

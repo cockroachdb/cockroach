@@ -54,16 +54,16 @@ func restoreStderr() error {
 // RecoverAndReportPanic can be invoked on goroutines that run with
 // stderr redirected to logs to ensure the user gets informed on the
 // real stderr a panic has occurred.
-func RecoverAndReportPanic() {
+func RecoverAndReportPanic(ctx context.Context) {
 	if r := recover(); r != nil {
-		ReportPanic(r)
+		ReportPanic(ctx, r)
 		panic(r)
 	}
 }
 
 // ReportPanic reports a panic has occurred on the real stderr.
-func ReportPanic(r interface{}) {
-	Shout(context.Background(), Severity_ERROR, "a panic has occurred!")
+func ReportPanic(ctx context.Context, r interface{}) {
+	Shout(ctx, Severity_ERROR, "a panic has occurred!")
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.

@@ -159,7 +159,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -368,7 +368,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -508,7 +508,7 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	// Create a table with column i and an index on v and i. Fix the column
 	// families so the key counts below don't change if the family heuristics
@@ -673,7 +673,7 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -891,7 +891,7 @@ func TestTableMutationQueue(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	// Create a table with column i and an index on v and i.
 	if _, err := sqlDB.Exec(`
@@ -986,7 +986,7 @@ func TestAddingFKs(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE t;

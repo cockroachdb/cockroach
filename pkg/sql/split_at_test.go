@@ -20,6 +20,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,7 +38,7 @@ func TestSplitAt(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	r := sqlutils.MakeSQLRunner(t, db)
 
@@ -150,7 +152,7 @@ func TestScatter(t *testing.T) {
 		// remove this when that is the case (#15003).
 		ReplicationMode: base.ReplicationManual,
 	})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",

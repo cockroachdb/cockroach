@@ -58,7 +58,7 @@ func TestUpsertFastPath(t *testing.T) {
 			TestingEvalFilter: filter,
 		}},
 	})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	sqlDB := sqlutils.MakeSQLRunner(t, conn)
 	sqlDB.Exec(`CREATE DATABASE d`)
 	sqlDB.Exec(`CREATE TABLE d.kv (k INT PRIMARY KEY, v INT)`)
@@ -134,7 +134,7 @@ func TestConcurrentUpsertWithSnapshotIsolation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	sqlDB := sqlutils.MakeSQLRunner(t, conn)
 
 	sqlDB.Exec(`CREATE DATABASE d`)

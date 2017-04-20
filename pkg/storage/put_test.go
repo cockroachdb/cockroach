@@ -46,7 +46,7 @@ func TestPut(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 	ctx := context.Background()
 
 	db := tc.Servers[0].DB()

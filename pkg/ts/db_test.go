@@ -272,7 +272,7 @@ type modelDataSource struct {
 func (mds *modelDataSource) GetTimeSeriesData() []tspb.TimeSeriesData {
 	if len(mds.datasets) == 0 {
 		// Stop on goroutine to prevent deadlock.
-		go mds.once.Do(mds.stopper.Stop)
+		go mds.once.Do(func() { mds.stopper.Stop(context.Background()) })
 		return nil
 	}
 	mds.calledCount++

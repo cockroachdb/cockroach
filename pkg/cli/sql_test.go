@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/chzyer/readline"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -34,7 +36,7 @@ func TestSQLLex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	pgurl, err := s.(*server.TestServer).Cfg.PGURL(url.User(security.RootUser))
 	if err != nil {

@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -216,7 +218,7 @@ func TestUseCerts(t *testing.T) {
 		SSLCertsDir: certsDir,
 	}
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()

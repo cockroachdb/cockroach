@@ -138,7 +138,7 @@ func TestPurgeOldLeases(t *testing.T) {
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, serverParams)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 	// Block gossip.
 	gossipSem <- struct{}{}
@@ -198,7 +198,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 func TestNameCacheIsUpdated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := db.Exec(`
@@ -269,7 +269,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 func TestNameCacheEntryDoesntReturnExpiredLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	const tableName = "test"
@@ -310,7 +310,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 func TestTableNameNotCaseSensitive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := db.Exec(`
@@ -354,7 +354,7 @@ func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(
 		t, base.TestServerArgs{Knobs: testingKnobs})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := sqlDB.Exec(`
@@ -464,7 +464,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 func TestAcquireFreshestFromStoreRaces(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
 	if _, err := db.Exec(`

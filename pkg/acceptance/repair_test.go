@@ -46,7 +46,7 @@ func testRepairInner(ctx context.Context, t *testing.T, c cluster.Cluster, cfg c
 	// Add some loads.
 	for i := 0; i < c.NumNodes()*2; i++ {
 		ID := i
-		stopper.RunWorker(func() {
+		stopper.RunWorker(ctx, func(ctx context.Context) {
 			insertLoad(ctx, t, dc, ID)
 		})
 	}

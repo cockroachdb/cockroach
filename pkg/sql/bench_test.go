@@ -29,6 +29,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 
@@ -43,7 +45,7 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	defer tracing.Disable()()
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{UseDatabase: "bench"})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bench`); err != nil {
 		b.Fatal(err)
@@ -64,7 +66,7 @@ func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB
 	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {
 		b.Fatal(err)
 	}
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	f(b, tc.Conns[0])
 }

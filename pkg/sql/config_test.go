@@ -91,7 +91,7 @@ func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop()
+	defer srv.Stopper().Stop(context.TODO())
 	s := srv.(*server.TestServer)
 
 	expectedCounter := uint32(keys.MaxReservedDescID)

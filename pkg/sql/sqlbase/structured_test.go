@@ -601,7 +601,7 @@ func TestValidateTableDesc(t *testing.T) {
 func TestValidateCrossTableReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	tests := []struct {
 		err        string
@@ -1077,7 +1077,7 @@ func TestKeysPerRow(t *testing.T) {
 	// a TableDescriptor. It should be possible to move MakeTableDesc into
 	// sqlbase. If/when that happens, use it here instead of this server.
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
 		t.Fatalf("%+v", err)
 	}

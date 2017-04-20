@@ -43,7 +43,7 @@ func TestGossipFirstRange(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	errors := make(chan error)
 	descs := make(chan *roachpb.RangeDescriptor)
@@ -159,7 +159,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs:      serverArgs,
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	// Take down a node other than the first node and replace it with a new one.
 	// Replacing the first node would be better from an adversarial testing

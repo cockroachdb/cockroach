@@ -104,7 +104,7 @@ func TestDistBackfill(t *testing.T) {
 				},
 			},
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 	cdb := tc.Server(0).KVClient().(*client.DB)
 
 	sqlutils.CreateTable(
@@ -234,7 +234,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 				UseDatabase: "test",
 			},
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	db0 := tc.ServerConn(0)
 	sqlutils.CreateTable(t, db0, "left",

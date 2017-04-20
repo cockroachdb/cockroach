@@ -57,7 +57,7 @@ func TestSchemaChangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	// Set MinSchemaChangeLeaseDuration to always expire the lease.
 	minLeaseDuration := sql.MinSchemaChangeLeaseDuration
 	sql.MinSchemaChangeLeaseDuration = 2 * sql.SchemaChangeLeaseDuration
@@ -166,7 +166,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
@@ -179,7 +179,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		stopper,
 		&sql.MemoryMetrics{},
 	)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	changer := sql.NewSchemaChangerForTesting(id, 0, node, *kvDB, leaseMgr)
 
 	if _, err := sqlDB.Exec(`
@@ -318,7 +318,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -588,7 +588,7 @@ func TestRaceWithBackfill(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 	sqlDB := tc.ServerConn(0)
 
@@ -756,7 +756,7 @@ func TestBackfillErrors(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 	sqlDB := tc.ServerConn(0)
 
@@ -916,7 +916,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1182,7 +1182,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1263,7 +1263,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1373,7 +1373,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1486,7 +1486,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// Create a k-v table.
 	if _, err := sqlDB.Exec(`
@@ -1655,7 +1655,7 @@ func TestParseSentinelValueWithNewColumnInSentinelFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1776,7 +1776,7 @@ func TestUpdateDuringColumnBackfill(t *testing.T) {
 		},
 	}
 	server, sqlDB, _ := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1849,7 +1849,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 	sqlDB := tc.ServerConn(0)
 
@@ -1907,7 +1907,7 @@ func TestSchemaChangeInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1977,7 +1977,7 @@ func TestSecondaryIndexWithOldStoringEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+	defer server.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE d;

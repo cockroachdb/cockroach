@@ -80,7 +80,7 @@ func TestSendToOneClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{},
@@ -185,7 +185,7 @@ func TestSendNext_AllSlow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	doneChans, sendChan, stopper := setupSendNextTest(t)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// Now that all replicas have been contacted, let one finish.
 	doneChans[1] <- BatchCall{
@@ -214,7 +214,7 @@ func TestSendNext_RPCErrorThenSuccess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	doneChans, sendChan, stopper := setupSendNextTest(t)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// Now that all replicas have been contacted, let two finish with
 	// retryable errors.
@@ -252,7 +252,7 @@ func TestSendNext_AllRPCErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	doneChans, sendChan, stopper := setupSendNextTest(t)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// All replicas finish with RPC errors.
 	for i := 0; i <= 2; i++ {
@@ -273,7 +273,7 @@ func TestSendNext_RetryableApplicationErrorThenSuccess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	doneChans, sendChan, stopper := setupSendNextTest(t)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// One replica finishes with a retryable error.
 	doneChans[1] <- BatchCall{
@@ -303,7 +303,7 @@ func TestSendNext_AllRetryableApplicationErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	doneChans, sendChan, stopper := setupSendNextTest(t)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// All replicas finish with a retryable error.
 	for _, ch := range doneChans {
@@ -331,7 +331,7 @@ func TestSendNext_NonRetryableApplicationError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	doneChans, sendChan, stopper := setupSendNextTest(t)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// One replica finishes with a non-retryable error.
 	doneChans[1] <- BatchCall{
@@ -389,7 +389,7 @@ func TestComplexScenarios(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	nodeContext := rpc.NewContext(
 		log.AmbientContext{},

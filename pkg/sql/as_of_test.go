@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -40,7 +42,7 @@ func TestAsOfTime(t *testing.T) {
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	const val1 = 1
 	const val2 = 2
@@ -196,7 +198,7 @@ func TestAsOfRetry(t *testing.T) {
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	const val1 = 1
 	const val2 = 2

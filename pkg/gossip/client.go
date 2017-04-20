@@ -87,8 +87,8 @@ func (c *client) startLocked(
 	// (*client).handleResponse once we know the ID.
 	g.outgoing.addPlaceholder()
 
-	stopper.RunWorker(func() {
-		ctx, cancel := context.WithCancel(c.AnnotateCtx(context.Background()))
+	ctx, cancel := context.WithCancel(c.AnnotateCtx(context.Background()))
+	stopper.RunWorker(ctx, func(ctx context.Context) {
 		var wg sync.WaitGroup
 		defer func() {
 			// This closes the outgoing stream, causing any attempt to send or
@@ -305,7 +305,7 @@ func (c *client) gossip(
 	// This wait group is used to allow the caller to wait until gossip
 	// processing is terminated.
 	wg.Add(1)
-	stopper.RunWorker(func() {
+	stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer wg.Done()
 
 		errCh <- func() error {

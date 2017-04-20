@@ -56,7 +56,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	cfg, ok := tc.gossip.GetSystemConfig()
@@ -166,7 +166,7 @@ func TestGCQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	tc.manualClock.Increment(48 * 60 * 60 * 1E9) // 2d past the epoch
@@ -457,7 +457,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		}
 	tc := testContext{manualClock: manual}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	outsideKey := tc.repl.Desc().EndKey.Next().AsRawKey()
@@ -571,7 +571,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	tc.manualClock.Set(48 * 60 * 60 * 1E9) // 2d past the epoch
@@ -636,7 +636,7 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	// Create two last processed times both at the range start key and

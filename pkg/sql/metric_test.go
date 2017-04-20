@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -46,7 +48,7 @@ func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
@@ -129,7 +131,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 
 	params, cmdFilters := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec("CREATE DATABASE db"); err != nil {
 		t.Fatal(err)
@@ -189,7 +191,7 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	txn, err := sqlDB.Begin()
 	if err != nil {

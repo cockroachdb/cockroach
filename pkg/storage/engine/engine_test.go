@@ -60,7 +60,7 @@ var (
 // invokes the supplied test func with each instance.
 func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	inMem := NewInMem(inMemAttrs, testCacheSize)
 	stopper.AddCloser(inMem)
 	test(inMem, t)

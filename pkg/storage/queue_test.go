@@ -131,7 +131,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
@@ -248,7 +248,7 @@ func TestBaseQueueAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	r, err := tc.store.GetReplica(1)
@@ -285,7 +285,7 @@ func TestBaseQueueProcess(t *testing.T) {
 	tsc := TestStoreConfig(nil)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
@@ -368,7 +368,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	r, err := tc.store.GetReplica(1)
@@ -410,7 +410,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	s, _ := createTestStore(t, stopper)
 
 	maxWontSplitAddr, err := keys.Addr(keys.SystemPrefix)
@@ -541,7 +541,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	tsc := TestStoreConfig(nil)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	testQueue := &testQueueImpl{
@@ -692,7 +692,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	r, err := tc.store.GetReplica(1)
@@ -749,7 +749,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	r, err := tc.store.GetReplica(1)
@@ -820,7 +820,7 @@ func TestBaseQueueDisable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	r, err := tc.store.GetReplica(1)

@@ -43,7 +43,7 @@ func TestServerQuery(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	tsrv := s.(*server.TestServer)
 
 	// Populate data directly.
@@ -261,7 +261,7 @@ func TestServerQueryStarvation(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		TimeSeriesQueryWorkerMax: workerCount,
 	})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	tsrv := s.(*server.TestServer)
 
 	seriesCount := workerCount * 2
@@ -293,7 +293,7 @@ func TestServerQueryStarvation(t *testing.T) {
 
 func BenchmarkServerQuery(b *testing.B) {
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	tsrv := s.(*server.TestServer)
 
 	// Populate data for large number of time series.

@@ -45,14 +45,16 @@ func ListenAndServeGRPC(
 		return ln, err
 	}
 
-	stopper.RunWorker(func() {
+	ctx := context.TODO()
+
+	stopper.RunWorker(ctx, func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		FatalIfUnexpected(ln.Close())
 		<-stopper.ShouldStop()
 		server.Stop()
 	})
 
-	stopper.RunWorker(func() {
+	stopper.RunWorker(ctx, func(context.Context) {
 		FatalIfUnexpected(server.Serve(ln))
 	})
 	return ln, nil
@@ -88,13 +90,15 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 		},
 	}
 
+	ctx := context.TODO()
+
 	// net/http.(*Server).Serve/http2.ConfigureServer are not thread safe with
 	// respect to net/http.(*Server).TLSConfig, so we call it synchronously here.
 	if err := http2.ConfigureServer(server.Server, nil); err != nil {
-		log.Fatal(context.TODO(), err)
+		log.Fatal(ctx, err)
 	}
 
-	stopper.RunWorker(func() {
+	stopper.RunWorker(ctx, func(context.Context) {
 		<-stopper.ShouldStop()
 
 		mu.Lock()
@@ -108,7 +112,9 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 }
 
 // ServeWith accepts connections on ln and serves them using serveConn.
-func (s *Server) ServeWith(stopper *stop.Stopper, l net.Listener, serveConn func(net.Conn)) error {
+func (s *Server) ServeWith(
+	ctx context.Context, stopper *stop.Stopper, l net.Listener, serveConn func(net.Conn),
+) error {
 	// Inspired by net/http.(*Server).Serve
 	var tempDelay time.Duration // how long to sleep on accept failure
 	for {
@@ -131,7 +137,7 @@ func (s *Server) ServeWith(stopper *stop.Stopper, l net.Listener, serveConn func
 		}
 		tempDelay = 0
 		go func() {
-			defer stopper.Recover()
+			defer stopper.Recover(ctx)
 			s.Server.ConnState(rw, http.StateNew) // before Serve can return
 			serveConn(rw)
 			s.Server.ConnState(rw, http.StateClosed)
