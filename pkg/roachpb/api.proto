@@ -542,7 +542,8 @@ message QueryTxnRequest {
 // A QueryTxnResponse is the return value from the QueryTxn() method.
 message QueryTxnResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Contains the current state of the queried transaction.
+  // Contains the current state of the queried transaction. If the queried
+  // transaction record does not exist, this will be empty.
   optional Transaction queried_txn = 2 [(gogoproto.nullable) = false];
   // Specifies a list of transaction IDs which are waiting on the txn.
   repeated bytes waiting_txns = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];

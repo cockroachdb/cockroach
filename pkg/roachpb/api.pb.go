@@ -1009,7 +1009,8 @@ func (*QueryTxnRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi,
 // A QueryTxnResponse is the return value from the QueryTxn() method.
 type QueryTxnResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	// Contains the current state of the queried transaction.
+	// Contains the current state of the queried transaction. If the queried
+	// transaction record does not exist, this will be empty.
 	QueriedTxn Transaction `protobuf:"bytes,2,opt,name=queried_txn,json=queriedTxn" json:"queried_txn"`
 	// Specifies a list of transaction IDs which are waiting on the txn.
 	WaitingTxns []github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,3,rep,name=waiting_txns,json=waitingTxns,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"waiting_txns,omitempty"`
