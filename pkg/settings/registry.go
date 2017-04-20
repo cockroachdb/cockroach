@@ -15,9 +15,209 @@
 package settings
 
 import (
+	"fmt"
+	"math"
+	"sort"
 	"sync/atomic"
 	"time"
 )
+
+// Setting implementions wrap a val with atomic access.
+type Setting interface {
+	setToDefault()
+	// Typ returns the short (1 char) string denoting the type of setting.
+	Typ() string
+	String() string
+}
+
+// BoolSetting is the interface of a setting variable that will be
+// updated automatically when the corresponding cluster-wide setting
+// of type "bool" is updated.
+type BoolSetting struct {
+	defaultValue bool
+	v            int32
+}
+
+// Get retrieves the bool value in the setting.
+func (b *BoolSetting) Get() bool {
+	return atomic.LoadInt32(&b.v) != 0
+}
+
+func (b *BoolSetting) String() string {
+	return EncodeBool(b.Get())
+}
+
+// Typ returns the short (1 char) string denoting the type of setting.
+func (*BoolSetting) Typ() string {
+	return "b"
+}
+
+func (b *BoolSetting) set(v bool) {
+	if v {
+		atomic.StoreInt32(&b.v, 1)
+	} else {
+		atomic.StoreInt32(&b.v, 0)
+	}
+}
+
+func (b *BoolSetting) setToDefault() {
+	b.set(b.defaultValue)
+}
+
+// RegisterBoolSetting defines a new setting with type bool.
+func RegisterBoolSetting(key, desc string, defVal bool) *BoolSetting {
+	setting := &BoolSetting{defaultValue: defVal}
+	register(key, desc, setting)
+	return setting
+}
+
+// IntSetting is the interface of a setting variable that will be
+// updated automatically when the corresponding cluster-wide setting
+// of type "int" is updated.
+type IntSetting struct {
+	defaultValue int
+	v            int64
+}
+
+// Get retrieves the int value in the setting.
+func (i *IntSetting) Get() int {
+	return int(atomic.LoadInt64(&i.v))
+}
+
+func (i *IntSetting) String() string {
+	return EncodeInt(i.Get())
+}
+
+// Typ returns the short (1 char) string denoting the type of setting.
+func (*IntSetting) Typ() string {
+	return "i"
+}
+
+func (i *IntSetting) set(v int) {
+	atomic.StoreInt64(&i.v, int64(v))
+}
+
+func (i *IntSetting) setToDefault() {
+	i.set(i.defaultValue)
+}
+
+// RegisterIntSetting defines a new setting with type int.
+func RegisterIntSetting(key, desc string, defVal int) *IntSetting {
+	setting := &IntSetting{defaultValue: defVal}
+	register(key, desc, setting)
+	return setting
+}
+
+// FloatSetting is the interface of a setting variable that will be
+// updated automatically when the corresponding cluster-wide setting
+// of type "float" is updated.
+type FloatSetting struct {
+	defaultValue float64
+	v            uint64
+}
+
+// Get retrieves the float value in the setting.
+func (f *FloatSetting) Get() float64 {
+	return math.Float64frombits(atomic.LoadUint64(&f.v))
+}
+
+func (f *FloatSetting) String() string {
+	return EncodeFloat(f.Get())
+}
+
+// Typ returns the short (1 char) string denoting the type of setting.
+func (*FloatSetting) Typ() string {
+	return "f"
+}
+
+func (f *FloatSetting) set(v float64) {
+	atomic.StoreUint64(&f.v, math.Float64bits(v))
+}
+
+func (f *FloatSetting) setToDefault() {
+	f.set(f.defaultValue)
+}
+
+// RegisterFloatSetting defines a new setting with type float.
+func RegisterFloatSetting(key, desc string, defVal float64) *FloatSetting {
+	setting := &FloatSetting{defaultValue: defVal}
+	register(key, desc, setting)
+	return setting
+}
+
+// DurationSetting is the interface of a setting variable that will be
+// updated automatically when the corresponding cluster-wide setting
+// of type "duration" is updated.
+type DurationSetting struct {
+	defaultValue time.Duration
+	v            int64
+}
+
+// Get retrieves the duration value in the setting.
+func (d *DurationSetting) Get() time.Duration {
+	return time.Duration(atomic.LoadInt64(&d.v))
+}
+
+func (d *DurationSetting) String() string {
+	return EncodeDuration(d.Get())
+}
+
+// Typ returns the short (1 char) string denoting the type of setting.
+func (*DurationSetting) Typ() string {
+	return "d"
+}
+
+func (d *DurationSetting) set(v time.Duration) {
+	atomic.StoreInt64(&d.v, int64(v))
+}
+
+func (d *DurationSetting) setToDefault() {
+	d.set(d.defaultValue)
+}
+
+// RegisterDurationSetting defines a new setting with type duration.
+func RegisterDurationSetting(key, desc string, defVal time.Duration) *DurationSetting {
+	setting := &DurationSetting{defaultValue: defVal}
+	register(key, desc, setting)
+	return setting
+}
+
+// StringSetting is the interface of a setting variable that will be
+// updated automatically when the corresponding cluster-wide setting
+// of type "string" is updated.
+type StringSetting struct {
+	defaultValue string
+	v            atomic.Value
+}
+
+func (s *StringSetting) String() string {
+	return s.Get()
+}
+
+// Typ returns the short (1 char) string denoting the type of setting.
+func (*StringSetting) Typ() string {
+	return "s"
+}
+
+// Get retrieves the string value in the setting.
+func (s *StringSetting) Get() string {
+	return s.v.Load().(string)
+}
+
+func (s *StringSetting) set(v string) {
+	s.v.Store(v)
+}
+
+func (s *StringSetting) setToDefault() {
+	s.set(s.defaultValue)
+}
+
+// RegisterStringSetting defines a new setting with type string.
+func RegisterStringSetting(key, desc string, defVal string) *StringSetting {
+	setting := &StringSetting{defaultValue: defVal}
+	register(key, desc, setting)
+	return setting
+}
 
 // registry contains all defined settings, their types and default values.
 //
@@ -26,7 +226,7 @@ import (
 //
 // Registry should never be mutated after init (except in tests), as it is read
 // concurrently by different callers.
-var registry = map[string]Value{}
+var registry = map[string]wrappedSetting{}
 
 // frozen becomes non-zero once the registry is "live".
 // This must be accessed atomically because test clusters spawn multiple
@@ -38,27 +238,42 @@ var frozen int32
 // has started. See settingsworker.go.
 func Freeze() { atomic.StoreInt32(&frozen, 1) }
 
+// register adds a setting to the registry.
+func register(key, desc string, s Setting) {
+	if atomic.LoadInt32(&frozen) > 0 {
+		panic(fmt.Sprintf("registration must occur before server start: %s", key))
+	}
+	if _, ok := registry[key]; ok {
+		panic(fmt.Sprintf("setting already defined: %s", key))
+	}
+	s.setToDefault()
+	registry[key] = wrappedSetting{description: desc, setting: s}
+}
+
 // Value holds the (parsed, typed) value of a setting.
 // raw settings are stored in system.settings as human-readable strings, but are
 // cached interally after parsing in these appropriately typed fields (which is
 // basically a poor-man's union, without boxing).
-type Value struct {
-	Typ         ValueType
-	Description string
-	// Exactly one of these will be set, determined by typ.
-	S string
-	B bool
-	I int
-	F float64
-	D time.Duration
-
-	// This is called, if it is defined, whenever the settings are
-	// updated asynchronously.
-	asyncUpdate func()
+type wrappedSetting struct {
+	description string
+	setting     Setting
 }
 
-// TypeOf returns the type of a setting, if it is defined.
-func TypeOf(key string) (ValueType, bool) {
-	d, ok := registry[key]
-	return d.Typ, ok
+// Keys returns a sorted string array with all the known keys.
+func Keys() (res []string) {
+	res = make([]string, 0, len(registry))
+	for k := range registry {
+		res = append(res, k)
+	}
+	sort.Strings(res)
+	return res
+}
+
+// Lookup returns a Setting by name along with its description.
+func Lookup(name string) (Setting, string, bool) {
+	v, ok := registry[name]
+	if !ok {
+		return nil, "", false
+	}
+	return v.setting, v.description, true
 }
