@@ -113,6 +113,15 @@ func (l *legacyTransportAdapter) IsExhausted() bool {
 	return l.called
 }
 
+func (l *legacyTransportAdapter) SendNextTimeout(
+	defaultTimeout time.Duration,
+) (time.Duration, bool) {
+	if l.IsExhausted() {
+		return 0, false
+	}
+	return defaultTimeout, true
+}
+
 func (l *legacyTransportAdapter) SendNext(ctx context.Context, done chan<- BatchCall) {
 	l.called = true
 	br, err := l.fn(ctx, l.opts, l.replicas, l.args, l.rpcContext)
@@ -1902,6 +1911,15 @@ type slowLeaseHolderTransport struct {
 
 func (t *slowLeaseHolderTransport) IsExhausted() bool {
 	return t.sendCount > t.replicaCount
+}
+
+func (t *slowLeaseHolderTransport) SendNextTimeout(
+	defaultTimeout time.Duration,
+) (time.Duration, bool) {
+	if t.IsExhausted() {
+		return 0, false
+	}
+	return defaultTimeout, true
 }
 
 func (t *slowLeaseHolderTransport) SendNext(_ context.Context, done chan<- BatchCall) {

@@ -436,6 +436,15 @@ func (t *multiTestContextKVTransport) IsExhausted() bool {
 	return t.idx == len(t.replicas)
 }
 
+func (t *multiTestContextKVTransport) SendNextTimeout(
+	defaultTimeout time.Duration,
+) (time.Duration, bool) {
+	if t.IsExhausted() {
+		return 0, false
+	}
+	return defaultTimeout, true
+}
+
 func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- kv.BatchCall) {
 	rep := t.replicas[t.idx]
 	t.idx++
