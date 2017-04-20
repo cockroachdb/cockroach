@@ -3652,31 +3652,7 @@ func (r *Replica) processRaftCommand(
 	var writeBatch *storagebase.WriteBatch
 	{
 		if raftCmd.ReplicatedEvalResult == nil && forcedErr == nil {
-			// If not proposer-evaluating, then our raftCmd consists only of
-			// the BatchRequest and some metadata.
-			innerResult, pErr := r.evaluateProposal(
-				ctx,
-				idKey,
-				*raftCmd.BatchRequest,
-				nil,
-			)
-			// Then, change the raftCmd to reflect the result of the
-			// evaluation, filling in the EvalResult (which is now properly
-			// populated, including a WriteBatch, and does not contain the
-			// BatchRequest any more).
-			//
-			// Note that this (intentionally) overwrites the LocalEvalResult,
-			// so we must salvage the done channel if we have a client waiting
-			// on it.
-			raftCmd.ReplicatedEvalResult = &innerResult.Replicated
-			writeBatch = innerResult.WriteBatch
-			if proposedLocally {
-				proposal.Local = &innerResult.Local
-			}
-			// Proposals which would failfast with proposer-evaluated KV now
-			// go this route, writing an empty entry and returning this error
-			// to the client.
-			forcedErr = pErr
+			panic("non-proposer-evaluated command found in raft log")
 		}
 
 		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; forcedErr == nil && filter != nil && raftCmd.ReplicatedEvalResult != nil {
