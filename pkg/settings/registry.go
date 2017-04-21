@@ -20,6 +20,8 @@ import (
 	"sort"
 	"sync/atomic"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 )
 
 // Setting implementions wrap a val with atomic access.
@@ -269,6 +271,10 @@ type ByteSizeSetting struct {
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*ByteSizeSetting) Typ() string {
 	return "z"
+}
+
+func (b *ByteSizeSetting) String() string {
+	return humanizeutil.IBytes(b.Get())
 }
 
 // RegisterByteSizeSetting defines a new setting with type bytesize.
