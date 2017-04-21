@@ -317,7 +317,7 @@ GRANT ALL ON system.lease TO testuser
 query T
 select name from system.settings
 ----
-diagnostics.reporting
+diagnostics.reporting.enabled
 
 statement ok
 INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
@@ -325,7 +325,7 @@ INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
 query TT
 select name, value from system.settings order by name
 ----
-diagnostics.reporting  true
+diagnostics.reporting.enabled  true
 somesetting   somevalue
 
 user testuser
