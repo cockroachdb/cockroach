@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -46,14 +47,16 @@ type stmtStats struct {
 
 // StmtStatsEnable determines whether to collect per-statement
 // statistics.
-var StmtStatsEnable = envutil.EnvOrDefaultBool(
-	"COCKROACH_SQL_STMT_STATS_ENABLE", true,
+var StmtStatsEnable = settings.RegisterBoolSetting(
+	"sql.metrics.statements_details.enabled", "collect per-statement query statistics ", true,
 )
 
 // SQLStatsCollectionLatencyThreshold specifies the minimum amount of time
 // consumed by a SQL statement before it is collected for statistics reporting.
-var SQLStatsCollectionLatencyThreshold = envutil.EnvOrDefaultFloat(
-	"COCKROACH_SQL_STATS_SVCLAT_THRESHOLD", 0,
+var SQLStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
+	"sql.metrics.statements_details.threshold",
+	"minmum execution time to cause statics to be collected",
+	0,
 )
 
 func (a *appStats) recordStatement(
@@ -64,11 +67,11 @@ func (a *appStats) recordStatement(
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 ) {
-	if a == nil || !StmtStatsEnable {
+	if a == nil || !StmtStatsEnable.Get() {
 		return
 	}
 
-	if svcLat < SQLStatsCollectionLatencyThreshold {
+	if t := SQLStatsCollectionLatencyThreshold.Get(); t > 0 && t.Seconds() >= svcLat {
 		return
 	}
 
@@ -170,6 +173,12 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	return a
 }
 
+var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
+	"sql.metrics.statement_details.dump_to_logs",
+	"dump collected statement statistics to node logs when periodically cleared",
+	false,
+)
+
 // resetStats clears all the stored per-app and per-statement
 // statistics.
 func (s *sqlStats) resetStats(ctx context.Context) {
@@ -197,7 +206,9 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 		// TODO(knz/dt): instead of dumping the stats to the log, save
 		// them in a SQL table so they can be inspected by the DBA and/or
 		// the UI.
-		dumpStmtStats(ctx, appName, a.stmts)
+		if dumpStmtStatsToLogBeforeReset.Get() {
+			dumpStmtStats(ctx, appName, a.stmts)
+		}
 
 		// Clear the map, to release the memory; make the new map somewhat
 		// already large for the likely future workload.
