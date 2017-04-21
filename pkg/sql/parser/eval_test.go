@@ -853,6 +853,9 @@ func TestEval(t *testing.T) {
 		{`'NaN'::decimal::float`, `NaN`},
 		{`'NaN'::float::decimal`, `NaN`},
 	}
+	ctx := NewTestingEvalContext()
+	defer ctx.Mon.Stop(context.Background())
+	defer ctx.ActiveMemAcc.Close(context.Background())
 	for _, d := range testData {
 		expr, err := ParseExpr(d.expr)
 		if err != nil {
@@ -863,8 +866,8 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		ctx := NewTestingEvalContext()
-		defer ctx.Mon.Stop(context.Background())
+		// We have to manually close this account because we're doing the evaluations
+		// ourselves.
 		if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

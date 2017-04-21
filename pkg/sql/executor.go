@@ -1412,6 +1412,12 @@ func (e *Executor) execStmtInOpenTxn(
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
+	// constantMemAcc accounts for all constant folded values that are computed
+	// prior to any rows being computed.
+	constantMemAcc := p.evalCtx.Mon.MakeBoundAccount()
+	p.evalCtx.ActiveMemAcc = &constantMemAcc
+	defer constantMemAcc.Close(session.Ctx())
+
 	var result Result
 	if runInParallel {
 		// Only run statements asynchronously through the parallelize queue if the
@@ -1550,6 +1556,15 @@ func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) 
 // implementation.
 func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) error {
 	ctx := planner.session.Ctx()
+	rowAcc := planner.evalCtx.Mon.MakeBoundAccount()
+	planner.evalCtx.ActiveMemAcc = &rowAcc
+	// We enclose this in a func because in the parser.Rows case we swap out the
+	// account, so we want to ensure that we close the currently active account at
+	// the conclusion of this function.
+	defer func() {
+		planner.evalCtx.ActiveMemAcc.Close(ctx)
+	}()
+
 	if err := planner.startPlan(ctx, plan); err != nil {
 		return err
 	}
@@ -1565,6 +1580,10 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 	case parser.Rows:
 		next, err := plan.Next(ctx)
 		for ; next; next, err = plan.Next(ctx) {
+			planner.evalCtx.ActiveMemAcc.Close(ctx)
+			rowAcc = planner.evalCtx.Mon.MakeBoundAccount()
+			planner.evalCtx.ActiveMemAcc = &rowAcc
+
 			// The plan.Values Datums needs to be copied on each iteration.
 			values := plan.Values()
 
