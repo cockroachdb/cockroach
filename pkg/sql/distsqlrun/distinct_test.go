@@ -17,10 +17,8 @@
 package distsqlrun
 
 import (
-	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -134,39 +132,41 @@ func TestDistinct(t *testing.T) {
 		},
 	}
 
-	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
-	defer monitor.Stop(context.Background())
 	for _, c := range testCases {
-		ds := c.spec
+		t.Run("", func(t *testing.T) {
+			ds := c.spec
 
-		in := NewRowBuffer(nil /* types */, c.input, RowBufferArgs{})
-		out := &RowBuffer{}
+			in := NewRowBuffer(nil /* types */, c.input, RowBufferArgs{})
+			out := &RowBuffer{}
 
-		flowCtx := FlowCtx{evalCtx: parser.EvalContext{Mon: &monitor}}
+			evalCtx := parser.MakeTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
+			flowCtx := FlowCtx{evalCtx: evalCtx}
 
-		d, err := newDistinct(&flowCtx, &ds, in, &PostProcessSpec{}, out)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		d.Run(context.Background(), nil)
-		if !out.ProducerClosed {
-			t.Fatalf("output RowReceiver not closed")
-		}
-		var res sqlbase.EncDatumRows
-		for {
-			row, meta := out.Next()
-			if !meta.Empty() {
-				t.Fatalf("unexpected metadata: %v", meta)
+			d, err := newDistinct(&flowCtx, &ds, in, &PostProcessSpec{}, out)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if row == nil {
-				break
-			}
-			res = append(res, row)
-		}
 
-		if result := res.String(); result != c.expected.String() {
-			t.Errorf("invalid results: %s, expected %s'", result, c.expected.String())
-		}
+			d.Run(context.Background(), nil)
+			if !out.ProducerClosed {
+				t.Fatalf("output RowReceiver not closed")
+			}
+			var res sqlbase.EncDatumRows
+			for {
+				row, meta := out.Next()
+				if !meta.Empty() {
+					t.Fatalf("unexpected metadata: %v", meta)
+				}
+				if row == nil {
+					break
+				}
+				res = append(res, row)
+			}
+
+			if result := res.String(); result != c.expected.String() {
+				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String())
+			}
+		})
 	}
 }
