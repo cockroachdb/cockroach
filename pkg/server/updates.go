@@ -208,7 +208,7 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 	return true
 }
 
-// "diagnostics.reporting" enables reporting of metrics related to a
+// "diagnostics.reporting.enabled" enables reporting of metrics related to a
 // node's storage (number, size and health of ranges) back to CockroachDB.
 // Collecting this data from production clusters helps us understand and improve
 // how our storage systems behave in real-world use cases.
@@ -221,7 +221,7 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 // Doing this, rather than just using a default of `true`, means that a node
 // will not errantly send a report using a default before loading settings.
 var diagnosticsReportingEnabled = settings.RegisterBoolSetting(
-	"diagnostics.reporting", "enable reporting diagnostic metrics to cockroach labs", false,
+	"diagnostics.reporting.enabled", "enable reporting diagnostic metrics to cockroach labs", false,
 )
 
 func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Duration) time.Time {

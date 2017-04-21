@@ -366,7 +366,7 @@ func createSettingsTable(ctx context.Context, r runner) error {
 var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
 
 func optIntToDiagnosticsStatReporting(ctx context.Context, r runner) error {
-	const setStmt = "SET CLUSTER SETTING diagnostics.reporting = true"
+	const setStmt = "SET CLUSTER SETTING diagnostics.reporting.enabled = true"
 
 	// We're opting-out of the automatic opt-in. See discussion in updates.go.
 	if reportingOptOut {
