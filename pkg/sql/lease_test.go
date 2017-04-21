@@ -857,3 +857,46 @@ INSERT INTO d.kv2 (k,v) VALUES ('c', 'd');
 		t.Fatalf("err = %s", err)
 	}
 }
+
+// Test that a transaction cannot use a table lease referencing a table
+// descriptor written after the transaction timestamp.
+func TestCantUseFutureTableLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE d;
+CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// acquire a timestamp for the txn.
+	if _, err := tx.Exec(`INSERT INTO d.kv (k,v) VALUES ('a', 'b');`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Table created after the txn timestamp.
+	if _, err := sqlDB.Exec(`
+CREATE TABLE d.kv2 (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`
+INSERT INTO d.kv2 (k,v) VALUES ('a', 'b');
+`); !testutils.IsError(err, "table 52 unable to acquire lease") {
+		t.Fatalf("err = %s", err)
+	}
+
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
