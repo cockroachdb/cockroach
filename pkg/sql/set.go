@@ -160,7 +160,7 @@ func (p *planner) toSettingString(
 	case *settings.IntSetting:
 		return typeCheckAndParse(parser.TypeInt, func(d parser.Datum) (string, error) {
 			if i, ok := d.(*parser.DInt); ok {
-				return settings.EncodeInt(int(*i)), nil
+				return settings.EncodeInt(int64(*i)), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for int setting", d.ResolvedType(), d)
 		})

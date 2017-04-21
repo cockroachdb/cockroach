@@ -50,7 +50,7 @@ func TestSettingsRefresh(t *testing.T) {
 	if expected, actual := "<default>", strA.Get(); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
-	if expected, actual := 1, intA.Get(); expected != actual {
+	if expected, actual := int64(1), intA.Get(); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
@@ -62,7 +62,7 @@ func TestSettingsRefresh(t *testing.T) {
 		if expected, actual := "foo", strA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2, intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -85,7 +85,7 @@ func TestSettingsRefresh(t *testing.T) {
 		if expected, actual := "qux", strA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2, intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -97,7 +97,7 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "after-invalid", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := 2, intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := "after-invalid", strA.Get(); expected != actual {
@@ -111,7 +111,7 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "after-mistype", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := 2, intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := "after-mistype", strA.Get(); expected != actual {

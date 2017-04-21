@@ -32,8 +32,8 @@ func EncodeBool(b bool) string {
 }
 
 // EncodeInt encodes an int in the format parseRaw expects.
-func EncodeInt(i int) string {
-	return strconv.Itoa(i)
+func EncodeInt(i int64) string {
+	return strconv.FormatInt(i, 10)
 }
 
 // EncodeFloat encodes a bool in the format parseRaw expects.
@@ -82,8 +82,7 @@ func (u Updater) Set(key, rawValue, vt string) error {
 		if err != nil {
 			return err
 		}
-		setting.set(i)
-
+		setting.set(int64(i))
 	case *FloatSetting:
 		f, err := strconv.ParseFloat(rawValue, 64)
 		if err != nil {
