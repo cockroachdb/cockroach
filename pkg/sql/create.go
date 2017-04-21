@@ -1543,7 +1543,7 @@ func makeCheckConstraint(
 		return nil, err
 	}
 
-	if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK", searchPath); err != nil {
+	if _, err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK", searchPath); err != nil {
 		return nil, err
 	}
 	if generateName {
