@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -3180,10 +3181,16 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, toStoreID roachpb.StoreID)
 }
 
-var preemptiveSnapshotRate = envutil.EnvOrDefaultBytes(
-	"COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 2<<20 /* 2 MB */)
-var raftSnapshotRate = envutil.EnvOrDefaultBytes(
-	"COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20 /* 8 MB */)
+const megabyte = float64(1 << 20)
+
+var rebalanceSnapshotRate = settings.RegisterFloatSetting(
+	"kv.snapshot.rebalance.rate",
+	"the rate limit (MB/sec) to use for rebalance snapshots",
+	envutil.EnvOrDefaultFloat("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 2<<20)/megabyte)
+var recoverySnapshotRate = settings.RegisterFloatSetting(
+	"kv.snapshot.recovery.rate",
+	"the rate limit (MB/sec) to use for recovery snapshots",
+	envutil.EnvOrDefaultFloat("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20)/megabyte)
 
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
@@ -3235,6 +3242,10 @@ func sendSnapshot(
 	// The size of batches to send. This is the granularity of rate limiting.
 	const batchSize = 256 << 10 // 256 KB
 
+	targetRate := rate.Limit(int64(recoverySnapshotRate.Get() * megabyte))
+	if header.CanDecline {
+		targetRate = rate.Limit(int64(rebalanceSnapshotRate.Get() * megabyte))
+	}
 	// Convert the bytes/sec rate limit to batches/sec.
 	//
 	// TODO(peter): Using bytes/sec for rate limiting seems more natural but has
@@ -3242,11 +3253,7 @@ func sendSnapshot(
 	// which seems to disable the rate limiting, or call WaitN in smaller than
 	// burst size chunks which caused excessive slowness in testing. Would be
 	// nice to figure this out, but the batches/sec rate limit works for now.
-	targetRate := rate.Limit(raftSnapshotRate) / batchSize
-	if header.CanDecline {
-		targetRate = rate.Limit(preemptiveSnapshotRate) / batchSize
-	}
-	limiter := rate.NewLimiter(targetRate, 1 /* burst size */)
+	limiter := rate.NewLimiter(targetRate/batchSize, 1 /* burst size */)
 
 	// Determine the unreplicated key prefix so we can drop any
 	// unreplicated keys from the snapshot.
