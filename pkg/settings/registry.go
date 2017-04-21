@@ -78,6 +78,11 @@ func TestingBoolSetting(b bool) *BoolSetting {
 	return s
 }
 
+type numericSetting interface {
+	Setting
+	set(i int64)
+}
+
 // IntSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
 // of type "int" is updated.
@@ -250,6 +255,32 @@ func RegisterStringSetting(key, desc string, defVal string) *StringSetting {
 // TestingStringSetting returns a mock, unregistered string setting for testing.
 func TestingStringSetting(v string) *StringSetting {
 	s := &StringSetting{defaultValue: v}
+	s.setToDefault()
+	return s
+}
+
+// ByteSizeSetting is the interface of a setting variable that will be
+// updated automatically when the corresponding cluster-wide setting
+// of type "bytesize" is updated.
+type ByteSizeSetting struct {
+	IntSetting
+}
+
+// Typ returns the short (1 char) string denoting the type of setting.
+func (*ByteSizeSetting) Typ() string {
+	return "z"
+}
+
+// RegisterByteSizeSetting defines a new setting with type bytesize.
+func RegisterByteSizeSetting(key, desc string, defVal int64) *ByteSizeSetting {
+	setting := &ByteSizeSetting{IntSetting{defaultValue: defVal}}
+	register(key, desc, setting)
+	return setting
+}
+
+// TestingByteSizeSetting returns a mock bytesize setting for testing.
+func TestingByteSizeSetting(i int64) *ByteSizeSetting {
+	s := &ByteSizeSetting{IntSetting{defaultValue: i}}
 	s.setToDefault()
 	return s
 }
