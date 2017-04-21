@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
+const mb = int64(1024 * 1024)
+
 var boolTA = RegisterBoolSetting("bool.t", "", true)
 var boolFA = RegisterBoolSetting("bool.f", "", false)
 var strFooA = RegisterStringSetting("str.foo", "", "")
@@ -29,6 +31,7 @@ var i1A = RegisterIntSetting("i.1", "", 0)
 var i2A = RegisterIntSetting("i.2", "", 5)
 var fA = RegisterFloatSetting("f", "", 5.4)
 var dA = RegisterDurationSetting("d", "", time.Second)
+var byteSize = RegisterByteSizeSetting("zzz", "", mb)
 
 func TestCache(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
@@ -54,6 +57,9 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := time.Second, dA.Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := mb, byteSize.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})
@@ -93,6 +99,9 @@ func TestCache(t *testing.T) {
 		if err := u.Set("d", EncodeDuration(2*time.Hour), "d"); err != nil {
 			t.Fatal(err)
 		}
+		if err := u.Set("zzz", EncodeInt(mb*5), "z"); err != nil {
+			t.Fatal(err)
+		}
 		u.Done()
 
 		if expected, actual := false, boolTA.Get(); expected != actual {
@@ -111,6 +120,9 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 2*time.Hour, dA.Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := mb*5, byteSize.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
@@ -207,6 +219,9 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := time.Hour, TestingDurationSetting(time.Hour).Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := mb*10, TestingByteSizeSetting(mb*10).Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 

@@ -70,14 +70,13 @@ func (u Updater) Set(key, rawValue, vt string) error {
 	switch setting := d.setting.(type) {
 	case *StringSetting:
 		setting.set(rawValue)
-
 	case *BoolSetting:
 		b, err := strconv.ParseBool(rawValue)
 		if err != nil {
 			return err
 		}
 		setting.set(b)
-	case *IntSetting:
+	case numericSetting:
 		i, err := strconv.Atoi(rawValue)
 		if err != nil {
 			return err
