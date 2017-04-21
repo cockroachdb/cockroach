@@ -211,7 +211,6 @@ func TestRandomBinaryDecimal(t *testing.T) {
 			t.Fatal(buf.err)
 		}
 		evalCtx := parser.NewTestingEvalContext()
-		defer evalCtx.Mon.Stop(context.Background())
 		if got := buf.wrapped.Bytes(); !bytes.Equal(got, test.Expect) {
 			t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
 		} else if datum, err := decodeOidDatum(oid.T_numeric, formatBinary, got[4:]); err != nil {
@@ -219,5 +218,6 @@ func TestRandomBinaryDecimal(t *testing.T) {
 		} else if dec.Compare(evalCtx, datum) != 0 {
 			t.Errorf("%q: expected %s, got %s", test.In, dec, datum)
 		}
+		evalCtx.Mon.Stop(context.Background())
 	}
 }

@@ -291,6 +291,9 @@ func TestSimplifyExpr(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Mon.Stop(context.Background())
 			sel := makeSelectNode(t)
+			// We need to manually close this memory account because we're doing the
+			// evals ourselves here.
+			defer evalCtx.ActiveMemAcc.Close(context.Background())
 			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr, equiv := simplifyExpr(evalCtx, expr)
 			if s := expr.String(); d.expected != s {

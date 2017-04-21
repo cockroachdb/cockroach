@@ -865,6 +865,9 @@ func TestEval(t *testing.T) {
 		}
 		ctx := NewTestingEvalContext()
 		defer ctx.Mon.Stop(context.Background())
+		// We have to manually close this account because we're doing the evaluations
+		// ourselves.
+		defer ctx.ActiveMemAcc.Close(context.Background())
 		if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

@@ -16,7 +16,9 @@
 
 package parser
 
-import "github.com/pkg/errors"
+import (
+	"github.com/pkg/errors"
+)
 
 type normalizableExpr interface {
 	Expr
@@ -612,6 +614,9 @@ func (v *normalizeVisitor) VisitPost(expr Expr) Expr {
 	if v.err != nil {
 		return expr
 	}
+	// We don't propagate errors during this step because errors might involve a
+	// branch of code that isn't traversed by normal execution (for example,
+	// IF(2 = 2, 1, 1 / 0)).
 
 	// Normalize expressions that know how to normalize themselves.
 	if normalizable, ok := expr.(normalizableExpr); ok {
