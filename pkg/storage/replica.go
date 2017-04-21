@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -94,7 +95,10 @@ var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 
 // TODO(peter): Off by default until we can figure out the performance
 // degradation see on test clusters.
-var syncRaftLog = envutil.EnvOrDefaultBool("COCKROACH_SYNC_RAFT_LOG", false)
+var syncRaftLog = settings.RegisterBoolSetting(
+	"kv.raft.log.sync",
+	"sync Raft log writes to persistent storage",
+	false)
 
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
@@ -2806,7 +2810,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	writer.Close()
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
-	if err := batch.Commit(syncRaftLog && rd.MustSync); err != nil {
+	if err := batch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
 		return stats, err
 	}
 
