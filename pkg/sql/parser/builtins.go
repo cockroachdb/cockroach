@@ -202,6 +202,11 @@ func (b Builtin) DistSQLBlacklist() bool {
 	return b.distsqlBlacklist
 }
 
+// Fn returns the Go function which implements the builtin.
+func (b Builtin) Fn() func(*EvalContext, Datums) (Datum, error) {
+	return b.fn
+}
+
 // FixedReturnType returns a fixed type that the function returns, returning Any
 // if the return type is based on the function's arguments.
 func (b Builtin) FixedReturnType() Type {
@@ -247,30 +252,36 @@ var Builtins = map[string][]Builtin{
 
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
 	"length": {
-		stringBuiltin1(func(s string) (Datum, error) {
+		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDInt(DInt(utf8.RuneCountInString(s))), nil
 		}, TypeInt, "Calculates the number of characters in `val`."),
-		bytesBuiltin1(func(s string) (Datum, error) {
+		bytesBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
 		}, TypeInt, "Calculates the number of bytes in `val`."),
 	},
 
 	"octet_length": {
-		stringBuiltin1(func(s string) (Datum, error) {
+		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
 		}, TypeInt, "Calculates the number of bytes used to represent `val`."),
-		bytesBuiltin1(func(s string) (Datum, error) {
+		bytesBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
 		}, TypeInt, "Calculates the number of bytes in `val`."),
 	},
 
 	// TODO(pmattis): What string functions should also support TypeBytes?
 
-	"lower": {stringBuiltin1(func(s string) (Datum, error) {
+	"lower": {stringBuiltin1(func(evalCtx *EvalContext, s string) (Datum, error) {
+		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
+			return nil, err
+		}
 		return NewDString(strings.ToLower(s)), nil
 	}, TypeString, "Converts all characters in `val`to their lower-case equivalents.")},
 
-	"upper": {stringBuiltin1(func(s string) (Datum, error) {
+	"upper": {stringBuiltin1(func(evalCtx *EvalContext, s string) (Datum, error) {
+		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
+			return nil, err
+		}
 		return NewDString(strings.ToUpper(s)), nil
 	}, TypeString, "Converts all characters in `val`to their to their upper-case equivalents.")},
 
@@ -283,11 +294,15 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      VariadicType{TypeString},
 			ReturnType: fixedReturnType(TypeString),
-			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				var buffer bytes.Buffer
 				for _, d := range args {
 					if d == DNull {
 						continue
+					}
+					nextLength := len(string(MustBeDString(d)))
+					if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(nextLength)); err != nil {
+						return nil, err
 					}
 					buffer.WriteString(string(MustBeDString(d)))
 				}
@@ -301,7 +316,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      VariadicType{TypeString},
 			ReturnType: fixedReturnType(TypeString),
-			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				if len(args) == 0 {
 					return nil, errInsufficientArgs
 				}
@@ -314,6 +329,11 @@ var Builtins = map[string][]Builtin{
 				for _, d := range args[1:] {
 					if d == DNull {
 						continue
+					}
+					nextLength := len(prefix) + len(string(MustBeDString(d)))
+					if err := evalCtx.ActiveMemAcc.Grow(
+						evalCtx.Ctx(), int64(nextLength)); err != nil {
+						return nil, err
 					}
 					// Note: we can't use the range index here because that
 					// would break when the 2nd argument is NULL.
@@ -435,20 +455,17 @@ var Builtins = map[string][]Builtin{
 			Types:            ArgTypes{{"input", TypeString}, {"repeat_counter", TypeInt}},
 			distsqlBlacklist: true,
 			ReturnType:       fixedReturnType(TypeString),
-			fn: func(_ *EvalContext, args Datums) (_ Datum, err error) {
+			fn: func(evalCtx *EvalContext, args Datums) (_ Datum, err error) {
 				s := string(MustBeDString(args[0]))
 				count := int(MustBeDInt(args[1]))
+
 				if count < 0 {
 					count = 0
 				}
-				// Repeat can overflow if len(s) * count is very large. The computation
-				// for the limit about what make can allocate is not trivial, so it's most
-				// accurate to detect it with a recover.
-				defer func() {
-					if r := recover(); r != nil {
-						err = fmt.Errorf("%s", r)
-					}
-				}()
+
+				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s)*count)); err != nil {
+					return nil, err
+				}
 				return NewDString(strings.Repeat(s, count)), nil
 			},
 			Info: "Concatenates `input` `repeat_counter` number of times.<br/><br/>For example, " +
@@ -456,7 +473,7 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	"ascii": {stringBuiltin1(func(s string) (Datum, error) {
+	"ascii": {stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 		for _, ch := range s {
 			return NewDInt(DInt(ch)), nil
 		}
@@ -534,7 +551,7 @@ var Builtins = map[string][]Builtin{
 	},
 
 	// The SQL parser coerces POSITION to STRPOS.
-	"strpos": {stringBuiltin2("input", "find", func(s, substring string) (Datum, error) {
+	"strpos": {stringBuiltin2("input", "find", func(_ *EvalContext, s, substring string) (Datum, error) {
 		index := strings.Index(s, substring)
 		if index < 0 {
 			return DZero, nil
@@ -585,41 +602,44 @@ var Builtins = map[string][]Builtin{
 
 	// The SQL parser coerces TRIM(...) and TRIM(BOTH ...) to BTRIM(...).
 	"btrim": {
-		stringBuiltin2("input", "trim_chars", func(s, chars string) (Datum, error) {
+		stringBuiltin2("input", "trim_chars", func(_ *EvalContext, s, chars string) (Datum, error) {
 			return NewDString(strings.Trim(s, chars)), nil
 		}, TypeString, "Removes any characters included in `trim_chars` from the beginning or end"+
 			" of `input` (applies recursively). <br/><br/>For example, `btrim('doggie', 'eod')` "+
 			"returns `ggi`."),
-		stringBuiltin1(func(s string) (Datum, error) {
+		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDString(strings.TrimSpace(s)), nil
 		}, TypeString, "Removes all spaces from the beginning and end of `val`."),
 	},
 
 	// The SQL parser coerces TRIM(LEADING ...) to LTRIM(...).
 	"ltrim": {
-		stringBuiltin2("input", "trim_chars", func(s, chars string) (Datum, error) {
+		stringBuiltin2("input", "trim_chars", func(_ *EvalContext, s, chars string) (Datum, error) {
 			return NewDString(strings.TrimLeft(s, chars)), nil
 		}, TypeString, "Removes any characters included in `trim_chars` from the beginning "+
 			"(left-hand side) of `input` (applies recursively). <br/><br/>For example, "+
 			"`ltrim('doggie', 'od')` returns `ggie`."),
-		stringBuiltin1(func(s string) (Datum, error) {
+		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
 		}, TypeString, "Removes all spaces from the beginning (left-hand side) of `val`."),
 	},
 
 	// The SQL parser coerces TRIM(TRAILING ...) to RTRIM(...).
 	"rtrim": {
-		stringBuiltin2("input", "trim_chars", func(s, chars string) (Datum, error) {
+		stringBuiltin2("input", "trim_chars", func(_ *EvalContext, s, chars string) (Datum, error) {
 			return NewDString(strings.TrimRight(s, chars)), nil
 		}, TypeString, "Removes any characters included in `trim_chars` from the end (right-hand "+
 			"side) of `input` (applies recursively). <br/><br/>For example, `rtrim('doggie', 'ei')` "+
 			"returns `dogg`."),
-		stringBuiltin1(func(s string) (Datum, error) {
+		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
 		}, TypeString, "Removes all spaces from the end (right-hand side) of `val`."),
 	},
 
-	"reverse": {stringBuiltin1(func(s string) (Datum, error) {
+	"reverse": {stringBuiltin1(func(evalCtx *EvalContext, s string) (Datum, error) {
+		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
+			return nil, err
+		}
 		runes := []rune(s)
 		for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
 			runes[i], runes[j] = runes[j], runes[i]
@@ -629,8 +649,12 @@ var Builtins = map[string][]Builtin{
 
 	"replace": {stringBuiltin3(
 		"input", "find", "replace",
-		func(input, from, to string) (Datum, error) {
-			return NewDString(strings.Replace(input, from, to, -1)), nil
+		func(evalCtx *EvalContext, input, from, to string) (Datum, error) {
+			result := strings.Replace(input, from, to, -1)
+			if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(result))); err != nil {
+				return nil, err
+			}
+			return NewDString(result), nil
 		},
 		TypeString,
 		"Replaces all occurrences of `find` with `replace` in `input`",
@@ -638,7 +662,10 @@ var Builtins = map[string][]Builtin{
 
 	"translate": {stringBuiltin3(
 		"input", "find", "replace",
-		func(s, from, to string) (Datum, error) {
+		func(evalCtx *EvalContext, s, from, to string) (Datum, error) {
+			if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
+				return nil, err
+			}
 			const deletionRune = utf8.MaxRune + 1
 			translation := make(map[rune]rune, len(from))
 			for _, fromRune := range from {
@@ -687,11 +714,18 @@ var Builtins = map[string][]Builtin{
 				{"replace", TypeString},
 			},
 			ReturnType: fixedReturnType(TypeString),
-			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				s := string(MustBeDString(args[0]))
 				pattern := string(MustBeDString(args[1]))
 				to := string(MustBeDString(args[2]))
-				return regexpReplace(ctx, s, pattern, to, "")
+				result, err := regexpReplace(evalCtx, s, pattern, to, "")
+				if err != nil {
+					return nil, err
+				}
+				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(string(MustBeDString(result))))); err != nil {
+					return nil, err
+				}
+				return result, nil
 			},
 			Info: "Replaces matches for the Regular Expression `regex` in `input` with the " +
 				"Regular Expression `replace`.",
@@ -704,12 +738,19 @@ var Builtins = map[string][]Builtin{
 				{"flags", TypeString},
 			},
 			ReturnType: fixedReturnType(TypeString),
-			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				s := string(MustBeDString(args[0]))
 				pattern := string(MustBeDString(args[1]))
 				to := string(MustBeDString(args[2]))
 				sqlFlags := string(MustBeDString(args[3]))
-				return regexpReplace(ctx, s, pattern, to, sqlFlags)
+				result, err := regexpReplace(evalCtx, s, pattern, to, sqlFlags)
+				if err != nil {
+					return nil, err
+				}
+				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(string(MustBeDString(result))))); err != nil {
+					return nil, err
+				}
+				return result, nil
 			},
 			Info: "Replaces matches for the Regular Expression `regex` in `input` with the Regular " +
 				"Expression `replace` using `flags`.<br/><br/>CockroachDB supports the following " +
@@ -731,7 +772,10 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	"initcap": {stringBuiltin1(func(s string) (Datum, error) {
+	"initcap": {stringBuiltin1(func(evalCtx *EvalContext, s string) (Datum, error) {
+		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
+			return nil, err
+		}
 		return NewDString(strings.Title(strings.ToLower(s))), nil
 	}, TypeString, "Capitalizes the first letter of `val`.")},
 
@@ -1689,6 +1733,20 @@ var Builtins = map[string][]Builtin{
 			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
+
+	// Identity function which is marked as impure to avoid constant folding.
+	"crdb_internal.no_constant_folding": {
+		Builtin{
+			Types:      ArgTypes{{"input", TypeAny}},
+			ReturnType: identityReturnType(0),
+			impure:     true,
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				return args[0], nil
+			},
+			category: categorySystemInfo,
+			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+	},
 }
 
 var substringImpls = []Builtin{
@@ -1914,50 +1972,57 @@ func decimalBuiltin2(
 	}
 }
 
-func stringBuiltin1(f func(string) (Datum, error), returnType Type, info string) Builtin {
+func stringBuiltin1(
+	f func(*EvalContext, string) (Datum, error), returnType Type, info string,
+) Builtin {
 	return Builtin{
 		Types:      ArgTypes{{"val", TypeString}},
 		ReturnType: fixedReturnType(returnType),
-		fn: func(_ *EvalContext, args Datums) (Datum, error) {
-			return f(string(MustBeDString(args[0])))
+		fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
+			return f(evalCtx, string(MustBeDString(args[0])))
 		},
 		Info: info,
 	}
 }
 
 func stringBuiltin2(
-	a, b string, f func(string, string) (Datum, error), returnType Type, info string,
+	a, b string, f func(*EvalContext, string, string) (Datum, error), returnType Type, info string,
 ) Builtin {
 	return Builtin{
 		Types:      ArgTypes{{a, TypeString}, {b, TypeString}},
 		ReturnType: fixedReturnType(returnType),
 		category:   categorizeType(TypeString),
-		fn: func(_ *EvalContext, args Datums) (Datum, error) {
-			return f(string(MustBeDString(args[0])), string(MustBeDString(args[1])))
+		fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
+			return f(evalCtx, string(MustBeDString(args[0])), string(MustBeDString(args[1])))
 		},
 		Info: info,
 	}
 }
 
 func stringBuiltin3(
-	a, b, c string, f func(string, string, string) (Datum, error), returnType Type, info string,
+	a, b, c string,
+	f func(*EvalContext, string, string, string) (Datum, error),
+	returnType Type,
+	info string,
 ) Builtin {
 	return Builtin{
 		Types:      ArgTypes{{a, TypeString}, {b, TypeString}, {c, TypeString}},
 		ReturnType: fixedReturnType(returnType),
-		fn: func(_ *EvalContext, args Datums) (Datum, error) {
-			return f(string(MustBeDString(args[0])), string(MustBeDString(args[1])), string(MustBeDString(args[2])))
+		fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
+			return f(evalCtx, string(MustBeDString(args[0])), string(MustBeDString(args[1])), string(MustBeDString(args[2])))
 		},
 		Info: info,
 	}
 }
 
-func bytesBuiltin1(f func(string) (Datum, error), returnType Type, info string) Builtin {
+func bytesBuiltin1(
+	f func(*EvalContext, string) (Datum, error), returnType Type, info string,
+) Builtin {
 	return Builtin{
 		Types:      ArgTypes{{"val", TypeBytes}},
 		ReturnType: fixedReturnType(returnType),
-		fn: func(_ *EvalContext, args Datums) (Datum, error) {
-			return f(string(*args[0].(*DBytes)))
+		fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
+			return f(evalCtx, string(*args[0].(*DBytes)))
 		},
 		Info: info,
 	}
