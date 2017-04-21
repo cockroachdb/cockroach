@@ -18,6 +18,7 @@ package sql
 
 import (
 	gosql "database/sql"
+	"fmt"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 // lowMemoryBudget is the memory budget used to test builtins are recording
@@ -65,7 +67,7 @@ CREATE TABLE d.t (a STRING)
 }
 
 // TestConcatAggMonitorsMemory verifies that the aggregates incrementally
-// record their memory usage as they builds up their result.
+// record their memory usage as they build up their result.
 func TestAggregatesMonitorMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -90,5 +92,112 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 		if _, err := sqlDB.Exec(statement); err.(*pq.Error).Code != pgerror.CodeOutOfMemoryError {
 			t.Fatalf("Expected \"%s\" to consume too much memory", statement)
 		}
+	}
+}
+
+// testIncrementalFailure gradually increases the input to a test until it fails. It returns an error if
+// it did not find an incremental failing value in between definitelyGood and definitelyBad, exclusive.
+// succeedsAt is a func which takes the input and returns true if the value passed and false if it did not.
+func testIncrementalFailure(
+	definitelyGood int, step int, definitelyBad int, succeedsAt func(int) bool,
+) error {
+	if !succeedsAt(definitelyGood) {
+		return errors.Errorf("expected %d to be a passing value, but failed", definitelyGood)
+	}
+	for i := definitelyGood; i < definitelyBad; i += step {
+		if !succeedsAt(i) {
+			return nil
+		}
+	}
+	return errors.Errorf("did not get failure by %d!", definitelyBad)
+}
+
+func TestBuiltinsMonitorMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: lowMemoryBudget,
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	// In this test we expect that each of the following statements allocate
+	// approximately the same amount of memory, and thus should all fail at the
+	// same time.
+	err := testIncrementalFailure(10000, 50000, 1000000, func(overFlowLength int) bool {
+		statements := []string{
+			// Expressions which are marked as pure and do not contain any variables get
+			// constant folded, and thus their evaluation follows a different code path
+			// than those which are not constant folded.
+
+			// SELECTing the LENGTH ensures that we capture the memory problem at the
+			// correct level.
+			fmt.Sprintf(`SELECT LENGTH(REPEAT('a', %d))`, overFlowLength),
+
+			// We are currently overly restrictive with memory allocation. In theory these
+			// queries should be allowed, but due to the complexity of accurately tracking
+			// all memory, for now we err on the side of rejecting queries. See #15295.
+			fmt.Sprintf(`SELECT LENGTH(REPEAT('a', %d)) + LENGTH(REPEAT('a', %d))`, overFlowLength/2, overFlowLength/2),
+			// In this query, each REPEAT is counted twice, once upon originally being
+			// called and once upon being concatenated.
+			fmt.Sprintf(`SELECT LENGTH(CONCAT(REPEAT('a', %d), REPEAT('a', %d)))`, overFlowLength/4, overFlowLength/4),
+			fmt.Sprintf(`SELECT LENGTH(CONCAT_WS('!', REPEAT('a', %d), REPEAT('a', %d)))`, overFlowLength/4, overFlowLength/4),
+
+			// By including the `generate_series` variable in this query, we prevent this
+			// call to REPEAT from getting constant folded.
+			fmt.Sprintf(`SELECT LENGTH(REPEAT('a', %d + generate_series * 0)) FROM GENERATE_SERIES(1,1)`, overFlowLength),
+		}
+
+		successes := make([]string, 0, len(statements))
+		failures := make([]string, 0, len(statements))
+
+		for _, statement := range statements {
+			_, err := sqlDB.Exec(statement)
+			if err != nil {
+				switch err := err.(type) {
+				case *pq.Error:
+					if err.Code == pgerror.CodeOutOfMemoryError {
+						failures = append(failures, statement)
+					} else {
+						t.Fatalf("statement failed with non-OOM error: \"%s\"", err)
+					}
+				default:
+					t.Fatalf("statement failed with non-PG error: \"%s\"", err)
+				}
+			} else {
+				successes = append(successes, statement)
+			}
+		}
+
+		if len(successes) > 0 && len(failures) > 0 {
+			t.Fatalf(
+				`Expected all statements to OOM at the same time, but at value
+	%d these statements failed:
+		%s,
+	while these statements succeeded:
+		%s`, overFlowLength, failures, successes)
+		}
+
+		return len(failures) == 0
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMemoryGetsFreedOnEachRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: lowMemoryBudget,
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	// We include the reference to generate_series to ensure that the call to
+	// REPEAT doesn't get constant-folded.
+	if _, err := sqlDB.Exec(
+		`SELECT LENGTH(REPEAT('a', 300000 + generate_series * 0)) FROM GENERATE_SERIES(1,100)`,
+	); err != nil {
+		t.Fatalf("Expected statement to run successfully, but got %s", err)
 	}
 }

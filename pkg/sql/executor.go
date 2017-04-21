@@ -1302,6 +1302,13 @@ func (e *Executor) execStmtInOpenTxn(
 	planner.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
 	planner.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 	planner.semaCtx.Placeholders.Assign(pinfo)
+
+	// constantMemAcc accounts for all constant folded values that are computed
+	// prior to any rows being computed.
+	constantMemAcc := planner.evalCtx.Mon.MakeBoundAccount()
+	planner.evalCtx.ActiveMemAcc = &constantMemAcc
+	defer constantMemAcc.Close(session.Ctx())
+
 	planner.avoidCachedDescriptors = avoidCachedDescriptors
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
@@ -1441,6 +1448,15 @@ func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) 
 // implementation.
 func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) error {
 	ctx := planner.session.Ctx()
+	rowAcc := planner.evalCtx.Mon.MakeBoundAccount()
+	planner.evalCtx.ActiveMemAcc = &rowAcc
+	// We enclose this in a func because in the parser.Rows case we swap out the
+	// account, so we want to ensure that we close the currently active account at
+	// the conclusion of this function.
+	defer func() {
+		planner.evalCtx.ActiveMemAcc.Close(ctx)
+	}()
+
 	if err := planner.startPlan(ctx, plan); err != nil {
 		return err
 	}
@@ -1456,6 +1472,10 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 	case parser.Rows:
 		next, err := plan.Next(ctx)
 		for ; next; next, err = plan.Next(ctx) {
+			planner.evalCtx.ActiveMemAcc.Close(ctx)
+			rowAcc = planner.evalCtx.Mon.MakeBoundAccount()
+			planner.evalCtx.ActiveMemAcc = &rowAcc
+
 			// The plan.Values Datums needs to be copied on each iteration.
 			values := plan.Values()
 

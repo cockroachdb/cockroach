@@ -318,6 +318,5 @@ func TestAggregator(t *testing.T) {
 			t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
 				expStr, retStr)
 		}
-		monitor.Stop(context.Background())
 	}
 }
