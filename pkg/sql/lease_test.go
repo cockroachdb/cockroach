@@ -768,3 +768,92 @@ SELECT EXISTS(SELECT * FROM t.foo);
 	case <-fooRelease:
 	}
 }
+
+// Tests that uncommitted database or table names can be used by statements
+// in the same transaction. Also tests that if the transaction doesn't commit
+// the name is illegal.
+func TestUncommittedDescriptorUse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`
+CREATE DATABASE d;
+CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`INSERT INTO d.kv (k,v) VALUES ('a', 'b');`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the names work after commit.
+	if _, err := sqlDB.Exec(`INSERT INTO d.kv (k,v) VALUES ('c', 'd');`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that on a rollback a database name cannot be used.
+	tx, err = sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`
+CREATE DATABASE dd;
+CREATE TABLE dd.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`INSERT INTO dd.kv (k,v) VALUES ('a', 'b');`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+INSERT INTO dd.kv (k,v) VALUES ('c', 'd');
+`); !testutils.IsError(err, "database \"dd\" does not exist") {
+		t.Fatalf("err = %s", err)
+	}
+
+	// Check that on a rollback of a table name on a committed database
+	// cannot be used.
+	tx, err = sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`
+CREATE TABLE d.kv2 (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`INSERT INTO d.kv2 (k,v) VALUES ('a', 'b');`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+INSERT INTO d.kv2 (k,v) VALUES ('c', 'd');
+`); !testutils.IsError(err, "table \"d.kv2\" does not exist") {
+		t.Fatalf("err = %s", err)
+	}
+}
