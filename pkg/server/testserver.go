@@ -497,15 +497,6 @@ func (ts *TestServer) SplitRange(
 	if err != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}
-	origRangeDesc, err := ts.LookupRange(splitKey)
-	if err != nil {
-		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
-	}
-	if origRangeDesc.StartKey.Equal(splitRKey) {
-		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
-			errors.Errorf(
-				"cannot split range %+v at start key %q", origRangeDesc, splitKey)
-	}
 	splitReq := roachpb.AdminSplitRequest{
 		Span: roachpb.Span{
 			Key: splitKey,
@@ -519,21 +510,54 @@ func (ts *TestServer) SplitRange(
 				"%q: split unexpected error: %s", splitReq.SplitKey, pErr)
 	}
 
-	var leftRangeDesc, rightRangeDesc roachpb.RangeDescriptor
-	if err := ts.DB().GetProto(context.TODO(),
-		keys.RangeDescriptorKey(origRangeDesc.StartKey), &leftRangeDesc); err != nil {
-		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
-			errors.Wrap(err, "could not look up left-hand side descriptor")
+	// The split point is not exactly at the key we requested (we always request
+	// splits at valid table keys, and the split point corresponds to the row's
+	// prefix). We scan for the range that includes the key we requested and the
+	// one that precedes it.
+
+	// We use a transaction so that we get consistent results between the two
+	// scans (in case there are other splits happening).
+	txn := client.NewTxn(ts.DB())
+	scanMeta := func(key roachpb.RKey, reverse bool) (desc roachpb.RangeDescriptor, err error) {
+		var kvs []client.KeyValue
+		if reverse {
+			kvs, err = txn.ReverseScan(
+				context.TODO(), keys.Meta2Prefix, keys.RangeMetaKey(key.Next()), 1, /* one result */
+			)
+		} else {
+			kvs, err = txn.Scan(
+				context.TODO(), keys.RangeMetaKey(key), keys.Meta2Prefix.PrefixEnd(), 1, /* one result */
+			)
+		}
+		if err != nil {
+			return desc, err
+		}
+		if len(kvs) != 1 {
+			return desc, fmt.Errorf("expected 1 result, got %d", len(kvs))
+		}
+		err = kvs[0].ValueProto(&desc)
+		return desc, err
 	}
-	// The split point might not be exactly the one we requested (it can be
-	// adjusted slightly so we don't split in the middle of SQL rows). Update it
-	// to the real point.
-	splitRKey = leftRangeDesc.EndKey
-	if err := ts.DB().GetProto(context.TODO(),
-		keys.RangeDescriptorKey(splitRKey), &rightRangeDesc); err != nil {
+
+	rightRangeDesc, err := scanMeta(splitRKey, false /* !reverse */)
+	if err != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.Wrap(err, "could not look up right-hand side descriptor")
 	}
+
+	leftRangeDesc, err := scanMeta(splitRKey, true /* reverse */)
+	if err != nil {
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
+			errors.Wrap(err, "could not look up left-hand side descriptor")
+	}
+
+	if !leftRangeDesc.EndKey.Equal(rightRangeDesc.StartKey) {
+		err := fmt.Errorf(
+			"inconsistent left (%v) and right (%v) descriptors", leftRangeDesc, rightRangeDesc,
+		)
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
+	}
+
 	return leftRangeDesc, rightRangeDesc, nil
 }
 
