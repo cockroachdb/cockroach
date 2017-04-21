@@ -99,56 +99,58 @@ func TestJoinReader(t *testing.T) {
 		},
 	}
 	for _, c := range testCases {
-		evalCtx := parser.MakeTestingEvalContext()
-		defer evalCtx.Stop(context.Background())
-		flowCtx := FlowCtx{
-			evalCtx:  evalCtx,
-			txnProto: &roachpb.Transaction{},
-			// Pass a DB without a TxnCoordSender.
-			remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),
-		}
-
-		in := &RowBuffer{}
-		for _, row := range c.input {
-			encRow := make(sqlbase.EncDatumRow, len(row))
-			for i, d := range row {
-				encRow[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}, d)
+		t.Run("", func(t *testing.T) {
+			evalCtx := parser.MakeTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
+			flowCtx := FlowCtx{
+				evalCtx:  evalCtx,
+				txnProto: &roachpb.Transaction{},
+				// Pass a DB without a TxnCoordSender.
+				remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),
 			}
-			if status := in.Push(encRow, ProducerMetadata{}); status != NeedMoreRows {
-				t.Fatalf("unexpected response: %d", status)
+
+			in := &RowBuffer{}
+			for _, row := range c.input {
+				encRow := make(sqlbase.EncDatumRow, len(row))
+				for i, d := range row {
+					encRow[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}, d)
+				}
+				if status := in.Push(encRow, ProducerMetadata{}); status != NeedMoreRows {
+					t.Fatalf("unexpected response: %d", status)
+				}
 			}
-		}
 
-		out := &RowBuffer{}
-		jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &c.post, out)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		jr.Run(context.Background(), nil)
-
-		if !in.Done {
-			t.Fatal("joinReader didn't consume all the rows")
-		}
-		if !out.ProducerClosed {
-			t.Fatalf("output RowReceiver not closed")
-		}
-
-		var res sqlbase.EncDatumRows
-		for {
-			row, meta := out.Next()
-			if !meta.Empty() {
-				t.Fatalf("unexpected metadata: %v", meta)
+			out := &RowBuffer{}
+			jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &c.post, out)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if row == nil {
-				break
-			}
-			res = append(res, row)
-		}
 
-		if result := res.String(); result != c.expected {
-			t.Errorf("invalid results: %s, expected %s'", result, c.expected)
-		}
+			jr.Run(context.Background(), nil)
+
+			if !in.Done {
+				t.Fatal("joinReader didn't consume all the rows")
+			}
+			if !out.ProducerClosed {
+				t.Fatalf("output RowReceiver not closed")
+			}
+
+			var res sqlbase.EncDatumRows
+			for {
+				row, meta := out.Next()
+				if !meta.Empty() {
+					t.Fatalf("unexpected metadata: %v", meta)
+				}
+				if row == nil {
+					break
+				}
+				res = append(res, row)
+			}
+
+			if result := res.String(); result != c.expected {
+				t.Errorf("invalid results: %s, expected %s'", result, c.expected)
+			}
+		})
 	}
 }
 

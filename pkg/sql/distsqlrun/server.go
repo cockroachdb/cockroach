@@ -154,9 +154,11 @@ func (ds *ServerImpl) setupFlow(
 	}
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
+	// The monitor and account opened here are closed in Flow.Cleanup().
 	monitor := mon.MakeMonitor("flow",
 		ds.Counter, ds.Hist, -1 /* use default block size */, noteworthyMemoryUsageBytes)
 	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
+	acc := monitor.MakeBoundAccount()
 
 	location, err := sqlbase.TimeZoneStringToLocation(req.EvalContext.Location)
 	if err != nil {
@@ -164,12 +166,13 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 	evalCtx := parser.EvalContext{
-		Location:   &location,
-		Database:   req.EvalContext.Database,
-		SearchPath: parser.SearchPath(req.EvalContext.SearchPath),
-		NodeID:     nodeID,
-		ReCache:    ds.regexpCache,
-		Mon:        &monitor,
+		Location:     &location,
+		Database:     req.EvalContext.Database,
+		SearchPath:   parser.SearchPath(req.EvalContext.SearchPath),
+		NodeID:       nodeID,
+		ReCache:      ds.regexpCache,
+		Mon:          &monitor,
+		ActiveMemAcc: &acc,
 		Ctx: func() context.Context {
 			// TODO(andrei): This is wrong. Each processor should override Ctx with its
 			// own context.

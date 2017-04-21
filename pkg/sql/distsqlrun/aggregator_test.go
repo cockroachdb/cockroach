@@ -305,7 +305,7 @@ func TestAggregator(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		func() {
+		t.Run("", func(t *testing.T) {
 			ags := c.spec
 
 			var types []sqlbase.ColumnType
@@ -352,6 +352,6 @@ func TestAggregator(t *testing.T) {
 				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
 					expStr, retStr)
 			}
-		}()
+		})
 	}
 }
