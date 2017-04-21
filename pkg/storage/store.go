@@ -3181,16 +3181,14 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, toStoreID roachpb.StoreID)
 }
 
-const megabyte = float64(1 << 20)
-
-var rebalanceSnapshotRate = settings.RegisterFloatSetting(
+var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot.rebalance.rate",
-	"the rate limit (MB/sec) to use for rebalance snapshots",
-	envutil.EnvOrDefaultFloat("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 2<<20)/megabyte)
-var recoverySnapshotRate = settings.RegisterFloatSetting(
+	"the rate limit (bytes/sec) to use for rebalance snapshots",
+	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 2<<20))
+var recoverySnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot.recovery.rate",
-	"the rate limit (MB/sec) to use for recovery snapshots",
-	envutil.EnvOrDefaultFloat("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20)/megabyte)
+	"the rate limit (bytes/sec) to use for recovery snapshots",
+	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20))
 
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
@@ -3242,9 +3240,9 @@ func sendSnapshot(
 	// The size of batches to send. This is the granularity of rate limiting.
 	const batchSize = 256 << 10 // 256 KB
 
-	targetRate := rate.Limit(int64(recoverySnapshotRate.Get() * megabyte))
+	targetRate := rate.Limit(recoverySnapshotRate.Get())
 	if header.CanDecline {
-		targetRate = rate.Limit(int64(rebalanceSnapshotRate.Get() * megabyte))
+		targetRate = rate.Limit(rebalanceSnapshotRate.Get())
 	}
 	// Convert the bytes/sec rate limit to batches/sec.
 	//
