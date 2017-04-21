@@ -5,6 +5,14 @@ export BUILDER_HIDE_GOPATH_SRC=1
 
 mkdir -p artifacts
 
+build/builder.sh go install ./vendor/github.com/Masterminds/glide ./pkg/cmd/github-pull-request-make
+
+# Run checkdeps.
+build/builder.sh env \
+	BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" \
+	TARGET=checkdeps \
+	github-pull-request-make
+
 build/builder.sh make check 2>&1 | tee artifacts/check.log | go-test-teamcity
 
 build/builder.sh make generate
