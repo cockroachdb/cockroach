@@ -18,6 +18,7 @@ package sql
 
 import (
 	gosql "database/sql"
+	"fmt"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -65,7 +66,7 @@ CREATE TABLE d.t (a STRING)
 }
 
 // TestConcatAggMonitorsMemory verifies that the aggregates incrementally
-// record their memory usage as they builds up their result.
+// record their memory usage as they build up their result.
 func TestAggregatesMonitorMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -89,6 +90,58 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 
 		if _, err := sqlDB.Exec(statement); err.(*pq.Error).Code != pgerror.CodeOutOfMemoryError {
 			t.Fatalf("Expected \"%s\" to consume too much memory", statement)
+		}
+	}
+}
+
+const overFlowLength = 600000
+
+func TestBuiltinsMonitorMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: lowMemoryBudget,
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	statementsWhichShouldError := []string{
+		// Expressions which are marked as pure and do not contain any variables get
+		// constant folded, and thus their evaluation follows a different code path
+		// than those which are not constant folded.
+		// SELECTing the LENGTH ensures that we capture the memory problem at the
+		// correct level.
+		fmt.Sprintf(`SELECT LENGTH(REPEAT('a', %d))`, overFlowLength),
+
+		// We are currently overly restrictive with memory allocation. In theory these
+		// queries should be allowed, but due to the complexity of accurately tracking
+		// all memory, for now we err on the side of rejecting queries. See #15295.
+		fmt.Sprintf(`SELECT LENGTH(REPEAT('a', %d)) + LENGTH(REPEAT('a', %d))`, overFlowLength/2, overFlowLength/2),
+		// In this query, each REPEAT is counted twice, once upon originally being
+		// called and once upon being concatenated.
+		fmt.Sprintf(`SELECT LENGTH(CONCAT(REPEAT('a', %d), REPEAT('a', %d)))`, overFlowLength/4, overFlowLength/4),
+		fmt.Sprintf(`SELECT LENGTH(CONCAT_WS('!', REPEAT('a', %d), REPEAT('a', %d)))`, overFlowLength/4, overFlowLength/4),
+
+		// By including the `generate_series` variable in this query, we prevent this
+		// call to REPEAT from getting constant folded.
+		fmt.Sprintf(`SELECT LENGTH(REPEAT('a', %d + generate_series * 0)) FROM GENERATE_SERIES(1,1)`, overFlowLength),
+	}
+
+	for _, statement := range statementsWhichShouldError {
+		if _, err := sqlDB.Exec(statement); err == nil || err.(*pq.Error).Code != pgerror.CodeOutOfMemoryError {
+			t.Fatalf("Expected \"%s\" to consume too much memory, got %s", statement, err)
+		}
+	}
+
+	statementsWhichShouldNotError := []string{
+		fmt.Sprintf(`SELECT LENGTH(REPEAT('a', %d))`, overFlowLength/2),
+		// We include `generate_series` in this query to avoid constant folding.
+		// This test verifies that we free the memory allocated during each successive evaluation.
+		fmt.Sprintf(`SELECT LENGTH(REPEAT('a', %d + generate_series * 0)) FROM GENERATE_SERIES(1,100)`, overFlowLength/2),
+	}
+
+	for _, statement := range statementsWhichShouldNotError {
+		if _, err := sqlDB.Exec(statement); err != nil {
+			t.Fatalf("Expected \"%s\" to run successfully, but got %s", statement, err)
 		}
 	}
 }

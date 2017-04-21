@@ -44,6 +44,19 @@ func NewErrorf(code string, format string, args ...interface{}) error {
 	}
 }
 
+// AnnotateError adds a prefix to the message of an error, maintaining its pg
+// error code and source if it is a pgerror.Error.
+func AnnotateError(prefix string, err error) error {
+	if e, ok := err.(*Error); ok {
+		return &Error{
+			Message: fmt.Sprintf("%s %v", prefix, e.Message),
+			Code:    e.Code,
+			Source:  e.Source,
+		}
+	}
+	return fmt.Errorf("%s %v", prefix, err)
+}
+
 // makeSrcCtx creates a Error_Source value with contextual information
 // about the caller at the requested depth.
 func makeSrcCtx(depth int) Error_Source {

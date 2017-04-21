@@ -107,7 +107,6 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		memMonitor: mon.MakeMonitor("distsql",
 			cfg.Counter, cfg.Hist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
 	}
-	ds.evalCtx.Mon = &ds.memMonitor
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 	return ds
 }
@@ -155,12 +154,14 @@ func (ds *ServerImpl) setupFlow(
 		return nil, nil, errors.Errorf("setupFlow called before the NodeID was resolved")
 	}
 
-	evalCtx := ds.evalCtx
+	evalCtx := &ds.evalCtx
 
 	monitor := mon.MakeMonitor("flow",
 		ds.Counter, ds.Hist, -1 /* use default block size */, noteworthyMemoryUsageBytes)
-	monitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
 	evalCtx.Mon = &monitor
+	acc := monitor.MakeBoundAccount()
+	evalCtx.ActiveMemAcc = &acc
 
 	// TODO(andrei): more fields from evalCtx need to be initialized (#13821).
 
@@ -169,7 +170,7 @@ func (ds *ServerImpl) setupFlow(
 	flowCtx := FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		id:             req.Flow.FlowID,
-		evalCtx:        evalCtx,
+		evalCtx:        *evalCtx,
 		rpcCtx:         ds.RPCContext,
 		txnProto:       &req.Txn,
 		clientDB:       ds.DB,
