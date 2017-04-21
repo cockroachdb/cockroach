@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,18 +28,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
 )
 
-func stubURL(target **settings.StringSetting, stubURL string) func() {
-	realSetting := *target
-	*target = settings.TestingStringSetting(stubURL)
+func stubURL(target **url.URL, stubURL *url.URL) func() {
+	realURL := *target
+	*target = stubURL
 	return func() {
-		*target = realSetting
+		*target = realURL
 	}
 }
 
@@ -55,8 +55,11 @@ func TestCheckVersion(t *testing.T) {
 		uuid = r.URL.Query().Get("uuid")
 		version = r.URL.Query().Get("version")
 	}))
-
-	defer stubURL(&updatesURL, recorder.URL)()
+	u, err := url.Parse(recorder.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stubURL(&updatesURL, u)()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	s.(*TestServer).checkForUpdates(time.Minute)
@@ -91,7 +94,11 @@ func TestReportUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}))
-	defer stubURL(&reportingURL, recorder.URL)()
+	u, err := url.Parse(recorder.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stubURL(&reportingURL, u)()
 
 	params := base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
