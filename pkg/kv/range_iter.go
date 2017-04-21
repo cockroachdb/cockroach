@@ -155,6 +155,12 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	ri.pErr = nil  // clear any prior error
 	ri.key = key   // set the key
 
+	if (scanDir == Ascending && key.Equal(roachpb.RKeyMax)) ||
+		(scanDir == Descending && key.Equal(roachpb.RKeyMin)) {
+		ri.pErr = roachpb.NewErrorf("RangeIterator seek to invalid key %s", key)
+		return
+	}
+
 	// Retry loop for looking up next range in the span. The retry loop
 	// deals with retryable range descriptor lookups.
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
