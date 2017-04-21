@@ -116,7 +116,6 @@ func (p *planner) groupBy(
 		values:             valuesNode{columns: s.columns},
 		render:             s.render,
 		filterToRenderIdxs: make(map[int]int),
-		numGroupBy:         len(groupByExprs),
 	}
 
 	aggVisitor := extractAggregatesVisitor{
@@ -201,6 +200,7 @@ func (p *planner) groupBy(
 	s.resetRenderColumns(newRenders, newColumns)
 
 	// Add the group-by expressions so they are available for bucketing.
+	group.groupByIdx = make([]int, 0, len(groupByExprs))
 	for _, g := range groupByExprs {
 		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(
 			ctx, parser.SelectExpr{Expr: g}, parser.TypeAny, s.sourceInfo, s.ivarHelper)
@@ -208,11 +208,8 @@ func (p *planner) groupBy(
 			return nil, err
 		}
 		s.isStar = s.isStar || hasStar
-		// TODO(andrei): reuseExistingRender is false because groupNode.Next() does
-		// the valuesToAccumulate/valuesToGroupBy split based on the former being
-		// the first values generated. We should make the groupNode more flexible
-		// and allow render reuse. Make sure not to break distsql grouping.
-		_ = s.addOrMergeRenders(cols, exprs, false /* reuseExistingRender */)
+		colIdxs := s.addOrMergeRenders(cols, exprs, true /* reuseExistingRender */)
+		group.groupByIdx = append(group.groupByIdx, colIdxs...)
 	}
 
 	// Add the filter expressions, so they are available when deciding what rows
@@ -263,12 +260,10 @@ type groupNode struct {
 	render []parser.TypedExpr
 	having parser.TypedExpr
 
-	// funcs are the aggregation functions that the render's use.
+	// funcs are the aggregation functions that the renders use.
 	funcs []*aggregateFuncHolder
-	// Number of grouping elements (expressions). Note that we don't need to know
-	// the actual grouping expressions, just their numbers. The expressions are
-	// passed at constructor time to the wrapped plan as renders.
-	numGroupBy int
+	// Indices (in the wrapped plan's columns) for the group by columns.
+	groupByIdx []int
 	// Map of index of aggregation function (from funcs) to the render for the
 	// corresponding filtering expression in the wrapped plan.
 	// The map is only populated for functions that have a filter.
@@ -366,13 +361,16 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 
 		values := n.plan.Values()
 		valuesToAccumulate := values[:len(n.funcs)]
-		valuesToGroupBy := values[len(n.funcs) : len(n.funcs)+n.numGroupBy]
 
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
-		bucket, err := sqlbase.EncodeDatums(scratch, valuesToGroupBy)
-		if err != nil {
-			return false, err
+		bucket := scratch
+		for _, idx := range n.groupByIdx {
+			var err error
+			bucket, err = sqlbase.EncodeDatum(bucket, values[idx])
+			if err != nil {
+				return false, err
+			}
 		}
 
 		n.buckets[string(bucket)] = struct{}{}
