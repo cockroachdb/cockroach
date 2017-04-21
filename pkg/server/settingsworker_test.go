@@ -17,6 +17,7 @@ package server_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -31,10 +32,12 @@ import (
 
 const strKey = "testing.str"
 const intKey = "testing.int"
+const durationKey = "testing.duration"
 const byteSizeKey = "testing.bytesize"
 
 var strA = settings.RegisterStringSetting(strKey, "", "<default>")
 var intA = settings.RegisterIntSetting(intKey, "", 1)
+var durationA = settings.RegisterDurationSetting(durationKey, "", time.Minute)
 var byteSizeA = settings.RegisterByteSizeSetting(byteSizeKey, "", 1024*1024)
 
 func TestSettingsRefresh(t *testing.T) {
@@ -139,6 +142,14 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(fmt.Sprintf(setQ, intKey, "5"))
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "5", db.QueryStr(fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
+
+	db.Exec(fmt.Sprintf(setQ, durationKey, "'2h'"))
+	testutils.SucceedsSoon(t, func() error {
+		if expected, actual := "2h", db.QueryStr(fmt.Sprintf(showQ, durationKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
