@@ -1277,6 +1277,13 @@ func (e *Executor) execStmtInOpenTxn(
 	planner.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
 	planner.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 	planner.semaCtx.Placeholders.Assign(pinfo)
+
+	// constantMemAcc accounts for all constant folded values that are computed
+	// prior to any rows being computed.
+	constantMemAcc := planner.evalCtx.Mon.MakeBoundAccount()
+	planner.evalCtx.ActiveMemAcc = &constantMemAcc
+	defer constantMemAcc.Close(session.Ctx())
+
 	planner.avoidCachedDescriptors = avoidCachedDescriptors
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
@@ -1419,8 +1426,12 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 		result.RowsAffected += count
 
 	case parser.Rows:
+		rowAcc := planner.evalCtx.Mon.MakeBoundAccount()
+		planner.evalCtx.ActiveMemAcc = &rowAcc
 		next, err := plan.Next(ctx)
 		for ; next; next, err = plan.Next(ctx) {
+			planner.evalCtx.ActiveMemAcc.Close(ctx)
+
 			// The plan.Values Datums needs to be copied on each iteration.
 			values := plan.Values()
 
@@ -1432,7 +1443,10 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 			if _, err := result.Rows.AddRow(ctx, values); err != nil {
 				return err
 			}
+			rowAcc = planner.evalCtx.Mon.MakeBoundAccount()
+			planner.evalCtx.ActiveMemAcc = &rowAcc
 		}
+		planner.evalCtx.ActiveMemAcc.Close(ctx)
 		if err != nil {
 			return err
 		}

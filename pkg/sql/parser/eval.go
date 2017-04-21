@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1732,6 +1733,11 @@ type EvalContext struct {
 	collationEnv CollationEnvironment
 
 	Mon *mon.MemoryMonitor
+
+	// ActiveMemAcc is the account to which values are allocated during
+	// evaluation. It can change over the course of evaluation, such as on a
+	// per-row basis.
+	ActiveMemAcc *mon.BoundAccount
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
@@ -1744,9 +1750,11 @@ func MakeTestingEvalContext() *EvalContext {
 		math.MaxInt64, /* noteworthy */
 	)
 	monitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	acc := monitor.MakeBoundAccount()
 	return &EvalContext{
-		Mon: &monitor,
-		Ctx: context.Background,
+		Mon:          &monitor,
+		Ctx:          context.Background,
+		ActiveMemAcc: &acc,
 	}
 }
 
@@ -2535,7 +2543,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		if _, ok := err.(*roachpb.RetryableTxnError); ok {
 			return nil, err
 		}
-		return nil, fmt.Errorf("%s(): %v", expr.Func, err)
+		return nil, pgerror.AnnotateError(fmt.Sprintf("%s():", expr.Func), err)
 	}
 	return res, nil
 }
