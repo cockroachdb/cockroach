@@ -209,6 +209,7 @@ CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
 # override so that no one is tempted to make USE_STDMALLOC=1 instead of make
 # TAGS=stdmalloc; without TAGS=stdmalloc, Go will still try to link jemalloc.
 override USE_STDMALLOC := $(findstring stdmalloc,$(TAGS))
+STDMALLOC_SUFFIX := $(if $(USE_STDMALLOC),_stdmalloc)
 
 ifdef XHOST_TRIPLE
 
@@ -245,7 +246,8 @@ else
 TARGET_TRIPLE := $(HOST_TRIPLE)
 endif
 
-BUILD_DIR := $(GOPATH)/native/$(TARGET_TRIPLE)
+NATIVE_SPECIFIER := $(TARGET_TRIPLE)$(NATIVE_SUFFIX)
+BUILD_DIR := $(GOPATH)/native/$(NATIVE_SPECIFIER)
 
 # In MinGW, cgo flags don't handle Unix-style paths, so convert our base path to
 # a Windows-style path.
@@ -258,7 +260,7 @@ endif
 
 JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
 PROTOBUF_DIR := $(BUILD_DIR)/protobuf
-ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(if $(USE_STDMALLOC),_stdmalloc)
+ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(STDMALLOC_SUFFIX)
 SNAPPY_DIR   := $(BUILD_DIR)/snappy
 # Can't share with protobuf because protoc is always built for the host.
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
@@ -267,7 +269,7 @@ PROTOC 		 := $(PROTOC_DIR)/protoc
 C_LIBS := $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb
 
 # Go does not permit dashes in build tags. This is undocumented. Fun!
-TARGET_TRIPLE_TAG := $(subst -,_,$(TARGET_TRIPLE))
+NATIVE_SPECIFIER_TAG := $(subst -,_,$(NATIVE_SPECIFIER))$(STDMALLOC_SUFFIX)
 
 # In each package that uses cgo, we inject include and library search paths
 # into files named zcgo_flags[_arch_vendor_os_abi].go. The logic for this is
@@ -291,7 +293,7 @@ TARGET_TRIPLE_TAG := $(subst -,_,$(TARGET_TRIPLE))
 # files are only compiled when building with Make.
 CGO_PKGS := cli server/status storage/engine ccl/storageccl/engineccl
 CGO_UNSUFFIXED_FLAGS_FILES := $(addprefix $(PKG_ROOT)/,$(addsuffix /zcgo_flags.go,$(CGO_PKGS)))
-CGO_SUFFIXED_FLAGS_FILES   := $(addprefix $(PKG_ROOT)/,$(addsuffix /zcgo_flags_$(TARGET_TRIPLE_TAG).go,$(CGO_PKGS)))
+CGO_SUFFIXED_FLAGS_FILES   := $(addprefix $(PKG_ROOT)/,$(addsuffix /zcgo_flags_$(NATIVE_SPECIFIER_TAG).go,$(CGO_PKGS)))
 CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 
 $(CGO_UNSUFFIXED_FLAGS_FILES): .ALWAYS_REBUILD
@@ -300,7 +302,7 @@ $(CGO_FLAGS_FILES):
 	@echo 'GEN $@'
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
-	@echo '// +build $(if $(findstring $(TARGET_TRIPLE_TAG),$@),$(TARGET_TRIPLE_TAG),!make)' >> $@
+	@echo '// +build $(if $(findstring $(NATIVE_SPECIFIER_TAG),$@),$(NATIVE_SPECIFIER_TAG),!make)' >> $@
 	@echo >> $@
 	@echo 'package $(notdir $(@D))' >> $@
 	@echo >> $@

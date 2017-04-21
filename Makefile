@@ -56,19 +56,71 @@ TYPE :=
 # toolchain.
 LINKFLAGS ?=
 
+BUILD_TYPE := development
 ifeq ($(TYPE),)
-override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
+else ifeq ($(TYPE),msan)
+NATIVE_SUFFIX := _msan
+override GOFLAGS += -msan
+# NB: using jemalloc with msan causes segfaults. Why?
+#
+# (gdb) run
+# Starting program: /go/src/github.com/cockroachdb/cockroach/pkg/cli/cli.test
+# [Thread debugging using libthread_db enabled]
+# Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+# Program received signal SIGSEGV, Segmentation fault.
+# 0x0000000001dc7465 in calloc (num=num@entry=1, size=size@entry=32)
+#     at /go/src/github.com/cockroachdb/cockroach/c-deps/jemalloc.src/src/jemalloc.c:1799
+# 1799	{
+# (gdb) backtrace
+# #0  0x0000000001dc7465 in calloc (num=num@entry=1, size=size@entry=32)
+#     at /go/src/github.com/cockroachdb/cockroach/c-deps/jemalloc.src/src/jemalloc.c:1799
+# #1  0x00007ffff6e5b627 in _dlerror_run (
+#     operate=operate@entry=0x7ffff6e5b020 <dlsym_doit>, args=args@entry=0x7fffffffeb40)
+#     at dlerror.c:141
+# #2  0x00007ffff6e5b088 in __dlsym (handle=<optimized out>, name=<optimized out>)
+#     at dlsym.c:70
+# #3  0x00000000006f7667 in __sanitizer::InitTlsSize() ()
+# #4  0x0000000000694e8a in __msan_init ()
+# #5  0x00007ffff7de74ea in call_init (l=<optimized out>, argc=argc@entry=1,
+#     argv=argv@entry=0x7fffffffec38, env=env@entry=0x7fffffffec48) at dl-init.c:72
+# #6  0x00007ffff7de75fb in call_init (env=0x7fffffffec48, argv=0x7fffffffec38, argc=1,
+#     l=<optimized out>) at dl-init.c:30
+# #7  _dl_init (main_map=0x7ffff7ffe168, argc=1, argv=0x7fffffffec38, env=0x7fffffffec48)
+#     at dl-init.c:120
+# #8  0x00007ffff7dd7cfa in _dl_start_user () from /lib64/ld-linux-x86-64.so.2
+# #9  0x0000000000000001 in ?? ()
+# #10 0x00007fffffffee15 in ?? ()
+# #11 0x0000000000000000 in ?? ()
+override TAGS += stdmalloc
+MSAN_CPPFLAGS := -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -I/libcxx_msan/include -I/libcxx_msan/include/c++/v1
+MSAN_LDFLAGS  := -fsanitize=memory -stdlib=libc++ -L/libcxx_msan/lib -lc++abi -Wl,-rpath,/libcxx_msan/lib
+override CGO_CPPFLAGS += $(MSAN_CPPFLAGS)
+override CGO_LDFLAGS += $(MSAN_LDFLAGS)
+export CGO_CPPFLAGS
+export CGO_LDFLAGS
+# NB: CMake doesn't respect CPPFLAGS (!)
+#
+# See https://bugs.launchpad.net/pantheon-terminal/+bug/1325329.
+override CFLAGS += $(MSAN_CPPFLAGS)
+override CXXFLAGS += $(MSAN_CPPFLAGS)
+override LDFLAGS += $(MSAN_LDFLAGS)
+export CFLAGS
+export CXXFLAGS
+export LDFLAGS
 else ifeq ($(TYPE),release-linux-gnu)
 # We use a custom toolchain to target old Linux and glibc versions. However,
 # this toolchain's libstdc++ version is quite recent and must be statically
 # linked to avoid depending on the target's available libstdc++.
 XHOST_TRIPLE := x86_64-unknown-linux-gnu
-override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++"
 override GOFLAGS += -installsuffix release-gnu
 override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
+BUILD_TYPE := release-gnu
 else ifeq ($(TYPE),release-linux-musl)
+BUILD_TYPE := release-musl
 XHOST_TRIPLE := x86_64-unknown-linux-musl
-override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
+override LINKFLAGS += -s -w -extldflags "-static"
 override GOFLAGS += -installsuffix release-musl
 override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
 else ifeq ($(TYPE),release-darwin)
@@ -76,20 +128,24 @@ XGOOS := darwin
 export CGO_ENABLED := 1
 XHOST_TRIPLE := x86_64-apple-darwin13
 override SUFFIX := $(SUFFIX)-darwin-10.9-amd64
-override LINKFLAGS += -s -w -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+override LINKFLAGS += -s -w
+BUILD_TYPE := release
 else ifeq ($(TYPE),release-windows)
 XGOOS := windows
 export CGO_ENABLED := 1
 XHOST_TRIPLE := x86_64-w64-mingw32
 override SUFFIX := $(SUFFIX)-windows-6.2-amd64
-override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+override LINKFLAGS += -s -w -extldflags "-static"
+BUILD_TYPE := release
 else
 $(error unknown build type $(TYPE))
 endif
 
+override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILD_TYPE)
+
 REPO_ROOT := .
 include $(REPO_ROOT)/build/common.mk
-override TAGS += make $(TARGET_TRIPLE_TAG)
+override TAGS += make $(NATIVE_SPECIFIER_TAG)
 
 # On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
 # symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
