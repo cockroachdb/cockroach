@@ -31,9 +31,11 @@ import (
 
 const strKey = "testing.str"
 const intKey = "testing.int"
+const byteSizeKey = "testing.bytesize"
 
 var strA = settings.RegisterStringSetting(strKey, "", "<default>")
 var intA = settings.RegisterIntSetting(intKey, "", 1)
+var byteSizeA = settings.RegisterByteSizeSetting(byteSizeKey, "", 1024*1024)
 
 func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -137,6 +139,14 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(fmt.Sprintf(setQ, intKey, "5"))
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "5", db.QueryStr(fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
+
+	db.Exec(fmt.Sprintf(setQ, byteSizeKey, "'1500MB'"))
+	testutils.SucceedsSoon(t, func() error {
+		if expected, actual := "1500000000", db.QueryStr(fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
