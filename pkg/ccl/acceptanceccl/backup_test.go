@@ -59,7 +59,6 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())
 
 	bt.f.AddEnvVar("COCKROACH_MAX_OFFSET", "1s")
-	bt.f.AddEnvVar("COCKROACH_PROPOSER_EVALUATED_KV", "true")
 
 	if bt.cockroachDiskSizeGB != 0 {
 		bt.f.AddVars["cockroach_disk_size"] = strconv.Itoa(bt.cockroachDiskSizeGB)
