@@ -12,21 +12,6 @@ but that’s no way to live. You might have heard that we don’t like
 you might be wondering what that’s about. This document is to serve as
 an explanation of Context-related topics.
 
-FIXME(requested by dan) “If you like, it would also be nice to talk
-about how contexts make distributed cancellation easy. This is really
-cool for things like backup/restore that kick off a lot of work.”
-Andrei: “yeah, there’s a section on cancellation that reads “!!!” 😃 -
-I need to get to it. If you’d like, please feel free to write it. Two
-technical points that I wanted to put in there are:
-
-- a cancellable sub-context of a cancellable context means there’s a
-  goroutine spawn under you for propagating the parents cancellation,
-  so it can be expensive.
-- how context cancellation crosses gRPC and libpq boundaries. Which I
-  don’t actually know exactly. I think @Tamir D and Matt Jibson might
-  know.”
-
-
 ## What is a `context.Context` ?
 
 `context.Context` is an interface defined in the `context` package of
@@ -46,7 +31,7 @@ So, the idea is that a `Context` represents an *operation*’s context -
 deadline, cancellation and values that we want to pass implicitly to
 all the function calls executed on behalf of that operation (this last
 use case may be achieved with thread-locals in other programming
-languages). The `context` **package does not attempt to define what an
+languages). The `context` package does not attempt to define what an
 operation is - that’s up to the programmer. Typical operations are
 serving an RPC call, serving a SQL query, or periodic background
 activities such as replica rebalancing. An important point is that
@@ -54,7 +39,7 @@ operations, and `Contexts` are supposed to be hierarchical - an
 operation can have sub-operations which may inherit the parent’s
 deadline/cancellation/values or may define their own; that’s why the
 `context` package makes it easy to create *derived* (or *forked*)
-**`*Contexts*` - child `Contexts` inheriting and augmenting the
+`Contexts` - child `Contexts` inheriting and augmenting the
 parent‘s properties.
 
 This is the interface definition:
@@ -82,24 +67,29 @@ This is the interface definition:
 ## Motivations for contexts in CockroachDB
 
 At Cockroach Labs, we use `Contexts` extensively, as a result of
-cascading pushes by different people for proper logging (more
-informative unstructured text log messages) and tracing
-(operation-specific structured logging). (FIXME(knz): clarify why it’s
-useful to separate them) We like passing `Contexts` everywhere, thus
+cascading pushes by different people for improving logging and tracing.
+
+Logging is about keeping a global history of the activity on a node
+or cluster; improvements there aim to make messages more
+informative. Tracing is about keeping the cause-effect relationship
+related to individual activities, e.g. individual client requests;
+improvements there aim to increase the accuracy/usefulness of the
+network of cause-effect relations tracked by individual traces.
+**Go contexts enable CockroachDB to provide both services using a common interface.**
+
+We like passing `Contexts` everywhere, thus
 *informing each layer of the code about the context in which every
 function is being executed*. The main benefits we get are that all our
 log messages are prefixed with information about the component that’s
 logging them, and that all the logging messages also become part of
 the current operation’s trace.
 
-**Contexts for logging**
+### Contexts for logging
 
 Let’s look at an example of a component’s information being part of
-log messages. The following call: (FIXME(knz) consider starting the
-example with log.Info instead, or clarify further what is happening
-here)
+log messages. The following call:
 
-    log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
+    log.Infof(ctx, "request range lease (attempt #%d)", attempt)
 
 results in the following message being output:
 
@@ -131,7 +121,7 @@ session at any level in the code (at least executed locally on the
 session’s gateway node; see discussion below about distributed tracing
 for how this relates to remote code execution).
 
-**Contexts for tracing**
+### Contexts for tracing
 
 Besides logging, *tracing* is also a big reason why we plumb contexts
 everywhere. A *trace* is a structured view of (messages printed on
@@ -153,7 +143,7 @@ sequential or parallel nature of the execution of sub-operations.
 
 The logging messages are the same as the ones that make it to the
 unstructured text log files that we discussed above - the messages
-produced by calls to `log.{Infof,Warningf,Errorf,VEventf}`).
+produced by calls to `log.{Info,Warning,Error,VEvent}f?`).
 
 A trace consists of a tree of spans: each *span* represents a
 sub-operation (except the root one) and can contain child spans. Spans
@@ -219,35 +209,45 @@ allows embedding a `trace.EventLog` in a `Context` ; events go to that
 `EventLog` automatically unless a span is also embedded in the
 context.
 
-There’s also `EXPLAIN(TRACE)SELECT …` that uses “snowball tracing”
-(FIXME: explain) for collecting the distributed trace of one query and
-displaying it as SQL result rows. But we don’t like this feature
-because it only works with `SELECTs` and the implementation is
-otherwise unclean and hard to maintain. There’s the
-`COCKROACH_TRACE_SQL=1ms` env var, which causes the distributed traces
-of all queries taking longer than a set time to be dumped into the
-logs. We don’t particularly like this feature (FIXME: clarify/qualify
-“we don’t like”) either ((although it has proven useful) because it
-causes “snowball tracing” (see below) to be enabled for all queries,
-which might not be cheap, and also because flooding the logs is not
-the best user experience. As of 03/2017, we’re working on a new
+There’s also `EXPLAIN(TRACE)SELECT …` that uses “snowball tracing” for
+collecting the distributed trace of one query and displaying it as SQL
+result rows. Snowball tracing is trace mode where trace information is
+stored in-memory, instead of being sent to a trace collector, so that
+the application can inspect its own trace later; this is the
+mechanism used by `EXPLAIN(TRACE)` to present the execution
+trace back to the SQL client.
+
+There’s also the
+`COCKROACH_TRACE_SQL` env var, which causes the distributed traces
+of all queries taking longer than a set time to be collected in memory
+and then dumped into the
+logs. This is expensive because it enables snowball tracing for all queries,
+and may flood the logs. As of 03/2017, I (Andrei) am working on a new
 mechanism allowing a user to enable/disable tracing on a SQL session
 by issuing special SQL statements, and then making the collected
 traces available through a virtual table.
 
-We’d also like to embed a graphical viewer of distributed traces in
-Cockroach - one such open-source one is AppDash. (FIXME: position this
-sentence in the right place)
-
 All these tracing capabilities are enabled by the proliferation of
-`Contexts`. The current span (which implicitly points to the current
-trace), is passed around in the `Context`. Whenever a logging method
-is invoked, the logging module extracts the span from the `Context`
-(FIXME: explain what this means) and tees the log messages to it,
-(FIXME: explain what this means) besides printing them to the log
-file.
+`Contexts`.
 
-**Creating traces programmatically**
+The mechanism for this is threefold:
+
+- we use `Spans` from package `opentracing` which represent the notion
+  of "current operation" in the application (e.g. a current client
+  request, a method call, whatever) and bind them to a `Tracer` object
+  which is able to receive events for that span (e.g. a trace
+  collector).
+- `Context` objects actually can carry a linked list of key/value pairs.
+  we store `Span` objects in `Context` to represent the stacking/nesting
+  of "current operations" in CockroachDB.
+- Whenever a logging method is invoked, the logging module inspects
+  the `Context` object from the head, check whether it contains a
+  span, and if it does, extracts the first span from the `Context`,
+  sends a copy of the log event to its tracer, before printing them to
+  the log file.
+
+
+### Creating traces programmatically
 
 When thinking about how our operations should be traced, the first
 decision we need to make is *what constitutes an* ***operation*** *for
@@ -272,11 +272,32 @@ The sub-operations create sub-spans and fork the `Context`:
     ctx, span := tracing.ChildSpan(ctx, "join reader")
     defer tracing.FinishSpan(span)
 
+### Context cancellation
+
+Contexts make distributed cancellation easy.
+A context object has a broadast "cancellation" channel which
+client components can check to see if the work is still "useful".
+For example a context for the worker of a network connection
+will be canceled by `net.Conn` if the remote connection
+is closed, and the worker can check that periodically and spontaneously
+abort, instead of checking the error status of trying to send
+data through the connection,
+
+This is really cool for things like backup/restore or distSQL that
+kick off a lot of work throughout the cluster.
+
+Of note:
+
+- a cancellable sub-context of a cancellable context means there is a
+  goroutine spawn under you for propagating the parents cancellation,
+  so it can be expensive.
+- it's stil la bit unclear how context cancellation crosses gRPC and
+  libpq boundaries.  People are working on this.
 
 
 ## Technical notes
 
-**I****ntegration between logging and** `**Contexts**` **** 
+### Integration between logging and `Contexts`
 
 All the logging methods (`log.{Infof,VEventf,…}`) take a `Context` and
 [extract the](https://github.com/cockroachdb/cockroach/blob/281777256787cef83e7b1a8485648010442ffe48/pkg/util/log/structured.go#L111)
@@ -324,7 +345,7 @@ and we say, for example, that a `replica` *annotates* all the
 [Enriching Log Messages Using Go Contexts](https://www.cockroachlabs.com/blog/enriching-log-messages-using-go-contexts/)
 blog post.
 
-**I****ntegration between tracing and** `**Contexts**` 
+### Integration between tracing and `Contexts` 
 
 For tracing, we use the OpenTracing interface - an attempt to
 standardize tracing interfaces in different languages such that
@@ -363,7 +384,7 @@ is a `Span` which is passed around - you’ve guessed it - in the
 it](https://github.com/cockroachdb/cockroach/blob/281777256787cef83e7b1a8485648010442ffe48/pkg/util/log/trace.go#L110)
 from there.
 
-**What** ***operations*** **do we track in crdb? Where do we track traces and spans?**
+### What operations do we track in crdb? Where do we track traces and spans?
 
 We define operations at multiple levels in crdb for tracing and
 logging. These different levels correspond to different
@@ -409,17 +430,17 @@ the sql
 means that the highest level grouping that we’ll see in LightStep for
 SQL operations is a SQL transaction.
 
-FIXME: integrate side note: “Side question: is this a wise choice?
-Things like data collection of SQL result sets can span multiple
-transactions. Don’t we want instead to span over a batch of SQL code
-received by a single message in pgwire? well, it’s useful to see
-retries in a single trace, that’s why we do it at the txn level. It
-hasn’t been a problem yet… When you’re using Lightstep for collection
-(or also the net.trace integrations), you’re relying on it to be fast
-and asynchronous and maybe drop log messages when too many have been
-accumulated.  When we talk about other trace collection mechanisms
-(e.g. EXPLAIN(TRACE)), we’re assuming that the user is going to be
-judicious about not tracing operations that are too massive…”
+[ Side note: "is this a wise choice?"  Things like data collection of
+SQL result sets can span multiple transactions. Don’t we want instead
+to span over a batch of SQL code received by a single message in
+pgwire? The reason why we do it is that it is useful to see retries in
+a single trace, so we do it at the txn level. It hasn’t been a problem
+yet… When you’re using Lightstep for collection (or also the net.trace
+integrations), you’re relying on it to be fast and asynchronous and
+maybe drop log messages when too many have been accumulated.  When we
+talk about other trace collection mechanisms (e.g. `EXPLAIN(TRACE)`),
+we’re assuming that the user is going to be judicious about not
+tracing operations that are too massive. ]
 
 Within a SQL transaction, there are many sub-operations. At the time
 of this writing, we’re a little shy about opening child spans. We only
@@ -447,9 +468,6 @@ log tag:
 In cases like this, we should probably also be creating a child span,
 so that opentracing also displays the range lookup more prominently as
 a logically separate operation.
-
-**Context cancellation**
-!!! FIXME
 
 
 
@@ -537,8 +555,7 @@ operation we’re interested in, and we want it to be passed explicitly
 as function arguments from that point downwards.
 
 
-
-**What about background operations?**
+### What about background operations?
 
 Besides interactive request-response processing that our servers do
 (e.g. for SQL processing), there’s also background work that happens
@@ -559,42 +576,41 @@ We may add a `/net/trace` in these contexts, since Go’s `debug/events`
 endpoint is meant for long-running operations. For some reason, we
 seem to have stopped doing that for our queues.
 
-**What’s** `**context.Background()**`**?
-What’s** `**context.TODO()**` **and what do I do when I see one?**
+### What’s `context.Background()`? What’s `context.TODO()` and what do I do when I see one?
 
-As we’ve seen, `Contexts` ****are hierarchical, which means there has
+As we’ve seen, `Contexts` are hierarchical, which means there has
 to be a root `Context`. There are, in fact, two roots provided by the
 `x/net` package - `context.Background()`and
 `context.TODO()`. These are empty `Contexts` - no values, deadline
 or cancellation.
 
-We want to use `context.Background()` ****as the root for most of our
-other `Contexts` ****- operation contexts should be derived from it,
+We want to use `context.Background()` as the root for most of our
+other `Contexts` - operation contexts should be derived from it,
 background work contexts should be derived from it.
 
-`context.TODO()` ****is technically equivalent, except we (and Go
-itself) use it to mark places where a proper `Context` ****has not yet
+`context.TODO()` is technically equivalent, except we (and Go
+itself) use it to mark places where a proper `Context` has not yet
 been plumbed to. So when you see this guy, it means that someone was
-lazy when `Context-ifying` ****some code module and didn’t plumb a
+lazy when `Context-ifying` some code module and didn’t plumb a
 proper operation context. We don’t want to use this for new non-test
 code.
 
-In tests we do use `context.TODO()` ****for the tests’ operations. We
+In tests we do use `context.TODO()` for the tests’ operations. We
 also sometimes use `context.Background()`; no pattern has emerged
 yet. Ideally each test would create one (or more) `Contexts`
-****annotated with the test’s name and perhaps a span. But there
+annotated with the test’s name and perhaps a span. But there
 currently is little benefit in doing that. I (Andrei) had a WIP a
 while ago for collecting traces from tests and dumping them into a
 file that can then be read and displayed by AppDash. (FIXME(andrei)
 add link) It was really cool but I didn’t clean it up. If we’d do
-this, then using proper `Contexts` ****in tests would be beneficial.
+this, then using proper `Contexts` in tests would be beneficial.
 
 FIXME: integrate side note: “Nathan: I just opened
 https://github.com/cockroachdb/cockroach/pull/14128 to address this
 first point. We should be using context.Background in tests, never
 context.TODO. Andrei: well it’s not technically Background() work. In
 fact, you can argue that Background() would be even worse, at it’d
-combine the test’s operations with background server activity.”  ****
+combine the test’s operations with background server activity.”
 
 ## Alternatives
 
@@ -614,7 +630,7 @@ traction for several reasons:
 2. we’d need to maintain some non-standard Go stuff
 3. `Context` are becoming more and more universal in the Go ecosystem
    - e.g. our dependencies and the std lib. Doing something different in
-   Cockroach might make interfacing with external code harder. (FIXME:
+   CockroachDB might make interfacing with external code harder. (FIXME:
    clarify/strengthen argument)
 4. avoiding hidden state. When a context is passed through as an arg,
    it’s usually easy to trace where a problematic context is coming
@@ -634,3 +650,9 @@ traction for several reasons:
    `RunAsyncTask/ForkCtxSpan`. It’s not clear either what do we do with
    goroutines that, in their lifetime, service many different
    “operations.”
+
+## Future directions
+
+We’d also like to embed a graphical viewer of distributed traces in
+CockroachDB - one such open-source one is AppDash.
+
