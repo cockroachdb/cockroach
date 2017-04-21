@@ -163,7 +163,15 @@ func TestSettingsRefresh(t *testing.T) {
 		if expected, actual := int64(1500000000), byteSizeA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "1500000000", db.QueryStr(fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
+		if expected, actual := "1.4 GiB", db.QueryStr(fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
+
+	db.Exec(fmt.Sprintf(setQ, byteSizeKey, "'1450MB'"))
+	testutils.SucceedsSoon(t, func() error {
+		if expected, actual := "1.4 GiB", db.QueryStr(fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
