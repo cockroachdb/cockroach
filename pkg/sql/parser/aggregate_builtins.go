@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -1017,10 +1018,10 @@ func (p *Parser) IsAggregate(n *SelectClause, searchPath SearchPath) bool {
 // aggregate functions or window functions, returning an error in either case.
 func (p *Parser) AssertNoAggregationOrWindowing(expr Expr, op string, searchPath SearchPath) error {
 	if p.AggregateInExpr(expr, searchPath) {
-		return fmt.Errorf("aggregate functions are not allowed in %s", op)
+		return pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op)
 	}
 	if p.WindowFuncInExpr(expr) {
-		return fmt.Errorf("window functions are not allowed in %s", op)
+		return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op)
 	}
 	return nil
 }
