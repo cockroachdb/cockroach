@@ -17,14 +17,12 @@
 package distsqlrun
 
 import (
-	"math"
 	"sort"
 	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -485,8 +483,6 @@ func TestHashJoiner(t *testing.T) {
 		},
 	}
 
-	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
-	defer monitor.Stop(context.Background())
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			hs := c.spec
