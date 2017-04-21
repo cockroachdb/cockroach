@@ -19,8 +19,11 @@
 package sql
 
 import (
+	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,12 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 // SplitTable splits a range in the table, creates a replica for the right
@@ -76,6 +81,126 @@ func SplitTable(
 	if err := tc.TransferRangeLease(rightRange, tc.Target(targetNodeIdx)); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestPlanningDuringSplits verifies that table reader planning (resolving
+// spans) tolerates concurrent splits.
+func TestPlanningDuringSplits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const n = 100
+	const numNodes = 1
+	tc := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{UseDatabase: "test"},
+	})
+
+	defer tc.Stopper().Stop(context.TODO())
+
+	sqlutils.CreateTable(
+		t, tc.ServerConn(0), "t", "x INT PRIMARY KEY, xsquared INT",
+		n,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, func(row int) parser.Datum {
+			return parser.NewDInt(parser.DInt(row * row))
+		}),
+	)
+
+	// Start a worker that continuously performs splits in the background.
+	tc.Stopper().RunWorker(context.TODO(), func(ctx context.Context) {
+		rng, _ := randutil.NewPseudoRand()
+		cdb := tc.Server(0).KVClient().(*client.DB)
+		for {
+			select {
+			case <-tc.Stopper().ShouldStop():
+				return
+			default:
+				// Split the table at a random row.
+				desc := sqlbase.GetTableDescriptor(cdb, "test", "t")
+
+				val := rng.Intn(n)
+				t.Logf("splitting at %d", val)
+				pik, err := sqlbase.MakePrimaryIndexKey(desc, val)
+				if err != nil {
+					panic(err)
+				}
+
+				splitKey := keys.MakeRowSentinelKey(pik)
+				if _, _, err = tc.Server(0).SplitRange(splitKey); err != nil {
+					panic(err)
+				}
+			}
+		}
+	})
+
+	sumX, sumXSquared := 0, 0
+	for x := 1; x <= n; x++ {
+		sumX += x
+		sumXSquared += x * x
+	}
+
+	// Run queries continuously in parallel workers. We need more than one worker
+	// because some queries result in cache updates, and we want to verify
+	// race conditions when planning during cache updates (see #15249).
+	const numQueriers = 4
+
+	var wg sync.WaitGroup
+	wg.Add(numQueriers)
+
+	for i := 0; i < numQueriers; i++ {
+		go func(idx int) {
+			defer wg.Done()
+
+			// Create a gosql.DB for this worker.
+			pgURL, cleanupGoDB := sqlutils.PGUrl(
+				t, tc.Server(0).ServingAddr(), fmt.Sprintf("%d", idx), url.User(security.RootUser),
+			)
+			defer cleanupGoDB()
+
+			pgURL.Path = "test"
+			goDB, err := gosql.Open("postgres", pgURL.String())
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			defer func() {
+				_ = goDB.Close()
+			}()
+
+			// Limit to 1 connection because we set a session variable.
+			goDB.SetMaxOpenConns(1)
+			if _, err := goDB.Exec("SET DISTSQL = ALWAYS"); err != nil {
+				t.Error(err)
+				return
+			}
+
+			for run := 0; run < 20; run++ {
+				t.Logf("querier %d run %d", idx, run)
+				rows, err := goDB.Query("SELECT SUM(x), SUM(xsquared) FROM t")
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if !rows.Next() {
+					t.Errorf("no rows")
+					return
+				}
+				var sum, sumSq int
+				if err := rows.Scan(&sum, &sumSq); err != nil {
+					t.Error(err)
+					return
+				}
+				if sum != sumX || sumXSquared != sumSq {
+					t.Errorf("invalid results: expected %d, %d got %d, %d", sumX, sumXSquared, sum, sumSq)
+					return
+				}
+				if rows.Next() {
+					t.Errorf("more than one row")
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
 }
 
 func TestDistBackfill(t *testing.T) {
@@ -130,9 +255,6 @@ func TestDistBackfill(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
 	r.DB.SetMaxOpenConns(1)
-	r.Exec("SET DISTSQL = ALWAYS")
-
-	r = r.Subtest(t)
 	r.Exec("SET DISTSQL = OFF")
 	if _, err := tc.ServerConn(0).Exec("CREATE INDEX foo ON NumToStr (str)"); err != nil {
 		t.Fatal(err)
