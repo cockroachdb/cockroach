@@ -2,7 +2,7 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
-set certs_dir "certs"
+set certs_dir "/certs"
 set ::env(COCKROACH_INSECURE) "false"
 
 proc start_secure_server {argv certs_dir} {

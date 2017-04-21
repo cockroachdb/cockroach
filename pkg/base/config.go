@@ -125,7 +125,7 @@ type Config struct {
 	HistogramWindowInterval time.Duration
 }
 
-var allowOldCertsFlags = envutil.EnvOrDefaultBool("COCKROACH_ALLOW_OLD_CERTS_FLAGS", true)
+var allowOldCertsFlags = envutil.EnvOrDefaultBool("COCKROACH_ALLOW_OLD_CERTS_FLAGS", false)
 
 // hasOldCertsFlags returns true if we have old certs flags and they are allowed.
 func (cfg *Config) hasOldCertsFlags() bool {
