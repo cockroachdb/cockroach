@@ -176,13 +176,15 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 		case *settings.IntSetting:
 			d = parser.NewDInt(parser.DInt(s.Get()))
 		case *settings.StringSetting:
-			d = parser.NewDString(s.Get())
+			d = parser.NewDString(s.String())
 		case *settings.BoolSetting:
 			d = parser.MakeDBool(parser.DBool(s.Get()))
 		case *settings.FloatSetting:
 			d = parser.NewDFloat(parser.DFloat(s.Get()))
 		case *settings.DurationSetting:
 			d = &parser.DInterval{Duration: duration.Duration{Nanos: s.Get().Nanoseconds()}}
+		case *settings.ByteSizeSetting:
+			d = parser.NewDString(s.String())
 		default:
 			return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 		}

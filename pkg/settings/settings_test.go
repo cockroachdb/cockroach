@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
+const mb = int64(1024 * 1024)
+
 var boolTA = RegisterBoolSetting("bool.t", "", true)
 var boolFA = RegisterBoolSetting("bool.f", "", false)
 var strFooA = RegisterStringSetting("str.foo", "", "")
@@ -29,6 +31,7 @@ var i1A = RegisterIntSetting("i.1", "", 0)
 var i2A = RegisterIntSetting("i.2", "", 5)
 var fA = RegisterFloatSetting("f", "", 5.4)
 var dA = RegisterDurationSetting("d", "", time.Second)
+var byteSize = RegisterByteSizeSetting("zzz", "", mb)
 
 func TestCache(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
@@ -44,19 +47,24 @@ func TestCache(t *testing.T) {
 		if expected, actual := "bar", strBarA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 0, i1A.Get(); expected != actual {
+		if expected, actual := int64(0), i1A.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 5, i2A.Get(); expected != actual {
+		if expected, actual := int64(5), i2A.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		// registering callback should have also run it initially and set default.
 		if expected, actual := 5.4, fA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := time.Second, dA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
+		if expected, actual := mb, byteSize.Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+	})
+
+	t.Run("lookup", func(t *testing.T) {
 		if actual, _, ok := Lookup("i.1"); !ok || i1A != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", i1A, actual, ok)
 		}
@@ -91,6 +99,9 @@ func TestCache(t *testing.T) {
 		if err := u.Set("d", EncodeDuration(2*time.Hour), "d"); err != nil {
 			t.Fatal(err)
 		}
+		if err := u.Set("zzz", EncodeInt(mb*5), "z"); err != nil {
+			t.Fatal(err)
+		}
 		u.Done()
 
 		if expected, actual := false, boolTA.Get(); expected != actual {
@@ -102,13 +113,16 @@ func TestCache(t *testing.T) {
 		if expected, actual := "baz", strFooA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 3, i2A.Get(); expected != actual {
+		if expected, actual := int64(3), i2A.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 3.1, fA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 2*time.Hour, dA.Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := mb*5, byteSize.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
@@ -198,13 +212,16 @@ func TestCache(t *testing.T) {
 		if expected, actual := "true", TestingStringSetting("true").Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 9, TestingIntSetting(9).Get(); expected != actual {
+		if expected, actual := int64(9), TestingIntSetting(9).Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 9.4, TestingFloatSetting(9.4).Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := time.Hour, TestingDurationSetting(time.Hour).Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := mb*10, TestingByteSizeSetting(mb*10).Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
