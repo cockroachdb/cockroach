@@ -20,6 +20,8 @@ import (
 	"sort"
 	"sync/atomic"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 )
 
 // Setting implementions wrap a val with atomic access.
@@ -78,17 +80,22 @@ func TestingBoolSetting(b bool) *BoolSetting {
 	return s
 }
 
+type numericSetting interface {
+	Setting
+	set(i int64)
+}
+
 // IntSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
 // of type "int" is updated.
 type IntSetting struct {
-	defaultValue int
+	defaultValue int64
 	v            int64
 }
 
 // Get retrieves the int value in the setting.
-func (i *IntSetting) Get() int {
-	return int(atomic.LoadInt64(&i.v))
+func (i *IntSetting) Get() int64 {
+	return atomic.LoadInt64(&i.v)
 }
 
 func (i *IntSetting) String() string {
@@ -100,8 +107,8 @@ func (*IntSetting) Typ() string {
 	return "i"
 }
 
-func (i *IntSetting) set(v int) {
-	atomic.StoreInt64(&i.v, int64(v))
+func (i *IntSetting) set(v int64) {
+	atomic.StoreInt64(&i.v, v)
 }
 
 func (i *IntSetting) setToDefault() {
@@ -109,14 +116,14 @@ func (i *IntSetting) setToDefault() {
 }
 
 // RegisterIntSetting defines a new setting with type int.
-func RegisterIntSetting(key, desc string, defVal int) *IntSetting {
+func RegisterIntSetting(key, desc string, defVal int64) *IntSetting {
 	setting := &IntSetting{defaultValue: defVal}
 	register(key, desc, setting)
 	return setting
 }
 
 // TestingIntSetting returns a mock, unregistered int setting for testing.
-func TestingIntSetting(i int) *IntSetting {
+func TestingIntSetting(i int64) *IntSetting {
 	s := &IntSetting{defaultValue: i}
 	s.setToDefault()
 	return s
@@ -250,6 +257,36 @@ func RegisterStringSetting(key, desc string, defVal string) *StringSetting {
 // TestingStringSetting returns a mock, unregistered string setting for testing.
 func TestingStringSetting(v string) *StringSetting {
 	s := &StringSetting{defaultValue: v}
+	s.setToDefault()
+	return s
+}
+
+// ByteSizeSetting is the interface of a setting variable that will be
+// updated automatically when the corresponding cluster-wide setting
+// of type "bytesize" is updated.
+type ByteSizeSetting struct {
+	IntSetting
+}
+
+// Typ returns the short (1 char) string denoting the type of setting.
+func (*ByteSizeSetting) Typ() string {
+	return "z"
+}
+
+func (b *ByteSizeSetting) String() string {
+	return humanizeutil.IBytes(b.Get())
+}
+
+// RegisterByteSizeSetting defines a new setting with type bytesize.
+func RegisterByteSizeSetting(key, desc string, defVal int64) *ByteSizeSetting {
+	setting := &ByteSizeSetting{IntSetting{defaultValue: defVal}}
+	register(key, desc, setting)
+	return setting
+}
+
+// TestingByteSizeSetting returns a mock bytesize setting for testing.
+func TestingByteSizeSetting(i int64) *ByteSizeSetting {
+	s := &ByteSizeSetting{IntSetting{defaultValue: i}}
 	s.setToDefault()
 	return s
 }

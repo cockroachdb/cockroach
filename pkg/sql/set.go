@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -160,7 +161,7 @@ func (p *planner) toSettingString(
 	case *settings.IntSetting:
 		return typeCheckAndParse(parser.TypeInt, func(d parser.Datum) (string, error) {
 			if i, ok := d.(*parser.DInt); ok {
-				return settings.EncodeInt(int(*i)), nil
+				return settings.EncodeInt(int64(*i)), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for int setting", d.ResolvedType(), d)
 		})
@@ -170,6 +171,17 @@ func (p *planner) toSettingString(
 				return settings.EncodeFloat(float64(*f)), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for float setting", d.ResolvedType(), d)
+		})
+	case *settings.ByteSizeSetting:
+		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
+			if s, ok := d.(*parser.DString); ok {
+				bytes, err := humanizeutil.ParseBytes(string(*s))
+				if err != nil {
+					return "", err
+				}
+				return settings.EncodeInt(bytes), nil
+			}
+			return "", errors.Errorf("cannot use %s %T value for byte size setting", d.ResolvedType(), d)
 		})
 	case *settings.DurationSetting:
 		return typeCheckAndParse(parser.TypeInterval, func(d parser.Datum) (string, error) {

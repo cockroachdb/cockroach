@@ -17,6 +17,7 @@ package server_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -31,9 +32,13 @@ import (
 
 const strKey = "testing.str"
 const intKey = "testing.int"
+const durationKey = "testing.duration"
+const byteSizeKey = "testing.bytesize"
 
 var strA = settings.RegisterStringSetting(strKey, "", "<default>")
 var intA = settings.RegisterIntSetting(intKey, "", 1)
+var durationA = settings.RegisterDurationSetting(durationKey, "", time.Minute)
+var byteSizeA = settings.RegisterByteSizeSetting(byteSizeKey, "", 1024*1024)
 
 func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -50,7 +55,7 @@ func TestSettingsRefresh(t *testing.T) {
 	if expected, actual := "<default>", strA.Get(); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
-	if expected, actual := 1, intA.Get(); expected != actual {
+	if expected, actual := int64(1), intA.Get(); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
@@ -62,7 +67,7 @@ func TestSettingsRefresh(t *testing.T) {
 		if expected, actual := "foo", strA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2, intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -85,7 +90,7 @@ func TestSettingsRefresh(t *testing.T) {
 		if expected, actual := "qux", strA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := 2, intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -97,7 +102,7 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "after-invalid", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := 2, intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := "after-invalid", strA.Get(); expected != actual {
@@ -111,7 +116,7 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "after-mistype", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := 2, intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := "after-mistype", strA.Get(); expected != actual {
@@ -137,6 +142,36 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(fmt.Sprintf(setQ, intKey, "5"))
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "5", db.QueryStr(fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
+
+	db.Exec(fmt.Sprintf(setQ, durationKey, "'2h'"))
+	testutils.SucceedsSoon(t, func() error {
+		if expected, actual := time.Hour*2, durationA.Get(); expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := "2h", db.QueryStr(fmt.Sprintf(showQ, durationKey))[0][0]; expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
+
+	db.Exec(fmt.Sprintf(setQ, byteSizeKey, "'1500MB'"))
+	testutils.SucceedsSoon(t, func() error {
+		if expected, actual := int64(1500000000), byteSizeA.Get(); expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := "1.4 GiB", db.QueryStr(fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
+
+	db.Exec(fmt.Sprintf(setQ, byteSizeKey, "'1450MB'"))
+	testutils.SucceedsSoon(t, func() error {
+		if expected, actual := "1.4 GiB", db.QueryStr(fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
