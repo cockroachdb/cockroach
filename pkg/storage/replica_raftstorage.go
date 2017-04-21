@@ -665,7 +665,7 @@ func (r *Replica) applySnapshot(
 	}
 
 	// We've written Raft log entries, so we need to sync the WAL.
-	if err := batch.Commit(syncRaftLog); err != nil {
+	if err := batch.Commit(syncRaftLog.Get()); err != nil {
 		return err
 	}
 	stats.commit = timeutil.Now()
