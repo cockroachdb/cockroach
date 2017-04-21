@@ -23,11 +23,12 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // appStats holds per-application statistics.
@@ -46,14 +47,16 @@ type stmtStats struct {
 
 // StmtStatsEnable determines whether to collect per-statement
 // statistics.
-var StmtStatsEnable = envutil.EnvOrDefaultBool(
-	"COCKROACH_SQL_STMT_STATS_ENABLE", true,
+var StmtStatsEnable = settings.RegisterBoolSetting(
+	"sql.metrics.stmtstats.enabled", "collect per-statement query statistics ", true,
 )
 
 // SQLStatsCollectionLatencyThreshold specifies the minimum amount of time
 // consumed by a SQL statement before it is collected for statistics reporting.
-var SQLStatsCollectionLatencyThreshold = envutil.EnvOrDefaultFloat(
-	"COCKROACH_SQL_STATS_SVCLAT_THRESHOLD", 0,
+var SQLStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
+	"sql.metrics.stmtstats.threshold",
+	"minmum execution time to cause statics to be collected",
+	0,
 )
 
 func (a *appStats) recordStatement(
@@ -64,11 +67,11 @@ func (a *appStats) recordStatement(
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 ) {
-	if a == nil || !StmtStatsEnable {
+	if a == nil || !StmtStatsEnable.Get() {
 		return
 	}
 
-	if svcLat < SQLStatsCollectionLatencyThreshold {
+	if t := SQLStatsCollectionLatencyThreshold.Get(); t > 0 && t.Seconds() >= svcLat {
 		return
 	}
 
@@ -170,6 +173,12 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	return a
 }
 
+var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
+	"sql.metrics.stmtstats.dumptologs",
+	"dump collected statement statistic to node logs when periodically cleared",
+	false,
+)
+
 // resetStats clears all the stored per-app and per-statement
 // statistics.
 func (s *sqlStats) resetStats(ctx context.Context) {
@@ -197,7 +206,9 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 		// TODO(knz/dt): instead of dumping the stats to the log, save
 		// them in a SQL table so they can be inspected by the DBA and/or
 		// the UI.
-		dumpStmtStats(ctx, appName, a.stmts)
+		if dumpStmtStatsToLogBeforeReset.Get() {
+			dumpStmtStats(ctx, appName, a.stmts)
+		}
 
 		// Clear the map, to release the memory; make the new map somewhat
 		// already large for the likely future workload.
@@ -230,8 +241,10 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[string]*stmtSt
 // StmtStatsResetFrequency is the frequency at which per-app and
 // per-statement statistics are cleared from memory, to avoid
 // unlimited memory growth.
-var StmtStatsResetFrequency = envutil.EnvOrDefaultDuration(
-	"COCKROACH_SQL_STMT_STATS_RESET_INTERVAL", 1*time.Hour,
+var StmtStatsResetFrequency = settings.RegisterDurationSetting(
+	"sql.metrics.stmtstats.interval",
+	"frequency at which per-app and per-statement statistics are reset",
+	1*time.Hour,
 )
 
 // startResetWorker ensures that the data is removed from memory
@@ -239,11 +252,13 @@ var StmtStatsResetFrequency = envutil.EnvOrDefaultDuration(
 func (s *sqlStats) startResetWorker(stopper *stop.Stopper) {
 	ctx := log.WithLogTag(context.Background(), "sql-stats", nil)
 	stopper.RunWorker(ctx, func(ctx context.Context) {
-		ticker := time.NewTicker(StmtStatsResetFrequency)
-		defer ticker.Stop()
+		var timer timeutil.Timer
+		defer timer.Stop()
 		for {
+			timer.Reset(StmtStatsResetFrequency.Get())
 			select {
-			case <-ticker.C:
+			case <-timer.C:
+				timer.Read = true
 				s.resetStats(ctx)
 			case <-stopper.ShouldStop():
 				return
