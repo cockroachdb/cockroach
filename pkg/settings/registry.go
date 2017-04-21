@@ -82,13 +82,13 @@ func TestingBoolSetting(b bool) *BoolSetting {
 // updated automatically when the corresponding cluster-wide setting
 // of type "int" is updated.
 type IntSetting struct {
-	defaultValue int
+	defaultValue int64
 	v            int64
 }
 
 // Get retrieves the int value in the setting.
-func (i *IntSetting) Get() int {
-	return int(atomic.LoadInt64(&i.v))
+func (i *IntSetting) Get() int64 {
+	return atomic.LoadInt64(&i.v)
 }
 
 func (i *IntSetting) String() string {
@@ -100,8 +100,8 @@ func (*IntSetting) Typ() string {
 	return "i"
 }
 
-func (i *IntSetting) set(v int) {
-	atomic.StoreInt64(&i.v, int64(v))
+func (i *IntSetting) set(v int64) {
+	atomic.StoreInt64(&i.v, v)
 }
 
 func (i *IntSetting) setToDefault() {
@@ -109,14 +109,14 @@ func (i *IntSetting) setToDefault() {
 }
 
 // RegisterIntSetting defines a new setting with type int.
-func RegisterIntSetting(key, desc string, defVal int) *IntSetting {
+func RegisterIntSetting(key, desc string, defVal int64) *IntSetting {
 	setting := &IntSetting{defaultValue: defVal}
 	register(key, desc, setting)
 	return setting
 }
 
 // TestingIntSetting returns a mock, unregistered int setting for testing.
-func TestingIntSetting(i int) *IntSetting {
+func TestingIntSetting(i int64) *IntSetting {
 	s := &IntSetting{defaultValue: i}
 	s.setToDefault()
 	return s
