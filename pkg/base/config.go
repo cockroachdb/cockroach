@@ -25,12 +25,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // Base config defaults.
@@ -80,13 +77,6 @@ type Config struct {
 	// This is really not recommended.
 	Insecure bool
 
-	// SSLCA, SSLCert, SSLCertKey are here for backwards-compatibility on the
-	// start command only. If specified, a warning is displayed and the
-	// SSL config is built from these rather than the certificate manager.
-	SSLCA      string // CA certificate
-	SSLCert    string // Client/server certificate
-	SSLCertKey string // Client/server key
-
 	// SSLCAKey is used to sign new certs.
 	SSLCAKey string
 	// SSLCertsDir is the path to the certificate/key directory.
@@ -125,23 +115,6 @@ type Config struct {
 	HistogramWindowInterval time.Duration
 }
 
-var allowOldCertsFlags = envutil.EnvOrDefaultBool("COCKROACH_ALLOW_OLD_CERTS_FLAGS", false)
-
-// hasOldCertsFlags returns true if we have old certs flags and they are allowed.
-func (cfg *Config) hasOldCertsFlags() bool {
-	if !allowOldCertsFlags {
-		return false
-	}
-	if cfg.SSLCA == "" && cfg.SSLCert == "" && cfg.SSLCertKey == "" {
-		return false
-	}
-
-	log.Warning(context.Background(),
-		"flags --ca-cert, --cert, and --key are deprecated and will soon be removed, please use --certs-dir",
-	)
-	return true
-}
-
 func didYouMeanInsecureError(err error) error {
 	return errors.Wrap(err, "problem using security settings, did you mean to use --insecure?")
 }
@@ -173,16 +146,6 @@ func (cfg *Config) AdminURL() string {
 
 // GetClientCertPaths returns the paths to the client cert and key.
 func (cfg *Config) GetClientCertPaths(user string) (string, string, error) {
-	if cfg.hasOldCertsFlags() {
-		if cfg.SSLCert == "" {
-			return "", "", errors.New("some certificate flags specified, but --cert is empty")
-		}
-		if cfg.SSLCertKey == "" {
-			return "", "", errors.New("some certificate flags specified, but --key is empty")
-		}
-		return cfg.SSLCert, cfg.SSLCertKey, nil
-	}
-
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
 		return "", "", err
@@ -192,13 +155,6 @@ func (cfg *Config) GetClientCertPaths(user string) (string, string, error) {
 
 // GetCACertPath returns the path to the CA certificate.
 func (cfg *Config) GetCACertPath() (string, error) {
-	if cfg.hasOldCertsFlags() {
-		if cfg.SSLCA == "" {
-			return "", errors.New("no CA certificate found, use --ca-cert")
-		}
-		return cfg.SSLCA, nil
-	}
-
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
 		return "", err
@@ -285,10 +241,6 @@ func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 		return nil, nil
 	}
 
-	if cfg.hasOldCertsFlags() {
-		return security.LoadClientTLSConfig(cfg.SSLCA, cfg.SSLCert, cfg.SSLCertKey)
-	}
-
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
 		return nil, didYouMeanInsecureError(err)
@@ -308,10 +260,6 @@ func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if cfg.Insecure {
 		return nil, nil
-	}
-
-	if cfg.hasOldCertsFlags() {
-		return security.LoadServerTLSConfig(cfg.SSLCA, cfg.SSLCert, cfg.SSLCertKey)
 	}
 
 	cm, err := cfg.GetCertificateManager()

@@ -253,15 +253,6 @@ func init() {
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
 
-		// The start command support the old flags for backwards compatibility.
-		// This will be removed soon.
-		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, "")
-		_ = f.MarkHidden(cliflags.CACert.Name)
-		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, "")
-		_ = f.MarkHidden(cliflags.Cert.Name)
-		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, "")
-		_ = f.MarkHidden(cliflags.Key.Name)
-
 		// Cluster joining flags.
 		varFlag(f, &serverCfg.JoinList, cliflags.Join)
 
