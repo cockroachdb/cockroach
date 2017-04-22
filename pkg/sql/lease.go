@@ -783,7 +783,7 @@ func (t *tableState) removeLease(lease *LeaseState, m *LeaseManager) {
 
 // purgeOldLeases refreshes the leases on a table. Unused leases older than
 // minVersion will be released.
-// If deleted is set, minVersion is ignored; no lease is acquired and all
+// If dropped is set, minVersion is ignored; no lease is acquired and all
 // existing unused leases are released. The table is further marked for
 // deletion, which will cause existing in-use leases to be eagerly released once
 // they're not in use any more.
@@ -791,7 +791,7 @@ func (t *tableState) removeLease(lease *LeaseState, m *LeaseManager) {
 func (t *tableState) purgeOldLeases(
 	ctx context.Context,
 	db *client.DB,
-	deleted bool,
+	dropped bool,
 	minVersion sqlbase.DescriptorVersion,
 	m *LeaseManager,
 ) error {
@@ -804,23 +804,26 @@ func (t *tableState) purgeOldLeases(
 		return nil
 	}
 
+	releaseInactives := func(deleted bool) {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.deleted = deleted
+		t.releaseInactiveLeases(m)
+	}
+
+	if dropped {
+		releaseInactives(dropped)
+		return nil
+	}
+
 	// Acquire and release a lease on the table at a version >= minVersion.
 	var lease *LeaseState
 	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		if !deleted {
-			lease, err = t.acquire(ctx, txn, minVersion, m)
-			if err == errTableDropped {
-				deleted = true
-			}
-		}
-		if err == nil || deleted {
-			t.mu.Lock()
-			defer t.mu.Unlock()
-			if deleted {
-				t.deleted = true
-			}
-			t.releaseInactiveLeases(m)
+		lease, err = t.acquire(ctx, txn, minVersion, m)
+		if err == errTableDropped {
+			lease = nil
+			releaseInactives(true /* deleted */)
 			return nil
 		}
 		return err
@@ -828,6 +831,7 @@ func (t *tableState) purgeOldLeases(
 	if err != nil {
 		return err
 	}
+	releaseInactives(false /* deleted */)
 	if lease == nil {
 		return nil
 	}
