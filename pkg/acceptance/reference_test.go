@@ -62,11 +62,7 @@ export COCKROACH_SKIP_UPDATE_CHECK=1
 export COCKROACH_CERTS_DIR=/certs/
 
 bin=/%s/cockroach
-# TODO(bdarnell): when --background is in referenceBinPath, use it here and below.
-# The until loop will also be unnecessary at that point.
-$bin start --logtostderr & &> oldout
-# Wait until cockroach has started up successfully.
-until $bin sql -e "SELECT 1"; do sleep 1; done
+$bin start --background --logtostderr &> oldout
 
 echo "Use the reference binary to write a couple rows, then render its output to a file and shut down."
 $bin sql -e "CREATE DATABASE old"
@@ -102,6 +98,10 @@ bin=/%s/cockroach
 	runReferenceTestWithScript(ctx, t, referenceTestScript)
 }
 
+// TestDockerReadWriteBidirectionalReferenceVersion verifies that we can
+// upgrade from the bidirectional reference version (i.e. the oldest
+// version that we support downgrading to, specified in the
+// postgres-test dockerfile), then downgrade to it again.
 func TestDockerReadWriteBidirectionalReferenceVersion(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
@@ -125,6 +125,14 @@ $bin quit && wait
 	runReadWriteReferenceTest(ctx, t, `bidirectional-reference-version`, backwardReferenceTest)
 }
 
+// TestDockerReadWriteForwardReferenceVersion verifies that we can
+// upgrade from the forward reference version (i.e. the oldest version
+// that we support upgrading from, specified in the postgres-test
+// dockerfile), and that downgrading to it fails in the expected ways.
+//
+// When the forward and bidirectional reference versions are the same,
+// this test is a duplicate of the bidirectional test above and exists
+// solely to preserve the scaffolding for when they differ again.
 func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
@@ -138,35 +146,12 @@ function finish() {
 trap finish EXIT
 
 export COCKROACH_CERTS_DIR=/certs/
-$bin start & &> out
-until $bin sql -e "SELECT 1"; do sleep 1; done
-# grep returns non-zero if it didn't match anything. With set -e above, that would exit here.
-$bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" 2>&1 | grep "is encoded using using version 3, but this client only supports version 1"
+$bin start --background --logtostderr &> out
+$bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
+# diff returns non-zero if different. With set -e above, that would exit here.
+diff new.everything old.everything
 $bin quit && wait
 `
 	runReadWriteReferenceTest(ctx, t, `forward-reference-version`, backwardReferenceTest)
-}
-
-func TestDockerMigration_7429(t *testing.T) {
-	s := log.Scope(t)
-	defer s.Close(t)
-
-	ctx := context.Background()
-	script := `
-set -eux
-bin=/cockroach/cockroach
-
-touch out
-function finish() {
-  cat out
-}
-trap finish EXIT
-
-export COCKROACH_SKIP_UPDATE_CHECK=1
-export COCKROACH_CERTS_DIR=/certs/
-$bin start --logtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
-$bin debug range ls
-$bin quit
-`
-	runReferenceTestWithScript(ctx, t, script)
 }
