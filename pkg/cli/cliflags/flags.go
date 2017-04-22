@@ -264,7 +264,7 @@ production usage.`,
 
 	AllowCAKeyReuse = FlagInfo{
 		Name:        "allow-ca-key-reuse",
-		Description: `Use the CA key if is exists.`,
+		Description: `Use the CA key if it exists.`,
 	}
 
 	OverwriteFiles = FlagInfo{
@@ -287,15 +287,17 @@ production usage.`,
 		EnvVar: "COCKROACH_CERTS_DIR",
 		Description: `
 The path to the directory containing SSL certificates and keys.
+<PRE>
 
 Cockroach looks for certificates and keys inside the directory using the following naming scheme:
 
-CA certificate and key: ca.crt, ca.key
-Server certificate and key: node.crt, node.key
-Client certificate and key: client.<user>.crt, client.<user>.key
+  - CA certificate and key: ca.crt, ca.key
+  - Server certificate and key: node.crt, node.key
+  - Client certificate and key: client.<user>.crt, client.<user>.key
 
 When running client commands, the user can be specified with the --user flag.
 
+</PRE>
 Keys have a minimum permission requirement of 0777 (rwx------). This restriction can be
 disabled by setting the environment variable COCKROACH_SKIP_KEY_PERMISSION_CHECK to true.`,
 	}
