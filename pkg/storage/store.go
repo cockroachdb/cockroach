@@ -1091,17 +1091,6 @@ func IterateRangeDescriptors(
 	return err
 }
 
-func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
-	batch := s.engine.NewBatch()
-	defer batch.Close()
-	if err := migrate7310And6991(ctx, batch, desc); err != nil {
-		log.Fatal(ctx, errors.Wrap(err, "during migration"))
-	}
-	if err := batch.Commit(false /* !sync */); err != nil {
-		log.Fatal(ctx, errors.Wrap(err, "could not migrate Raft state"))
-	}
-}
-
 // ReadStoreIdent reads the StoreIdent from the store.
 // It returns *NotBootstrappedError if the ident is missing (meaning that the
 // store needs to be bootstrapped).
@@ -1173,7 +1162,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			if !desc.IsInitialized() {
 				return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
 			}
-			s.migrate(ctx, desc)
 
 			rep, err := NewReplica(&desc, s, 0)
 			if err != nil {
