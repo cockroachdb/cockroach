@@ -257,9 +257,6 @@ func TestDistBackfill(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
 	r.DB.SetMaxOpenConns(1)
-	r.Exec("SET DISTSQL = ALWAYS")
-
-	r = r.Subtest(t)
 	r.Exec("SET DISTSQL = OFF")
 	if _, err := tc.ServerConn(0).Exec("CREATE INDEX foo ON NumToStr (str)"); err != nil {
 		t.Fatal(err)
