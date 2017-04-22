@@ -36,10 +36,10 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # nodejs - ui: all
 # openssh-client - terraform / jepsen
 # patch - crosstool-ng/configure
-# python - msan: libxx
+# python - msan: libcxx
 # texinfo - crosstool-ng/configure
 # unzip - terraform
-# xz-utils - msan: libcxx
+# xz-utils - msan: libcxx / CRDB build system
 # yarn - ui: all
 RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf \
@@ -67,11 +67,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     yarn
 
-# TODO(tamird): use the shallow clone when crosstool-ng 1.23 is released.
-# RUN git clone --depth 1 --branch crosstool-ng-1.23.0 https://github.com/crosstool-ng/crosstool-ng.git \
-RUN git clone https://github.com/crosstool-ng/crosstool-ng && git -C crosstool-ng checkout ee7662fa58a7f45ccd3e3520919ee70301ab7648 \
+RUN mkdir crosstool-ng \
+ && curl -fsSL http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.23.0.tar.xz | tar --strip-components=1 -C crosstool-ng -xJ \
  && cd crosstool-ng \
- && ./bootstrap \
  && ./configure --prefix /usr/local/ct-ng \
  && make -j$(nproc) \
  && make install \
@@ -91,18 +89,11 @@ RUN apt-get autoremove -y gcc g++
 
 # Build an msan-enabled build of libc++, following instructions from
 # https://github.com/google/sanitizers/wiki/MemorySanitizerLibcxxHowTo
-#
-# Note that this is done before CC and CXX are set below because our cross
-# compilers are too old to build libc++.
 RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/llvm-3.9.1.src.tar.xz      | tar --strip-components=1 -C llvm -xJ \
  && mkdir llvm/projects/libcxx    && curl -sfSL http://releases.llvm.org/3.9.1/libcxx-3.9.1.src.tar.xz    | tar --strip-components=1 -C llvm/projects/libcxx -xJ \
  && mkdir llvm/projects/libcxxabi && curl -sfSL http://releases.llvm.org/3.9.1/libcxxabi-3.9.1.src.tar.xz | tar --strip-components=1 -C llvm/projects/libcxxabi -xJ \
  && curl -fsSL https://github.com/llvm-mirror/libcxx/commit/b640da0b315ead39690d4d65c76938ab8aeb5449.patch | git -C llvm/projects/libcxx apply \
  && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory && make cxx -j$(nproc))
-
-# Go assumes "gcc" and "g++", so we must teach it otherwise.
-ENV CC  clang
-ENV CXX clang++
 
 RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
  && (cd osxcross/tarballs && curl -sfSL https://s3.amazonaws.com/andrew-osx-sdks/MacOSX10.9.sdk.tar.xz -O) \
@@ -119,7 +110,7 @@ RUN curl -fsSL https://storage.googleapis.com/golang/go1.8.1.src.tar.gz -o golan
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
  && patch -p2 -i /parallelbuilds-go1.8.patch \
- && GOROOT_BOOTSTRAP=$(go env GOROOT) ./make.bash \
+ && GOROOT_BOOTSTRAP=$(go env GOROOT) CC=clang CXX=clang++ ./make.bash \
  && rm -rf /*.patch \
  && apt-get autoremove -y golang
 

@@ -214,11 +214,6 @@ ISDARWIN := $(findstring darwin,$(XHOST_TRIPLE))
 XHOST_BIN_DIR := /x-tools/$(XHOST_TRIPLE)/bin
 
 export PATH := $(XHOST_BIN_DIR):$(PATH)
-# TODO(tamird): setting these in the builder image is terrible. Stop doing it.
-#
-# We need to unexport these variables to allow autoconf to find the right
-# compilers and tools.
-unexport CC CXX
 
 CC_PATH  := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
 CXX_PATH := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
