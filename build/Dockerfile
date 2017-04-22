@@ -36,10 +36,10 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # nodejs - ui: all
 # openssh-client - terraform / jepsen
 # patch - crosstool-ng/configure
-# python - msan: libxx
+# python - msan: libcxx
 # texinfo - crosstool-ng/configure
 # unzip - terraform
-# xz-utils - msan: libcxx
+# xz-utils - msan: libcxx / CRDB build system
 # yarn - ui: all
 RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf \
