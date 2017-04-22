@@ -67,11 +67,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     yarn
 
-# TODO(tamird): use the shallow clone when crosstool-ng 1.23 is released.
-# RUN git clone --depth 1 --branch crosstool-ng-1.23.0 https://github.com/crosstool-ng/crosstool-ng.git \
-RUN git clone https://github.com/crosstool-ng/crosstool-ng && git -C crosstool-ng checkout ee7662fa58a7f45ccd3e3520919ee70301ab7648 \
+RUN mkdir crosstool-ng \
+ && curl -fsSL http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.23.0.tar.xz | tar --strip-components=1 -C crosstool-ng -xJ \
  && cd crosstool-ng \
- && ./bootstrap \
  && ./configure --prefix /usr/local/ct-ng \
  && make -j$(nproc) \
  && make install \
