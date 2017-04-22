@@ -725,7 +725,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %right     NOT
 %nonassoc  IS                  // IS sets precedence for IS NULL, etc
 %nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS
-%nonassoc  BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH NOT_REGIMATCH NOT_LA
+%nonassoc  '~' BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH NOT_REGIMATCH NOT_LA
 %nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
 %nonassoc  OVERLAPS
 %left      POSTFIXOP           // dummy for postfix OP rules
@@ -766,7 +766,6 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %left      AT                // sets precedence for AT TIME ZONE
 %left      COLLATE
 %right     UMINUS
-%left      '~'
 %left      '[' ']'
 %left      '(' ')'
 %left      TYPEANNOTATE
