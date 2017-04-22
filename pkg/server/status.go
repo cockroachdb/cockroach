@@ -67,6 +67,10 @@ const (
 	// rangeDebugEndpoint exposes an html page with information about a specific range.
 	rangeDebugEndpoint = "/debug/range"
 
+	// problemRangesDebugEndpoint exposes an html page with a list of all ranges
+	// that are experiencing problems.
+	problemRangesDebugEndpoint = "/debug/problemranges"
+
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
 )
@@ -624,7 +628,9 @@ func (s *statusServer) Ranges(
 		return state
 	}
 
-	constructRangeInfo := func(desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID) serverpb.RangeInfo {
+	constructRangeInfo := func(
+		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID, problems serverpb.RangeProblems,
+	) serverpb.RangeInfo {
 		return serverpb.RangeInfo{
 			Span: serverpb.PrettySpan{
 				StartKey: desc.StartKey.String(),
@@ -634,10 +640,18 @@ func (s *statusServer) Ranges(
 			State:         rep.State(),
 			SourceNodeID:  nodeID,
 			SourceStoreID: storeID,
+			Problems:      problems,
 		}
 	}
 
+	cfg, ok := s.gossip.GetSystemConfig()
+	if !ok {
+		return nil, grpc.Errorf(codes.Internal, "system config not yet available")
+	}
+	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+
 	err = s.stores.VisitStores(func(store *storage.Store) error {
+		timestamp := store.Clock().Now()
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
 
@@ -649,7 +663,17 @@ func (s *statusServer) Ranges(
 					if err != nil {
 						return true, err
 					}
-					output.Ranges = append(output.Ranges, constructRangeInfo(desc, rep, store.Ident.StoreID))
+					metrics := rep.Metrics(ctx, timestamp, cfg, isLiveMap)
+					output.Ranges = append(output.Ranges,
+						constructRangeInfo(
+							desc,
+							rep,
+							store.Ident.StoreID,
+							serverpb.RangeProblems{
+								Unavailable:          metrics.RangeCounter && metrics.Unavailable,
+								LeaderNotLeaseHolder: metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
+							},
+						))
 					return false, nil
 				})
 			return err
@@ -663,7 +687,16 @@ func (s *statusServer) Ranges(
 				continue
 			}
 			desc := rep.Desc()
-			output.Ranges = append(output.Ranges, constructRangeInfo(*desc, rep, store.Ident.StoreID))
+			metrics := rep.Metrics(ctx, timestamp, cfg, isLiveMap)
+			output.Ranges = append(output.Ranges, constructRangeInfo(
+				*desc,
+				rep,
+				store.Ident.StoreID,
+				serverpb.RangeProblems{
+					Unavailable:          metrics.RangeCounter && metrics.Unavailable,
+					LeaderNotLeaseHolder: metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
+				},
+			))
 		}
 		return nil
 	})
