@@ -98,6 +98,12 @@ func (b *BytesValue) Type() string {
 
 // String implements the flag.Value and pflag.Value interfaces.
 func (b *BytesValue) String() string {
+	// We need to be able to print the zero value in order for go's flags
+	// package to not choke when comparing values to the zero value
+	// (as it does in isZeroValue as of go1.8).
+	if b.val == nil {
+		return IBytes(0)
+	}
 	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
 	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
 	// vs 1024.
