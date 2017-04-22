@@ -4687,27 +4687,29 @@ func (r *Replica) Less(i btree.Item) bool {
 	return r.endKey().Less(i.(rangeKeyItem).endKey())
 }
 
-type replicaMetrics struct {
-	leader      bool
-	leaseValid  bool
-	leaseholder bool
-	leaseType   roachpb.LeaseType
-	quiescent   bool
+// ReplicaMetrics contains details on the current status of the replica.
+type ReplicaMetrics struct {
+	Leader      bool
+	LeaseValid  bool
+	Leaseholder bool
+	LeaseType   roachpb.LeaseType
+	Quiescent   bool
 	// Is this the replica which collects per-range metrics? This is done either
 	// on the leader or, if there is no leader, on the largest live replica ID.
-	rangeCounter    bool
-	unavailable     bool
-	underreplicated bool
-	behindCount     int64
-	selfBehindCount int64
+	RangeCounter    bool
+	Unavailable     bool
+	Underreplicated bool
+	BehindCount     int64
+	SelfBehindCount int64
 }
 
-func (r *Replica) metrics(
+// Metrics returns the current metrics for the replica.
+func (r *Replica) Metrics(
 	ctx context.Context,
 	now hlc.Timestamp,
 	cfg config.SystemConfig,
 	livenessMap map[roachpb.NodeID]bool,
-) replicaMetrics {
+) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
 	status := r.leaseStatus(r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
@@ -4739,20 +4741,20 @@ func calcReplicaMetrics(
 	storeID roachpb.StoreID,
 	quiescent bool,
 	selfBehindCount int64,
-) replicaMetrics {
-	var m replicaMetrics
+) ReplicaMetrics {
+	var m ReplicaMetrics
 
 	var leaseOwner bool
 	if status.state == leaseValid {
-		m.leaseValid = true
+		m.LeaseValid = true
 		leaseOwner = status.lease.OwnedBy(storeID)
-		m.leaseType = status.lease.Type()
+		m.LeaseType = status.lease.Type()
 	}
-	m.leaseholder = m.leaseValid && leaseOwner
-	m.leader = isRaftLeader(raftStatus)
-	m.quiescent = quiescent
-	if !m.leader {
-		m.selfBehindCount = selfBehindCount
+	m.Leaseholder = m.LeaseValid && leaseOwner
+	m.Leader = isRaftLeader(raftStatus)
+	m.Quiescent = quiescent
+	if !m.Leader {
+		m.SelfBehindCount = selfBehindCount
 	}
 
 	// We gather per-range stats on either the leader or, if there is no leader,
@@ -4769,24 +4771,24 @@ func calcReplicaMetrics(
 		// The range doesn't have a leader or we don't know who the leader is.
 		for _, rd := range desc.Replicas {
 			if livenessMap[rd.NodeID] {
-				m.rangeCounter = rd.StoreID == storeID
+				m.RangeCounter = rd.StoreID == storeID
 				break
 			}
 		}
 	} else {
-		m.rangeCounter = m.leader
+		m.RangeCounter = m.Leader
 	}
 
-	if m.rangeCounter {
+	if m.RangeCounter {
 		var goodReplicas int
-		goodReplicas, m.behindCount = calcGoodReplicas(raftStatus, desc, livenessMap)
+		goodReplicas, m.BehindCount = calcGoodReplicas(raftStatus, desc, livenessMap)
 		if goodReplicas < computeQuorum(len(desc.Replicas)) {
-			m.unavailable = true
+			m.Unavailable = true
 		}
 		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
 			log.Error(ctx, err)
 		} else if int32(goodReplicas) < zoneConfig.NumReplicas {
-			m.underreplicated = true
+			m.Underreplicated = true
 		}
 	}
 
