@@ -3837,37 +3837,37 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
-		metrics := rep.metrics(ctx, timestamp, cfg, livenessMap)
-		if metrics.leader {
+		metrics := rep.Metrics(ctx, timestamp, cfg, livenessMap)
+		if metrics.Leader {
 			raftLeaderCount++
-			if metrics.leaseValid && !metrics.leaseholder {
+			if metrics.LeaseValid && !metrics.Leaseholder {
 				raftLeaderNotLeaseHolderCount++
 			}
 		}
-		if metrics.leaseholder {
+		if metrics.Leaseholder {
 			leaseHolderCount++
 		}
-		switch metrics.leaseType {
+		switch metrics.LeaseType {
 		case roachpb.LeaseNone:
 		case roachpb.LeaseExpiration:
 			leaseExpirationCount++
 		case roachpb.LeaseEpoch:
 			leaseEpochCount++
 		}
-		if metrics.quiescent {
+		if metrics.Quiescent {
 			quiescentCount++
 		}
-		if metrics.rangeCounter {
+		if metrics.RangeCounter {
 			rangeCount++
-			if metrics.unavailable {
+			if metrics.Unavailable {
 				unavailableRangeCount++
 			}
-			if metrics.underreplicated {
+			if metrics.Underreplicated {
 				underreplicatedRangeCount++
 			}
 		}
-		behindCount += metrics.behindCount
-		selfBehindCount += metrics.selfBehindCount
+		behindCount += metrics.BehindCount
+		selfBehindCount += metrics.SelfBehindCount
 		return true // more
 	})
 

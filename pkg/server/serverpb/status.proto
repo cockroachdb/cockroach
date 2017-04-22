@@ -88,6 +88,11 @@ message RaftState {
   map<uint64, Progress> progress = 6 [(gogoproto.nullable) = false];
 }
 
+message RangeProblems {
+    bool unavailable = 1;
+    bool leader_not_lease_holder = 2;
+}
+
 message RangeInfo {
   PrettySpan span = 1 [(gogoproto.nullable) = false];
   RaftState raft_state = 2 [(gogoproto.nullable) = false];
@@ -102,6 +107,7 @@ message RangeInfo {
   ];
   string error_message = 7;
   repeated roachpb.Lease lease_history = 8 [(gogoproto.nullable) = false];
+  RangeProblems problems = 9 [(gogoproto.nullable) = false];
 }
 
 message RangesRequest {
