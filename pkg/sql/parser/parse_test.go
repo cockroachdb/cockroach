@@ -1334,10 +1334,22 @@ func TestParsePrecedence(t *testing.T) {
 	or := func(left, right Expr) Expr {
 		return &OrExpr{Left: left, Right: right}
 	}
+	concat := func(left, right Expr) Expr {
+		return &BinaryExpr{Operator: Concat, Left: left, Right: right}
+	}
+	regmatch := func(left, right Expr) Expr {
+		return &ComparisonExpr{Operator: RegMatch, Left: left, Right: right}
+	}
+	regimatch := func(left, right Expr) Expr {
+		return &ComparisonExpr{Operator: RegIMatch, Left: left, Right: right}
+	}
 
 	one := &NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
 	two := &NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
 	three := &NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
+	a := &StrVal{s: "a"}
+	b := &StrVal{s: "b"}
+	c := &StrVal{s: "c"}
 
 	testData := []struct {
 		sql      string
@@ -1457,6 +1469,13 @@ func TestParsePrecedence(t *testing.T) {
 
 		// OR combined with self (left associative).
 		{`1 OR 2 OR 3`, or(or(one, two), three)},
+
+		// ~ and ~* should both be lower than ||.
+		{`'a' || 'b' ~ 'c'`, regmatch(concat(a, b), c)},
+		{`'a' || 'b' ~* 'c'`, regimatch(concat(a, b), c)},
+
+		// Unary ~ should have highest precedence.
+		{`~1+2`, binary(Plus, unary(UnaryComplement, one), two)},
 	}
 	for _, d := range testData {
 		expr, err := ParseExpr(d.sql)
