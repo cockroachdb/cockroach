@@ -28,8 +28,9 @@ import (
 // PreparedStatement is a SQL statement that has been parsed and the types
 // of arguments and results have been determined.
 type PreparedStatement struct {
-	Query       string
-	Type        parser.StatementType
+	// Statement is the parsed, prepared SQL statement. It may be nil if the
+	// prepared statement is empty.
+	Statement   parser.Statement
 	SQLTypes    parser.PlaceholderTypes
 	Columns     sqlbase.ResultColumns
 	portalNames map[string]struct{}
@@ -65,24 +66,39 @@ func (ps PreparedStatements) Exists(name string) bool {
 	return ok
 }
 
+// NewFromString creates a new PreparedStatement with the provided name and
+// corresponding query string, using the given PlaceholderTypes hints to assist
+// in inferring placeholder types.
+//
+// ps.session.Ctx() is used as the logging context for the prepare operation.
+func (ps PreparedStatements) NewFromString(
+	e *Executor, name, query string, placeholderHints parser.PlaceholderTypes,
+) (*PreparedStatement, error) {
+	sessionEventf(ps.session, "parsing: %s", query)
+
+	var parser parser.Parser
+	stmts, err := parser.Parse(query)
+	if err != nil {
+		return nil, err
+	}
+	return ps.New(e, name, stmts, placeholderHints)
+}
+
 // New creates a new PreparedStatement with the provided name and corresponding
-// query string, using the given PlaceholderTypes hints to assist in inferring
-// placeholder types.
+// query statements, using the given PlaceholderTypes hints to assist in
+// inferring placeholder types.
 //
 // ps.session.Ctx() is used as the logging context for the prepare operation.
 func (ps PreparedStatements) New(
-	e *Executor, name, query string, placeholderHints parser.PlaceholderTypes,
+	e *Executor, name string, stmts parser.StatementList, placeholderHints parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	// Prepare the query. This completes the typing of placeholders.
-	stmt, err := e.Prepare(query, ps.session, placeholderHints)
+	stmt, err := e.Prepare(stmts, ps.session, placeholderHints)
 	if err != nil {
 		return nil, err
 	}
 
-	// For now we are just counting the size of the query string and
-	// statement name. When we start storing the prepared query plan
-	// during prepare, this should be tallied up to the monitor as well.
-	sz := int64(uintptr(len(query)+len(name)) + unsafe.Sizeof(*stmt))
+	sz := int64(uintptr(len(name)) + unsafe.Sizeof(*stmt))
 	if err := stmt.memAcc.Wsession(ps.session).OpenAndInit(ps.session.Ctx(), sz); err != nil {
 		return nil, err
 	}
