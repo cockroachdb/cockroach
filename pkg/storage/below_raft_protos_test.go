@@ -23,12 +23,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -66,11 +63,6 @@ type fixture struct {
 }
 
 var belowRaftGoldenProtos = map[reflect.Type]fixture{
-	reflect.TypeOf(&raftpb.HardState{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return &raftpb.HardState{Term: 1, Vote: 2, Commit: 3} },
-		emptySum:             13621293256077144893,
-		populatedSum:         11100902660574274053,
-	},
 	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
 		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCMetadata(r, false) },
 		emptySum:             7551962144604783939,
@@ -80,31 +72,6 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCStats(r, false) },
 		emptySum:             18064891702890239528,
 		populatedSum:         4287370248246326846,
-	},
-	reflect.TypeOf(&roachpb.AbortCacheEntry{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return roachpb.NewPopulatedAbortCacheEntry(r, false) },
-		emptySum:             11932598136014321867,
-		populatedSum:         5118321872981034391,
-	},
-	reflect.TypeOf(&roachpb.Lease{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return roachpb.NewPopulatedLease(r, false) },
-		emptySum:             10006158318270644799,
-		populatedSum:         1304511461063751549,
-	},
-	reflect.TypeOf(&roachpb.RaftTruncatedState{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return roachpb.NewPopulatedRaftTruncatedState(r, false) },
-		emptySum:             5531676819244041709,
-		populatedSum:         14781226418259198098,
-	},
-	reflect.TypeOf(&hlc.Timestamp{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return hlc.NewPopulatedTimestamp(r, false) },
-		emptySum:             5531676819244041709,
-		populatedSum:         10735653246768912584,
-	},
-	reflect.TypeOf(&roachpb.Transaction{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return roachpb.NewPopulatedTransaction(r, false) },
-		emptySum:             8650182997796107667,
-		populatedSum:         15911378024840759412,
 	},
 }
 
