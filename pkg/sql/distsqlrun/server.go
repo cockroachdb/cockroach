@@ -154,23 +154,26 @@ func (ds *ServerImpl) setupFlow(
 		return nil, nil, errors.Errorf("setupFlow called before the NodeID was resolved")
 	}
 
+	evalCtx := ds.evalCtx
+
 	monitor := mon.MakeMonitor("flow",
 		ds.Counter, ds.Hist, -1 /* use default block size */, noteworthyMemoryUsageBytes)
 	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
-	ds.evalCtx.Mon = &monitor
+	evalCtx.Mon = &monitor
+
+	// TODO(andrei): more fields from evalCtx need to be initialized (#13821).
 
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
 	flowCtx := FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		id:             req.Flow.FlowID,
-		// TODO(andrei): more fields from evalCtx need to be initialized (#13821).
-		evalCtx:      ds.evalCtx,
-		rpcCtx:       ds.RPCContext,
-		txnProto:     &req.Txn,
-		clientDB:     ds.DB,
-		testingKnobs: ds.TestingKnobs,
-		nodeID:       nodeID,
+		evalCtx:        evalCtx,
+		rpcCtx:         ds.RPCContext,
+		txnProto:       &req.Txn,
+		clientDB:       ds.DB,
+		testingKnobs:   ds.TestingKnobs,
+		nodeID:         nodeID,
 	}
 
 	ctx = flowCtx.AnnotateCtx(ctx)
