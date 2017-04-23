@@ -303,18 +303,36 @@ func runQuery(
 // It runs the sql query and writes output to 'w'.
 func runQueryAndFormatResults(
 	conn *sqlConn, w io.Writer, fn queryFunc, displayFormat tableDisplayFormat,
-) error {
+) (err error) {
 	rows, err := fn(conn)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() {
+		_ = rows.Close()
+	}()
 	for {
-		cols, allRows, result, err := sqlRowsToStrings(rows, true)
+		cols := getColumnStrings(rows)
+		if len(cols) == 0 {
+			// Even if the query returned no rows, we still need to "exhaust" the
+			// results in order to generate a properly formatted tag.
+			for {
+				err := rows.Next(nil)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					return err
+				}
+			}
+			fmt.Fprintln(w, getFormattedTag(rows.Tag(), rows.Result()))
+			// Can return early because we know there are no more results
+			return nil
+		}
+		err := printQueryOutput(w, cols, newRowIter(rows), "", displayFormat)
 		if err != nil {
 			return err
 		}
-		printQueryOutput(w, cols, allRows, result, displayFormat)
 
 		if more, err := rows.NextResultSet(); err != nil {
 			return err
@@ -332,35 +350,65 @@ func runQueryAndFormatResults(
 // information was returned (eg: statement was not a query).
 // If showMoreChars is true, then more characters are not escaped.
 func sqlRowsToStrings(rows *sqlRows, showMoreChars bool) ([]string, [][]string, string, error) {
+	cols := getColumnStrings(rows)
+	allRows, err := getAllRowStrings(rows, showMoreChars)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	tag := getFormattedTag(rows.Tag(), rows.Result())
+
+	return cols, allRows, tag, nil
+}
+
+func getColumnStrings(rows *sqlRows) []string {
 	srcCols := rows.Columns()
 	cols := make([]string, len(srcCols))
 	for i, c := range srcCols {
-		cols[i] = formatVal(c, showMoreChars, false)
+		cols[i] = formatVal(c, true, false)
+	}
+	return cols
+}
+
+func getAllRowStrings(rows *sqlRows, showMoreChars bool) ([][]string, error) {
+	var allRows [][]string
+
+	for {
+		rowStrings, err := getNextRowStrings(rows, showMoreChars)
+		if err != nil {
+			return nil, err
+		}
+		if rowStrings == nil {
+			break
+		}
+		allRows = append(allRows, rowStrings)
 	}
 
-	var allRows [][]string
+	return allRows, nil
+}
+
+func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
+	cols := rows.Columns()
 	var vals []driver.Value
 	if len(cols) > 0 {
 		vals = make([]driver.Value, len(cols))
 	}
 
-	for {
-		err := rows.Next(vals)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, nil, "", err
-		}
-		rowStrings := make([]string, len(cols))
-		for i, v := range vals {
-			rowStrings[i] = formatVal(v, showMoreChars, showMoreChars)
-		}
-		allRows = append(allRows, rowStrings)
+	err := rows.Next(vals)
+	if err == io.EOF {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	result := rows.Result()
-	tag := rows.Tag()
+	rowStrings := make([]string, len(cols))
+	for i, v := range vals {
+		rowStrings[i] = formatVal(v, showMoreChars, showMoreChars)
+	}
+	return rowStrings, nil
+}
+
+func getFormattedTag(tag string, result driver.Result) string {
 	switch tag {
 	case "":
 		tag = "OK"
@@ -369,8 +417,7 @@ func sqlRowsToStrings(rows *sqlRows, showMoreChars bool) ([]string, [][]string, 
 			tag = fmt.Sprintf("%s %d", tag, n)
 		}
 	}
-
-	return cols, allRows, tag, nil
+	return tag
 }
 
 // expandTabsAndNewLines ensures that multi-line row strings that may
