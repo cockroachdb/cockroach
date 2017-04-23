@@ -401,19 +401,12 @@ func (e *Executor) getDatabaseCache() *databaseCache {
 // populate the missing types. The PreparedStatement is returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
-	query string, session *Session, pinfo parser.PlaceholderTypes,
+	stmts parser.StatementList, session *Session, pinfo parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	session.resetForBatch(e)
-	sessionEventf(session, "preparing: %s", query)
-
-	var p parser.Parser
-	stmts, err := p.Parse(query)
-	if err != nil {
-		return nil, err
-	}
+	sessionEventf(session, "preparing: %s", stmts)
 
 	prepared := &PreparedStatement{
-		Query:       query,
 		SQLTypes:    pinfo,
 		portalNames: make(map[string]struct{}),
 	}
@@ -426,8 +419,8 @@ func (e *Executor) Prepare(
 		return nil, errWrongNumberOfPreparedStatements(len(stmts))
 	}
 	stmt := stmts[0]
-	prepared.Type = stmt.StatementType()
-	if err = pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
+	prepared.Statement = stmt
+	if err := pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
 		return nil, err
 	}
 	protoTS, err := isAsOf(session, stmt, e.cfg.Clock.Now())
@@ -486,6 +479,14 @@ func (e *Executor) Prepare(
 	return prepared, nil
 }
 
+func logIfPanicking(ctx context.Context, sql string) {
+	if r := recover(); r != nil {
+		log.Shout(ctx, log.Severity_ERROR, "a SQL panic has occurred!")
+		// On a panic, prepend the executed SQL.
+		panic(fmt.Errorf("%s: %v", sql, r))
+	}
+}
+
 // ExecuteStatements executes the given statement(s) and returns a response.
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
@@ -493,16 +494,30 @@ func (e *Executor) ExecuteStatements(
 	session.resetForBatch(e)
 	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
-	defer func() {
-		if r := recover(); r != nil {
-			// On a panic, prepend the executed SQL.
-			panic(fmt.Errorf("%s: %v", stmts, r))
-		}
-	}()
+	defer logIfPanicking(session.Ctx(), stmts)
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
 	return e.execRequest(session, stmts, pinfo, copyMsgNone)
+}
+
+// ExecutePreparedStatement executes the given statement and returns a response.
+func (e *Executor) ExecutePreparedStatement(
+	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
+) StatementResults {
+	session.resetForBatch(e)
+	session.phaseTimes[sessionStartBatch] = timeutil.Now()
+
+	var stmts parser.StatementList
+	if stmt.Statement != nil {
+		stmts = parser.StatementList{stmt.Statement}
+	}
+
+	defer logIfPanicking(session.Ctx(), stmts.String())
+
+	// Send the Request for SQL execution and set the application-level error
+	// for each result in the reply.
+	return e.execParsed(session, stmts, pinfo, copyMsgNone)
 }
 
 // CopyData adds data to the COPY buffer and executes if there are enough rows.
@@ -572,9 +587,7 @@ func (e *Executor) waitForConfigUpdate() {
 func (e *Executor) execRequest(
 	session *Session, sql string, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
 ) StatementResults {
-	var res StatementResults
 	var stmts parser.StatementList
-	var avoidCachedDescriptors bool
 	var err error
 	txnState := &session.TxnState
 
@@ -602,9 +615,20 @@ func (e *Executor) execRequest(
 			// Rollback the txn.
 			txnState.updateStateAndCleanupOnErr(err, e)
 		}
+		var res StatementResults
 		res.ResultList = append(res.ResultList, Result{Err: err})
 		return res
 	}
+	return e.execParsed(session, stmts, pinfo, copymsg)
+}
+
+func (e *Executor) execParsed(
+	session *Session, stmts parser.StatementList, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
+) StatementResults {
+	var res StatementResults
+	var avoidCachedDescriptors bool
+	txnState := &session.TxnState
+
 	if len(stmts) == 0 {
 		res.Empty = true
 		return res
@@ -637,6 +661,7 @@ func (e *Executor) execRequest(
 				stmtsToExec = stmtsToExec[:1]
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
+				var err error
 				protoTS, err = isAsOf(session, stmtsToExec[0], e.cfg.Clock.Now())
 				if err != nil {
 					res.ResultList = append(res.ResultList, Result{Err: err})
@@ -1241,7 +1266,7 @@ func (e *Executor) execStmtInOpenTxn(
 		for i, t := range s.Types {
 			typeHints[strconv.Itoa(i+1)] = parser.CastTargetToDatumType(t)
 		}
-		_, err := session.PreparedStatements.New(e, name, s.Statement.String(), typeHints)
+		_, err := session.PreparedStatements.New(e, name, parser.StatementList{s.Statement}, len(s.Statement.String()), typeHints)
 		return Result{}, err
 	case *parser.Execute:
 		name := s.Name.String()
@@ -1268,7 +1293,7 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 			qArgs[idx] = typedExpr
 		}
-		results := e.ExecuteStatements(session, prepared.Query, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
+		results := e.ExecutePreparedStatement(session, prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
 		if results.Empty {
 			return Result{}, nil
 		}
