@@ -735,7 +735,9 @@ func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, 
 func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	// If there is a value known already, immediately substitute with it.
 	if v, ok := ctx.Placeholders.Value(expr.Name); ok {
-		return v, nil
+		expr.Value = v
+		expr.typ = v.ResolvedType()
+		return expr, nil
 	}
 
 	// Otherwise, perform placeholder typing.

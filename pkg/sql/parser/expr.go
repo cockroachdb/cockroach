@@ -612,7 +612,8 @@ var _ VariableExpr = &Placeholder{}
 
 // Placeholder represents a named placeholder.
 type Placeholder struct {
-	Name string
+	Name  string
+	Value TypedExpr
 
 	typeAnnotation
 }
