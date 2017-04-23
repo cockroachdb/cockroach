@@ -255,7 +255,7 @@ func (a *allocSim) rangeInfo() (total int, replicas, leases, leaseTransfers []in
 				if v, ok := storeMetrics["replicas.leaseholders"]; ok {
 					leases[i] += int(v.(float64))
 				}
-				if v, ok := storeMetrics["leasestransfers.success"]; ok {
+				if v, ok := storeMetrics["leases.transfers.success"]; ok {
 					leaseTransfers[i] += int(v.(float64))
 				}
 			}
