@@ -99,7 +99,9 @@ type SpanResolverIterator interface {
 	// that was last Seek()ed.
 	NeedAnother() bool
 
-	// Next advances the iterator to the next range.
+	// Next advances the iterator to the next range. The next range contains the
+	// last range's end key (but it does not necessarily start there, because of
+	// asynchronous range splits and caching effects).
 	// Possible errors encountered should be checked for with Valid().
 	Next(ctx context.Context)
 
