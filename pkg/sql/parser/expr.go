@@ -612,7 +612,8 @@ var _ VariableExpr = &Placeholder{}
 
 // Placeholder represents a named placeholder.
 type Placeholder struct {
-	Name string
+	Name  string
+	Value TypedExpr
 
 	typeAnnotation
 }
@@ -629,6 +630,11 @@ func (*Placeholder) Variable() {}
 func (node *Placeholder) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('$')
 	buf.WriteString(node.Name)
+	if node.Value != nil {
+		buf.WriteString("(")
+		node.Value.Format(buf, f)
+		buf.WriteString(")")
+	}
 }
 
 // ResolvedType implements the TypedExpr interface.

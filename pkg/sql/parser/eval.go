@@ -2814,8 +2814,8 @@ func (t *DOidWrapper) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (node *Placeholder) Eval(_ *EvalContext) (Datum, error) {
-	return nil, fmt.Errorf("no value provided for placeholder: $%s", node.Name)
+func (node *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
+	return node.Value.Eval(ctx)
 }
 
 func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {
