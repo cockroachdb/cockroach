@@ -153,3 +153,38 @@ func (p *PlaceholderInfo) IsUnresolvedPlaceholder(expr Expr) bool {
 	}
 	return false
 }
+
+// placeholdersVisitor is a Visitor implementation used to
+// replace placeholders with their supplied values.
+type placeholdersVisitor struct {
+	placeholders PlaceholderInfo
+}
+
+var _ Visitor = &placeholdersVisitor{}
+
+func (v *placeholdersVisitor) VisitPre(expr Expr) (recurse bool, newNode Expr) {
+	switch t := expr.(type) {
+	case *Placeholder:
+		if e, ok := v.placeholders.Value(t.Name); ok {
+			return true, e
+		}
+	}
+	return true, expr
+}
+
+func (*placeholdersVisitor) VisitPost(expr Expr) Expr { return expr }
+
+// replacePlaceholders replaces all placeholders in the input expression with
+// their supplied values in the planner's Placeholders map.
+func replacePlaceholders(expr Expr, ctx *SemaContext) Expr {
+	if ctx == nil {
+		return expr
+	}
+	v := &placeholdersVisitor{}
+	*v = placeholdersVisitor{
+		placeholders: ctx.Placeholders,
+	}
+
+	expr, _ = WalkExpr(v, expr)
+	return expr
+}

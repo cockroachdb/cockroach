@@ -247,9 +247,9 @@ func TestReportUsage(t *testing.T) {
 		"": {
 			`CREATE DATABASE _`,
 			`CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
-			`INSERT INTO _ VALUES (length(_::STRING))`,
+			`INSERT INTO _ VALUES (length($1::STRING))`,
 			`INSERT INTO _ VALUES (_)`,
-			`SELECT * FROM _ WHERE (_ = length(_::STRING)) OR (_ = $2)`,
+			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 		},
 		elemName: {
