@@ -22,7 +22,8 @@ import (
 // #cgo CPPFLAGS: -I../../../../c-deps/rocksdb.src/include
 // #cgo LDFLAGS: -lprotobuf
 // #cgo LDFLAGS: -lrocksdb
-// #cgo LDFLAGS: -ljemalloc
+// #cgo !darwin LDFLAGS: -ljemalloc
+// #cgo darwin LDFLAGS: -ljemalloc -u_je_zone_register
 // #cgo LDFLAGS: -lsnappy
 // #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
 // #cgo linux LDFLAGS: -lrt -lm -lpthread

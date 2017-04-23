@@ -19,7 +19,8 @@
 package status
 
 // #cgo CPPFLAGS: -DJEMALLOC_NO_DEMANGLE
-// #cgo LDFLAGS: -ljemalloc
+// #cgo !darwin LDFLAGS: -ljemalloc
+// #cgo darwin LDFLAGS: -ljemalloc -u_je_zone_register
 // #cgo linux LDFLAGS: -lrt -lm -lpthread
 //
 // #include <jemalloc/jemalloc.h>
