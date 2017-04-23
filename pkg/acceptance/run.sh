@@ -2,7 +2,10 @@
 
 set -euxo pipefail
 
-"$(dirname "${0}")"/../../build/builder.sh make install TAGS=clockoffset
+# We must make a release build here because the binary needs to work
+# in both the builder image and the postgres-test image, which have
+# different libstc++ versions.
+"$(dirname "${0}")"/../../build/builder.sh make install TAGS=clockoffset TYPE=release-linux-gnu
 
 # The log files that should be created by -l below can only
 # be created if the parent directory already exists. Ensure
