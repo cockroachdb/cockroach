@@ -20,6 +20,12 @@ package status
 
 // #cgo CPPFLAGS: -DJEMALLOC_NO_DEMANGLE
 // #cgo LDFLAGS: -ljemalloc
+// // On macOS, je_zone_register is run at init time to register
+// // jemalloc with the system allocator. Unfortunately, all the
+// // machinery for this is in a single file, and is not referenced
+// // elsewhere, causing the linker to omit the file's symbols.
+// // Manually force the presence of these symbols on macOS.
+// #cgo darwin LDFLAGS: -u_je_zone_register
 // #cgo linux LDFLAGS: -lrt -lm -lpthread
 //
 // #include <jemalloc/jemalloc.h>
@@ -119,4 +125,10 @@ func getJemallocStats(ctx context.Context) (uint, uint, error) {
 	}
 
 	return uint(js.Allocated), uint(js.Resident), nil
+}
+
+// Used to force allocation in tests. 'import "C"' is not supported in tests.
+func allocateMemory() {
+	// Empirically, 8KiB is not enough, but 16KiB is.
+	C.malloc(16 << 10)
 }
