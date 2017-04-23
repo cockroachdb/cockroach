@@ -405,6 +405,8 @@ func (dsp *distSQLPlanner) partitionSpans(
 		}
 
 		var lastNodeID roachpb.NodeID
+		// lastKey maintains the EndKey of the last piece of `span`.
+		lastKey := rspan.Key
 		for it.Seek(ctx, span, kv.Ascending); ; it.Next(ctx) {
 			if !it.Valid() {
 				return nil, it.Error()
@@ -415,16 +417,15 @@ func (dsp *distSQLPlanner) partitionSpans(
 			}
 			desc := it.Desc()
 
-			var trimmedSpan roachpb.Span
-			if rspan.Key.Less(desc.StartKey) {
-				trimmedSpan.Key = desc.StartKey.AsRawKey()
-			} else {
-				trimmedSpan.Key = span.Key
+			if !desc.ContainsKey(lastKey) {
+				// This range must contain the last range's EndKey.
+				log.Fatalf(ctx, "next range doesn't cover last end key: %#v %v", splits, desc.RSpan())
 			}
-			if desc.EndKey.Less(rspan.EndKey) {
-				trimmedSpan.EndKey = desc.EndKey.AsRawKey()
-			} else {
-				trimmedSpan.EndKey = span.EndKey
+
+			// Limit the end key to the end of the span we are resolving.
+			endKey := desc.EndKey
+			if rspan.EndKey.Less(endKey) {
+				endKey = rspan.EndKey
 			}
 
 			nodeID := replInfo.NodeDesc.NodeID
@@ -441,18 +442,21 @@ func (dsp *distSQLPlanner) partitionSpans(
 
 			if lastNodeID == nodeID {
 				// Two consecutive ranges on the same node, merge the spans.
-				if !split.spans[len(split.spans)-1].EndKey.Equal(trimmedSpan.Key) {
-					log.Fatalf(ctx, "expected consecutive span pieces %v %v", split.spans, trimmedSpan)
-				}
-				split.spans[len(split.spans)-1].EndKey = trimmedSpan.EndKey
+				split.spans[len(split.spans)-1].EndKey = endKey.AsRawKey()
 			} else {
-				split.spans = append(split.spans, trimmedSpan)
+				split.spans = append(split.spans, roachpb.Span{
+					Key:    lastKey.AsRawKey(),
+					EndKey: endKey.AsRawKey(),
+				})
 			}
 
-			lastNodeID = nodeID
-			if !it.NeedAnother() {
+			if !endKey.Less(rspan.EndKey) {
+				// Done.
 				break
 			}
+
+			lastKey = endKey
+			lastNodeID = nodeID
 		}
 	}
 	return splits, nil
