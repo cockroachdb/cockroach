@@ -84,7 +84,8 @@ func RegisterBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
 // It returns a cleanup function that swaps back the original setting. This
 // function should not be used by tests that run in parallel, as it could
 // result in race detector failures, as well as if the cleanup functions are
-// called out of order.
+// called out of order. The original Setting remains registered for
+// gossip-driven updates which become visible when it is restored.
 func TestingSetBool(s **BoolSetting, v bool) func() {
 	saved := *s
 	if v {
