@@ -516,7 +516,7 @@ func fillDefault(expr parser.Expr, index int, defaultExprs []parser.TypedExpr) p
 	return expr
 }
 
-func (u *updateNode) Columns() ResultColumns {
+func (u *updateNode) Columns() sqlbase.ResultColumns {
 	return u.rh.columns
 }
 

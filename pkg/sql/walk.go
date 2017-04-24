@@ -117,7 +117,7 @@ func (v *planVisitor) visit(plan planNode) {
 		var subplans []planNode
 		for i, tuple := range n.tuples {
 			for j, expr := range tuple {
-				if n.columns[j].omitted {
+				if n.columns[j].Omitted {
 					continue
 				}
 				var fieldName string
@@ -233,7 +233,7 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *sortNode:
 		if v.observer.attr != nil {
-			var columns ResultColumns
+			var columns sqlbase.ResultColumns
 			if n.plan != nil {
 				columns = n.plan.Columns()
 			}

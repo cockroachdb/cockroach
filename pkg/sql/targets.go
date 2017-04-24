@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
 
@@ -30,7 +31,7 @@ func (p *planner) computeRender(
 	desiredType parser.Type,
 	info multiSourceInfo,
 	ivarHelper parser.IndexedVarHelper,
-) (column ResultColumn, expr parser.TypedExpr, err error) {
+) (column sqlbase.ResultColumn, expr parser.TypedExpr, err error) {
 	// When generating an output column name it should exactly match the original
 	// expression, so determine the output column name before we perform any
 	// manipulations to the expression.
@@ -38,10 +39,10 @@ func (p *planner) computeRender(
 
 	normalized, err := p.analyzeExpr(ctx, target.Expr, info, ivarHelper, desiredType, false, "")
 	if err != nil {
-		return ResultColumn{}, nil, err
+		return sqlbase.ResultColumn{}, nil, err
 	}
 
-	return ResultColumn{Name: outputName, Typ: normalized.ResolvedType()}, normalized, nil
+	return sqlbase.ResultColumn{Name: outputName, Typ: normalized.ResolvedType()}, normalized, nil
 }
 
 // computeRenderAllowingStars expands a target expression into a result column (or more
@@ -53,7 +54,7 @@ func (p *planner) computeRenderAllowingStars(
 	desiredType parser.Type,
 	info multiSourceInfo,
 	ivarHelper parser.IndexedVarHelper,
-) (columns ResultColumns, exprs []parser.TypedExpr, hasStar bool, err error) {
+) (columns sqlbase.ResultColumns, exprs []parser.TypedExpr, hasStar bool, err error) {
 	// Pre-normalize any VarName so the work is not done twice below.
 	if err := target.NormalizeTopLevelVarName(); err != nil {
 		return nil, nil, false, err
@@ -70,7 +71,7 @@ func (p *planner) computeRenderAllowingStars(
 		return nil, nil, false, err
 	}
 
-	return ResultColumns{col}, []parser.TypedExpr{expr}, false, nil
+	return sqlbase.ResultColumns{col}, []parser.TypedExpr{expr}, false, nil
 }
 
 // equivalentRenders returns true if and only if the two render expressions
@@ -90,7 +91,7 @@ func (s *renderNode) isRenderEquivalent(exprStr string, j int) bool {
 // already rendered, and the reuse flag is true, no new render is
 // added and the index of the existing column is returned instead.
 func (s *renderNode) addOrMergeRender(
-	col ResultColumn, expr parser.TypedExpr, reuseExistingRender bool,
+	col sqlbase.ResultColumn, expr parser.TypedExpr, reuseExistingRender bool,
 ) (colIdx int) {
 	if reuseExistingRender {
 		// Now, try to find an equivalent render. We use the syntax
@@ -112,7 +113,7 @@ func (s *renderNode) addOrMergeRender(
 }
 
 func (s *renderNode) addOrMergeRenders(
-	cols ResultColumns, exprs []parser.TypedExpr, reuseExistingRender bool,
+	cols sqlbase.ResultColumns, exprs []parser.TypedExpr, reuseExistingRender bool,
 ) (colIdxs []int) {
 	colIdxs = make([]int, len(cols))
 	for i := range cols {
@@ -131,10 +132,10 @@ func symbolicExprStr(expr parser.Expr) string {
 // checkRenderStar handles the case where the target specification contains a
 // SQL star (UnqualifiedStar or AllColumnsSelector). We match the prefix of the
 // name to one of the tables in the query and then expand the "*" into a list
-// of columns. A ResultColumns and Expr pair is returned for each column.
+// of columns. A sqlbase.ResultColumns and Expr pair is returned for each column.
 func checkRenderStar(
 	target parser.SelectExpr, info multiSourceInfo, ivarHelper parser.IndexedVarHelper,
-) (isStar bool, columns ResultColumns, exprs []parser.TypedExpr, err error) {
+) (isStar bool, columns sqlbase.ResultColumns, exprs []parser.TypedExpr, err error) {
 	v, ok := target.Expr.(parser.VarName)
 	if !ok {
 		return false, nil, nil, nil

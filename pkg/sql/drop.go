@@ -210,7 +210,7 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 
 func (*dropDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
 func (*dropDatabaseNode) Close(context.Context)              {}
-func (*dropDatabaseNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*dropDatabaseNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
 func (*dropDatabaseNode) Ordering() orderingInfo             { return orderingInfo{} }
 func (*dropDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
 func (*dropDatabaseNode) DebugValues() debugValues           { return debugValues{} }
@@ -406,7 +406,7 @@ func (p *planner) dropIndexByName(
 
 func (*dropIndexNode) Next(context.Context) (bool, error) { return false, nil }
 func (*dropIndexNode) Close(context.Context)              {}
-func (*dropIndexNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*dropIndexNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
 func (*dropIndexNode) Ordering() orderingInfo             { return orderingInfo{} }
 func (*dropIndexNode) Values() parser.Datums              { return parser.Datums{} }
 func (*dropIndexNode) DebugValues() debugValues           { return debugValues{} }
@@ -519,7 +519,7 @@ func (n *dropViewNode) Start(ctx context.Context) error {
 
 func (*dropViewNode) Next(context.Context) (bool, error) { return false, nil }
 func (*dropViewNode) Close(context.Context)              {}
-func (*dropViewNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*dropViewNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
 func (*dropViewNode) Ordering() orderingInfo             { return orderingInfo{} }
 func (*dropViewNode) Values() parser.Datums              { return parser.Datums{} }
 func (*dropViewNode) DebugValues() debugValues           { return debugValues{} }
@@ -761,7 +761,7 @@ func (n *dropTableNode) Start(ctx context.Context) error {
 
 func (*dropTableNode) Next(context.Context) (bool, error) { return false, nil }
 func (*dropTableNode) Close(context.Context)              {}
-func (*dropTableNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*dropTableNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
 func (*dropTableNode) Ordering() orderingInfo             { return orderingInfo{} }
 func (*dropTableNode) Values() parser.Datums              { return parser.Datums{} }
 func (*dropTableNode) DebugValues() debugValues           { return debugValues{} }

@@ -46,7 +46,7 @@ type scanNode struct {
 	// The table columns, possibly including ones currently in schema changes.
 	cols []sqlbase.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns ResultColumns
+	resultColumns sqlbase.ResultColumns
 	// Contains values for the current row. There is a 1-1 correspondence
 	// between resultColumns and values in row.
 	row parser.Datums
@@ -105,7 +105,7 @@ func (p *planner) Scan() *scanNode {
 	return &scanNode{p: p}
 }
 
-func (n *scanNode) Columns() ResultColumns {
+func (n *scanNode) Columns() sqlbase.ResultColumns {
 	return n.resultColumns
 }
 
@@ -374,7 +374,7 @@ func (n *scanNode) initDescDefaults(
 			}
 		}
 	}
-	n.resultColumns = makeResultColumns(n.cols)
+	n.resultColumns = sqlbase.ResultColumnsFromColDescs(n.cols)
 	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i

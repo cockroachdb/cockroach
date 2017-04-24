@@ -154,11 +154,11 @@ type Result struct {
 	// the names and types of the columns returned in the result set in the order
 	// specified in the SQL statement. The number of columns will equal the number
 	// of values in each Row.
-	Columns ResultColumns
+	Columns sqlbase.ResultColumns
 	// Rows will be populated if the statement type is "Rows". It will contain
 	// the result set of the result.
 	// TODO(nvanbenschoten): Can this be streamed from the planNode?
-	Rows *RowContainer
+	Rows *sqlbase.RowContainer
 }
 
 // Close ensures that the resources claimed by the result are released.
@@ -169,22 +169,6 @@ func (r *Result) Close(ctx context.Context) {
 		r.Rows.Close(ctx)
 	}
 }
-
-// ResultColumn contains the name and type of a SQL "cell".
-type ResultColumn struct {
-	Name string
-	Typ  parser.Type
-
-	// If set, this is an implicit column; used internally.
-	hidden bool
-
-	// If set, a value won't be produced for this column; used internally.
-	omitted bool
-}
-
-// ResultColumns is the type used throughout the sql module to
-// describe the column types of a table.
-type ResultColumns []ResultColumn
 
 // An Executor executes SQL statements.
 // Executor is thread-safe.
@@ -988,8 +972,8 @@ func runShowTransactionState(session *Session, implicitTxn bool) (Result, error)
 	var result Result
 	result.PGTag = (*parser.Show)(nil).StatementTag()
 	result.Type = (*parser.Show)(nil).StatementType()
-	result.Columns = ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}}
-	result.Rows = NewRowContainer(session.makeBoundAccount(), result.Columns, 0)
+	result.Columns = sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}}
+	result.Rows = sqlbase.NewRowContainer(session.makeBoundAccount(), result.Columns, 0)
 	state := session.TxnState.State
 	if implicitTxn {
 		state = NoTxn
@@ -1462,7 +1446,7 @@ func makeRes(stmt parser.Statement, planner *planner, plan planNode) (Result, er
 				return Result{}, err
 			}
 		}
-		result.Rows = NewRowContainer(planner.session.makeBoundAccount(), result.Columns, 0)
+		result.Rows = sqlbase.NewRowContainer(planner.session.makeBoundAccount(), result.Columns, 0)
 	}
 	return result, nil
 }
@@ -1688,22 +1672,6 @@ func checkResultType(typ parser.Type) error {
 		}
 	}
 	return nil
-}
-
-// makeResultColumns converts sqlbase.ColumnDescriptors to ResultColumns.
-func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) ResultColumns {
-	cols := make(ResultColumns, 0, len(colDescs))
-	for _, colDesc := range colDescs {
-		// Convert the sqlbase.ColumnDescriptor to ResultColumn.
-		typ := colDesc.Type.ToDatumType()
-		if typ == nil {
-			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
-		}
-
-		hidden := colDesc.Hidden
-		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, hidden: hidden})
-	}
-	return cols
 }
 
 // EvalAsOfTimestamp evaluates and returns the timestamp from an AS OF SYSTEM

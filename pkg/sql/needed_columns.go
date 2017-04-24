@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // setNeededColumns informs the node about which columns are
@@ -220,9 +221,9 @@ func allColumns(plan planNode) []bool {
 }
 
 // markOmitted propagates the information from the needed array back
-// to the ResultColumns array.
-func markOmitted(cols ResultColumns, needed []bool) {
+// to the sqlbase.ResultColumns array.
+func markOmitted(cols sqlbase.ResultColumns, needed []bool) {
 	for i, val := range needed {
-		cols[i].omitted = !val
+		cols[i].Omitted = !val
 	}
 }

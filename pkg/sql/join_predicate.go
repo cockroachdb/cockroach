@@ -207,7 +207,7 @@ func makeEqualityPredicate(
 	// below which columns remain after the equality; this is used
 	// only when merging result columns.
 	var usedLeft, usedRight []int
-	var columns ResultColumns
+	var columns sqlbase.ResultColumns
 	if numMergedEqualityColumns > 0 {
 		usedLeft = make([]int, len(left.sourceColumns))
 		for i := range usedLeft {
@@ -218,7 +218,7 @@ func makeEqualityPredicate(
 			usedRight[i] = invalidColIdx
 		}
 		nResultColumns := len(left.sourceColumns) + len(right.sourceColumns) - numMergedEqualityColumns
-		columns = make(ResultColumns, 0, nResultColumns)
+		columns = make(sqlbase.ResultColumns, 0, nResultColumns)
 	}
 
 	// Find out which columns are involved in EqualityPredicate.
@@ -272,13 +272,13 @@ func makeEqualityPredicate(
 	// right data sources.
 	for i, c := range left.sourceColumns {
 		if usedLeft != nil && usedLeft[i] != invalidColIdx {
-			c.hidden = true
+			c.Hidden = true
 		}
 		columns = append(columns, c)
 	}
 	for i, c := range right.sourceColumns {
 		if usedRight != nil && usedRight[i] != invalidColIdx {
-			c.hidden = true
+			c.Hidden = true
 		}
 		columns = append(columns, c)
 	}
@@ -318,7 +318,7 @@ func makeEqualityPredicate(
 	// Now collect the other table-less columns into the anonymous data
 	// source, but hide (skip) those that are already merged.
 	collectAnonymousAliases := func(
-		sourceAliases sourceAliases, hiddenNames []string, cols ResultColumns, offset int,
+		sourceAliases sourceAliases, hiddenNames []string, cols sqlbase.ResultColumns, offset int,
 	) {
 		for _, alias := range sourceAliases {
 			if alias.name != anonymousTable {
@@ -465,10 +465,12 @@ func (p *joinPredicate) encode(b []byte, row parser.Datums, cols []int) ([]byte,
 // pickUsingColumn searches for a column whose name matches colName.
 // The column index and type are returned if found, otherwise an error
 // is reported.
-func pickUsingColumn(cols ResultColumns, colName string, context string) (int, parser.Type, error) {
+func pickUsingColumn(
+	cols sqlbase.ResultColumns, colName string, context string,
+) (int, parser.Type, error) {
 	idx := invalidColIdx
 	for j, col := range cols {
-		if col.hidden {
+		if col.Hidden {
 			continue
 		}
 		if parser.ReNormalizeName(col.Name) == colName {

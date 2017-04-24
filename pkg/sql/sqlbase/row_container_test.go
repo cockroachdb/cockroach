@@ -14,7 +14,7 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"math"

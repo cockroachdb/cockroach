@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -202,12 +203,12 @@ func createTestServerParams() (base.TestServerArgs, *CommandFilters) {
 func init() {
 	testingPlanHook := func(
 		ctx context.Context, stmt parser.Statement, state sql.PlanHookState,
-	) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
+	) (func() ([]parser.Datums, error), sqlbase.ResultColumns, error) {
 		show, ok := stmt.(*parser.Show)
 		if !ok || show.Name != "planhook" {
 			return nil, nil, nil
 		}
-		header := sql.ResultColumns{
+		header := sqlbase.ResultColumns{
 			{Name: "value", Typ: parser.TypeString},
 		}
 		return func() ([]parser.Datums, error) {

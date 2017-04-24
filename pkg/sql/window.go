@@ -94,7 +94,7 @@ func (p *planner) window(
 	window.replaceIndexVarsAndAggFuncs(s)
 
 	acc := p.session.TxnState.makeBoundAccount()
-	window.wrappedRenderVals = NewRowContainer(acc, s.columns, 0)
+	window.wrappedRenderVals = sqlbase.NewRowContainer(acc, s.columns, 0)
 	window.windowsAcc = p.session.TxnState.OpenAccount()
 
 	return window, nil
@@ -112,7 +112,7 @@ func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 	oldRenders := s.render
 	oldColumns := s.columns
 	newRenders := make([]parser.TypedExpr, 0, len(oldRenders))
-	newColumns := make([]ResultColumn, 0, len(oldColumns))
+	newColumns := make([]sqlbase.ResultColumn, 0, len(oldColumns))
 	for i := range oldRenders {
 		// Add all window function applications found in oldRenders[i] to window.funcs.
 		typedExpr, numFuncsAdded, err := visitor.extract(oldRenders[i])
@@ -134,7 +134,7 @@ func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 				for _, argExpr := range funcHolder.args {
 					arg := argExpr.(parser.TypedExpr)
 					newRenders = append(newRenders, arg)
-					newColumns = append(newColumns, ResultColumn{
+					newColumns = append(newColumns, sqlbase.ResultColumn{
 						Name: arg.String(),
 						Typ:  arg.ResolvedType(),
 					})
@@ -349,7 +349,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 			case *parser.IndexedVar:
 				// We add a new render to the source renderNode for each new IndexedVar we
 				// see. We also register this mapping in the idxMap.
-				col := ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
+				col := sqlbase.ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
 				colIdx := s.addOrMergeRender(col, t, true)
 				n.colContainer.idxMap[t.Idx] = colIdx
 				return nil, false, ivarHelper.IndexedVar(t.Idx)
@@ -360,7 +360,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 				if t.GetAggregateConstructor() != nil {
 					// We add a new render to the source renderNode for each new aggregate
 					// function we see.
-					col := ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
+					col := sqlbase.ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
 					colIdx := s.addOrMergeRender(col, t, true)
 
 					if iVar, ok := aggIVars[colIdx]; ok {
@@ -426,7 +426,7 @@ type windowNode struct {
 	//     we need to buffer all values here while we compute window function results. We
 	//     then index into these values in colContainer.IndexedVarEval and
 	//     aggContainer.IndexedVarEval. (see replaceIndexVarsAndAggFuncs)
-	wrappedRenderVals *RowContainer
+	wrappedRenderVals *sqlbase.RowContainer
 	sourceCols        int
 
 	// A sparse array holding renders specific to this windowNode. This will contain
@@ -454,7 +454,7 @@ type windowNode struct {
 	explain explainMode
 }
 
-func (n *windowNode) Columns() ResultColumns {
+func (n *windowNode) Columns() sqlbase.ResultColumns {
 	return n.values.Columns()
 }
 
@@ -532,7 +532,7 @@ func (n *windowNode) Next(ctx context.Context) (bool, error) {
 type partitionSorter struct {
 	evalCtx       *parser.EvalContext
 	rows          []parser.IndexedRow
-	windowDefVals *RowContainer
+	windowDefVals *sqlbase.RowContainer
 	ordering      sqlbase.ColumnOrdering
 }
 
@@ -760,7 +760,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 func (n *windowNode) populateValues(ctx context.Context) error {
 	acc := n.windowsAcc.Wtxn(n.planner.session)
 	rowCount := n.wrappedRenderVals.Len()
-	n.values.rows = NewRowContainer(
+	n.values.rows = sqlbase.NewRowContainer(
 		n.planner.session.TxnState.makeBoundAccount(), n.values.columns, rowCount,
 	)
 
