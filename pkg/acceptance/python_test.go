@@ -41,8 +41,16 @@ cur = conn.cursor()
 cur.execute("SELECT 1, 2+%v")
 v = cur.fetchall()
 assert v == [(1, 5)]
-# verify #6597 is fixed
+
+# Verify #6597 (timestamp format) is fixed.
 cur = conn.cursor()
 cur.execute("SELECT now()")
 v = cur.fetchall()
+
+# Verify round-trip of strings containing backslashes.
+# https://github.com/cockroachdb/cockroachdb-python/issues/23
+s = ('\\\\',)
+cur.execute("SELECT %s", s)
+v = cur.fetchall()
+assert v == [s], (v, s)
 `
