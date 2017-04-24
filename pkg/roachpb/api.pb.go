@@ -111,6 +111,7 @@
 		RangeNotFoundError
 		RangeKeyMismatchError
 		ReadWithinUncertaintyIntervalError
+		TableFromFutureError
 		TransactionAbortedError
 		TransactionPushError
 		TransactionRetryError

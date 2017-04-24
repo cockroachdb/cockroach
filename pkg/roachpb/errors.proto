@@ -89,6 +89,18 @@ message ReadWithinUncertaintyIntervalError {
   optional util.hlc.Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
+// A TableFromFutureError indicates that a transaction encountered
+// a lease on a table descriptor such that the write timestamp
+// on the table descriptor is after the transaction timestamp.
+// The transaction should be retried at a higher timestamp; the timestamps
+// contained within are purely informational, though typically
+// table_timestamp is a lower bound for a new timestamp at which the
+// transaction producing this error would succeed on retry.
+message TableFromFutureError {
+  optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp table_timestamp = 2 [(gogoproto.nullable) = false];
+}
+
 // A TransactionAbortedError indicates that the transaction was
 // aborted by another concurrent transaction.
 message TransactionAbortedError {
@@ -231,6 +243,7 @@ message ErrorDetail {
   optional LeaseRejectedError lease_rejected = 13;
   optional NodeUnavailableError node_unavailable = 14;
   optional SendError send = 15;
+  optional TableFromFutureError table_from_future = 19;
   reserved 25;
   optional AmbiguousResultError ambiguous_result = 26;
   optional StoreNotFoundError store_not_found = 27;
