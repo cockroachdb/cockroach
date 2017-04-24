@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -36,6 +37,7 @@ func TestHashRouter(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
+	evalCtx := &parser.EvalContext{}
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
@@ -96,7 +98,7 @@ func TestHashRouter(t *testing.T) {
 						for _, row2 := range r2 {
 							equal := true
 							for _, c := range tc.hashColumns {
-								cmp, err := row[c].Compare(alloc, &row2[c])
+								cmp, err := row[c].Compare(alloc, evalCtx, &row2[c])
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -138,6 +140,7 @@ func TestMirrorRouter(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
+	evalCtx := &parser.EvalContext{}
 
 	vals := sqlbase.RandEncDatumSlices(rng, numCols, numRows)
 
@@ -187,7 +190,7 @@ func TestMirrorRouter(t *testing.T) {
 
 				equal := true
 				for j, c := range row {
-					cmp, err := c.Compare(alloc, &row2[j])
+					cmp, err := c.Compare(alloc, evalCtx, &row2[j])
 					if err != nil {
 						t.Fatal(err)
 					}
