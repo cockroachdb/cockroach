@@ -94,7 +94,7 @@ func (p *planner) window(
 	window.replaceIndexVarsAndAggFuncs(s)
 
 	acc := p.session.TxnState.makeBoundAccount()
-	window.wrappedRenderVals = NewRowContainer(acc, s.columns, 0)
+	window.wrappedRenderVals = sqlbase.NewRowContainer(acc, s.columns.Types(), 0)
 	window.windowsAcc = p.session.TxnState.OpenAccount()
 
 	return window, nil
@@ -426,7 +426,7 @@ type windowNode struct {
 	//     we need to buffer all values here while we compute window function results. We
 	//     then index into these values in colContainer.IndexedVarEval and
 	//     aggContainer.IndexedVarEval. (see replaceIndexVarsAndAggFuncs)
-	wrappedRenderVals *RowContainer
+	wrappedRenderVals *sqlbase.RowContainer
 	sourceCols        int
 
 	// A sparse array holding renders specific to this windowNode. This will contain
@@ -532,7 +532,7 @@ func (n *windowNode) Next(ctx context.Context) (bool, error) {
 type partitionSorter struct {
 	evalCtx       *parser.EvalContext
 	rows          []parser.IndexedRow
-	windowDefVals *RowContainer
+	windowDefVals *sqlbase.RowContainer
 	ordering      sqlbase.ColumnOrdering
 }
 
@@ -760,8 +760,8 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 func (n *windowNode) populateValues(ctx context.Context) error {
 	acc := n.windowsAcc.Wtxn(n.planner.session)
 	rowCount := n.wrappedRenderVals.Len()
-	n.values.rows = NewRowContainer(
-		n.planner.session.TxnState.makeBoundAccount(), n.values.columns, rowCount,
+	n.values.rows = sqlbase.NewRowContainer(
+		n.planner.session.TxnState.makeBoundAccount(), n.values.columns.Types(), rowCount,
 	)
 
 	row := make(parser.Datums, len(n.windowRender))

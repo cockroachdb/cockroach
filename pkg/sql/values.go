@@ -36,10 +36,10 @@ type valuesNode struct {
 	columns  ResultColumns
 	ordering sqlbase.ColumnOrdering
 	tuples   [][]parser.TypedExpr
-	rows     *RowContainer
+	rows     *sqlbase.RowContainer
 
 	// rowsPopped is used for heaps, it indicates the number of rows that were
-	// "popped". These rows are still part of the underlying RowContainer, in the
+	// "popped". These rows are still part of the underlying sqlbase.RowContainer, in the
 	// range [rows.Len()-n.rowsPopped, rows.Len).
 	rowsPopped int
 
@@ -53,7 +53,9 @@ func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *v
 	return &valuesNode{
 		p:       p,
 		columns: columns,
-		rows:    NewRowContainer(p.session.TxnState.makeBoundAccount(), columns, capacity),
+		rows: sqlbase.NewRowContainer(
+			p.session.TxnState.makeBoundAccount(), columns.Types(), capacity,
+		),
 	}
 }
 
@@ -127,7 +129,9 @@ func (n *valuesNode) Start(ctx context.Context) error {
 	// others that create a valuesNode internally for storing results
 	// from other planNodes), so its expressions need evaluting.
 	// This may run subqueries.
-	n.rows = NewRowContainer(n.p.session.TxnState.makeBoundAccount(), n.columns, len(n.n.Tuples))
+	n.rows = sqlbase.NewRowContainer(
+		n.p.session.TxnState.makeBoundAccount(), n.columns.Types(), len(n.n.Tuples),
+	)
 
 	row := make([]parser.Datum, len(n.columns))
 	for _, tupleRow := range n.tuples {

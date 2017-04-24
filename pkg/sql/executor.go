@@ -158,7 +158,7 @@ type Result struct {
 	// Rows will be populated if the statement type is "Rows". It will contain
 	// the result set of the result.
 	// TODO(nvanbenschoten): Can this be streamed from the planNode?
-	Rows *RowContainer
+	Rows *sqlbase.RowContainer
 }
 
 // Close ensures that the resources claimed by the result are released.
@@ -185,6 +185,15 @@ type ResultColumn struct {
 // ResultColumns is the type used throughout the sql module to
 // describe the column types of a table.
 type ResultColumns []ResultColumn
+
+// Types extracts the column types in a slice.
+func (rc ResultColumns) Types() []parser.Type {
+	types := make([]parser.Type, len(rc))
+	for i := range rc {
+		types[i] = rc[i].Typ
+	}
+	return types
+}
 
 // An Executor executes SQL statements.
 // Executor is thread-safe.
@@ -989,7 +998,7 @@ func runShowTransactionState(session *Session, implicitTxn bool) (Result, error)
 	result.PGTag = (*parser.Show)(nil).StatementTag()
 	result.Type = (*parser.Show)(nil).StatementType()
 	result.Columns = ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}}
-	result.Rows = NewRowContainer(session.makeBoundAccount(), result.Columns, 0)
+	result.Rows = sqlbase.NewRowContainer(session.makeBoundAccount(), result.Columns.Types(), 0)
 	state := session.TxnState.State
 	if implicitTxn {
 		state = NoTxn
@@ -1462,7 +1471,9 @@ func makeRes(stmt parser.Statement, planner *planner, plan planNode) (Result, er
 				return Result{}, err
 			}
 		}
-		result.Rows = NewRowContainer(planner.session.makeBoundAccount(), result.Columns, 0)
+		result.Rows = sqlbase.NewRowContainer(
+			planner.session.makeBoundAccount(), result.Columns.Types(), 0,
+		)
 	}
 	return result, nil
 }

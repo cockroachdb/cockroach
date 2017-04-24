@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type joinType int
@@ -63,7 +64,7 @@ func (b *bucket) AddRow(row parser.Datums) {
 
 type buckets struct {
 	buckets      map[string]*bucket
-	rowContainer *RowContainer
+	rowContainer *sqlbase.RowContainer
 }
 
 func (b *buckets) Buckets() map[string]*bucket {
@@ -82,7 +83,7 @@ func (b *buckets) AddRow(
 	if err != nil {
 		return err
 	}
-	if err := acc.Grow(ctx, sizeOfDatums); err != nil {
+	if err := acc.Grow(ctx, sqlbase.SizeOfDatums); err != nil {
 		return err
 	}
 	bk.AddRow(rowCopy)
@@ -265,13 +266,17 @@ func (p *planner) makeJoin(
 	}
 
 	n.buffer = &RowBuffer{
-		RowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.Columns(), 0),
+		RowContainer: sqlbase.NewRowContainer(
+			p.session.TxnState.makeBoundAccount(), n.Columns().Types(), 0,
+		),
 	}
 
 	n.bucketsMemAcc = p.session.TxnState.OpenAccount()
 	n.buckets = buckets{
-		buckets:      make(map[string]*bucket),
-		rowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.right.plan.Columns(), 0),
+		buckets: make(map[string]*bucket),
+		rowContainer: sqlbase.NewRowContainer(
+			p.session.TxnState.makeBoundAccount(), n.right.plan.Columns().Types(), 0,
+		),
 	}
 
 	return planDataSource{

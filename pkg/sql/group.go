@@ -408,9 +408,9 @@ func (n *groupNode) computeAggregates(ctx context.Context) error {
 	}
 
 	// Render the results.
-	n.values.rows = NewRowContainer(
+	n.values.rows = sqlbase.NewRowContainer(
 		n.planner.session.TxnState.makeBoundAccount(),
-		n.values.Columns(), len(n.buckets),
+		n.values.Columns().Types(), len(n.buckets),
 	)
 	row := make(parser.Datums, len(n.render))
 	for k := range n.buckets {
