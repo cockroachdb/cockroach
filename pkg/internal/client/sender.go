@@ -28,6 +28,18 @@ type Sender interface {
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
+// !!! comment
+type SenderWithDistSQLBackdoor interface {
+	Sender
+
+	UpdateStateOnDetachedErr(
+		ctx context.Context,
+		txn roachpb.Transaction,
+		pri roachpb.UserPriority,
+		err error,
+	) roachpb.Transaction
+}
+
 // SenderFunc is an adapter to allow the use of ordinary functions
 // as Senders.
 type SenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)

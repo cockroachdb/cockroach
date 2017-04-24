@@ -684,7 +684,7 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 	}
 	if retErr, ok := err.(*roachpb.RetryableTxnError); !ok ||
 		!ts.willBeRetried() ||
-		!ts.txn.IsRetryableErrMeantForTxn(retErr) {
+		!ts.txn.IsRetryableErrMeantForTxn(*retErr) {
 
 		// We can't or don't want to retry this txn, so the txn is over.
 		e.TxnAbortCount.Inc(1)

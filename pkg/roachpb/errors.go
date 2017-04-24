@@ -22,13 +22,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
+
+// RetryableTxnError represents a retryable transaction error - the transaction
+// that caused it should be re-run.
+type RetryableTxnError struct {
+	Msg   string
+	TxnID *uuid.UUID
+}
 
 func (e *RetryableTxnError) Error() string {
 	return e.Msg
 }
 
 var _ error = &RetryableTxnError{}
+
+func (e *InternalRetryableTxnError) Error() string {
+	return e.Msg
+}
+
+var _ error = &InternalRetryableTxnError{}
 
 // NewRetryableTxnError creates a shim RetryableTxnError that
 // reports the given cause when converted to String(). This can be
@@ -93,6 +107,7 @@ func NewError(err error) *Error {
 	} else {
 		e.setGoError(err)
 	}
+
 	return e
 }
 
@@ -150,6 +165,10 @@ func (e *Error) GoError() error {
 		return nil
 	}
 	if e.TransactionRestart != TransactionRestart_NONE {
+		if tErr, ok := e.GetDetail().(*HandledRetryableError); ok {
+			return &RetryableTxnError{Msg: tErr.Msg, TxnID: tErr.TxnID}
+		}
+
 		var txnID *uuid.UUID
 		if e.GetTxn() != nil {
 			txnID = e.GetTxn().ID
@@ -158,14 +177,61 @@ func (e *Error) GoError() error {
 		// TransactionAbortedError will not carry a Transaction, signaling to the
 		// recipient to start a brand new txn.
 		txn := e.GetTxn()
-		if _, ok := e.GetDetail().(*TransactionAbortedError); ok {
-			txn = nil
+		retryPriority := int32(-1)
+		retryTimestamp := hlc.MinTimestamp
+		if txn != nil {
+			txnClone := txn.Clone()
+			txn = &txnClone
+			switch tErr := e.GetDetail().(type) {
+			case *TransactionAbortedError:
+				retryTimestamp = txn.Timestamp
+				retryPriority = txn.Priority
+				txn = nil
+			case *ReadWithinUncertaintyIntervalError:
+				// If the reader encountered a newer write within the uncertainty
+				// interval, we advance the txn's timestamp just past the last observed
+				// timestamp from the node.
+				ts, ok := txn.GetObservedTimestamp(e.OriginNode)
+				if !ok {
+					return errors.Wrapf(
+						tErr,
+						"no observed timestamp for node %d found on uncertainty restart",
+						e.OriginNode)
+				}
+				txn.Timestamp.Forward(ts)
+			case *TransactionPushError:
+				// Increase timestamp if applicable, ensuring that we're just ahead of
+				// the pushee.
+				txn.Timestamp.Forward(tErr.PusheeTxn.Timestamp)
+				txn.UpgradePriority(tErr.PusheeTxn.Priority - 1)
+			case *TransactionRetryError:
+				// Nothing to do. Transaction.Timestamp has already been forwarded to be
+				// ahead of any timestamp cache entries or newer versions which caused
+				// the restart.
+			case *WriteTooOldError:
+				// Increase the timestamp to the ts at which we've actually written.
+				txn.Timestamp.Forward(tErr.ActualTimestamp)
+			default:
+				// Assert that we've covered all the retryable errors.
+				if _, ok := tErr.(transactionRestartError); ok {
+					return errors.Wrapf(tErr, "retryable error of type %T not handled in "+
+						"pErr.GoErr(): %s", tErr, tErr)
+				}
+			}
 		}
-		return &RetryableTxnError{
+
+		err := &InternalRetryableTxnError{
 			Msg:         e.Message,
 			TxnID:       txnID,
 			Transaction: txn,
 		}
+		if retryPriority != -1 {
+			err.RetryPriority = &retryPriority
+		}
+		if retryTimestamp != hlc.MinTimestamp {
+			err.RetryTimestamp = &retryTimestamp
+		}
+		return err
 	}
 	return e.GetDetail()
 }
@@ -351,11 +417,11 @@ func (e *AmbiguousResultError) message(_ *Error) string {
 var _ ErrorDetailInterface = &AmbiguousResultError{}
 
 func (e *TransactionAbortedError) Error() string {
-	return "txn aborted"
+	return "TransactionAbortedError: txn aborted"
 }
 
 func (e *TransactionAbortedError) message(pErr *Error) string {
-	return fmt.Sprintf("txn aborted %s", pErr.GetTxn())
+	return fmt.Sprintf("TransactionAbortedError: txn aborted %s", pErr.GetTxn())
 }
 
 func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
@@ -365,9 +431,32 @@ func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
 var _ ErrorDetailInterface = &TransactionAbortedError{}
 var _ transactionRestartError = &TransactionAbortedError{}
 
+func (e *HandledRetryableError) Error() string {
+	return e.message(nil)
+}
+
+func (e *HandledRetryableError) message(_ *Error) string {
+	return fmt.Sprintf("HandledRetryableError: %s", e.Msg)
+}
+
+func (*HandledRetryableError) canRestartTransaction() TransactionRestart {
+	// TODO(andrei): make this dependent on the type of the original error
+	return TransactionRestart_IMMEDIATE
+}
+
+var _ ErrorDetailInterface = &HandledRetryableError{}
+var _ transactionRestartError = &HandledRetryableError{}
+
 // NewTransactionAbortedError initializes a new TransactionAbortedError.
 func NewTransactionAbortedError() *TransactionAbortedError {
 	return &TransactionAbortedError{}
+}
+
+// NewHandledRetryableError initializes a new HandledRetryableError.
+func NewHandledRetryableError(
+	msg string, txnID *uuid.UUID, txn Transaction,
+) *HandledRetryableError {
+	return &HandledRetryableError{Msg: msg, TxnID: txnID, Transaction: &txn}
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
@@ -401,14 +490,12 @@ func NewTransactionRetryError() *TransactionRetryError {
 	return &TransactionRetryError{}
 }
 
-// TODO(kaneda): Delete this method once we fully unimplement error for every
-// error detail.
 func (e *TransactionRetryError) Error() string {
-	return fmt.Sprintf("retry txn")
+	return fmt.Sprintf("TransactionRetryError: retry txn")
 }
 
 func (e *TransactionRetryError) message(pErr *Error) string {
-	return fmt.Sprintf("retry txn %s", pErr.GetTxn())
+	return fmt.Sprintf("TransactionRetryError: retry txn %s", pErr.GetTxn())
 }
 
 var _ ErrorDetailInterface = &TransactionRetryError{}
@@ -468,7 +555,8 @@ func (e *WriteTooOldError) Error() string {
 }
 
 func (e *WriteTooOldError) message(_ *Error) string {
-	return fmt.Sprintf("write at timestamp %s too old; wrote at %s", e.Timestamp, e.ActualTimestamp)
+	return fmt.Sprintf("WriteTooOldError: write at timestamp %s too old; wrote at %s",
+		e.Timestamp, e.ActualTimestamp)
 }
 
 var _ ErrorDetailInterface = &WriteTooOldError{}
@@ -495,7 +583,9 @@ func (e *ReadWithinUncertaintyIntervalError) Error() string {
 }
 
 func (e *ReadWithinUncertaintyIntervalError) message(_ *Error) string {
-	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.ReadTimestamp, e.ExistingTimestamp)
+	return fmt.Sprintf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
+		"previous write with future timestamp %s within uncertainty interval",
+		e.ReadTimestamp, e.ExistingTimestamp)
 }
 
 var _ ErrorDetailInterface = &ReadWithinUncertaintyIntervalError{}

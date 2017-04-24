@@ -247,14 +247,14 @@ func makeDistSQLReceiver(
 	rangeCache *kv.RangeDescriptorCache,
 	leaseCache *kv.LeaseHolderCache,
 	txn *client.Txn,
-) distSQLReceiver {
+) (distSQLReceiver, error) {
 	return distSQLReceiver{
 		ctx:        ctx,
 		rows:       sink,
 		rangeCache: rangeCache,
 		leaseCache: leaseCache,
 		txn:        txn,
-	}
+	}, nil
 }
 
 // Push is part of the RowReceiver interface.
@@ -269,7 +269,10 @@ func (r *distSQLReceiver) Push(
 				// itself in non-error cases. Those updates are not necessary if we're
 				// just doing reads. Once DistSQL starts performing writes, we'll need
 				// to perform such updates too.
-				r.txn.UpdateStateOnErr(meta.Err)
+				// TODO(andrei): Figure out a story for the priority we're passing
+				// below. In the TxnCoordSender world, this is coming from the current
+				// Batch's priority.
+				r.txn.UpdateStateOnDetachedErr(r.ctx, meta.Err, roachpb.NormalUserPriority)
 			}
 			r.err = meta.Err
 		}
