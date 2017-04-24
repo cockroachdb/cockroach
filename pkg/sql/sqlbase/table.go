@@ -1697,7 +1697,11 @@ func (desc TableDescriptor) collectConstraintInfo(
 			detail := ConstraintDetail{Kind: ConstraintTypeFK}
 			detail.Unvalidated = index.ForeignKey.Validity == ConstraintValidity_Unvalidated
 			if tableLookup != nil {
-				detail.Columns = index.ColumnNames
+				numCols := len(index.ColumnIDs)
+				if index.ForeignKey.SharedPrefixLen > 0 {
+					numCols = int(index.ForeignKey.SharedPrefixLen)
+				}
+				detail.Columns = index.ColumnNames[:numCols]
 				detail.Index = index
 				other, err := tableLookup(index.ForeignKey.Table)
 				if err != nil {

@@ -542,6 +542,14 @@ CREATE TABLE domain_modules (
   CONSTRAINT domain_modules_uq UNIQUE (domain_id, module_id)
 )
 
+query TTTTT
+SHOW CONSTRAINTS FROM domain_modules
+----
+domain_modules  domain_modules_domain_id_fk  FOREIGN KEY  domain_id             domains.[id]
+domain_modules  domain_modules_module_id_fk  FOREIGN KEY  module_id             modules.[id]
+domain_modules  domain_modules_uq            UNIQUE       domain_id, module_id  NULL
+domain_modules  primary                      PRIMARY KEY  id                    NULL
+
 statement ok
 CREATE TABLE tx (
   id INT NOT NULL PRIMARY KEY
