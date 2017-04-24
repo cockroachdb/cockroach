@@ -112,6 +112,7 @@ func (n *createDatabaseNode) Start(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
+		n.p.session.leases.addUncommittedDatabase(desc.Name, desc.ID)
 	}
 	return nil
 }
@@ -496,9 +497,11 @@ func (n *createViewNode) Start(ctx context.Context) error {
 		return err
 	}
 
+	n.p.session.leases.addUncommittedTable(&desc)
+
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+	return MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
 		ctx,
 		n.p.txn,
 		EventLogCreateView,
@@ -509,11 +512,7 @@ func (n *createViewNode) Start(ctx context.Context) error {
 			Statement string
 			User      string
 		}{n.n.Name.String(), n.n.String(), n.p.session.User},
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func (n *createViewNode) Close(ctx context.Context) {
@@ -690,6 +689,8 @@ func (n *createTableNode) Start(ctx context.Context) error {
 	if err := desc.Validate(ctx, n.p.txn); err != nil {
 		return err
 	}
+
+	n.p.session.leases.addUncommittedTable(&desc)
 
 	// Log Create Table event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
