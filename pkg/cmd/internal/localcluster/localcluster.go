@@ -407,7 +407,7 @@ func (n *Node) Start() {
 		return
 	}
 
-	pid := n.cmd.ProcessState.Pid()
+	pid := n.cmd.Process.Pid
 	log.Infof(ctx, "process %d started: %s", pid, n.cmd.Args)
 
 	go func(cmd *exec.Cmd) {
