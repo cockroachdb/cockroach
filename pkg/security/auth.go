@@ -42,10 +42,10 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	if len(tlsState.PeerCertificates) == 0 {
 		return "", errors.Errorf("no client certificates in request")
 	}
-	if len(tlsState.VerifiedChains) != len(tlsState.PeerCertificates) {
-		// TODO(marc): can this happen? Should we require exactly one?
-		return "", errors.Errorf("client cerficates not verified")
-	}
+	// TODO(marc): some clients pass the entire chain (client and CA certificates).
+	// We've yet to see requests where the client certificate is not the first in the list
+	// but we may have to examine certificates if that happens.
+
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }
 
