@@ -622,3 +622,16 @@ DROP TABLE a
 
 statement ok
 DROP TABLE b
+
+# A CREATE TABLE with a FK reference within a transaction.
+statement ok
+CREATE TABLE referee (id INT PRIMARY KEY);
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+CREATE TABLE refers (a INT REFERENCES referee);
+
+statement ok
+COMMIT
