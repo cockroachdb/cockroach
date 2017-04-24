@@ -24,7 +24,7 @@ import (
 	// Register the net/trace endpoint with http.DefaultServeMux.
 	"golang.org/x/net/trace"
 
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 
@@ -41,6 +41,11 @@ const debugEndpoint = "/debug/"
 // register to that via import, and go-metrics registers to that via exp.Exp())
 var debugServeMux = http.DefaultServeMux
 
+var debugRemote = settings.RegisterStringSetting(
+	"server.debug.remote",
+	"set to enable remote debugging, localhost-only or disable (all, local, false)",
+	"local")
+
 // handleDebug passes requests with the debugPathPrefix onto the default
 // serve mux, which is preconfigured (by import of net/http/pprof and registration
 // of go-metrics) to serve endpoints which access exported variables and pprof tools.
@@ -50,10 +55,6 @@ func handleDebug(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() {
-	// Register our interest in the COCKROACH_REMOTE_DEBUG env var.
-	const remoteDebug = "COCKROACH_REMOTE_DEBUG"
-	_ = envutil.EnvOrDefaultString(remoteDebug, "local")
-
 	// Tweak the authentication logic for the tracing endpoint. By default it's
 	// open for localhost only, but with Docker we want to get there from
 	// anywhere. We maintain the default behavior of only allowing access to
@@ -63,7 +64,7 @@ func init() {
 	origAuthRequest := trace.AuthRequest
 	trace.AuthRequest = func(req *http.Request) (bool, bool) {
 		allow, sensitive := origAuthRequest(req)
-		switch strings.ToLower(envutil.EnvOrDefaultString(remoteDebug, "local")) {
+		switch strings.ToLower(debugRemote.Get()) {
 		case "any", "true", "t", "1":
 			allow = true
 		case "local":
