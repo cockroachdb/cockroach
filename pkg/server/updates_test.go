@@ -15,10 +15,15 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -83,16 +89,21 @@ func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	usageReports := int32(0)
-	uuid := ""
+	var uuid, rawReportBody string
 	reported := reportingInfo{}
 
 	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		atomic.AddInt32(&usageReports, 1)
 		uuid = r.URL.Query().Get("uuid")
-		if err := json.NewDecoder(r.Body).Decode(&reported); err != nil {
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
 			t.Fatal(err)
 		}
+		if err := json.NewDecoder(bytes.NewReader(body)).Decode(&reported); err != nil {
+			t.Fatal(err)
+		}
+		rawReportBody = string(body)
 	}))
 	u, err := url.Parse(recorder.URL)
 	if err != nil {
@@ -106,11 +117,32 @@ func TestReportUsage(t *testing.T) {
 			base.DefaultTestStoreSpec,
 		},
 	}
-	s, _, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, params)
 	ts := s.(*TestServer)
 
 	if err := ts.WaitForInitialSplits(); err != nil {
 		t.Fatal(err)
+	}
+
+	const elemName = "somestring"
+	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(fmt.Sprintf(
+		`CREATE TABLE %s.%s (%s INT CONSTRAINT %s CHECK (%s > 1))`,
+		elemName, elemName, elemName, elemName, elemName,
+	)); err != nil {
+		t.Fatal(err)
+	}
+	tables, err := ts.collectSchemaInfo(context.TODO())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actual := len(tables); actual != 1 {
+		t.Fatalf("unexpected table count %d", actual)
+	}
+	if expected, actual := "_", tables[0].Name; expected != actual {
+		t.Fatalf("unexpected table name, expected %q got %q", expected, actual)
 	}
 
 	var expectedUsageReports int32
@@ -169,6 +201,27 @@ func TestReportUsage(t *testing.T) {
 		}
 		return nil
 	})
+
+	if strings.Contains(rawReportBody, elemName) {
+		t.Fatalf("%q should not appear in %q", elemName, rawReportBody)
+	}
+
+	if expected, actual := len(tables), len(reported.Schema); expected != actual {
+		t.Fatalf("expected %d tables in schema, got %d", expected, actual)
+	}
+	reportedByID := make(map[sqlbase.ID]sqlbase.TableDescriptor, len(tables))
+	for _, r := range reported.Schema {
+		reportedByID[r.ID] = r
+	}
+	for _, tbl := range tables {
+		r, ok := reportedByID[tbl.ID]
+		if !ok {
+			t.Fatalf("expected table %d to be in reported schema", tbl.ID)
+		}
+		if !reflect.DeepEqual(r, tbl) {
+			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, tbl, r)
+		}
+	}
 
 	ts.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
 	recorder.Close()
