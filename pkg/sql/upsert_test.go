@@ -180,8 +180,8 @@ SELECT * FROM d.t@primary = %s
 SELECT * FROM d.t@b_idx   = %s
 `,
 					err,
-					sqlDB.QueryStr(`SELECT * FROM d.t@primary`),
-					sqlDB.QueryStr(`SELECT * FROM d.t@b_idx`),
+					sqlDB.QueryResults(`SELECT * FROM d.t@primary`),
+					sqlDB.QueryResults(`SELECT * FROM d.t@b_idx`),
 				)
 			}
 		})

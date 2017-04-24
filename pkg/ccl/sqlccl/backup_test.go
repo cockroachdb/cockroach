@@ -112,9 +112,7 @@ func backupSQLRunner(t testing.TB, tc *testcluster.TestCluster) *sqlutils.SQLRun
 	show := "SHOW CLUSTER SETTING enterprise.enabled"
 	for _, conn := range tc.Conns {
 		testutils.SucceedsSoon(t, func() error {
-			var enabled string
-			sqlutils.MakeSQLRunner(t, conn).QueryRow(show).Scan(&enabled)
-			if enabled != "true" {
+			if enabled := sqlutils.MakeSQLRunner(t, conn).QueryStr(show); enabled != "true" {
 				return errors.New("enterprise.enabled is not true")
 			}
 			return nil
@@ -335,15 +333,14 @@ func backupAndRestore(
 			t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, bytes)
 		}
 
-		var rowCount int64
-		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
-		if rowCount != numAccounts {
-			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
+		if count := sqlDBRestore.QueryInt(`SELECT COUNT(*) FROM bench.bank`); count != numAccounts {
+			t.Fatalf("expected %d rows but found %d", numAccounts, count)
 		}
 
-		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank@balance_idx`).Scan(&rowCount)
-		if rowCount != numAccounts {
-			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
+		if count := sqlDBRestore.QueryInt(
+			`SELECT COUNT(*) FROM bench.bank@balance_idx`,
+		); count != numAccounts {
+			t.Fatalf("expected %d rows but found %d", numAccounts, count)
 		}
 	}
 }
@@ -558,22 +555,17 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 
 		sqlDBRestore.Exec(`RESTORE bench.* FROM $1`, dir)
 
-		var rowCount int64
-		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
-		if rowCount != numAccounts {
-			t.Errorf("expected %d rows but found %d", numAccounts, rowCount)
+		if count := sqlDBRestore.QueryInt(`SELECT COUNT(*) FROM bench.bank`); count != numAccounts {
+			t.Errorf("expected %d rows but found %d", numAccounts, count)
 		}
-		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.i0`).Scan(&rowCount)
-		if rowCount != 2*numAccounts {
-			t.Errorf("expected %d rows but found %d", 2*numAccounts, rowCount)
+		if count := sqlDBRestore.QueryInt(`SELECT COUNT(*) FROM bench.i0`); count != 2*numAccounts {
+			t.Errorf("expected %d rows but found %d", 2*numAccounts, count)
 		}
-		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.i0_0`).Scan(&rowCount)
-		if rowCount != 3*numAccounts {
-			t.Errorf("expected %d rows but found %d", 3*numAccounts, rowCount)
+		if count := sqlDBRestore.QueryInt(`SELECT COUNT(*) FROM bench.i0_0`); count != 3*numAccounts {
+			t.Errorf("expected %d rows but found %d", 3*numAccounts, count)
 		}
-		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.i1`).Scan(&rowCount)
-		if rowCount != 4*numAccounts {
-			t.Errorf("expected %d rows but found %d", 4*numAccounts, rowCount)
+		if count := sqlDBRestore.QueryInt(`SELECT COUNT(*) FROM bench.i1`); count != 4*numAccounts {
+			t.Errorf("expected %d rows but found %d", 4*numAccounts, count)
 		}
 	})
 
@@ -672,12 +664,12 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		_ = origDB.Exec(`BACKUP DATABASE store, storestats TO $1`, dir)
 	}
 
-	origCustomers := origDB.QueryStr(`SHOW CONSTRAINTS FROM store.customers`)
-	origOrders := origDB.QueryStr(`SHOW CONSTRAINTS FROM store.orders`)
-	origReceipts := origDB.QueryStr(`SHOW CONSTRAINTS FROM store.receipts`)
+	origCustomers := origDB.QueryResults(`SHOW CONSTRAINTS FROM store.customers`)
+	origOrders := origDB.QueryResults(`SHOW CONSTRAINTS FROM store.orders`)
+	origReceipts := origDB.QueryResults(`SHOW CONSTRAINTS FROM store.receipts`)
 
-	origEarlyCustomers := origDB.QueryStr(`SELECT * from store.early_customers`)
-	origOrderCounts := origDB.QueryStr(`SELECT * from storestats.ordercounts ORDER BY id`)
+	origEarlyCustomers := origDB.QueryResults(`SELECT * from store.early_customers`)
+	origOrderCounts := origDB.QueryResults(`SELECT * from storestats.ordercounts ORDER BY id`)
 
 	t.Run("restore everything to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
@@ -1081,7 +1073,7 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	sqlDB.Exec(`RESTORE bench.* FROM $1`, baseDir)
 	atomic.StoreInt32(&allowErrors, 0)
 
-	bad := sqlDB.QueryStr(`SELECT id, balance, payload FROM bench.bank WHERE id != balance`)
+	bad := sqlDB.QueryResults(`SELECT id, balance, payload FROM bench.bank WHERE id != balance`)
 	for _, r := range bad {
 		t.Errorf("bad row ID %s = bal %s (payload: %q)", r[0], r[1], r[2])
 	}
@@ -1095,14 +1087,11 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
 
-	var ts string
-	var rowCount int64
+	ts := sqlDB.QueryStr(`SELECT cluster_logical_timestamp()`)
 
-	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts)
 	sqlDB.Exec(`TRUNCATE bench.bank`)
 
-	sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
-	if rowCount != 0 {
+	if rowCount := sqlDB.QueryInt(`SELECT COUNT(*) FROM bench.bank`); rowCount != 0 {
 		t.Fatalf("expected 0 rows but found %d", rowCount)
 	}
 
@@ -1112,8 +1101,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 	sqlDB.Exec(`RESTORE bench.* FROM $1`, dir)
 
-	sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
-	if rowCount != numAccounts {
+	if rowCount := sqlDB.QueryInt(`SELECT COUNT(*) FROM bench.bank`); rowCount != numAccounts {
 		t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 	}
 }
@@ -1349,12 +1337,12 @@ func TestRestoredPrivileges(t *testing.T) {
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
 	defer cleanupFn()
 
-	rootOnly := sqlDB.QueryStr(`SHOW GRANTS ON bench.bank`)
+	rootOnly := sqlDB.QueryResults(`SHOW GRANTS ON bench.bank`)
 
 	sqlDB.Exec(`CREATE USER someone`)
 	sqlDB.Exec(`GRANT SELECT, INSERT, UPDATE, DELETE ON bench.bank TO someone`)
 
-	withGrants := sqlDB.QueryStr(`SHOW GRANTS ON bench.bank`)
+	withGrants := sqlDB.QueryResults(`SHOW GRANTS ON bench.bank`)
 
 	sqlDB.Exec(`BACKUP DATABASE bench TO $1`, dir)
 	sqlDB.Exec(`DROP TABLE bench.bank`)
@@ -1399,7 +1387,7 @@ func TestRestoreInto(t *testing.T) {
 	sqlDB.Exec(`CREATE DATABASE bench2`)
 	sqlDB.Exec(restoreStmt)
 
-	expected := sqlDB.QueryStr(`SELECT * FROM bench.bank`)
+	expected := sqlDB.QueryResults(`SELECT * FROM bench.bank`)
 	sqlDB.CheckQueryResults(`SELECT * FROM bench2.bank`, expected)
 }
 

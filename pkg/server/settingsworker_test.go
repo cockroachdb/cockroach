@@ -132,7 +132,7 @@ func TestSettingsRefresh(t *testing.T) {
 	// SET/SHOW work too.
 	db.Exec(fmt.Sprintf(setQ, strKey, "'via-set'"))
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "via-set", db.QueryStr(fmt.Sprintf(showQ, strKey))[0][0]; expected != actual {
+		if expected, actual := "via-set", db.QueryStr(fmt.Sprintf(showQ, strKey)); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -141,7 +141,7 @@ func TestSettingsRefresh(t *testing.T) {
 	// SET/SHOW work too.
 	db.Exec(fmt.Sprintf(setQ, intKey, "5"))
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "5", db.QueryStr(fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
+		if expected, actual := "5", db.QueryStr(fmt.Sprintf(showQ, intKey)); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
