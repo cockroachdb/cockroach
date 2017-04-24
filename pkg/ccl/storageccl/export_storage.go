@@ -349,11 +349,19 @@ func makeGCSStorage(ctx context.Context, conf *roachpb.ExportStorage_GCS) (Expor
 }
 
 func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
-	w := g.bucket.Object(filepath.Join(g.prefix, basename)).NewWriter(ctx)
-	if _, err := io.Copy(w, content); err != nil {
-		return errors.Wrap(err, "failed to write to google cloud")
-	}
-	return w.Close()
+	const maxAttempts = 3
+
+	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		if _, err := content.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		w := g.bucket.Object(filepath.Join(g.prefix, basename)).NewWriter(ctx)
+		if _, err := io.Copy(w, content); err != nil {
+			return err
+		}
+		return w.Close()
+	})
+	return errors.Wrap(err, "write to google cloud")
 }
 
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
