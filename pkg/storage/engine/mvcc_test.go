@@ -377,6 +377,44 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 	}
 }
 
+// Test that a write with a higher epoch is permitted even when the sequence
+// number has decreased compared to an existing intent. This is because, on
+// transaction restart, the sequence number should not be compared with intents
+// from the old epoch.
+func TestMVCCPutNewEpochLowerSequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	txn := *txn1
+	txn.Sequence = 5
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, &txn); err != nil {
+		t.Fatal(err)
+	}
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 3}, true, &txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(value.RawBytes, value1.RawBytes) {
+		t.Fatalf("the value should be %s, but got %s",
+			value2.RawBytes, value.RawBytes)
+	}
+
+	txn.Sequence = 4
+	txn.Epoch++
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, &txn); err != nil {
+		t.Fatal(err)
+	}
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 3}, true, &txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(value.RawBytes, value2.RawBytes) {
+		t.Fatalf("the value should be %s, but got %s",
+			value2.RawBytes, value.RawBytes)
+	}
+}
+
 // TestMVCCIncrement verifies increment behavior. In particular,
 // incrementing a non-existent key by 0 will create the value.
 func TestMVCCIncrement(t *testing.T) {
