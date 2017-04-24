@@ -50,7 +50,6 @@ var zoneDisableReplication bool
 
 var serverCfg = server.MakeConfig()
 var baseCfg = serverCfg.Config
-var serverInsecure bool
 var cliCtx = cliContext{Config: baseCfg}
 var sqlCtx = sqlContext{cliContext: &cliCtx}
 var dumpCtx = dumpContext{cliContext: &cliCtx, dumpMode: dumpBoth}
@@ -59,6 +58,10 @@ var debugCtx = debugContext{
 	endKey:     engine.MVCCKeyMax,
 	replicated: false,
 }
+
+// server-specific values of some flags.
+var serverInsecure bool
+var serverSSLCertsDir string
 
 // InitCLIDefaults is used for testing.
 func InitCLIDefaults() {
@@ -250,8 +253,9 @@ func init() {
 		// We share the default with the ClientInsecure flag.
 		boolFlag(f, &serverInsecure, cliflags.ServerInsecure, baseCfg.Insecure)
 
-		// Certificate flags.
-		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
+		// Certificates directory. Use a server-specific flag and value to ignore environment
+		// variables, but share the same default.
+		stringFlag(f, &serverSSLCertsDir, cliflags.ServerCertsDir, base.DefaultCertsDirectory)
 
 		// Cluster joining flags.
 		varFlag(f, &serverCfg.JoinList, cliflags.Join)

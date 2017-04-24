@@ -289,17 +289,24 @@ production usage.`,
 The path to the directory containing SSL certificates and keys.
 <PRE>
 
-Cockroach looks for certificates and keys inside the directory using the following naming scheme:
+Cockroach looks for certificates and keys inside the directory using the
+following naming scheme:
 
   - CA certificate and key: ca.crt, ca.key
   - Server certificate and key: node.crt, node.key
   - Client certificate and key: client.<user>.crt, client.<user>.key
 
 When running client commands, the user can be specified with the --user flag.
-
 </PRE>
-Keys have a minimum permission requirement of 0777 (rwx------). This restriction can be
+
+Keys have a minimum permission requirement of 0700 (rwx------). This restriction can be
 disabled by setting the environment variable COCKROACH_SKIP_KEY_PERMISSION_CHECK to true.`,
+	}
+
+	// Server version of the certs directory flag, cannot be set through environment.
+	ServerCertsDir = FlagInfo{
+		Name:        "certs-dir",
+		Description: CertsDir.Description,
 	}
 
 	CAKey = FlagInfo{
