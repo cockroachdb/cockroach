@@ -22,7 +22,8 @@ import (
 	"io/ioutil"
 	"os"
 	"runtime"
-	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 )
 
 // TestLogScope represents the lifetime of a logging output.  It
@@ -65,9 +66,7 @@ func Scope(t tShim) *TestLogScope {
 // ScopeWithoutShowLogs ignores the -show-logs flag and should be used for tests
 // that require the logs go to files.
 func ScopeWithoutShowLogs(t tShim) *TestLogScope {
-	// Subtests are slash-delimited, which can confuse things when slash is also
-	// the path separator.
-	tempDir, err := ioutil.TempDir("", "log"+strings.Replace(t.Name(), "/", "_", -1))
+	tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
 	if err != nil {
 		t.Fatal(err)
 	}
