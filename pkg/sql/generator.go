@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // valueGenerator represents a node that produces rows
@@ -42,7 +43,7 @@ type valueGenerator struct {
 	gen parser.ValueGenerator
 
 	// columns is the signature of this generator.
-	columns ResultColumns
+	columns sqlbase.ResultColumns
 
 	// rowCount is used for DebugValues() only.
 	rowCount int
@@ -69,13 +70,13 @@ func (p *planner) makeGenerator(ctx context.Context, t *parser.FuncExpr) (planNo
 		return nil, errors.Errorf("FROM expression is not a generator: %s", t)
 	}
 
-	var columns ResultColumns
+	var columns sqlbase.ResultColumns
 	if len(tType.Cols) == 1 {
-		columns = ResultColumns{ResultColumn{Name: origName, Typ: tType.Cols[0]}}
+		columns = sqlbase.ResultColumns{sqlbase.ResultColumn{Name: origName, Typ: tType.Cols[0]}}
 	} else {
-		columns = make(ResultColumns, len(tType.Cols))
+		columns = make(sqlbase.ResultColumns, len(tType.Cols))
 		for i, t := range tType.Cols {
-			columns[i] = ResultColumn{
+			columns[i] = sqlbase.ResultColumn{
 				Name: fmt.Sprintf("column%d", i+1),
 				Typ:  t,
 			}
@@ -130,7 +131,7 @@ func (n *valueGenerator) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
 	return nil, nil, nil
 }
 
-func (n *valueGenerator) Ordering() orderingInfo  { return orderingInfo{} }
-func (n *valueGenerator) Values() parser.Datums   { return n.gen.Values() }
-func (n *valueGenerator) MarkDebug(_ explainMode) {}
-func (n *valueGenerator) Columns() ResultColumns  { return n.columns }
+func (n *valueGenerator) Ordering() orderingInfo         { return orderingInfo{} }
+func (n *valueGenerator) Values() parser.Datums          { return n.gen.Values() }
+func (n *valueGenerator) MarkDebug(_ explainMode)        {}
+func (n *valueGenerator) Columns() sqlbase.ResultColumns { return n.columns }

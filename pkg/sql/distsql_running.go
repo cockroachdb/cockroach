@@ -202,7 +202,7 @@ type distSQLReceiver struct {
 
 	// rows is the container where we store the results; if we only need the count
 	// of the rows, it is nil.
-	rows *RowContainer
+	rows *sqlbase.RowContainer
 	// resultToStreamColMap maps result columns to columns in the distsqlrun results
 	// stream.
 	resultToStreamColMap []int
@@ -229,7 +229,7 @@ var _ distsqlrun.RowReceiver = &distSQLReceiver{}
 
 func makeDistSQLReceiver(
 	ctx context.Context,
-	sink *RowContainer,
+	sink *sqlbase.RowContainer,
 	rangeCache *kv.RangeDescriptorCache,
 	leaseCache *kv.LeaseHolderCache,
 ) distSQLReceiver {

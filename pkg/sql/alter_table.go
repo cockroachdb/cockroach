@@ -483,7 +483,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 
 func (n *alterTableNode) Next(context.Context) (bool, error)                  { return false, nil }
 func (n *alterTableNode) Close(context.Context)                               {}
-func (n *alterTableNode) Columns() ResultColumns                              { return make(ResultColumns, 0) }
+func (n *alterTableNode) Columns() sqlbase.ResultColumns                      { return make(sqlbase.ResultColumns, 0) }
 func (n *alterTableNode) Ordering() orderingInfo                              { return orderingInfo{} }
 func (n *alterTableNode) Values() parser.Datums                               { return parser.Datums{} }
 func (n *alterTableNode) DebugValues() debugValues                            { return debugValues{} }

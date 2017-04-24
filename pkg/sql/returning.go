@@ -32,7 +32,7 @@ import (
 type returningHelper struct {
 	p *planner
 	// Expected columns.
-	columns ResultColumns
+	columns sqlbase.ResultColumns
 	// Processed copies of expressions from ReturningExprs.
 	exprs        []parser.TypedExpr
 	rowCount     int
@@ -77,9 +77,11 @@ func (p *planner) newReturningHelper(
 		}
 	}
 
-	rh.columns = make(ResultColumns, 0, len(rExprs))
+	rh.columns = make(sqlbase.ResultColumns, 0, len(rExprs))
 	aliasTableName := parser.TableName{TableName: parser.Name(alias)}
-	rh.source = newSourceInfoForSingleTable(aliasTableName, makeResultColumns(tablecols))
+	rh.source = newSourceInfoForSingleTable(
+		aliasTableName, sqlbase.ResultColumnsFromColDescs(tablecols),
+	)
 	rh.exprs = make([]parser.TypedExpr, 0, len(rExprs))
 	ivarHelper := parser.MakeIndexedVarHelper(rh, len(tablecols))
 	for _, target := range rExprs {

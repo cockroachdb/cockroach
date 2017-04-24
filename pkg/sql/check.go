@@ -43,7 +43,9 @@ func (c *checkHelper) init(
 	}
 
 	c.cols = tableDesc.Columns
-	c.sourceInfo = newSourceInfoForSingleTable(*tn, makeResultColumns(tableDesc.Columns))
+	c.sourceInfo = newSourceInfoForSingleTable(
+		*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.Columns),
+	)
 
 	c.exprs = make([]parser.TypedExpr, len(tableDesc.Checks))
 	exprStrings := make([]string, len(tableDesc.Checks))

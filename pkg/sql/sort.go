@@ -35,7 +35,7 @@ import (
 type sortNode struct {
 	p        *planner
 	plan     planNode
-	columns  ResultColumns
+	columns  sqlbase.ResultColumns
 	ordering sqlbase.ColumnOrdering
 
 	needSort     bool
@@ -272,7 +272,7 @@ func (p *planner) colIndex(numOriginalCols int, expr parser.Expr, context string
 	return int(ord), nil
 }
 
-func (n *sortNode) Columns() ResultColumns {
+func (n *sortNode) Columns() sqlbase.ResultColumns {
 	return n.columns
 }
 
