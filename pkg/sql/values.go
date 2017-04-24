@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 type valuesNode struct {
@@ -212,26 +211,7 @@ func (n *valuesNode) Less(i, j int) bool {
 // ValuesLess returns the comparison result between the two provided Datums slices
 // in the context of the valuesNode ordering.
 func (n *valuesNode) ValuesLess(ra, rb parser.Datums) bool {
-	for _, c := range n.ordering {
-		var da, db parser.Datum
-		if c.Direction == encoding.Ascending {
-			da = ra[c.ColIdx]
-			db = rb[c.ColIdx]
-		} else {
-			da = rb[c.ColIdx]
-			db = ra[c.ColIdx]
-		}
-		// TODO(pmattis): This is assuming that the datum types are compatible. I'm
-		// not sure this always holds as `CASE` expressions can return different
-		// types for a column for different rows. Investigate how other RDBMs
-		// handle this.
-		if c := da.Compare(&n.p.evalCtx, db); c < 0 {
-			return true
-		} else if c > 0 {
-			return false
-		}
-	}
-	return true
+	return sqlbase.CompareDatums(n.ordering, &n.p.evalCtx, ra, rb) < 0
 }
 
 func (n *valuesNode) Swap(i, j int) {
