@@ -15,13 +15,16 @@
 package settings
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/pkg/errors"
 )
 
 // Setting implementions wrap a val with atomic access.
@@ -39,6 +42,8 @@ type BoolSetting struct {
 	defaultValue bool
 	v            int32
 }
+
+var _ Setting = &BoolSetting{}
 
 // Get retrieves the bool value in the setting.
 func (b *BoolSetting) Get() bool {
@@ -67,8 +72,8 @@ func (b *BoolSetting) setToDefault() {
 }
 
 // RegisterBoolSetting defines a new setting with type bool.
-func RegisterBoolSetting(key, desc string, defVal bool) *BoolSetting {
-	setting := &BoolSetting{defaultValue: defVal}
+func RegisterBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
+	setting := &BoolSetting{defaultValue: defaultValue}
 	register(key, desc, setting)
 	return setting
 }
@@ -93,6 +98,8 @@ type IntSetting struct {
 	v            int64
 }
 
+var _ Setting = &IntSetting{}
+
 // Get retrieves the int value in the setting.
 func (i *IntSetting) Get() int64 {
 	return atomic.LoadInt64(&i.v)
@@ -116,8 +123,8 @@ func (i *IntSetting) setToDefault() {
 }
 
 // RegisterIntSetting defines a new setting with type int.
-func RegisterIntSetting(key, desc string, defVal int64) *IntSetting {
-	setting := &IntSetting{defaultValue: defVal}
+func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	setting := &IntSetting{defaultValue: defaultValue}
 	register(key, desc, setting)
 	return setting
 }
@@ -136,6 +143,8 @@ type FloatSetting struct {
 	defaultValue float64
 	v            uint64
 }
+
+var _ Setting = &FloatSetting{}
 
 // Get retrieves the float value in the setting.
 func (f *FloatSetting) Get() float64 {
@@ -167,8 +176,8 @@ func TestingFloatSetting(f float64) *FloatSetting {
 }
 
 // RegisterFloatSetting defines a new setting with type float.
-func RegisterFloatSetting(key, desc string, defVal float64) *FloatSetting {
-	setting := &FloatSetting{defaultValue: defVal}
+func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
+	setting := &FloatSetting{defaultValue: defaultValue}
 	register(key, desc, setting)
 	return setting
 }
@@ -180,6 +189,8 @@ type DurationSetting struct {
 	defaultValue time.Duration
 	v            int64
 }
+
+var _ Setting = &DurationSetting{}
 
 // Get retrieves the duration value in the setting.
 func (d *DurationSetting) Get() time.Duration {
@@ -204,8 +215,8 @@ func (d *DurationSetting) setToDefault() {
 }
 
 // RegisterDurationSetting defines a new setting with type duration.
-func RegisterDurationSetting(key, desc string, defVal time.Duration) *DurationSetting {
-	setting := &DurationSetting{defaultValue: defVal}
+func RegisterDurationSetting(key, desc string, defaultValue time.Duration) *DurationSetting {
+	setting := &DurationSetting{defaultValue: defaultValue}
 	register(key, desc, setting)
 	return setting
 }
@@ -224,6 +235,8 @@ type StringSetting struct {
 	defaultValue string
 	v            atomic.Value
 }
+
+var _ Setting = &StringSetting{}
 
 func (s *StringSetting) String() string {
 	return s.Get()
@@ -248,8 +261,8 @@ func (s *StringSetting) setToDefault() {
 }
 
 // RegisterStringSetting defines a new setting with type string.
-func RegisterStringSetting(key, desc string, defVal string) *StringSetting {
-	setting := &StringSetting{defaultValue: defVal}
+func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting {
+	setting := &StringSetting{defaultValue: defaultValue}
 	register(key, desc, setting)
 	return setting
 }
@@ -261,12 +274,99 @@ func TestingStringSetting(v string) *StringSetting {
 	return s
 }
 
+// EnumSetting is a StringSetting that restricts the values to be one of the `enumValues`
+type EnumSetting struct {
+	IntSetting
+	defaultValue int64
+	v            int64
+	enumValues   map[string]int64
+}
+
+var _ Setting = &EnumSetting{}
+
+func (e *EnumSetting) Get() int64 {
+	return atomic.LoadInt64(&e.v)
+}
+
+func (e *EnumSetting) String() string {
+	return EncodeInt(e.Get())
+}
+
+func (e *EnumSetting) setToDefault() {
+	atomic.StoreInt64(&e.v, e.defaultValue)
+}
+
+func (e *EnumSetting) Typ() string {
+	return "e"
+}
+
+func (e *EnumSetting) IsValid(k string) bool {
+	_, ok := e.enumValues[strings.ToLower(k)]
+	return ok
+}
+
+func (e *EnumSetting) set(k string) error {
+	v, ok := e.enumValues[strings.ToLower(k)]
+	if !ok {
+		return errors.Errorf("cannot set cluster setting to value '%s', acceptable values are %s", k, enumValuesToDesc(e.enumValues))
+	}
+	atomic.StoreInt64(&e.v, v)
+	return nil
+}
+
+func enumValuesToDesc(enumValues map[string]int64) string {
+	var buffer bytes.Buffer
+	buffer.WriteString("[")
+	var notFirstElem bool
+	for k, v := range enumValues {
+		if notFirstElem {
+			buffer.WriteString(", ")
+		}
+		fmt.Fprintf(&buffer, "%s = %d", strings.ToLower(k), v)
+		notFirstElem = true
+	}
+	buffer.WriteString("]")
+	return buffer.String()
+}
+
+// RegisterEnumSetting defines a new setting with type int.
+func RegisterEnumSetting(
+	key, desc string, defaultKey string, enumValues map[string]int64,
+) *EnumSetting {
+	enumValuesLower := make(map[string]int64)
+	if len(enumValues) == 0 {
+		panic("cannot register enum setting with empty map of enum values")
+	}
+	for k, v := range enumValues {
+		enumValuesLower[strings.ToLower(k)] = v
+	}
+	defaultValue, ok := enumValuesLower[strings.ToLower(strings.ToLower(defaultKey))]
+	if !ok {
+		panic(fmt.Sprintf("enum registered with default value %s not in map %s", defaultKey, enumValuesToDesc(enumValuesLower)))
+	}
+	setting := &EnumSetting{
+		enumValues:   enumValuesLower,
+		defaultValue: defaultValue,
+	}
+	register(key, fmt.Sprintf("%s %s", desc, enumValuesToDesc(enumValues)), setting)
+	return setting
+}
+
+// TestingEnumSetting returns a mock, unregistered enum setting for testing.
+func TestingEnumSetting(i int64) *EnumSetting {
+	s := &EnumSetting{defaultValue: i}
+	s.setToDefault()
+	return s
+}
+
 // ByteSizeSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
 // of type "bytesize" is updated.
 type ByteSizeSetting struct {
 	IntSetting
 }
+
+var _ Setting = &ByteSizeSetting{}
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*ByteSizeSetting) Typ() string {
@@ -278,8 +378,8 @@ func (b *ByteSizeSetting) String() string {
 }
 
 // RegisterByteSizeSetting defines a new setting with type bytesize.
-func RegisterByteSizeSetting(key, desc string, defVal int64) *ByteSizeSetting {
-	setting := &ByteSizeSetting{IntSetting{defaultValue: defVal}}
+func RegisterByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
+	setting := &ByteSizeSetting{IntSetting{defaultValue: defaultValue}}
 	register(key, desc, setting)
 	return setting
 }
@@ -324,7 +424,7 @@ func register(key, desc string, s Setting) {
 
 // Value holds the (parsed, typed) value of a setting.
 // raw settings are stored in system.settings as human-readable strings, but are
-// cached interally after parsing in these appropriately typed fields (which is
+// cached internally after parsing in these appropriately typed fields (which is
 // basically a poor-man's union, without boxing).
 type wrappedSetting struct {
 	description string
