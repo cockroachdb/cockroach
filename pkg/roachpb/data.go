@@ -692,6 +692,7 @@ func NewTransaction(
 			Sequence:  1,
 		},
 		Name:          name,
+		LastHeartbeat: now,
 		OrigTimestamp: now,
 		MaxTimestamp:  now.Add(maxOffset, 0),
 	}
@@ -700,21 +701,17 @@ func NewTransaction(
 // LastActive returns the last timestamp at which client activity definitely
 // occurred, i.e. the maximum of OrigTimestamp and LastHeartbeat.
 func (t Transaction) LastActive() hlc.Timestamp {
-	candidate := t.OrigTimestamp
-	if t.LastHeartbeat != nil && candidate.Less(*t.LastHeartbeat) {
-		candidate = *t.LastHeartbeat
+	ts := t.LastHeartbeat
+	if ts.Less(t.OrigTimestamp) {
+		ts = t.OrigTimestamp
 	}
-	return candidate
+	return ts
 }
 
 // Clone creates a copy of the given transaction. The copy is "mostly" deep,
 // but does share pieces of memory with the original such as Key, ID and the
 // keys with the intent spans.
 func (t Transaction) Clone() Transaction {
-	if t.LastHeartbeat != nil {
-		h := *t.LastHeartbeat
-		t.LastHeartbeat = &h
-	}
 	mt := t.ObservedTimestamps
 	if len(mt) != 0 {
 		t.ObservedTimestamps = make([]ObservedTimestamp, len(mt))
@@ -879,14 +876,9 @@ func (t *Transaction) Update(o *Transaction) {
 		t.Epoch = o.Epoch
 	}
 	t.Timestamp.Forward(o.Timestamp)
+	t.LastHeartbeat.Forward(o.LastHeartbeat)
 	t.OrigTimestamp.Forward(o.OrigTimestamp)
 	t.MaxTimestamp.Forward(o.MaxTimestamp)
-	if o.LastHeartbeat != nil {
-		if t.LastHeartbeat == nil {
-			t.LastHeartbeat = &hlc.Timestamp{}
-		}
-		t.LastHeartbeat.Forward(*o.LastHeartbeat)
-	}
 
 	// Absorb the collected clock uncertainty information.
 	for _, v := range o.ObservedTimestamps {

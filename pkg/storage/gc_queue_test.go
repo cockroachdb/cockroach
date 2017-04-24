@@ -471,7 +471,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		txn.Status = test.status
 		txn.Intents = testIntents
 		if test.hb > 0 {
-			txn.LastHeartbeat = &hlc.Timestamp{WallTime: test.hb}
+			txn.LastHeartbeat = hlc.Timestamp{WallTime: test.hb}
 		}
 		// Set a high Timestamp to make sure it does not matter. Only
 		// OrigTimestamp (and heartbeat) are used for GC decisions.
