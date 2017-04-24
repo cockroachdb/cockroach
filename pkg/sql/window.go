@@ -94,7 +94,9 @@ func (p *planner) window(
 	window.replaceIndexVarsAndAggFuncs(s)
 
 	acc := p.session.TxnState.makeBoundAccount()
-	window.wrappedRenderVals = sqlbase.NewRowContainer(acc, s.columns, 0)
+	window.wrappedRenderVals = sqlbase.NewRowContainer(
+		acc, sqlbase.ColTypeInfoFromResCols(s.columns), 0,
+	)
 	window.windowsAcc = p.session.TxnState.OpenAccount()
 
 	return window, nil
@@ -761,7 +763,9 @@ func (n *windowNode) populateValues(ctx context.Context) error {
 	acc := n.windowsAcc.Wtxn(n.planner.session)
 	rowCount := n.wrappedRenderVals.Len()
 	n.values.rows = sqlbase.NewRowContainer(
-		n.planner.session.TxnState.makeBoundAccount(), n.values.columns, rowCount,
+		n.planner.session.TxnState.makeBoundAccount(),
+		sqlbase.ColTypeInfoFromResCols(n.values.columns),
+		rowCount,
 	)
 
 	row := make(parser.Datums, len(n.windowRender))

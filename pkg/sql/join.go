@@ -266,14 +266,18 @@ func (p *planner) makeJoin(
 	}
 
 	n.buffer = &RowBuffer{
-		RowContainer: sqlbase.NewRowContainer(p.session.TxnState.makeBoundAccount(), n.Columns(), 0),
+		RowContainer: sqlbase.NewRowContainer(
+			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(n.Columns()), 0,
+		),
 	}
 
 	n.bucketsMemAcc = p.session.TxnState.OpenAccount()
 	n.buckets = buckets{
 		buckets: make(map[string]*bucket),
 		rowContainer: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(), n.right.plan.Columns(), 0,
+			p.session.TxnState.makeBoundAccount(),
+			sqlbase.ColTypeInfoFromResCols(n.right.plan.Columns()),
+			0,
 		),
 	}
 

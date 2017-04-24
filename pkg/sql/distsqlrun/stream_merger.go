@@ -17,6 +17,7 @@
 package distsqlrun
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
@@ -127,10 +128,13 @@ func CompareEncDatumRowForMerge(
 		)
 	}
 
+	// TODO(radu): plumb EvalContext
+	evalCtx := &parser.EvalContext{}
+
 	for i, ord := range leftOrdering {
 		lIdx := ord.ColIdx
 		rIdx := rightOrdering[i].ColIdx
-		cmp, err := lhs[lIdx].Compare(da, &rhs[rIdx])
+		cmp, err := lhs[lIdx].Compare(da, evalCtx, &rhs[rIdx])
 		if err != nil {
 			return 0, err
 		}

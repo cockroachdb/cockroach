@@ -53,7 +53,7 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 		p:       p,
 		columns: columns,
 		rows: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(), columns, capacity,
+			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
 		),
 	}
 }
@@ -129,7 +129,9 @@ func (n *valuesNode) Start(ctx context.Context) error {
 	// from other planNodes), so its expressions need evaluting.
 	// This may run subqueries.
 	n.rows = sqlbase.NewRowContainer(
-		n.p.session.TxnState.makeBoundAccount(), n.columns, len(n.n.Tuples),
+		n.p.session.TxnState.makeBoundAccount(),
+		sqlbase.ColTypeInfoFromResCols(n.columns),
+		len(n.n.Tuples),
 	)
 
 	row := make([]parser.Datum, len(n.columns))
