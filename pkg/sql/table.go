@@ -232,13 +232,70 @@ func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	return nil
 }
 
+// getUncommittedDatabaseID returns a database ID for the requested tablename
+// if the requested tablename is for a database modified within the transaction
+// affiliated with the LeaseCollection.
+func (lc *LeaseCollection) getUncommittedDatabaseID(tn *parser.TableName) (sqlbase.ID, error) {
+	// Walk latest to earliest.
+	for i := len(lc.uncommittedDatabases) - 1; i >= 0; i-- {
+		db := lc.uncommittedDatabases[i]
+		if tn.Database() == db.name {
+			if db.dropped {
+				return 0, sqlbase.NewUndefinedTableError(tn.String())
+			}
+			return db.id, nil
+		}
+	}
+	return 0, nil
+}
+
+// getUncommittedTable returns a table for the requested tablename
+// if the requested tablename is for a table modified within the transaction
+// affiliated with the LeaseCollection.
+func (lc *LeaseCollection) getUncommittedTable(
+	dbID sqlbase.ID, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	for _, table := range lc.uncommittedTables {
+		if parser.ReNormalizeName(table.Name) == tn.TableName.Normalize() &&
+			table.ParentID == dbID {
+			if err := filterTableState(table); err != nil {
+				return nil, sqlbase.NewUndefinedTableError(tn.String())
+			}
+			return table, nil
+		}
+		// If a table has gotten renamed we'd like to disallow using the old names.
+		// The renames could have happened in another transaction but it's still okay
+		// to disallow the use of the old name in this transaction because the other
+		// transaction has already committed and this transaction is seeing the
+		// effect of it.
+		for _, rename := range table.GetRenames() {
+			if parser.ReNormalizeName(rename.OldName) == tn.TableName.Normalize() &&
+				rename.OldParentID == dbID {
+				return nil, sqlbase.NewUndefinedTableError(tn.String())
+			}
+		}
+	}
+	return nil, nil
+}
+
+func newTableFromFutureError(
+	ctx context.Context, txn *client.Txn, timestamp, creationTime hlc.Timestamp,
+) error {
+	retryErr := roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(roachpb.RETRY_TABLE_FROM_FUTURE), txn.Proto())
+	txn.UpdateStateOnRetryableErr(ctx, *retryErr)
+	err := roachpb.NewHandledRetryableTxnError(
+		retryErr.GetDetail().Error(), txn.Proto().ID, *txn.Proto())
+	log.Infof(ctx, "transaction at time %s encountered table with future timestamp %s", timestamp, creationTime)
+	return err
+}
+
 // getTableLease acquires a lease for the specified table. The lease must
 // be released by calling lc.releaseLeases().
 func (lc *LeaseCollection) getTableLease(
 	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
-		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
+		log.Infof(ctx, "acquiring lease on table '%s'", tn)
 	}
 
 	isSystemDB := tn.Database() == sqlbase.SystemDB.Name
@@ -259,9 +316,30 @@ func (lc *LeaseCollection) getTableLease(
 		return tbl, nil
 	}
 
-	dbID, err := lc.databaseCache.getDatabaseID(ctx, txn, vt, tn.Database())
+	dbID, err := lc.getUncommittedDatabaseID(tn)
 	if err != nil {
 		return nil, err
+	}
+	if dbID == 0 {
+		if err := lc.leaseMgr.LeaseStore.db.Txn(
+			ctx,
+			func(ctx context.Context, txn *client.Txn) error {
+				var err error
+				dbID, err = lc.databaseCache.getDatabaseID(ctx, txn, vt, tn.Database())
+				return err
+			},
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if table, err := lc.getUncommittedTable(dbID, tn); err != nil {
+		return nil, err
+	} else if table != nil {
+		if log.V(2) {
+			log.Infof(ctx, "found uncommitted table %d", table.ID)
+		}
+		return table, nil
 	}
 
 	// First, look to see if we already have a lease for this table.
@@ -274,7 +352,7 @@ func (lc *LeaseCollection) getTableLease(
 			l.ParentID == dbID {
 			lease = l
 			if log.V(2) {
-				log.Infof(ctx, "found lease in planner cache for table '%s'", tn)
+				log.Infof(ctx, "found lease in cache for table '%s'", tn)
 			}
 			break
 		}
@@ -283,7 +361,7 @@ func (lc *LeaseCollection) getTableLease(
 	// If we didn't find a lease or the lease is about to expire, acquire one.
 	if lease == nil || lc.removeLeaseIfExpiring(ctx, txn, lease) {
 		var err error
-		lease, err = lc.leaseMgr.AcquireByName(ctx, txn, dbID, tn.Table())
+		lease, err = lc.leaseMgr.AcquireByName(ctx, dbID, tn.Table())
 		if err != nil {
 			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
@@ -292,9 +370,17 @@ func (lc *LeaseCollection) getTableLease(
 			}
 			return nil, err
 		}
+		timestamp := txn.OrigTimestamp()
+		if creationTime := lease.creationTime; timestamp.Less(creationTime) {
+			// Push the transaction forward.
+			if err := lc.leaseMgr.Release(lease); err != nil {
+				log.Warning(ctx, err)
+			}
+			return nil, newTableFromFutureError(ctx, txn, timestamp, creationTime)
+		}
 		lc.leases = append(lc.leases, lease)
 		if log.V(2) {
-			log.Infof(ctx, "added lease on table '%s' to planner cache", tn)
+			log.Infof(ctx, "added lease on table '%s' to cache", tn)
 		}
 		// If the lease we just acquired expires before the txn's deadline, reduce
 		// the deadline.
@@ -308,7 +394,7 @@ func (lc *LeaseCollection) getTableLeaseByID(
 	ctx context.Context, txn *client.Txn, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
-		log.Infof(ctx, "planner acquiring lease on table ID %d", tableID)
+		log.Infof(ctx, "acquiring lease on table ID %d", tableID)
 	}
 
 	if testDisableTableLeases {
@@ -322,6 +408,18 @@ func (lc *LeaseCollection) getTableLeaseByID(
 		return table, nil
 	}
 
+	for _, table := range lc.uncommittedTables {
+		if table.ID == tableID {
+			if log.V(2) {
+				log.Infof(ctx, "found uncommitted table %d", tableID)
+			}
+			if table.Dropped() {
+				return nil, sqlbase.NewUndefinedTableError(fmt.Sprintf("<id=%d>", tableID))
+			}
+			return table, nil
+		}
+	}
+
 	// First, look to see if we already have a lease for this table -- including
 	// leases acquired via `getTableLease`.
 	var lease *LeaseState
@@ -329,7 +427,7 @@ func (lc *LeaseCollection) getTableLeaseByID(
 		if l.ID == tableID {
 			lease = l
 			if log.V(2) {
-				log.Infof(ctx, "found lease in planner cache for table %d", tableID)
+				log.Infof(ctx, "found lease in cache for table %d", tableID)
 			}
 			break
 		}
@@ -338,7 +436,7 @@ func (lc *LeaseCollection) getTableLeaseByID(
 	// If we didn't find a lease or the lease is about to expire, acquire one.
 	if lease == nil || lc.removeLeaseIfExpiring(ctx, txn, lease) {
 		var err error
-		lease, err = lc.leaseMgr.Acquire(ctx, txn, tableID, 0)
+		lease, err = lc.leaseMgr.Acquire(ctx, tableID, 0)
 		if err != nil {
 			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
@@ -346,6 +444,14 @@ func (lc *LeaseCollection) getTableLeaseByID(
 				return nil, sqlbase.NewUndefinedTableError(fmt.Sprintf("<id=%d>", tableID))
 			}
 			return nil, err
+		}
+		timestamp := txn.OrigTimestamp()
+		if creationTime := lease.creationTime; timestamp.Less(creationTime) {
+			// Push the transaction forward.
+			if err := lc.leaseMgr.Release(lease); err != nil {
+				log.Warning(ctx, err)
+			}
+			return nil, newTableFromFutureError(ctx, txn, timestamp, creationTime)
 		}
 		lc.leases = append(lc.leases, lease)
 		// If the lease we just acquired expires before the txn's deadline, reduce
@@ -450,11 +556,14 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	if isVirtualDescriptor(tableDesc) {
 		panic(fmt.Sprintf("Virtual Descriptors cannot be stored, found: %v", tableDesc))
 	}
+
 	// Some statements setTestingVerifyMetadata to verify the descriptor they
 	// have written, but if they are followed by other statements that modify
 	// the descriptor the verification of the overwritten descriptor cannot be
 	// done.
 	p.session.setTestingVerifyMetadata(nil)
+
+	p.session.leases.addUncommittedTable(tableDesc)
 
 	return p.txn.Put(
 		ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),

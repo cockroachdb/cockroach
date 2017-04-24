@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -155,17 +156,33 @@ func GetDatabaseDescFromID(
 // ID passed in using an existing txn. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
 func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDescriptor, error) {
-	desc := &Descriptor{}
+	table, _, err := GetTableDescAndTimestampFromID(ctx, txn, id)
+	return table, err
+}
+
+// GetTableDescAndTimestampFromID retrieves the table descriptor for the table
+// ID passed in using an existing txn. Returns an error if the
+// descriptor doesn't exist or if it exists and is not a table.
+func GetTableDescAndTimestampFromID(
+	ctx context.Context, txn *client.Txn, id ID,
+) (*TableDescriptor, hlc.Timestamp, error) {
 	descKey := MakeDescMetadataKey(id)
 
-	if err := txn.GetProto(ctx, descKey, desc); err != nil {
-		return nil, err
+	kv, err := txn.Get(ctx, descKey)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
 	}
+
+	desc := &Descriptor{}
+	if err := kv.ValueProto(desc); err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+
 	table := desc.GetTable()
 	if table == nil {
-		return nil, ErrDescriptorNotFound
+		return nil, hlc.Timestamp{}, ErrDescriptorNotFound
 	}
-	return table, nil
+	return table, kv.Value.Timestamp, nil
 }
 
 // RunOverAllColumns applies its argument fn to each of the column IDs in desc.
