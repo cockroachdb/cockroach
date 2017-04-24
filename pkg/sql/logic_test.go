@@ -223,7 +223,7 @@ type testClusterConfig struct {
 	numNodes            int
 	useFakeSpanResolver bool
 	// if non-empty, overrides the default distsql mode.
-	defaultDistSQLMode string
+	overrideDistSQLMode string
 	// if set, any logic statement expected to succeed and parallelizable
 	// using RETURNING NOTHING syntax will be parallelized transparently.
 	// See logicStatement.parallelizeStmts.
@@ -239,7 +239,7 @@ type testClusterConfig struct {
 var logicTestConfigs = []testClusterConfig{
 	{name: "default", numNodes: 1},
 	{name: "parallel-stmts", numNodes: 1, parallelStmts: true},
-	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, defaultDistSQLMode: "ON"},
+	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "ON"},
 	{name: "5node", numNodes: 5},
 }
 
@@ -614,7 +614,9 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool) {
+func (t *logicTest) setup(
+	numNodes int, useFakeSpanResolver bool, distSQLOverride *settings.EnumSetting,
+) {
 	t.logScope = log.Scope(t.t)
 
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
@@ -632,6 +634,7 @@ func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool) {
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					WaitForGossipUpdate:   true,
 					CheckStmtStringChange: true,
+					OverrideDistSQLMode:   distSQLOverride,
 				},
 			},
 		},
@@ -1324,9 +1327,8 @@ func (t *logicTest) success(file string) {
 	}
 }
 
-func (t *logicTest) setupAndRunFile(path string, config testClusterConfig) {
+func (t *logicTest) runFile(path string, config testClusterConfig) {
 	defer t.close()
-	t.setup(config.numNodes, config.useFakeSpanResolver)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -1412,7 +1414,7 @@ func TestLogic(t *testing.T) {
 		t.Fatalf("No testfiles found (globs: %v)", globs)
 	}
 
-	// We want to collect SQL perstatement statistics in tests,
+	// We want to collect SQL per-statement statistics in tests,
 	// regardless of what the environment / config says.
 	defer settings.TestingSetBool(&sql.StmtStatsEnable, true)()
 
@@ -1442,10 +1444,6 @@ func TestLogic(t *testing.T) {
 		if len(paths) == 0 {
 			continue
 		}
-		var cleanupFuncs []func()
-		if cfg.defaultDistSQLMode != "" {
-			cleanupFuncs = append(cleanupFuncs, sql.SetDefaultDistSQLMode(cfg.defaultDistSQLMode))
-		}
 		// Top-level test: one per test configuration.
 		t.Run(cfg.name, func(t *testing.T) {
 			for _, path := range paths {
@@ -1470,7 +1468,13 @@ func TestLogic(t *testing.T) {
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
-					lt.setupAndRunFile(path, cfg)
+					var distSQLOverrideEnum *settings.EnumSetting
+					if cfg.overrideDistSQLMode != "" {
+						distSQLOverrideEnum = &settings.EnumSetting{}
+						settings.TestingSetEnum(&distSQLOverrideEnum, 2)
+					}
+					lt.setup(cfg.numNodes, cfg.useFakeSpanResolver, distSQLOverrideEnum)
+					lt.runFile(path, cfg)
 
 					progress.Lock()
 					defer progress.Unlock()
@@ -1485,9 +1489,6 @@ func TestLogic(t *testing.T) {
 				})
 			}
 		})
-		for _, cleanupFunc := range cleanupFuncs {
-			cleanupFunc()
-		}
 	}
 
 	unsupportedMsg := ""

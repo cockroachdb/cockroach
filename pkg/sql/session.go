@@ -20,7 +20,6 @@ package sql
 import (
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -80,7 +79,7 @@ var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
 const keyFor7881Sample = "found#7881"
 
 // distSQLExecMode controls if and when the Executor uses DistSQL.
-type distSQLExecMode int
+type distSQLExecMode int64
 
 const (
 	// distSQLOff means that we never use distSQL.
@@ -94,25 +93,20 @@ const (
 	distSQLAlways
 )
 
-func distSQLExecModeFromString(val string) distSQLExecMode {
-	switch strings.ToUpper(val) {
-	case "OFF":
-		return distSQLOff
-	case "AUTO":
-		return distSQLAuto
-	case "ON":
-		return distSQLOn
-	case "ALWAYS":
-		return distSQLAlways
-	default:
-		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
-	}
+func distSQLExecModeFromInt(val int64) distSQLExecMode {
+	return distSQLExecMode(val)
 }
 
-// defaultDistSQLMode controls the default DistSQL mode (see above). It can
-// still be overridden per-session using `SET DIST_SQL = ...`.
-var defaultDistSQLMode = distSQLExecModeFromString(
-	envutil.EnvOrDefaultString("COCKROACH_DISTSQL_MODE", "OFF"),
+// DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
+var DistSQLClusterExecMode = settings.RegisterEnumSetting(
+	"sql.defaults.distsql",
+	"Default distributed SQL execution mode",
+	"Off",
+	map[int64]string{
+		int64(distSQLOff):  "Off",
+		int64(distSQLAuto): "Auto",
+		int64(distSQLOn):   "On",
+	},
 )
 
 // Session contains the state of a SQL client connection.
@@ -263,9 +257,13 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
+	distSQLMode := distSQLExecModeFromInt(DistSQLClusterExecMode.Get())
+	if e.cfg.TestingKnobs.OverrideDistSQLMode != nil {
+		distSQLMode = distSQLExecModeFromInt(e.cfg.TestingKnobs.OverrideDistSQLMode.Get())
+	}
 	s := &Session{
 		Database:         args.Database,
-		DistSQLMode:      defaultDistSQLMode,
+		DistSQLMode:      distSQLMode,
 		SearchPath:       parser.SearchPath{"pg_catalog"},
 		Location:         time.UTC,
 		User:             args.User,
