@@ -682,9 +682,9 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 	if err == nil {
 		panic("updateStateAndCleanupOnErr called with no error")
 	}
-	if retErr, ok := err.(*roachpb.RetryableTxnError); !ok ||
+	if retErr, ok := err.(*roachpb.HandledRetryableTxnError); !ok ||
 		!ts.willBeRetried() ||
-		!ts.txn.IsRetryableErrMeantForTxn(retErr) {
+		!ts.txn.IsRetryableErrMeantForTxn(*retErr) {
 
 		// We can't or don't want to retry this txn, so the txn is over.
 		e.TxnAbortCount.Inc(1)

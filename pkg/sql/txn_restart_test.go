@@ -1236,6 +1236,7 @@ INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// We're going to use FORCE_RETRY() to generate an error for a different
 	// transaction than the one we initiate. We need call that function in a
 	// transaction that already has an id (so, it can't be the first query in the
@@ -1250,7 +1251,7 @@ INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 	if isRetryableErr(err) {
 		t.Fatalf("expected non-retryable error, got: %s", err)
 	}
-	if !testutils.IsError(err, "pq: retryable error from another txn: forced by crdb_internal.force_retry()") {
+	if !testutils.IsError(err, "pq: retryable error from another txn.* forced by crdb_internal.force_retry()") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := tx.Rollback(); err != nil {

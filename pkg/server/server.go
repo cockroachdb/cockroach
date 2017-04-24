@@ -267,13 +267,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetric(distSQLMetrics.CurBytesCount)
 	s.registry.AddMetric(distSQLMetrics.MaxBytesHist)
 
-	// Set up the DistSQL server
+	// Set up the DistSQL server.
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
 		DB:             s.db,
-		RPCContext:     s.rpcContext,
-		Stopper:        s.stopper,
-		NodeID:         &s.nodeIDContainer,
+		// DistSQL also uses a DB that bypasses the TxnCoordSender.
+		FlowDB:     client.NewDB(s.distSender, s.clock),
+		RPCContext: s.rpcContext,
+		Stopper:    s.stopper,
+		NodeID:     &s.nodeIDContainer,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 		Counter:             distSQLMetrics.CurBytesCount,
@@ -291,18 +293,19 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
-		AmbientCtx:              s.cfg.AmbientCtx,
-		NodeID:                  &s.nodeIDContainer,
-		DB:                      s.db,
-		Gossip:                  s.gossip,
-		DistSender:              s.distSender,
-		RPCContext:              s.rpcContext,
-		LeaseManager:            s.leaseMgr,
-		Clock:                   s.clock,
-		DistSQLSrv:              s.distSQLServer,
-		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
-		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
-		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
+		AmbientCtx:                        s.cfg.AmbientCtx,
+		NodeID:                            &s.nodeIDContainer,
+		DB:                                s.db,
+		Gossip:                            s.gossip,
+		DistSender:                        s.distSender,
+		RPCContext:                        s.rpcContext,
+		LeaseManager:                      s.leaseMgr,
+		Clock:                             s.clock,
+		DistSQLSrv:                        s.distSQLServer,
+		HistogramWindowInterval:           s.cfg.HistogramWindowInterval(),
+		RangeDescriptorCache:              s.distSender.RangeDescriptorCache(),
+		LeaseHolderCache:                  s.distSender.LeaseHolderCache(),
+		StopHeartbeatingTransactionRecord: s.txnCoordSender.CleanupTxn,
 	}
 	if s.cfg.TestingKnobs.SQLExecutor != nil {
 		execCfg.TestingKnobs = s.cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)

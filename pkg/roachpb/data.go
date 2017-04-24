@@ -18,6 +18,7 @@ package roachpb
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -954,6 +956,81 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.Timestamp
 func (t Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) {
 	s := observedTimestampSlice(t.ObservedTimestamps)
 	return s.get(nodeID)
+}
+
+// PrepareTransactionForRetry returns a new Transaction to be used for retrying
+// the original Transaction. Depending on the error, this might return an
+// already-existing Transaction with an incremented epoch, or a completely new
+// Transaction.
+//
+// The caller should generally check that the error was
+// meant for this Transaction before calling this.
+//
+// pri is the priority that should be used when giving the restarted transaction
+// the chance to get a higher priority. Not used when the transaction is being
+// aborted.
+//
+// In case retryErr tells us that a new Transaction needs to be created,
+// isolation and name help initialize this new transaction.
+func PrepareTransactionForRetry(ctx context.Context, pErr *Error, pri UserPriority) Transaction {
+	if pErr.TransactionRestart == TransactionRestart_NONE {
+		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
+	}
+	txn := pErr.GetTxn()
+	if txn == nil {
+		log.Fatalf(ctx, "missing txn for retryable error: %s", pErr)
+	}
+
+	aborted := false
+
+	// Figure out what updated Transaction the error should carry.
+	// TransactionAbortedError will not carry a Transaction, signaling to the
+	// recipient to start a brand new txn.
+	txnClone := txn.Clone()
+	txn = &txnClone
+	switch tErr := pErr.GetDetail().(type) {
+	case *TransactionAbortedError:
+		aborted = true
+		// TODO(andrei): Should we preserve the ObservedTimestamps across the
+		// restart?
+		txn = &Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Priority:  txn.Priority,
+				Timestamp: txn.Timestamp,
+				Isolation: txn.Isolation,
+			},
+			Name: txn.Name,
+		}
+	case *ReadWithinUncertaintyIntervalError:
+		// If the reader encountered a newer write within the uncertainty
+		// interval, we advance the txn's timestamp just past the last observed
+		// timestamp from the node.
+		ts, ok := txn.GetObservedTimestamp(pErr.OriginNode)
+		if !ok {
+			log.Fatalf(ctx,
+				"missing observed timestamp for node %d found on uncertainty restart",
+				pErr.OriginNode)
+		}
+		txn.Timestamp.Forward(ts)
+	case *TransactionPushError:
+		// Increase timestamp if applicable, ensuring that we're just ahead of
+		// the pushee.
+		txn.Timestamp.Forward(tErr.PusheeTxn.Timestamp)
+		txn.UpgradePriority(tErr.PusheeTxn.Priority - 1)
+	case *TransactionRetryError:
+		// Nothing to do. Transaction.Timestamp has already been forwarded to be
+		// ahead of any timestamp cache entries or newer versions which caused
+		// the restart.
+	case *WriteTooOldError:
+		// Increase the timestamp to the ts at which we've actually written.
+		txn.Timestamp.Forward(tErr.ActualTimestamp)
+	default:
+		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
+	}
+	if !aborted {
+		txn.Restart(pri, txn.Priority, txn.Timestamp)
+	}
+	return *txn
 }
 
 var _ fmt.Stringer = &Lease{}

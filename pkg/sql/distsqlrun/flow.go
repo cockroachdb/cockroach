@@ -57,8 +57,13 @@ type FlowCtx struct {
 	// txnProto is the transaction in which kv operations performed by processors
 	// in the flow must be performed.
 	txnProto *roachpb.Transaction
-	// clientDB is a handle to the cluster. Used to run transactions.
+	// clientDB is a handle to the cluster. Used for performing requests outside
+	// of the transaction in which the flow's query is running.
 	clientDB *client.DB
+	// remoteTxnDB is a handle to the cluster that bypasses the local
+	// TxnCoordSender. Used via setupTxn() for running requests on behalf of the
+	// query's transaction.
+	remoteTxnDB *client.DB
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.
 	nodeID       roachpb.NodeID
@@ -66,7 +71,7 @@ type FlowCtx struct {
 }
 
 func (flowCtx *FlowCtx) setupTxn() *client.Txn {
-	return client.NewTxnWithProto(flowCtx.clientDB, *flowCtx.txnProto)
+	return client.NewTxnWithProto(flowCtx.remoteTxnDB, *flowCtx.txnProto)
 }
 
 type flowStatus int
