@@ -1961,7 +1961,7 @@ var flagToNotByte = map[syntax.Flags]byte{
 // http://www.postgresql.org/docs/9.0/static/functions-matching.html#POSIX-EMBEDDED-OPTIONS-TABLE.
 // It then returns an adjusted regexp pattern.
 func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
-	flags := syntax.DotNL
+	flags := syntax.DotNL | syntax.OneLine
 
 	for _, sqlFlag := range sqlFlags {
 		switch sqlFlag {
@@ -1972,12 +1972,12 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 		case 'c':
 			flags &^= syntax.FoldCase
 		case 's':
-			flags |= syntax.DotNL
+			flags &^= syntax.DotNL
 		case 'm', 'n':
 			flags &^= syntax.DotNL
-			flags |= syntax.OneLine
+			flags &^= syntax.OneLine
 		case 'p':
-			flags |= syntax.DotNL
+			flags &^= syntax.DotNL
 			flags |= syntax.OneLine
 		case 'w':
 			flags |= syntax.DotNL
