@@ -31,8 +31,8 @@ const defaultKeySize = 2048
 
 // We use 366 days on certificate lifetimes to at least match X years,
 // otherwise leap years risk putting us just under.
-const defaultCALifetime = 5 * 366 * 24 * time.Hour   // five years
-const defaultCertLifetime = 2 * 366 * 24 * time.Hour // two years
+const defaultCALifetime = 10 * 366 * 24 * time.Hour   // ten years
+const defaultCertLifetime = 10 * 366 * 24 * time.Hour // ten years
 
 var keySize int
 var certificateLifetime time.Duration
