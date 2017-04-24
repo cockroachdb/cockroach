@@ -3228,8 +3228,11 @@ func sendSnapshot(
 	// The size of batches to send. This is the granularity of rate limiting.
 	const batchSize = 256 << 10 // 256 KB
 
-	targetRate := rate.Limit(recoverySnapshotRate.Get())
-	if header.CanDecline {
+	var targetRate rate.Limit
+	switch header.Priority {
+	case SnapshotRequest_RECOVERY:
+		targetRate = rate.Limit(recoverySnapshotRate.Get())
+	default:
 		targetRate = rate.Limit(rebalanceSnapshotRate.Get())
 	}
 	// Convert the bytes/sec rate limit to batches/sec.
