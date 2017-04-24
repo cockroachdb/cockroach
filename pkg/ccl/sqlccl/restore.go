@@ -63,7 +63,7 @@ func Import(
 		log.Infof(ctx, "import [%s,%s) (%d files)", newStartKey, newEndKey, len(files))
 	}
 	if len(files) == 0 {
-		return nil, nil
+		return &roachpb.ImportResponse{}, nil
 	}
 
 	req := &roachpb.ImportRequest{
