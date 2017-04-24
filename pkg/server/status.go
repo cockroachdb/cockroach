@@ -624,7 +624,11 @@ func (s *statusServer) Ranges(
 		return state
 	}
 
-	constructRangeInfo := func(desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID) serverpb.RangeInfo {
+	// TODO(bram): Add in lease info for a range if it is no longer on a store
+	// but it was present there in the past.
+	constructRangeInfo := func(
+		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID, leaseHistory []roachpb.Lease,
+	) serverpb.RangeInfo {
 		return serverpb.RangeInfo{
 			Span: serverpb.PrettySpan{
 				StartKey: desc.StartKey.String(),
@@ -634,6 +638,7 @@ func (s *statusServer) Ranges(
 			State:         rep.State(),
 			SourceNodeID:  nodeID,
 			SourceStoreID: storeID,
+			LeaseHistory:  leaseHistory,
 		}
 	}
 
@@ -649,7 +654,12 @@ func (s *statusServer) Ranges(
 					if err != nil {
 						return true, err
 					}
-					output.Ranges = append(output.Ranges, constructRangeInfo(desc, rep, store.Ident.StoreID))
+					output.Ranges = append(output.Ranges, constructRangeInfo(
+						desc,
+						rep,
+						store.Ident.StoreID,
+						rep.GetLeaseHistory(),
+					))
 					return false, nil
 				})
 			return err
@@ -663,7 +673,12 @@ func (s *statusServer) Ranges(
 				continue
 			}
 			desc := rep.Desc()
-			output.Ranges = append(output.Ranges, constructRangeInfo(*desc, rep, store.Ident.StoreID))
+			output.Ranges = append(output.Ranges, constructRangeInfo(
+				*desc,
+				rep,
+				store.Ident.StoreID,
+				rep.GetLeaseHistory(),
+			))
 		}
 		return nil
 	})
