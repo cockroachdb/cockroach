@@ -42,10 +42,8 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	if len(tlsState.PeerCertificates) == 0 {
 		return "", errors.Errorf("no client certificates in request")
 	}
-	if len(tlsState.VerifiedChains) != len(tlsState.PeerCertificates) {
-		// TODO(marc): can this happen? Should we require exactly one?
-		return "", errors.Errorf("client cerficates not verified")
-	}
+	// The go server handshake code verifies the first certificate, using
+	// any following certificates as intermediates.
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }
 
