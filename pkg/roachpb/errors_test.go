@@ -52,7 +52,7 @@ func TestSetTxn(t *testing.T) {
 	e := NewError(NewTransactionAbortedError())
 	txn := NewTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, hlc.Timestamp{}, 0)
 	e.SetTxn(txn)
-	if !strings.HasPrefix(e.Message, "txn aborted \"test\"") {
+	if !strings.HasPrefix(e.Message, "TransactionAbortedError: txn aborted \"test\"") {
 		t.Errorf("unexpected message: %s", e.Message)
 	}
 }

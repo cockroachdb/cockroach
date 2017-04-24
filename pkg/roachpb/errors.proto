@@ -290,9 +290,6 @@ message Error {
   // of retryable errors.
   //
   // Not to be accessed directly - use Error.GetTxn().
-  // 
-  // NOTE: TxnCoordSender currently has a role in updating the epoch on the
-  // return path for most retryable errors.
   optional Transaction unexposed_txn = 4;
 
   // Node at which the error was generated (zero if does not apply).
@@ -325,7 +322,7 @@ message Error {
 message RetryableTxnError {
   // A user-readable message.
   optional string msg = 1 [(gogoproto.nullable) = false];
-  
+
   // The ID of the transaction being restarted. The client is supposed to check
   // this against the ID of its transaction and make sure the retryable error
   // is meant for its level and didn't escape from some inner transaction.
@@ -333,16 +330,35 @@ message RetryableTxnError {
   // TODO(andrei): make this non-nullable (and thus required) if we manage to
   // make Transaction.ID non-nullable.
   optional bytes txn_id = 2 [
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID", 
-    (gogoproto.customname) = "TxnID"]; 
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID"];
 
   // The Transaction that the client is supposed to use for the next attempt.
   // If not set, the client is supposed to use a brand new Transaction. This is
   // set by all retryable errors except TransactionAbortedError to communicate
   // the new timestamp and epoch for the next attempt.
+  //
+  // When retrying, a client is not supposed to call Transaction.Restart() on
+  // this transaction, and pass the fields below.
   optional Transaction transaction = 3;
+
+  // The fields below are filled in when "transaction" is not present (i.e. as a
+  // result of a TransactionAbortedError). They're supposed to be
+  // used with the Transaction.Restart() call. If transaction is not set, these
+  // will also not be set.
+  //
+  // NOTE(andrei): I think a better design would be for the server to always be
+  // in charge of updating the Transaction to the final form in which it should
+  // be used by the client. I couldn't easily do that, though, due to the
+  // current mechanics through which pErrs and their details are partially
+  // filled in by multiple layers.
+  // I've also tried to apply these fields to the transaction in pErr.GoError().
+  // The problem I hit in doing that was that Transaction.Restart() needs a
+  // request's UserPriority, and pErr.GoError() doesn't have a request.
 
   // If set, this is a lower-bound on the priority of the restarted transaction.
   // This can only be set if transaction is not set.
   optional int32 retry_priority = 4;
+  // If set, a retry should use this timestamp.
+  optional util.hlc.Timestamp retry_timestamp = 5;
 }

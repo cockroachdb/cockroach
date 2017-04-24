@@ -252,6 +252,17 @@ type ExecutorConfig struct {
 	// Caches updated by DistSQL.
 	RangeDescriptorCache *kv.RangeDescriptorCache
 	LeaseHolderCache     *kv.LeaseHolderCache
+
+	// StopheartbeatingTransactionRecord needs to be set for the Executor to be
+	// able to run DistSQL queries. This will be called whenever a query running
+	// through DistSQL encounters a TransactionAbortedError, and so the
+	// Transaction proto is re-initialized and the old transaction record should
+	// be cleaned up. This needs to be hooked up to the TxnCoordSender's cleanup
+	// routine.
+	//
+	// On non-DistSQL query execution, the TxnCoordSender is directly involved and
+	// this indirection is not used.
+	StopHeartbeatingTransactionRecord func(ctx context.Context, prevTxn roachpb.Transaction)
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
@@ -1348,12 +1359,21 @@ func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, er
 func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
 	ctx := planner.session.Ctx()
-	recv := makeDistSQLReceiver(
+	planner.txn.PrepareForDetachedUpdates(e.cfg.StopHeartbeatingTransactionRecord)
+	// Reset the txn to an "attached" state.
+	// TODO(andrei): We should figure out a better solution to this "some updates
+	// go through the TxnCoordSender, some don't" problem if we are to allow
+	// distSQL queries concurrently with other queries using this transaction.
+	defer planner.txn.PrepareForDetachedUpdates(nil)
+	recv, err := makeDistSQLReceiver(
 		ctx, result.Rows,
 		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
 		planner.txn,
 	)
-	err := e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv)
+	if err != nil {
+		return err
+	}
+	err = e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv)
 	if err != nil {
 		return err
 	}

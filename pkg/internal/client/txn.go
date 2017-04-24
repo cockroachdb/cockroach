@@ -74,6 +74,19 @@ type Txn struct {
 		// TODO(andrei): This is broken for DistSQL, which doesn't account for the
 		// requests it uses the transaction for.
 		commandCount int
+
+		// onKVTxnAborted, if set, is called when a KV-level roachpb.Transaction has
+		// been aborted, but this client.Txn instance will continue by initializing
+		// another roachpb.Transaction.
+		//
+		// This happens in response to TransactionAbortedError's and is used to
+		// inform the TxnCoordSender that it should stop heartbeating the
+		// transaction record corresponding to prevTxn.
+		//
+		// TODO(andrei): Criss-crossing between layers like this and calling from
+		// client.Txn into TxnCoordSender is ugly; it was meant as a temporary hack
+		// until #10511 is addressed and TxnCoordSender is merged with client.Txn.
+		onKVTxnSwitched func(ctx context.Context, prevTxn roachpb.Transaction)
 	}
 }
 
@@ -846,7 +859,7 @@ func (txn *Txn) send(
 		if log.V(1) {
 			log.Infof(ctx, "failed batch: %s", pErr)
 		}
-		txn.updateStateOnErrLocked(pErr.GoError())
+		txn.updateStateOnErrLocked(ctx, pErr.GoError(), ba.UserPriority)
 		return nil, pErr
 	}
 
@@ -861,10 +874,8 @@ func (txn *Txn) send(
 		}
 
 		// Only successful requests can carry an updated Txn in their response
-		// header. Any error (e.g. a restart) can have a Txn attached to them as
-		// well; those update our local state in the same way for the next attempt.
-		// The exception is if our transaction was aborted and needs to restart
-		// from scratch, in which case we do just that.
+		// header. Some errors (e.g. a restart) have a Txn attached to them as
+		// well; these errors have been handled above.
 		txn.mu.Proto.Update(br.Txn)
 	}
 
@@ -913,24 +924,29 @@ func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
 }
 
 // UpdateStateOnErr updates the Txn, and the Transaction proto inside it, in
-// response to an error encountered when running a request through the txn.  If
+// response to an error encountered when running a request through the txn. If
 // the error is not a RetryableTxnError, then this is a no-op. For a retryable
 // error, the Transaction proto is either initialized with the updated proto
 // from the error, or a new Transaction proto is initialized.
+//
+// pri is the priority that should be used if the transaction needs to be
+// restarted and we're giving the restarted transaction the chance to get a
+// higher priority.
 //
 // TODO(andrei,nvanbenschoten): document whether calling this repeatedly within
 // the same epoch of the txn is safe or not, and generally what protection we
 // have for racing calls. We protect against calls for old IDs, but what about
 // old epochs and/or the current epoch?
-func (txn *Txn) UpdateStateOnErr(err error) {
+func (txn *Txn) UpdateStateOnErr(ctx context.Context, err error, pri roachpb.UserPriority) {
 	txn.mu.Lock()
-	txn.updateStateOnErrLocked(err)
+	txn.updateStateOnErrLocked(ctx, err, pri)
 	txn.mu.Unlock()
 }
 
 // updateStateOnErrLocked is like UpdateStateOnErr, but assumes that txn.mu is
 // locked.
-func (txn *Txn) updateStateOnErrLocked(err error) {
+func (txn *Txn) updateStateOnErrLocked(ctx context.Context, err error, pri roachpb.UserPriority) {
+	log.Infof(context.TODO(), "client.Txn.updateStateOnErrLocked with err: %s", err)
 	retryErr, ok := err.(*roachpb.RetryableTxnError)
 	if !ok {
 		return
@@ -946,7 +962,8 @@ func (txn *Txn) updateStateOnErrLocked(err error) {
 		// Letting this wrong error slip here can cause us to retry the wrong
 		// transaction.
 		panic(fmt.Sprintf("Got a retryable error meant for a different transaction. "+
-			"txn.mu.Proto.ID: %v, pErr.ID: %v", txn.mu.Proto.ID, retryErr.TxnID))
+			"txn.mu.Proto.ID: %v, pErr.ID: %v. err: %s",
+			txn.mu.Proto.ID, retryErr.TxnID, retryErr))
 	}
 
 	// Reset the statement count as this is a retryable txn error.
@@ -956,30 +973,48 @@ func (txn *Txn) updateStateOnErrLocked(err error) {
 	// incarnation of the transaction. In other words, only update it if
 	// retryErr.TxnID is not in txn.mu.previousIDs.
 	if roachpb.TxnIDEqual(retryErr.TxnID, txn.mu.Proto.ID) {
-		if retryErr.Transaction != nil {
-			txn.mu.Proto.Update(retryErr.Transaction)
-		} else {
-			// Transaction == nil means the cause was a TransactionAbortedError. We'll
-			// init a new Transaction, and also save the old transaction ID so that
-			// concurrent requests or delayed responses that that throw errors know
-			// that these errors were sent to the correct transaction, even once the
-			// proto is reset.
+		if retryErr.Transaction == nil {
+			// Transaction == nil means the cause was a TransactionAbortedError; we're
+			// going to initialized a new Transaction, and so have to save the old
+			// transaction ID so that concurrent requests or delayed responses that
+			// that throw errors know that these errors were sent to the correct
+			// transaction, even once the proto is reset.
 			if txn.mu.previousIDs == nil {
 				txn.mu.previousIDs = make(map[uuid.UUID]struct{})
 			}
 			txn.mu.previousIDs[*txn.mu.Proto.ID] = struct{}{}
-
-			// Next, reset the transaction proto so we start anew on restart.
-			txn.mu.Proto = roachpb.Transaction{
-				TxnMeta: enginepb.TxnMeta{
-					Isolation: txn.mu.Proto.Isolation,
-				},
-				Name: txn.mu.Proto.Name,
-			}
-			// Acts as a minimum priority on restart.
-			if retryErr.RetryPriority != nil {
-				txn.mu.Proto.Priority = *retryErr.RetryPriority
-			}
 		}
+		newTxn := roachpb.PrepareTransactionForRetry(
+			retryErr, pri, txn.mu.Proto.Isolation, txn.mu.Proto.Name,
+		)
+		if !roachpb.TxnIDEqual(txn.mu.Proto.ID, newTxn.ID) &&
+			txn.mu.onKVTxnSwitched != nil {
+			txn.mu.onKVTxnSwitched(ctx, txn.mu.Proto)
+		}
+		// Overwrite the transaction proto with the one to be used for the next
+		// attempt.
+		txn.mu.Proto = newTxn
 	}
+}
+
+// PrepareForDetachedUpdates needs to be called on Txn's that are going to be
+// used by DistSQL queries and, as such, will receive updates to their state
+// which haven't gone through the TxnCoordSender.
+//
+// Call with a nil callback to reset the Txn to the "attached" state, where all
+// requests go through the TxnCoordSender.
+func (txn *Txn) PrepareForDetachedUpdates(
+	cb func(ctx context.Context, prevTxn roachpb.Transaction),
+) {
+	txn.mu.Lock()
+	txn.mu.onKVTxnSwitched = cb
+	txn.mu.Unlock()
+}
+
+// IsPreparedForDetachedUpdates checks whether PrepareForDetachedUpdates has
+// been called on the Txn.
+func (txn *Txn) IsPreparedForDetachedUpdates() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.onKVTxnSwitched != nil
 }

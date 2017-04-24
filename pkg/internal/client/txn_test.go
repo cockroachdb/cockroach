@@ -18,6 +18,7 @@ package client
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"regexp"
 	"testing"
@@ -574,37 +575,49 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 		{&roachpb.TransactionStatusError{}, false},
 	}
 
-	for i, test := range testCases {
-		count := 0
-		db := NewDB(newTestSender(
-			func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	for _, test := range testCases {
+		t.Run(fmt.Sprintf("%T", test.err), func(t *testing.T) {
+			count := 0
+			db := NewDB(newTestSender(
+				func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 
-				if _, ok := ba.GetArg(roachpb.Put); ok {
-					count++
-					if count == 1 {
-						return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
+					if _, ok := ba.GetArg(roachpb.Put); ok {
+						count++
+						if count == 1 {
+							var pErr *roachpb.Error
+							if _, ok := test.err.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+								// This error requires an observed timestamp to have been
+								// recorded on the origin node.
+								ba.Txn.UpdateObservedTimestamp(1, hlc.Timestamp{WallTime: 1, Logical: 1})
+								pErr = roachpb.NewErrorWithTxn(test.err, ba.Txn)
+								pErr.OriginNode = 1
+							} else {
+								pErr = roachpb.NewErrorWithTxn(test.err, ba.Txn)
+							}
+							return nil, pErr
+						}
 					}
+					return ba.CreateReply(), nil
+				}), clock)
+			err := db.Txn(context.TODO(), func(ctx context.Context, txn *Txn) error {
+				return txn.Put(ctx, "a", "b")
+			})
+			if test.retry {
+				if err != nil {
+					t.Fatalf("expected success on retry; got %s", err)
 				}
-				return ba.CreateReply(), nil
-			}), clock)
-		err := db.Txn(context.TODO(), func(ctx context.Context, txn *Txn) error {
-			return txn.Put(ctx, "a", "b")
+				if count != 2 {
+					t.Fatalf("expected one retry; got %d", count-1)
+				}
+			} else {
+				if count != 1 {
+					t.Errorf("expected no retries; got %d", count)
+				}
+				if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
+					t.Errorf("expected error of type %T; got %T", test.err, err)
+				}
+			}
 		})
-		if test.retry {
-			if count != 2 {
-				t.Errorf("%d: expected one retry; got %d", i, count-1)
-			}
-			if err != nil {
-				t.Errorf("%d: expected success on retry; got %s", i, err)
-			}
-		} else {
-			if count != 1 {
-				t.Errorf("%d: expected no retries; got %d", i, count)
-			}
-			if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
-				t.Errorf("%d: expected error of type %T; got %T", i, test.err, err)
-			}
-		}
 	}
 }
 

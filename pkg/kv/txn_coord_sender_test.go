@@ -585,9 +585,14 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 
 func assertTransactionRetryError(t *testing.T, e error) {
 	if retErr, ok := e.(*roachpb.RetryableTxnError); ok {
-		if _, ok := retErr.Cause.(*roachpb.TransactionRetryError); !ok {
-			t.Fatalf("expected a TransactionRetryError, but got %s (%T)",
-				retErr.Cause, retErr.Cause)
+		if retErr.Transaction == nil {
+			t.Fatalf("expected the cause to be TransactionRetryError "+
+				"and the transaction to be filled in, but got nil Transaction with %s",
+				retErr)
+		}
+		if !testutils.IsError(retErr, "TransactionRetryError") {
+			t.Fatalf("expected the cause to be TransactionRetryError, but got %s",
+				retErr)
 		}
 	} else {
 		t.Fatalf("expected a retryable error, but got %s (%T)", e, e)
@@ -596,9 +601,14 @@ func assertTransactionRetryError(t *testing.T, e error) {
 
 func assertTransactionAbortedError(t *testing.T, e error) {
 	if retErr, ok := e.(*roachpb.RetryableTxnError); ok {
-		if _, ok := retErr.Cause.(*roachpb.TransactionAbortedError); !ok {
-			t.Fatalf("expected a TransactionAbortedError, but got %s (%T)",
-				retErr.Cause, retErr.Cause)
+		if retErr.Transaction != nil {
+			t.Fatalf("expected the cause to be TransactionAbortedError "+
+				"and the transaction to not be filled in, but got %s (txn: %s)",
+				retErr, retErr.Transaction)
+		}
+		if !testutils.IsError(retErr, "TransactionAbortedError") {
+			t.Fatalf("expected the cause to be TransactionAbortedError, but got %s",
+				retErr)
 		}
 	} else {
 		t.Fatalf("expected a retryable error, but got %s (%T)", e, e)
@@ -790,7 +800,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	plus10 := origTS.Add(10, 10)
 	plus20 := plus10.Add(10, 0)
 	testCases := []struct {
-		pErr             *roachpb.Error
+		// The test's name.
+		name             string
+		pErrGen          func(txn *roachpb.Transaction) *roachpb.Error
 		expEpoch         uint32
 		expPri           int32
 		expTS, expOrigTS hlc.Timestamp
@@ -798,7 +810,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	}{
 		{
 			// No error, so nothing interesting either.
-			pErr:      nil,
+			name:      "nil",
+			pErrGen:   func(_ *roachpb.Transaction) *roachpb.Error { return nil },
 			expEpoch:  0,
 			expPri:    1,
 			expTS:     origTS,
@@ -807,15 +820,17 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// On uncertainty error, new epoch begins and node is seen.
 			// Timestamp moves ahead of the existing write.
-			pErr: func() *roachpb.Error {
-				pErr := roachpb.NewErrorWithTxn(
-					roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}),
-					&roachpb.Transaction{})
+			name: "ReadWithinUncertaintyIntervalError",
+			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				const nodeID = 1
-				pErr.GetTxn().UpdateObservedTimestamp(nodeID, plus10)
+				txn.UpdateObservedTimestamp(nodeID, plus10)
+				pErr := roachpb.NewErrorWithTxn(
+					roachpb.NewReadWithinUncertaintyIntervalError(
+						hlc.Timestamp{}, hlc.Timestamp{}),
+					txn)
 				pErr.OriginNode = nodeID
 				return pErr
-			}(),
+			},
 			expEpoch:  1,
 			expPri:    1,
 			expTS:     plus10,
@@ -825,21 +840,25 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// On abort, nothing changes but we get a new priority to use for
 			// the next attempt.
-			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{},
-				&roachpb.Transaction{
-					TxnMeta: enginepb.TxnMeta{Timestamp: plus20, Priority: 10},
-				}),
+			name: "TransactionAbortedError",
+			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
+				txn.Timestamp = plus20
+				txn.Priority = 10
+				return roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, txn)
+			},
 			expPri: 10,
 		},
 		{
 			// On failed push, new epoch begins just past the pushed timestamp.
 			// Additionally, priority ratchets up to just below the pusher's.
-			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
-				PusheeTxn: roachpb.Transaction{
-					TxnMeta: enginepb.TxnMeta{Timestamp: plus10, Priority: int32(10)},
-				},
+			name: "TransactionPushError",
+			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
+				return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
+					PusheeTxn: roachpb.Transaction{
+						TxnMeta: enginepb.TxnMeta{Timestamp: plus10, Priority: int32(10)},
+					},
+				}, txn)
 			},
-				&roachpb.Transaction{}),
 			expEpoch:  1,
 			expPri:    9,
 			expTS:     plus10,
@@ -847,11 +866,12 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		},
 		{
 			// On retry, restart with new epoch, timestamp and priority.
-			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionRetryError{},
-				&roachpb.Transaction{
-					TxnMeta: enginepb.TxnMeta{Timestamp: plus10, Priority: int32(10)},
-				},
-			),
+			name: "TransactionRetryError",
+			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
+				txn.Timestamp = plus10
+				txn.Priority = 10
+				return roachpb.NewErrorWithTxn(&roachpb.TransactionRetryError{}, txn)
+			},
 			expEpoch:  1,
 			expPri:    10,
 			expTS:     plus10,
@@ -859,60 +879,65 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		},
 	}
 
-	for i, test := range testCases {
-		stopper := stop.NewStopper()
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			stopper := stop.NewStopper()
 
-		manual := hlc.NewManualClock(origTS.WallTime)
-		clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
+			manual := hlc.NewManualClock(origTS.WallTime)
+			clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
 
-		var senderFn client.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			var reply *roachpb.BatchResponse
-			if test.pErr == nil {
-				reply = ba.CreateReply()
+			var senderFn client.SenderFunc = func(
+				_ context.Context, ba roachpb.BatchRequest,
+			) (*roachpb.BatchResponse, *roachpb.Error) {
+				var reply *roachpb.BatchResponse
+				pErr := test.pErrGen(ba.Txn)
+				if pErr == nil {
+					reply = ba.CreateReply()
+				}
+				return reply, pErr
 			}
-			return reply, test.pErr
-		}
-		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-		ts := NewTxnCoordSender(
-			ambient,
-			senderFn,
-			clock,
-			false,
-			stopper,
-			MakeTxnMetrics(metric.TestSampleInterval),
-		)
-		db := client.NewDB(ts, clock)
-		txn := client.NewTxn(db)
-		txn.InternalSetPriority(1)
-		txn.SetDebugName("test txn")
-		key := roachpb.Key("test-key")
-		_, err := txn.Get(context.TODO(), key)
-		teardownHeartbeats(ts)
-		stopper.Stop(context.TODO())
+			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+			ts := NewTxnCoordSender(
+				ambient,
+				senderFn,
+				clock,
+				false,
+				stopper,
+				MakeTxnMetrics(metric.TestSampleInterval),
+			)
+			db := client.NewDB(ts, clock)
+			txn := client.NewTxn(db)
+			txn.InternalSetPriority(1)
+			txn.SetDebugName("test txn")
+			key := roachpb.Key("test-key")
+			_, err := txn.Get(context.TODO(), key)
+			teardownHeartbeats(ts)
+			stopper.Stop(context.TODO())
 
-		if test.pErr != nil && err == nil {
-			t.Fatalf("expected an error")
-		}
-		if txn.Proto().Epoch != test.expEpoch {
-			t.Errorf("%d: expected epoch = %d; got %d",
-				i, test.expEpoch, txn.Proto().Epoch)
-		}
-		if txn.Proto().Priority != test.expPri {
-			t.Errorf("%d: expected priority = %d; got %d",
-				i, test.expPri, txn.Proto().Priority)
-		}
-		if txn.Proto().Timestamp != test.expTS {
-			t.Errorf("%d: expected timestamp to be %s; got %s",
-				i, test.expTS, txn.Proto().Timestamp)
-		}
-		if txn.Proto().OrigTimestamp != test.expOrigTS {
-			t.Errorf("%d: expected orig timestamp to be %s; got %s",
-				i, test.expOrigTS, txn.Proto().OrigTimestamp)
-		}
-		if ns := txn.Proto().ObservedTimestamps; (len(ns) != 0) != test.nodeSeen {
-			t.Errorf("%d: expected nodeSeen=%t, but list of hosts is %v",
-				i, test.nodeSeen, ns)
-		}
+			if test.name != "nil" && err == nil {
+				t.Fatalf("expected an error")
+			}
+			if txn.Proto().Epoch != test.expEpoch {
+				t.Errorf("expected epoch = %d; got %d",
+					test.expEpoch, txn.Proto().Epoch)
+			}
+			if txn.Proto().Priority != test.expPri {
+				t.Errorf("expected priority = %d; got %d",
+					test.expPri, txn.Proto().Priority)
+			}
+			if txn.Proto().Timestamp != test.expTS {
+				t.Errorf("expected timestamp to be %s; got %s",
+					test.expTS, txn.Proto().Timestamp)
+			}
+			if txn.Proto().OrigTimestamp != test.expOrigTS {
+				t.Errorf("expected orig timestamp to be %s; got %s",
+					test.expOrigTS, txn.Proto().OrigTimestamp)
+			}
+			if ns := txn.Proto().ObservedTimestamps; (len(ns) != 0) != test.nodeSeen {
+				t.Errorf("expected nodeSeen=%t, but list of hosts is %v",
+					test.nodeSeen, ns)
+			}
+		})
 	}
 }
 
