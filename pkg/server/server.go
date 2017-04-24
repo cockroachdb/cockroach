@@ -267,13 +267,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetric(distSQLMetrics.CurBytesCount)
 	s.registry.AddMetric(distSQLMetrics.MaxBytesHist)
 
-	// Set up the DistSQL server
+	// Set up the DistSQL server.
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
 		DB:             s.db,
-		RPCContext:     s.rpcContext,
-		Stopper:        s.stopper,
-		NodeID:         &s.nodeIDContainer,
+		// DistSQL also uses a DB that bypasses the TxnCoordSender.
+		FlowDB:     client.NewDB(s.distSender, s.clock),
+		RPCContext: s.rpcContext,
+		Stopper:    s.stopper,
+		NodeID:     &s.nodeIDContainer,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 		Counter:             distSQLMetrics.CurBytesCount,

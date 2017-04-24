@@ -247,14 +247,14 @@ func makeDistSQLReceiver(
 	rangeCache *kv.RangeDescriptorCache,
 	leaseCache *kv.LeaseHolderCache,
 	txn *client.Txn,
-) distSQLReceiver {
+) (distSQLReceiver, error) {
 	return distSQLReceiver{
 		ctx:        ctx,
 		rows:       sink,
 		rangeCache: rangeCache,
 		leaseCache: leaseCache,
 		txn:        txn,
-	}
+	}, nil
 }
 
 // Push is part of the RowReceiver interface.
@@ -264,12 +264,16 @@ func (r *distSQLReceiver) Push(
 	if !meta.Empty() {
 		if meta.Err != nil && r.err == nil {
 			if r.txn != nil {
-				// Update the txn in response to remote errors. In the non-DistSQL
-				// world, the TxnCoordSender does this, and the client.Txn updates
-				// itself in non-error cases. Those updates are not necessary if we're
-				// just doing reads. Once DistSQL starts performing writes, we'll need
-				// to perform such updates too.
-				r.txn.UpdateStateOnErr(meta.Err)
+				if retryErr, ok := meta.Err.(*roachpb.DistSQLRetryableTxnError); ok {
+					// Update the txn in response to remote errors. In the non-DistSQL
+					// world, the TxnCoordSender does this, and the client.Txn updates
+					// itself in non-error cases. Those updates are not necessary if we're
+					// just doing reads. Once DistSQL starts performing writes, we'll need
+					// to perform such updates too.
+					r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, *retryErr)
+					meta.Err = roachpb.NewHandledRetryableTxnError(
+						meta.Err.Error(), r.txn.Proto().ID, *r.txn.Proto())
+				}
 			}
 			r.err = meta.Err
 		}

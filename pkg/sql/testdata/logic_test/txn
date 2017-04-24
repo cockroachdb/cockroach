@@ -530,7 +530,7 @@ COMMIT
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart
 
-query error restart transaction: forced
+query error restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
 SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
 
 query T

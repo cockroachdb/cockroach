@@ -24,28 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-func (e *RetryableTxnError) Error() string {
+func (e *DistSQLRetryableTxnError) Error() string {
 	return e.Msg
 }
 
-var _ error = &RetryableTxnError{}
-
-// NewRetryableTxnError creates a shim RetryableTxnError that
-// reports the given cause when converted to String(). This can be
-// used to fake/force a retry at the SQL layer.
-//
-// txnID is the id of the transaction that this error is supposed to cause a
-// retry for. Can be nil, in which case it will cause retries for transactions
-// that don't have an ID set.
-// TODO(andrei): this function should really take a transaction as an argument.
-// The caller (crdb_internal.force_retry) should be given access to the current
-// transaction through the EvalContext.
-func NewRetryableTxnError(cause string, txnID *uuid.UUID) *RetryableTxnError {
-	return &RetryableTxnError{
-		Msg:   cause,
-		TxnID: txnID,
-	}
-}
+var _ error = &DistSQLRetryableTxnError{}
 
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
 // a roachpb.BatchResponse) unexpectedly has Error set in its response header.
@@ -84,15 +67,10 @@ func NewError(err error) *Error {
 	e := &Error{}
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
-	} else if _, ok := err.(*RetryableTxnError); ok {
-		// This shouldn't happen; RetryableTxnError should never be converted back
-		// into a pErr because it might lead to the wrong transaction being retried.
-		// If this conversation were attempted, it'd be a sign of a pErr having been
-		// converted to an error which is now being converted back to a pErr.
-		panic("RetryableTxnError being converted back to pErr.")
 	} else {
 		e.setGoError(err)
 	}
+
 	return e
 }
 
@@ -149,22 +127,22 @@ func (e *Error) GoError() error {
 	if e == nil {
 		return nil
 	}
+
 	if e.TransactionRestart != TransactionRestart_NONE {
 		var txnID *uuid.UUID
+
+		// TODO(andrei): Can e.GetTxn() be nil here? It can't be if the request that
+		// generated the error was sent through client.Txn. If client.Txn wasn't
+		// used, is it still possible to get retryable errors?
 		if e.GetTxn() != nil {
 			txnID = e.GetTxn().ID
 		}
-		// Figure out what updated Transaction the error should carry.
-		// TransactionAbortedError will not carry a Transaction, signaling to the
-		// recipient to start a brand new txn.
-		txn := e.GetTxn()
-		if _, ok := e.GetDetail().(*TransactionAbortedError); ok {
-			txn = nil
-		}
-		return &RetryableTxnError{
+
+		return &DistSQLRetryableTxnError{
+			Cause:       *e.Detail,
 			Msg:         e.Message,
 			TxnID:       txnID,
-			Transaction: txn,
+			Transaction: e.GetTxn(),
 		}
 	}
 	return e.GetDetail()
@@ -351,11 +329,11 @@ func (e *AmbiguousResultError) message(_ *Error) string {
 var _ ErrorDetailInterface = &AmbiguousResultError{}
 
 func (e *TransactionAbortedError) Error() string {
-	return "txn aborted"
+	return "TransactionAbortedError: txn aborted"
 }
 
 func (e *TransactionAbortedError) message(pErr *Error) string {
-	return fmt.Sprintf("txn aborted %s", pErr.GetTxn())
+	return fmt.Sprintf("TransactionAbortedError: txn aborted %s", pErr.GetTxn())
 }
 
 func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
@@ -365,9 +343,26 @@ func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
 var _ ErrorDetailInterface = &TransactionAbortedError{}
 var _ transactionRestartError = &TransactionAbortedError{}
 
+func (e *HandledRetryableTxnError) Error() string {
+	return e.message(nil)
+}
+
+func (e *HandledRetryableTxnError) message(_ *Error) string {
+	return fmt.Sprintf("HandledRetryableTxnError: %s", e.Msg)
+}
+
+var _ ErrorDetailInterface = &HandledRetryableTxnError{}
+
 // NewTransactionAbortedError initializes a new TransactionAbortedError.
 func NewTransactionAbortedError() *TransactionAbortedError {
 	return &TransactionAbortedError{}
+}
+
+// NewHandledRetryableTxnError initializes a new HandledRetryableTxnError.
+func NewHandledRetryableTxnError(
+	msg string, txnID *uuid.UUID, txn Transaction,
+) *HandledRetryableTxnError {
+	return &HandledRetryableTxnError{Msg: msg, TxnID: txnID, Transaction: &txn}
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
@@ -401,14 +396,12 @@ func NewTransactionRetryError() *TransactionRetryError {
 	return &TransactionRetryError{}
 }
 
-// TODO(kaneda): Delete this method once we fully unimplement error for every
-// error detail.
 func (e *TransactionRetryError) Error() string {
-	return fmt.Sprintf("retry txn")
+	return fmt.Sprintf("TransactionRetryError: retry txn")
 }
 
 func (e *TransactionRetryError) message(pErr *Error) string {
-	return fmt.Sprintf("retry txn %s", pErr.GetTxn())
+	return fmt.Sprintf("TransactionRetryError: retry txn %s", pErr.GetTxn())
 }
 
 var _ ErrorDetailInterface = &TransactionRetryError{}
@@ -468,7 +461,8 @@ func (e *WriteTooOldError) Error() string {
 }
 
 func (e *WriteTooOldError) message(_ *Error) string {
-	return fmt.Sprintf("write at timestamp %s too old; wrote at %s", e.Timestamp, e.ActualTimestamp)
+	return fmt.Sprintf("WriteTooOldError: write at timestamp %s too old; wrote at %s",
+		e.Timestamp, e.ActualTimestamp)
 }
 
 var _ ErrorDetailInterface = &WriteTooOldError{}
@@ -495,7 +489,9 @@ func (e *ReadWithinUncertaintyIntervalError) Error() string {
 }
 
 func (e *ReadWithinUncertaintyIntervalError) message(_ *Error) string {
-	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.ReadTimestamp, e.ExistingTimestamp)
+	return fmt.Sprintf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
+		"previous write with future timestamp %s within uncertainty interval",
+		e.ReadTimestamp, e.ExistingTimestamp)
 }
 
 var _ ErrorDetailInterface = &ReadWithinUncertaintyIntervalError{}

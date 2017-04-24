@@ -43,7 +43,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// the queue does a consistent lookup which will usually be read from
 	// Node 1. Hence, if Node 1 hasn't processed the removal when Node 2 has,
 	// no GC will take place since the consistent RangeLookup hits the first
-	// Node. We use the TestingCommandFilter to make sure that the second Node
+	// Node. We use the TestingEvalFilter to make sure that the second Node
 	// waits for the first.
 	cfg := storage.TestStoreConfig(nil)
 	mtc.storeConfig = &cfg

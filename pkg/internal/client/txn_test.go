@@ -18,6 +18,7 @@ package client
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"regexp"
 	"testing"
@@ -201,25 +202,6 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		if _, pErr := txn.send(context.Background(), ba); pErr != nil {
 			t.Fatal(pErr)
 		}
-	}
-}
-
-// TestTxnResetTxnOnAbort verifies transaction is reset on abort.
-func TestTxnResetTxnOnAbort(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
-	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		return nil, roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, ba.Txn)
-	}), clock)
-
-	txn := NewTxn(db)
-	_, pErr := txn.send(context.Background(), testPut())
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
-		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
-	}
-
-	if txn.Proto().ID != nil {
-		t.Error("expected txn to be cleared")
 	}
 }
 
@@ -456,10 +438,11 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 					t.Fatal(err)
 				}
 				ok = true
-				// Return an immediate txn retry error. We need to go through the pErr
-				// and back to get a RetryableTxnError.
-				return roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionRetryError(), txn.Proto()).GoError()
+				// Return an immediate txn retry error.
+				// HACK ALERT: to do without a TxnCoordSender, we jump through hoops to
+				// get the retryable error expected by db.Txn().
+				return roachpb.NewHandledRetryableTxnError(
+					"bogus retryable error", txn.Proto().ID, *txn.Proto())
 			}
 			if !success {
 				return errors.New("aborting on purpose")
@@ -474,8 +457,9 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	}
 }
 
-// TestTransactionKeyNotChangedInRestart verifies that if the transaction already has a key (we're
-// in a restart), the key in the begin transaction request is not changed.
+// TestTransactionKeyNotChangedInRestart verifies that if the transaction
+// already has a key (we're in a restart), the key in the begin transaction
+// request is not changed.
 func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -508,7 +492,12 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		if attempt == 0 {
 			// Abort the first attempt so that we need to retry with
 			// a new transaction proto.
-			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
+			//
+			// HACK ALERT: to do without a TxnCoordSender, we jump through hoops to
+			// get the retryable error expected by db.Txn().
+			return nil, roachpb.NewError(
+				roachpb.NewHandledRetryableTxnError(
+					"bogus retryable error", ba.Txn.ID, *ba.Txn))
 		}
 		return ba.CreateReply(), nil
 	}), clock)
@@ -557,6 +546,10 @@ func TestAbortMutatingTransaction(t *testing.T) {
 
 // TestRunTransactionRetryOnErrors verifies that the transaction
 // is retried on the correct errors.
+//
+// TODO(andrei): This test is probably not actually testing much, the mock
+// sender implementation recognizes the retryable errors. We should give this
+// test a TxnCoordSender instead.
 func TestRunTransactionRetryOnErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	clock := hlc.NewClock(hlc.UnixNano, 0)
@@ -574,135 +567,56 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 		{&roachpb.TransactionStatusError{}, false},
 	}
 
-	for i, test := range testCases {
-		count := 0
-		db := NewDB(newTestSender(
-			func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-
-				if _, ok := ba.GetArg(roachpb.Put); ok {
-					count++
-					if count == 1 {
-						return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
-					}
-				}
-				return ba.CreateReply(), nil
-			}), clock)
-		err := db.Txn(context.TODO(), func(ctx context.Context, txn *Txn) error {
-			return txn.Put(ctx, "a", "b")
-		})
-		if test.retry {
-			if count != 2 {
-				t.Errorf("%d: expected one retry; got %d", i, count-1)
-			}
-			if err != nil {
-				t.Errorf("%d: expected success on retry; got %s", i, err)
-			}
-		} else {
-			if count != 1 {
-				t.Errorf("%d: expected no retries; got %d", i, count)
-			}
-			if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
-				t.Errorf("%d: expected error of type %T; got %T", i, test.err, err)
-			}
-		}
-	}
-}
-
-// Test that the a txn gets a fresh OrigTimestamp with every retry.
-func TestAbortedRetryRenewsTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Create a TestSender that aborts a transaction 2 times before succeeding.
-	mc := hlc.NewManualClock(123)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	count := 0
-	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if _, ok := ba.GetArg(roachpb.Put); ok {
-			mc.Increment(1)
-			count++
-			if count < 3 {
-				return nil, roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, ba.Txn)
-			}
-		}
-		return ba.CreateReply(), nil
-	}), clock)
-
-	txnClosure := func(ctx context.Context, txn *Txn, opt *TxnExecOptions) error {
-		// Ensure the KV transaction is created.
-		return txn.Put(ctx, "a", "b")
-	}
-
-	txn := NewTxn(db)
-
-	// Request a client-defined timestamp.
-	refTimestamp := clock.Now()
-	execOpt := TxnExecOptions{
-		AutoRetry:                  true,
-		AutoCommit:                 true,
-		AssignTimestampImmediately: true,
-	}
-
-	// Perform the transaction.
-	if err := txn.Exec(context.Background(), execOpt, txnClosure); err != nil {
-		t.Fatal(err)
-	}
-
-	// Check the timestamp was preserved.
-	if txn.Proto().OrigTimestamp.WallTime == refTimestamp.WallTime {
-		t.Errorf("expected txn orig ts to be different than %s", refTimestamp)
-	}
-}
-
-// TestAbortTransactionOnCommitErrors verifies that transactions are
-// aborted on the correct errors.
-func TestAbortTransactionOnCommitErrors(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
-
-	testCases := []struct {
-		err   error
-		abort bool
-	}{
-		{roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}), true},
-		{&roachpb.TransactionAbortedError{}, false},
-		{&roachpb.TransactionPushError{}, true},
-		{&roachpb.TransactionRetryError{}, true},
-		{&roachpb.RangeNotFoundError{}, true},
-		{&roachpb.RangeKeyMismatchError{}, true},
-		{&roachpb.TransactionStatusError{}, true},
-	}
-
 	for _, test := range testCases {
-		var commit, abort bool
-		db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		t.Run(fmt.Sprintf("%T", test.err), func(t *testing.T) {
+			count := 0
+			db := NewDB(newTestSender(
+				func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 
-			switch t := ba.Requests[0].GetInner().(type) {
-			case *roachpb.EndTransactionRequest:
-				if t.Commit {
-					commit = true
-					return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
+					if _, ok := ba.GetArg(roachpb.Put); ok {
+						count++
+						if count == 1 {
+							var pErr *roachpb.Error
+							if _, ok := test.err.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+								// This error requires an observed timestamp to have been
+								// recorded on the origin node.
+								ba.Txn.UpdateObservedTimestamp(1, hlc.Timestamp{WallTime: 1, Logical: 1})
+								pErr = roachpb.NewErrorWithTxn(test.err, ba.Txn)
+								pErr.OriginNode = 1
+							} else {
+								pErr = roachpb.NewErrorWithTxn(test.err, ba.Txn)
+							}
+
+							if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+								// HACK ALERT: to do without a TxnCoordSender, we jump through
+								// hoops to get the retryable error expected by db.Txn().
+								return nil, roachpb.NewError(roachpb.NewHandledRetryableTxnError(
+									pErr.Message, ba.Txn.ID, *ba.Txn))
+							}
+							return nil, pErr
+						}
+					}
+					return ba.CreateReply(), nil
+				}), clock)
+			err := db.Txn(context.TODO(), func(ctx context.Context, txn *Txn) error {
+				return txn.Put(ctx, "a", "b")
+			})
+			if test.retry {
+				if err != nil {
+					t.Fatalf("expected success on retry; got %s", err)
 				}
-				abort = true
+				if count != 2 {
+					t.Fatalf("expected one retry; got %d", count-1)
+				}
+			} else {
+				if count != 1 {
+					t.Errorf("expected no retries; got %d", count)
+				}
+				if reflect.TypeOf(err) != reflect.TypeOf(test.err) {
+					t.Errorf("expected error of type %T; got %T", test.err, err)
+				}
 			}
-			return ba.CreateReply(), nil
-		}), clock)
-
-		txn := NewTxn(db)
-		if pErr := txn.Put(context.Background(), "a", "b"); pErr != nil {
-			t.Fatalf("put failed: %s", pErr)
-		}
-		if pErr := txn.CommitOrCleanup(context.Background()); pErr == nil {
-			t.Fatalf("unexpected commit success")
-		}
-
-		if !commit {
-			t.Errorf("%T: failed to find commit", test.err)
-		}
-		if test.abort && !abort {
-			t.Errorf("%T: failed to find abort", test.err)
-		} else if !test.abort && abort {
-			t.Errorf("%T: found unexpected abort", test.err)
-		}
+		})
 	}
 }
 
@@ -853,18 +767,20 @@ func TestWrongTxnRetry(t *testing.T) {
 			if err := innerTxn.Put(ctx, "x", "y"); err != nil {
 				t.Fatal(err)
 			}
-			return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
-				PusheeTxn: *outerTxn.Proto()}, innerTxn.Proto()).GoError()
+			// HACK ALERT: to do without a TxnCoordSender, we jump through hoops to
+			// get the retryable error expected by txn.Exec().
+			return roachpb.NewHandledRetryableTxnError(
+				"test error", innerTxn.Proto().ID, *innerTxn.Proto())
 		}
 		innerTxn := NewTxn(db)
 		err := innerTxn.Exec(ctx, execOpt, innerClosure)
-		if !testutils.IsError(err, "failed to push") {
+		if !testutils.IsError(err, "test error") {
 			t.Fatalf("unexpected inner failure: %v", err)
 		}
 		return err
 	}
 
-	if err := db.Txn(context.TODO(), txnClosure); !testutils.IsError(err, "failed to push") {
+	if err := db.Txn(context.TODO(), txnClosure); !testutils.IsError(err, "test error") {
 		t.Fatal(err)
 	}
 	if retries != 1 {
