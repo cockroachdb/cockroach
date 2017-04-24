@@ -623,7 +623,12 @@ func (e *Error) String() string {
 func NewError(err error) *Error {
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		return &Error{Detail: &Error_PGError{PGError: pgErr}}
-	} else if retryErr, ok := err.(*roachpb.RetryableTxnError); ok {
+	} else if retryErr, ok := err.(*roachpb.InternalRetryableTxnError); ok {
+		// !!! I think the cast above is impossible since DistSQL goes through a
+		// local TxnCoordSender which always converts these to
+		// HandledRetryableError. But that's not what we want; we want the global
+		// TxnCoordSender to do the txn restarting. So I think DistSQL should bypass
+		// the local txnCoordSender.
 		return &Error{
 			Detail: &Error_RetryableTxnError{
 				RetryableTxnError: retryErr,

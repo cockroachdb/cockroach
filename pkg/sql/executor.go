@@ -252,6 +252,17 @@ type ExecutorConfig struct {
 	// Caches updated by DistSQL.
 	RangeDescriptorCache *kv.RangeDescriptorCache
 	LeaseHolderCache     *kv.LeaseHolderCache
+
+	// StopheartbeatingTransactionRecord needs to be set for the Executor to be
+	// able to run DistSQL queries. This will be called whenever a query running
+	// through DistSQL encounters a TransactionAbortedError, and so the
+	// Transaction proto is re-initialized and the old transaction record should
+	// be cleaned up. This needs to be hooked up to the TxnCoordSender's cleanup
+	// routine.
+	//
+	// On non-DistSQL query execution, the TxnCoordSender is directly involved and
+	// this indirection is not used.
+	StopHeartbeatingTransactionRecord func(ctx context.Context, prevTxn roachpb.Transaction)
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
@@ -751,7 +762,7 @@ func (e *Executor) execRequest(
 
 		// Sanity check about not leaving KV txns open on errors.
 		if err != nil && txnState.txn != nil && !txnState.txn.IsFinalized() {
-			if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
+			if _, retryable := err.(*roachpb.HandledRetryableTxnError); !retryable {
 				log.Fatalf(session.Ctx(), "got a non-retryable error but the KV "+
 					"transaction is not finalized. TxnState: %s, err: %s\n"+
 					"err:%+v\n\ntxn: %s", txnState.State, err, err, txnState.txn.Proto())
@@ -1348,12 +1359,15 @@ func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, er
 func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
 	ctx := planner.session.Ctx()
-	recv := makeDistSQLReceiver(
+	recv, err := makeDistSQLReceiver(
 		ctx, result.Rows,
 		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
 		planner.txn,
 	)
-	err := e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv)
+	if err != nil {
+		return err
+	}
+	err = e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv)
 	if err != nil {
 		return err
 	}
@@ -1841,7 +1855,7 @@ func convertToErrWithPGCode(err error) error {
 		return nil
 	}
 	switch tErr := err.(type) {
-	case *roachpb.RetryableTxnError:
+	case *roachpb.HandledRetryableTxnError:
 		return sqlbase.NewRetryError(err)
 	case *roachpb.AmbiguousResultError:
 		// TODO(andrei): Once DistSQL starts executing writes, we'll need a

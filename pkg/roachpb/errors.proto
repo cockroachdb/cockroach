@@ -239,6 +239,7 @@ message ErrorDetail {
   reserved 25;
   optional AmbiguousResultError ambiguous_result = 26;
   optional StoreNotFoundError store_not_found = 27;
+  optional HandledRetryableTxnError handled_retryable_txn_error = 28;
 
   // TODO(kaneda): Following are added to preserve the type when
   // converting Go errors from/to proto Errors. Revisit this design.
@@ -290,9 +291,6 @@ message Error {
   // of retryable errors.
   //
   // Not to be accessed directly - use Error.GetTxn().
-  // 
-  // NOTE: TxnCoordSender currently has a role in updating the epoch on the
-  // return path for most retryable errors.
   optional Transaction unexposed_txn = 4;
 
   // Node at which the error was generated (zero if does not apply).
@@ -313,19 +311,24 @@ message Error {
   reserved 2;
 }
 
-// RetryableTxnError tells the recipient that the transaction it attempted to
-// use to perform an operation must be retried. This is returned generally as a
-// result of a transaction conflict.
+// InternalRetryableTxnError tells the recipient that the transaction it
+// attempted to use to perform an operation must be retried. This is returned
+// generally as a result of a transaction conflict.
 //
-// This is not an ErrorDetail; it is a higher-level error than a pErr. It is
-// created based on a TransactionRetryError or a TransactionAbortedError. It
-// implements the go error interface and is used by the layers above KV. It is a
-// proto because DistSQL needs to send it over the wire. It needs to be in this
+// This is not an ErrorDetail. It is created based on details such as
+// TransactionRetryError or TransactionAbortedError. It implements the go error
+// interface and is used by the TxnCoordSender and DistSQL. It is a proto
+// because DistSQL needs to send it over the wire. It needs to be in this
 // package because it both depends on and is depended on by roachpb.
-message RetryableTxnError {
+//
+// After resetting the Transaction proto according to this error, the
+// TxnCoordSender will transform this into a HandledRetryableTxnError (an
+// ErrorDetail), so that restart information can be passed to the next layer up
+// (the client.Txn) through the client.Sender() interface.
+message InternalRetryableTxnError {
   // A user-readable message.
   optional string msg = 1 [(gogoproto.nullable) = false];
-  
+
   // The ID of the transaction being restarted. The client is supposed to check
   // this against the ID of its transaction and make sure the retryable error
   // is meant for its level and didn't escape from some inner transaction.
@@ -333,16 +336,60 @@ message RetryableTxnError {
   // TODO(andrei): make this non-nullable (and thus required) if we manage to
   // make Transaction.ID non-nullable.
   optional bytes txn_id = 2 [
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID", 
-    (gogoproto.customname) = "TxnID"]; 
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID"];
 
   // The Transaction that the client is supposed to use for the next attempt.
   // If not set, the client is supposed to use a brand new Transaction. This is
   // set by all retryable errors except TransactionAbortedError to communicate
   // the new timestamp and epoch for the next attempt.
+  //
+  // When retrying, a client is supposed to call Transaction.Restart() on
+  // this transaction.
   optional Transaction transaction = 3;
+
+  // The fields below are filled in when "transaction" is not present (i.e. as a
+  // result of a TransactionAbortedError). They're supposed to be
+  // used with the Transaction.Restart() call. If transaction is not set, these
+  // will also not be set.
+  //
+  // NOTE(andrei): I think a better design would be for the server to always be
+  // in charge of updating the Transaction to the final form in which it should
+  // be used by the client. I couldn't easily do that, though, due to the
+  // current mechanics through which pErrs and their details are partially
+  // filled in by multiple layers.
+  // I've also tried to apply these fields to the transaction in pErr.GoError().
+  // The problem I hit in doing that was that Transaction.Restart() needs a
+  // request's UserPriority, and pErr.GoError() doesn't have a request.
 
   // If set, this is a lower-bound on the priority of the restarted transaction.
   // This can only be set if transaction is not set.
   optional int32 retry_priority = 4;
+}
+
+// HandledRetryableTxnError is an error detail representing a retryable error
+// that has been "handled" by the TxnCoordSender. This contains the final form
+// of the Transaction proto that should be used on next attempts. This error is
+// handled first by the client.Txn, which uses the Transaction inside to update
+// its state, and then passed along to SQL in a pErr (through the
+// client.Sender() interface.
+message HandledRetryableTxnError {
+  // A user-readable message.
+  optional string msg = 1 [(gogoproto.nullable) = false];
+
+  // The ID of the transaction being restarted. The client is supposed to check
+  // this against the ID of its transaction and make sure the retryable error
+  // is meant for its level and didn't escape from some inner transaction.
+  //
+  // TODO(andrei): make this non-nullable (and thus required) if we manage to
+  // make Transaction.ID non-nullable.
+  optional bytes txn_id = 2 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID"];
+
+  // The Transaction that should be used by next attempts. Depending on the
+  // original cause of this method, this can either be the same Transaction as
+  // before, but with an incremented epoch and timestamp, or a completely new
+  // Transaction.
+  optional Transaction transaction = 3;
 }

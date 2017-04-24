@@ -395,6 +395,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "SetSystemConfigTrigger"}:    {},
 		{txnType, "SetTxnAnchorKey"}:           {},
 		{txnType, "UpdateDeadlineMaybe"}:       {},
+		{txnType, "UpdateStateOnDetachedErr"}:  {},
 		{txnType, "AddCommitTrigger"}:          {},
 		{txnType, "CommandCount"}:              {},
 		{txnType, "IsRetryableErrMeantForTxn"}: {},

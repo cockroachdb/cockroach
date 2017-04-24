@@ -956,6 +956,51 @@ func (t Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) {
 	return s.get(nodeID)
 }
 
+// PrepareTransactionForRetry returns a new Transaction to be used for retrying
+// the original Transaction. Depending on the error, this might return an
+// already-existing Transaction with an incremented epoch, or a completely new
+// Transaction.
+//
+// The caller should generally check that the error was
+// meant for this Transaction before calling this.
+//
+// pri is the priority that should be used when giving the restarted transaction
+// the chance to get a higher priority.
+//
+// In case retryErr tells us that a new Transaction needs to be created,
+// isolation and name help initialize this new transaction.
+//
+// TODO(andrei): The `pri` param is confusing: it's passed as the priority of
+// the Batch request that caused the retry. And it's not used if a new
+// Transaction needs to be created; in this case the priority will be
+// initialized later, before running the first batch in the new retry. Feels
+// like something more consistent should be done about this.
+func PrepareTransactionForRetry(
+	retryErr *InternalRetryableTxnError,
+	pri UserPriority,
+	isolation enginepb.IsolationType,
+	name string,
+) Transaction {
+	var newTxn Transaction
+	if retryErr.Transaction != nil {
+		newTxn = retryErr.Transaction.Clone()
+		newTxn.Restart(pri, newTxn.Priority, newTxn.Timestamp)
+	} else {
+		// Transaction == nil means the cause was a TransactionAbortedError. We'll
+		// init a new Transaction.
+		newTxn = Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Isolation: isolation,
+			},
+			Name: name,
+		}
+		if retryErr.RetryPriority != nil {
+			newTxn.Priority = *retryErr.RetryPriority
+		}
+	}
+	return newTxn
+}
+
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {

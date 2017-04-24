@@ -1501,7 +1501,10 @@ var Builtins = map[string][]Builtin{
 					Nanos: int64(ctx.stmtTimestamp.Sub(ctx.txnTimestamp)),
 				}
 				if elapsed.Compare(minDuration) < 0 {
-					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()", nil /* txnID */)
+					return nil, roachpb.NewHandledRetryableTxnError(
+						"forced by crdb_internal.force_retry()",
+						nil, /* txnID */
+						roachpb.Transaction{})
 				}
 				return DZero, nil
 			},
@@ -1525,7 +1528,8 @@ var Builtins = map[string][]Builtin{
 					if err != nil {
 						return nil, err
 					}
-					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()", &uuid)
+					return nil, roachpb.NewHandledRetryableTxnError(
+						"forced by crdb_internal.force_retry()", &uuid, roachpb.Transaction{})
 				}
 				return DZero, nil
 			},

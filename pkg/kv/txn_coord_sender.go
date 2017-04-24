@@ -511,8 +511,13 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	case txnMeta.txn.Status == roachpb.ABORTED:
 		txn := txnMeta.txn.Clone()
 		tc.cleanupTxnLocked(ctx, txn)
-		return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(),
-			&txn)
+		abortedErr := roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txn)
+		retryErr := abortedErr.GoError().(*roachpb.InternalRetryableTxnError)
+		// TODO(andrei): figure out a UserPriority to use here.
+		newTxn := roachpb.PrepareTransactionForRetry(
+			retryErr, roachpb.NormalUserPriority, txn.Isolation, txn.Name)
+		return roachpb.NewError(roachpb.NewHandledRetryableTxnError(
+			retryErr.Error(), retryErr.TxnID, newTxn))
 	case txnMeta.txn.Status == roachpb.COMMITTED:
 		txn := txnMeta.txn.Clone()
 		tc.cleanupTxnLocked(ctx, txn)
@@ -555,9 +560,20 @@ func (tc *TxnCoordSender) validateTxnForBatch(ba *roachpb.BatchRequest) error {
 	return nil
 }
 
-// cleanupTxnLocked is called when a transaction ends. The transaction record
-// is updated and the heartbeat goroutine signaled to clean up the transaction
+// CleanupTxn is called when a transaction ends. The transaction record is
+// updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
+//
+// TODO(andrei): the TxnCoordSender should get out of the business of deciding
+// when the transaction should be cleaned up; this decision should be delegated
+// to the client. Also see #10511.
+func (tc *TxnCoordSender) CleanupTxn(ctx context.Context, txn roachpb.Transaction) {
+	tc.txnMu.Lock()
+	tc.cleanupTxnLocked(ctx, txn)
+	tc.txnMu.Unlock()
+}
+
+// cleanupTxnLocked is like CleanupTxn, but assumes that tc.txnMu is locked.
 func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Transaction) {
 	log.Event(ctx, "coordinator stops")
 	txnMeta, ok := tc.txnMu.txns[*txn.ID]
@@ -791,8 +807,13 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 
 // updateState updates the transaction state in both the success and
 // error cases, applying those updates to the corresponding txnMeta
-// object when adequate. It also updates certain errors with the
+// object when adequate. It also updates retryable errors with the
 // updated transaction for use by client restarts.
+//
+// startNS is the time when the request that's updating the state has been sent.
+// This is not used if the request is known to not be the one in charge of
+// starting tracking the transaction - i.e. this is the case for DistSQL, which
+// just does reads and passes 0.
 func (tc *TxnCoordSender) updateState(
 	ctx context.Context,
 	startNS int64,
@@ -809,58 +830,67 @@ func (tc *TxnCoordSender) updateState(
 		return pErr
 	}
 
+	txnID := *ba.Txn.ID
 	var newTxn roachpb.Transaction
-	newTxn.Update(ba.Txn)
 	if pErr == nil {
+		newTxn.Update(ba.Txn)
 		newTxn.Update(br.Txn)
-	} else if errTxn := pErr.GetTxn(); errTxn != nil {
-		newTxn.Update(errTxn)
-	}
-
-	switch t := pErr.GetDetail().(type) {
-	case *roachpb.OpRequiresTxnError:
-		panic("OpRequiresTxnError must not happen at this level")
-	case *roachpb.ReadWithinUncertaintyIntervalError:
-		// If the reader encountered a newer write within the uncertainty
-		// interval, we advance the txn's timestamp just past the last observed
-		// timestamp from the node.
-		restartTS, ok := newTxn.GetObservedTimestamp(pErr.OriginNode)
-		if !ok {
-			pErr = roachpb.NewError(errors.Errorf("no observed timestamp for node %d found on uncertainty restart", pErr.OriginNode))
-		} else {
-			newTxn.Timestamp.Forward(restartTS)
-			newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)
+	} else {
+		var retryErr *roachpb.InternalRetryableTxnError
+		if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+			goErr := pErr.GoError()
+			var ok bool
+			retryErr, ok = goErr.(*roachpb.InternalRetryableTxnError)
+			if !ok {
+				// Something went wrong with the conversion; some assertion must have
+				// failed in the GoError() call.
+				log.Errorf(ctx, "Expected conversion to InternalRetryableTxnError "+
+					"to succeed, but it didn't. The conversion of %s returned: %s",
+					pErr, goErr)
+				pErr = roachpb.NewError(goErr)
+			}
 		}
-	case *roachpb.TransactionAbortedError:
-		// Increase timestamp if applicable.
-		newTxn.Timestamp.Forward(pErr.GetTxn().Timestamp)
-		newTxn.Priority = pErr.GetTxn().Priority
-		// Clean up the freshly aborted transaction in defer(), avoiding a
-		// race with the state update below.
-		defer tc.cleanupTxnLocked(ctx, newTxn)
-	case *roachpb.TransactionPushError:
-		// Increase timestamp if applicable, ensuring that we're
-		// just ahead of the pushee.
-		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp)
-		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
-	case *roachpb.TransactionRetryError:
-		// Increase timestamp so on restart, we're ahead of any timestamp
-		// cache entries or newer versions which caused the restart.
-		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp)
-	case *roachpb.WriteTooOldError:
-		newTxn.Restart(ba.UserPriority, newTxn.Priority, t.ActualTimestamp)
-	case nil:
-		// Nothing to do here, avoid the default case.
-	default:
-		// Do not clean up the transaction since we're leaving cancellation of
-		// the transaction up to the client. For example, on seeing an error,
-		// like TransactionStatusError or ConditionFailedError, the client
-		// will call Txn.CleanupOnError() which will cleanup the transaction
-		// and its intents. Therefore leave the transaction in the PENDING
-		// state and do not call cleanTxnLocked().
-	}
+		if retryErr != nil {
+			if !roachpb.TxnIDEqual(pErr.GetTxn().ID, &txnID) {
+				// KV should not return errors for transactions other that the one in
+				// the BatchRequest.
+				log.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
+					ba.Txn, pErr)
+			}
+			newTxn = roachpb.PrepareTransactionForRetry(
+				retryErr, ba.UserPriority, ba.Txn.Isolation, ba.Txn.Name,
+			)
+			if newTxn.ID == nil {
+				// Clean up the freshly aborted transaction in defer(), avoiding a
+				// race with the state update below.
+				//
+				// TODO(andrei): If the epoch that our map is aware of has already been
+				// incremented compared to ba.Txn, perhaps we shouldn't abort the txn
+				// here. This would match client.Txn, who will ignore this error.
+				defer tc.cleanupTxnLocked(ctx, *ba.Txn)
+			}
+			// Pass a HandledRetryableTxnError up to the next layer.
+			pErr = roachpb.NewError(
+				roachpb.NewHandledRetryableTxnError(retryErr.Error(), retryErr.TxnID, newTxn))
+		} else {
+			// We got a non-retryable error.
 
-	txnID := *newTxn.ID
+			newTxn.Update(ba.Txn)
+			if errTxn := pErr.GetTxn(); errTxn != nil {
+				// Writes can carry back intents in errors, so we have to keep track of
+				// them.
+				newTxn.Update(errTxn)
+			}
+
+			// Update the txn in the error to reflect the TxnCoordSender's state.
+			//
+			// Avoid changing existing errors because sometimes they escape into
+			// goroutines and data races can occur.
+			pErrShallow := *pErr
+			pErrShallow.SetTxn(&newTxn) // SetTxn clones newTxn
+			pErr = &pErrShallow
+		}
+	}
 
 	txnMeta := tc.txnMu.txns[txnID]
 	// For successful transactional requests, keep the written intents and
@@ -937,15 +967,50 @@ func (tc *TxnCoordSender) updateState(
 		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
 	}
 
-	if pErr != nil && pErr.GetTxn() != nil {
-		// Avoid changing existing errors because sometimes they escape into
-		// goroutines and data races can occur.
-		pErrShallow := *pErr
-		pErrShallow.SetTxn(&newTxn) // SetTxn clones newTxn
-		pErr = &pErrShallow
+	return pErr
+}
+
+// UpdateStateOnDetachedErr is part of the SenderWithDistSQLBackdoor interface.
+func (tc *TxnCoordSender) UpdateStateOnDetachedErr(
+	ctx context.Context, txn roachpb.Transaction, pri roachpb.UserPriority, err error,
+) roachpb.Transaction {
+	tc.txnMu.Lock()
+	defer tc.txnMu.Unlock()
+
+	retryErr, ok := err.(*roachpb.InternalRetryableTxnError)
+	if !ok {
+		// Nothing to update for non-retryable errors. In updateState() we read
+		// transaction state from all errors to keep track of intents, but that
+		// doesn't apply here (DistSQL only does reads).
+		return txn
 	}
 
-	return pErr
+	// TODO(andrei): We should check:
+	// roachpb.TxnIDEqual(retryErr.TxnID, txn.mu.Proto.ID)
+	// once #15024 merges. Until then, the check can fail spuriously as DistSQL
+	// transactions might not have an ID at the gateway.
+
+	newTxn := roachpb.PrepareTransactionForRetry(
+		retryErr, pri, txn.Isolation, txn.Name,
+	)
+
+	// TODO(andrei): Remove the IsInitialized() check once #15024 is merged.
+	if txn.IsInitialized() {
+		if newTxn.ID == nil {
+			// Clean up the freshly aborted transaction.
+			// !!! maybe TODO is obsolete
+			// TODO(andrei): We're cleaning up the previous txn here, although the
+			// client.Txn tries to do the same thing (if it was configured with an
+			// onKVTxnSwitched). Remove this duplication of work and concerns.
+			tc.cleanupTxnLocked(ctx, txn)
+		} else {
+			txnMeta := tc.txnMu.txns[*txn.ID]
+			txnMeta.txn.Update(&newTxn)
+			txnMeta.setLastUpdate(tc.clock.PhysicalNow())
+		}
+	}
+
+	return newTxn
 }
 
 // TODO(tschottdorf): this method is somewhat awkward but unless we want to
