@@ -1324,9 +1324,8 @@ func (t *logicTest) success(file string) {
 	}
 }
 
-func (t *logicTest) setupAndRunFile(path string, config testClusterConfig) {
+func (t *logicTest) runFile(path string, config testClusterConfig) {
 	defer t.close()
-	t.setup(config.numNodes, config.useFakeSpanResolver)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -1441,10 +1440,6 @@ func TestLogic(t *testing.T) {
 		if len(paths) == 0 {
 			continue
 		}
-		var cleanupFuncs []func()
-		if cfg.defaultDistSQLMode != "" {
-			cleanupFuncs = append(cleanupFuncs, sql.SetDefaultDistSQLMode(cfg.defaultDistSQLMode))
-		}
 		// Top-level test: one per test configuration.
 		t.Run(cfg.name, func(t *testing.T) {
 			for _, path := range paths {
@@ -1469,7 +1464,11 @@ func TestLogic(t *testing.T) {
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
-					lt.setupAndRunFile(path, cfg)
+					if cfg.defaultDistSQLMode != "" {
+						defer settings.TestingSetEnum(&sql.DistSQLClusterExecMode, 2)()
+					}
+					lt.setup(cfg.numNodes, cfg.useFakeSpanResolver)
+					lt.runFile(path, cfg)
 
 					progress.Lock()
 					defer progress.Unlock()
@@ -1484,9 +1483,6 @@ func TestLogic(t *testing.T) {
 				})
 			}
 		})
-		for _, cleanupFunc := range cleanupFuncs {
-			cleanupFunc()
-		}
 	}
 
 	unsupportedMsg := ""
