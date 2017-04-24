@@ -151,12 +151,12 @@ func backupRestoreTestSetupWithParams(
 	sqlDB = backupSQLRunner(t, tc)
 
 	sqlDB.Exec(bankCreateDatabase)
+	sqlDB.Exec(bankCreateTable)
+	for _, insert := range bankDataInsertStmts(numAccounts) {
+		sqlDB.Exec(insert)
+	}
 
 	if numAccounts > 0 {
-		sqlDB.Exec(bankCreateTable)
-		for _, insert := range bankDataInsertStmts(numAccounts) {
-			sqlDB.Exec(insert)
-		}
 		split := bankSplitStmt(numAccounts, backupRestoreDefaultRanges)
 		// This occasionally flakes, so ignore errors.
 		_, _ = sqlDB.DB.Exec(split)
@@ -278,8 +278,18 @@ func TestBackupRestoreLocal(t *testing.T) {
 	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
 }
 
+func TestBackupRestoreEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 0
+
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
+}
+
 func backupAndRestore(
-	ctx context.Context, t *testing.T, sqlDB *sqlutils.SQLRunner, dest string, numAccounts int64,
+	ctx context.Context, t *testing.T, sqlDB *sqlutils.SQLRunner, dest string, numAccounts int,
 ) {
 	{
 		sqlDB.Exec(`CREATE INDEX balance_idx ON bench.bank (balance)`)
@@ -298,9 +308,14 @@ func backupAndRestore(
 		sqlDB.QueryRow(`BACKUP DATABASE bench TO $1`, dest).Scan(
 			&unused, &unused, &unused, &bytes,
 		)
-		approxBytes := int64(backupRestoreRowPayloadSize) * numAccounts
-		if max := approxBytes * 2; bytes < approxBytes || bytes > max {
-			t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, bytes)
+		// When numAccounts == 0, our approxBytes formula breaks down because
+		// backups of no data still contain the system.users and system.descriptor
+		// tables. Just skip the check in this case.
+		if numAccounts > 0 {
+			approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
+			if max := approxBytes * 2; bytes < approxBytes || bytes > max {
+				t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, bytes)
+			}
 		}
 		if _, err := sqlDB.DB.Exec(`BACKUP DATABASE bench TO $1`, dest); !testutils.IsError(err,
 			"already appears to exist",
@@ -330,19 +345,19 @@ func backupAndRestore(
 		sqlDBRestore.QueryRow(`RESTORE bench.* FROM $1`, dest).Scan(
 			&unused, &unused, &unused, &bytes,
 		)
-		approxBytes := int64(backupRestoreRowPayloadSize) * numAccounts
+		approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
 		if max := approxBytes * 2; bytes < approxBytes || bytes > max {
 			t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, bytes)
 		}
 
 		var rowCount int64
 		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
-		if rowCount != numAccounts {
+		if rowCount != int64(numAccounts) {
 			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 		}
 
 		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank@balance_idx`).Scan(&rowCount)
-		if rowCount != numAccounts {
+		if rowCount != int64(numAccounts) {
 			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 		}
 	}
@@ -920,7 +935,6 @@ func TestBackupRestoreIncremental(t *testing.T) {
 	var backupDirs []string
 	var checksums []uint32
 	{
-		sqlDB.Exec(bankCreateTable)
 		for backupNum := 0; backupNum < numBackups; backupNum++ {
 			// In the following, windowSize is `w` and offset is `o`. The first
 			// mutation creates accounts with id [w,3w). Every mutation after
