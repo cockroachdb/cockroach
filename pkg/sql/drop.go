@@ -184,6 +184,8 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 		return nil
 	})
 
+	n.p.session.leases.addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true)
+
 	if err := n.p.txn.Run(ctx, b); err != nil {
 		return err
 	}
@@ -737,6 +739,7 @@ func (n *dropTableNode) Start(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
 		// Log a Drop Table event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
