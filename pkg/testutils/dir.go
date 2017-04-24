@@ -19,13 +19,15 @@ package testutils
 import (
 	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 )
 
 // TempDir creates a directory and a function to clean it up at the end of the
 // test.
 func TempDir(t testing.TB) (string, func()) {
-	dir, err := ioutil.TempDir("", t.Name())
+	name := strings.Replace(t.Name(), "/", "_", -1)
+	dir, err := ioutil.TempDir("", name)
 	if err != nil {
 		t.Fatal(err)
 	}
