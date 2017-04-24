@@ -31,6 +31,7 @@ var i1A = RegisterIntSetting("i.1", "", 0)
 var i2A = RegisterIntSetting("i.2", "", 5)
 var fA = RegisterFloatSetting("f", "", 5.4)
 var dA = RegisterDurationSetting("d", "", time.Second)
+var eA = RegisterEnumSetting("e", "", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = RegisterByteSizeSetting("zzz", "", mb)
 
 func TestCache(t *testing.T) {
@@ -62,6 +63,9 @@ func TestCache(t *testing.T) {
 		if expected, actual := mb, byteSize.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
+		if expected, actual := int64(1), eA.Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
 	})
 
 	t.Run("lookup", func(t *testing.T) {
@@ -73,6 +77,9 @@ func TestCache(t *testing.T) {
 		}
 		if actual, _, ok := Lookup("d"); !ok || dA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", dA, actual, ok)
+		}
+		if actual, _, ok := Lookup("e"); !ok || eA != actual {
+			t.Fatalf("expected %v, got %v (exists: %v)", eA, actual, ok)
 		}
 		if actual, _, ok := Lookup("dne"); ok {
 			t.Fatalf("expected nothing, got %v", actual)
@@ -102,6 +109,13 @@ func TestCache(t *testing.T) {
 		if err := u.Set("zzz", EncodeInt(mb*5), "z"); err != nil {
 			t.Fatal(err)
 		}
+		if err := u.Set("e", EncodeInt(2), "e"); err != nil {
+			t.Fatal(err)
+		}
+		if expected, err := "strconv.Atoi: parsing \"notAValidValue\": invalid syntax",
+			u.Set("e", "notAValidValue", "e"); !testutils.IsError(err, expected) {
+			t.Fatalf("expected '%s' != actual error '%s'", expected, err)
+		}
 		u.Done()
 
 		if expected, actual := false, boolTA.Get(); expected != actual {
@@ -120,6 +134,9 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 2*time.Hour, dA.Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := int64(2), eA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := mb*5, byteSize.Get(); expected != actual {
@@ -257,6 +274,17 @@ func TestCache(t *testing.T) {
 			}
 			f()
 			if expected, actual := time.Second, dA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+		}
+
+		{
+			f := TestingSetEnum(&eA, 3)
+			if expected, actual := int64(3), eA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+			f()
+			if expected, actual := int64(1), eA.Get(); expected != actual {
 				t.Fatalf("expected %v, got %v", expected, actual)
 			}
 		}

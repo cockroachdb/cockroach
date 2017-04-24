@@ -143,7 +143,7 @@ func (p *planner) toSettingString(
 		return f(d)
 	}
 
-	switch setting.(type) {
+	switch setting := setting.(type) {
 	case *settings.StringSetting:
 		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
 			if s, ok := d.(*parser.DString); ok {
@@ -171,6 +171,17 @@ func (p *planner) toSettingString(
 				return settings.EncodeFloat(float64(*f)), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for float setting", d.ResolvedType(), d)
+		})
+	case *settings.EnumSetting:
+		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
+			if s, ok := d.(*parser.DString); ok {
+				str := string(*s)
+				if _, ok := setting.ParseEnum(str); !ok {
+					return "", errors.Errorf("invalid value '%s' for enum setting", str)
+				}
+				return str, nil
+			}
+			return "", errors.Errorf("cannot use %s %T value for enum setting", d.ResolvedType(), d)
 		})
 	case *settings.ByteSizeSetting:
 		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
