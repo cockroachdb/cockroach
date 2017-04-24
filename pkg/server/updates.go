@@ -25,11 +25,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -79,8 +82,9 @@ type versionInfo struct {
 }
 
 type reportingInfo struct {
-	Node   nodeInfo    `json:"node"`
-	Stores []storeInfo `json:"stores"`
+	Node   nodeInfo                  `json:"node"`
+	Stores []storeInfo               `json:"stores"`
+	Schema []sqlbase.TableDescriptor `json:"schema"`
 }
 
 type nodeInfo struct {
@@ -236,7 +240,7 @@ func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Durati
 	return scheduled.Add(diagnosticReportFrequency)
 }
 
-func (s *Server) getReportingInfo() reportingInfo {
+func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 	n := s.node.recorder.GetStatusSummary()
 
 	summary := nodeInfo{NodeID: s.node.Descriptor.NodeID}
@@ -253,7 +257,16 @@ func (s *Server) getReportingInfo() reportingInfo {
 		stores[i].Bytes = bytes
 		summary.Bytes += bytes
 	}
-	return reportingInfo{summary, stores}
+
+	schema, err := s.collectSchemaInfo(ctx)
+	if err != nil {
+		log.Warningf(ctx, "error collecting schema info for diagnostic report: %+v", err)
+		schema = nil
+	}
+
+	// TODO(dt): scrub schema of strings.
+
+	return reportingInfo{summary, stores, schema}
 }
 
 func (s *Server) reportDiagnostics() {
@@ -261,7 +274,7 @@ func (s *Server) reportDiagnostics() {
 	defer span.Finish()
 
 	b := new(bytes.Buffer)
-	if err := json.NewEncoder(b).Encode(s.getReportingInfo()); err != nil {
+	if err := json.NewEncoder(b).Encode(s.getReportingInfo(ctx)); err != nil {
 		log.Warning(ctx, err)
 		return
 	}
@@ -287,4 +300,24 @@ func (s *Server) reportDiagnostics() {
 		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s, "+
 			"error: %v", res.Status, b, err)
 	}
+}
+
+func (s *Server) collectSchemaInfo(ctx context.Context) ([]sqlbase.TableDescriptor, error) {
+	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+	endKey := startKey.PrefixEnd()
+	rows, err := s.db.Scan(ctx, startKey, endKey, 0)
+	if err != nil {
+		return nil, err
+	}
+	tables := make([]sqlbase.TableDescriptor, 0, len(rows))
+	for _, row := range rows {
+		var desc sqlbase.Descriptor
+		if err := row.ValueProto(&desc); err != nil {
+			return nil, errors.Wrapf(err, "%s: unable to unmarshal SQL descriptor", row.Key)
+		}
+		if t := desc.GetTable(); t != nil && t.ID > keys.MaxReservedDescID {
+			tables = append(tables, *t)
+		}
+	}
+	return tables, nil
 }

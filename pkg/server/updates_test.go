@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -106,10 +108,20 @@ func TestReportUsage(t *testing.T) {
 			base.DefaultTestStoreSpec,
 		},
 	}
-	s, _, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, params)
 	ts := s.(*TestServer)
 
 	if err := ts.WaitForInitialSplits(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE DATABASE foobar`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE foobar.baz (somestring INT CONSTRAINT somestring CHECK (somestring > 1))`); err != nil {
+		t.Fatal(err)
+	}
+	tables, err := ts.collectSchemaInfo(context.TODO())
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -169,6 +181,23 @@ func TestReportUsage(t *testing.T) {
 		}
 		return nil
 	})
+
+	if expected, actual := len(tables), len(reported.Schema); expected != actual {
+		t.Fatalf("expected %d tables in schema, got %d", expected, actual)
+	}
+	reportedByID := make(map[sqlbase.ID]sqlbase.TableDescriptor, len(tables))
+	for _, r := range reported.Schema {
+		reportedByID[r.ID] = r
+	}
+	for _, tbl := range tables {
+		r, ok := reportedByID[tbl.ID]
+		if !ok {
+			t.Fatalf("expected table %d to be in reported schema", tbl.ID)
+		}
+		if !reflect.DeepEqual(r, tbl) {
+			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, tbl, r)
+		}
+	}
 
 	ts.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
 	recorder.Close()
