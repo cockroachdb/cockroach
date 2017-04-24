@@ -103,6 +103,16 @@ message RaftMessageResponse {
 
 // SnapshotRequest is the request used to send streaming snapshot requests.
 message SnapshotRequest {
+  enum Priority {
+    UNKNOWN = 0;
+    // RECOVERY is used for a Raft-initiated snapshots and for
+    // up-replication snapshots (i.e. when a dead node has been
+    // removed and the range needs to be up-replicated).
+    RECOVERY = 1;
+    // REBALANCE is used for snapshots involved in rebalancing.
+    REBALANCE = 2;
+  }
+
   message Header {
     reserved 1;
 
@@ -123,6 +133,9 @@ message SnapshotRequest {
     // by raft because at that point it is better to queue up the stream
     // than to cancel it.
     optional bool can_decline = 4 [(gogoproto.nullable) = false];
+
+    // The priority of the snapshot.
+    optional Priority priority = 6 [(gogoproto.nullable) = false];
   }
 
   optional Header header = 1;
