@@ -3170,11 +3170,11 @@ type SnapshotStorePool interface {
 }
 
 var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
-	"kv.snapshot.rebalance.rate",
+	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance snapshots",
 	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 2<<20))
 var recoverySnapshotRate = settings.RegisterByteSizeSetting(
-	"kv.snapshot.recovery.rate",
+	"kv.snapshot_recovery.max_rate",
 	"the rate limit (bytes/sec) to use for recovery snapshots",
 	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20))
 

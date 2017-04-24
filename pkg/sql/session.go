@@ -53,7 +53,7 @@ import (
 // all execution because traces are gathered for all transactions even
 // if they are not output.
 var traceTxnThreshold = settings.RegisterDurationSetting(
-	"sql.trace.txn.threshold",
+	"sql.trace.txn.enable_threshold",
 	"duration beyond which all transactions are traced (set to 0 to disable)", 0)
 
 // traceSessionEventLogEnabled can be used to enable the event log
@@ -61,7 +61,7 @@ var traceTxnThreshold = settings.RegisterDurationSetting(
 // non-trivial performance impact and also reveals SQL statements
 // which may be a privacy concern.
 var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
-	"sql.trace.session.eventlog.enabled",
+	"sql.trace.session_eventlog.enabled",
 	"set to true to enable session tracing", false)
 
 // debugTrace7881Enabled causes all SQL transactions to be traced using their
@@ -72,7 +72,7 @@ var debugTrace7881Enabled = envutil.EnvOrDefaultBool("COCKROACH_TRACE_7881", fal
 // logStatementsExecuteEnabled causes the Executor to log executed
 // statements and, if any, resulting errors.
 var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
-	"sql.log.statements.execute.enabled",
+	"sql.trace.log_statement_execute",
 	"set to true to enable logging of executed statements", false)
 
 // span baggage key used for marking a span
