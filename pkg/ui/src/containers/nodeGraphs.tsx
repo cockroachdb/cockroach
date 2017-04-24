@@ -138,7 +138,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     return <div className="section l-columns">
       <div className="chart-group l-columns__left">
         <GraphGroup groupId="node.overview" hide={dashboard !== "overview"}>
-          <LineGraph title="SQL Queries" sources={nodeSources} tooltip={`The average number of SELECT, INSERT, UPDATE, and DELETE statements per second across ${specifier}.`}>
+          <LineGraph title="SQL Queries" sources={nodeSources} tooltip={`The average number of SELECT, INSERT, UPDATE, and DELETE statements per second ${specifier}.`}>
             <Axis>
               <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
               <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
@@ -179,8 +179,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
               }
             </Axis>
           </LineGraph>
-          <LineGraph title="Replicas per Store"
-                    tooltip={`The number of replicas on each store.`}>
+          <LineGraph title="Replicas per Node"
+                    tooltip={`The number of replicas on each node.`}>
             <Axis>
               {
                 _.map(nodeIDs, (nid) =>
@@ -213,13 +213,27 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Memory Usage" sources={nodeSources} tooltip={<div>{`Memory in use ${specifier}:`}<dl>
-            <dt>RSS</dt><dd>Total memory in use by CockroachDB</dd>
-            <dt>Go Allocated</dt><dd>Memory allocated by the Go layer</dd>
-            <dt>Go Total</dt><dd>Total memory managed by the Go layer</dd>
-            <dt>C Allocated</dt><dd>Memory allocated by the C layer</dd>
-            <dt>C Total</dt><dd>Total memory managed by the C layer</dd>
-            </dl></div>}>
+          <LineGraph
+            title="Memory Usage"
+            sources={nodeSources}
+            tooltip={(
+              <div>
+                {`Memory in use ${specifier}:`}
+                <dl>
+                  <dt>RSS</dt>
+                  <dd>Total memory in use by CockroachDB</dd>
+                  <dt>Go Allocated</dt>
+                  <dd>Memory allocated by the Go layer</dd>
+                  <dt>Go Total</dt>
+                  <dd>Total memory managed by the Go layer</dd>
+                  <dt>C Allocated</dt>
+                  <dd>Memory allocated by the C layer</dd>
+                  <dt>C Total</dt>
+                  <dd>Total memory managed by the C layer</dd>
+                </dl>
+              </div>
+            )}
+          >
             <Axis units={ AxisUnits.Bytes }>
               <Metric name="cr.node.sys.rss" title="Total memory (RSS)" />
               <Metric name="cr.node.sys.go.allocbytes" title="Go Allocated" />
@@ -255,6 +269,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             <Axis units={ AxisUnits.Duration }>
               <Metric name="cr.node.sys.cpu.user.ns" title="User CPU Time" nonNegativeRate />
               <Metric name="cr.node.sys.cpu.sys.ns" title="Sys CPU Time" nonNegativeRate />
+              <Metric name="cr.node.sys.gc.pause.ns" title="GC Pause Time" nonNegativeRate />
             </Axis>
           </LineGraph>
 
@@ -267,14 +282,14 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="SQL Byte Traffic" sources={nodeSources} tooltip={`The average amount of SQL client network traffic in bytes per second ${specifier}.`}>
+          <LineGraph title="SQL Byte Traffic" sources={nodeSources} tooltip={`The total amount of SQL client network traffic in bytes per second ${specifier}.`}>
             <Axis units={ AxisUnits.Bytes }>
               <Metric name="cr.node.sql.bytesin" title="Bytes In" nonNegativeRate />
               <Metric name="cr.node.sql.bytesout" title="Bytes Out" nonNegativeRate />
             </Axis>
           </LineGraph>
 
-          <LineGraph title="SQL Queries" sources={nodeSources} tooltip={`The average number of SELECT, INSERT, UPDATE, and DELETE statements per second ${specifier}.`}>
+          <LineGraph title="SQL Queries" sources={nodeSources} tooltip={`The total number of SELECT, INSERT, UPDATE, and DELETE statements per second ${specifier}.`}>
             <Axis>
               <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
               <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
@@ -378,7 +393,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Transactions" sources={nodeSources} tooltip={`The average number of transactions opened, committed, rolled back, or aborted per second ${specifier}.`}>
+          <LineGraph title="Transactions" sources={nodeSources} tooltip={`The total number of transactions opened, committed, rolled back, or aborted per second ${specifier}.`}>
             <Axis>
               <Metric name="cr.node.sql.txn.begin.count" title="Begin" nonNegativeRate />
               <Metric name="cr.node.sql.txn.commit.count" title="Commits" nonNegativeRate />
@@ -387,7 +402,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Schema Changes" sources={nodeSources} tooltip={`The average number of DDL statements per second ${specifier}.`}>
+          <LineGraph title="Schema Changes" sources={nodeSources} tooltip={`The total number of DDL statements per second ${specifier}.`}>
             <Axis>
               <Metric name="cr.node.sql.ddl.count" title="DDL Statements" nonNegativeRate />
             </Axis>
