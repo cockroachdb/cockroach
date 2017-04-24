@@ -1321,9 +1321,8 @@ func (t *logicTest) success(file string) {
 	}
 }
 
-func (t *logicTest) setupAndRunFile(path string, config testClusterConfig) {
+func (t *logicTest) runFile(path string, config testClusterConfig) {
 	defer t.close()
-	t.setup(config.numNodes, config.useFakeSpanResolver)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -1438,9 +1437,15 @@ func TestLogic(t *testing.T) {
 		if len(paths) == 0 {
 			continue
 		}
+		var startupFuncs []func()
 		var cleanupFuncs []func()
 		if cfg.defaultDistSQLMode != "" {
-			cleanupFuncs = append(cleanupFuncs, sql.SetDefaultDistSQLMode(cfg.defaultDistSQLMode))
+			startupFuncs = append(startupFuncs, func() {
+				sql.DistSQLClusterExecMode = settings.TestingEnumSetting(2)
+			})
+			cleanupFuncs = append(cleanupFuncs, func() {
+				sql.DistSQLClusterExecMode = settings.TestingEnumSetting(0)
+			})
 		}
 		// Top-level test: one per test configuration.
 		t.Run(cfg.name, func(t *testing.T) {
@@ -1466,7 +1471,11 @@ func TestLogic(t *testing.T) {
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
-					lt.setupAndRunFile(path, cfg)
+					lt.setup(cfg.numNodes, cfg.useFakeSpanResolver)
+					for _, startupFunc := range startupFuncs {
+						startupFunc()
+					}
+					lt.runFile(path, cfg)
 
 					progress.Lock()
 					defer progress.Unlock()
@@ -1478,12 +1487,12 @@ func TestLogic(t *testing.T) {
 						progress.lastProgress = now
 						lt.outf("--- total progress: %d statements/queries", progress.total)
 					}
+					for _, cleanupFunc := range cleanupFuncs {
+						cleanupFunc()
+					}
 				})
 			}
 		})
-		for _, cleanupFunc := range cleanupFuncs {
-			cleanupFunc()
-		}
 	}
 
 	unsupportedMsg := ""
