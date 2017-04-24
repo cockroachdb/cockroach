@@ -62,6 +62,7 @@ export COCKROACH_SKIP_UPDATE_CHECK=1
 export COCKROACH_CERTS_DIR=/certs/
 
 bin=/%s/cockroach
+echo "TODO(marc): specify --certs-dir=/certs/ once the binary is upgraded"
 $bin start --background --logtostderr &> oldout
 
 echo "Use the reference binary to write a couple rows, then render its output to a file and shut down."
@@ -73,7 +74,7 @@ $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01
 $bin quit && wait # wait will block until all background jobs finish.
 
 bin=/cockroach/cockroach
-$bin start --background --logtostderr &> newout
+$bin start --certs-dir=/certs/ --background --logtostderr &> newout
 echo "Read data written by reference version using new binary"
 $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > new.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
@@ -115,6 +116,7 @@ function finish() {
 trap finish EXIT
 
 export COCKROACH_CERTS_DIR=/certs/
+echo "TODO(marc): specify --certs-dir=/certs/ once the binary is upgraded"
 $bin start --background --logtostderr &> out
 $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
 $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
@@ -146,6 +148,7 @@ function finish() {
 trap finish EXIT
 
 export COCKROACH_CERTS_DIR=/certs/
+echo "TODO(marc): specify --certs-dir=/certs/ once the binary is upgraded"
 $bin start --background --logtostderr &> out
 $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
 $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
