@@ -120,6 +120,8 @@ var varGen = map[string]sessionVar{
 				p.session.DistSQLMode = distSQLOff
 			case parser.ReNormalizeName("on"):
 				p.session.DistSQLMode = distSQLOn
+			case parser.ReNormalizeName("auto"):
+				p.session.DistSQLMode = distSQLAuto
 			case parser.ReNormalizeName("always"):
 				p.session.DistSQLMode = distSQLAlways
 			default:
@@ -141,7 +143,7 @@ var varGen = map[string]sessionVar{
 			return "auto"
 		},
 		Reset: func(p *planner) error {
-			p.session.DistSQLMode = defaultDistSQLMode
+			p.session.DistSQLMode = distSQLExecModeFromInt(distSQLClusterExecMode.Get())
 			return nil
 		},
 	},

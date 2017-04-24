@@ -1440,7 +1440,10 @@ func TestLogic(t *testing.T) {
 		}
 		var cleanupFuncs []func()
 		if cfg.defaultDistSQLMode != "" {
-			cleanupFuncs = append(cleanupFuncs, sql.SetDefaultDistSQLMode(cfg.defaultDistSQLMode))
+			// TODO(DONOTMERGE): how do we run a SET CLUSTER SETTING distsql.mode = on SQL command here?
+			cleanupFuncs = append(cleanupFuncs, func() {
+				// TODO(DONOTMERGE): how we run a SET CLUSTER SETTING distsql.mode = off SQL command here?
+			})
 		}
 		// Top-level test: one per test configuration.
 		t.Run(cfg.name, func(t *testing.T) {
