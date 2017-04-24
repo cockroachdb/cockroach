@@ -286,7 +286,8 @@ func (rq *replicateQueue) processOneChange(
 		if log.V(1) {
 			log.Infof(ctx, "adding replica to %+v due to under-replication", newReplica)
 		}
-		if err := rq.addReplica(ctx, repl, newReplica, desc); err != nil {
+		if err := rq.addReplica(
+			ctx, repl, newReplica, desc, SnapshotRequest_RECOVERY); err != nil {
 			return false, err
 		}
 	case AllocatorRemove:
@@ -415,7 +416,8 @@ func (rq *replicateQueue) processOneChange(
 		if log.V(1) {
 			log.Infof(ctx, "rebalancing to %+v", rebalanceReplica)
 		}
-		if err := rq.addReplica(ctx, repl, rebalanceReplica, desc); err != nil {
+		if err := rq.addReplica(
+			ctx, repl, rebalanceReplica, desc, SnapshotRequest_REBALANCE); err != nil {
 			return false, err
 		}
 	}
@@ -460,8 +462,9 @@ func (rq *replicateQueue) addReplica(
 	repl *Replica,
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
+	priority SnapshotRequest_Priority,
 ) error {
-	return repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, target, desc)
+	return repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority)
 }
 
 func (rq *replicateQueue) removeReplica(

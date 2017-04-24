@@ -32,6 +32,7 @@ import (
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -2608,5 +2609,30 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
+	}
+}
+
+func TestSnapshotRateLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		priority      SnapshotRequest_Priority
+		expectedLimit rate.Limit
+		expectedErr   string
+	}{
+		{SnapshotRequest_UNKNOWN, 0, "unknown snapshot priority"},
+		{SnapshotRequest_RECOVERY, 8 << 20, ""},
+		{SnapshotRequest_REBALANCE, 2 << 20, ""},
+	}
+	for _, c := range testCases {
+		t.Run(c.priority.String(), func(t *testing.T) {
+			limit, err := snapshotRateLimit(c.priority)
+			if !testutils.IsError(err, c.expectedErr) {
+				t.Fatalf("expected \"%s\", but found %v", c.expectedErr, err)
+			}
+			if c.expectedLimit != limit {
+				t.Fatalf("expected %v, but found %v", c.expectedLimit, limit)
+			}
+		})
 	}
 }
