@@ -94,6 +94,9 @@ func (u Updater) Set(key, rawValue, vt string) error {
 			return err
 		}
 		setting.set(d)
+	case *EnumSetting:
+		err := setting.set(rawValue)
+		return err
 	}
 	return nil
 }

@@ -98,10 +98,7 @@ func (s *Server) refreshSettings() {
 			}
 		}
 
-		if err := u.Set(k, v, t); err != nil {
-			log.Warning(ctx, err)
-		}
-		return nil
+		return u.Set(k, v, t)
 	}
 
 	ctx := s.AnnotateCtx(context.Background())

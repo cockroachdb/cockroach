@@ -15,13 +15,16 @@
 package settings
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/pkg/errors"
 )
 
 // Setting implementions wrap a val with atomic access.
@@ -261,6 +264,74 @@ func TestingStringSetting(v string) *StringSetting {
 	return s
 }
 
+// EnumSetting is a StringSetting that restricts the values to be one of the `enumValues`
+type EnumSetting struct {
+	enumValues   map[string]int64
+	defaultValue int64
+	v            int64
+}
+
+func (e *EnumSetting) Get() int64 {
+	return atomic.LoadInt64(&e.v)
+}
+
+func (e *EnumSetting) String() string {
+	return EncodeInt(e.Get())
+}
+
+func (e *EnumSetting) Typ() string {
+	return "e"
+}
+
+func (e *EnumSetting) IsValid(k string) bool {
+	_, ok := e.enumValues[strings.ToLower(k)]
+	return ok
+}
+
+func (e *EnumSetting) set(k string) error {
+	v, ok := e.enumValues[strings.ToLower(k)]
+	if !ok {
+		return errors.Errorf("cannot set cluster setting to value '%s', acceptable values are %s", k, enumValuesToDesc(e.enumValues))
+	}
+	atomic.StoreInt64(&e.v, v)
+	return nil
+}
+
+func (e *EnumSetting) setToDefault() {
+	atomic.StoreInt64(&e.v, e.defaultValue)
+}
+
+func enumValuesToDesc(enumValues map[string]int64) string {
+	var buffer bytes.Buffer
+	buffer.WriteString("[")
+	for k, v := range enumValues {
+		buffer.WriteString(fmt.Sprintf("(%s:%d)", strings.ToLower(k), v))
+	}
+	buffer.WriteString("]")
+	return buffer.String()
+}
+
+// RegisterIntSetting defines a new setting with type int.
+func RegisterEnumSetting(key, desc string, defVal int64, enumValues map[string]int64) *EnumSetting {
+	enumValuesLower := make(map[string]int64)
+	for k, v := range enumValues {
+		enumValuesLower[strings.ToLower(k)] = v
+	}
+	setting := &EnumSetting{
+		defaultValue: defVal,
+		enumValues:   enumValuesLower,
+	}
+	register(key, fmt.Sprintf("%s %s", desc, enumValuesToDesc(enumValues)), setting)
+	return setting
+}
+
+// TestingIntSetting returns a mock, unregistered enum setting for testing.
+func TestingEnumSetting(i int64) *EnumSetting {
+	s := &EnumSetting{defaultValue: i}
+	s.setToDefault()
+	return s
+}
+
 // ByteSizeSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
 // of type "bytesize" is updated.
@@ -324,7 +395,7 @@ func register(key, desc string, s Setting) {
 
 // Value holds the (parsed, typed) value of a setting.
 // raw settings are stored in system.settings as human-readable strings, but are
-// cached interally after parsing in these appropriately typed fields (which is
+// cached internally after parsing in these appropriately typed fields (which is
 // basically a poor-man's union, without boxing).
 type wrappedSetting struct {
 	description string
@@ -349,3 +420,8 @@ func Lookup(name string) (Setting, string, bool) {
 	}
 	return v.setting, v.description, true
 }
+
+var _ Setting = &BoolSetting{}
+var _ Setting = &IntSetting{}
+var _ Setting = &StringSetting{}
+var _ Setting = &EnumSetting{}
