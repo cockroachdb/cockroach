@@ -67,6 +67,10 @@ const (
 	// rangeDebugEndpoint exposes an html page with information about a specific range.
 	rangeDebugEndpoint = "/debug/range"
 
+	// problemRangesDebugEndpoint exposes an html page with a list of all ranges
+	// that are experiencing problems.
+	problemRangesDebugEndpoint = "/debug/problemranges"
+
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
 )
@@ -624,10 +628,8 @@ func (s *statusServer) Ranges(
 		return state
 	}
 
-	// TODO(bram): Add in lease info for a range if it is no longer on a store
-	// but it was present there in the past.
 	constructRangeInfo := func(
-		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID, leaseHistory []roachpb.Lease,
+		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID, leaseHistory []roachpb.Lease, metrics storage.ReplicaMetrics,
 	) serverpb.RangeInfo {
 		return serverpb.RangeInfo{
 			Span: serverpb.PrettySpan{
@@ -639,10 +641,21 @@ func (s *statusServer) Ranges(
 			SourceNodeID:  nodeID,
 			SourceStoreID: storeID,
 			LeaseHistory:  leaseHistory,
+			Problems: serverpb.RangeProblems{
+				Unavailable:          metrics.RangeCounter && metrics.Unavailable,
+				LeaderNotLeaseHolder: metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
+			},
 		}
 	}
 
+	cfg, ok := s.gossip.GetSystemConfig()
+	if !ok {
+		return nil, grpc.Errorf(codes.Internal, "system config not yet available")
+	}
+	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+
 	err = s.stores.VisitStores(func(store *storage.Store) error {
+		timestamp := store.Clock().Now()
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
 
@@ -654,12 +667,14 @@ func (s *statusServer) Ranges(
 					if err != nil {
 						return true, err
 					}
-					output.Ranges = append(output.Ranges, constructRangeInfo(
-						desc,
-						rep,
-						store.Ident.StoreID,
-						rep.GetLeaseHistory(),
-					))
+					output.Ranges = append(output.Ranges,
+						constructRangeInfo(
+							desc,
+							rep,
+							store.Ident.StoreID,
+							rep.GetLeaseHistory(),
+							rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+						))
 					return false, nil
 				})
 			return err
@@ -673,12 +688,14 @@ func (s *statusServer) Ranges(
 				continue
 			}
 			desc := rep.Desc()
-			output.Ranges = append(output.Ranges, constructRangeInfo(
-				*desc,
-				rep,
-				store.Ident.StoreID,
-				rep.GetLeaseHistory(),
-			))
+			output.Ranges = append(output.Ranges,
+				constructRangeInfo(
+					*desc,
+					rep,
+					store.Ident.StoreID,
+					rep.GetLeaseHistory(),
+					rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+				))
 		}
 		return nil
 	})

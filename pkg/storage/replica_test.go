@@ -7379,170 +7379,170 @@ func TestReplicaMetrics(t *testing.T) {
 		desc       roachpb.RangeDescriptor
 		raftStatus *raft.Status
 		liveness   map[roachpb.NodeID]bool
-		expected   replicaMetrics
+		expected   ReplicaMetrics
 	}{
 		// The leader of a 1-replica range is up.
 		{1, 1, desc(1), status(1, progress(2)), live(1),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     false,
-				underreplicated: false,
-				behindCount:     10,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     false,
+				Underreplicated: false,
+				BehindCount:     10,
 			}},
 		// The leader of a 2-replica range is up (only 1 replica present).
 		{2, 1, desc(1), status(1, progress(2)), live(1),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     false,
-				underreplicated: true,
-				behindCount:     10,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     false,
+				Underreplicated: true,
+				BehindCount:     10,
 			}},
 		// The leader of a 2-replica range is up.
 		{2, 1, desc(1, 2), status(1, progress(2)), live(1),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     true,
-				underreplicated: true,
-				behindCount:     10,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     true,
+				Underreplicated: true,
+				BehindCount:     10,
 			}},
 		// Both replicas of a 2-replica range are up to date.
 		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1, 2),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     false,
-				underreplicated: false,
-				behindCount:     20,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     false,
+				Underreplicated: false,
+				BehindCount:     20,
 			}},
 		// Both replicas of a 2-replica range are up to date (local replica is not leader)
 		{2, 2, desc(1, 2), status(2, progress(2, 2)), live(1, 2),
-			replicaMetrics{
-				leader:          false,
-				rangeCounter:    false,
-				unavailable:     false,
-				underreplicated: false,
-				selfBehindCount: 5,
+			ReplicaMetrics{
+				Leader:          false,
+				RangeCounter:    false,
+				Unavailable:     false,
+				Underreplicated: false,
+				SelfBehindCount: 5,
 			}},
 		// Both replicas of a 2-replica range are live, but follower is behind.
 		{2, 1, desc(1, 2), status(1, progress(2, 1)), live(1, 2),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     true,
-				underreplicated: true,
-				behindCount:     21,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     true,
+				Underreplicated: true,
+				BehindCount:     21,
 			}},
 		// Both replicas of a 2-replica range are up to date, but follower is dead.
 		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     true,
-				underreplicated: true,
-				behindCount:     20,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     true,
+				Underreplicated: true,
+				BehindCount:     20,
 			}},
 		// The leader of a 3-replica range is up.
 		{3, 1, desc(1, 2, 3), status(1, progress(1)), live(1),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     true,
-				underreplicated: true,
-				behindCount:     11,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     true,
+				Underreplicated: true,
+				BehindCount:     11,
 			}},
 		// All replicas of a 3-replica range are up to date.
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2, 3),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     false,
-				underreplicated: false,
-				behindCount:     30,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     false,
+				Underreplicated: false,
+				BehindCount:     30,
 			}},
 		// All replicas of a 3-replica range are up to date (match = 0 is
 		// considered up to date).
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 0)), live(1, 2, 3),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     false,
-				underreplicated: false,
-				behindCount:     20,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     false,
+				Underreplicated: false,
+				BehindCount:     20,
 			}},
 		// All replicas of a 3-replica range are live but one replica is behind.
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 1)), live(1, 2, 3),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     false,
-				underreplicated: true,
-				behindCount:     31,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     false,
+				Underreplicated: true,
+				BehindCount:     31,
 			}},
 		// All replicas of a 3-replica range are live but two replicas are behind.
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 1, 1)), live(1, 2, 3),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     true,
-				underreplicated: true,
-				behindCount:     32,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     true,
+				Underreplicated: true,
+				BehindCount:     32,
 			}},
 		// All replicas of a 3-replica range are up to date, but one replica is dead.
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     false,
-				underreplicated: true,
-				behindCount:     30,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     false,
+				Underreplicated: true,
+				BehindCount:     30,
 			}},
 		// All replicas of a 3-replica range are up to date, but two replicas are dead.
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1),
-			replicaMetrics{
-				leader:          true,
-				rangeCounter:    true,
-				unavailable:     true,
-				underreplicated: true,
-				behindCount:     30,
+			ReplicaMetrics{
+				Leader:          true,
+				RangeCounter:    true,
+				Unavailable:     true,
+				Underreplicated: true,
+				BehindCount:     30,
 			}},
 		// Range has no leader, local replica is the range counter.
 		{3, 1, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
-			replicaMetrics{
-				leader:          false,
-				rangeCounter:    true,
-				unavailable:     false,
-				underreplicated: false,
-				selfBehindCount: 15,
+			ReplicaMetrics{
+				Leader:          false,
+				RangeCounter:    true,
+				Unavailable:     false,
+				Underreplicated: false,
+				SelfBehindCount: 15,
 			}},
 		// Range has no leader, local replica is the range counter.
 		{3, 3, desc(3, 2, 1), status(0, progress(2, 2, 2)), live(1, 2, 3),
-			replicaMetrics{
-				leader:          false,
-				rangeCounter:    true,
-				unavailable:     false,
-				underreplicated: false,
-				selfBehindCount: 16,
+			ReplicaMetrics{
+				Leader:          false,
+				RangeCounter:    true,
+				Unavailable:     false,
+				Underreplicated: false,
+				SelfBehindCount: 16,
 			}},
 		// Range has no leader, local replica is not the range counter.
 		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
-			replicaMetrics{
-				leader:          false,
-				rangeCounter:    false,
-				unavailable:     false,
-				underreplicated: false,
-				selfBehindCount: 17,
+			ReplicaMetrics{
+				Leader:          false,
+				RangeCounter:    false,
+				Unavailable:     false,
+				Underreplicated: false,
+				SelfBehindCount: 17,
 			}},
 		// Range has no leader, local replica is not the range counter.
 		{3, 3, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
-			replicaMetrics{
-				leader:          false,
-				rangeCounter:    false,
-				unavailable:     false,
-				underreplicated: false,
-				selfBehindCount: 18,
+			ReplicaMetrics{
+				Leader:          false,
+				RangeCounter:    false,
+				Unavailable:     false,
+				Underreplicated: false,
+				SelfBehindCount: 18,
 			}},
 	}
 	for i, c := range testCases {
@@ -7552,11 +7552,11 @@ func TestReplicaMetrics(t *testing.T) {
 
 			// Alternate between quiescent and non-quiescent replicas to test the
 			// quiescent metric.
-			c.expected.quiescent = i%2 == 0
+			c.expected.Quiescent = i%2 == 0
 			metrics := calcReplicaMetrics(
 				context.Background(), hlc.Timestamp{}, config.SystemConfig{},
 				c.liveness, &c.desc, c.raftStatus, LeaseStatus{},
-				c.storeID, c.expected.quiescent, int64(i+1))
+				c.storeID, c.expected.Quiescent, int64(i+1))
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
 			}

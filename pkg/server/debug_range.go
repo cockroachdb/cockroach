@@ -103,11 +103,12 @@ func (s *statusServer) handleDebugRange(w http.ResponseWriter, r *http.Request) 
 		err    error
 	}
 
-	aliveNodes := len(s.nodeLiveness.GetIsLiveMap())
+	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	aliveNodes := len(isLiveMap)
 	responses := make(chan nodeResponse)
 	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 	defer cancel()
-	for nodeID, alive := range s.nodeLiveness.GetIsLiveMap() {
+	for nodeID, alive := range isLiveMap {
 		if !alive {
 			data.Failures = append(data.Failures, serverpb.RangeInfo{
 				SourceNodeID: nodeID,
