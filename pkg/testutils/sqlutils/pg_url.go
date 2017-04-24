@@ -23,11 +23,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 )
 
 // PGUrl returns a postgres connection url which connects to this server with the given user, and a
@@ -48,7 +48,9 @@ func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.UR
 		t.Fatal(err)
 	}
 
-	tempDir, err := ioutil.TempDir("", strings.Replace(prefix, "/", "_", -1))
+	// TODO(benesch): Audit usage of prefix and replace the following line with
+	// `testutils.TempDir(t)` if prefix can always be `t.Name()`.
+	tempDir, err := ioutil.TempDir("", fileutil.EscapeFilename(prefix))
 	if err != nil {
 		t.Fatal(err)
 	}
