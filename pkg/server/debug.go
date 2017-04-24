@@ -130,6 +130,11 @@ func init() {
         <td><a href="/debug/range?id=1">range</a></td>
       </tr>
       <tr>
+        <td>problem ranges</td>
+        <td><a href="/debug/problemranges">on the cluster</a></td>
+        <td><a href="/debug/problemranges?node_id=1">on a specific node</a></td>
+      </tr>
+      <tr>
         <td>raft</td>
         <td><a href="/_status/raft">raft</a></td>
       </tr>

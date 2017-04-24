@@ -9387,6 +9387,201 @@ export const cockroach = $root.cockroach = (() => {
                 return RaftState;
             })();
 
+            serverpb.RangeProblems = (function() {
+
+                /**
+                 * Properties of a RangeProblems.
+                 * @typedef cockroach.server.serverpb.RangeProblems$Properties
+                 * @type {Object}
+                 * @property {boolean} [unavailable] RangeProblems unavailable.
+                 * @property {boolean} [leader_not_lease_holder] RangeProblems leader_not_lease_holder.
+                 */
+
+                /**
+                 * Constructs a new RangeProblems.
+                 * @exports cockroach.server.serverpb.RangeProblems
+                 * @constructor
+                 * @param {cockroach.server.serverpb.RangeProblems$Properties=} [properties] Properties to set
+                 */
+                function RangeProblems(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * RangeProblems unavailable.
+                 * @type {boolean}
+                 */
+                RangeProblems.prototype.unavailable = false;
+
+                /**
+                 * RangeProblems leader_not_lease_holder.
+                 * @type {boolean}
+                 */
+                RangeProblems.prototype.leader_not_lease_holder = false;
+
+                /**
+                 * Creates a new RangeProblems instance using the specified properties.
+                 * @param {cockroach.server.serverpb.RangeProblems$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.RangeProblems} RangeProblems instance
+                 */
+                RangeProblems.create = function create(properties) {
+                    return new RangeProblems(properties);
+                };
+
+                /**
+                 * Encodes the specified RangeProblems message. Does not implicitly {@link cockroach.server.serverpb.RangeProblems.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.RangeProblems$Properties} message RangeProblems message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                RangeProblems.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.unavailable != null && message.hasOwnProperty("unavailable"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).bool(message.unavailable);
+                    if (message.leader_not_lease_holder != null && message.hasOwnProperty("leader_not_lease_holder"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).bool(message.leader_not_lease_holder);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified RangeProblems message, length delimited. Does not implicitly {@link cockroach.server.serverpb.RangeProblems.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.RangeProblems$Properties} message RangeProblems message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                RangeProblems.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a RangeProblems message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.RangeProblems} RangeProblems
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                RangeProblems.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.RangeProblems();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.unavailable = reader.bool();
+                            break;
+                        case 2:
+                            message.leader_not_lease_holder = reader.bool();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a RangeProblems message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.RangeProblems} RangeProblems
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                RangeProblems.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a RangeProblems message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                RangeProblems.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.unavailable != null && message.hasOwnProperty("unavailable"))
+                        if (typeof message.unavailable !== "boolean")
+                            return "unavailable: boolean expected";
+                    if (message.leader_not_lease_holder != null && message.hasOwnProperty("leader_not_lease_holder"))
+                        if (typeof message.leader_not_lease_holder !== "boolean")
+                            return "leader_not_lease_holder: boolean expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a RangeProblems message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.RangeProblems} RangeProblems
+                 */
+                RangeProblems.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.RangeProblems)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.RangeProblems();
+                    if (object.unavailable != null)
+                        message.unavailable = Boolean(object.unavailable);
+                    if (object.leader_not_lease_holder != null)
+                        message.leader_not_lease_holder = Boolean(object.leader_not_lease_holder);
+                    return message;
+                };
+
+                /**
+                 * Creates a RangeProblems message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.RangeProblems.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.RangeProblems} RangeProblems
+                 */
+                RangeProblems.from = RangeProblems.fromObject;
+
+                /**
+                 * Creates a plain object from a RangeProblems message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.RangeProblems} message RangeProblems
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                RangeProblems.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.unavailable = false;
+                        object.leader_not_lease_holder = false;
+                    }
+                    if (message.unavailable != null && message.hasOwnProperty("unavailable"))
+                        object.unavailable = message.unavailable;
+                    if (message.leader_not_lease_holder != null && message.hasOwnProperty("leader_not_lease_holder"))
+                        object.leader_not_lease_holder = message.leader_not_lease_holder;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this RangeProblems message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                RangeProblems.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this RangeProblems to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                RangeProblems.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return RangeProblems;
+            })();
+
             serverpb.RangeInfo = (function() {
 
                 /**
@@ -9400,6 +9595,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {number} [source_store_id] RangeInfo source_store_id.
                  * @property {string} [error_message] RangeInfo error_message.
                  * @property {Array.<cockroach.roachpb.Lease$Properties>} [lease_history] RangeInfo lease_history.
+                 * @property {cockroach.server.serverpb.RangeProblems$Properties} [problems] RangeInfo problems.
                  */
 
                 /**
@@ -9459,6 +9655,12 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.lease_history = $util.emptyArray;
 
                 /**
+                 * RangeInfo problems.
+                 * @type {(cockroach.server.serverpb.RangeProblems$Properties|null)}
+                 */
+                RangeInfo.prototype.problems = null;
+
+                /**
                  * Creates a new RangeInfo instance using the specified properties.
                  * @param {cockroach.server.serverpb.RangeInfo$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.RangeInfo} RangeInfo instance
@@ -9491,6 +9693,8 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.lease_history != null && message.lease_history.length)
                         for (let i = 0; i < message.lease_history.length; ++i)
                             $root.cockroach.roachpb.Lease.encode(message.lease_history[i], writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
+                    if (message.problems != null && message.hasOwnProperty("problems"))
+                        $root.cockroach.server.serverpb.RangeProblems.encode(message.problems, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
                     return writer;
                 };
 
@@ -9541,6 +9745,9 @@ export const cockroach = $root.cockroach = (() => {
                             if (!(message.lease_history && message.lease_history.length))
                                 message.lease_history = [];
                             message.lease_history.push($root.cockroach.roachpb.Lease.decode(reader, reader.uint32()));
+                            break;
+                        case 9:
+                            message.problems = $root.cockroach.server.serverpb.RangeProblems.decode(reader, reader.uint32());
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -9604,6 +9811,11 @@ export const cockroach = $root.cockroach = (() => {
                                 return "lease_history." + error;
                         }
                     }
+                    if (message.problems != null && message.hasOwnProperty("problems")) {
+                        let error = $root.cockroach.server.serverpb.RangeProblems.verify(message.problems);
+                        if (error)
+                            return "problems." + error;
+                    }
                     return null;
                 };
 
@@ -9647,6 +9859,11 @@ export const cockroach = $root.cockroach = (() => {
                             message.lease_history[i] = $root.cockroach.roachpb.Lease.fromObject(object.lease_history[i]);
                         }
                     }
+                    if (object.problems != null) {
+                        if (typeof object.problems !== "object")
+                            throw TypeError(".cockroach.server.serverpb.RangeInfo.problems: object expected");
+                        message.problems = $root.cockroach.server.serverpb.RangeProblems.fromObject(object.problems);
+                    }
                     return message;
                 };
 
@@ -9678,6 +9895,7 @@ export const cockroach = $root.cockroach = (() => {
                         object.source_node_id = 0;
                         object.source_store_id = 0;
                         object.error_message = "";
+                        object.problems = null;
                     }
                     if (message.span != null && message.hasOwnProperty("span"))
                         object.span = $root.cockroach.server.serverpb.PrettySpan.toObject(message.span, options);
@@ -9696,6 +9914,8 @@ export const cockroach = $root.cockroach = (() => {
                         for (let j = 0; j < message.lease_history.length; ++j)
                             object.lease_history[j] = $root.cockroach.roachpb.Lease.toObject(message.lease_history[j], options);
                     }
+                    if (message.problems != null && message.hasOwnProperty("problems"))
+                        object.problems = $root.cockroach.server.serverpb.RangeProblems.toObject(message.problems, options);
                     return object;
                 };
 
