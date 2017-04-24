@@ -492,6 +492,29 @@ func (*ReadWithinUncertaintyIntervalError) canRestartTransaction() TransactionRe
 	return TransactionRestart_IMMEDIATE
 }
 
+// NewTableFromFutureError creates a new retry error.
+func NewTableFromFutureError(ts, tableTS hlc.Timestamp) *TableFromFutureError {
+	return &TableFromFutureError{
+		Timestamp:      ts,
+		TableTimestamp: tableTS,
+	}
+}
+
+func (e *TableFromFutureError) Error() string {
+	return e.message(nil)
+}
+
+func (e *TableFromFutureError) message(_ *Error) string {
+	return fmt.Sprintf("transaction at time %s encountered table with future timestamp %s", e.Timestamp, e.TableTimestamp)
+}
+
+var _ ErrorDetailInterface = &TableFromFutureError{}
+var _ transactionRestartError = &TableFromFutureError{}
+
+func (*TableFromFutureError) canRestartTransaction() TransactionRestart {
+	return TransactionRestart_IMMEDIATE
+}
+
 func (e *OpRequiresTxnError) Error() string {
 	return e.message(nil)
 }
