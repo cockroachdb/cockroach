@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // PreparedStatement is a SQL statement that has been parsed and the types
@@ -30,7 +31,7 @@ type PreparedStatement struct {
 	Query       string
 	Type        parser.StatementType
 	SQLTypes    parser.PlaceholderTypes
-	Columns     ResultColumns
+	Columns     sqlbase.ResultColumns
 	portalNames map[string]struct{}
 
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.

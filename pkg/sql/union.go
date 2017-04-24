@@ -79,7 +79,7 @@ func (p *planner) UnionClause(
 		if !l.Typ.Equivalent(r.Typ) {
 			return nil, fmt.Errorf("%v types %s and %s cannot be matched", n.Type, l.Typ, r.Typ)
 		}
-		if l.hidden != r.hidden {
+		if l.Hidden != r.Hidden {
 			return nil, fmt.Errorf("%v types cannot be matched", n.Type)
 		}
 	}
@@ -141,8 +141,8 @@ type unionNode struct {
 	debugVals   debugValues
 }
 
-func (n *unionNode) Columns() ResultColumns { return n.left.Columns() }
-func (n *unionNode) Ordering() orderingInfo { return orderingInfo{} }
+func (n *unionNode) Columns() sqlbase.ResultColumns { return n.left.Columns() }
+func (n *unionNode) Ordering() orderingInfo         { return orderingInfo{} }
 
 func (n *unionNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
 	leftReads, leftWrites, err := n.left.Spans(ctx)

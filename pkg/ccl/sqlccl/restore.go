@@ -791,7 +791,7 @@ func Restore(
 
 func restorePlanHook(
 	baseCtx context.Context, stmt parser.Statement, p sql.PlanHookState,
-) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
+) (func() ([]parser.Datums, error), sqlbase.ResultColumns, error) {
 	restore, ok := stmt.(*parser.Restore)
 	if !ok {
 		return nil, nil, nil
@@ -809,7 +809,7 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
-	header := sql.ResultColumns{
+	header := sqlbase.ResultColumns{
 		{Name: "job_id", Typ: parser.TypeInt},
 		{Name: "status", Typ: parser.TypeString},
 		{Name: "fraction_completed", Typ: parser.TypeFloat},

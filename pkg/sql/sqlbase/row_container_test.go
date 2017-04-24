@@ -14,7 +14,7 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"math"
@@ -33,12 +33,12 @@ func TestRowContainer(t *testing.T) {
 	for _, numCols := range []int{1, 2, 3, 5, 10, 15} {
 		for _, numRows := range []int{5, 10, 100} {
 			for _, numPops := range []int{0, 1, 2, numRows / 3, numRows / 2} {
-				resCol := make(ResultColumns, numCols)
-				for i := range resCol {
-					resCol[i] = ResultColumn{Typ: parser.TypeInt}
+				colTypes := make([]parser.Type, numCols)
+				for i := range colTypes {
+					colTypes[i] = parser.TypeInt
 				}
 				m := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
-				rc := NewRowContainer(m.MakeBoundAccount(), resCol, 0)
+				rc := NewRowContainer(m.MakeBoundAccount(), colTypes, 0)
 				row := make(parser.Datums, numCols)
 				for i := 0; i < numRows; i++ {
 					for j := range row {
