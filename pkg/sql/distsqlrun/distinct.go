@@ -26,6 +26,7 @@ import (
 )
 
 type distinct struct {
+	flowCtx      *FlowCtx
 	input        RowSource
 	lastGroupKey sqlbase.EncDatumRow
 	seen         map[string]struct{}
@@ -41,6 +42,7 @@ func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*distinct, error) {
 	d := &distinct{
+		flowCtx:      flowCtx,
 		input:        input,
 		orderedCols:  make(map[uint32]struct{}),
 		distinctCols: make(map[uint32]struct{}),
@@ -144,7 +146,7 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 		return false, nil
 	}
 	for colIdx := range d.orderedCols {
-		res, err := d.lastGroupKey[colIdx].Compare(&d.datumAlloc, &row[colIdx])
+		res, err := d.lastGroupKey[colIdx].Compare(&d.datumAlloc, &d.flowCtx.evalCtx, &row[colIdx])
 		if res != 0 || err != nil {
 			return false, err
 		}

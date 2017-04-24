@@ -27,8 +27,7 @@ import (
 
 // EncDatum represents a datum that is "backed" by an encoding and/or by a
 // parser.Datum. It allows "passing through" a Datum without decoding and
-// reencoding. TODO(radu): It will also allow comparing encoded datums directly
-// (for certain encodings).
+// reencoding.
 type EncDatum struct {
 	Type ColumnType
 
@@ -224,7 +223,9 @@ func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([
 //    -1 if the receiver is less than rhs,
 //    0  if the receiver is equal to rhs,
 //    +1 if the receiver is greater than rhs.
-func (ed *EncDatum) Compare(a *DatumAlloc, rhs *EncDatum) (int, error) {
+func (ed *EncDatum) Compare(
+	a *DatumAlloc, evalCtx *parser.EvalContext, rhs *EncDatum,
+) (int, error) {
 	// TODO(radu): if we have both the Datum and a key encoding available, which
 	// one would be faster to use?
 	if ed.encoding == rhs.encoding && ed.encoded != nil && rhs.encoded != nil {
@@ -241,7 +242,7 @@ func (ed *EncDatum) Compare(a *DatumAlloc, rhs *EncDatum) (int, error) {
 	if err := rhs.EnsureDecoded(a); err != nil {
 		return 0, err
 	}
-	return ed.Datum.Compare(&parser.EvalContext{}, rhs.Datum), nil
+	return ed.Datum.Compare(evalCtx, rhs.Datum), nil
 }
 
 // EncDatumRow is a row of EncDatums.
@@ -295,12 +296,33 @@ func EncDatumRowToDatums(datums parser.Datums, row EncDatumRow, da *DatumAlloc) 
 // equal; for example, rows [1 1 5] and [1 1 6] when compared against ordering
 // {{0, asc}, {1, asc}} (i.e. ordered by first column and then by second
 // column).
-func (r EncDatumRow) Compare(a *DatumAlloc, ordering ColumnOrdering, rhs EncDatumRow) (int, error) {
+func (r EncDatumRow) Compare(
+	a *DatumAlloc, ordering ColumnOrdering, evalCtx *parser.EvalContext, rhs EncDatumRow,
+) (int, error) {
 	for _, c := range ordering {
-		cmp, err := r[c.ColIdx].Compare(a, &rhs[c.ColIdx])
+		cmp, err := r[c.ColIdx].Compare(a, evalCtx, &rhs[c.ColIdx])
 		if err != nil {
 			return 0, err
 		}
+		if cmp != 0 {
+			if c.Direction == encoding.Descending {
+				cmp = -cmp
+			}
+			return cmp, nil
+		}
+	}
+	return 0, nil
+}
+
+// CompareToDatums is a version of Compare which compares against decoded Datums.
+func (r EncDatumRow) CompareToDatums(
+	a *DatumAlloc, ordering ColumnOrdering, evalCtx *parser.EvalContext, rhs parser.Datums,
+) (int, error) {
+	for _, c := range ordering {
+		if err := r[c.ColIdx].EnsureDecoded(a); err != nil {
+			return 0, err
+		}
+		cmp := r[c.ColIdx].Datum.Compare(evalCtx, rhs[c.ColIdx])
 		if cmp != 0 {
 			if c.Direction == encoding.Descending {
 				cmp = -cmp

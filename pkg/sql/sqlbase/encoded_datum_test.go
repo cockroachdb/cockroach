@@ -160,7 +160,8 @@ func checkEncDatumCmp(
 
 	dec2 := EncDatumFromEncoded(v2.Type, enc2, buf2)
 
-	if val, err := dec1.Compare(a, &dec2); err != nil {
+	evalCtx := &parser.EvalContext{}
+	if val, err := dec1.Compare(a, evalCtx, &dec2); err != nil {
 		t.Fatal(err)
 	} else if val != expectedCmp {
 		t.Errorf("comparing %s (%s), %s (%s) resulted in %d, expected %d",
@@ -209,7 +210,7 @@ func TestEncDatumCompare(t *testing.T) {
 		v1 := DatumToEncDatum(typ, d1)
 		v2 := DatumToEncDatum(typ, d2)
 
-		if val, err := v1.Compare(a, &v2); err != nil {
+		if val, err := v1.Compare(a, evalCtx, &v2); err != nil {
 			t.Fatal(err)
 		} else if val != -1 {
 			t.Errorf("compare(1, 2) = %d", val)
@@ -391,8 +392,9 @@ func TestEncDatumRowCompare(t *testing.T) {
 	}
 
 	a := &DatumAlloc{}
+	evalCtx := &parser.EvalContext{}
 	for _, c := range testCases {
-		cmp, err := c.row1.Compare(a, c.ord, c.row2)
+		cmp, err := c.row1.Compare(a, c.ord, evalCtx, c.row2)
 		if err != nil {
 			t.Error(err)
 		} else if cmp != c.cmp {

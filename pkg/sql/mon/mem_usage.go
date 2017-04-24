@@ -459,6 +459,17 @@ func (mm *MemoryMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
+// Clear is an accessor for b.mon.ClearAccount.
+func (b *BoundAccount) Clear(ctx context.Context) {
+	if b.mon == nil {
+		// An account created by MakeStandaloneBudget is disconnected
+		// from any monitor -- "memory out of the aether". This needs not be
+		// closed.
+		return
+	}
+	b.mon.ClearAccount(ctx, &b.MemoryAccount)
+}
+
 // Close is an accessor for b.mon.CloseAccount.
 func (b *BoundAccount) Close(ctx context.Context) {
 	if b.mon == nil {
