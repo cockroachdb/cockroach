@@ -20,7 +20,6 @@ package sql
 import (
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -44,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"strings"
 )
 
 // traceTxnThreshold can be used to log SQL transactions that take
@@ -79,12 +79,12 @@ var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
 // span baggage key used for marking a span
 const keyFor7881Sample = "found#7881"
 
-// distSQLExecMode controls if and when the Executor uses DistSQL.
-type distSQLExecMode int
+// DistSQLExecMode controls if and when the Executor uses DistSQL.
+type DistSQLExecMode int64
 
 const (
 	// distSQLOff means that we never use distSQL.
-	distSQLOff distSQLExecMode = iota
+	distSQLOff DistSQLExecMode = iota
 	// distSQLAuto means that we automatically decide on a case-by-case basis if
 	// we use distSQL.
 	distSQLAuto
@@ -94,7 +94,13 @@ const (
 	distSQLAlways
 )
 
-func distSQLExecModeFromString(val string) distSQLExecMode {
+// DistSQLExecModeFromString converts an int64 into a DistSQLExecMode
+func DistSQLExecModeFromInt(val int64) DistSQLExecMode {
+	return DistSQLExecMode(val)
+}
+
+// DistSQLExecModeFromString converts a string into a DistSQLExecMode
+func DistSQLExecModeFromString(val string) DistSQLExecMode {
 	switch strings.ToUpper(val) {
 	case "OFF":
 		return distSQLOff
@@ -109,10 +115,16 @@ func distSQLExecModeFromString(val string) distSQLExecMode {
 	}
 }
 
-// defaultDistSQLMode controls the default DistSQL mode (see above). It can
-// still be overridden per-session using `SET DIST_SQL = ...`.
-var defaultDistSQLMode = distSQLExecModeFromString(
-	envutil.EnvOrDefaultString("COCKROACH_DISTSQL_MODE", "OFF"),
+// DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
+var DistSQLClusterExecMode = settings.RegisterEnumSetting(
+	"sql.defaults.distsql",
+	"Default distributed SQL execution mode",
+	"Off",
+	map[int64]string{
+		int64(distSQLOff):  "Off",
+		int64(distSQLAuto): "Auto",
+		int64(distSQLOn):   "On",
+	},
 )
 
 // Session contains the state of a SQL client connection.
@@ -134,7 +146,7 @@ type Session struct {
 	DefaultIsolationLevel enginepb.IsolationType
 	// DistSQLMode indicates whether to run queries using the distributed
 	// execution engine.
-	DistSQLMode distSQLExecMode
+	DistSQLMode DistSQLExecMode
 	// Location indicates the current time zone.
 	Location *time.Location
 	// SearchPath is a list of databases that will be searched for a table name
@@ -263,9 +275,13 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
+	distSQLMode := DistSQLExecModeFromInt(DistSQLClusterExecMode.Get())
+	if e.cfg.TestingKnobs.OverrideDistSQLMode != nil {
+		distSQLMode = DistSQLExecModeFromInt(e.cfg.TestingKnobs.OverrideDistSQLMode.Get())
+	}
 	s := &Session{
 		Database:         args.Database,
-		DistSQLMode:      defaultDistSQLMode,
+		DistSQLMode:      distSQLMode,
 		SearchPath:       parser.SearchPath{"pg_catalog"},
 		Location:         time.UTC,
 		User:             args.User,
