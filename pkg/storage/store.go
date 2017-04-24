@@ -3178,6 +3178,17 @@ var recoverySnapshotRate = settings.RegisterByteSizeSetting(
 	"the rate limit (bytes/sec) to use for recovery snapshots",
 	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20))
 
+func snapshotRateLimit(priority SnapshotRequest_Priority) (rate.Limit, error) {
+	switch priority {
+	case SnapshotRequest_RECOVERY:
+		return rate.Limit(recoverySnapshotRate.Get()), nil
+	case SnapshotRequest_REBALANCE:
+		return rate.Limit(rebalanceSnapshotRate.Get()), nil
+	default:
+		return 0, errors.Errorf("unknown snapshot priority: %s", priority)
+	}
+}
+
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
@@ -3227,11 +3238,11 @@ func sendSnapshot(
 
 	// The size of batches to send. This is the granularity of rate limiting.
 	const batchSize = 256 << 10 // 256 KB
-
-	targetRate := rate.Limit(recoverySnapshotRate.Get())
-	if header.CanDecline {
-		targetRate = rate.Limit(rebalanceSnapshotRate.Get())
+	targetRate, err := snapshotRateLimit(header.Priority)
+	if err != nil {
+		return errors.Wrapf(err, "r%d", header.State.Desc.RangeID)
 	}
+
 	// Convert the bytes/sec rate limit to batches/sec.
 	//
 	// TODO(peter): Using bytes/sec for rate limiting seems more natural but has
