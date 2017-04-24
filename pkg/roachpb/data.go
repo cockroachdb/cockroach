@@ -1015,6 +1015,9 @@ func PrepareTransactionForRetry(ctx context.Context, pErr *Error, pri UserPriori
 				pErr.OriginNode, pErr, txn, txn.ObservedTimestamps)
 		}
 		txn.Timestamp.Forward(ts)
+	case *TableFromFutureError:
+		// No need to push the transaction timestamp to the future time since
+		// the hlc has already been updated.
 	case *TransactionPushError:
 		// Increase timestamp if applicable, ensuring that we're just ahead of
 		// the pushee.

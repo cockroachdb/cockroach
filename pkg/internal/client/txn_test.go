@@ -558,6 +558,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 		retry bool // Expect retry?
 	}{
 		{roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}), true},
+		{roachpb.NewTableFromFutureError(hlc.Timestamp{}, hlc.Timestamp{}), true},
 		{&roachpb.TransactionAbortedError{}, true},
 		{&roachpb.TransactionPushError{}, true},
 		{&roachpb.TransactionRetryError{}, true},
