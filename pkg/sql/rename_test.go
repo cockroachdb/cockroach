@@ -240,8 +240,6 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 }
 
 // Test that a txn doing a rename can use the new name immediately.
-// It can also use the old name if it took a lease on it before the rename, for
-// better or worse.
 func TestTxnCanUseNewNameAfterRename(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -256,28 +254,52 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	txn, err := db.Begin()
-	if err != nil {
+	// Make sure we take a lease on the version called "t".
+	if _, err := db.Exec("SELECT * FROM test.t"); err != nil {
 		t.Fatal(err)
 	}
 
-	// Make sure we take a lease on the version called "t".
-	if _, err := txn.Exec("SELECT * FROM test.t"); err != nil {
-		t.Fatal(err)
+	{
+		txn, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := txn.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
+			t.Fatal(err)
+		}
+		// Check that we can use the new name.
+		if _, err := txn.Exec("SELECT * FROM test.t2"); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := txn.Commit(); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, err := txn.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
-		t.Fatal(err)
-	}
-	// Check that we can use the new name.
-	if _, err := txn.Exec("SELECT * FROM test.t2"); err != nil {
-		t.Fatal(err)
-	}
-	// Check that we can also use the old name, since we have a lease on it.
-	if _, err := txn.Exec("SELECT * FROM test.t"); err != nil {
-		t.Fatal(err)
-	}
-	if err := txn.Commit(); err != nil {
-		t.Fatal(err)
+
+	{
+		txn, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := txn.Exec("ALTER TABLE test.t2 RENAME TO test.t"); err != nil {
+			t.Fatal(err)
+		}
+		// Check that we can use the new name.
+		if _, err := txn.Exec("SELECT * FROM test.t"); err != nil {
+			t.Fatal(err)
+		}
+		// Check that we cannot use the old name.
+		if _, err := txn.Exec(`
+		SELECT * FROM test.t2
+		`); !testutils.IsError(err, "table \"test.t2\" does not exist") {
+			t.Fatalf("err = %v", err)
+		}
+		if err := txn.Rollback(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
