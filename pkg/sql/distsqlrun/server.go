@@ -72,7 +72,13 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 type ServerConfig struct {
 	log.AmbientContext
 
-	DB           *client.DB
+	// DB is a handle to the cluster.
+	DB *client.DB
+	// FlowDB is the DB that flows should use for interacting with the database.
+	// This DB has to be set such that it bypasses the local TxnCoordSender. We
+	// want only the TxnCoordSender on the gateway to be involved with requests
+	// performed by DistSQL.
+	FlowDB       *client.DB
 	RPCContext   *rpc.Context
 	Stopper      *stop.Stopper
 	TestingKnobs TestingKnobs
@@ -172,6 +178,7 @@ func (ds *ServerImpl) setupFlow(
 		rpcCtx:         ds.RPCContext,
 		txnProto:       &req.Txn,
 		clientDB:       ds.DB,
+		remoteTxnDB:    ds.FlowDB,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 	}
