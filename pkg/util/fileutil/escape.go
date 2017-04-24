@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,29 +12,16 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Daniel Harrison (daniel.harrison@gmail.com)
+// Author: Nikhil Benesch (nikhil.benesch@gmail.com)
 
-package testutils
+package fileutil
 
-import (
-	"io/ioutil"
-	"os"
-	"testing"
+import "regexp"
 
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
-)
-
-// TempDir creates a directory and a function to clean it up at the end of the
-// test.
-func TempDir(t testing.TB) (string, func()) {
-	dir, err := ioutil.TempDir("", fileutil.EscapeFilename(t.Name()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	cleanup := func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Error(err)
-		}
-	}
-	return dir, cleanup
+// EscapeFilename replaces bad characters in a filename with safe equivalents.
+// The only character disallowed on Unix systems is the path separator "/".
+// Windows is more restrictive; banned characters on Windows are listed here:
+// https://msdn.microsoft.com/en-us/library/windows/desktop/aa365247(v=vs.85).aspx
+func EscapeFilename(s string) string {
+	return regexp.MustCompile(`[<>:"\/|?*\x00-\x1f]`).ReplaceAllString(s, "_")
 }
