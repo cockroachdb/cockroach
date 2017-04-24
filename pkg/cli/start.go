@@ -292,9 +292,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Use the server-specific Insecure flag.
+	// Use the server-specific values for some flags and settings.
 	serverCfg.Insecure = serverInsecure
-	// Default user for servers.
+	serverCfg.SSLCertsDir = serverSSLCertsDir
 	serverCfg.User = security.NodeUser
 
 	signalCh := make(chan os.Signal, 1)
