@@ -45,3 +45,31 @@
   visibility visible
   opacity 1
   transition-duration 0s
+
+.hover-tooltip
+  position relative
+  z-index 1
+
+  &__text
+    visibility hidden
+    position absolute
+    top -10px
+    left 100%
+    width 300px
+    padding 10px
+    border-radius 5px
+    border 1px solid rgba(0, 0, 0, .1)
+    box-shadow 0 0 4px rgba(0, 0, 0, .2)
+    background rgba(255, 255, 255, .98)
+    font-family Lato-Regular
+    text-align left
+    color $light-blue
+
+  &--hovered &__text
+    visibility visible
+
+  dt
+    font-weight bold
+
+  dd
+    padding-left 5px
