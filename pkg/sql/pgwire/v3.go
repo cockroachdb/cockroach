@@ -255,6 +255,10 @@ var statusReportParams = map[string]string{
 	"server_version": sql.PgServerVersion,
 	// The current CockroachDB version string.
 	"crdb_version": build.GetInfo().Short(),
+	// If this parameter is not present, some drivers (including Python's psycopg2)
+	// will add redundant backslash escapes for compatibility with non-standard
+	// backslash handling in older versions of postgres.
+	"standard_conforming_strings": "on",
 }
 
 // handleAuthentication should discuss with the client to arrange
