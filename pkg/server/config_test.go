@@ -114,12 +114,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_TIME_UNTIL_STORE_DEAD"); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Unsetenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL"); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Unsetenv("COCKROACH_RESERVATIONS_ENABLED"); err != nil {
-			t.Fatal(err)
-		}
 		envutil.ClearEnvCache()
 	}
 	defer resetEnvVar()
@@ -168,13 +162,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgExpected.TimeUntilStoreDead = time.Millisecond * 10
-	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "10ms"); err != nil {
-		t.Fatal(err)
-	}
-	cfgExpected.ConsistencyCheckInterval = time.Millisecond * 10
-	if err := os.Setenv("COCKROACH_RESERVATIONS_ENABLED", "false"); err != nil {
-		t.Fatal(err)
-	}
 
 	envutil.ClearEnvCache()
 	cfg.readEnvironmentVariables()
@@ -191,8 +178,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		"COCKROACH_CONSISTENCY_CHECK_INTERVAL",
 		"COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE",
 		"COCKROACH_TIME_UNTIL_STORE_DEAD",
-		"COCKROACH_CONSISTENCY_CHECK_INTERVAL",
-		"COCKROACH_RESERVATIONS_ENABLED",
 	} {
 		t.Run("invalid", func(t *testing.T) {
 			if err := os.Setenv(envVar, "abcd"); err != nil {
