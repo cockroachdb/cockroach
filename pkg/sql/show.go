@@ -183,6 +183,8 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 			d = parser.NewDFloat(parser.DFloat(s.Get()))
 		case *settings.DurationSetting:
 			d = &parser.DInterval{Duration: duration.Duration{Nanos: s.Get().Nanoseconds()}}
+		case *settings.EnumSetting:
+			d = parser.NewDInt(parser.DInt(s.Get()))
 		case *settings.ByteSizeSetting:
 			d = parser.NewDString(s.String())
 		default:

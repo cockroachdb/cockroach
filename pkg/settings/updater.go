@@ -94,6 +94,12 @@ func (u Updater) Set(key, rawValue, vt string) error {
 			return err
 		}
 		setting.set(d)
+	case *EnumSetting:
+		i, err := strconv.Atoi(rawValue)
+		if err != nil {
+			return err
+		}
+		return setting.set(int64(i))
 	}
 	return nil
 }
