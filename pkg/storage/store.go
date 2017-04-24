@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -3178,6 +3179,17 @@ var recoverySnapshotRate = settings.RegisterByteSizeSetting(
 	"the rate limit (bytes/sec) to use for recovery snapshots",
 	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20))
 
+func snapshotRateLimit(priority SnapshotRequest_Priority) (rate.Limit, error) {
+	switch priority {
+	case SnapshotRequest_RECOVERY:
+		return rate.Limit(recoverySnapshotRate.Get()), nil
+	case SnapshotRequest_REBALANCE:
+		return rate.Limit(rebalanceSnapshotRate.Get()), nil
+	default:
+		return 0, errors.Errorf("unknown snapshot priority: %s", priority)
+	}
+}
+
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
@@ -3227,11 +3239,11 @@ func sendSnapshot(
 
 	// The size of batches to send. This is the granularity of rate limiting.
 	const batchSize = 256 << 10 // 256 KB
-
-	targetRate := rate.Limit(recoverySnapshotRate.Get())
-	if header.CanDecline {
-		targetRate = rate.Limit(rebalanceSnapshotRate.Get())
+	targetRate, err := snapshotRateLimit(header.Priority)
+	if err != nil {
+		return errors.Wrapf(err, "r%d", header.State.Desc.RangeID)
 	}
+
 	// Convert the bytes/sec rate limit to batches/sec.
 	//
 	// TODO(peter): Using bytes/sec for rate limiting seems more natural but has
@@ -3321,8 +3333,9 @@ func sendSnapshot(
 	if err := stream.Send(req); err != nil {
 		return err
 	}
-	log.Infof(ctx, "streamed snapshot: kv pairs: %d, log entries: %d, %0.0fms",
-		n, len(logEntries), timeutil.Since(start).Seconds()*1000)
+	log.Infof(ctx, "streamed snapshot: kv pairs: %d, log entries: %d, rate-limit: %s/sec, %0.0fms",
+		n, len(logEntries), humanizeutil.IBytes(int64(targetRate)),
+		timeutil.Since(start).Seconds()*1000)
 
 	resp, err = stream.Recv()
 	if err != nil {

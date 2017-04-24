@@ -3419,6 +3419,16 @@ func (r *Replica) ChangeReplicas(
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 ) error {
+	return r.changeReplicas(ctx, changeType, target, desc, SnapshotRequest_REBALANCE)
+}
+
+func (r *Replica) changeReplicas(
+	ctx context.Context,
+	changeType roachpb.ReplicaChangeType,
+	target roachpb.ReplicationTarget,
+	desc *roachpb.RangeDescriptor,
+	priority SnapshotRequest_Priority,
+) error {
 	repDesc := roachpb.ReplicaDescriptor{
 		NodeID:  target.NodeID,
 		StoreID: target.StoreID,
@@ -3482,7 +3492,7 @@ func (r *Replica) ChangeReplicas(
 		// operation is processed. This is important to allow other ranges to make
 		// progress which might be required for this ChangeReplicas operation to
 		// complete. See #10409.
-		if err := r.sendSnapshot(ctx, repDesc, snapTypePreemptive); err != nil {
+		if err := r.sendSnapshot(ctx, repDesc, snapTypePreemptive, priority); err != nil {
 			return err
 		}
 
@@ -3585,7 +3595,10 @@ func (r *Replica) ChangeReplicas(
 // careful about adding additional calls as generating a snapshot is moderately
 // expensive.
 func (r *Replica) sendSnapshot(
-	ctx context.Context, repDesc roachpb.ReplicaDescriptor, snapType string,
+	ctx context.Context,
+	repDesc roachpb.ReplicaDescriptor,
+	snapType string,
+	priority SnapshotRequest_Priority,
 ) error {
 	snap, err := r.GetSnapshot(ctx, snapType)
 	if err != nil {
@@ -3627,6 +3640,7 @@ func (r *Replica) sendSnapshot(
 		RangeSize: r.GetMVCCStats().Total(),
 		// Recipients can choose to decline preemptive snapshots.
 		CanDecline: snapType == snapTypePreemptive,
+		Priority:   priority,
 	}
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
