@@ -62,13 +62,15 @@ func TestGetCertificateUser(t *testing.T) {
 		t.Error("unexpected success")
 	}
 
-	// len(certs) != len(chains)
-	if _, err := security.GetCertificateUser(makeFakeTLSState([]string{"foo"}, []int{1, 1})); err == nil {
-		t.Error("unexpected success")
-	}
-
 	// Good request: single certificate.
 	if name, err := security.GetCertificateUser(makeFakeTLSState([]string{"foo"}, []int{2})); err != nil {
+		t.Error(err)
+	} else if name != "foo" {
+		t.Errorf("expected name: foo, got: %s", name)
+	}
+
+	// Request with multiple certs, but only one chain (eg: origin certs are client and CA).
+	if name, err := security.GetCertificateUser(makeFakeTLSState([]string{"foo", "CA"}, []int{2})); err != nil {
 		t.Error(err)
 	} else if name != "foo" {
 		t.Errorf("expected name: foo, got: %s", name)
