@@ -1,5 +1,5 @@
 hash: ed1063398b86b5d46f97337f7e816645f275282f96f13b2ceccc91a06c1a3e35
-updated: 2017-04-18T17:02:26.996981026-04:00
+updated: 2017-04-25T02:23:41.796557849Z
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -291,6 +291,8 @@ imports:
   version: fff283ad5116362ca252298cfc9b95828956d85d
 - name: github.com/mitchellh/go-homedir
   version: b8bc1bf767474819792c23f32d8286a45736f1c6
+- name: github.com/mitchellh/reflectwalk
+  version: 417edcfd99a4d472c262e58f22b4bfe97580f03e
 - name: github.com/montanaflynn/stats
   version: 41c34e4914ec3c05d485e564d9028d8861d5d9ad
 - name: github.com/olekukonko/tablewriter

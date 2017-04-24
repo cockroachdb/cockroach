@@ -15,11 +15,14 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -85,16 +88,21 @@ func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	usageReports := int32(0)
-	uuid := ""
+	var uuid, rawReportBody string
 	reported := reportingInfo{}
 
 	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		atomic.AddInt32(&usageReports, 1)
 		uuid = r.URL.Query().Get("uuid")
-		if err := json.NewDecoder(r.Body).Decode(&reported); err != nil {
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
 			t.Fatal(err)
 		}
+		if err := json.NewDecoder(bytes.NewReader(body)).Decode(&reported); err != nil {
+			t.Fatal(err)
+		}
+		rawReportBody = string(body)
 	}))
 	u, err := url.Parse(recorder.URL)
 	if err != nil {
@@ -123,6 +131,12 @@ func TestReportUsage(t *testing.T) {
 	tables, err := ts.collectSchemaInfo(context.TODO())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if actual := len(tables); actual != 1 {
+		t.Fatalf("unexpected table count %d", actual)
+	}
+	if expected, actual := "_", tables[0].Name; expected != actual {
+		t.Fatalf("unexpected table name, expected %q got %q", expected, actual)
 	}
 
 	var expectedUsageReports int32
@@ -181,6 +195,12 @@ func TestReportUsage(t *testing.T) {
 		}
 		return nil
 	})
+
+	for _, redacted := range []string{"foobar", "baz", "somestring"} {
+		if strings.Contains(rawReportBody, redacted) {
+			t.Fatalf("%q should not appear in %q", redacted, rawReportBody)
+		}
+	}
 
 	if expected, actual := len(tables), len(reported.Schema); expected != actual {
 		t.Fatalf("expected %d tables in schema, got %d", expected, actual)

@@ -22,9 +22,11 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"time"
 
+	"github.com/mitchellh/reflectwalk"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -264,8 +266,6 @@ func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 		schema = nil
 	}
 
-	// TODO(dt): scrub schema of strings.
-
 	return reportingInfo{summary, stores, schema}
 }
 
@@ -310,14 +310,27 @@ func (s *Server) collectSchemaInfo(ctx context.Context) ([]sqlbase.TableDescript
 		return nil, err
 	}
 	tables := make([]sqlbase.TableDescriptor, 0, len(rows))
+	redactor := stringRedactor{}
 	for _, row := range rows {
 		var desc sqlbase.Descriptor
 		if err := row.ValueProto(&desc); err != nil {
 			return nil, errors.Wrapf(err, "%s: unable to unmarshal SQL descriptor", row.Key)
 		}
 		if t := desc.GetTable(); t != nil && t.ID > keys.MaxReservedDescID {
+			if err := reflectwalk.Walk(t, redactor); err != nil {
+				panic(err) // stringRedactor never returns a non-nil err
+			}
 			tables = append(tables, *t)
 		}
 	}
 	return tables, nil
+}
+
+type stringRedactor struct{}
+
+func (stringRedactor) Primitive(v reflect.Value) error {
+	if v.Kind() == reflect.String && v.String() != "" {
+		v.Set(reflect.ValueOf("_"))
+	}
+	return nil
 }
