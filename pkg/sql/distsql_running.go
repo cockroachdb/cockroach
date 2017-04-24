@@ -294,7 +294,7 @@ func (r *distSQLReceiver) Push(
 					// itself in non-error cases. Those updates are not necessary if we're
 					// just doing reads. Once DistSQL starts performing writes, we'll need
 					// to perform such updates too.
-					r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, retryErr.PErr)
+					r.txn.UpdateStateOnRetryableErr(r.ctx, retryErr.PErr)
 					// Update the clock with information from the error. On non-DistSQL
 					// code paths, the DistSender does this.
 					// TODO(andrei): We don't propagate clock signals on success cases
