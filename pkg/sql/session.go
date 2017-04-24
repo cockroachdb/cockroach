@@ -20,7 +20,6 @@ package sql
 import (
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -93,25 +92,19 @@ const (
 	distSQLAlways
 )
 
-func distSQLExecModeFromString(val string) distSQLExecMode {
-	switch strings.ToUpper(val) {
-	case "OFF":
-		return distSQLOff
-	case "AUTO":
-		return distSQLAuto
-	case "ON":
-		return distSQLOn
-	case "ALWAYS":
-		return distSQLAlways
-	default:
-		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
-	}
+func distSQLExecModeFromInt(val int64) distSQLExecMode {
+	return distSQLExecMode(val)
 }
 
-// defaultDistSQLMode controls the default DistSQL mode (see above). It can
-// still be overridden per-session using `SET DIST_SQL = ...`.
-var defaultDistSQLMode = distSQLExecModeFromString(
-	envutil.EnvOrDefaultString("COCKROACH_DISTSQL_MODE", "OFF"),
+var distSQLClusterExecMode = settings.RegisterEnumSetting(
+	"sql.defaults.distsql",
+	"Default distributed SQL execution mode",
+	"Off",
+	map[string]int64{
+		"Off":    int64(distSQLOff),
+		"Auto":   int64(distSQLAuto),
+		"On":     int64(distSQLOn),
+	},
 )
 
 // Session contains the state of a SQL client connection.
@@ -262,9 +255,10 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
+
 	s := &Session{
 		Database:         args.Database,
-		DistSQLMode:      defaultDistSQLMode,
+		DistSQLMode:      distSQLExecModeFromInt(distSQLClusterExecMode.Get()),
 		SearchPath:       parser.SearchPath{"pg_catalog"},
 		Location:         time.UTC,
 		User:             args.User,
