@@ -278,6 +278,11 @@ func (p *planner) renameDatabase(
 	b.Put(descKey, descDesc)
 	b.Del(oldKey)
 
+	p.session.leases.addUncommittedDatabase(
+		oldName, descID, true /* dropped */)
+	p.session.leases.addUncommittedDatabase(
+		newName, descID, false /* dropped */)
+
 	if err := p.txn.Run(ctx, b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
 			return onAlreadyExists()

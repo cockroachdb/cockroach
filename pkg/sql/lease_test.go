@@ -110,13 +110,8 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*sql.LeaseState, error) {
-	var lease *sql.LeaseState
-	err := t.kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		lease, err = t.node(nodeID).Acquire(ctx, txn, descID, version)
-		return err
-	})
-	return lease, err
+	leaseMgr := t.node(nodeID)
+	return leaseMgr.Acquire(context.TODO(), descID, version)
 }
 
 func (t *leaseTest) mustAcquire(
@@ -557,13 +552,8 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*sql.LeaseState, error) {
-	var lease *sql.LeaseState
-	err := s.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		lease, err = s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, txn, descID, version)
-		return err
-	})
-	return lease, err
+	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
+	return leaseMgr.Acquire(context.TODO(), descID, version)
 }
 
 // Test that once a table is marked as deleted, a lease's refcount dropping to 0
@@ -776,5 +766,182 @@ SELECT EXISTS(SELECT * FROM t.foo);
 	case <-timeout:
 		t.Fatal("lease from sub-query was not released")
 	case <-fooRelease:
+	}
+}
+
+// Tests that uncommitted database or table names can be used by statements
+// in the same transaction. Also tests that if the transaction doesn't commit
+// the names are discarded and cannot be used by future transactions.
+func TestUncommittedDescriptorUse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	{
+		tx, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`
+CREATE DATABASE d;
+CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`INSERT INTO d.kv (k,v) VALUES ('a', 'b');`); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Check that the names work after commit.
+		if _, err := sqlDB.Exec(`INSERT INTO d.kv (k,v) VALUES ('c', 'd');`); err != nil {
+			t.Fatal(err)
+		}
+
+	}
+
+	// A table rename disallows the use of the old name.
+	{
+		tx, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`
+ALTER TABLE d.kv RENAME TO d.kv2;
+`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`INSERT INTO d.kv2 (k,v) VALUES ('e', 'f');`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`
+		INSERT INTO d.kv (k,v) VALUES ('g', 'h');
+		`); !testutils.IsError(err, "table \"d.kv\" does not exist") {
+			t.Fatal(err)
+		}
+
+		if err := tx.Rollback(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A database rename disallows the use of the old name.
+	{
+		tx, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`
+ALTER DATABASE d RENAME TO dnew;
+`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`INSERT INTO dnew.kv (k,v) VALUES ('e', 'f');`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`
+		INSERT INTO d.kv (k,v) VALUES ('g', 'h');
+		`); !testutils.IsError(err, "table \"d.kv\" does not exist") {
+			t.Fatal(err)
+		}
+
+		if err := tx.Rollback(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The reuse of a name is allowed.
+	{
+		tx, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`
+ALTER DATABASE d RENAME TO dnew;
+CREATE DATABASE d;
+CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+			t.Fatal(err)
+		}
+
+		// Insert an existing row to prove that this d.kv is different
+		// from the previous one.
+		if _, err := tx.Exec(`INSERT INTO d.kv (k,v) VALUES ('a', 'b');`); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Check that on a rollback a database name cannot be used.
+	{
+		tx, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`
+CREATE DATABASE dd;
+CREATE TABLE dd.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`INSERT INTO dd.kv (k,v) VALUES ('a', 'b');`); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := tx.Rollback(); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlDB.Exec(`
+INSERT INTO dd.kv (k,v) VALUES ('c', 'd');
+`); !testutils.IsError(err, "database \"dd\" does not exist") {
+			t.Fatalf("err = %v", err)
+		}
+	}
+
+	// Check that on a rollback a table name cannot be used.
+	{
+		tx, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`
+CREATE TABLE d.kv2 (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := tx.Exec(`INSERT INTO d.kv2 (k,v) VALUES ('a', 'b');`); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := tx.Rollback(); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlDB.Exec(`
+INSERT INTO d.kv2 (k,v) VALUES ('c', 'd');
+`); !testutils.IsError(err, "table \"d.kv2\" does not exist") {
+			t.Fatalf("err = %v", err)
+		}
 	}
 }

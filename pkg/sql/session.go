@@ -478,6 +478,8 @@ func (lc *LeaseCollection) releaseLeases(ctx context.Context) {
 		}
 		lc.leases = nil
 	}
+	lc.uncommittedTables = nil
+	lc.uncommittedDatabases = nil
 }
 
 // setTestingVerifyMetadata sets a callback to be called after the Session
