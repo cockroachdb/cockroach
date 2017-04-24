@@ -18,102 +18,118 @@ package distsqlrun
 
 import (
 	"container/heap"
+	"sort"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // sorterValues is the internal wrapper around the collection of rows added to
 // a sorter strategy, it is at this level that the rows to be sorted are stored.
 type sorterValues struct {
-	rows          sqlbase.EncDatumRows
-	err           error // err can be set by the RowLess function.
-	invertSorting bool  // Inverts the sorting predicate.
-	ordering      sqlbase.ColumnOrdering
-	tmpRow        sqlbase.EncDatumRow // Used to store temporary rows.
-	alloc         sqlbase.DatumAlloc
+	sqlbase.RowContainer
+	types          []sqlbase.ColumnType
+	invertSorting  bool // Inverts the sorting predicate.
+	ordering       sqlbase.ColumnOrdering
+	preallocRow    parser.Datums // Used temporarily.
+	preallocEncRow sqlbase.EncDatumRow
+
+	evalCtx *parser.EvalContext
+
+	datumAlloc sqlbase.DatumAlloc
+	rowAlloc   sqlbase.EncDatumRowAlloc
 }
 
 var _ heap.Interface = &sorterValues{}
 
-// Len is part of heap.Interface and is only meant to be used internally.
-func (sv *sorterValues) Len() int {
-	return len(sv.rows)
+func makeSorterValues(
+	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *parser.EvalContext,
+) sorterValues {
+	acc := evalCtx.Mon.MakeBoundAccount()
+	return sorterValues{
+		RowContainer:   sqlbase.MakeRowContainer(acc, sqlbase.ColTypeInfoFromColTypes(types), 0),
+		types:          types,
+		ordering:       ordering,
+		preallocRow:    make(parser.Datums, len(types)),
+		preallocEncRow: make(sqlbase.EncDatumRow, len(types)),
+		evalCtx:        evalCtx,
+	}
 }
 
 // Less is part of heap.Interface and is only meant to be used internally.
 func (sv *sorterValues) Less(i, j int) bool {
-	ri := sv.rows[i]
-	rj := sv.rows[j]
-
-	return sv.invertSorting != sv.RowLess(ri, rj)
-}
-
-// RowLess reports whether the first row should sort before the second.
-func (sv *sorterValues) RowLess(ri, rj sqlbase.EncDatumRow) bool {
-	cmp, err := ri.Compare(&sv.alloc, sv.ordering, rj)
-	if err != nil {
-		sv.err = err
-		return false
+	cmp := sqlbase.CompareDatums(sv.ordering, sv.evalCtx, sv.At(i), sv.At(j))
+	if sv.invertSorting {
+		cmp = -cmp
 	}
-
 	return cmp < 0
 }
 
-// Swap is part of heap.Interface and is only meant to be used internally.
-func (sv *sorterValues) Swap(i, j int) {
-	sv.rows[i], sv.rows[j] = sv.rows[j], sv.rows[i]
-}
-
-// Pop implements the heap.Interface interface.
-func (sv *sorterValues) Pop() interface{} {
-	idx := len(sv.rows) - 1
-	// Returning a pointer to avoid an allocation when storing the slice in an
-	// interface{}.
-	x := &(sv.rows)[idx]
-	sv.rows = sv.rows[:idx]
-	return x
-}
-
-// Next returns the first row from the heap representation of sorterValues.
-func (sv *sorterValues) NextRow() sqlbase.EncDatumRow {
-	if len(sv.rows) == 0 {
-		return nil
+// EncRow returns the idx-th row as an EncDatumRow. The slice itself is reused
+// so it is only valid until the next call to EncRow.
+func (sv *sorterValues) EncRow(idx int) sqlbase.EncDatumRow {
+	datums := sv.At(idx)
+	for i, d := range datums {
+		sv.preallocEncRow[i] = sqlbase.DatumToEncDatum(sv.types[i], d)
 	}
-
-	x := heap.Pop(sv)
-	return *x.(*sqlbase.EncDatumRow)
+	return sv.preallocEncRow
 }
 
-// Push implements the heap.Interface interface.
-func (sv *sorterValues) Push(x interface{}) {
-	sv.rows = append(sv.rows, sv.tmpRow)
+// AddRow adds a row to the container.
+func (sv *sorterValues) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	if len(row) != len(sv.types) {
+		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(sv.types))
+	}
+	for i := range row {
+		err := row[i].EnsureDecoded(&sv.datumAlloc)
+		if err != nil {
+			return err
+		}
+		sv.preallocRow[i] = row[i].Datum
+	}
+	// Avoid passing slice through interface{} to avoid allocation. We add the row
+	// beforehand and sorterValues.Push does nothing.
+	_, err := sv.RowContainer.AddRow(ctx, sv.preallocRow)
+	return err
 }
 
-// Add pushes the given row into the heap representation
-// of the sorterValues.
-func (sv *sorterValues) PushRow(row sqlbase.EncDatumRow) {
-	// Avoid passing slice through interface{} to avoid allocation.
-	sv.tmpRow = row
-	heap.Push(sv, nil)
+func (sv *sorterValues) Sort() {
+	sv.invertSorting = false
+	sort.Sort(sv)
+}
+
+// Push is part of heap.Interface.
+func (sv *sorterValues) Push(_ interface{}) { panic("unimplemented") }
+
+// Pop is part of heap.Interface.
+func (sv *sorterValues) Pop() interface{} { panic("unimplemented") }
+
+// ReplaceMax replaces the maximum element with the given row, if it is smaller.
+// Assumes InitMaxHeap was called.
+func (sv *sorterValues) ReplaceMax(row sqlbase.EncDatumRow) error {
+	max := sv.At(0)
+	cmp, err := row.CompareToDatums(&sv.datumAlloc, sv.ordering, sv.evalCtx, max)
+	if err != nil {
+		return err
+	}
+	if cmp < 0 {
+		// row is smaller than the max; replace.
+		for i := range row {
+			if err := row[i].EnsureDecoded(&sv.datumAlloc); err != nil {
+				return err
+			}
+			max[i] = row[i].Datum
+		}
+		heap.Fix(sv, 0)
+	}
+	return nil
 }
 
 // Initializes the rows contained within sorterValues as a MaxHeap.
 func (sv *sorterValues) InitMaxHeap() {
 	sv.invertSorting = true
 	heap.Init(sv)
-}
-
-// Initializes the rows contained within sorterValues as a MinHeap.
-func (sv *sorterValues) InitMinHeap() {
-	sv.invertSorting = false
-	heap.Init(sv)
-}
-
-// Sort sorts all values in the sv.rows slice.
-// When re-initialized to a MinHeap it essentially pops all values in the heap,
-// resulting in the inverted ordering being sorted in reverse. Therefore, the
-// slice is ordered correctly in-place.
-func (sv *sorterValues) Sort() error {
-	sv.InitMinHeap()
-	return sv.err
 }

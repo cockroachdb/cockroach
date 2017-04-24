@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -95,12 +96,13 @@ func TestValues(t *testing.T) {
 						t.Fatalf("incorrect number of rows %d, expected %d", len(res), numRows)
 					}
 
+					evalCtx := &parser.EvalContext{}
 					for i := 0; i < numRows; i++ {
 						if len(res[i]) != numCols {
 							t.Fatalf("row %d incorrect length %d, expected %d", i, len(res[i]), numCols)
 						}
 						for j, res := range res[i] {
-							cmp, err := res.Compare(&a, &inRows[i][j])
+							cmp, err := res.Compare(&a, evalCtx, &inRows[i][j])
 							if err != nil {
 								t.Fatal(err)
 							}

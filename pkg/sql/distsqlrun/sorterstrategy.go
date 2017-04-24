@@ -17,8 +17,6 @@
 package distsqlrun
 
 import (
-	"container/heap"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -37,60 +35,6 @@ type sorterStrategy interface {
 	// indicated that no more rows are needed. In any case, the caller is
 	// responsible for draining and closing the producer and the consumer.
 	Execute(context.Context, *sorter) error
-
-	/////////////////////////////////////////////////////////////////////////////
-	// All the methods below are not truly interface methods; they're only called
-	// internally by implementors from Execute(). However, they're grouped and
-	// documented here as they're currently common to all implementations.
-	/////////////////////////////////////////////////////////////////////////////
-
-	// add adds a single element to the strategy.
-	add(sqlbase.EncDatumRow)
-
-	// process sorts all the values that have been currently added to the
-	// strategy. It suffices to call this only once unless you need to sort
-	// batches of rows at a time (as is in the case of possible optimizations
-	// made for partial column ordering matches).
-	process() error
-
-	// peek returns the value of the next element without removing it
-	// from the strategy.
-	//
-	// Illegal to call if new elements have been added to the strategy since
-	// the last call to Sort.
-	peek() sqlbase.EncDatumRow
-
-	// next retrieves the next row whilst removing it from the strategy.
-	// Returns a nil row if there are no more rows.
-	//
-	// Illegal to call if new elements have been added to the strategy since
-	// the last call to Sort.
-	next() sqlbase.EncDatumRow
-}
-
-// All rows for each sorting strategy are added to the wrapped sorterValues.
-type sortStrategyBase struct {
-	sValues *sorterValues
-}
-
-func (ss *sortStrategyBase) add(row sqlbase.EncDatumRow) {
-	ss.sValues.PushRow(row)
-}
-
-func (ss *sortStrategyBase) process() error {
-	return ss.sValues.Sort()
-}
-
-func (ss *sortStrategyBase) peek() sqlbase.EncDatumRow {
-	if len(ss.sValues.rows) == 0 {
-		return nil
-	}
-
-	return ss.sValues.rows[0]
-}
-
-func (ss *sortStrategyBase) next() sqlbase.EncDatumRow {
-	return ss.sValues.NextRow()
 }
 
 // sortAllStrategy reads in all values into the wrapped sValues and
@@ -99,23 +43,23 @@ func (ss *sortStrategyBase) next() sqlbase.EncDatumRow {
 //
 // The strategy is intended to be used when all values need to be sorted.
 type sortAllStrategy struct {
-	sortStrategyBase
+	sValues sorterValues
 }
 
 var _ sorterStrategy = &sortAllStrategy{}
 
-func newSortAllStrategy(sValues *sorterValues) sorterStrategy {
+func newSortAllStrategy(sValues sorterValues) sorterStrategy {
 	return &sortAllStrategy{
-		sortStrategyBase: sortStrategyBase{
-			sValues: sValues,
-		},
+		sValues: sValues,
 	}
 }
 
-// The execution loop for the SortAll strategy is trivial in that it simply
-// loads all rows into memory, runs sort.Sort to sort rows in place following
-// which it sends each row out to the output stream.
+// The execution loop for the SortAll strategy:
+//  - loads all rows into memory;
+//  - runs sort.Sort to sort rows in place;
+//  - sends each row out to the output stream.
 func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
+	defer ss.sValues.Close(ctx)
 	for {
 		row, err := s.input.NextRow()
 		if err != nil {
@@ -124,26 +68,21 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 		if row == nil {
 			break
 		}
-		ss.add(row)
-	}
-
-	err := ss.process()
-	if err != nil {
-		return err
-	}
-
-	for {
-		row := ss.next()
-		if row == nil {
-			return nil
-		}
-
-		// Push the row to the output; stop if they don't need more rows.
-		consumerStatus, err := s.out.emitRow(ctx, row)
-		if err != nil || consumerStatus != NeedMoreRows {
+		if err := ss.sValues.AddRow(ctx, row); err != nil {
 			return err
 		}
 	}
+	ss.sValues.Sort()
+
+	for ss.sValues.Len() > 0 {
+		// Push the row to the output; stop if they don't need more rows.
+		consumerStatus, err := s.out.emitRow(ctx, ss.sValues.EncRow(0))
+		if err != nil || consumerStatus != NeedMoreRows {
+			return err
+		}
+		ss.sValues.PopFirst()
+	}
+	return nil
 }
 
 // sortTopKStrategy creates a max-heap in its wrapped sValues and keeps
@@ -164,28 +103,27 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 // For instance, the top k can be found in linear time, and then this can be
 // sorted in linearithmic time.
 type sortTopKStrategy struct {
-	sortStrategyBase
-	k int64
+	sValues sorterValues
+	k       int64
 }
 
 var _ sorterStrategy = &sortTopKStrategy{}
 
-func newSortTopKStrategy(sValues *sorterValues, k int64) sorterStrategy {
+func newSortTopKStrategy(sValues sorterValues, k int64) sorterStrategy {
 	ss := &sortTopKStrategy{
-		sortStrategyBase: sortStrategyBase{
-			sValues: sValues,
-		},
-		k: k,
+		sValues: sValues,
+		k:       k,
 	}
-	ss.sValues.InitMaxHeap()
 
 	return ss
 }
 
-// The execution loop for the SortTopK strategy is completely identical to that
-// of the SortAll strategy, the key difference comes about in the Push
-// implementation shown below.
+// The execution loop for the SortTopK strategy is similar to that of the
+// SortAll strategy; the difference is that we push rows into a max-heap of size
+// at most K, and only sort those.
 func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
+	defer ss.sValues.Close(ctx)
+	heapCreated := false
 	for {
 		row, err := s.input.NextRow()
 		if err != nil {
@@ -194,64 +132,60 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 		if row == nil {
 			break
 		}
-		ss.add(row)
-	}
 
-	err := ss.process()
-	if err != nil {
-		return err
-	}
-
-	for {
-		row := ss.next()
-		if row == nil {
-			return nil
+		if int64(ss.sValues.Len()) < ss.k {
+			// Accumulate up to k values.
+			err = ss.sValues.AddRow(ctx, row)
+		} else {
+			if !heapCreated {
+				// Arrange the k values into a max-heap.
+				ss.sValues.InitMaxHeap()
+				heapCreated = true
+			}
+			// Replace the max value if the new row is smaller, maintaining the
+			// max-heap.
+			err = ss.sValues.ReplaceMax(row)
 		}
-		// Push the row to the output; stop if they don't need more rows.
-		consumerStatus, err := s.out.emitRow(ctx, row)
-		if err != nil || consumerStatus != NeedMoreRows {
+		if err != nil {
 			return err
 		}
 	}
-}
 
-func (ss *sortTopKStrategy) add(row sqlbase.EncDatumRow) {
-	switch {
-	case int64(ss.sValues.Len()) < ss.k:
-		// The first k values all go into the max-heap.
-		ss.sValues.PushRow(row)
-	case ss.sValues.RowLess(row, ss.peek()):
-		// Once the heap is full, only replace the top
-		// value if a new value is less than it. If so
-		// replace and fix the heap.
-		ss.sValues.rows[0] = row
-		heap.Fix(ss.sValues, 0)
+	ss.sValues.Sort()
+
+	for ss.sValues.Len() > 0 {
+		// Push the row to the output; stop if they don't need more rows.
+		consumerStatus, err := s.out.emitRow(ctx, ss.sValues.EncRow(0))
+		if err != nil || consumerStatus != NeedMoreRows {
+			return err
+		}
+		ss.sValues.PopFirst()
 	}
+	return nil
 }
 
 // If we're scanning an index with a prefix matching an ordering prefix, we only accumulate values
 // for equal fields in this prefix, sort the accumulated chunk and then output.
 type sortChunksStrategy struct {
-	sortStrategyBase
-	alloc sqlbase.DatumAlloc
+	sValues sorterValues
+	alloc   sqlbase.DatumAlloc
 }
 
 var _ sorterStrategy = &sortChunksStrategy{}
 
-func newSortChunksStrategy(sValues *sorterValues) sorterStrategy {
+func newSortChunksStrategy(sValues sorterValues) sorterStrategy {
 	return &sortChunksStrategy{
-		sortStrategyBase: sortStrategyBase{
-			sValues: sValues,
-		},
+		sValues: sValues,
 	}
 }
 
 func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
+	defer ss.sValues.Close(ctx)
 	// pivoted is a helper function that determines if the given row shares the same values for the
 	// first s.matchLen ordering columns with the given pivot.
 	pivoted := func(row, pivot sqlbase.EncDatumRow) (bool, error) {
 		for _, ord := range s.ordering[:s.matchLen] {
-			cmp, err := row[ord.ColIdx].Compare(&ss.alloc, &pivot[ord.ColIdx])
+			cmp, err := row[ord.ColIdx].Compare(&ss.alloc, ss.sValues.evalCtx, &pivot[ord.ColIdx])
 			if err != nil || cmp != 0 {
 				return false, err
 			}
@@ -273,7 +207,9 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 			if log.V(3) {
 				log.Infof(ctx, "pushing row %s", nextRow)
 			}
-			ss.add(nextRow)
+			if err := ss.sValues.AddRow(ctx, nextRow); err != nil {
+				return err
+			}
 
 			nextRow, err = s.input.NextRow()
 			if err != nil {
@@ -292,7 +228,7 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 			}
 
 			// We verify if the nextRow here is infact 'greater' than pivot.
-			if cmp, err := nextRow.Compare(&ss.alloc, s.ordering, pivot); err != nil {
+			if cmp, err := nextRow.Compare(&ss.alloc, s.ordering, ss.sValues.evalCtx, pivot); err != nil {
 				return err
 			} else if cmp < 0 {
 				return errors.Errorf("incorrectly ordered row %s before %s", pivot, nextRow)
@@ -300,27 +236,21 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 			break
 		}
 
-		// Process all the rows that have been pushed onto the buffer.
-		err = ss.process()
-		if err != nil {
-			return err
-		}
+		// Sort the rows that have been pushed onto the buffer.
+		ss.sValues.Sort()
 
 		// Stream out sorted rows in order to row receiver.
-		for {
-			res := ss.next()
-			if res == nil {
-				break
-			}
-
-			consumerStatus, err := s.out.emitRow(ctx, res)
+		for ss.sValues.Len() > 0 {
+			consumerStatus, err := s.out.emitRow(ctx, ss.sValues.EncRow(0))
 			if err != nil || consumerStatus != NeedMoreRows {
 				// We don't need any more rows; clear out ss so to not hold on to that
 				// memory.
 				ss = &sortChunksStrategy{}
 				return err
 			}
+			ss.sValues.PopFirst()
 		}
+		ss.sValues.Clear(ctx)
 
 		if nextRow == nil {
 			// We've reached the end of the table.
