@@ -114,19 +114,19 @@ type Datum interface {
 type Datums []Datum
 
 // Len returns the number of Datum values.
-func (d *Datums) Len() int { return len(*d) }
+func (d Datums) Len() int { return len(d) }
 
 // Reverse reverses the order of the Datum values.
-func (d *Datums) Reverse() {
+func (d Datums) Reverse() {
 	for i, j := 0, d.Len()-1; i < j; i, j = i+1, j-1 {
-		(*d)[i], (*d)[j] = (*d)[j], (*d)[i]
+		d[i], d[j] = d[j], d[i]
 	}
 }
 
 // Format implements the NodeFormatter interface.
-func (d *Datums) Format(buf *bytes.Buffer, f FmtFlags) {
+func (d Datums) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('(')
-	for i, v := range *d {
+	for i, v := range d {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
