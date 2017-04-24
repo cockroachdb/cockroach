@@ -43,6 +43,7 @@ func TestTransactionString(t *testing.T) {
 			Epoch:     2,
 			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 21},
 			Priority:  957356782,
+			Sequence:  15,
 		},
 		Name:          "name",
 		Status:        roachpb.COMMITTED,
@@ -51,7 +52,7 @@ func TestTransactionString(t *testing.T) {
 		MaxTimestamp:  hlc.Timestamp{WallTime: 40, Logical: 41},
 	}
 	expStr := `"name" id=d7aa0f5e key="foo" rw=false pri=44.58039917 iso=SERIALIZABLE stat=COMMITTED ` +
-		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41 wto=false rop=false`
+		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41 wto=false rop=false seq=15`
 
 	if str := txn.String(); str != expStr {
 		t.Errorf("expected txn %s; got %s", expStr, str)
