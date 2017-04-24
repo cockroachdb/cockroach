@@ -853,6 +853,7 @@ func (t *Transaction) Restart(
 	t.UpgradePriority(upgradePriority)
 	t.WriteTooOld = false
 	t.RetryOnPush = false
+	t.Sequence = 0
 }
 
 // Update ratchets priority, timestamp and original timestamp values (among
