@@ -930,9 +930,10 @@ func (t Transaction) String() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s wto=%t rop=%t",
+	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d "+
+		"ts=%s orig=%s max=%s wto=%t rop=%t seq=%d",
 		t.Short(), Key(t.Key), t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
-		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.RetryOnPush)
+		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.RetryOnPush, t.Sequence)
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
