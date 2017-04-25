@@ -597,3 +597,16 @@ Level  Type    Field  Description  Columns        Ordering
 3              table  s@primary
 3              spans  ALL
 3              limit  3
+
+# Verify that impure defaults are evaluated separately on each row
+# (#14352)
+statement ok
+CREATE TABLE impure (x INT); INSERT INTO impure(x) VALUES (1), (2), (3);
+
+statement ok
+ALTER TABLE impure ADD COLUMN a INT DEFAULT unique_rowid();
+
+query I
+SELECT count(distinct a) FROM impure
+----
+3
