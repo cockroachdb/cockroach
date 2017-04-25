@@ -17,14 +17,12 @@
 package distsqlrun
 
 import (
-	"math"
 	"sort"
 	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -282,10 +280,10 @@ func TestAggregator(t *testing.T) {
 		}
 		in := NewRowBuffer(types, c.input, RowBufferArgs{})
 		out := &RowBuffer{}
-
-		monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
+		evalCtx := parser.MakeTestingEvalContext()
+		defer evalCtx.Stop(context.Background())
 		flowCtx := FlowCtx{
-			evalCtx: parser.EvalContext{Mon: &monitor},
+			evalCtx: evalCtx,
 		}
 
 		ag, err := newAggregator(&flowCtx, &ags, in, &PostProcessSpec{}, out)

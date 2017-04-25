@@ -17,10 +17,8 @@
 package distsqlrun
 
 import (
-	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -170,46 +168,48 @@ func TestSorter(t *testing.T) {
 		},
 	}
 
-	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
-	defer monitor.Stop(context.Background())
 	for _, c := range testCases {
-		ss := c.spec
-		types := make([]sqlbase.ColumnType, len(c.input[0]))
-		for i := range types {
-			types[i] = columnTypeInt
-		}
-		in := NewRowBuffer(types, c.input, RowBufferArgs{})
-		out := &RowBuffer{}
-		flowCtx := FlowCtx{
-			evalCtx: parser.EvalContext{Mon: &monitor},
-		}
-
-		s, err := newSorter(&flowCtx, &ss, in, &c.post, out)
-		if err != nil {
-			t.Fatal(err)
-		}
-		s.Run(context.Background(), nil)
-		if !out.ProducerClosed {
-			t.Fatalf("output RowReceiver not closed")
-		}
-
-		var retRows sqlbase.EncDatumRows
-		for {
-			row, meta := out.Next()
-			if !meta.Empty() {
-				t.Fatalf("unexpected metadata: %v", meta)
+		func() {
+			ss := c.spec
+			types := make([]sqlbase.ColumnType, len(c.input[0]))
+			for i := range types {
+				types[i] = columnTypeInt
 			}
-			if row == nil {
-				break
+			in := NewRowBuffer(types, c.input, RowBufferArgs{})
+			out := &RowBuffer{}
+			evalCtx := parser.MakeTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
+			flowCtx := FlowCtx{
+				evalCtx: evalCtx,
 			}
-			retRows = append(retRows, row)
-		}
 
-		expStr := c.expected.String()
-		retStr := retRows.String()
-		if expStr != retStr {
-			t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
-				expStr, retStr)
-		}
+			s, err := newSorter(&flowCtx, &ss, in, &c.post, out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.Run(context.Background(), nil)
+			if !out.ProducerClosed {
+				t.Fatalf("output RowReceiver not closed")
+			}
+
+			var retRows sqlbase.EncDatumRows
+			for {
+				row, meta := out.Next()
+				if !meta.Empty() {
+					t.Fatalf("unexpected metadata: %v", meta)
+				}
+				if row == nil {
+					break
+				}
+				retRows = append(retRows, row)
+			}
+
+			expStr := c.expected.String()
+			retStr := retRows.String()
+			if expStr != retStr {
+				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
+					expStr, retStr)
+			}
+		}()
 	}
 }
