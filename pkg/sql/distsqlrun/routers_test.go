@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -37,7 +38,8 @@ func TestHashRouter(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
-	evalCtx := &parser.EvalContext{}
+	evalCtx := parser.NewTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
@@ -140,7 +142,8 @@ func TestMirrorRouter(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
-	evalCtx := &parser.EvalContext{}
+	evalCtx := parser.NewTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
 
 	vals := sqlbase.RandEncDatumSlices(rng, numCols, numRows)
 

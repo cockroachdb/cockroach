@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -49,7 +51,8 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {
-		evalCtx := &parser.EvalContext{}
+		evalCtx := parser.NewTestingEvalContext()
+		defer evalCtx.Stop(context.Background())
 		sel := makeSelectNode(t)
 		expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 		group := &groupNode{planner: p}

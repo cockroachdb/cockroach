@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 type testVarContainer []Datum
@@ -92,7 +94,8 @@ func TestIndexedVars(t *testing.T) {
 	if !typ.Equivalent(TypeInt) {
 		t.Errorf("invalid expression type %s", typ)
 	}
-	evalCtx := &EvalContext{}
+	evalCtx := NewTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
 	d, err := typedExpr.Eval(evalCtx)
 	if err != nil {
 		t.Fatal(err)
