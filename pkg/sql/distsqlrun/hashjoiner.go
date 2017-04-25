@@ -18,9 +18,11 @@ package distsqlrun
 
 import (
 	"sync"
+	"unsafe"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -30,9 +32,13 @@ import (
 // columns specified by the join constraints), 'seen' is used to determine if
 // there was a matching row in the opposite stream.
 type bucket struct {
-	rows sqlbase.EncDatumRows
+	// rows hold indices of rows into the hashJoiner's rows container.
+	rows []int
 	seen []bool
 }
+
+const sizeOfBucket = int64(unsafe.Sizeof(bucket{}))
+const sizeOfRowIdx = int64(unsafe.Sizeof(int(0)))
 
 // HashJoiner performs hash join, it has two input streams and one output.
 //
@@ -44,6 +50,14 @@ type bucket struct {
 // left row (i+1).
 type hashJoiner struct {
 	joinerBase
+
+	// All the rows are stored in this container. The buckets reference these rows
+	// by index.
+	rows rowContainer
+
+	// bucketsAcc is the memory account for the buckets. The datums themselves are
+	// all in the rows container.
+	bucketsAcc mon.BoundAccount
 
 	leftEqCols  columns
 	rightEqCols columns
@@ -65,6 +79,8 @@ func newHashJoiner(
 		leftEqCols:  columns(spec.LeftEqColumns),
 		rightEqCols: columns(spec.RightEqColumns),
 		buckets:     make(map[string]bucket),
+		bucketsAcc:  flowCtx.evalCtx.Mon.MakeBoundAccount(),
+		rows:        makeRowContainer(nil /* ordering */, rightSource.Types(), &flowCtx.evalCtx),
 	}
 
 	if err := h.joinerBase.init(
@@ -75,6 +91,9 @@ func newHashJoiner(
 
 	return h, nil
 }
+
+const sizeOfBoolSlice = unsafe.Sizeof([]bool{})
+const sizeOfBool = unsafe.Sizeof(true)
 
 // Run is part of the processor interface.
 func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
@@ -91,11 +110,14 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting hash joiner run")
 	}
 
+	defer h.bucketsAcc.Close(ctx)
+
 	moreRows, err := h.buildPhase(ctx)
 	if err != nil {
 		// We got an error. We still want to drain. Any error encountered while
 		// draining will be swallowed, and the original error will be forwarded to
 		// the consumer.
+		log.Infof(ctx, "build phase error %s", err)
 		DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
 		return
 	}
@@ -105,6 +127,12 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	if h.joinType == rightOuter || h.joinType == fullOuter {
 		for k, bucket := range h.buckets {
+			if err := h.bucketsAcc.Grow(
+				ctx, int64(sizeOfBoolSlice+uintptr(len(bucket.rows))*sizeOfBool),
+			); err != nil {
+				DrainAndClose(ctx, h.out.output, err, h.leftSource)
+				return
+			}
 			bucket.seen = make([]bool, len(bucket.rows))
 			h.buckets[k] = bucket
 		}
@@ -116,6 +144,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// draining will be swallowed, and the original error will be forwarded to
 		// the consumer. Note that rightSource has already been drained at this
 		// point.
+		log.Infof(ctx, "probe phase error %s", err)
 		DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource)
 	}
 }
@@ -150,7 +179,9 @@ func (h *hashJoiner) buildPhase(ctx context.Context) (bool, error) {
 			return true, nil
 		}
 
-		encoded, hasNull, err := encodeColumnsOfRow(&h.datumAlloc, scratch, rrow, h.rightEqCols, false /* encodeNull */)
+		encoded, hasNull, err := encodeColumnsOfRow(
+			&h.datumAlloc, scratch, rrow, h.rightEqCols, false, /* encodeNull */
+		)
 		if err != nil {
 			return false, err
 		}
@@ -175,8 +206,25 @@ func (h *hashJoiner) buildPhase(ctx context.Context) (bool, error) {
 			continue
 		}
 
-		b := h.buckets[string(encoded)]
-		b.rows = append(b.rows, rrow)
+		rowIdx := h.rows.Len()
+		if err := h.rows.AddRow(ctx, rrow); err != nil {
+			return false, err
+		}
+
+		b, bucketExists := h.buckets[string(encoded)]
+
+		// Acount for the memory usage of rowIdx, map key, and bucket.
+		usage := sizeOfRowIdx
+		if !bucketExists {
+			usage += int64(len(encoded))
+			usage += sizeOfBucket
+		}
+
+		if err := h.bucketsAcc.Grow(ctx, usage); err != nil {
+			return false, err
+		}
+
+		b.rows = append(b.rows, rowIdx)
 		h.buckets[string(encoded)] = b
 	}
 }
@@ -245,32 +293,36 @@ func (h *hashJoiner) probePhase(ctx context.Context) (bool, error) {
 			continue
 		}
 
-		b, ok := h.buckets[string(encoded)]
-		if !ok {
-			if moreRowsNeeded, _, err := renderAndEmit(lrow, nil); !moreRowsNeeded || err != nil {
-				return moreRowsNeeded, err
+		if b, ok := h.buckets[string(encoded)]; ok {
+			for i, rrowIdx := range b.rows {
+				rrow := h.rows.EncRow(rrowIdx)
+				moreRowsNeeded, failedOnCond, err := renderAndEmit(lrow, rrow)
+
+				if !moreRowsNeeded || err != nil {
+					return moreRowsNeeded, err
+				}
+				if !failedOnCond && (h.joinType == rightOuter || h.joinType == fullOuter) {
+					b.seen[i] = true
+				}
 			}
 		} else {
-			for idx, rrow := range b.rows {
-				if moreRowsNeeded, failedOnCond, err := renderAndEmit(lrow, rrow); !moreRowsNeeded || err != nil {
+			if h.joinType == leftOuter || h.joinType == fullOuter {
+				if moreRowsNeeded, _, err := renderAndEmit(lrow, nil); !moreRowsNeeded || err != nil {
 					return moreRowsNeeded, err
-				} else if !failedOnCond && (h.joinType == rightOuter || h.joinType == fullOuter) {
-					b.seen[idx] = true
 				}
 			}
 		}
 	}
 
-	if h.joinType == innerJoin || h.joinType == leftOuter {
-		return true, nil
-	}
-
-	// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
-	for _, b := range h.buckets {
-		for idx, rrow := range b.rows {
-			if !b.seen[idx] {
-				if moreRowsNeeded, _, err := renderAndEmit(nil, rrow); !moreRowsNeeded || err != nil {
-					return moreRowsNeeded, err
+	if h.joinType == rightOuter || h.joinType == fullOuter {
+		// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
+		for _, b := range h.buckets {
+			for i, seen := range b.seen {
+				if !seen {
+					rrow := h.rows.EncRow(b.rows[i])
+					if moreRowsNeeded, _, err := renderAndEmit(nil, rrow); !moreRowsNeeded || err != nil {
+						return moreRowsNeeded, err
+					}
 				}
 			}
 		}
