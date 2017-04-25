@@ -237,3 +237,6 @@ SELECT y FROM (SELECT y FROM NumToStr ORDER BY y LIMIT 5) AS a WHERE y <> 2
 3
 4
 5
+
+statement error memory budget exceeded
+SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str
