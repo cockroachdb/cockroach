@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
@@ -40,6 +41,8 @@ const (
 	// BackupDescriptorName is the file name used for serialized
 	// BackupDescriptor protos.
 	BackupDescriptorName = "BACKUP"
+	// BackupFormatInitialVersion is the first version of backup and its files.
+	BackupFormatInitialVersion uint32 = 0
 )
 
 // exportStorageFromURI returns an ExportStorage for the given URI.
@@ -437,12 +440,15 @@ func Backup(
 	files, dataSize := mu.files, mu.dataSize // No more concurrency, so this is safe.
 
 	desc := BackupDescriptor{
-		StartTime:   startTime,
-		EndTime:     endTime,
-		Descriptors: sqlDescs,
-		Spans:       spans,
-		Files:       files,
-		DataSize:    dataSize,
+		StartTime:     startTime,
+		EndTime:       endTime,
+		Descriptors:   sqlDescs,
+		Spans:         spans,
+		Files:         files,
+		DataSize:      dataSize,
+		FormatVersion: BackupFormatInitialVersion,
+		BuildInfo:     build.GetInfo(),
+		NodeID:        p.ExecCfg().NodeID.Get(),
 	}
 	sort.Sort(backupFileDescriptors(desc.Files))
 
