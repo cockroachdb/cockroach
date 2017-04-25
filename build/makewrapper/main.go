@@ -69,9 +69,7 @@ var releaseConfigurations = map[string]releaseConfiguration{
 	},
 }
 
-var xtoolsBase = "/x-tools"
-
-var defaultTarget = "build"
+const xtoolsBase = "/x-tools"
 
 type releaseConfiguration struct {
 	os      string
@@ -81,47 +79,25 @@ type releaseConfiguration struct {
 	suffix  string
 }
 
-func (rc *releaseConfiguration) linkflags() string {
-	if len(rc.ldflags) > 0 {
-		return fmt.Sprintf("-extldflags \"%s\"", strings.Join(rc.ldflags, " "))
-	}
-	return ""
-}
-
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
 
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.Errorf("usage: go run release.go RELEASE-CONFIGURATION [MAKE-GOALS...]")
+		return errors.Errorf("usage: %s RELEASE-CONFIGURATION [MAKE-GOALS...]", os.Args[0])
 	}
 
 	rc, ok := releaseConfigurations[os.Args[1]]
 	if !ok {
-		return errors.Errorf("fatal: unknown release configuration '%s'", os.Args[1])
-	}
-
-	sysroot := filepath.Join(xtoolsBase, rc.triple, "bin")
-	if _, err := os.Stat(sysroot); os.IsNotExist(err) {
-		return errors.Errorf("fatal: sysroot '%s' does not exist", sysroot)
-	}
-	if err := prependDirToPath(sysroot); err != nil {
-		return err
-	}
-
-	if err := setEnv("CGO_ENABLED", "1"); err != nil {
-		return err
+		return errors.Errorf("unknown release configuration '%s'", os.Args[1])
 	}
 
 	args := []string{
 		"TYPE=" + "release",
-		"LINKFLAGS=" + rc.linkflags(),
-		"GOFLAGS=" + os.Getenv("GOFLAGS"),
-		"TAGS=" + os.Getenv("TAGS"),
-		"SUFFIX=" + rc.suffix + os.Getenv("SUFFIX"),
 		"TARGET_TRIPLE=" + rc.triple,
 		"XCMAKE_SYSTEM_NAME=" + strings.Title(rc.os),
 		"XGOOS=" + rc.os,
@@ -129,31 +105,49 @@ func run() error {
 		"XCC=" + fmt.Sprintf("%s-cc", rc.triple),
 		"XCXX=" + fmt.Sprintf("%s-c++", rc.triple),
 	}
-	args = append(args, os.Args[2:]...)
-	return runMake(args)
-}
-
-func prependDirToPath(dir string) error {
-	paths := append([]string{dir}, filepath.SplitList(os.Getenv("PATH"))...)
-	return setEnv("PATH", strings.Join(paths, string(filepath.ListSeparator)))
-}
-
-func setEnv(key, value string) error {
-	fmt.Fprintf(os.Stderr, "%s=%s\n", key, shellEscape(value))
-	return os.Setenv(key, value)
-}
-
-func runMake(args []string) error {
-	printArgs := []string{"make"}
-	for _, arg := range args {
-		printArgs = append(printArgs, shellEscape(arg))
+	if len(rc.ldflags) > 0 {
+		args = append(args, fmt.Sprintf("-extldflags \"%s\"", strings.Join(rc.ldflags, " ")))
 	}
-	fmt.Fprintln(os.Stderr, strings.Join(printArgs, " "))
+	for _, name := range []string{"GOFLAGS", "TAGS", "SUFFIX"} {
+		if value, ok := os.LookupEnv(name); ok {
+			args = append(args, name+"="+value)
+		}
+	}
+	args = append(args, os.Args[2:]...)
 
-	command := exec.Command("make", args...)
-	command.Stdout = os.Stdout
-	command.Stderr = os.Stderr
-	return command.Run()
+	cmd := exec.Command("make", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	const gopathKey = "GOPATH"
+	if gopath, ok := os.LookupEnv(gopathKey); ok {
+		cmd.Env = append(cmd.Env, gopathKey+"="+gopath)
+	}
+	cmd.Env = append(cmd.Env, "CGO_ENABLED=1")
+
+	{
+		sysroot := filepath.Join(xtoolsBase, rc.triple, "bin")
+		if _, err := os.Stat(sysroot); err != nil {
+			return errors.Wrapf(err, "os.Stat(%s)", sysroot)
+		}
+		const pathKey = "PATH"
+		newPaths := []string{sysroot}
+		if pathList, ok := os.LookupEnv(pathKey); ok {
+			newPaths = append(newPaths, filepath.SplitList(pathList)...)
+		}
+		newPathList := strings.Join(newPaths, string(filepath.ListSeparator))
+		cmd.Env = append(cmd.Env, pathKey+"="+newPathList)
+	}
+
+	var printCmd []string
+	for _, env := range cmd.Env {
+		printCmd = append(printCmd, shellEscape(env))
+	}
+	for _, arg := range cmd.Args {
+		printCmd = append(printCmd, shellEscape(arg))
+	}
+	fmt.Fprintln(os.Stderr, strings.Join(printCmd, " "))
+	return cmd.Run()
 }
 
 func shellEscape(s string) string {

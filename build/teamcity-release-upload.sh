@@ -39,7 +39,7 @@ done
 build/push-docker-deploy.sh
 mv build/deploy/cockroach cockroach
 aws configure set region us-east-1
-build/builder.sh go run build/release.go darwin build
+build/builder.sh go run build/makewrapper/*.go darwin build
 # TODO(tamird, #14673): make CCL compile on Windows.
-build/builder.sh go run build/release.go windows buildoss
+build/builder.sh go run build/makewrapper/*.go windows buildoss
 eval $push

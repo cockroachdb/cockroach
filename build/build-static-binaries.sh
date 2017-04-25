@@ -7,11 +7,11 @@ archive=$1
 
 source "$(dirname "${0}")"/build-common.sh
 
-time go run build/release.go linux-gnu build
-time go run build/release.go linux-musl build
+time go run build/makewrapper/*.go linux-gnu build
+time go run build/makewrapper/*.go linux-musl build
 # Build test binaries. Note that the acceptance binary will not be included in
 # the archive, but is instead uploaded directly by push-aws.sh.
-TAGS="${TAGS-} acceptance" time go run build/release.go linux-gnu testbuild 
+TAGS="${TAGS-} acceptance" time go run build/makewrapper/*.go linux-gnu testbuild
 
 # We don't check all test binaries, but one from each invocation.
 check_static "cockroach${SUFFIX-}"
