@@ -1,5 +1,5 @@
-hash: ed1063398b86b5d46f97337f7e816645f275282f96f13b2ceccc91a06c1a3e35
-updated: 2017-04-25T02:23:41.796557849Z
+hash: 04cc0a18094bdfa1396e60ffa89c8dac83d14844245254335c81bcb3afb6ca01
+updated: 2017-04-25T13:31:41.976821966-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -13,7 +13,7 @@ imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
 - name: github.com/Azure/azure-sdk-for-go
-  version: 088007b3b08cc02b27f2eadfdcd870958460ce7e
+  version: 8dd1f3ff407c300cff0a4bfedd969111ca5a7903
   subpackages:
   - storage
 - name: github.com/Azure/go-ansiterm
@@ -71,7 +71,7 @@ imports:
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/docker/distribution
-  version: c3e06c6069653bf72034ed907d6749d3928fdacb
+  version: e85ef3c019a2809b3397771d385581ee09fc7649
   subpackages:
   - digestset
   - reference
@@ -173,7 +173,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: de33c46a823d3f723514fc5333b75ef2e937b7df
+  version: e8d46665e050742f457a58088b1e6b794b2ae966
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -181,7 +181,7 @@ imports:
   subpackages:
   - query
 - name: github.com/google/pprof
-  version: 813536d15e1777e55ba62a8644ccb355ab5db409
+  version: 1047541c199cf408b1892b277297296895acd4db
   subpackages:
   - driver
   - internal/binutils
@@ -236,7 +236,7 @@ imports:
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
-  version: 0a22c00b113343382aaf6d35c84574fc7357a100
+  version: 45076de666938f451972e097cc450db32882dfec
   subpackages:
   - collectorpb
   - lightstep_thrift
@@ -337,7 +337,7 @@ imports:
 - name: github.com/satori/go.uuid
   version: 5bf94b69c6b68ee1b541973bb8e1144db23a194b
 - name: github.com/shurcooL/sanitized_anchor_name
-  version: 1dba4b3954bc059efc3991ec364f9f9a35f597d2
+  version: 79c90efaf01eddc01945af5bc1797859189b830b
 - name: github.com/Sirupsen/logrus
   version: 10f801ebc38b33738c9d17d50860f484a0988ff5
 - name: github.com/spf13/cobra
@@ -349,7 +349,7 @@ imports:
 - name: github.com/StackExchange/wmi
   version: ea383cf3ba6ec950874b8486cd72356d007c768f
 - name: github.com/tebeka/go2xunit
-  version: ca9f945db336cbce0d742a84282c53d6a4a70a21
+  version: 3d745e6f4de3e1e94034d7cfb3cc0c543b080b49
   subpackages:
   - lib
 - name: github.com/VividCortex/ewma
@@ -382,7 +382,7 @@ imports:
   - jws
   - jwt
 - name: golang.org/x/sync
-  version: 5a06fca2c336a4b2b2fcb45702e8c47621b2aa2c
+  version: de49d9dcd27d4f764488181bea099dfe6179bcf0
   subpackages:
   - errgroup
   - singleflight
@@ -392,7 +392,7 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: f4b4367115ec2de254587813edaa901bc1c723a8
+  version: a9a820217f98f7c8a207ec1e45a874e1fe12c478
   subpackages:
   - collate
   - internal/colltab
@@ -402,11 +402,11 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/time
-  version: f51c12702a4d776e4c1fa9b0fabab841babae631
+  version: 8be79e1e0910c292df4e79c241bb7e8f7e725959
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 663269851cdddc898f963782f74ea574bcd5c814
+  version: 75e5ff36f363f6a84a3dce209446774ff2d13076
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -429,7 +429,7 @@ imports:
   - imports
   - refactor/importgraph
 - name: google.golang.org/api
-  version: 0b0f5a5147930d092abd132cf09fafa23e8c3942
+  version: fbbaff1827317122a8a0e1b24de25df8417ce87b
   subpackages:
   - gensupport
   - googleapi
@@ -478,7 +478,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 - name: honnef.co/go/tools
-  version: 42d503dcc02471f4716bffd62f4b8f8656797dc1
+  version: f637af825144df9db357bdbe921707f4a535f316
   subpackages:
   - callgraph
   - callgraph/static

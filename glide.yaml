@@ -17,6 +17,11 @@ import:
 - package: google.golang.org/grpc
   version: ded79a3531af2dd320eed5b2fd138f23fb2e3f59
   repo: https://github.com/andreimatei/grpc-go
+# https://github.com/lightstep/lightstep-tracer-go/pull/73 removed support for
+# basictracer.Delegator. Revisit when
+# https://github.com/cockroachdb/cockroach/issues/9806 is fixed.
+- package: github.com/lightstep/lightstep-tracer-go
+  version: 45076de666938f451972e097cc450db32882dfec
 # We pin glide itself to prevent changes to glide's dependency resolution
 # algorithm from modifying our dependencies unexpectedly.
 - package: github.com/Masterminds/glide
