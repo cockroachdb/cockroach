@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var (
@@ -1736,6 +1737,26 @@ type EvalContext struct {
 	collationEnv CollationEnvironment
 
 	Mon *mon.MemoryMonitor
+}
+
+// MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
+func MakeTestingEvalContext() EvalContext {
+	ctx := EvalContext{}
+	monitor := mon.MakeMonitor(
+		"test-monitor",
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+	)
+	monitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	ctx.Mon = &monitor
+	ctx.Ctx = context.Background
+	now := timeutil.Now()
+	ctx.SetTxnTimestamp(now)
+	ctx.SetStmtTimestamp(now)
+	ctx.SetClusterTimestamp(hlc.Timestamp{WallTime: now.Unix()})
+	return ctx
 }
 
 // GetStmtTimestamp retrieves the current statement timestamp as per

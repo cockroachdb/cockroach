@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -52,7 +53,10 @@ func Load(
 	}
 
 	parse := parser.Parser{}
+	curTime := time.Unix(0, ts.WallTime).UTC()
 	evalCtx := parser.EvalContext{}
+	evalCtx.SetTxnTimestamp(curTime)
+	evalCtx.SetStmtTimestamp(curTime)
 
 	conf, err := storageccl.ExportStorageConfFromURI(uri)
 	if err != nil {
@@ -144,7 +148,7 @@ func Load(
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here.
 			var txn *client.Txn
-			desc, err := sql.MakeTableDesc(ctx, txn, sql.NilVirtualTabler, nil, s, dbDesc.ID, 0 /* table ID */, privs, affected, dbDesc.Name)
+			desc, err := sql.MakeTableDesc(ctx, txn, sql.NilVirtualTabler, nil, s, dbDesc.ID, 0 /* table ID */, privs, affected, dbDesc.Name, &evalCtx)
 			if err != nil {
 				return BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}
