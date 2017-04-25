@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	rotateInterval = 5 * time.Minute
-	decayFactor    = 0.8
+	replStatsRotateInterval = 5 * time.Minute
+	decayFactor             = 0.8
 )
 
 type localityOracle func(roachpb.NodeID) string
@@ -43,7 +43,7 @@ type replicaStats struct {
 	// We use a set of time windows in order to age out old stats without having
 	// to do hard resets. The `requests` array is a circular buffer of the last
 	// N windows of stats. We rotate through the circular buffer every so often
-	// as determined by `rotateInterval`.
+	// as determined by `replStatsRotateInterval`.
 	//
 	// We could alternatively use a forward decay approach here, but it would
 	// require more memory than this slightly less precise windowing method:
@@ -80,7 +80,7 @@ func (rs *replicaStats) record(nodeID roachpb.NodeID) {
 }
 
 func (rs *replicaStats) maybeRotateLocked(now time.Time) {
-	if now.Sub(rs.mu.lastRotate) >= rotateInterval {
+	if now.Sub(rs.mu.lastRotate) >= replStatsRotateInterval {
 		rs.rotateLocked()
 		rs.mu.lastRotate = now
 	}
@@ -103,7 +103,7 @@ func (rs *replicaStats) getRequestCounts() (perLocalityCounts, time.Duration) {
 
 	// Use the fraction of time since the last rotation as a smoothing factor to
 	// avoid jarring changes in request count immediately before/after a rotation.
-	fractionOfRotation := float64(now.Sub(rs.mu.lastRotate)) / float64(rotateInterval)
+	fractionOfRotation := float64(now.Sub(rs.mu.lastRotate)) / float64(replStatsRotateInterval)
 
 	counts := make(perLocalityCounts)
 	for i := range rs.mu.requests {
