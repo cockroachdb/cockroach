@@ -76,7 +76,7 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting sorter run")
 	}
 
-	sv := makeSorterValues(s.ordering, s.rawInput.Types(), &s.flowCtx.evalCtx)
+	sv := makeRowContainer(s.ordering, s.rawInput.Types(), &s.flowCtx.evalCtx)
 	// Construct the optimal sorterStrategy.
 	var ss sorterStrategy
 	if s.matchLen == 0 {
