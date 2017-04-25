@@ -336,6 +336,9 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 // See #2198.
 func (ba BatchRequest) String() string {
 	var str []string
+	if !ba.Timestamp.Equal(hlc.ZeroTimestamp) {
+		str = append(str, fmt.Sprintf("[timestamp: %s]", ba.Timestamp))
+	}
 	if ba.Txn != nil {
 		str = append(str, fmt.Sprintf("[txn: %s]", ba.Txn.Short()))
 	}
