@@ -211,7 +211,7 @@ func (p *planner) makeIndexJoin(
 	return node, indexScan
 }
 
-func (n *indexJoinNode) Columns() ResultColumns {
+func (n *indexJoinNode) Columns() sqlbase.ResultColumns {
 	return n.table.Columns()
 }
 

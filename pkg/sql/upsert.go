@@ -111,8 +111,12 @@ func (p *planner) makeUpsertHelper(
 		}
 	}
 
-	sourceInfo := newSourceInfoForSingleTable(*tn, makeResultColumns(tableDesc.Columns))
-	excludedSourceInfo := newSourceInfoForSingleTable(upsertExcludedTable, makeResultColumns(insertCols))
+	sourceInfo := newSourceInfoForSingleTable(
+		*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.Columns),
+	)
+	excludedSourceInfo := newSourceInfoForSingleTable(
+		upsertExcludedTable, sqlbase.ResultColumnsFromColDescs(insertCols),
+	)
 
 	helper := &upsertHelper{
 		p:                  p,

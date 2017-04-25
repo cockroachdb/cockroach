@@ -118,7 +118,7 @@ func (n *createDatabaseNode) Start(ctx context.Context) error {
 
 func (*createDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
 func (*createDatabaseNode) Close(context.Context)              {}
-func (*createDatabaseNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*createDatabaseNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
 func (*createDatabaseNode) Ordering() orderingInfo             { return orderingInfo{} }
 func (*createDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
 func (*createDatabaseNode) DebugValues() debugValues           { return debugValues{} }
@@ -236,7 +236,7 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 
 func (*createIndexNode) Next(context.Context) (bool, error) { return false, nil }
 func (*createIndexNode) Close(context.Context)              {}
-func (*createIndexNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*createIndexNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
 func (*createIndexNode) Ordering() orderingInfo             { return orderingInfo{} }
 func (*createIndexNode) Values() parser.Datums              { return parser.Datums{} }
 func (*createIndexNode) DebugValues() debugValues           { return debugValues{} }
@@ -343,7 +343,7 @@ func (n *createUserNode) Start(ctx context.Context) error {
 
 func (*createUserNode) Next(context.Context) (bool, error) { return false, nil }
 func (*createUserNode) Close(context.Context)              {}
-func (*createUserNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*createUserNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
 func (*createUserNode) Ordering() orderingInfo             { return orderingInfo{} }
 func (*createUserNode) Values() parser.Datums              { return parser.Datums{} }
 func (*createUserNode) DebugValues() debugValues           { return debugValues{} }
@@ -523,7 +523,7 @@ func (n *createViewNode) Close(ctx context.Context) {
 }
 
 func (*createViewNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createViewNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*createViewNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
 func (*createViewNode) Ordering() orderingInfo             { return orderingInfo{} }
 func (*createViewNode) Values() parser.Datums              { return parser.Datums{} }
 func (*createViewNode) DebugValues() debugValues           { return debugValues{} }
@@ -758,7 +758,7 @@ func (n *createTableNode) Close(ctx context.Context) {
 }
 
 func (*createTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createTableNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*createTableNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
 func (*createTableNode) Ordering() orderingInfo             { return orderingInfo{} }
 func (*createTableNode) Values() parser.Datums              { return parser.Datums{} }
 func (*createTableNode) DebugValues() debugValues           { return debugValues{} }
@@ -1154,7 +1154,7 @@ func (n *createViewNode) makeViewTableDesc(
 	p *parser.CreateView,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
-	resultColumns []ResultColumn,
+	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) (sqlbase.TableDescriptor, error) {
@@ -1195,7 +1195,7 @@ func (n *createViewNode) makeViewTableDesc(
 func makeTableDescIfAs(
 	p *parser.CreateTable,
 	parentID, id sqlbase.ID,
-	resultColumns []ResultColumn,
+	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
 ) (desc sqlbase.TableDescriptor, err error) {
 	desc = sqlbase.TableDescriptor{

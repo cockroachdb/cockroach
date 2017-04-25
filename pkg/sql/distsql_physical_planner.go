@@ -546,7 +546,7 @@ func (dsp *distSQLPlanner) convertOrdering(
 
 // createTableReaders generates a plan consisting of table reader processors,
 // one for each node that has spans that we are reading.
-// overrideResultColumns is optional.
+// overridesResultColumns is optional.
 func (dsp *distSQLPlanner) createTableReaders(
 	planCtx *planningCtx, n *scanNode, overrideResultColumns []uint32,
 ) (physicalPlan, error) {
@@ -1273,7 +1273,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	//  - the columns on the right side (numRightCols)
 	joinCol := 0
 	for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
-		if !n.columns[joinCol].omitted {
+		if !n.columns[joinCol].Omitted {
 			// TODO(radu): for full outer joins, this will be more tricky: we would
 			// need an output column that outputs either the left or the right
 			// equality column, whichever is not NULL.
@@ -1282,13 +1282,13 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		joinCol++
 	}
 	for i := 0; i < n.pred.numLeftCols; i++ {
-		if !n.columns[joinCol].omitted {
+		if !n.columns[joinCol].Omitted {
 			joinToStreamColMap[joinCol] = addOutCol(uint32(leftPlan.planToStreamColMap[i]))
 		}
 		joinCol++
 	}
 	for i := 0; i < n.pred.numRightCols; i++ {
-		if !n.columns[joinCol].omitted {
+		if !n.columns[joinCol].Omitted {
 			joinToStreamColMap[joinCol] = addOutCol(
 				uint32(rightPlan.planToStreamColMap[i] + len(leftTypes)),
 			)

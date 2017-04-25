@@ -186,13 +186,13 @@ func (p *planner) groupBy(
 	// Replace the render expressions in the scanNode with expressions that
 	// compute only the arguments to the aggregate expressions.
 	newRenders := make([]parser.TypedExpr, len(group.funcs))
-	newColumns := make(ResultColumns, len(group.funcs))
+	newColumns := make(sqlbase.ResultColumns, len(group.funcs))
 	for i, f := range group.funcs {
 		// Note: we do not need to normalize the expressions again because
 		// they were normalized by renderNode's initFrom() before we
 		// extracted aggregation functions above.
 		newRenders[i] = f.arg
-		newColumns[i] = ResultColumn{
+		newColumns[i] = sqlbase.ResultColumn{
 			Name: f.arg.String(),
 			Typ:  f.arg.ResolvedType(),
 		}
@@ -289,7 +289,7 @@ type groupNode struct {
 	explain explainMode
 }
 
-func (n *groupNode) Columns() ResultColumns {
+func (n *groupNode) Columns() sqlbase.ResultColumns {
 	return n.values.Columns()
 }
 
@@ -408,9 +408,8 @@ func (n *groupNode) computeAggregates(ctx context.Context) error {
 	}
 
 	// Render the results.
-	n.values.rows = NewRowContainer(
-		n.planner.session.TxnState.makeBoundAccount(),
-		n.values.Columns(), len(n.buckets),
+	n.values.rows = sqlbase.NewRowContainer(
+		n.planner.session.TxnState.makeBoundAccount(), n.values.Columns(), len(n.buckets),
 	)
 	row := make(parser.Datums, len(n.render))
 	for k := range n.buckets {

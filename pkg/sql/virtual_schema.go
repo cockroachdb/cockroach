@@ -101,10 +101,12 @@ type virtualTableEntry struct {
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
 // where we can't guarantee it will be Close()d in case of error.
-func (e virtualTableEntry) getPlanInfo(ctx context.Context) (ResultColumns, nodeConstructor) {
-	var columns ResultColumns
+func (e virtualTableEntry) getPlanInfo(
+	ctx context.Context,
+) (sqlbase.ResultColumns, nodeConstructor) {
+	var columns sqlbase.ResultColumns
 	for _, col := range e.desc.Columns {
-		columns = append(columns, ResultColumn{
+		columns = append(columns, sqlbase.ResultColumn{
 			Name: col.Name,
 			Typ:  col.Type.ToDatumType(),
 		})

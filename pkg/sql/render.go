@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -57,7 +58,7 @@ type renderNode struct {
 	// will add extra renderNode renders for the aggregation sources.
 	// windowNode also adds additional renders for the window functions.
 	render  []parser.TypedExpr
-	columns ResultColumns
+	columns sqlbase.ResultColumns
 
 	// A piece of metadata to indicate whether a star expression was expanded
 	// during rendering.
@@ -95,7 +96,7 @@ type renderNode struct {
 	noCopy util.NoCopy
 }
 
-func (s *renderNode) Columns() ResultColumns {
+func (s *renderNode) Columns() sqlbase.ResultColumns {
 	return s.columns
 }
 
@@ -386,7 +387,7 @@ func extractSetReturningFunction(exprs []parser.TypedExpr) *parser.FuncExpr {
 // render expression that points at the new data source.
 func (s *renderNode) transformToCrossJoin(
 	ctx context.Context, e *parser.FuncExpr, desiredType parser.Type,
-) (columns ResultColumns, exprs []parser.TypedExpr, hasStar bool, err error) {
+) (columns sqlbase.ResultColumns, exprs []parser.TypedExpr, hasStar bool, err error) {
 	src, err := s.planner.getDataSource(ctx, e, nil, publicColumns)
 	if err != nil {
 		return nil, nil, false, err
@@ -460,7 +461,7 @@ func getRenderColName(target parser.SelectExpr) string {
 
 // appendRenderColumn adds a new render expression at the end of the current list.
 // The expression must be normalized already.
-func (s *renderNode) addRenderColumn(expr parser.TypedExpr, col ResultColumn) {
+func (s *renderNode) addRenderColumn(expr parser.TypedExpr, col sqlbase.ResultColumn) {
 	s.render = append(s.render, expr)
 	s.columns = append(s.columns, col)
 }
@@ -468,7 +469,7 @@ func (s *renderNode) addRenderColumn(expr parser.TypedExpr, col ResultColumn) {
 // resetRenderColumns resets all the render expressions. This is used e.g. by
 // aggregation and windowing (see group.go / window.go). The method also
 // asserts that both the render and columns array have the same size.
-func (s *renderNode) resetRenderColumns(exprs []parser.TypedExpr, cols ResultColumns) {
+func (s *renderNode) resetRenderColumns(exprs []parser.TypedExpr, cols sqlbase.ResultColumns) {
 	if len(exprs) != len(cols) {
 		panic(fmt.Sprintf("resetRenderColumns used with arrays of different sizes: %d != %d", len(exprs), len(cols)))
 	}

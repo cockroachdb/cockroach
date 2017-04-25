@@ -459,7 +459,7 @@ func Backup(
 
 func backupPlanHook(
 	baseCtx context.Context, stmt parser.Statement, p sql.PlanHookState,
-) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
+) (func() ([]parser.Datums, error), sqlbase.ResultColumns, error) {
 	backup, ok := stmt.(*parser.Backup)
 	if !ok {
 		return nil, nil, nil
@@ -480,7 +480,7 @@ func backupPlanHook(
 		return nil, nil, err
 	}
 
-	header := sql.ResultColumns{
+	header := sqlbase.ResultColumns{
 		{Name: "job_id", Typ: parser.TypeInt},
 		{Name: "status", Typ: parser.TypeString},
 		{Name: "fraction_completed", Typ: parser.TypeFloat},

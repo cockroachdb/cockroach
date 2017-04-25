@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // delayedNode wraps a planNode in cases where the planNode
@@ -28,7 +29,7 @@ import (
 // SQL prepare) for resource tracking purposes.
 type delayedNode struct {
 	name        string
-	columns     ResultColumns
+	columns     sqlbase.ResultColumns
 	constructor nodeConstructor
 	plan        planNode
 }
@@ -42,7 +43,7 @@ func (d *delayedNode) Close(ctx context.Context) {
 	}
 }
 
-func (d *delayedNode) Columns() ResultColumns                 { return d.columns }
+func (d *delayedNode) Columns() sqlbase.ResultColumns         { return d.columns }
 func (d *delayedNode) Ordering() orderingInfo                 { return orderingInfo{} }
 func (d *delayedNode) MarkDebug(_ explainMode)                {}
 func (d *delayedNode) Start(ctx context.Context) error        { return d.plan.Start(ctx) }

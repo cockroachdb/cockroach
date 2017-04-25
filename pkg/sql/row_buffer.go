@@ -18,6 +18,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // RowBuffer is a buffer for rows of DTuples. Rows must be added using
@@ -29,7 +30,7 @@ import (
 // under the constraints imposed by Next() and Values() under the planNode
 // interface.
 type RowBuffer struct {
-	*RowContainer
+	*sqlbase.RowContainer
 	output parser.Datums
 }
 

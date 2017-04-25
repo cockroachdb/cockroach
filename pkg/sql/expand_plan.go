@@ -330,7 +330,7 @@ func expandRenderNode(
 
 		foundNonTrivialRender := false
 		for i, e := range r.render {
-			if r.columns[i].omitted {
+			if r.columns[i].Omitted {
 				continue
 			}
 			if iv, ok := e.(*parser.IndexedVar); ok && i < len(sourceCols) &&

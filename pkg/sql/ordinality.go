@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // ordinalityNode represents a node that adds an "ordinality" column
@@ -41,7 +42,7 @@ import (
 type ordinalityNode struct {
 	source   planNode
 	ordering orderingInfo
-	columns  ResultColumns
+	columns  sqlbase.ResultColumns
 	row      parser.Datums
 	curCnt   int64
 }
@@ -58,10 +59,10 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	}
 
 	// Allocate an extra column for the ordinality values.
-	res.columns = make(ResultColumns, len(srcColumns)+1)
+	res.columns = make(sqlbase.ResultColumns, len(srcColumns)+1)
 	copy(res.columns, srcColumns)
 	newColIdx := len(res.columns) - 1
-	res.columns[newColIdx] = ResultColumn{
+	res.columns[newColIdx] = sqlbase.ResultColumn{
 		Name: "ordinality",
 		Typ:  parser.TypeInt,
 	}
@@ -101,7 +102,7 @@ func (o *ordinalityNode) Ordering() orderingInfo          { return o.ordering }
 func (o *ordinalityNode) Values() parser.Datums           { return o.row }
 func (o *ordinalityNode) DebugValues() debugValues        { return o.source.DebugValues() }
 func (o *ordinalityNode) MarkDebug(mode explainMode)      { o.source.MarkDebug(mode) }
-func (o *ordinalityNode) Columns() ResultColumns          { return o.columns }
+func (o *ordinalityNode) Columns() sqlbase.ResultColumns  { return o.columns }
 func (o *ordinalityNode) Start(ctx context.Context) error { return o.source.Start(ctx) }
 func (o *ordinalityNode) Close(ctx context.Context)       { o.source.Close(ctx) }
 

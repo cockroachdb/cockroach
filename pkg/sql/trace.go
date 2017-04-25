@@ -52,7 +52,7 @@ type explainTraceNode struct {
 	tracingCtx        context.Context
 }
 
-var traceColumns = append(ResultColumns{
+var traceColumns = append(sqlbase.ResultColumns{
 	{Name: "Cumulative Time", Typ: parser.TypeString},
 	{Name: "Duration", Typ: parser.TypeString},
 	{Name: "Span Pos", Typ: parser.TypeInt},
@@ -62,7 +62,7 @@ var traceColumns = append(ResultColumns{
 
 // Internally, the explainTraceNode also returns a timestamp column which is
 // used during sorting.
-var traceColumnsWithTS = append(traceColumns, ResultColumn{
+var traceColumnsWithTS = append(traceColumns, sqlbase.ResultColumn{
 	Name: "Timestamp", Typ: parser.TypeTimestamp,
 })
 
@@ -231,10 +231,10 @@ func (n *explainTraceNode) Values() parser.Datums {
 	return n.rows[0]
 }
 
-func (*explainTraceNode) Columns() ResultColumns   { return traceColumnsWithTS }
-func (*explainTraceNode) Ordering() orderingInfo   { return orderingInfo{} }
-func (*explainTraceNode) MarkDebug(_ explainMode)  {}
-func (*explainTraceNode) DebugValues() debugValues { return debugValues{} }
+func (*explainTraceNode) Columns() sqlbase.ResultColumns { return traceColumnsWithTS }
+func (*explainTraceNode) Ordering() orderingInfo         { return orderingInfo{} }
+func (*explainTraceNode) MarkDebug(_ explainMode)        {}
+func (*explainTraceNode) DebugValues() debugValues       { return debugValues{} }
 
 func (n *explainTraceNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
 	return n.plan.Spans(ctx)

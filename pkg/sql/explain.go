@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type explainMode int
@@ -241,14 +242,14 @@ type explainDebugNode struct {
 }
 
 // Columns for explainDebug mode.
-var debugColumns = ResultColumns{
+var debugColumns = sqlbase.ResultColumns{
 	{Name: "RowIdx", Typ: parser.TypeInt},
 	{Name: "Key", Typ: parser.TypeString},
 	{Name: "Value", Typ: parser.TypeString},
 	{Name: "Disposition", Typ: parser.TypeString},
 }
 
-func (*explainDebugNode) Columns() ResultColumns                   { return debugColumns }
+func (*explainDebugNode) Columns() sqlbase.ResultColumns           { return debugColumns }
 func (*explainDebugNode) Ordering() orderingInfo                   { return orderingInfo{} }
 func (n *explainDebugNode) Start(ctx context.Context) error        { return n.plan.Start(ctx) }
 func (n *explainDebugNode) Next(ctx context.Context) (bool, error) { return n.plan.Next(ctx) }
@@ -302,13 +303,13 @@ func (*explainDistSQLNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) 
 	panic("unimplemented")
 }
 
-var explainDistSQLColumns = ResultColumns{
+var explainDistSQLColumns = sqlbase.ResultColumns{
 	{Name: "Automatic", Typ: parser.TypeBool},
 	{Name: "URL", Typ: parser.TypeString},
 	{Name: "JSON", Typ: parser.TypeString},
 }
 
-func (*explainDistSQLNode) Columns() ResultColumns { return explainDistSQLColumns }
+func (*explainDistSQLNode) Columns() sqlbase.ResultColumns { return explainDistSQLColumns }
 
 func (n *explainDistSQLNode) Start(ctx context.Context) error {
 	// Trigger limit propagation.
