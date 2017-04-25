@@ -363,6 +363,25 @@ func (a Allocator) RebalanceTarget(
 		a.storePool.deterministic,
 	)
 
+	// We're going to add another replica to the range which will change the
+	// quorum size. Verify that the number of existing candidates is sufficient
+	// to meet the new quorum. Note that "existingCandidates" only contains
+	// replicas on live nodes while "existing" contains all of the replicas for a
+	// range. For a range configured for 3 replicas, this will disable
+	// rebalancing if one of the replicas is on a down node. Instead, we'll have
+	// to wait for the down node to be declared dead and go through the dead-node
+	// removal dance: remove dead replica, add new replica.
+	//
+	// NB: The len(existing) > 1 check allows rebalancing of ranges with only a
+	// single replica. This is a corner case which could happen in practice and
+	// also affects tests.
+	newQuorum := computeQuorum(len(existing) + 1)
+	if len(existing) > 1 && len(existingCandidates) < newQuorum {
+		// Don't rebalance as we won't be able to make quorum after the rebalance
+		// until the new replica has been caught up.
+		return nil, nil
+	}
+
 	// No need to rebalance.
 	if len(existingCandidates) == 0 {
 		return nil, nil

@@ -661,6 +661,87 @@ func TestAllocatorRebalance(t *testing.T) {
 	}
 }
 
+func TestAllocatorRebalanceDeadNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, _, sp, a, _ := createTestAllocator( /* deterministic */ false)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	mockStorePool(sp,
+		[]roachpb.StoreID{1, 2, 3, 4, 5, 6},
+		[]roachpb.StoreID{7, 8},
+		nil)
+
+	ranges := func(rangeCount int32) roachpb.StoreCapacity {
+		return roachpb.StoreCapacity{
+			Capacity:   1000,
+			Available:  1000,
+			RangeCount: rangeCount,
+		}
+	}
+
+	sp.detailsMu.Lock()
+	sp.getStoreDetailLocked(1).desc.Capacity = ranges(100)
+	sp.getStoreDetailLocked(2).desc.Capacity = ranges(100)
+	sp.getStoreDetailLocked(3).desc.Capacity = ranges(100)
+	sp.getStoreDetailLocked(4).desc.Capacity = ranges(100)
+	sp.getStoreDetailLocked(5).desc.Capacity = ranges(100)
+	sp.getStoreDetailLocked(6).desc.Capacity = ranges(0)
+	sp.getStoreDetailLocked(7).desc.Capacity = ranges(100)
+	sp.getStoreDetailLocked(8).desc.Capacity = ranges(100)
+	sp.detailsMu.Unlock()
+
+	replicas := func(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
+		res := make([]roachpb.ReplicaDescriptor, len(storeIDs))
+		for i, storeID := range storeIDs {
+			res[i].StoreID = storeID
+		}
+		return res
+	}
+
+	// Each test case should describe a repair situation which has a lower
+	// priority than the previous test case.
+	testCases := []struct {
+		existing []roachpb.ReplicaDescriptor
+		expected roachpb.StoreID
+	}{
+		// 3/3 live -> 3/4 live: ok
+		{replicas(1, 2, 3), 6},
+		// 2/3 live -> 2/4 live: nope
+		{replicas(1, 2, 7), 0},
+		// 4/4 live -> 4/5 live: ok
+		{replicas(1, 2, 3, 4), 6},
+		// 3/4 live -> 3/5 live: ok
+		{replicas(1, 2, 3, 7), 6},
+		// 5/5 live -> 5/6 live: ok
+		{replicas(1, 2, 3, 4, 5), 6},
+		// 4/5 live -> 4/6 live: ok
+		{replicas(1, 2, 3, 4, 7), 6},
+		// 3/5 live -> 3/6 live: nope
+		{replicas(1, 2, 3, 7, 8), 0},
+	}
+
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			result, err := a.RebalanceTarget(
+				ctx, config.Constraints{}, c.existing, firstRange)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.expected > 0 {
+				if result == nil {
+					t.Fatalf("expected %d, but found nil", c.expected)
+				} else if c.expected != result.StoreID {
+					t.Fatalf("expected %d, but found %d", c.expected, result.StoreID)
+				}
+			} else if result != nil {
+				t.Fatalf("expected nil, but found %d", result.StoreID)
+			}
+		})
+	}
+}
+
 // TestAllocatorRebalanceThrashing tests that the rebalancer does not thrash
 // when replica counts are balanced, within the appropriate thresholds, across
 // stores.
