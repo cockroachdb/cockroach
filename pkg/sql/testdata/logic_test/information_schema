@@ -120,24 +120,24 @@ views
 query TT colnames
 SHOW CREATE TABLE information_schema.tables
 ----
-    Table                      CreateTable
-    information_schema.tables  CREATE TABLE tables (
-                               table_catalog STRING NOT NULL DEFAULT '',
-                               table_schema STRING NOT NULL DEFAULT '',
-                               table_name STRING NOT NULL DEFAULT '',
-                               table_type STRING NOT NULL DEFAULT '',
-                               version INT NULL
+Table                      CreateTable
+information_schema.tables  CREATE TABLE tables (
+                           table_catalog STRING NOT NULL DEFAULT '':::STRING,
+                           table_schema STRING NOT NULL DEFAULT '':::STRING,
+                           table_name STRING NOT NULL DEFAULT '':::STRING,
+                           table_type STRING NOT NULL DEFAULT '':::STRING,
+                           version INT NULL
 )
 
 query TTBTT colnames
 SHOW COLUMNS FROM information_schema.tables
 ----
-Field          Type    Null   Default  Indices
-table_catalog  STRING  false  ''       {}
-table_schema   STRING  false  ''       {}
-table_name     STRING  false  ''       {}
-table_type     STRING  false  ''       {}
-version        INT     true   NULL     {}
+Field            Type       Null   Default     Indices
+table_catalog    STRING     false  '':::STRING {}
+table_schema     STRING     false  '':::STRING {}
+table_name       STRING     false  '':::STRING {}
+table_type       STRING     false  '':::STRING {}
+version          INT        true   NULL        {}
 
 query TTBITTBB colnames
 SHOW INDEXES FROM information_schema.tables
@@ -578,8 +578,8 @@ FROM information_schema.columns
 WHERE table_schema = 'test' AND table_name = 'with_defaults'
 ----
 table_name     column_name  column_default
-with_defaults  a            9
-with_defaults  b            'default'
+with_defaults  a            9:::INT
+with_defaults  b            'default':::STRING
 with_defaults  c            NULL
 with_defaults  d            NULL
 

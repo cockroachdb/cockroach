@@ -46,6 +46,7 @@ func CreateTestTableDescriptor(
 		return sqlbase.TableDescriptor{}, err
 	}
 	p := planner{session: new(Session)}
+	p.evalCtx = parser.MakeTestingEvalContext()
 	return p.makeTableDesc(ctx, stmt.(*parser.CreateTable), parentID, id, privileges, nil)
 }
 

@@ -404,9 +404,9 @@ JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'constraint_db'
 ----
-oid         relname  adrelid     adnum  adbin  adsrc
-2737381215  t1       2876473678  4      12     12
-2989572986  t3       3211628798  3      'FOO'  'FOO'
+oid         relname  adrelid     adnum  adbin          adsrc
+2737381215  t1       2876473678  4      12:::INT       12:::INT
+2989572986  t3       3211628798  3      'FOO':::STRING 'FOO':::STRING
 
 ## pg_catalog.pg_indexes
 
@@ -1015,8 +1015,8 @@ JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'constraint_db'
 ----
-2737381215  t1  12
-2989572986  t3  'FOO'
+2737381215  t1  12:::INT
+2989572986  t3  'FOO':::STRING
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.
