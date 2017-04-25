@@ -241,7 +241,6 @@ func (s *orderedSynchronizer) drainSources() {
 			log.Fatalf(context.TODO(), "unexpected draining error: %s", err)
 		}
 	}
-	return
 }
 
 // Next is part of the RowSource interface.

@@ -163,7 +163,6 @@ func (rec *raftEntryCache) delEntries(rangeID roachpb.RangeID, lo, hi uint64) {
 	for _, k := range keys {
 		rec.cache.Del(k)
 	}
-	return
 }
 
 // clearTo clears the entries in the cache for specified range up to,
