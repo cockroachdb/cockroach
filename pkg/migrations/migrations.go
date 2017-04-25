@@ -15,6 +15,8 @@
 package migrations
 
 import (
+	"bytes"
+	"fmt"
 	"time"
 
 	"golang.org/x/net/context"
@@ -24,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -64,6 +68,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		name:   "enable diagnostics reporting",
 		workFn: optIntToDiagnosticsStatReporting,
+	},
+	{
+		name:   "populate system.settings default overrides",
+		workFn: initSettingsOverrides,
 	},
 }
 
@@ -389,4 +397,80 @@ func optIntToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 		log.Warningf(ctx, "failed attempt to update setting: %s", err)
 	}
 	return err
+}
+
+const settingsOverridesVarPrefix = "COCKROACH_SETTINGS_DEFAULT_OVERRIDE_"
+
+func initSettingsOverrides(ctx context.Context, r runner) error {
+	type override struct {
+		key     string
+		setting settings.Setting
+		value   string
+	}
+
+	// First validate the entire override set: better do nothing at all
+	// than partially populate the overrides.
+	var overrides []override
+	var evalCtx parser.EvalContext
+	for _, key := range settings.Keys() {
+		typ, _, ok := settings.Lookup(key)
+		if !ok {
+			return errors.Errorf("non-existent setting: %s", key)
+		}
+
+		settingsOverridesVarName := settingsOverridesVarPrefix + key
+		val, ok := envutil.EnvStringUnchecked(settingsOverridesVarName, 1)
+		if !ok || len(val) == 0 {
+			continue
+		}
+
+		switch typ.(type) {
+		case *settings.IntSetting, *settings.FloatSetting:
+			// These format as-is.
+		default:
+			// Everything else needs to be quoted in SQL.
+			val = "'" + val + "'"
+		}
+		expr, err := parser.ParseExpr(val)
+		if err != nil {
+			return errors.Errorf("invalid value in %s: %q", settingsOverridesVarName, val)
+		}
+
+		encoded, err := sql.ToSettingString(settingsOverridesVarName, typ, expr, &evalCtx)
+		if err != nil {
+			return errors.Errorf("invalid value in %s: %s", settingsOverridesVarName, expr.String())
+		}
+
+		overrides = append(overrides, override{key: key, setting: typ, value: encoded})
+	}
+
+	// Now actually populate them
+	const setStmtTemplate = `
+INSERT INTO system.settings (name, value, lastUpdated, valueType)
+       VALUES ('%s', '%s', NOW(), '%s')
+       ON CONFLICT (name) DO NOTHING;
+`
+	var stmt bytes.Buffer
+	for _, override := range overrides {
+		log.Shout(ctx, log.Severity_INFO, fmt.Sprintf(
+			"setting override: %s%s -> %s", settingsOverridesVarPrefix, override.key, override.value))
+		fmt.Fprintf(&stmt, setStmtTemplate, override.key, override.value, override.setting.Typ())
+	}
+
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+	// Retry a limited number of times because returning an error and letting
+	// the node kill itself is better than holding the migration lease for an
+	// arbitrarily long time.
+	var lastErr error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		res := r.sqlExecutor.ExecuteStatements(session, stmt.String(), nil)
+		lastErr = checkQueryResults(res.ResultList, len(overrides))
+		if lastErr == nil {
+			break
+		}
+		log.Warningf(ctx, "failed attempt to initialize setting default: %s", lastErr)
+	}
+	return lastErr
 }

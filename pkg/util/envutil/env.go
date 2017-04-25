@@ -44,15 +44,17 @@ func init() {
 	ClearEnvCache()
 }
 
-func checkVarName(name string) {
+func checkVarName(name string, checkSpecialChars bool) {
 	// Env vars must:
 	//  - start with COCKROACH_
 	//  - be uppercase
 	//  - only contain letters, digits, and _
 	valid := strings.HasPrefix(name, "COCKROACH_")
-	for i := 0; valid && i < len(name); i++ {
-		c := name[i]
-		valid = ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')
+	if checkSpecialChars {
+		for i := 0; valid && i < len(name); i++ {
+			c := name[i]
+			valid = ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')
+		}
 	}
 	if !valid {
 		panic("invalid env var name " + name)
@@ -65,9 +67,9 @@ func checkVarName(name string) {
 // The bookkeeping enables a report of all influential environment
 // variables with "cockroach debug env". To keep this report useful,
 // all relevant environment variables should be read during start up.
-func getEnv(varName string, depth int) (string, bool) {
+func getEnv(varName string, depth int, doCheck bool) (string, bool) {
 	_, consumer, _, _ := runtime.Caller(depth + 1)
-	checkVarName(varName)
+	checkVarName(varName, doCheck)
 
 	envVarRegistry.mu.Lock()
 	defer envVarRegistry.mu.Unlock()
@@ -150,14 +152,21 @@ func GetShellCommand(cmd string) []string {
 // associated with the variable.
 // The returned boolean flag indicates if the variable is set.
 func EnvString(name string, depth int) (string, bool) {
-	return getEnv(name, depth+1)
+	return getEnv(name, depth+1, true)
+}
+
+// EnvStringUnchecked is analogous to EnvString but does not check that
+// the environment variable is lexically correct beyond checking
+// for the COCKROACH_ prefix.
+func EnvStringUnchecked(name string, depth int) (string, bool) {
+	return getEnv(name, depth+1, false)
 }
 
 // EnvOrDefaultString returns the value set by the specified
 // environment variable, if any, otherwise the specified default
 // value.
 func EnvOrDefaultString(name string, value string) string {
-	if v, present := getEnv(name, 1); present {
+	if v, present := getEnv(name, 1, true); present {
 		return v
 	}
 	return value
@@ -166,7 +175,7 @@ func EnvOrDefaultString(name string, value string) string {
 // EnvOrDefaultBool returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultBool(name string, value bool) bool {
-	if str, present := getEnv(name, 1); present {
+	if str, present := getEnv(name, 1, true); present {
 		v, err := strconv.ParseBool(str)
 		if err != nil {
 			panic(fmt.Sprintf("error parsing %s: %s", name, err))
@@ -179,7 +188,7 @@ func EnvOrDefaultBool(name string, value bool) bool {
 // EnvOrDefaultInt returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultInt(name string, value int) int {
-	if str, present := getEnv(name, 1); present {
+	if str, present := getEnv(name, 1, true); present {
 		v, err := strconv.ParseInt(str, 0, 0)
 		if err != nil {
 			panic(fmt.Sprintf("error parsing %s: %s", name, err))
@@ -192,7 +201,7 @@ func EnvOrDefaultInt(name string, value int) int {
 // EnvOrDefaultInt64 returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultInt64(name string, value int64) int64 {
-	if str, present := getEnv(name, 1); present {
+	if str, present := getEnv(name, 1, true); present {
 		v, err := strconv.ParseInt(str, 0, 64)
 		if err != nil {
 			panic(fmt.Sprintf("error parsing %s: %s", name, err))
@@ -205,7 +214,7 @@ func EnvOrDefaultInt64(name string, value int64) int64 {
 // EnvOrDefaultFloat returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultFloat(name string, value float64) float64 {
-	if str, present := getEnv(name, 1); present {
+	if str, present := getEnv(name, 1, true); present {
 		v, err := strconv.ParseFloat(str, 64)
 		if err != nil {
 			panic(fmt.Sprintf("error parsing %s: %s", name, err))
@@ -218,7 +227,7 @@ func EnvOrDefaultFloat(name string, value float64) float64 {
 // EnvOrDefaultBytes returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultBytes(name string, value int64) int64 {
-	if str, present := getEnv(name, 1); present {
+	if str, present := getEnv(name, 1, true); present {
 		v, err := humanizeutil.ParseBytes(str)
 		if err != nil {
 			panic(fmt.Sprintf("error parsing %s: %s", name, err))
@@ -231,7 +240,7 @@ func EnvOrDefaultBytes(name string, value int64) int64 {
 // EnvOrDefaultDuration returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultDuration(name string, value time.Duration) time.Duration {
-	if str, present := getEnv(name, 1); present {
+	if str, present := getEnv(name, 1, true); present {
 		v, err := time.ParseDuration(str)
 		if err != nil {
 			panic(fmt.Sprintf("error parsing %s: %s", name, err))
