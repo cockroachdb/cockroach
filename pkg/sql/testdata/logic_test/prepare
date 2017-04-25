@@ -1,15 +1,171 @@
 # LogicTest: default
 
-statement error unimplemented: Prepared statements are supported only via the Postgres wire protocol \(see issue https://github.com/cockroachdb/cockroach/issues/7568\)
-PREPARE a AS SELECT 1
-
-statement error unimplemented: Executing prepared statements is supported only via the Postgres wire protocol \(see issue https://github.com/cockroachdb/cockroach/issues/7568\)
-EXECUTE a
-
-# TODO(nvanbenschoten) This deserves more robust testing, but that is hard
-# to add until we support the PREPARE statement.
-statement error prepared statement a does not exist
+## Tests for ensuring that prepared statements can't get overwritten and for
+## deallocate and deallocate all.
+statement error prepared statement \"a\" does not exist
 DEALLOCATE a
 
+statement
+PREPARE a AS SELECT 1
+
+query I
+EXECUTE a
+----
+1
+
+query I
+EXECUTE a
+----
+1
+
+statement error prepared statement \"a\" already exists
+PREPARE a AS SELECT 1
+
+statement
+DEALLOCATE a
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement error prepared statement \"a\" does not exist
+EXECUTE a
+
+statement
+PREPARE a AS SELECT 1
+
+statement
+PREPARE b AS SELECT 1
+
+query I
+EXECUTE a
+----
+1
+
+query I
+EXECUTE b
+----
+1
+
 statement ok
+DEALLOCATE ALL
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement error prepared statement \"a\" does not exist
+EXECUTE a
+
+statement error prepared statement \"b\" does not exist
+DEALLOCATE b
+
+statement error prepared statement \"b\" does not exist
+EXECUTE b
+
+## Typing tests - no type hints
+#
+query error syntax error at or near \"\)\"
+PREPARE a as ()
+
+statement error could not determine data type of placeholder \$1
+PREPARE a AS SELECT $1
+
+statement
+PREPARE a AS SELECT $1:::int + $2
+
+query I
+EXECUTE a(3, 1)
+----
+4
+
+query error incompatible type for EXECUTE parameter expression: int vs string
+EXECUTE a('foo', 1)
+
+query error incompatible type for EXECUTE parameter expression: int vs decimal
+EXECUTE a(3.5, 1)
+
+query error aggregate functions are not allowed in EXECUTE parameters
+EXECUTE a(max(3), 1)
+
+query error window functions are not allowed in EXECUTE parameters
+EXECUTE a(rank() over (partition by 3), 1)
+
+query error EXECUTE parameter expression '\(SELECT 3\)' may not contain variable sub-expressions
+EXECUTE a((SELECT 3), 1)
+
+query error wrong number of parameters for prepared statement \"a\": expected 2, got 3
+EXECUTE a(1, 1, 1)
+
+query error wrong number of parameters for prepared statement \"a\": expected 2, got 0
+EXECUTE a
+
+## Type hints
+
+statement
+PREPARE b (int) AS SELECT $1
+
+query I
+EXECUTE b(3)
+----
+3
+
+query error incompatible type for EXECUTE parameter expression: int vs string
+EXECUTE b('foo')
+
+statement
+PREPARE allTypes(int, float, string, bytea, date, timestamp, timestamptz, bool, decimal) AS
+SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+
+query IRTTTTTBR
+EXECUTE allTypes(0, 0.0, 'foo', 'bar', '2017-08-08', '2015-08-30 03:34:45.34567', '2015-08-30 03:34:45.34567', true, 3.4)
+----
+0  0  foo  bar  2017-08-08 00:00:00 +0000 +0000  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 03:34:45.34567 +0000 +0000  true  3.4
+
+## Other
+
+statement
+PREPARE c AS SELECT COUNT(*)
+
+query I
+EXECUTE c
+----
+1
+
+statement
+CREATE TABLE t (a int)
+
+statement
+PREPARE i AS INSERT INTO t(a) VALUES($1) RETURNING $1 + 1
+
+statement
+PREPARE s AS SELECT * FROM t
+
+query I
+EXECUTE i(1)
+----
+2
+
+query I
+EXECUTE i(2)
+----
+3
+
+query error incompatible type for EXECUTE parameter expression: int vs string
+EXECUTE i('foo')
+
+query error incompatible type for EXECUTE parameter expression: int vs decimal
+EXECUTE i(2.3)
+
+query I
+EXECUTE i(3.3::int)
+----
+4
+
+query I
+EXECUTE s
+----
+1
+2
+3
+
+statement
 DEALLOCATE ALL

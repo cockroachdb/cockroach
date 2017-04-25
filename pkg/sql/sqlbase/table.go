@@ -45,26 +45,27 @@ func incompatibleExprTypeError(
 		context, expectedType, actualType)
 }
 
-// SanitizeVarFreeExpr verifies a default expression is valid, has the
-// correct type and contains no variable expressions.
+// SanitizeVarFreeExpr verifies that an expression is valid, has the correct
+// type and contains no variable expressions. It returns the type-checked and
+// constant-folded expression.
 func SanitizeVarFreeExpr(
 	expr parser.Expr, expectedType parser.Type, context string, searchPath parser.SearchPath,
-) error {
+) (parser.TypedExpr, error) {
 	if parser.ContainsVars(expr) {
-		return exprContainsVarsError(context, expr)
+		return nil, exprContainsVarsError(context, expr)
 	}
 	ctx := parser.SemaContext{SearchPath: searchPath}
 	typedExpr, err := parser.TypeCheck(expr, &ctx, expectedType)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defaultType := typedExpr.ResolvedType()
 	if !expectedType.Equivalent(defaultType) && typedExpr != parser.DNull {
 		// The DEFAULT expression must match the column type exactly unless it is a
 		// constant NULL value.
-		return incompatibleExprTypeError(context, expectedType, defaultType)
+		return nil, incompatibleExprTypeError(context, expectedType, defaultType)
 	}
-	return nil
+	return typedExpr, nil
 }
 
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
@@ -159,7 +160,7 @@ func MakeColumnDefDescs(
 
 	if d.HasDefaultExpr() {
 		// Verify the default expression type is compatible with the column type.
-		if err := SanitizeVarFreeExpr(
+		if _, err := SanitizeVarFreeExpr(
 			d.DefaultExpr.Expr, colDatumType, "DEFAULT", searchPath,
 		); err != nil {
 			return nil, nil, err
