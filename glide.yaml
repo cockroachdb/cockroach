@@ -26,6 +26,12 @@ import:
 # algorithm from modifying our dependencies unexpectedly.
 - package: github.com/Masterminds/glide
   version: 869001d1571ce5f03fd0078bff188b9d3f272807
+
+# https://github.com/cockroachdb/raven-go/pulls/1 avoids banned go/build import.
+- package: github.com/getsentry/raven-go
+  version: aa4f14680cc759ef40791558d93c90c6f629c10f
+  repo: https://github.com/cockroachdb/raven-go
+
 # Pins to prevent unintended version changes to libs we care about when adding/
 # removing/changing other deps. These are grouped separately to make it easier
 # to comment them out in bulk when running an across-the-board dep update.

@@ -35,6 +35,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/elazarl/go-bindata-assetfs"
+	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -693,6 +694,8 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	log.Event(ctx, "started node")
+
+	raven.SetTagsContext(map[string]string{"cluster": s.ClusterID().String(), "node": s.NodeID().String()})
 
 	// We can now add the node registry.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAddr)
