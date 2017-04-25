@@ -112,10 +112,20 @@ SELECT 3 + x FROM generate_series(1,2) AS a(x)
 4
 5
 
-# Not supported yet: transforming set-returning functions that aren't top-level
-# render expressions into cross joins.
-query error pq: unsupported binary operator: <int> \+ <setof tuple\{int\}>
+
+query I colnames
 SELECT 3 + generate_series(1,2)
+----
+3 + generate_series(1, 2)
+4
+5
+
+query I
+SELECT 3 + (3 * generate_series(1,3))
+----
+6
+9
+12
 
 query I
 SELECT * from unnest(ARRAY[1,2])
@@ -131,3 +141,32 @@ SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
 2  a
 2  b
 
+query I
+SELECT unnest(ARRAY[3,4]) - 2
+----
+1
+2
+
+query II
+SELECT 1 + generate_series(0, 1), unnest(ARRAY[2, 4]) - 1
+----
+1  1
+1  3
+2  1
+2  3
+
+query I
+SELECT ascii(unnest(ARRAY['a', 'b', 'c']));
+----
+97
+98
+99
+
+query error pq: cannot specify two set-returning functions in the same SELECT expression
+SELECT generate_series(generate_series(1, 3), 3)
+
+query error pq: cannot specify two set-returning functions in the same SELECT expression
+SELECT generate_series(1, 3) + generate_series(1, 3)
+
+query error pq: column name "generate_series" not found
+SELECT generate_series(1, 3) FROM t WHERE generate_series > 3

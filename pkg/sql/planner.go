@@ -70,6 +70,7 @@ type planner struct {
 	subqueryVisitor       subqueryVisitor
 	subqueryPlanVisitor   subqueryPlanVisitor
 	nameResolutionVisitor nameResolutionVisitor
+	srfExtractionVisitor  srfExtractionVisitor
 }
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each

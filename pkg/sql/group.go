@@ -203,7 +203,8 @@ func (p *planner) groupBy(
 	group.groupByIdx = make([]int, 0, len(groupByExprs))
 	for _, g := range groupByExprs {
 		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(
-			ctx, parser.SelectExpr{Expr: g}, parser.TypeAny, s.sourceInfo, s.ivarHelper)
+			ctx, parser.SelectExpr{Expr: g}, parser.TypeAny, s.sourceInfo, s.ivarHelper,
+			autoGenerateRenderOutputName)
 		if err != nil {
 			return nil, err
 		}
@@ -227,7 +228,7 @@ func (p *planner) groupBy(
 
 		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(
 			ctx, parser.SelectExpr{Expr: f.filter}, parser.TypeAny,
-			s.sourceInfo, s.ivarHelper)
+			s.sourceInfo, s.ivarHelper, autoGenerateRenderOutputName)
 		if err != nil {
 			return nil, err
 		}
