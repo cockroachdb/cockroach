@@ -385,8 +385,8 @@ func (e *Executor) Prepare(
 	session.resetForBatch(e)
 	sessionEventf(session, "preparing: %s", query)
 
-	var parser parser.Parser
-	stmts, err := parser.Parse(query)
+	var p parser.Parser
+	stmts, err := p.Parse(query)
 	if err != nil {
 		return nil, err
 	}
@@ -431,9 +431,13 @@ func (e *Executor) Prepare(
 		}
 		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
 	}
+
 	if len(session.TxnState.schemaChangers.schemaChangers) > 0 {
-		return nil, errStmtFollowsSchemaChange
+		if _, ok := stmt.(parser.ValidAfterSchemaUpdateStatement); !ok {
+			return nil, errStmtFollowsSchemaChange
+		}
 	}
+
 	planner := session.newPlanner(e, txn)
 	planner.semaCtx.Placeholders.SetTypes(pinfo)
 	planner.evalCtx.PrepareOnly = true
@@ -1215,7 +1219,9 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	if len(txnState.schemaChangers.schemaChangers) > 0 {
-		return Result{}, errStmtFollowsSchemaChange
+		if _, ok := stmt.(parser.ValidAfterSchemaUpdateStatement); !ok {
+			return Result{}, errStmtFollowsSchemaChange
+		}
 	}
 
 	// Create a new planner from the Session to execute the statement.
