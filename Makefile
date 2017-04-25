@@ -105,7 +105,7 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all
-all: build test check
+all: build test
 
 .PHONY: short
 short: build testshort checkshort
