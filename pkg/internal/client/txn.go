@@ -108,6 +108,12 @@ func (txn *Txn) IsFinalized() bool {
 	return txn.mu.finalized
 }
 
+func (txn *Txn) status() roachpb.TransactionStatus {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.Proto.Status
+}
+
 // SetUserPriority sets the transaction's user priority. Transactions default to
 // normal user priority. The user priority must be set before any operations are
 // performed on the transaction.
@@ -414,13 +420,13 @@ func (txn *Txn) Run(ctx context.Context, b *Batch) error {
 }
 
 func (txn *Txn) commit(ctx context.Context) error {
-	err := txn.sendEndTxnReq(ctx, true /* commit */, txn.deadline)
-	if err == nil {
+	pErr := txn.sendEndTxnReq(ctx, true /* commit */, txn.deadline)
+	if pErr == nil {
 		for _, t := range txn.commitTriggers {
 			t()
 		}
 	}
-	return err
+	return pErr.GoError()
 }
 
 // CleanupOnError cleans up the transaction as a result of an error.
@@ -431,12 +437,13 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 	// This may race with a concurrent EndTxnRequests. That's fine though because
 	// we're just trying to clean up and will happily log the failed Rollback error
 	// if someone beat us.
-	txn.mu.Lock()
-	isPending := txn.mu.Proto.Status == roachpb.PENDING
-	txn.mu.Unlock()
-	if isPending {
-		if replyErr := txn.Rollback(ctx); replyErr != nil {
-			log.Errorf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+	if txn.status() == roachpb.PENDING {
+		if replyErr := txn.rollback(ctx); replyErr != nil {
+			if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.status() == roachpb.ABORTED {
+				log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+			} else {
+				log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+			}
 		}
 	}
 }
@@ -501,6 +508,10 @@ func (txn *Txn) GetDeadline() *hlc.Timestamp {
 // Rollback sends an EndTransactionRequest with Commit=false.
 // txn is considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback(ctx context.Context) error {
+	return txn.rollback(ctx).GoError()
+}
+
+func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	log.VEventf(ctx, 2, "rolling back transaction")
 	return txn.sendEndTxnReq(ctx, false /* commit */, nil)
 }
@@ -511,11 +522,13 @@ func (txn *Txn) AddCommitTrigger(trigger func()) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
-func (txn *Txn) sendEndTxnReq(ctx context.Context, commit bool, deadline *hlc.Timestamp) error {
+func (txn *Txn) sendEndTxnReq(
+	ctx context.Context, commit bool, deadline *hlc.Timestamp,
+) *roachpb.Error {
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(commit, deadline, txn.systemConfigTrigger))
-	_, err := txn.send(ctx, ba)
-	return err.GoError()
+	_, pErr := txn.send(ctx, ba)
+	return pErr
 }
 
 func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) roachpb.Request {
@@ -615,9 +628,7 @@ func (txn *Txn) Exec(
 			// Copy the status out of the Proto under lock. Making decisions on
 			// this later is not thread-safe, but the commutativity property of
 			// transactions assure that reasoning about the situation is straightforward.
-			txn.mu.Lock()
-			status := txn.Proto().Status
-			txn.mu.Unlock()
+			status := txn.status()
 
 			switch status {
 			case roachpb.ABORTED:
