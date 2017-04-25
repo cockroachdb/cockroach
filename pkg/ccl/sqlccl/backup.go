@@ -448,6 +448,7 @@ func Backup(
 		FormatVersion: BackupFormatInitialVersion,
 		BuildInfo:     build.GetInfo(),
 		NodeID:        p.ExecCfg().NodeID.Get(),
+		ClusterID:     p.ExecCfg().ClusterID(),
 	}
 	sort.Sort(backupFileDescriptors(desc.Files))
 
