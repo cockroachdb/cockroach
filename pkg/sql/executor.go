@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
@@ -219,6 +220,7 @@ type Executor struct {
 // a Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
 	AmbientCtx   log.AmbientContext
+	ClusterID    func() uuid.UUID
 	NodeID       *base.NodeIDContainer
 	DB           *client.DB
 	Gossip       *gossip.Gossip
