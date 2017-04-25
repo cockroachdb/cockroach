@@ -37,20 +37,20 @@ type sorterStrategy interface {
 	Execute(context.Context, *sorter) error
 }
 
-// sortAllStrategy reads in all values into the wrapped sValues and
+// sortAllStrategy reads in all values into the wrapped rows and
 // uses sort.Sort to sort all values in-place. It has a worst-case time
 // complexity of O(n*log(n)) and a worst-case space complexity of O(n).
 //
 // The strategy is intended to be used when all values need to be sorted.
 type sortAllStrategy struct {
-	sValues sorterValues
+	rows rowContainer
 }
 
 var _ sorterStrategy = &sortAllStrategy{}
 
-func newSortAllStrategy(sValues sorterValues) sorterStrategy {
+func newSortAllStrategy(rows rowContainer) sorterStrategy {
 	return &sortAllStrategy{
-		sValues: sValues,
+		rows: rows,
 	}
 }
 
@@ -59,7 +59,7 @@ func newSortAllStrategy(sValues sorterValues) sorterStrategy {
 //  - runs sort.Sort to sort rows in place;
 //  - sends each row out to the output stream.
 func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
-	defer ss.sValues.Close(ctx)
+	defer ss.rows.Close(ctx)
 	for {
 		row, err := s.input.NextRow()
 		if err != nil {
@@ -68,24 +68,24 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 		if row == nil {
 			break
 		}
-		if err := ss.sValues.AddRow(ctx, row); err != nil {
+		if err := ss.rows.AddRow(ctx, row); err != nil {
 			return err
 		}
 	}
-	ss.sValues.Sort()
+	ss.rows.Sort()
 
-	for ss.sValues.Len() > 0 {
+	for ss.rows.Len() > 0 {
 		// Push the row to the output; stop if they don't need more rows.
-		consumerStatus, err := s.out.emitRow(ctx, ss.sValues.EncRow(0))
+		consumerStatus, err := s.out.emitRow(ctx, ss.rows.EncRow(0))
 		if err != nil || consumerStatus != NeedMoreRows {
 			return err
 		}
-		ss.sValues.PopFirst()
+		ss.rows.PopFirst()
 	}
 	return nil
 }
 
-// sortTopKStrategy creates a max-heap in its wrapped sValues and keeps
+// sortTopKStrategy creates a max-heap in its wrapped rows and keeps
 // this heap populated with only the top k values seen. It accomplishes this
 // by comparing new values (before the deep copy) with the top of the heap.
 // If the new value is less than the current top, the top will be replaced
@@ -103,16 +103,16 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 // For instance, the top k can be found in linear time, and then this can be
 // sorted in linearithmic time.
 type sortTopKStrategy struct {
-	sValues sorterValues
-	k       int64
+	rows rowContainer
+	k    int64
 }
 
 var _ sorterStrategy = &sortTopKStrategy{}
 
-func newSortTopKStrategy(sValues sorterValues, k int64) sorterStrategy {
+func newSortTopKStrategy(rows rowContainer, k int64) sorterStrategy {
 	ss := &sortTopKStrategy{
-		sValues: sValues,
-		k:       k,
+		rows: rows,
+		k:    k,
 	}
 
 	return ss
@@ -122,7 +122,7 @@ func newSortTopKStrategy(sValues sorterValues, k int64) sorterStrategy {
 // SortAll strategy; the difference is that we push rows into a max-heap of size
 // at most K, and only sort those.
 func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
-	defer ss.sValues.Close(ctx)
+	defer ss.rows.Close(ctx)
 	heapCreated := false
 	for {
 		row, err := s.input.NextRow()
@@ -133,34 +133,34 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 			break
 		}
 
-		if int64(ss.sValues.Len()) < ss.k {
+		if int64(ss.rows.Len()) < ss.k {
 			// Accumulate up to k values.
-			if err := ss.sValues.AddRow(ctx, row); err != nil {
+			if err := ss.rows.AddRow(ctx, row); err != nil {
 				return err
 			}
 		} else {
 			if !heapCreated {
 				// Arrange the k values into a max-heap.
-				ss.sValues.InitMaxHeap()
+				ss.rows.InitMaxHeap()
 				heapCreated = true
 			}
 			// Replace the max value if the new row is smaller, maintaining the
 			// max-heap.
-			if err := ss.sValues.MaybeReplaceMax(row); err != nil {
+			if err := ss.rows.MaybeReplaceMax(row); err != nil {
 				return err
 			}
 		}
 	}
 
-	ss.sValues.Sort()
+	ss.rows.Sort()
 
-	for ss.sValues.Len() > 0 {
+	for ss.rows.Len() > 0 {
 		// Push the row to the output; stop if they don't need more rows.
-		consumerStatus, err := s.out.emitRow(ctx, ss.sValues.EncRow(0))
+		consumerStatus, err := s.out.emitRow(ctx, ss.rows.EncRow(0))
 		if err != nil || consumerStatus != NeedMoreRows {
 			return err
 		}
-		ss.sValues.PopFirst()
+		ss.rows.PopFirst()
 	}
 	return nil
 }
@@ -168,25 +168,25 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 // If we're scanning an index with a prefix matching an ordering prefix, we only accumulate values
 // for equal fields in this prefix, sort the accumulated chunk and then output.
 type sortChunksStrategy struct {
-	sValues sorterValues
-	alloc   sqlbase.DatumAlloc
+	rows  rowContainer
+	alloc sqlbase.DatumAlloc
 }
 
 var _ sorterStrategy = &sortChunksStrategy{}
 
-func newSortChunksStrategy(sValues sorterValues) sorterStrategy {
+func newSortChunksStrategy(rows rowContainer) sorterStrategy {
 	return &sortChunksStrategy{
-		sValues: sValues,
+		rows: rows,
 	}
 }
 
 func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
-	defer ss.sValues.Close(ctx)
+	defer ss.rows.Close(ctx)
 	// pivoted is a helper function that determines if the given row shares the same values for the
 	// first s.matchLen ordering columns with the given pivot.
 	pivoted := func(row, pivot sqlbase.EncDatumRow) (bool, error) {
 		for _, ord := range s.ordering[:s.matchLen] {
-			cmp, err := row[ord.ColIdx].Compare(&ss.alloc, ss.sValues.evalCtx, &pivot[ord.ColIdx])
+			cmp, err := row[ord.ColIdx].Compare(&ss.alloc, ss.rows.evalCtx, &pivot[ord.ColIdx])
 			if err != nil || cmp != 0 {
 				return false, err
 			}
@@ -208,7 +208,7 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 			if log.V(3) {
 				log.Infof(ctx, "pushing row %s", nextRow)
 			}
-			if err := ss.sValues.AddRow(ctx, nextRow); err != nil {
+			if err := ss.rows.AddRow(ctx, nextRow); err != nil {
 				return err
 			}
 
@@ -229,7 +229,7 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 			}
 
 			// We verify if the nextRow here is infact 'greater' than pivot.
-			if cmp, err := nextRow.Compare(&ss.alloc, s.ordering, ss.sValues.evalCtx, pivot); err != nil {
+			if cmp, err := nextRow.Compare(&ss.alloc, s.ordering, ss.rows.evalCtx, pivot); err != nil {
 				return err
 			} else if cmp < 0 {
 				return errors.Errorf("incorrectly ordered row %s before %s", pivot, nextRow)
@@ -238,20 +238,20 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 		}
 
 		// Sort the rows that have been pushed onto the buffer.
-		ss.sValues.Sort()
+		ss.rows.Sort()
 
 		// Stream out sorted rows in order to row receiver.
-		for ss.sValues.Len() > 0 {
-			consumerStatus, err := s.out.emitRow(ctx, ss.sValues.EncRow(0))
+		for ss.rows.Len() > 0 {
+			consumerStatus, err := s.out.emitRow(ctx, ss.rows.EncRow(0))
 			if err != nil || consumerStatus != NeedMoreRows {
 				// We don't need any more rows; clear out ss so to not hold on to that
 				// memory.
 				ss = &sortChunksStrategy{}
 				return err
 			}
-			ss.sValues.PopFirst()
+			ss.rows.PopFirst()
 		}
-		ss.sValues.Clear(ctx)
+		ss.rows.Clear(ctx)
 
 		if nextRow == nil {
 			// We've reached the end of the table.
