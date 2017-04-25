@@ -18,10 +18,16 @@
 package grpcutil
 
 import (
+	"strings"
+	"time"
+
+	"github.com/petermattis/goid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/grpclog"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func init() {
@@ -53,13 +59,49 @@ func (*logger) Fatalln(args ...interface{}) {
 }
 
 func (*logger) Print(args ...interface{}) {
-	log.InfofDepth(context.TODO(), 2, "", args...)
+	print("", args...)
 }
 
 func (*logger) Printf(format string, args ...interface{}) {
-	log.InfofDepth(context.TODO(), 2, format, args...)
+	print(format, args...)
 }
 
 func (*logger) Println(args ...interface{}) {
-	log.InfofDepth(context.TODO(), 2, "", args...)
+	print("", args...)
+}
+
+var spamMu = struct {
+	syncutil.Mutex
+	gids map[int64]time.Time
+}{
+	gids: make(map[int64]time.Time),
+}
+
+func print(format string, args ...interface{}) {
+	var isSpam bool
+	if strings.Contains(format, "failed to create client transport") {
+		for _, arg := range args {
+			if err, ok := arg.(error); ok {
+				if strings.Contains(err.Error(), "refused") {
+					isSpam = true
+					break
+				}
+			}
+		}
+	}
+	if isSpam {
+		gid := goid.Get()
+		func() {
+			spamMu.Lock()
+			defer spamMu.Unlock()
+
+			if t, ok := spamMu.gids[gid]; ok {
+				if timeutil.Since(t) < time.Minute {
+					return
+				}
+			}
+			spamMu.gids[gid] = timeutil.Now()
+		}()
+	}
+	log.InfofDepth(context.TODO(), 3, format, args...)
 }
