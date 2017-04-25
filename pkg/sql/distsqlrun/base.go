@@ -604,8 +604,11 @@ func SetFlowRequestTrace(ctx context.Context, req *SetupFlowRequest) error {
 	if sp == nil {
 		return nil
 	}
-	req.TraceContext = &tracing.SpanContextCarrier{}
 	tracer := sp.Tracer()
+	if _, ok := tracer.(opentracing.NoopTracer); ok {
+		return nil
+	}
+	req.TraceContext = &tracing.SpanContextCarrier{}
 	return tracer.Inject(sp.Context(), basictracer.Delegator, req.TraceContext)
 }
 
