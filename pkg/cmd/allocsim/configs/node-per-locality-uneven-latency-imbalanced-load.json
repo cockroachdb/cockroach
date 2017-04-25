@@ -2,6 +2,7 @@
   "Localities": [
     {
       "Name": "1",
+      "LocalityStr": "a=1,b=1",
       "NumNodes": 1,
       "NumWorkers": 0,
       "OutgoingLatencies": [
@@ -17,6 +18,7 @@
     },
     {
       "Name": "2",
+      "LocalityStr": "a=1,b=2",
       "NumNodes": 1,
       "NumWorkers": 32,
       "OutgoingLatencies": [
@@ -32,6 +34,7 @@
     },
     {
       "Name": "3",
+      "LocalityStr": "a=2,b=1",
       "NumNodes": 1,
       "NumWorkers": 0,
       "OutgoingLatencies": [
