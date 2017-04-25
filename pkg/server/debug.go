@@ -41,8 +41,9 @@ const debugEndpoint = "/debug/"
 // register to that via import, and go-metrics registers to that via exp.Exp())
 var debugServeMux = http.DefaultServeMux
 
+// TODO(arjun): use an Enum setting here.
 var debugRemote = settings.RegisterStringSetting(
-	"server.debug.remote",
+	"server.remote_debugging.mode",
 	"set to enable remote debugging, localhost-only or disable (all, local, false)",
 	"local")
 
