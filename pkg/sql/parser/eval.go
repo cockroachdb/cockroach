@@ -1734,6 +1734,33 @@ type EvalContext struct {
 	Mon *mon.MemoryMonitor
 }
 
+// PrepareTestingEvalContext sets up an EvalContext for testing.
+func PrepareTestingEvalContext(evalCtx *EvalContext) *EvalContext {
+	monitor := mon.MakeMonitor(
+		"test-monitor",
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+	)
+	monitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	evalCtx.Mon = &monitor
+	evalCtx.Ctx = context.Background
+	return evalCtx
+}
+
+// MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
+func MakeTestingEvalContext() EvalContext {
+	ctx := EvalContext{}
+	PrepareTestingEvalContext(&ctx)
+	return ctx
+}
+
+func NewTestingEvalContext() *EvalContext {
+	ctx := MakeTestingEvalContext()
+	return &ctx
+}
+
 // GetStmtTimestamp retrieves the current statement timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetStmtTimestamp() time.Time {

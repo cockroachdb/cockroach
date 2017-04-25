@@ -51,9 +51,10 @@ func TestOutbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Mon.Stop(context.Background())
 	flowCtx := FlowCtx{
-		evalCtx: parser.EvalContext{},
+		evalCtx: evalCtx,
 		rpcCtx:  newInsecureRPCContext(stopper),
 	}
 	flowID := FlowID{uuid.MakeV4()}
@@ -204,8 +205,10 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Mon.Stop(context.Background())
 	flowCtx := FlowCtx{
-		evalCtx: parser.EvalContext{},
+		evalCtx: evalCtx,
 		rpcCtx:  newInsecureRPCContext(stopper),
 	}
 	flowID := FlowID{uuid.MakeV4()}
@@ -266,8 +269,10 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			evalCtx := parser.MakeTestingEvalContext()
+			defer evalCtx.Mon.Stop(context.Background())
 			flowCtx := FlowCtx{
-				evalCtx: parser.EvalContext{},
+				evalCtx: evalCtx,
 				rpcCtx:  newInsecureRPCContext(stopper),
 			}
 			flowID := FlowID{uuid.MakeV4()}

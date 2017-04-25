@@ -22,6 +22,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -861,7 +863,8 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		ctx := &EvalContext{}
+		ctx := NewTestingEvalContext()
+		defer ctx.Mon.Stop(context.Background())
 		if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -952,7 +955,8 @@ func TestTimeConversion(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		ctx := &EvalContext{}
+		ctx := NewTestingEvalContext()
+		defer ctx.Mon.Stop(context.Background())
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
 		expr, err := ParseExpr(exprStr)
 		if err != nil {
@@ -1089,7 +1093,9 @@ func TestEvalError(t *testing.T) {
 		}
 		typedExpr, err := TypeCheck(expr, nil, TypeAny)
 		if err == nil {
-			_, err = typedExpr.Eval(&EvalContext{})
+			evalCtx := NewTestingEvalContext()
+			defer evalCtx.Mon.Stop(context.Background())
+			_, err = typedExpr.Eval(evalCtx)
 		}
 		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
@@ -1127,7 +1133,8 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 			Left:     NewDString(d.left),
 			Right:    NewDString(d.right),
 		}
-		ctx := &EvalContext{}
+		ctx := NewTestingEvalContext()
+		defer ctx.Mon.Stop(context.Background())
 		ctx.ReCache = NewRegexpCache(8)
 		typedExpr, err := TypeCheck(expr, nil, TypeAny)
 		if err != nil {
@@ -1181,7 +1188,8 @@ func TestClusterTimestampConversion(t *testing.T) {
 		{9223372036854775807, 2147483647, "9223372036854775807.2147483647"},
 	}
 
-	ctx := &EvalContext{}
+	ctx := NewTestingEvalContext()
+	defer ctx.Mon.Stop(context.Background())
 	ctx.PrepareOnly = true
 	for _, d := range testData {
 		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}
@@ -1212,7 +1220,9 @@ func TestCastToCollatedString(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			val, err := typedexpr.Eval(&EvalContext{})
+			evalCtx := NewTestingEvalContext()
+			defer evalCtx.Mon.Stop(context.Background())
+			val, err := typedexpr.Eval(evalCtx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1265,17 +1275,29 @@ func benchmarkLike(b *testing.B, ctx *EvalContext, caseInsensitive bool) {
 }
 
 func BenchmarkLikeWithCache(b *testing.B) {
-	benchmarkLike(b, &EvalContext{ReCache: NewRegexpCache(len(benchmarkLikePatterns))}, false)
+	ctx := &EvalContext{ReCache: NewRegexpCache(len(benchmarkLikePatterns))}
+	defer ctx.Mon.Stop(context.Background())
+
+	benchmarkLike(b, PrepareTestingEvalContext(ctx), false)
 }
 
 func BenchmarkLikeWithoutCache(b *testing.B) {
-	benchmarkLike(b, &EvalContext{}, false)
+	evalCtx := NewTestingEvalContext()
+	defer evalCtx.Mon.Stop(context.Background())
+
+	benchmarkLike(b, evalCtx, false)
 }
 
 func BenchmarkILikeWithCache(b *testing.B) {
-	benchmarkLike(b, &EvalContext{ReCache: NewRegexpCache(len(benchmarkLikePatterns))}, true)
+	ctx := &EvalContext{ReCache: NewRegexpCache(len(benchmarkLikePatterns))}
+	defer ctx.Mon.Stop(context.Background())
+
+	benchmarkLike(b, PrepareTestingEvalContext(ctx), true)
 }
 
 func BenchmarkILikeWithoutCache(b *testing.B) {
-	benchmarkLike(b, &EvalContext{}, true)
+	evalCtx := NewTestingEvalContext()
+	defer evalCtx.Mon.Stop(context.Background())
+
+	benchmarkLike(b, evalCtx, true)
 }

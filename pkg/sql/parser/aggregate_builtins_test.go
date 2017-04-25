@@ -33,7 +33,8 @@ import (
 func testAggregateResultDeepCopy(
 	t *testing.T, aggFunc func([]Type, *EvalContext) AggregateFunc, vals []Datum,
 ) {
-	evalCtx := &EvalContext{}
+	evalCtx := NewTestingEvalContext()
+	defer evalCtx.Mon.Stop(context.Background())
 	aggImpl := aggFunc([]Type{vals[0].ResolvedType()}, evalCtx)
 	runningDatums := make([]Datum, len(vals))
 	runningStrings := make([]string, len(vals))
@@ -237,7 +238,8 @@ func makeIntervalTestDatum(count int) []Datum {
 func runBenchmarkAggregate(
 	b *testing.B, aggFunc func([]Type, *EvalContext) AggregateFunc, vals []Datum,
 ) {
-	evalCtx := &EvalContext{}
+	evalCtx := NewTestingEvalContext()
+	defer evalCtx.Mon.Stop(context.Background())
 	params := []Type{vals[0].ResolvedType()}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

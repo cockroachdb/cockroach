@@ -99,8 +99,10 @@ func TestJoinReader(t *testing.T) {
 		},
 	}
 	for _, c := range testCases {
+		evalCtx := parser.MakeTestingEvalContext()
+		defer evalCtx.Mon.Stop(context.Background())
 		flowCtx := FlowCtx{
-			evalCtx:  parser.EvalContext{},
+			evalCtx:  evalCtx,
 			txnProto: &roachpb.Transaction{},
 			// Pass a DB without a TxnCoordSender.
 			remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),
@@ -168,8 +170,10 @@ func TestJoinReaderDrain(t *testing.T) {
 	)
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Mon.Stop(context.Background())
 	flowCtx := FlowCtx{
-		evalCtx:  parser.EvalContext{},
+		evalCtx:  evalCtx,
 		txnProto: &roachpb.Transaction{},
 		// Pass a DB without a TxnCoordSender.
 		remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),

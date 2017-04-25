@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/lib/pq/oid"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -101,7 +103,9 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Compare(&parser.EvalContext{}, d) != 0 {
+	evalCtx := parser.NewTestingEvalContext()
+	defer evalCtx.Mon.Stop(context.Background())
+	if got.Compare(evalCtx, d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
 	}
 }
@@ -308,9 +312,11 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 		b.StartTimer()
 		got, err := decodeOidDatum(oid.T_numeric, formatBinary, bytes)
 		b.StopTimer()
+		evalCtx := parser.NewTestingEvalContext()
+		defer evalCtx.Mon.Stop(context.Background())
 		if err != nil {
 			b.Fatal(err)
-		} else if got.Compare(&parser.EvalContext{}, expected) != 0 {
+		} else if got.Compare(evalCtx, expected) != 0 {
 			b.Fatalf("expected %s, got %s", expected, got)
 		}
 	}

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -113,7 +115,9 @@ func TestOrderedSync(t *testing.T) {
 			rowBuf := NewRowBuffer(nil /* types */, srcRows, RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
-		src, err := makeOrderedSync(c.ordering, &parser.EvalContext{}, sources)
+		evalCtx := parser.NewTestingEvalContext()
+		defer evalCtx.Mon.Stop(context.Background())
+		src, err := makeOrderedSync(c.ordering, evalCtx, sources)
 		if err != nil {
 			t.Fatal(err)
 		}

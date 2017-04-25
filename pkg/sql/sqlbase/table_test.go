@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/pkg/errors"
 
@@ -184,7 +186,8 @@ func TestIndexKey(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		evalCtx := &parser.EvalContext{}
+		evalCtx := parser.NewTestingEvalContext()
+		defer evalCtx.Mon.Stop(context.Background())
 		tableDesc, colMap := makeTableDescForTest(test)
 		testValues := append(test.primaryValues, test.secondaryValues...)
 

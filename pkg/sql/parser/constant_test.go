@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/apd"
 )
 
@@ -314,7 +316,9 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 					i, availType, test.c, res)
 			} else {
 				expectedDatum := parseFuncs[availType](t, test.c.s)
-				if res.Compare(&EvalContext{}, expectedDatum) != 0 {
+				evalCtx := NewTestingEvalContext()
+				defer evalCtx.Mon.Stop(context.Background())
+				if res.Compare(evalCtx, expectedDatum) != 0 {
 					t.Errorf("%d: type %s expected to be resolved from the StrVal %v to Datum %v"+
 						", found %v",
 						i, availType, test.c, expectedDatum, res)

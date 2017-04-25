@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -119,7 +121,8 @@ func TestSplitFilter(t *testing.T) {
 
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~(%s, %s)", d.expr, d.expectedRes, d.expectedRem), func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Mon.Stop(context.Background())
 			sel := makeSelectNode(t)
 			// A function that "converts" only vars in the list.
 			conv := func(expr parser.VariableExpr) (bool, parser.Expr) {
