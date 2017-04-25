@@ -23,6 +23,8 @@ import (
 	"regexp"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -146,7 +148,8 @@ func TestTypeCheckNormalize(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			evalCtx := &EvalContext{}
+			evalCtx := NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
 			typedExpr, err := evalCtx.NormalizeExpr(typeChecked)
 			if err != nil {
 				t.Fatal(err)
