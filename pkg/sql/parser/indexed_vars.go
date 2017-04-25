@@ -140,6 +140,13 @@ func (h *IndexedVarHelper) AssertSameContainer(ivar *IndexedVar) {
 	}
 }
 
+// AppendSlot expands the capacity of this IndexedVarHelper by one and returns
+// the index of the new slot.
+func (h *IndexedVarHelper) AppendSlot() int {
+	h.vars = append(h.vars, IndexedVar{})
+	return len(h.vars) - 1
+}
+
 func (h *IndexedVarHelper) checkIndex(idx int) {
 	if idx < 0 || idx >= len(h.vars) {
 		panic(fmt.Sprintf("invalid var index %d (columns: %d)", idx, len(h.vars)))

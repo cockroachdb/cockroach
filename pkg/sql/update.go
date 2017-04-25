@@ -209,7 +209,7 @@ func addOrMergeExpr(
 	selectExpr := parser.SelectExpr{Expr: e}
 	typ := updateCols[currentUpdateIdx].Type.ToDatumType()
 	col, expr, err := render.planner.computeRender(ctx, selectExpr, typ,
-		render.sourceInfo, render.ivarHelper)
+		render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
 	if err != nil {
 		return -1, err
 	}
@@ -329,7 +329,7 @@ func (p *planner) Update(
 					desiredTupleType[i] = updateCols[currentUpdateIdx+i].Type.ToDatumType()
 				}
 				col, expr, err := render.planner.computeRender(ctx, selectExpr, desiredTupleType,
-					render.sourceInfo, render.ivarHelper)
+					render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
 				if err != nil {
 					return nil, err
 				}
