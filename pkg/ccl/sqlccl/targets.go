@@ -24,12 +24,23 @@ func descriptorsMatchingTargets(
 	// tables (as of 2017-01-12 it's only pg_catalog), then this method will
 	// need to support it.
 
-	starByDatabase := make(map[string]struct{}, len(targets.Databases))
+	type validity int
+	const (
+		maybeValid validity = iota
+		valid
+	)
+
+	starByDatabase := make(map[string]validity, len(targets.Databases))
 	for _, d := range targets.Databases {
-		starByDatabase[d.Normalize()] = struct{}{}
+		starByDatabase[d.Normalize()] = maybeValid
 	}
 
-	tablesByDatabase := make(map[string][]string, len(targets.Tables))
+	type table struct {
+		name     string
+		validity validity
+	}
+
+	tablesByDatabase := make(map[string][]table, len(targets.Tables))
 	for _, pattern := range targets.Tables {
 		var err error
 		pattern, err = pattern.NormalizeTablePattern()
@@ -45,14 +56,17 @@ func descriptorsMatchingTargets(
 				}
 			}
 			db := p.DatabaseName.Normalize()
-			tablesByDatabase[db] = append(tablesByDatabase[db], p.TableName.Normalize())
+			tablesByDatabase[db] = append(tablesByDatabase[db], table{
+				name:     p.TableName.Normalize(),
+				validity: maybeValid,
+			})
 		case *parser.AllTablesSelector:
 			if sessionDatabase != "" {
 				if err := p.QualifyWithDatabase(sessionDatabase); err != nil {
 					return nil, err
 				}
 			}
-			starByDatabase[p.Database.Normalize()] = struct{}{}
+			starByDatabase[p.Database.Normalize()] = maybeValid
 		default:
 			return nil, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
 		}
@@ -66,6 +80,7 @@ func descriptorsMatchingTargets(
 			databasesByID[dbDesc.ID] = dbDesc
 			normalizedDBName := parser.ReNormalizeName(dbDesc.Name)
 			if _, ok := starByDatabase[normalizedDBName]; ok {
+				starByDatabase[normalizedDBName] = valid
 				ret = append(ret, desc)
 			} else if _, ok := tablesByDatabase[normalizedDBName]; ok {
 				ret = append(ret, desc)
@@ -80,17 +95,36 @@ func descriptorsMatchingTargets(
 				return nil, errors.Errorf("unknown ParentID: %d", tableDesc.ParentID)
 			}
 			normalizedDBName := parser.ReNormalizeName(dbDesc.Name)
-			if _, ok := starByDatabase[normalizedDBName]; ok {
-				ret = append(ret, desc)
-			} else if tableNames, ok := tablesByDatabase[normalizedDBName]; ok {
-				for _, tableName := range tableNames {
-					if parser.ReNormalizeName(tableName) == parser.ReNormalizeName(tableDesc.Name) {
+			if tables, ok := tablesByDatabase[normalizedDBName]; ok {
+				for i := range tables {
+					if parser.ReNormalizeName(tables[i].name) == parser.ReNormalizeName(tableDesc.Name) {
+						tables[i].validity = valid
 						ret = append(ret, desc)
 						break
 					}
 				}
+			} else if _, ok := starByDatabase[normalizedDBName]; ok {
+				ret = append(ret, desc)
 			}
 		}
 	}
+
+	for dbName, validity := range starByDatabase {
+		if validity != valid {
+			if dbName == "" {
+				return nil, errors.Errorf("no database specified for wildcard")
+			}
+			return nil, errors.Errorf(`database "%s" does not exist`, dbName)
+		}
+	}
+
+	for _, tables := range tablesByDatabase {
+		for _, table := range tables {
+			if table.validity != valid {
+				return nil, errors.Errorf(`table "%s" does not exist`, table.name)
+			}
+		}
+	}
+
 	return ret, nil
 }
