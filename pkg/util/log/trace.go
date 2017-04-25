@@ -88,14 +88,12 @@ func FinishEventLog(ctx context.Context) {
 	}
 }
 
-var noopTracer opentracing.NoopTracer
-
 // getSpanOrEventLog returns the current Span. If there is no Span, it returns
 // the current ctxEventLog. If neither (or the Span is NoopTracer), returns
 // false.
 func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, bool) {
 	if sp := opentracing.SpanFromContext(ctx); sp != nil {
-		if sp.Tracer() == noopTracer {
+		if _, ok := sp.Tracer().(opentracing.NoopTracer); ok {
 			return nil, nil, false
 		}
 		return sp, nil, true
