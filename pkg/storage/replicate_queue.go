@@ -17,9 +17,12 @@
 package storage
 
 import (
+	"bytes"
+	"fmt"
 	"sync/atomic"
 	"time"
 
+	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -284,7 +287,8 @@ func (rq *replicateQueue) processOneChange(
 
 		rq.metrics.AddReplicaCount.Inc(1)
 		if log.V(1) {
-			log.Infof(ctx, "adding replica to %+v due to under-replication", newReplica)
+			log.Infof(ctx, "adding replica to %+v due to under-replication: %s",
+				newReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 		}
 		if err := rq.addReplica(
 			ctx, repl, newReplica, desc, SnapshotRequest_RECOVERY); err != nil {
@@ -331,7 +335,8 @@ func (rq *replicateQueue) processOneChange(
 		} else {
 			rq.metrics.RemoveReplicaCount.Inc(1)
 			if log.V(1) {
-				log.Infof(ctx, "removing replica %+v due to over-replication", removeReplica)
+				log.Infof(ctx, "removing replica %+v due to over-replication: %s",
+					removeReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 			}
 			target := roachpb.ReplicationTarget{
 				NodeID:  removeReplica.NodeID,
@@ -414,7 +419,8 @@ func (rq *replicateQueue) processOneChange(
 		}
 		rq.metrics.RebalanceReplicaCount.Inc(1)
 		if log.V(1) {
-			log.Infof(ctx, "rebalancing to %+v", rebalanceReplica)
+			log.Infof(ctx, "rebalancing to %+v: %s",
+				rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 		}
 		if err := rq.addReplica(
 			ctx, repl, rebalanceReplica, desc, SnapshotRequest_REBALANCE); err != nil {
@@ -490,4 +496,30 @@ func (*replicateQueue) timer(_ time.Duration) time.Duration {
 // purgatoryChan returns the replicate queue's store update channel.
 func (rq *replicateQueue) purgatoryChan() <-chan struct{} {
 	return rq.updateChan
+}
+
+// rangeRaftStatus pretty-prints the Raft progress (i.e. Raft log position) of
+// the replicas.
+func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor) string {
+	if raftStatus == nil || len(raftStatus.Progress) == 0 {
+		return ""
+	}
+	var buf bytes.Buffer
+	buf.WriteString("[")
+	for i, r := range replicas {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "%d", r.ReplicaID)
+		if uint64(r.ReplicaID) == raftStatus.Lead {
+			buf.WriteString("*")
+		}
+		if progress, ok := raftStatus.Progress[uint64(r.ReplicaID)]; ok {
+			fmt.Fprintf(&buf, ":%d", progress.Match)
+		} else {
+			buf.WriteString(":?")
+		}
+	}
+	buf.WriteString("]")
+	return buf.String()
 }
