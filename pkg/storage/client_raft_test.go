@@ -934,8 +934,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		)
 	}
 
-	expected := "snapshot intersects existing range"
-	if err := replicateRHS(); !testutils.IsError(err, expected) {
+	if err := replicateRHS(); !testutils.IsError(err, storage.IntersectingSnapshotMsg) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
