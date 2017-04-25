@@ -200,8 +200,11 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 	cleanupRequired := true
 	defer func() {
-		if err != nil && cleanupRequired {
-			DrainAndClose(ctx, ag.out.output, err, ag.input)
+		if err != nil {
+			log.Infof(ctx, "accumulate error %s", err)
+			if cleanupRequired {
+				DrainAndClose(ctx, ag.out.output, err, ag.input)
+			}
 		}
 	}()
 
