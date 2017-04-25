@@ -53,7 +53,7 @@ func newSorter(
 		rawInput: input,
 		ordering: convertToColumnOrdering(spec.OutputOrdering),
 		matchLen: spec.OrderingMatchLen,
-		limit:    spec.Limit,
+		limit:    int64(post.Limit),
 	}
 	if err := s.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
 		return nil, err
