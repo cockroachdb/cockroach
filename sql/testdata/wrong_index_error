@@ -1,0 +1,31 @@
+# Document an anomaly in which the wrong index is blamed for a constraint
+# violation.
+
+statement ok
+CREATE TABLE accounts (
+  pk1 VARCHAR,
+  pk2 BIGINT NOT NULL,
+  causality_id BIGINT NOT NULL,
+  transaction_id VARCHAR,
+  PRIMARY KEY (pk1, pk2),
+  UNIQUE (pk1, causality_id)
+);
+
+# This seemingly bogus index triggers a bug.
+statement ok
+CREATE INDEX ON accounts(transaction_id);
+
+# And this one is needed too. God knows what's going on under the hood.
+statement ok
+CREATE INDEX ON accounts (pk2);
+
+# Need to insert something or the bug won't fire.
+statement ok
+INSERT INTO accounts (pk1, pk2, causality_id) values('A', 1, 1)
+
+# Violate the primary key constraint (pk1, pk2) in a single insert.
+# Should give:
+#   statement error violates unique constraint "primary"
+# but doesn't. Omitting causality_id fixes it.
+statement error violates unique constraint "accounts_transaction_id_idx"
+INSERT INTO accounts (pk1, pk2, causality_id) values('A', 2, 2), ('A', 2, 3);

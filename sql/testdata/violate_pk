@@ -1,0 +1,31 @@
+# Document an anomaly which reports success when inserting two conflicting rows,
+# with only the second row actually written.
+
+statement ok
+CREATE TABLE accounts (
+  pk1 INT,
+  pk2 INT,
+  random_id INT,
+  PRIMARY KEY (pk1, pk2),
+  UNIQUE (pk1, random_id)
+);
+
+# To trigger the anomaly below, it doesn't matter what index we create here,
+# but without one, things behave correctly.
+statement ok
+CREATE INDEX ON accounts(random_id);
+
+statement ok
+CREATE INDEX ON accounts (pk2);
+
+# Violate the primary key constraint (pk1, pk2). This *should* give
+#   statement error violates unique constraint "primary"
+# but it goes through!
+statement ok
+INSERT INTO accounts (pk1, pk2, random_id) values(123, 2, 2), (123, 2, 3);
+
+# It has overwritten the first insert.
+query III
+SELECT * FROM accounts;
+----
+123 2 3
