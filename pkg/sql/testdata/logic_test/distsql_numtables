@@ -240,3 +240,7 @@ SELECT y FROM (SELECT y FROM NumToStr ORDER BY y LIMIT 5) AS a WHERE y <> 2
 
 statement error memory budget exceeded
 SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str
+
+# Verify we use the "top K" strategy and thus don't hit OOM as above.
+statement ok
+SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str LIMIT 10
