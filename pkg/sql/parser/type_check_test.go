@@ -146,7 +146,7 @@ func TestTypeCheckNormalize(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			evalCtx := &EvalContext{}
+			evalCtx := MakeTestingEvalContext()
 			typedExpr, err := evalCtx.NormalizeExpr(typeChecked)
 			if err != nil {
 				t.Fatal(err)

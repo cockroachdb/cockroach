@@ -107,6 +107,7 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		memMonitor: mon.MakeMonitor("distsql",
 			cfg.Counter, cfg.Hist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
 	}
+	ds.evalCtx.Mon = &ds.memMonitor
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 	return ds
 }
@@ -158,7 +159,7 @@ func (ds *ServerImpl) setupFlow(
 
 	monitor := mon.MakeMonitor("flow",
 		ds.Counter, ds.Hist, -1 /* use default block size */, noteworthyMemoryUsageBytes)
-	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
+	monitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
 	evalCtx.Mon = &monitor
 
 	// TODO(andrei): more fields from evalCtx need to be initialized (#13821).

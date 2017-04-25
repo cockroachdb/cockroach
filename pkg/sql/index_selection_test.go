@@ -313,7 +313,7 @@ func TestMakeConstraints(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.MakeTestingEvalContext()
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
@@ -509,7 +509,7 @@ func TestMakeSpans(t *testing.T) {
 				expected = d.expectedDesc
 			}
 			t.Run(d.expr+"~"+expected, func(t *testing.T) {
-				evalCtx := &parser.EvalContext{}
+				evalCtx := parser.MakeTestingEvalContext()
 				sel := makeSelectNode(t)
 				columns := strings.Split(d.columns, ",")
 				dirs := make([]encoding.Direction, 0, len(columns))
@@ -557,7 +557,7 @@ func TestMakeSpans(t *testing.T) {
 	}
 	for _, d := range testData2 {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.MakeTestingEvalContext()
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
@@ -636,7 +636,7 @@ func TestExactPrefix(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~%d", d.expr, d.expected), func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.MakeTestingEvalContext()
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
@@ -712,7 +712,7 @@ func TestApplyConstraints(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.MakeTestingEvalContext()
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, expr := makeConstraints(t, evalCtx, d.expr, desc, index, sel)

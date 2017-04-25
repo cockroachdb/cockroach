@@ -282,7 +282,7 @@ func TestAggregator(t *testing.T) {
 		out := &RowBuffer{}
 
 		flowCtx := FlowCtx{
-			evalCtx: parser.EvalContext{},
+			evalCtx: *parser.MakeTestingEvalContext(),
 		}
 
 		ag, err := newAggregator(&flowCtx, &ags, in, &PostProcessSpec{}, out)

@@ -861,7 +861,7 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		ctx := &EvalContext{}
+		ctx := MakeTestingEvalContext()
 		if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -952,7 +952,7 @@ func TestTimeConversion(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		ctx := &EvalContext{}
+		ctx := MakeTestingEvalContext()
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
 		expr, err := ParseExpr(exprStr)
 		if err != nil {
@@ -1089,7 +1089,7 @@ func TestEvalError(t *testing.T) {
 		}
 		typedExpr, err := TypeCheck(expr, nil, TypeAny)
 		if err == nil {
-			_, err = typedExpr.Eval(&EvalContext{})
+			_, err = typedExpr.Eval(MakeTestingEvalContext())
 		}
 		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
@@ -1127,7 +1127,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 			Left:     NewDString(d.left),
 			Right:    NewDString(d.right),
 		}
-		ctx := &EvalContext{}
+		ctx := MakeTestingEvalContext()
 		ctx.ReCache = NewRegexpCache(8)
 		typedExpr, err := TypeCheck(expr, nil, TypeAny)
 		if err != nil {
@@ -1181,7 +1181,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		{9223372036854775807, 2147483647, "9223372036854775807.2147483647"},
 	}
 
-	ctx := &EvalContext{}
+	ctx := MakeTestingEvalContext()
 	ctx.PrepareOnly = true
 	for _, d := range testData {
 		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}
@@ -1212,7 +1212,7 @@ func TestCastToCollatedString(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			val, err := typedexpr.Eval(&EvalContext{})
+			val, err := typedexpr.Eval(MakeTestingEvalContext())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1269,7 +1269,7 @@ func BenchmarkLikeWithCache(b *testing.B) {
 }
 
 func BenchmarkLikeWithoutCache(b *testing.B) {
-	benchmarkLike(b, &EvalContext{}, false)
+	benchmarkLike(b, MakeTestingEvalContext(), false)
 }
 
 func BenchmarkILikeWithCache(b *testing.B) {
@@ -1277,5 +1277,5 @@ func BenchmarkILikeWithCache(b *testing.B) {
 }
 
 func BenchmarkILikeWithoutCache(b *testing.B) {
-	benchmarkLike(b, &EvalContext{}, true)
+	benchmarkLike(b, MakeTestingEvalContext(), true)
 }

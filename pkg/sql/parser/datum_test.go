@@ -34,7 +34,7 @@ func prepareExpr(t *testing.T, datumExpr string) TypedExpr {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
 	// Normalization ensures that casts are processed.
-	ctx := &EvalContext{}
+	ctx := MakeTestingEvalContext()
 	typedExpr, err = ctx.NormalizeExpr(typedExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
@@ -267,7 +267,7 @@ func TestDFloatCompare(t *testing.T) {
 			} else if i > j {
 				expected = 1
 			}
-			got := x.Compare(&EvalContext{}, y)
+			got := x.Compare(MakeTestingEvalContext(), y)
 			if got != expected {
 				t.Errorf("comparing DFloats %s and %s: expected %d, got %d", x, y, expected, got)
 			}
@@ -315,7 +315,7 @@ func TestParseDIntervalWithField(t *testing.T) {
 			t.Errorf("unexpected error while parsing expected value INTERVAL %s: %s", td.expected, err)
 			continue
 		}
-		if expected.Compare(&EvalContext{}, actual) != 0 {
+		if expected.Compare(MakeTestingEvalContext(), actual) != 0 {
 			t.Errorf("INTERVAL %s %v: got %s, expected %s", td.str, td.field, actual, expected)
 		}
 	}
@@ -354,7 +354,7 @@ func TestParseDDate(t *testing.T) {
 			t.Errorf("unexpected error while parsing expected value DATE %s: %s", td.expected, err)
 			continue
 		}
-		if expected.Compare(&EvalContext{}, actual) != 0 {
+		if expected.Compare(MakeTestingEvalContext(), actual) != 0 {
 			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
 		}
 	}

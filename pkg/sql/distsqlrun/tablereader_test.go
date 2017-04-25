@@ -117,7 +117,7 @@ func TestTableReader(t *testing.T) {
 		ts.Table = *td
 
 		flowCtx := FlowCtx{
-			evalCtx:  parser.EvalContext{},
+			evalCtx:  *parser.MakeTestingEvalContext(),
 			txnProto: &roachpb.Transaction{},
 			clientDB: kvDB,
 			nodeID:   s.NodeID(),
@@ -182,7 +182,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	flowCtx := FlowCtx{
-		evalCtx:  parser.EvalContext{},
+		evalCtx:  *parser.MakeTestingEvalContext(),
 		txnProto: &roachpb.Transaction{},
 		clientDB: kvDB,
 		nodeID:   tc.Server(0).NodeID(),

@@ -119,7 +119,7 @@ func TestSplitFilter(t *testing.T) {
 
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~(%s, %s)", d.expr, d.expectedRes, d.expectedRem), func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.MakeTestingEvalContext()
 			sel := makeSelectNode(t)
 			// A function that "converts" only vars in the list.
 			conv := func(expr parser.VariableExpr) (bool, parser.Expr) {

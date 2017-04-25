@@ -290,7 +290,7 @@ func TestMergeJoiner(t *testing.T) {
 			leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
 			rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
 			out := &RowBuffer{}
-			flowCtx := FlowCtx{evalCtx: parser.EvalContext{}}
+			flowCtx := FlowCtx{evalCtx: *parser.MakeTestingEvalContext()}
 
 			post := PostProcessSpec{OutputColumns: c.outCols}
 			m, err := newMergeJoiner(&flowCtx, &ms, leftInput, rightInput, &post, out)

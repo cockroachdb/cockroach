@@ -101,7 +101,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Compare(&parser.EvalContext{}, d) != 0 {
+	if got.Compare(parser.MakeTestingEvalContext(), d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
 	}
 }
@@ -310,7 +310,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 		b.StopTimer()
 		if err != nil {
 			b.Fatal(err)
-		} else if got.Compare(&parser.EvalContext{}, expected) != 0 {
+		} else if got.Compare(parser.MakeTestingEvalContext(), expected) != 0 {
 			b.Fatalf("expected %s, got %s", expected, got)
 		}
 	}

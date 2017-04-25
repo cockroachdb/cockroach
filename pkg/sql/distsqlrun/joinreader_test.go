@@ -97,7 +97,7 @@ func TestJoinReader(t *testing.T) {
 	}
 	for _, c := range testCases {
 		flowCtx := FlowCtx{
-			evalCtx:  parser.EvalContext{},
+			evalCtx:  *parser.MakeTestingEvalContext(),
 			txnProto: &roachpb.Transaction{},
 			clientDB: kvDB,
 		}
@@ -165,7 +165,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	flowCtx := FlowCtx{
-		evalCtx:  parser.EvalContext{},
+		evalCtx:  *parser.MakeTestingEvalContext(),
 		txnProto: &roachpb.Transaction{},
 		clientDB: kvDB,
 	}

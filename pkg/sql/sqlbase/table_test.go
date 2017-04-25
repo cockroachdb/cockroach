@@ -184,7 +184,7 @@ func TestIndexKey(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		evalCtx := &parser.EvalContext{}
+		evalCtx := parser.MakeTestingEvalContext()
 		tableDesc, colMap := makeTableDescForTest(test)
 		testValues := append(test.primaryValues, test.secondaryValues...)
 

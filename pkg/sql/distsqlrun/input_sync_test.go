@@ -113,7 +113,7 @@ func TestOrderedSync(t *testing.T) {
 			rowBuf := NewRowBuffer(nil /* types */, srcRows, RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
-		src, err := makeOrderedSync(c.ordering, &parser.EvalContext{}, sources)
+		src, err := makeOrderedSync(c.ordering, parser.MakeTestingEvalContext(), sources)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -29,7 +29,7 @@ func TestEncDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &DatumAlloc{}
-	evalCtx := &parser.EvalContext{}
+	evalCtx := parser.MakeTestingEvalContext()
 	v := EncDatum{}
 	if !v.IsUnset() {
 		t.Errorf("empty EncDatum should be unset")
@@ -160,7 +160,7 @@ func checkEncDatumCmp(
 
 	dec2 := EncDatumFromEncoded(v2.Type, enc2, buf2)
 
-	evalCtx := &parser.EvalContext{}
+	evalCtx := parser.MakeTestingEvalContext()
 	if val, err := dec1.Compare(a, evalCtx, &dec2); err != nil {
 		t.Fatal(err)
 	} else if val != expectedCmp {
@@ -183,7 +183,7 @@ func TestEncDatumCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &DatumAlloc{}
-	evalCtx := &parser.EvalContext{}
+	evalCtx := parser.MakeTestingEvalContext()
 	rng, _ := randutil.NewPseudoRand()
 
 	for kind := range ColumnType_Kind_name {
@@ -245,7 +245,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var alloc DatumAlloc
-	evalCtx := &parser.EvalContext{}
+	evalCtx := parser.MakeTestingEvalContext()
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 20; test++ {
 		var err error
@@ -392,7 +392,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 	}
 
 	a := &DatumAlloc{}
-	evalCtx := &parser.EvalContext{}
+	evalCtx := parser.MakeTestingEvalContext()
 	for _, c := range testCases {
 		cmp, err := c.row1.Compare(a, c.ord, evalCtx, c.row2)
 		if err != nil {
@@ -407,7 +407,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 func TestEncDatumRowAlloc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := &parser.EvalContext{}
+	evalCtx := parser.MakeTestingEvalContext()
 	rng, _ := randutil.NewPseudoRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {
 		for _, rows := range []int{1, 2, 3, 5, 10, 20} {

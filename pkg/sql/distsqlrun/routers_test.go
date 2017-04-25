@@ -37,7 +37,7 @@ func TestHashRouter(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
-	evalCtx := &parser.EvalContext{}
+	evalCtx := parser.MakeTestingEvalContext()
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
@@ -140,7 +140,7 @@ func TestMirrorRouter(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
-	evalCtx := &parser.EvalContext{}
+	evalCtx := parser.MakeTestingEvalContext()
 
 	vals := sqlbase.RandEncDatumSlices(rng, numCols, numRows)
 

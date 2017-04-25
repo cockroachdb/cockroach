@@ -74,7 +74,7 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 				t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
 			} else if datum, err := decodeOidDatum(oid, formatBinary, got[4:]); err != nil {
 				t.Fatalf("unable to decode %v: %s", got[4:], err)
-			} else if d.Compare(&parser.EvalContext{}, datum) != 0 {
+			} else if d.Compare(parser.MakeTestingEvalContext(), datum) != 0 {
 				t.Errorf("expected %s, got %s", d, datum)
 			}
 		}()
@@ -142,7 +142,7 @@ func TestBinaryIntArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Compare(&parser.EvalContext{}, d) != 0 {
+	if got.Compare(parser.MakeTestingEvalContext(), d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
 	}
 }
@@ -208,7 +208,7 @@ func TestRandomBinaryDecimal(t *testing.T) {
 			t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
 		} else if datum, err := decodeOidDatum(oid.T_numeric, formatBinary, got[4:]); err != nil {
 			t.Errorf("%q: unable to decode %v: %s", test.In, got[4:], err)
-		} else if dec.Compare(&parser.EvalContext{}, datum) != 0 {
+		} else if dec.Compare(parser.MakeTestingEvalContext(), datum) != 0 {
 			t.Errorf("%q: expected %s, got %s", test.In, dec, datum)
 		}
 	}

@@ -17,10 +17,8 @@
 package distsqlrun
 
 import (
-	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -170,7 +168,6 @@ func TestSorter(t *testing.T) {
 		},
 	}
 
-	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
 	for _, c := range testCases {
 		ss := c.spec
 		types := make([]sqlbase.ColumnType, len(c.input[0]))
@@ -180,7 +177,7 @@ func TestSorter(t *testing.T) {
 		in := NewRowBuffer(types, c.input, RowBufferArgs{})
 		out := &RowBuffer{}
 		flowCtx := FlowCtx{
-			evalCtx: parser.EvalContext{Mon: &monitor},
+			evalCtx: *parser.MakeTestingEvalContext(),
 		}
 
 		s, err := newSorter(&flowCtx, &ss, in, &c.post, out)

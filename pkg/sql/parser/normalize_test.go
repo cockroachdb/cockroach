@@ -187,7 +187,7 @@ func TestNormalizeExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		rOrig := typedExpr.String()
-		ctx := &EvalContext{}
+		ctx := MakeTestingEvalContext()
 		r, err := ctx.NormalizeExpr(typedExpr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)

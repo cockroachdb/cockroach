@@ -53,7 +53,7 @@ func TestOutbox(t *testing.T) {
 	}
 
 	flowCtx := FlowCtx{
-		evalCtx: parser.EvalContext{},
+		evalCtx: *parser.MakeTestingEvalContext(),
 		rpcCtx:  newInsecureRPCContext(stopper),
 	}
 	flowID := FlowID{uuid.MakeV4()}
@@ -205,7 +205,7 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 	}
 
 	flowCtx := FlowCtx{
-		evalCtx: parser.EvalContext{},
+		evalCtx: *parser.MakeTestingEvalContext(),
 		rpcCtx:  newInsecureRPCContext(stopper),
 	}
 	flowID := FlowID{uuid.MakeV4()}
@@ -267,7 +267,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			}
 
 			flowCtx := FlowCtx{
-				evalCtx: parser.EvalContext{},
+				evalCtx: *parser.MakeTestingEvalContext(),
 				rpcCtx:  newInsecureRPCContext(stopper),
 			}
 			flowID := FlowID{uuid.MakeV4()}
