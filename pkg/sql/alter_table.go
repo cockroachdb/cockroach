@@ -80,7 +80,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			if d.HasFKConstraint() {
 				return errors.Errorf("adding a REFERENCES constraint via ALTER not supported")
 			}
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, n.p.session.SearchPath)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, n.p.session.SearchPath, &n.p.evalCtx)
 			if err != nil {
 				return err
 			}

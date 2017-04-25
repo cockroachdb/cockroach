@@ -389,7 +389,7 @@ a      INT      false  NULL    {primary,tt_s_key,tt_t_key}
 q      DECIMAL  false  NULL    {}
 r      DECIMAL  true   NULL    {}
 s      DECIMAL  false  NULL    {tt_s_key}
-t      DECIMAL  true   4.0     {tt_t_key}
+t      DECIMAL  true   4.0:::DECIMAL {tt_t_key}
 
 # Default values can be added and changed after table creation.
 statement ok

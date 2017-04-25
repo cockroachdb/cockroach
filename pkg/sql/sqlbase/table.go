@@ -71,7 +71,7 @@ func SanitizeVarFreeExpr(
 // index descriptor if the column is a primary key or unique.
 // The search path is used for name resolution for DEFAULT expressions.
 func MakeColumnDefDescs(
-	d *parser.ColumnTableDef, searchPath parser.SearchPath,
+	d *parser.ColumnTableDef, searchPath parser.SearchPath, evalCtx *parser.EvalContext,
 ) (*ColumnDescriptor, *IndexDescriptor, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
@@ -170,6 +170,24 @@ func MakeColumnDefDescs(
 		); err != nil {
 			return nil, nil, err
 		}
+
+		// Type check and simplify: this performs constant folding and reduces the expression.
+		typedExpr, err := parser.TypeCheck(d.DefaultExpr.Expr, nil, col.Type.ToDatumType())
+		if err != nil {
+			return nil, nil, err
+		}
+		if typedExpr, err = p.NormalizeExpr(evalCtx, typedExpr); err != nil {
+			return nil, nil, err
+		}
+		// Try to evaluate once. If it is aimed to succeed during a
+		// backfill, it must succeed here too. This tries to ensure that
+		// we don't end up failing the evaluation during the schema change
+		// proper.
+		if _, err := typedExpr.Eval(evalCtx); err != nil {
+			return nil, nil, err
+		}
+		d.DefaultExpr.Expr = typedExpr
+
 		s := parser.Serialize(d.DefaultExpr.Expr)
 		col.DefaultExpr = &s
 	}
