@@ -408,6 +408,7 @@ func (e *Executor) Prepare(
 	prepared := &PreparedStatement{
 		Query:       query,
 		SQLTypes:    pinfo,
+		Stmts:       stmts,
 		portalNames: make(map[string]struct{}),
 	}
 	switch len(stmts) {
@@ -575,6 +576,11 @@ func (e *Executor) execRequest(
 		stmts, err = session.ProcessCopyData(session.Ctx(), sql, copymsg)
 	} else if copymsg != copyMsgNone {
 		err = fmt.Errorf("unexpected copy command")
+	} else if pinfo != nil && len(pinfo.Stmts) > 0 {
+		// TODO: This doesn't work as query planning and type checking both mutate
+		// the query in place. Specifically, table names are resolved and
+		// expression nodes are given resolved types.
+		stmts = pinfo.Stmts
 	} else {
 		var parser parser.Parser
 		stmts, err = parser.Parse(sql)

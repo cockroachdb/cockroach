@@ -34,6 +34,7 @@ type QueryArguments map[string]Datum
 type PlaceholderInfo struct {
 	Values QueryArguments
 	Types  PlaceholderTypes
+	Stmts  StatementList
 }
 
 // MakePlaceholderInfo constructs an empty PlaceholderInfo.
