@@ -201,6 +201,7 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 	cleanupRequired := true
 	defer func() {
 		if err != nil && cleanupRequired {
+			log.Infof(ctx, "accumulate error %s", err)
 			DrainAndClose(ctx, ag.out.output, err, ag.input)
 		}
 	}()

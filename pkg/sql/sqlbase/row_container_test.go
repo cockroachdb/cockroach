@@ -30,7 +30,7 @@ import (
 func TestRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, numCols := range []int{1, 2, 3, 5, 10, 15} {
+	for _, numCols := range []int{0, 1, 2, 3, 5, 10, 15} {
 		for _, numRows := range []int{5, 10, 100} {
 			for _, numPops := range []int{0, 1, 2, numRows / 3, numRows / 2} {
 				resCol := make(ResultColumns, numCols)
