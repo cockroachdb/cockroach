@@ -1781,6 +1781,18 @@ func MakeTestingEvalContext() EvalContext {
 	return ctx
 }
 
+// NewTestingEvalContext is a convenience version of MakeTestingEvalContext
+// that returns a pointer.
+func NewTestingEvalContext() *EvalContext {
+	ctx := MakeTestingEvalContext()
+	return &ctx
+}
+
+// Stop closes out the EvalContext and must be called once it is no longer in use.
+func (ctx *EvalContext) Stop(c context.Context) {
+	ctx.Mon.Stop(c)
+}
+
 // GetStmtTimestamp retrieves the current statement timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetStmtTimestamp() time.Time {
