@@ -78,30 +78,24 @@ var spamMu = struct {
 }
 
 func print(format string, args ...interface{}) {
-	var isSpam bool
 	if strings.Contains(format, "failed to create client transport") {
 		for _, arg := range args {
 			if err, ok := arg.(error); ok {
 				if strings.Contains(err.Error(), "refused") {
-					isSpam = true
+					gid := goid.Get()
+					spamMu.Lock()
+					t, ok := spamMu.gids[gid]
+					spamMu.Unlock()
+					if ok && timeutil.Since(t) < time.Minute {
+						return
+					}
+					spamMu.Lock()
+					spamMu.gids[gid] = timeutil.Now()
+					spamMu.Unlock()
 					break
 				}
 			}
 		}
-	}
-	if isSpam {
-		gid := goid.Get()
-		func() {
-			spamMu.Lock()
-			defer spamMu.Unlock()
-
-			if t, ok := spamMu.gids[gid]; ok {
-				if timeutil.Since(t) < time.Minute {
-					return
-				}
-			}
-			spamMu.gids[gid] = timeutil.Now()
-		}()
 	}
 	log.InfofDepth(context.TODO(), 3, format, args...)
 }
