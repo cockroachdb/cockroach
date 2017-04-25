@@ -694,6 +694,9 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	log.Event(ctx, "started node")
 
+	// TODO(dt): this would be nice if it raven didn't have a race on SetTags.
+	// raven.SetTagsContext(map[string]string{"cluster": s.ClusterID().String(), "node": s.NodeID().String()})
+
 	// We can now add the node registry.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAddr)
 

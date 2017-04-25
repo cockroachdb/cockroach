@@ -1,5 +1,5 @@
-hash: 04cc0a18094bdfa1396e60ffa89c8dac83d14844245254335c81bcb3afb6ca01
-updated: 2017-04-26T14:05:42.990793673-04:00
+hash: 2de92d2768ebcc7b02df420765f13fe46d2361d669b42abc384de5756ffcfc84
+updated: 2017-04-27T17:10:37.813429461Z
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -35,6 +35,8 @@ imports:
   - llrb
 - name: github.com/cenk/backoff
   version: 5d150e7eec023ce7a124856b37c68e54b4050ac7
+- name: github.com/certifi/gocertifi
+  version: a9c833d2837d3b16888d55d5aafa9ffe9afb22b0
 - name: github.com/chzyer/readline
   version: 41eea22f717c616615e1e59aa06cf831f9901f35
 - name: github.com/client9/misspell
@@ -71,7 +73,7 @@ imports:
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/docker/distribution
-  version: e85ef3c019a2809b3397771d385581ee09fc7649
+  version: b7d5d9bfed2a3b06d935c9a82d0771ec44a01d87
   subpackages:
   - digestset
   - reference
@@ -119,6 +121,9 @@ imports:
   version: 30f82fa23fd844bd5bb1e5f216db87fd77b5eb43
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
+- name: github.com/getsentry/raven-go
+  version: aa4f14680cc759ef40791558d93c90c6f629c10f
+  repo: https://github.com/cockroachdb/raven-go
 - name: github.com/go-ole/go-ole
   version: de8695c8edbf8236f30d6e1376e20b198a028d42
   subpackages:
@@ -345,7 +350,7 @@ imports:
   subpackages:
   - doc
 - name: github.com/spf13/pflag
-  version: 2300d0f8576fe575f71aaa5b9bbe4e1b0dc2eb51
+  version: f1d95a35e132e8a1868023a08932b14f0b8b8fcb
 - name: github.com/StackExchange/wmi
   version: ea383cf3ba6ec950874b8486cd72356d007c768f
 - name: github.com/tebeka/go2xunit
@@ -399,7 +404,7 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: a9a820217f98f7c8a207ec1e45a874e1fe12c478
+  version: 470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4
   subpackages:
   - collate
   - internal/colltab
@@ -413,7 +418,7 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 9a6c6fca12efdd355f948c5b748b8b48edbb4ef0
+  version: 3aa1caa08a9813c4635689965b58bd050828f0bf
   subpackages:
   - cmd/goimports
   - cmd/gorename
