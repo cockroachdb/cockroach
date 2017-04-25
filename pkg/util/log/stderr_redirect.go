@@ -19,6 +19,11 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	raven "github.com/getsentry/raven-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -65,6 +70,10 @@ func RecoverAndReportPanic(ctx context.Context) {
 func ReportPanic(ctx context.Context, r interface{}) {
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
 
+	if crashReports.Get() {
+		sendCrashReport(ctx, r)
+	}
+
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
 	Flush()
@@ -78,5 +87,44 @@ func ReportPanic(ctx context.Context, r interface{}) {
 	// is redirected to a file otherwise.
 	if stderrRedirected {
 		fmt.Fprintf(OrigStderr, "%v\n\n%s\n", r, debug.Stack())
+	}
+}
+
+var crashReports = settings.RegisterBoolSetting(
+	"diagnostics.crash_reports.enabled",
+	"send crash and panic reports",
+	true,
+)
+
+// SetupCrashReporter sets the crash reporter info.
+func SetupCrashReporter(ctx context.Context, cmd string) {
+	url := envutil.EnvOrDefaultString(
+		"COCKROACH_CRASH_REPORTS", "https://ignored:ignored@errors.cockroachdb.com/sentry",
+	)
+	if err := errors.Wrap(raven.SetDSN(url), "failed to setup crash reporting"); err != nil {
+		panic(err)
+	}
+
+	if cmd == "start" {
+		cmd = "server"
+	}
+	info := build.GetInfo()
+	raven.SetRelease(info.Tag)
+	raven.SetEnvironment(cmd)
+	raven.SetTagsContext(map[string]string{
+		"platform":     info.Platform,
+		"distribution": info.Distribution,
+		"rev":          info.Revision,
+		"goversion":    info.GoVersion,
+	})
+}
+
+func sendCrashReport(ctx context.Context, r interface{}) {
+	if err, ok := r.(error); ok {
+		id := raven.CaptureErrorAndWait(err, nil)
+		Shout(ctx, Severity_ERROR, "Reported as error "+id)
+	} else {
+		id := raven.CaptureMessageAndWait(fmt.Sprint(r), nil)
+		Shout(ctx, Severity_ERROR, "Reported as error "+id)
 	}
 }

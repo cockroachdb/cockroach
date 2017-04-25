@@ -109,7 +109,7 @@ type storeInfo struct {
 func (s *Server) PeriodicallyCheckForUpdates() {
 	s.stopper.RunWorker(context.TODO(), func(context.Context) {
 		startup := timeutil.Now()
-		var nextUpdateCheck, nextDiagnosticReport time.Time
+		var nextUpdateCheck, nextDiagnosticReport = startup, startup
 
 		var timer timeutil.Timer
 		defer timer.Stop()
@@ -238,7 +238,6 @@ func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Durati
 	if diagnosticsReportingEnabled.Get() {
 		s.reportDiagnostics()
 	}
-
 	return scheduled.Add(diagnosticReportFrequency)
 }
 
