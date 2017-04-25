@@ -60,7 +60,7 @@ type Configuration struct {
 // Locality defines the properties of a single locality as part of a Configuration.
 type Locality struct {
 	Name              string `json:"Name"`
-	LocalityStr				string `json:"LocalityStr"`
+	LocalityStr       string `json:"LocalityStr"`
 	NumNodes          int    `json:"NumNodes"`
 	NumWorkers        int    `json:"NumWorkers"`
 	OutgoingLatencies []*struct {
