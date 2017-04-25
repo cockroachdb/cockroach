@@ -241,7 +241,7 @@ func (rq *replicateQueue) process(
 		}
 		return nil
 	}
-	return errors.Errorf("failed to replicate %s after %d retries", repl, retryOpts.MaxRetries)
+	return errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
 }
 
 func (rq *replicateQueue) processOneChange(
