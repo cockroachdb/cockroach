@@ -112,7 +112,7 @@ func (p *planner) setClusterSetting(
 		}
 	case 1:
 		// TODO(dt): validate and properly encode str according to type.
-		encoded, err := p.toSettingString(name, typ, v[0])
+		encoded, err := ToSettingString(name, typ, v[0], &p.evalCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -128,15 +128,15 @@ func (p *planner) setClusterSetting(
 	return &emptyNode{}, nil
 }
 
-func (p *planner) toSettingString(
-	name string, setting settings.Setting, raw parser.Expr,
+func ToSettingString(
+	name string, setting settings.Setting, raw parser.Expr, evalCtx *parser.EvalContext,
 ) (string, error) {
 	typeCheckAndParse := func(t parser.Type, f func(parser.Datum) (string, error)) (string, error) {
 		typed, err := parser.TypeCheckAndRequire(raw, nil, t, name)
 		if err != nil {
 			return "", err
 		}
-		d, err := typed.Eval(&p.evalCtx)
+		d, err := typed.Eval(evalCtx)
 		if err != nil {
 			return "", err
 		}
