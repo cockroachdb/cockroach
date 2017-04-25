@@ -323,8 +323,18 @@ func MakeUnlimitedMonitor(
 	}
 }
 
+// EmergencyStop completes a monitoring region, and disables checking
+// that all accounts have been closed.
+func (mm *MemoryMonitor) EmergencyStop(ctx context.Context) {
+	mm.doStop(ctx, false)
+}
+
 // Stop completes a monitoring region.
 func (mm *MemoryMonitor) Stop(ctx context.Context) {
+	mm.doStop(ctx, true)
+}
+
+func (mm *MemoryMonitor) doStop(ctx context.Context, check bool) {
 	// NB: No need to lock mm.mu here, when StopMonitor() is called the
 	// monitor is not shared any more.
 	if log.V(1) {
@@ -333,7 +343,7 @@ func (mm *MemoryMonitor) Stop(ctx context.Context) {
 			humanizeutil.IBytes(mm.mu.maxAllocated))
 	}
 
-	if mm.mu.curAllocated != 0 {
+	if check && mm.mu.curAllocated != 0 {
 		panic(fmt.Sprintf("%s: unexpected leftover memory: %d bytes",
 			mm.name,
 			mm.mu.curAllocated))

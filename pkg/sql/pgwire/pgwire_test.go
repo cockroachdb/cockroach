@@ -1638,3 +1638,38 @@ func TestPGWireAuth(t *testing.T) {
 		}
 	})
 }
+
+func TestRecoverFromPanics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	scope := log.Scope(t)
+	defer scope.Close(t)
+
+	params := base.TestServerArgs{}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Check that the server recovers from SQL panics and propagates a proper
+	// error code to the client.
+	if _, err := db.Exec(`SELECT crdb_internal.internal_error('mytest')`); err != nil {
+		if !testutils.IsError(err, "internal server error during SQL execution") {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatalf("panic recover error expected, none found")
+	}
+
+	// Check that the db connection can recover after the previous error.
+	if _, err := db.Exec(`SELECT 1`); err != nil {
+		t.Fatal(err)
+	}
+}
