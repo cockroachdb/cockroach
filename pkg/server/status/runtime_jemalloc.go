@@ -26,6 +26,7 @@ package status
 // // elsewhere, causing the linker to omit the file's symbols.
 // // Manually force the presence of these symbols on macOS.
 // #cgo darwin LDFLAGS: -u_je_zone_register
+// #cgo dragonfly freebsd LDFLAGS: -lm
 // #cgo linux LDFLAGS: -lrt -lm -lpthread
 //
 // #include <jemalloc/jemalloc.h>
