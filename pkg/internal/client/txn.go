@@ -108,6 +108,12 @@ func (txn *Txn) IsFinalized() bool {
 	return txn.mu.finalized
 }
 
+func (txn *Txn) status() roachpb.TransactionStatus {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.Proto.Status
+}
+
 // SetUserPriority sets the transaction's user priority. Transactions default to
 // normal user priority. The user priority must be set before any operations are
 // performed on the transaction.
@@ -431,12 +437,14 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 	// This may race with a concurrent EndTxnRequests. That's fine though because
 	// we're just trying to clean up and will happily log the failed Rollback error
 	// if someone beat us.
-	txn.mu.Lock()
-	isPending := txn.mu.Proto.Status == roachpb.PENDING
-	txn.mu.Unlock()
-	if isPending {
+	if txn.status() == roachpb.PENDING {
 		if replyErr := txn.Rollback(ctx); replyErr != nil {
-			log.Errorf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+			if replyErr.Error() == "does not exist" || replyErr.Error() == "already committed" ||
+				txn.status() == roachpb.ABORTED {
+				log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+			} else {
+				log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+			}
 		}
 	}
 }
@@ -615,9 +623,7 @@ func (txn *Txn) Exec(
 			// Copy the status out of the Proto under lock. Making decisions on
 			// this later is not thread-safe, but the commutativity property of
 			// transactions assure that reasoning about the situation is straightforward.
-			txn.mu.Lock()
-			status := txn.Proto().Status
-			txn.mu.Unlock()
+			status := txn.status()
 
 			switch status {
 			case roachpb.ABORTED:
