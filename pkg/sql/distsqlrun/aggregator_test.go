@@ -17,14 +17,12 @@
 package distsqlrun
 
 import (
-	"math"
 	"sort"
 	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -307,52 +305,53 @@ func TestAggregator(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		ags := c.spec
+		func() {
+			ags := c.spec
 
-		var types []sqlbase.ColumnType
-		if len(c.input) == 0 {
-			types = []sqlbase.ColumnType{columnTypeInt}
-		}
-		in := NewRowBuffer(types, c.input, RowBufferArgs{})
-		out := &RowBuffer{}
-
-		monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
-		flowCtx := FlowCtx{
-			evalCtx: parser.EvalContext{Mon: &monitor},
-		}
-
-		ag, err := newAggregator(&flowCtx, &ags, in, &PostProcessSpec{}, out)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		ag.Run(context.Background(), nil)
-
-		var expected []string
-		for _, row := range c.expected {
-			expected = append(expected, row.String())
-		}
-		sort.Strings(expected)
-		expStr := strings.Join(expected, "")
-
-		var rets []string
-		for {
-			row, meta := out.Next()
-			if !meta.Empty() {
-				t.Fatalf("unexpected metadata: %v", meta)
+			var types []sqlbase.ColumnType
+			if len(c.input) == 0 {
+				types = []sqlbase.ColumnType{columnTypeInt}
 			}
-			if row == nil {
-				break
+			in := NewRowBuffer(types, c.input, RowBufferArgs{})
+			out := &RowBuffer{}
+			evalCtx := parser.MakeTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
+			flowCtx := FlowCtx{
+				evalCtx: evalCtx,
 			}
-			rets = append(rets, row.String())
-		}
-		sort.Strings(rets)
-		retStr := strings.Join(rets, "")
 
-		if expStr != retStr {
-			t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
-				expStr, retStr)
-		}
-		monitor.Stop(context.Background())
+			ag, err := newAggregator(&flowCtx, &ags, in, &PostProcessSpec{}, out)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ag.Run(context.Background(), nil)
+
+			var expected []string
+			for _, row := range c.expected {
+				expected = append(expected, row.String())
+			}
+			sort.Strings(expected)
+			expStr := strings.Join(expected, "")
+
+			var rets []string
+			for {
+				row, meta := out.Next()
+				if !meta.Empty() {
+					t.Fatalf("unexpected metadata: %v", meta)
+				}
+				if row == nil {
+					break
+				}
+				rets = append(rets, row.String())
+			}
+			sort.Strings(rets)
+			retStr := strings.Join(rets, "")
+
+			if expStr != retStr {
+				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
+					expStr, retStr)
+			}
+		}()
 	}
 }
