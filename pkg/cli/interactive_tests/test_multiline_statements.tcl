@@ -70,6 +70,27 @@ send "SELECT 1; COMMIT;\r"
 eexpect "1 row"
 eexpect root@
 
+# Test that a dangling table creation can be committed, and that other
+# non-DDL, non-DML statements can be issued in the same txn. (#15283)
+send "create database if not exists t;"
+send "drop table if exists t.blih;"
+send "create table if not exists t.kv(k int primary key, v int);\r"
+eexpect "CREATE TABLE"
+eexpect root@
+send "begin; create table t.blih(x INT REFERENCES t.kv(k));\r\r"
+eexpect "CREATE TABLE"
+eexpect root@
+eexpect OPEN
+
+send "SHOW ALL CLUSTER SETTINGS;\r"
+eexpect "rows"
+eexpect root@
+eexpect OPEN
+
+send "commit;\r"
+eexpect COMMIT
+eexpect root@
+
 interrupt
 eexpect eof
 
