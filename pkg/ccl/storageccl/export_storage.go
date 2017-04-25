@@ -538,25 +538,38 @@ func FetchFile(
 	if tempPrefix == "" {
 		return "", cleanup, errors.New("must provide tempdir path")
 	}
-	r, err := e.ReadFile(ctx, basename)
-	if err != nil {
-		return "", cleanup, errors.Wrapf(err, "creating reader for %q", basename)
-	}
-	defer r.Close()
-	f, err := ioutil.TempFile(tempPrefix, basename)
-	if err != nil {
-		return "", cleanup, errors.Wrap(err, "creating tmpfile")
-	}
-	defer f.Close()
-	cleanup = func() {
-		if err := errors.Wrapf(os.Remove(f.Name()), "cleaning up tmpfile", f.Name()); err != nil {
-			log.Warningf(ctx, "%+v", err)
+
+	const maxAttempts = 3
+	var fileName string
+	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		r, err := e.ReadFile(ctx, basename)
+		if err != nil {
+			return errors.Wrapf(err, "creating reader for %q", basename)
 		}
+		defer r.Close()
+
+		f, err := ioutil.TempFile(tempPrefix, basename)
+		if err != nil {
+			return errors.Wrap(err, "creating tmpfile")
+		}
+		defer f.Close()
+		cleanup = func() {
+			if err := errors.Wrapf(os.Remove(f.Name()), "cleaning up tmpfile", f.Name()); err != nil {
+				log.Warningf(ctx, "%+v", err)
+			}
+		}
+
+		if _, err := io.Copy(f, r); err != nil {
+			cleanup()
+			cleanup = func() {}
+			return errors.Wrapf(err, "fetching file content for %q", basename)
+		}
+		fileName = f.Name()
+		return nil
+	}); err != nil {
+		return "", cleanup, err
 	}
-	if _, err := io.Copy(f, r); err != nil {
-		return "", cleanup, errors.Wrapf(err, "fetching file content for %q", basename)
-	}
-	return f.Name(), cleanup, nil
+	return fileName, cleanup, nil
 }
 
 // ExportFileWriter provides a local path, to a file or pipe, that can be
