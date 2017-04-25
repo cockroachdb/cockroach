@@ -10,6 +10,7 @@ syntax = "proto3";
 package cockroach.ccl.sqlccl;
 option go_package = "sqlccl";
 
+import "cockroach/pkg/build/info.proto";
 import "cockroach/pkg/roachpb/api.proto";
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/sql/sqlbase/structured.proto";
@@ -23,9 +24,6 @@ import "gogoproto/gogo.proto";
 // ranges in a backup is the same, but the start may vary (to allow individual
 // tables to be backed up on different schedules).
 message BackupDescriptor {
-  // TODO(dan): While this is feature is experimental, this proto may change in
-  // ways that are backward incompatible. Remove this note when it launches.
-
   // BackupDescriptor_File represents a file that contains the diff for a key
   // range between two timestamps.
   message File {
@@ -46,4 +44,15 @@ message BackupDescriptor {
   int64 data_size = 6;
 
   roachpb.ExportStorage dir = 7 [(gogoproto.nullable) = false];
+
+  uint32 format_version = 8;
+
+  bytes cluster_id = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+
+  // node_id and build_info of the gateway node (which writes the descriptor).
+  int32 node_id = 10 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  build.Info build_info = 11 [(gogoproto.nullable) = false];
+
 }
