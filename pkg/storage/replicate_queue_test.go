@@ -18,6 +18,7 @@ package storage_test
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,7 +39,7 @@ import (
 
 func TestReplicateQueueRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#12943")
+	t.Skip("#13885")
 
 	if testing.Short() {
 		t.Skip("short flag")
@@ -102,18 +103,19 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	})
 }
 
-// TestReplicateQueueDownReplicate verifies that the replication queue will notice
-// over-replicated ranges and remove replicas from them.
+// TestReplicateQueueDownReplicate verifies that the replication queue will
+// notice over-replicated ranges and remove replicas from them.
 func TestReplicateQueueDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#12943")
-
 	const replicaCount = 3
 
+	// The goal of this test is to ensure that down replication occurs correctly
+	// using the replicate queue, and to ensure that's the case, the test
+	// cluster needs to be kept in auto replication mode.
 	tc := testcluster.StartTestCluster(t, replicaCount+2,
 		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
 	)
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	// Split off a range from the initial range for testing; there are
 	// complications if the metadata ranges are moved.
@@ -122,50 +124,47 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	desc, err := tc.LookupRange(testKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rangeID := desc.RangeID
+	allowedErrs := strings.Join([]string{
+		// If a node is already present, we expect this error.
+		"unable to add replica .* which is already present",
+		// If a replica for this range was previously present on this store and
+		// it has already been removed but has not yet been GCed, this error
+		// is expected.
+		storage.IntersectingSnapshotMsg,
+	}, "|")
 
-	countReplicas := func() int {
-		count := 0
-		for _, s := range tc.Servers {
-			if err := s.Stores().VisitStores(func(store *storage.Store) error {
-				if _, err := store.GetReplica(rangeID); err == nil {
-					count++
-				}
+	// Up-replicate the new range to all nodes to create redundant replicas.
+	// Every time a new replica is added, there's a very good chance that
+	// another one is removed. So all the replicas can't be added at once and
+	// instead need to be added one at a time ensuring that the replica did
+	// indeed make it to the desired target.
+	for _, server := range tc.Servers {
+		nodeID := server.NodeID()
+		// If this is not wrapped in a SucceedsSoon, then other temporary
+		// failures unlike the ones listed below, such as rejected reservations
+		// can cause the test to fail. When encountering those failures, a
+		// retry is in order.
+		testutils.SucceedsSoon(t, func() error {
+			_, err := tc.AddReplicas(testKey, roachpb.ReplicationTarget{
+				NodeID:  nodeID,
+				StoreID: server.GetFirstStoreID(),
+			})
+			if testutils.IsError(err, allowedErrs) {
 				return nil
-			}); err != nil {
-				t.Fatal(err)
 			}
-		}
-		return count
+			return err
+		})
 	}
 
-	// Up-replicate the new range to all servers to create redundant replicas.
-	// Add replicas to all of the nodes. Only 2 of these calls will succeed
-	// because the range is already replicated to the other 3 nodes.
+	// Now wait until the replicas have been down-replicated back to the
+	// desired number.
 	testutils.SucceedsSoon(t, func() error {
-		for i := 0; i < tc.NumServers(); i++ {
-			_, err := tc.AddReplicas(testKey, tc.Target(i))
-			if err != nil {
-				if testutils.IsError(err, "unable to add replica .* which is already present") {
-					continue
-				}
-				return err
-			}
+		desc, err := tc.LookupRange(testKey)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if c := countReplicas(); c != tc.NumServers() {
-			return errors.Errorf("replica count = %d", c)
-		}
-		return nil
-	})
-
-	// Ensure that the replicas for the new range down replicate.
-	testutils.SucceedsSoon(t, func() error {
-		if c := countReplicas(); c != replicaCount {
-			return errors.Errorf("replica count = %d", c)
+		if len(desc.Replicas) != replicaCount {
+			return errors.Errorf("replica count, want %d, current %d", replicaCount, len(desc.Replicas))
 		}
 		return nil
 	})
