@@ -1481,7 +1481,7 @@ func TestBackupAzureAccountName(t *testing.T) {
 	}
 
 	// Verify newlines in the account name cause an error.
-	if _, err := sqlDB.DB.Exec(`backup database d to $1`, url.String()); !testutils.IsError(err, "azure account name invalid") {
-		t.Fatalf("unexpected error, got %v", err)
+	if _, err := sqlDB.DB.Exec(`backup database d to $1`, url.String()); !testutils.IsError(err, "azure: account name is not valid") {
+		t.Fatalf("unexpected error %v", err)
 	}
 }

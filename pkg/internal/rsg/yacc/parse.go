@@ -87,8 +87,7 @@ func (t *Tree) unexpected(token item, context string) {
 
 // recover is the handler that turns panics into returns from the top level of Parse.
 func (t *Tree) recover(errp *error) {
-	e := recover()
-	if e != nil {
+	if e := recover(); e != nil {
 		if _, ok := e.(runtime.Error); ok {
 			panic(e)
 		}
@@ -97,7 +96,6 @@ func (t *Tree) recover(errp *error) {
 		}
 		*errp = e.(error)
 	}
-	return
 }
 
 // startParse initializes the parser, using the lexer.
