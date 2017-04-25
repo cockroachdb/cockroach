@@ -41,7 +41,7 @@ import (
 )
 
 const baseUpdatesURL = `https://register.cockroachdb.com/api/clusters/updates`
-const baseReportingURL = `https://register.cockroachdb.com/api/report`
+const baseReportingURL = `https://register.cockroachdb.com/api/clusters/report`
 
 var updatesURL, reportingURL *url.URL
 
