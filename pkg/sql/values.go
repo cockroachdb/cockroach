@@ -27,19 +27,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 type valuesNode struct {
 	n        *parser.ValuesClause
 	p        *planner
-	columns  ResultColumns
+	columns  sqlbase.ResultColumns
 	ordering sqlbase.ColumnOrdering
 	tuples   [][]parser.TypedExpr
-	rows     *RowContainer
+	rows     *sqlbase.RowContainer
 
 	// rowsPopped is used for heaps, it indicates the number of rows that were
-	// "popped". These rows are still part of the underlying RowContainer, in the
+	// "popped". These rows are still part of the underlying sqlbase.RowContainer, in the
 	// range [rows.Len()-n.rowsPopped, rows.Len).
 	rowsPopped int
 
@@ -49,11 +48,13 @@ type valuesNode struct {
 	invertSorting bool // Inverts the sorting predicate.
 }
 
-func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *valuesNode {
+func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
 		p:       p,
 		columns: columns,
-		rows:    NewRowContainer(p.session.TxnState.makeBoundAccount(), columns, capacity),
+		rows: sqlbase.NewRowContainer(
+			p.session.TxnState.makeBoundAccount(), columns, capacity,
+		),
 	}
 }
 
@@ -74,7 +75,7 @@ func (p *planner) ValuesClause(
 	v.tuples = make([][]parser.TypedExpr, 0, len(n.Tuples))
 	tupleBuf := make([]parser.TypedExpr, len(n.Tuples)*numCols)
 
-	v.columns = make(ResultColumns, 0, numCols)
+	v.columns = make(sqlbase.ResultColumns, 0, numCols)
 
 	for num, tuple := range n.Tuples {
 		if a, e := len(tuple.Exprs), numCols; a != e {
@@ -103,7 +104,7 @@ func (p *planner) ValuesClause(
 
 			typ := typedExpr.ResolvedType()
 			if num == 0 {
-				v.columns = append(v.columns, ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
+				v.columns = append(v.columns, sqlbase.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
 			} else if v.columns[i].Typ == parser.TypeNull {
 				v.columns[i].Typ = typ
 			} else if typ != parser.TypeNull && !typ.Equivalent(v.columns[i].Typ) {
@@ -127,12 +128,14 @@ func (n *valuesNode) Start(ctx context.Context) error {
 	// others that create a valuesNode internally for storing results
 	// from other planNodes), so its expressions need evaluting.
 	// This may run subqueries.
-	n.rows = NewRowContainer(n.p.session.TxnState.makeBoundAccount(), n.columns, len(n.n.Tuples))
+	n.rows = sqlbase.NewRowContainer(
+		n.p.session.TxnState.makeBoundAccount(), n.columns, len(n.n.Tuples),
+	)
 
 	row := make([]parser.Datum, len(n.columns))
 	for _, tupleRow := range n.tuples {
 		for i, typedExpr := range tupleRow {
-			if n.columns[i].omitted {
+			if n.columns[i].Omitted {
 				row[i] = parser.DNull
 			} else {
 				var err error
@@ -150,7 +153,7 @@ func (n *valuesNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *valuesNode) Columns() ResultColumns {
+func (n *valuesNode) Columns() sqlbase.ResultColumns {
 	return n.columns
 }
 
@@ -208,26 +211,7 @@ func (n *valuesNode) Less(i, j int) bool {
 // ValuesLess returns the comparison result between the two provided Datums slices
 // in the context of the valuesNode ordering.
 func (n *valuesNode) ValuesLess(ra, rb parser.Datums) bool {
-	for _, c := range n.ordering {
-		var da, db parser.Datum
-		if c.Direction == encoding.Ascending {
-			da = ra[c.ColIdx]
-			db = rb[c.ColIdx]
-		} else {
-			da = rb[c.ColIdx]
-			db = ra[c.ColIdx]
-		}
-		// TODO(pmattis): This is assuming that the datum types are compatible. I'm
-		// not sure this always holds as `CASE` expressions can return different
-		// types for a column for different rows. Investigate how other RDBMs
-		// handle this.
-		if c := da.Compare(&n.p.evalCtx, db); c < 0 {
-			return true
-		} else if c > 0 {
-			return false
-		}
-	}
-	return true
+	return sqlbase.CompareDatums(n.ordering, &n.p.evalCtx, ra, rb) < 0
 }
 
 func (n *valuesNode) Swap(i, j int) {

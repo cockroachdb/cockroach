@@ -512,7 +512,7 @@ func fillDefaults(
 	return ret
 }
 
-func (n *insertNode) Columns() ResultColumns {
+func (n *insertNode) Columns() sqlbase.ResultColumns {
 	return n.rh.columns
 }
 

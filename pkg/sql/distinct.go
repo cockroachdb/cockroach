@@ -63,9 +63,9 @@ func (n *distinctNode) Start(ctx context.Context) error {
 	return n.plan.Start(ctx)
 }
 
-func (n *distinctNode) Columns() ResultColumns { return n.plan.Columns() }
-func (n *distinctNode) Values() parser.Datums  { return n.plan.Values() }
-func (n *distinctNode) Ordering() orderingInfo { return n.plan.Ordering() }
+func (n *distinctNode) Columns() sqlbase.ResultColumns { return n.plan.Columns() }
+func (n *distinctNode) Values() parser.Datums          { return n.plan.Values() }
+func (n *distinctNode) Ordering() orderingInfo         { return n.plan.Ordering() }
 
 func (n *distinctNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
 	return n.plan.Spans(ctx)

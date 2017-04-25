@@ -15,7 +15,7 @@
 // Author: Raphael 'kena' Poss (knz@cockroachlabs.com)
 // Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
-package sql
+package sqlbase
 
 import (
 	"fmt"
@@ -30,8 +30,10 @@ import (
 const (
 	// targetChunkSize is the target number of Datums in a RowContainer chunk.
 	targetChunkSize = 64
-	sizeOfDatum     = int64(unsafe.Sizeof(parser.Datum(nil)))
-	sizeOfDatums    = int64(unsafe.Sizeof(parser.Datums(nil)))
+	// SizeOfDatum is the memory size of a Datum reference.
+	SizeOfDatum = int64(unsafe.Sizeof(parser.Datum(nil)))
+	// SizeOfDatums is the memory size of a Datum slice.
+	SizeOfDatums = int64(unsafe.Sizeof(parser.Datums(nil)))
 )
 
 // RowContainer is a container for rows of Datums which tracks the
@@ -124,8 +126,8 @@ func NewRowContainer(acc mon.BoundAccount, h ResultColumns, rowCapacity int) *Ro
 
 	// Precalculate the memory used for a chunk, specifically by the Datums in the
 	// chunk and the slice pointing at the chunk.
-	c.chunkMemSize = sizeOfDatum * int64(c.rowsPerChunk*c.numCols)
-	c.chunkMemSize += sizeOfDatums
+	c.chunkMemSize = SizeOfDatum * int64(c.rowsPerChunk*c.numCols)
+	c.chunkMemSize += SizeOfDatums
 
 	return c
 }

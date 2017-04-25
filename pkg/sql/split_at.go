@@ -144,8 +144,8 @@ func (n *splitNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
 }
 
-func (*splitNode) Columns() ResultColumns {
-	return ResultColumns{
+func (*splitNode) Columns() sqlbase.ResultColumns {
+	return sqlbase.ResultColumns{
 		{
 			Name: "key",
 			Typ:  parser.TypeBytes,
@@ -333,8 +333,8 @@ func (n *relocateNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
 }
 
-func (*relocateNode) Columns() ResultColumns {
-	return ResultColumns{
+func (*relocateNode) Columns() sqlbase.ResultColumns {
+	return sqlbase.ResultColumns{
 		{
 			Name: "key",
 			Typ:  parser.TypeBytes,
@@ -465,8 +465,8 @@ func (n *scatterNode) Next(ctx context.Context) (bool, error) {
 	return hasNext, nil
 }
 
-func (*scatterNode) Columns() ResultColumns {
-	return ResultColumns{
+func (*scatterNode) Columns() sqlbase.ResultColumns {
+	return sqlbase.ResultColumns{
 		{
 			Name: "key",
 			Typ:  parser.TypeBytes,

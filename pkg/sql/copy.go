@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // COPY FROM is not a usual planNode. After a COPY FROM is executed as a
@@ -47,13 +48,13 @@ type copyNode struct {
 	p             *planner
 	table         parser.TableExpr
 	columns       parser.UnresolvedNames
-	resultColumns ResultColumns
+	resultColumns sqlbase.ResultColumns
 	buf           bytes.Buffer
 	rows          []*parser.Tuple
 	rowsMemAcc    WrappableMemoryAccount
 }
 
-func (n *copyNode) Columns() ResultColumns                            { return n.resultColumns }
+func (n *copyNode) Columns() sqlbase.ResultColumns                    { return n.resultColumns }
 func (*copyNode) Ordering() orderingInfo                              { return orderingInfo{} }
 func (*copyNode) Values() parser.Datums                               { return nil }
 func (*copyNode) MarkDebug(_ explainMode)                             {}
@@ -95,9 +96,9 @@ func (p *planner) CopyFrom(
 	if err != nil {
 		return nil, err
 	}
-	cn.resultColumns = make(ResultColumns, len(cols))
+	cn.resultColumns = make(sqlbase.ResultColumns, len(cols))
 	for i, c := range cols {
-		cn.resultColumns[i] = ResultColumn{Typ: c.Type.ToDatumType()}
+		cn.resultColumns[i] = sqlbase.ResultColumn{Typ: c.Type.ToDatumType()}
 	}
 	cn.p = p
 	cn.rowsMemAcc = p.session.OpenAccount()

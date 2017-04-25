@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -93,7 +94,7 @@ type planNode interface {
 	// tuple returned by Values().
 	//
 	// Available after newPlan().
-	Columns() ResultColumns
+	Columns() sqlbase.ResultColumns
 
 	// The indexes of the columns the output is ordered by.
 	//

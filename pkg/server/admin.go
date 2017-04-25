@@ -1031,7 +1031,7 @@ type resultScanner struct {
 	colNameToIdx map[string]int
 }
 
-func makeResultScanner(cols []sql.ResultColumn) resultScanner {
+func makeResultScanner(cols []sqlbase.ResultColumn) resultScanner {
 	rs := resultScanner{
 		colNameToIdx: make(map[string]int),
 	}
