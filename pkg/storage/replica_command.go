@@ -228,7 +228,7 @@ func evaluateCommand(
 	// }
 
 	if log.V(2) {
-		log.Infof(ctx, "executed %s command %+v: %+v, err=%v", args.Method(), args, reply, err)
+		log.Infof(ctx, "evaluated %s command %+v: %+v, err=%v", args.Method(), args, reply, err)
 	}
 
 	// Create a roachpb.Error by initializing txn from the request/response header.
@@ -1952,7 +1952,7 @@ func evalRequestLease(
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
 	args.Lease.Start = effectiveStart
-	return applyNewLease(ctx, cArgs.EvalCtx, batch, cArgs.Stats,
+	return evalNewLease(ctx, cArgs.EvalCtx, batch, cArgs.Stats,
 		args.Lease, prevLease, isExtension, false /* isTransfer */)
 }
 
@@ -1975,11 +1975,11 @@ func evalTransferLease(
 	if log.V(2) {
 		log.Infof(ctx, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, args.Lease)
 	}
-	return applyNewLease(ctx, cArgs.EvalCtx, batch, cArgs.Stats,
+	return evalNewLease(ctx, cArgs.EvalCtx, batch, cArgs.Stats,
 		args.Lease, prevLease, false /* isExtension */, true /* isTransfer */)
 }
 
-// applyNewLease checks that the lease contains a valid interval and that
+// evalNewLease checks that the lease contains a valid interval and that
 // the new lease holder is still a member of the replica set, and then proceeds
 // to write the new lease to the batch, emitting an appropriate trigger.
 //
@@ -1992,7 +1992,7 @@ func evalTransferLease(
 //
 // TODO(tschottdorf): refactoring what's returned from the trigger here makes
 // sense to minimize the amount of code intolerant of rolling updates.
-func applyNewLease(
+func evalNewLease(
 	ctx context.Context,
 	rec ReplicaEvalContext,
 	batch engine.ReadWriter,
