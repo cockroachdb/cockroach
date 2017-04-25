@@ -452,9 +452,9 @@ func TestAdminAPITableDetails(t *testing.T) {
 			// Verify columns.
 			expColumns := []serverpb.TableDetailsResponse_Column{
 				{Name: "nulls_allowed", Type: "INT", Nullable: true, DefaultValue: ""},
-				{Name: "nulls_not_allowed", Type: "INT", Nullable: false, DefaultValue: "1000"},
-				{Name: "default2", Type: "INT", Nullable: true, DefaultValue: "2"},
-				{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "'default_string'"},
+				{Name: "nulls_not_allowed", Type: "INT", Nullable: false, DefaultValue: "1000:::INT"},
+				{Name: "default2", Type: "INT", Nullable: true, DefaultValue: "2:::INT"},
+				{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "'default_string':::STRING"},
 			}
 			testutils.SortStructs(expColumns, "Name")
 			testutils.SortStructs(resp.Columns, "Name")

@@ -245,10 +245,10 @@ CREATE TABLE test.named_constraints (
 query TT
 SHOW CREATE TABLE test.named_constraints
 ----
-    test.named_constraints  CREATE TABLE named_constraints (
+test.named_constraints  CREATE TABLE named_constraints (
                             id INT NOT NULL,
                             name STRING NOT NULL,
-                            title STRING NULL DEFAULT 'VP of Something',
+                            title STRING NULL DEFAULT 'VP of Something':::STRING,
                             nickname STRING NULL,
                             username STRING(10) NULL,
                             email STRING(100) NULL,
