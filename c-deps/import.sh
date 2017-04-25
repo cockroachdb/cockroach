@@ -31,6 +31,10 @@ deps=(
     [snappy]=https://github.com/google/snappy/releases/download/1.1.3/snappy-1.1.3.tar.gz
 )
 
+mangle_protobuf() {
+  rm -r protobuf.src/examples
+}
+
 (($# >= 1)) && goals=("$@") || goals=("${!deps[@]}")
 
 for dep in "${goals[@]}"; do
@@ -50,6 +54,7 @@ for dep in "${goals[@]}"; do
     echo ">> $patch"
     patch -d "$dep.src" -p1 < "$patch"
   done
+  type -t "mangle_$dep" > /dev/null && set -x && "mangle_$dep" && set +x
   # TODO(benesch): it would be good for these tarballs to be reproducible.
   # Currently, any patches cause them not to be, because of the change in
   # mtime. Fix this.
