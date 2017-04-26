@@ -56,8 +56,10 @@ specialized hardware or number of cores (e.g. "gpu", "x16c"). For example:
 An ordered, comma-separated list of key-value pairs that describe the topography
 of the machine. Topography might include country, datacenter or rack
 designations. Data is automatically replicated to maximize diversities of each
-tier. The order of tiers is used to determine the priority of the diversity. The
-tiers and order must be the same on all nodes.  For example:
+tier. The order of tiers is used to determine the priority of the diversity, so
+the more inclusive localities like country should come before less inclusive
+localities like datacenter. The tiers and order must be the same on all nodes.
+Including more tiers is better than including fewer. For example:
 <PRE>
 
   --locality=country=us,region=us-west,datacenter=us-west-1b,rack=12
