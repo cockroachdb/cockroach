@@ -39,6 +39,8 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -206,6 +208,12 @@ func (b Builtin) FixedReturnType() Type {
 func (b Builtin) Signature() string {
 	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.FixedReturnType())
 }
+
+// panicOnSoftInternalError causes `force_internal_error()` to trigger a panic
+// instead of a regular SQL error.
+var panicOnSoftInternalError = settings.RegisterBoolSetting(
+	"sql.builtin.force_internal_error.panic",
+	"set to true to cause force_internal_error to panic instead of reporting an error", false)
 
 func init() {
 	initAggregateBuiltins()
@@ -1522,6 +1530,25 @@ var Builtins = map[string][]Builtin{
 				return schemas, nil
 			},
 			Info: "Returns the current search path for unqualified names.",
+		},
+	},
+
+	"crdb_internal.force_internal_error": {
+		Builtin{
+			Types:      ArgTypes{{"msg", TypeString}},
+			ReturnType: fixedReturnType(TypeInt),
+			impure:     true,
+			privileged: true,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				msg := string(*args[0].(*DString))
+				if panicOnSoftInternalError.Get() {
+					panic(msg)
+				} else {
+					return nil, pgerror.NewError(pgerror.CodeInternalError, msg)
+				}
+			},
+			category: categorySystemInfo,
+			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
 
