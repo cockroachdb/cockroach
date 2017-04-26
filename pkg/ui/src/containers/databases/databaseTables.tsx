@@ -68,7 +68,11 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
               {
                 title: "Table Name",
                 cell: (tableInfo) => {
-                  return <Link to={`databases/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>;
+                  return (
+                    <div className="sort-table__unbounded-column">
+                      <Link to={`databases/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>
+                    </div>
+                  );
                 },
                 sort: (tableInfo) => tableInfo.name,
                 className: "expand-link", // don't pad the td element to allow the link to expand
