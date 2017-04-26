@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/text/language"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
@@ -40,13 +41,22 @@ type SemaContext struct {
 	// names. The path elements must be normalized via Name.Normalize()
 	// already.
 	SearchPath []string
+
+	// privileged, if true, enables "unsafe" builtins, e.g. those
+	// from the crdb_internal namespace. Must be set only for
+	// the root user.
+	// TODO(knz): this attribute can be moved to EvalContext pending #15363.
+	privileged bool
 }
 
 // MakeSemaContext initializes a simple SemaContext suitable
 // for "lightweight" type checking such as the one performed for default
 // expressions.
-func MakeSemaContext() SemaContext {
-	return SemaContext{Placeholders: MakePlaceholderInfo()}
+func MakeSemaContext(privileged bool) SemaContext {
+	return SemaContext{
+		Placeholders: MakePlaceholderInfo(),
+		privileged:   privileged,
+	}
 }
 
 // isUnresolvedPlaceholder provides a nil-safe method to determine whether expr is an
@@ -441,6 +451,13 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 			return nil, fmt.Errorf("FILTER specified but %s() is not an aggregate function", expr.Func)
 		}
 
+	}
+
+	// Check that the built-in is allowed for the current user.
+	// TODO(knz): this check can be moved to evaluation time pending #15363.
+	if builtin.privileged && !ctx.privileged {
+		return nil, pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
+			"insufficient privilege to use %s", expr.Func)
 	}
 
 	for i, subExpr := range typedSubExprs {
