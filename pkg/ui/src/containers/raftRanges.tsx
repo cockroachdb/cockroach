@@ -9,7 +9,7 @@ import * as protos from "../js/protos";
 import { AdminUIState } from "../redux/state";
 import { refreshRaft } from "../redux/apiReducers";
 import { CachedDataReducerState } from "../redux/cachedDataReducer";
-import { ToolTip } from "../components/toolTip";
+import { ToolTipWrapper } from "../components/toolTip";
 
 /******************************
  *   RAFT RANGES MAIN COMPONENT
@@ -168,12 +168,15 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
         let row = [<td key={-1}>
             {key}
             {
-              (hasErrors) ? (<span style={{position: "relative"}}>
-                <div className="viz-info-icon">
-                  <div className="icon-warning" />
-                </div>
-                <ToolTip title="Errors" text={rangeErrors} />
-              </span>) : ""
+              (hasErrors) ? (
+                <span style={{position: "relative"}}>
+                  <ToolTipWrapper text={rangeErrors}>
+                    <div className="viz-info-icon">
+                      <div className="icon-warning" />
+                    </div>
+                  </ToolTipWrapper>
+                </span>
+              ) : ""
             }
           </td>];
         rows[i] = row;

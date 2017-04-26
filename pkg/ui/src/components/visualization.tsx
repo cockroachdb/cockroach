@@ -3,7 +3,7 @@ const spinner = require<string>("../../assets/spinner.gif");
 
 import * as React from "react";
 import classNames from "classnames";
-import { ToolTip } from "./toolTip";
+import { ToolTipWrapper } from "./toolTip";
 
 interface VisualizationProps {
   title: string;
@@ -27,38 +27,44 @@ interface VisualizationProps {
  */
 export default class extends React.Component<VisualizationProps, {}> {
   render() {
-    let { title, tooltip, stale, warning, warningTitle } = this.props;
+    let { title, tooltip, stale } = this.props;
     let vizClasses = classNames({
       "visualization": true,
       "visualization--faded": stale || false,
     });
 
-    let icon = (stale || warning || warningTitle) ? "warning" : "info";
-
-    return <div className={vizClasses}>
-      <div className="visualization__header">
-        <div className="visualization__title">
-          {this.props.title}
+    let tooltipNode: React.ReactNode = "";
+    if (tooltip) {
+      tooltipNode = (
+        <div className="visualization__tooltip">
+          <ToolTipWrapper text={tooltip}>
+            <div className="visualization__tooltip-hover-area">
+              <div className="visualization__info-icon">!</div>
+            </div>
+          </ToolTipWrapper>
         </div>
-        {
-          this.props.subtitle ?
-            <div className="visualization__subtitle">{this.props.subtitle}</div>
-            : null
-        }
-        <div className="visualization__info-icon">
+      );
+    }
+
+    return (
+      <div className={vizClasses}>
+        <div className="visualization__header">
+          <div className="visualization__title">
+            {title}
+          </div>
           {
-            // Display an icon if there is either a tooltip or if data is stale.
-            (tooltip || stale) ? <div className={`icon-${icon}`} /> : ""
+            this.props.subtitle ?
+              <div className="visualization__subtitle">{this.props.subtitle}</div>
+              : null
+          }
+          {
+            tooltipNode
           }
         </div>
-        {
-          // Display tooltip if specified.
-          (tooltip) ? <ToolTip text={tooltip} title={title} warning={warning} warningTitle={warningTitle} /> : ""
-        }
+        <div className={"visualization__content" + (this.props.loading ? " visualization--loading" : "")}>
+          {this.props.loading ? <img className="visualization__spinner" src={spinner} /> :  this.props.children }
+        </div>
       </div>
-      <div className={"visualization__content" + (this.props.loading ? " visualization--loading" : "")}>
-        {this.props.loading ? <img className="visualization__spinner" src={spinner} /> :  this.props.children }
-      </div>
-    </div>;
+    );
   }
 }

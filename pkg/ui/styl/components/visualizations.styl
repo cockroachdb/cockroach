@@ -59,10 +59,24 @@ $viz-sides = 62px
     width 40px
     height 40px
 
-  &__info-icon
+  &__tooltip
     float right
-    color $secondary-gray-5
-    display none
+
+  &__tooltip-hover-area
+    padding 5px 10px
+
+  &__info-icon
+    width 12px
+    height 12px
+    border-radius 50%
+    border 1px solid $light-gray
+    font-size 10px
+    color $light-gray
+    line-height 10px
+
+  .hover-tooltip--hovered &__info-icon
+    border-color $light-blue
+    color $light-blue
 
   .icon-warning
     color $secondary-gold

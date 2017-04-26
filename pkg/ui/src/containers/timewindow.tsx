@@ -26,8 +26,8 @@ interface TimeWindowManagerState {
  * expired.
  */
 class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWindowManagerState> {
-  constructor() {
-    super();
+  constructor(props?: TimeWindowManagerProps, context?: any) {
+    super(props, context);
     this.state = { timeout: null };
   }
 
