@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1521,6 +1522,36 @@ var Builtins = map[string][]Builtin{
 				return schemas, nil
 			},
 			Info: "Returns the current search path for unqualified names.",
+		},
+	},
+
+	"crdb_internal.force_internal_error": {
+		Builtin{
+			Types:      ArgTypes{{"msg", TypeString}},
+			ReturnType: fixedReturnType(TypeInt),
+			impure:     true,
+			privileged: true,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				msg := string(*args[0].(*DString))
+				return nil, pgerror.NewError(pgerror.CodeInternalError, msg)
+			},
+			category: categorySystemInfo,
+			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+	},
+
+	"crdb_internal.force_panic": {
+		Builtin{
+			Types:      ArgTypes{{"msg", TypeString}},
+			ReturnType: fixedReturnType(TypeInt),
+			impure:     true,
+			privileged: true,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				msg := string(*args[0].(*DString))
+				panic(msg)
+			},
+			category: categorySystemInfo,
+			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
 
