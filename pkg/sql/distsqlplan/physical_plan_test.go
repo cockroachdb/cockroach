@@ -73,6 +73,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{1, 3, 2},
 			},
 			expResultTypes: "B,D,C",
@@ -89,6 +90,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{2},
 			},
 			expResultTypes: "C",
@@ -106,6 +108,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{2, 3, 1},
 			},
 			expResultTypes: "C,D,B",
@@ -115,6 +118,7 @@ func TestProjectionAndRendering(t *testing.T) {
 		{
 			// Projection after projection.
 			post: distsqlrun.PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{5, 6, 7, 8},
 			},
 			resultTypes: "A,B,C,D",
@@ -125,6 +129,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{8, 6},
 			},
 			expResultTypes: "D,B",
@@ -134,6 +139,7 @@ func TestProjectionAndRendering(t *testing.T) {
 		{
 			// Projection after projection; ordering refers to non-projected column.
 			post: distsqlrun.PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{5, 6, 7, 8},
 			},
 			resultTypes: "A,B,C,D",
@@ -144,6 +150,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{8, 6, 5},
 			},
 			expResultTypes: "D,B,A",
@@ -228,6 +235,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			},
 
 			expPost: distsqlrun.PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{1, 3, 2},
 			},
 			expResultTypes: "B,D,C",
@@ -263,6 +271,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			// Rendering with ordering that refers to non-projected column after
 			// projection.
 			post: distsqlrun.PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{5, 6, 7, 8},
 			},
 			resultTypes: "A,B,C,D",

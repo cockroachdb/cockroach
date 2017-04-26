@@ -342,3 +342,54 @@ query T
 SELECT URL FROM [EXPLAIN (DISTSQL) SELECT STDDEV(a+b) FROM data GROUP BY c, d]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlcFq3DAQhu99CjOnlqqwsp009UmF9JBLWrahl6KDYg2OYWMZSYaG4HcvawfSdZOZgnrQ0Za-0cz3g_QIg7N4be4xQPMTJAgoQUAFAmoQcAZawOhdiyE4f9yyAlf2FzQ7Af0wTvH4WwtonUdoHiH28YDQwI25PeAejUUPAixG0x-WQ0bf3xv_oKyJBgTscbDom0LJ4n2hykJVhapBzwLcFJ_KP1e9fSjuTLg7rahKoSrQs57FK_09F5gG5y16tCcl9PzCBJ-7zmNnovMvHSfg-83l5Zcfb5V8t2n3P_dx7T64cbPt9eNk5rHITGIpM_dUZuKpytxTlYmnOnNPdSaemGdjj2F0Q0DyvtMC0Ha4jhLc5Fv85l27FF8_vy67l9vGYojr6tPH1bAuHdv6d7hOgc9T4IsUWO5oWm7p3Z90ScMlCctT37stXaWERcNMWDTMhEXDTFjMzExYdUpYZym6aZjRTcOMbhpmdDMzM7rPU3R_TNFNw4xuGmZ00zCjm5mZ0X2RovtTim4aZnTTMKObhhndzMzczf_Xw0H61vOb3wEAAP__iAmuQw==
+
+# Test plans with empty streams.
+statement ok
+CREATE TABLE one (k INT PRIMARY KEY, v INT)
+
+statement ok
+ALTER TABLE one SPLIT AT VALUES (0), (99)
+
+statement ok
+ALTER TABLE one TESTING_RELOCATE VALUES (ARRAY[1], 0)
+
+statement ok
+INSERT INTO one VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
+
+statement ok
+CREATE TABLE two (k INT PRIMARY KEY, v INT);
+
+statement ok
+ALTER TABLE two SPLIT AT VALUES (0), (99)
+
+statement ok
+ALTER TABLE two TESTING_RELOCATE VALUES (ARRAY[2], 0)
+
+statement ok
+INSERT INTO two VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE one
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /0       {5}       5
+/0         /99      {1}       1
+/99        NULL     {5}       5
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE two
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /0       {5}       5
+/0         /99      {2}       2
+/99        NULL     {5}       5
+
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM one AS a, one AS b, two AS c]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUkstO8zAQhff_U1Sz-pG8aNKWi1dFbCiLFlVlhbIw8ShEaj3R2BGgKu-O4ghBAnIbReKytGe-M8fjswdDGpdqhxbkPUQgIAYBM0gEFEwpWktcl5rGhX4GORaQm6J09XUiICVGkHtwudsiSNiohy2uUWlkEKDRqXzrxQvOd4pf5mQQBKxKJ0eQVAKodG9qlfjhOe_ypSHWyKhb4p481PKF2WtlH28oN12vv9vdGo1GlqPxkH-6zDLGTDnqiF-t7pab__PoJCgeDQyBe6KjQhB_U9j-ypxj93bg89doCzIWuzFt6SUCUGfYJNxSySneMqVevDmufLe_0GhdU500h4Xxpai29RGOgnAchuMek-MuPAnC0xY87sLTIHwRhmc93vzJ9umQbZ8N2fZ5L9tJ9e81AAD__42OQB0=
+
+query I
+SELECT COUNT(*) FROM one AS a, one AS b, two AS c
+----
+1000

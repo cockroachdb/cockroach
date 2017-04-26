@@ -115,6 +115,7 @@ func checkDistAggregationInfo(
 		return distsqlrun.ProcessorSpec{
 			Core: distsqlrun.ProcessorCoreUnion{TableReader: &tr},
 			Post: distsqlrun.PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{uint32(colIdx)},
 			},
 			Output: []distsqlrun.OutputRouterSpec{{

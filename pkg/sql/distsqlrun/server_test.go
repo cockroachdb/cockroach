@@ -57,7 +57,8 @@ func TestServer(t *testing.T) {
 	}
 	post := PostProcessSpec{
 		Filter:        Expression{Expr: "@1 != 2"}, // a != 2
-		OutputColumns: []uint32{0, 1},              // a
+		Projection:    true,
+		OutputColumns: []uint32{0, 1}, // a
 	}
 
 	req := &SetupFlowRequest{Version: Version}
