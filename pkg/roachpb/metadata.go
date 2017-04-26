@@ -188,7 +188,7 @@ func (r RangeDescriptor) String() string {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			fmt.Fprintf(&buf, "r%d(n%d,s%d)", rep.ReplicaID, rep.NodeID, rep.StoreID)
+			fmt.Fprintf(&buf, "(n%d,s%d):%d", rep.NodeID, rep.StoreID, rep.ReplicaID)
 		}
 	} else {
 		buf.WriteString("<no replicas>")
