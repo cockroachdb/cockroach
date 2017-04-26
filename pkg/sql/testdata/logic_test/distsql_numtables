@@ -23,7 +23,7 @@ ALTER TABLE NumToStr TESTING_RELOCATE
   SELECT ARRAY[i+1], (i * 100 * 100 / 5)::int FROM GENERATE_SERIES(0, 4) AS g(i)
 
 statement ok
-INSERT INTO NumToStr SELECT i, crdb_testing.to_english(i) FROM GENERATE_SERIES(1, 100*100) AS g(i)
+INSERT INTO NumToStr SELECT i, to_english(i) FROM GENERATE_SERIES(1, 100*100) AS g(i)
 
 # Verify data placement.
 query TTTI colnames
@@ -138,7 +138,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlcFq20AQhu99ijCnBLbgXc
 
 # Save the result of the following statement to a label.
 query IT rowsort label-sq-str
-SELECT i, crdb_testing.to_english(i*i) FROM GENERATE_SERIES(1, 100) AS g(i)
+SELECT i, to_english(i*i) FROM GENERATE_SERIES(1, 100) AS g(i)
 
 # Compare the results of this query to the one above.
 query IT rowsort label-sq-str

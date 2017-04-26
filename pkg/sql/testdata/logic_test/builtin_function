@@ -1513,7 +1513,7 @@ SELECT oid(3), oid(0), oid(12023948723)
 3  0  12023948723
 
 query T
-SELECT crdb_testing.to_english(i) FROM (VALUES (1), (13), (617)) AS a(i)
+SELECT to_english(i) FROM (VALUES (1), (13), (617)) AS a(i)
 ----
 one
 one-three
