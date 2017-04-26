@@ -8,7 +8,7 @@ archive=$1
 source "$(dirname "${0}")"/build-common.sh
 
 time make build TYPE=release-linux-gnu  GOFLAGS="${GOFLAGS-}" SUFFIX="${SUFFIX-}" TAGS="${TAGS-}"
-time make build TYPE=release-linux-musl GOFLAGS="${GOFLAGS-}" SUFFIX="${SUFFIX-}" TAGS="${TAGS-}"
+[[ "${GOFLAGS-}" == *-race* ]] || time make build TYPE=release-linux-musl GOFLAGS="${GOFLAGS-}" SUFFIX="${SUFFIX-}" TAGS="${TAGS-}"
 # Build test binaries. Note that the acceptance binary will not be included in
 # the archive, but is instead uploaded directly by push-aws.sh.
 time make testbuild TYPE=release-linux-gnu GOFLAGS="${GOFLAGS-}" SUFFIX="${SUFFIX-}" TAGS="${TAGS-} acceptance"
