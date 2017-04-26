@@ -247,6 +247,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 					}
 					if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
 						if err == errSkippedHeartbeat {
+							log.Infof(ctx, "%s; retrying", err)
 							continue
 						}
 						log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
@@ -284,63 +285,75 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness *Liveness) error
 func (nl *NodeLiveness) heartbeatInternal(
 	ctx context.Context, liveness *Liveness, incrementEpoch bool,
 ) error {
-	defer func(start time.Time) {
-		if dur := timeutil.Now().Sub(start); dur > time.Second {
-			log.Warningf(ctx, "slow heartbeat took %0.1fs", dur.Seconds())
-		}
-	}(timeutil.Now())
+	hbFn := func() error {
+		defer func(start time.Time) {
+			if dur := timeutil.Now().Sub(start); dur > time.Second {
+				log.Warningf(ctx, "slow heartbeat took %0.1fs", dur.Seconds())
+			}
+		}(timeutil.Now())
 
-	// Allow only one heartbeat at a time.
-	select {
-	case nl.sem <- struct{}{}:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	defer func() {
-		<-nl.sem
-	}()
+		// Allow only one heartbeat at a time.
+		select {
+		case nl.sem <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		defer func() {
+			<-nl.sem
+		}()
 
-	newLiveness := Liveness{
-		NodeID: nl.gossip.NodeID.Get(),
-		Epoch:  1,
+		newLiveness := Liveness{
+			NodeID: nl.gossip.NodeID.Get(),
+			Epoch:  1,
+		}
+		if liveness != nil {
+			newLiveness = *liveness
+			if incrementEpoch {
+				newLiveness.Epoch++
+				// Clear draining field.
+				newLiveness.Draining = false
+			}
+		}
+		// We need to add the maximum clock offset to the expiration because it's
+		// used when determining liveness for a node.
+		newLiveness.Expiration = nl.clock.Now().Add(
+			(nl.livenessThreshold + nl.clock.MaxOffset()).Nanoseconds(), 0)
+		if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
+			// Update liveness to actual value on mismatch.
+			nl.setSelf(actual)
+			// If the actual liveness is different than expected, but is
+			// considered live, treat the heartbeat as a success. This can
+			// happen when the periodic heartbeater races with a concurrent
+			// lease acquisition.
+			if actual.isLive(nl.clock.Now(), nl.clock.MaxOffset()) && !incrementEpoch {
+				return errNodeAlreadyLive
+			}
+			// Otherwise, return error.
+			return errSkippedHeartbeat
+		}); err != nil {
+			if err == errNodeAlreadyLive {
+				nl.metrics.HeartbeatSuccesses.Inc(1)
+				return nil
+			}
+			nl.metrics.HeartbeatFailures.Inc(1)
+			return err
+		}
+
+		log.VEventf(ctx, 1, "heartbeat %+v", newLiveness.Expiration)
+		nl.setSelf(newLiveness)
+		nl.metrics.HeartbeatSuccesses.Inc(1)
+		return nil
 	}
-	if liveness != nil {
-		newLiveness = *liveness
-		if incrementEpoch {
-			newLiveness.Epoch++
-			// Clear draining field.
-			newLiveness.Draining = false
+
+	for {
+		err := hbFn()
+		// Retry ambiguous result errors immediately.
+		if _, ok := err.(*roachpb.AmbiguousResultError); ok {
+			log.Infof(ctx, "heartbeat %s; retrying", err)
+			continue
 		}
-	}
-	// We need to add the maximum clock offset to the expiration because it's
-	// used when determining liveness for a node.
-	newLiveness.Expiration = nl.clock.Now().Add(
-		(nl.livenessThreshold + nl.clock.MaxOffset()).Nanoseconds(), 0)
-	if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
-		// Update liveness to actual value on mismatch.
-		nl.setSelf(actual)
-		// If the actual liveness is different than expected, but is
-		// considered live, treat the heartbeat as a success. This can
-		// happen when the periodic heartbeater races with a concurrent
-		// lease acquisition.
-		if actual.isLive(nl.clock.Now(), nl.clock.MaxOffset()) && !incrementEpoch {
-			return errNodeAlreadyLive
-		}
-		// Otherwise, return error.
-		return errSkippedHeartbeat
-	}); err != nil {
-		if err == errNodeAlreadyLive {
-			nl.metrics.HeartbeatSuccesses.Inc(1)
-			return nil
-		}
-		nl.metrics.HeartbeatFailures.Inc(1)
 		return err
 	}
-
-	log.VEventf(ctx, 1, "heartbeat %+v", newLiveness.Expiration)
-	nl.setSelf(newLiveness)
-	nl.metrics.HeartbeatSuccesses.Inc(1)
-	return nil
 }
 
 // Self returns the liveness record for this node. ErrNoLivenessRecord
