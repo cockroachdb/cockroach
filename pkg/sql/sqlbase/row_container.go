@@ -74,6 +74,40 @@ type RowContainer struct {
 	memAcc mon.BoundAccount
 }
 
+// ColTypeInfo is a type that allows multiple representations of column type
+// information (to avoid conversions and allocations).
+type ColTypeInfo struct {
+	// Only one of these fields can be set.
+	resCols  ResultColumns
+	colTypes []ColumnType
+}
+
+// ColTypeInfoFromResCols creates a ColTypeInfo from ResultColumns.
+func ColTypeInfoFromResCols(resCols ResultColumns) ColTypeInfo {
+	return ColTypeInfo{resCols: resCols}
+}
+
+// ColTypeInfoFromColTypes creates a ColTypeInfo from []ColumnType.
+func ColTypeInfoFromColTypes(colTypes []ColumnType) ColTypeInfo {
+	return ColTypeInfo{colTypes: colTypes}
+}
+
+// NumColumns returns the number of columns in the type.
+func (ti ColTypeInfo) NumColumns() int {
+	if ti.resCols != nil {
+		return len(ti.resCols)
+	}
+	return len(ti.colTypes)
+}
+
+// Type returns the datum type of the i-th column.
+func (ti ColTypeInfo) Type(idx int) parser.Type {
+	if ti.resCols != nil {
+		return ti.resCols[idx].Typ
+	}
+	return ti.colTypes[idx].ToDatumType()
+}
+
 // NewRowContainer allocates a new row container.
 //
 // The acc argument indicates where to register memory allocations by
@@ -95,10 +129,18 @@ type RowContainer struct {
 // test properly.  The trade-off is that very large table schemas or
 // column selections could cause unchecked and potentially dangerous
 // memory growth.
-func NewRowContainer(acc mon.BoundAccount, h ResultColumns, rowCapacity int) *RowContainer {
-	nCols := len(h)
+func NewRowContainer(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity int) *RowContainer {
+	c := MakeRowContainer(acc, ti, rowCapacity)
+	return &c
+}
 
-	c := &RowContainer{
+// MakeRowContainer is the non-pointer version of NewRowContainer, suitable to
+// avoid unnecessary indirections when RowContainer is already part of an on-heap
+// structure.
+func MakeRowContainer(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity int) RowContainer {
+	nCols := ti.NumColumns()
+
+	c := RowContainer{
 		numCols:        nCols,
 		memAcc:         acc,
 		preallocChunks: 1,
@@ -112,7 +154,7 @@ func NewRowContainer(acc mon.BoundAccount, h ResultColumns, rowCapacity int) *Ro
 	}
 
 	for i := 0; i < nCols; i++ {
-		sz, variable := h[i].Typ.Size()
+		sz, variable := ti.Type(i).Size()
 		if variable {
 			if c.varSizedColumns == nil {
 				// Only allocate varSizedColumns if necessary.
@@ -130,6 +172,15 @@ func NewRowContainer(acc mon.BoundAccount, h ResultColumns, rowCapacity int) *Ro
 	c.chunkMemSize += SizeOfDatums
 
 	return c
+}
+
+// Clear resets the container and releases the associated memory. This allows
+// the RowContainer to be reused.
+func (c *RowContainer) Clear(ctx context.Context) {
+	c.numRows = 0
+	c.deletedRows = 0
+	c.chunks = nil
+	c.memAcc.Clear(ctx)
 }
 
 // Close releases the memory associated with the RowContainer.
@@ -232,7 +283,7 @@ func (c *RowContainer) Swap(i, j int) {
 	}
 }
 
-// PopFirst discards the the first rows added to the RowContainer.
+// PopFirst discards the first row in the RowContainer.
 func (c *RowContainer) PopFirst() {
 	if c.numRows == 0 {
 		panic("no rows added to container, nothing to pop")

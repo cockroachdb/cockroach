@@ -25,6 +25,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -65,6 +66,7 @@ const (
 // (intra-stream ordering).
 type orderedSynchronizer struct {
 	ordering sqlbase.ColumnOrdering
+	evalCtx  *parser.EvalContext
 
 	sources []srcInfo
 
@@ -107,7 +109,7 @@ func (s *orderedSynchronizer) Len() int {
 func (s *orderedSynchronizer) Less(i, j int) bool {
 	si := &s.sources[s.heap[i]]
 	sj := &s.sources[s.heap[j]]
-	cmp, err := si.row.Compare(&s.alloc, s.ordering, sj.row)
+	cmp, err := si.row.Compare(&s.alloc, s.ordering, s.evalCtx, sj.row)
 	if err != nil {
 		s.err = err
 		return false
@@ -223,7 +225,7 @@ func (s *orderedSynchronizer) advanceRoot() error {
 	} else {
 		heap.Fix(s, 0)
 		// TODO(radu): this check may be costly, we could disable it in production
-		if cmp, err := oldRow.Compare(&s.alloc, s.ordering, src.row); err != nil {
+		if cmp, err := oldRow.Compare(&s.alloc, s.ordering, s.evalCtx, src.row); err != nil {
 			return err
 		} else if cmp > 0 {
 			return errors.Errorf("incorrectly ordered stream %s after %s", src.row, oldRow)
@@ -320,7 +322,9 @@ func (s *orderedSynchronizer) consumerStatusChanged(f func(RowSource)) {
 	}
 }
 
-func makeOrderedSync(ordering sqlbase.ColumnOrdering, sources []RowSource) (RowSource, error) {
+func makeOrderedSync(
+	ordering sqlbase.ColumnOrdering, evalCtx *parser.EvalContext, sources []RowSource,
+) (RowSource, error) {
 	if len(sources) < 2 {
 		return nil, errors.Errorf("only %d sources for ordered synchronizer", len(sources))
 	}
@@ -329,6 +333,7 @@ func makeOrderedSync(ordering sqlbase.ColumnOrdering, sources []RowSource) (RowS
 		sources:  make([]srcInfo, len(sources)),
 		heap:     make([]srcIdx, 0, len(sources)),
 		ordering: ordering,
+		evalCtx:  evalCtx,
 	}
 	for i := range s.sources {
 		s.sources[i].src = sources[i]

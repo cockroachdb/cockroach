@@ -265,7 +265,7 @@ func (f *Flow) setupFlow(ctx context.Context, spec *FlowSpec) error {
 					streams[i] = rowChan
 				}
 				var err error
-				sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), streams)
+				sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), &f.evalCtx, streams)
 				if err != nil {
 					return err
 				}
