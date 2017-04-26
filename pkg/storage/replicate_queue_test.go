@@ -39,7 +39,6 @@ import (
 
 func TestReplicateQueueRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13885")
 
 	if testing.Short() {
 		t.Skip("short flag")
