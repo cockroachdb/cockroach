@@ -950,7 +950,7 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 	if _, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec("BOGUS SQL STATEMENT"); !testutils.IsError(err, `syntax error at or near "BOGUS"`) {
+	if _, err := tx.Exec("BOGUS SQL STATEMENT"); !testutils.IsError(err, `syntax error at or near "bogus"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if _, err := tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); !testutils.IsError(

@@ -71,7 +71,7 @@ SET
 	}
 
 	expectedRows := [][]string{
-		{`parentID`, `INT`, `false`, `NULL`, `{primary}`},
+		{`parentid`, `INT`, `false`, `NULL`, `{primary}`},
 		{`name`, `STRING`, `false`, `NULL`, `{primary}`},
 		{`id`, `INT`, `true`, `NULL`, `{}`},
 	}
@@ -88,7 +88,7 @@ SET
 +----------+--------+-------+---------+-----------+
 |  Field   |  Type  | Null  | Default |  Indices  |
 +----------+--------+-------+---------+-----------+
-| parentID | INT    | false | NULL    | {primary} |
+| parentid | INT    | false | NULL    | {primary} |
 | name     | STRING | false | NULL    | {primary} |
 | id       | INT    | true  | NULL    | {}        |
 +----------+--------+-------+---------+-----------+
@@ -109,7 +109,7 @@ SET
 
 	expected = `
 +----------+------------+----+
-| parentID |    name    | id |
+| parentid |    name    | id |
 +----------+------------+----+
 |        1 | descriptor |  3 |
 +----------+------------+----+

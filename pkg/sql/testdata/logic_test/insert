@@ -326,8 +326,8 @@ INSERT INTO return VALUES (default) RETURNING a, b
 query III colnames
 INSERT INTO return VALUES (default) RETURNING a, b as C, 4
 ----
-a C 4
-3 NULL 4
+a  c     4
+3  NULL  4
 
 # Return a qualified name
 query I
