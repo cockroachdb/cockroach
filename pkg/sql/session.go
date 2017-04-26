@@ -205,6 +205,9 @@ type Session struct {
 	// statistics for result sets (which escape transactions).
 	mon        mon.MemoryMonitor
 	sessionMon mon.MemoryMonitor
+	// emergencyShutdown is set to true by EmergencyClose() to
+	// indicate to Finish() that the session is already closed.
+	emergencyShutdown bool
 
 	leases LeaseCollection
 
@@ -306,6 +309,11 @@ func NewSession(
 // operating in the background in the case of parallelized statements, which
 // is why we make sure to drain background statements.
 func (s *Session) Finish(e *Executor) {
+	if s.emergencyShutdown {
+		// closed by EmergencyClose() already.
+		return
+	}
+
 	if s.mon == (mon.MemoryMonitor{}) {
 		// This check won't catch the cases where Finish is never called, but it's
 		// proven to be easier to remember to call Finish than it is to call
@@ -357,6 +365,36 @@ func (s *Session) Finish(e *Executor) {
 	// in the TxnCoordSender should not be waiting on this channel any more.
 	// Consider getting rid of this cancel field all-together.
 	s.cancel()
+}
+
+// EmergencyClose is an edulcorated version of Finish() which is less picky
+// about the current state of the Session.
+func (s *Session) EmergencyClose() {
+	// Ensure that all in-flight statements are done, so that monitor
+	// traffic is stopped.
+	_ = s.parallelizeQueue.Wait()
+
+	// Release the leases - to ensure other sessions don't get stuck.
+	s.leases.releaseLeases(s.context)
+
+	// The KV txn may be unusable - just leave it dead. Simply
+	// shut down its memory monitor.
+	s.TxnState.mon.EmergencyStop(s.context)
+	// Shut the remaining monitors down.
+	s.sessionMon.EmergencyStop(s.context)
+	s.mon.EmergencyStop(s.context)
+
+	// Finalize the event log.
+	if s.eventLog != nil {
+		s.eventLog.Finish()
+		s.eventLog = nil
+	}
+
+	// Stop the heartbeating.
+	s.cancel()
+
+	// Mark the session as already closed, so that Finish() doesn't get confused.
+	s.emergencyShutdown = true
 }
 
 // Ctx returns the current context for the session: if there is an active SQL
@@ -794,4 +832,29 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		}
 	}
 	scc.schemaChangers = scc.schemaChangers[:0]
+}
+
+// maybeRecover catches SQL panics and does some log reporting before
+// propagating the panic further.
+// TODO(knz) this is where we can place code to recover from
+// recoverable panics.
+func (s *Session) maybeRecover(action, query string) {
+	if r := recover(); r != nil {
+		err := errors.Errorf("panic while %s %q: %s", action, query, r)
+
+		// A short warning header guaranteed to go to stderr.
+		log.Shout(s.Ctx(), log.Severity_ERROR,
+			"a SQL panic has occurred!")
+		// TODO(knz) log panic details to logs once panics
+		// are not propagated to the top-level and printed out by the Go runtime.
+
+		// Close the session with force shutdown of the monitors. This is
+		// guaranteed to succeed, or fail with a panic which we can't
+		// recover from: if there's a panic, that means the lease /
+		// tracing / kv subsystem is broken and we can't resume from that.
+		s.EmergencyClose()
+
+		// Propagate the panic further.
+		panic(err)
+	}
 }
