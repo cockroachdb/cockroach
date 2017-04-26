@@ -3219,29 +3219,28 @@ func sendSnapshot(
 			if len(resp.Message) > 0 {
 				declinedMsg = resp.Message
 			}
-			return errors.Errorf("n%d,s%d: remote declined snapshot: %s",
-				to.NodeID, to.StoreID, declinedMsg)
+			return errors.Errorf("%s: remote declined snapshot: %s", to, declinedMsg)
 		}
 		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("n%d,s%d: programming error: remote declined required snapshot: %s",
-			to.NodeID, to.StoreID, resp.Message)
+		return errors.Errorf("%s: programming error: remote declined required snapshot: %s",
+			to, resp.Message)
 	case SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("n%d,s%d: remote couldn't accept snapshot with error: %s",
-			to.NodeID, to.StoreID, resp.Message)
+		return errors.Errorf("%s: remote couldn't accept snapshot with error: %s",
+			to, resp.Message)
 	case SnapshotResponse_ACCEPTED:
 	// This is the response we're expecting. Continue with snapshot sending.
 	default:
 		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("n%d,s%d: server sent an invalid status during negotiation: %s",
-			to.NodeID, to.StoreID, resp.Status)
+		return errors.Errorf("%s: server sent an invalid status during negotiation: %s",
+			to, resp.Status)
 	}
 
 	// The size of batches to send. This is the granularity of rate limiting.
 	const batchSize = 256 << 10 // 256 KB
 	targetRate, err := snapshotRateLimit(header.Priority)
 	if err != nil {
-		return errors.Wrapf(err, "n%d,s%d", to.NodeID, to.StoreID)
+		return errors.Wrapf(err, "%s", to)
 	}
 
 	// Convert the bytes/sec rate limit to batches/sec.
@@ -3333,31 +3332,28 @@ func sendSnapshot(
 	if err := stream.Send(req); err != nil {
 		return err
 	}
-	log.Infof(ctx, "streamed snapshot to n%d,s%d: kv pairs: %d, log entries: %d, rate-limit: %s/sec, %0.0fms",
-		to.NodeID, to.StoreID, n, len(logEntries), humanizeutil.IBytes(int64(targetRate)),
+	log.Infof(ctx, "streamed snapshot to %s: kv pairs: %d, log entries: %d, rate-limit: %s/sec, %0.0fms",
+		to, n, len(logEntries), humanizeutil.IBytes(int64(targetRate)),
 		timeutil.Since(start).Seconds()*1000)
 
 	resp, err = stream.Recv()
 	if err != nil {
-		return errors.Wrapf(err, "n%d,s%d: remote failed to apply snapshot",
-			to.StoreID, to.NodeID)
+		return errors.Wrapf(err, "%s: remote failed to apply snapshot", to)
 	}
 	// NB: wait for EOF which ensures that all processing on the server side has
 	// completed (such as defers that might be run after the previous message was
 	// received).
 	if unexpectedResp, err := stream.Recv(); err != io.EOF {
-		return errors.Errorf("n%d,s%d: expected EOF, got resp=%v err=%v",
-			to.StoreID, to.NodeID, unexpectedResp, err)
+		return errors.Errorf("%s: expected EOF, got resp=%v err=%v", to, unexpectedResp, err)
 	}
 	switch resp.Status {
 	case SnapshotResponse_ERROR:
-		return errors.Errorf("n%d,s%d: remote failed to apply snapshot for reason %s",
-			to.StoreID, to.NodeID, resp.Message)
+		return errors.Errorf("%s: remote failed to apply snapshot for reason %s", to, resp.Message)
 	case SnapshotResponse_APPLIED:
 		return nil
 	default:
-		return errors.Errorf("n%d,s%d: server sent an invalid status during finalization: %s",
-			to.StoreID, to.NodeID, resp.Status)
+		return errors.Errorf("%s: server sent an invalid status during finalization: %s",
+			to, resp.Status)
 	}
 }
 
