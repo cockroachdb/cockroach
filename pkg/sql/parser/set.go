@@ -23,6 +23,7 @@
 package parser
 
 import "bytes"
+import "strings"
 
 // Set represents a SET or RESET statement.
 type Set struct {
@@ -107,7 +108,7 @@ func (node *SetTimeZone) Format(buf *bytes.Buffer, f FmtFlags) {
 		case *DString:
 			s = string(*v)
 		case *StrVal:
-			s = v.s
+			s = strings.ToUpper(v.s)
 		}
 		if s == "DEFAULT" || s == "LOCAL" {
 			buf.WriteString(s)
