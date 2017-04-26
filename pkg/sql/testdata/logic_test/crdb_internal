@@ -82,3 +82,13 @@ query ITTTTTTTTTRT colnames
 SELECT * FROM crdb_internal.jobs
 ----
 id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error
+
+# Check that privileged builtins are only allowed for 'root'
+query I
+select crdb_internal.force_retry(interval '0s')
+----
+0
+
+user testuser
+query error pq: insufficient privilege
+select crdb_internal.force_retry(interval '0s')

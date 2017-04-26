@@ -113,6 +113,9 @@ type Builtin struct {
 	// variables. Used e.g. by `random` and aggregate functions.
 	needsRepeatedEvaluation bool
 
+	// Set to true when the built-in can only be used by security.RootUser.
+	privileged bool
+
 	class    FunctionClass
 	category string
 
@@ -1526,6 +1529,7 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{{"val", TypeInterval}},
 			ReturnType: fixedReturnType(TypeInt),
 			impure:     true,
+			privileged: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				minDuration := args[0].(*DInterval).Duration
 				elapsed := duration.Duration{
