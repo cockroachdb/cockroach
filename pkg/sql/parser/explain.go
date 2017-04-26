@@ -16,7 +16,10 @@
 
 package parser
 
-import "bytes"
+import (
+	"bytes"
+	"strings"
+)
 
 // Explain represents an EXPLAIN statement.
 type Explain struct {
@@ -45,7 +48,7 @@ func (node *Explain) Format(buf *bytes.Buffer, f FmtFlags) {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			buf.WriteString(opt)
+			buf.WriteString(strings.ToUpper(opt))
 		}
 		buf.WriteString(") ")
 	}

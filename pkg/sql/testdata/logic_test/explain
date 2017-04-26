@@ -64,11 +64,11 @@ EXPLAIN (TRACE,UNKNOWN) SELECT 1
 query ITTTTT
 EXPLAIN (METADATA) EXPLAIN (TRACE) SELECT 1
 ----
-0  sort                                    ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)
-0                 order  +Timestamp,+"Span Pos"
-1  explain trace                           ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition, Timestamp)
-2  render                                  ("1")
-3  nullrow                                 ()
+0  sort                                            ("Cumulative Time", "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition")
+0                 order  +"Timestamp",+"Span Pos"
+1  explain trace                                   ("Cumulative Time", "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition", "Timestamp")
+2  render                                          ("1")
+3  nullrow                                         ()
 
 # Ensure that all relevant statement types can be explained
 query ITTT
@@ -127,7 +127,7 @@ query ITTT
 EXPLAIN SHOW DATABASES
 ----
 0  sort
-0                 order   +Database
+0                 order   +"Database"
 1  render
 2  virtual table
 2                 source  information_schema.schemata
@@ -145,9 +145,9 @@ EXPLAIN SHOW TABLES
 query ITTT
 EXPLAIN SHOW DATABASE
 ----
-0 virtual table
-0                 source  SHOW DATABASE
-1 values
+0  virtual table
+0                 source  SHOW database
+1  values
 1                 size    1 column, 1 row
 
 query ITTT
@@ -161,9 +161,9 @@ EXPLAIN SHOW TIME ZONE
 query ITTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-0 virtual table
-0                 source  SHOW DEFAULT_TRANSACTION_ISOLATION
-1 values
+0  virtual table
+0                 source  SHOW default_transaction_isolation
+1  values
 1                 size    1 column, 1 row
 
 query ITTT
@@ -196,7 +196,7 @@ EXPLAIN SHOW GRANTS ON foo
 0  virtual table
 0                 source  SHOW GRANTS
 1  sort
-1                 order   +"Table",+"User",+Privileges
+1                 order   +"Table",+"User",+"Privileges"
 2  values
 2                 size    3 columns, 1 row
 
@@ -214,7 +214,7 @@ EXPLAIN SHOW CONSTRAINTS FROM foo
 0  virtual table
 0                 source  SHOW CONSTRAINTS FROM foo
 1  sort
-1                 order   +"Table",+Name
+1                 order   +"Table",+"Name"
 2  values
 2                 size    5 columns, 0 rows
 

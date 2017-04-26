@@ -1,9 +1,9 @@
 # LogicTest: default
 
-statement error unknown variable: "FOO"
+statement error unknown variable: "foo"
 SET FOO = bar
 
-statement error unknown variable: "FOO"
+statement error unknown variable: "foo"
 SHOW FOO
 
 statement error database "foo" does not exist
