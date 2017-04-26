@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/biogo/store/llrb"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/singleflight"
@@ -270,7 +271,8 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	} else if desc != nil {
 		rdc.rangeCache.RUnlock()
 		returnToken := rdc.makeEvictionToken(desc, func() error {
-			return rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
+			evictCtx := opentracing.ContextWithSpan(ctx, nil)
+			return rdc.evictCachedRangeDescriptorLocked(evictCtx, key, desc, useReverseScan)
 		})
 		return desc, returnToken, nil
 	}
@@ -297,7 +299,8 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 			lookupRes = lookupResult{
 				desc: desc,
 				evictToken: rdc.makeEvictionToken(desc, func() error {
-					return rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
+					evictCtx := opentracing.ContextWithSpan(ctx, nil)
+					return rdc.evictCachedRangeDescriptorLocked(evictCtx, key, desc, useReverseScan)
 				}),
 			}
 		case 2:
@@ -306,7 +309,8 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 			lookupRes = lookupResult{
 				desc: desc,
 				evictToken: rdc.makeEvictionToken(desc, func() error {
-					return rdc.insertRangeDescriptorsLocked(ctx, nextDesc)
+					evictCtx := opentracing.ContextWithSpan(ctx, nil)
+					return rdc.insertRangeDescriptorsLocked(evictCtx, nextDesc)
 				}),
 			}
 		default:
