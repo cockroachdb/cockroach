@@ -32,6 +32,8 @@ message Attributes {
 
 // ReplicationTarget identifies a node/store pair.
 message ReplicationTarget {
+  option (gogoproto.goproto_stringer) = false;
+
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional int32 store_id = 2 [(gogoproto.nullable) = false,
@@ -42,6 +44,7 @@ message ReplicationTarget {
 // (corresponds to a host:port via lookup on gossip network) and store
 // ID (identifies the device).
 message ReplicaDescriptor {
+  option (gogoproto.goproto_stringer) = false;
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
