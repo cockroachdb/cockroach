@@ -115,17 +115,6 @@ func (ba *BatchRequest) IsSingleRequest() bool {
 	return len(ba.Requests) == 1
 }
 
-// IsNonKV returns true iff all of the requests in the batch have the non-KV
-// flag set.
-func (ba *BatchRequest) IsNonKV() bool {
-	for _, union := range ba.Requests {
-		if (union.GetInner().flags() & isNonKV) == 0 {
-			return false
-		}
-	}
-	return true
-}
-
 // IsSingleSkipLeaseCheckRequest returns true iff the batch contains a single
 // request, and that request has the skipLeaseCheck flag set.
 func (ba *BatchRequest) IsSingleSkipLeaseCheckRequest() bool {

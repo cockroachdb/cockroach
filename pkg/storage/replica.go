@@ -2011,17 +2011,12 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	var endCmds *endCmds
-
-	if !ba.IsNonKV() {
-		// Add the read to the command queue to gate subsequent
-		// overlapping commands until this command completes.
-		log.Event(ctx, "command queue")
-		var err error
-		endCmds, err = r.beginCmds(ctx, &ba, spans)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
+	// Add the read to the command queue to gate subsequent
+	// overlapping commands until this command completes.
+	log.Event(ctx, "command queue")
+	endCmds, err := r.beginCmds(ctx, &ba, spans)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	log.Event(ctx, "waiting for read lock")
@@ -2033,9 +2028,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
-		if endCmds != nil {
-			endCmds.done(br, pErr, proposalNoRetry)
-		}
+		endCmds.done(br, pErr, proposalNoRetry)
 	}()
 
 	if err := r.IsDestroyed(); err != nil {
@@ -2167,29 +2160,24 @@ func (r *Replica) tryExecuteWriteBatch(
 		return nil, roachpb.NewError(err), proposalNoRetry
 	}
 
-	isNonKV := ba.IsNonKV()
-	var endCmds *endCmds
-	if !isNonKV {
-		// Add the write to the command queue to gate subsequent overlapping
-		// commands until this command completes. Note that this must be
-		// done before getting the max timestamp for the key(s), as
-		// timestamp cache is only updated after preceding commands have
-		// been run to successful completion.
-		log.Event(ctx, "command queue")
-		var err error
-		endCmds, err = r.beginCmds(ctx, &ba, spans)
-		if err != nil {
-			return nil, roachpb.NewError(err), proposalNoRetry
-		}
-
-		// Guarantee we remove the commands from the command queue. This is
-		// wrapped to delay pErr evaluation to its value when returning.
-		defer func() {
-			if endCmds != nil {
-				endCmds.done(br, pErr, retry)
-			}
-		}()
+	// Add the write to the command queue to gate subsequent overlapping
+	// commands until this command completes. Note that this must be
+	// done before getting the max timestamp for the key(s), as
+	// timestamp cache is only updated after preceding commands have
+	// been run to successful completion.
+	log.Event(ctx, "command queue")
+	endCmds, err := r.beginCmds(ctx, &ba, spans)
+	if err != nil {
+		return nil, roachpb.NewError(err), proposalNoRetry
 	}
+
+	// Guarantee we remove the commands from the command queue. This is
+	// wrapped to delay pErr evaluation to its value when returning.
+	defer func() {
+		if endCmds != nil {
+			endCmds.done(br, pErr, retry)
+		}
+	}()
 
 	var lease *roachpb.Lease
 	// For lease commands, use the provided previous lease for verification.
@@ -2205,31 +2193,29 @@ func (r *Replica) tryExecuteWriteBatch(
 		lease = status.lease
 	}
 
-	if !isNonKV {
-		// Examine the read and write timestamp caches for preceding
-		// commands which require this command to move its timestamp
-		// forward. Or, in the case of a transactional write, the txn
-		// timestamp and possible write-too-old bool.
-		if bumped, pErr := r.applyTimestampCache(&ba); pErr != nil {
-			return nil, pErr, proposalNoRetry
-		} else if bumped {
-			// If we bump the transaction's timestamp, we must absolutely
-			// tell the client in a response transaction (for otherwise it
-			// doesn't know about the incremented timestamp). Response
-			// transactions are set far away from this code, but at the time
-			// of writing, they always seem to be set. Since that is a
-			// likely target of future micro-optimization, this assertion is
-			// meant to protect against future correctness anomalies.
-			defer func() {
-				if br != nil && ba.Txn != nil && br.Txn == nil {
-					log.Fatalf(ctx, "assertion failed: transaction updated by "+
-						"timestamp cache, but transaction returned in response; "+
-						"updated timestamp would have been lost (recovered): "+
-						"%s in batch %s", ba.Txn, ba,
-					)
-				}
-			}()
-		}
+	// Examine the read and write timestamp caches for preceding
+	// commands which require this command to move its timestamp
+	// forward. Or, in the case of a transactional write, the txn
+	// timestamp and possible write-too-old bool.
+	if bumped, pErr := r.applyTimestampCache(&ba); pErr != nil {
+		return nil, pErr, proposalNoRetry
+	} else if bumped {
+		// If we bump the transaction's timestamp, we must absolutely
+		// tell the client in a response transaction (for otherwise it
+		// doesn't know about the incremented timestamp). Response
+		// transactions are set far away from this code, but at the time
+		// of writing, they always seem to be set. Since that is a
+		// likely target of future micro-optimization, this assertion is
+		// meant to protect against future correctness anomalies.
+		defer func() {
+			if br != nil && ba.Txn != nil && br.Txn == nil {
+				log.Fatalf(ctx, "assertion failed: transaction updated by "+
+					"timestamp cache, but transaction returned in response; "+
+					"updated timestamp would have been lost (recovered): "+
+					"%s in batch %s", ba.Txn, ba,
+				)
+			}
+		}()
 	}
 
 	log.Event(ctx, "raft")
