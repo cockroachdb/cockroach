@@ -227,10 +227,10 @@ func TestGetTruncatableIndexes(t *testing.T) {
 // log even when replica scanning is disabled.
 func TestProactiveRaftLogTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#9772")
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	store, _ := createTestStore(t, stopper)
 
 	store.SetReplicaScannerActive(false)
@@ -240,35 +240,30 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r.mu.Lock()
-	oldFirstIndex, err := r.FirstIndex()
-	r.mu.Unlock()
+	oldFirstIndex, err := r.GetFirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Write a few keys to the range. While writing these keys, the raft log
 	// should be proactively truncated even though replica scanning is disabled.
-	for i := 0; i < 2*RaftLogQueueStaleThreshold; i++ {
+	for i := 0; i < RaftLogQueueStaleThreshold+raftLogCheckFrequency; i++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", i))
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
-		if _, err := client.SendWrapped(context.Background(), store.testSender(), &args); err != nil {
+		if _, err := client.SendWrapped(ctx, store.testSender(), &args); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// Wait for any asynchronous tasks to finish.
-	stopper.Quiesce(context.TODO())
-
-	r.mu.Lock()
-	newFirstIndex, err := r.FirstIndex()
-	r.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if newFirstIndex <= oldFirstIndex {
-		t.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
-			oldFirstIndex, newFirstIndex)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		newFirstIndex, err := r.GetFirstIndex()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if newFirstIndex <= oldFirstIndex {
+			return errors.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
+				oldFirstIndex, newFirstIndex)
+		}
+		return nil
+	})
 }
