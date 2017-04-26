@@ -43,6 +43,11 @@ import (
 	_ "github.com/wadey/gocovmerge"
 	_ "golang.org/x/tools/cmd/goimports"
 	_ "golang.org/x/tools/cmd/goyacc"
-	_ "golang.org/x/tools/cmd/guru"
 	_ "golang.org/x/tools/cmd/stringer"
+
+	// These dev-only tools would not normally be included in this list, but
+	// they happen to live in the same repository as tools used in CI. We
+	// include them here for the sake of reducing necessary $GOPATH pollution.
+	_ "golang.org/x/tools/cmd/gorename"
+	_ "golang.org/x/tools/cmd/guru"
 )
