@@ -319,16 +319,20 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	// Retry a limited number of times because returning an error and letting
 	// the node kill itself is better than holding the migration lease for an
 	// arbitrarily long time.
-	var err error
+	var lastErr error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		res := r.sqlExecutor.ExecuteStatements(session, alterStmt, nil)
-		err = checkQueryResults(res.ResultList, 1)
-		if err == nil {
+		res, err := r.sqlExecutor.ExecuteStatements(session, alterStmt, nil)
+		if err != nil {
+			// An error directly from `ExecuteStatements` is irrecoverable.
+			return err
+		}
+		lastErr = checkQueryResults(res.ResultList, 1)
+		if lastErr == nil {
 			break
 		}
-		log.Warningf(ctx, "failed attempt to update system.eventlog schema: %s", err)
+		log.Warningf(ctx, "failed attempt to update system.eventlog schema: %s", lastErr)
 	}
-	return err
+	return lastErr
 }
 
 // TODO(a-robinson): Write unit test for this.
@@ -379,14 +383,18 @@ func optIntToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	// Retry a limited number of times because returning an error and letting
 	// the node kill itself is better than holding the migration lease for an
 	// arbitrarily long time.
-	var err error
+	var lastErr error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		res := r.sqlExecutor.ExecuteStatements(session, setStmt, nil)
-		err = checkQueryResults(res.ResultList, 1)
-		if err == nil {
+		res, err := r.sqlExecutor.ExecuteStatements(session, setStmt, nil)
+		if err != nil {
+			// An error directly from `ExecuteStatements` is irrecoverable.
+			return err
+		}
+		lastErr = checkQueryResults(res.ResultList, 1)
+		if lastErr == nil {
 			break
 		}
-		log.Warningf(ctx, "failed attempt to update setting: %s", err)
+		log.Warningf(ctx, "failed attempt to update setting: %s", lastErr)
 	}
-	return err
+	return lastErr
 }

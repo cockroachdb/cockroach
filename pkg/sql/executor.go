@@ -384,8 +384,40 @@ func (e *Executor) getDatabaseCache() *databaseCache {
 // contain partial type information for placeholders. Prepare will
 // populate the missing types. The PreparedStatement is returned (or
 // nil if there are no results).
+//
+// If fatalErr is returned true, then the session must be closed
+// because it is not reusable.
+// TOOD(knz) use this fatal error return to tell the caller that a
+// panic was recovered from but the session is not safe any more.
 func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
+) (res *PreparedStatement, fatalErr bool, err error) {
+	defer session.maybeRecover("preparing", query)
+
+	// Prepare needs a transaction because it needs to retrieve db/table
+	// descriptors for type checking.
+	txn := session.TxnState.txn
+	if txn == nil {
+		// The new txn need not be the same transaction used by statements following
+		// this prepare statement because it can only be used by prepare() to get a
+		// table lease that is eventually added to the session.
+		//
+		// TODO(vivek): perhaps we should be more consistent and update
+		// session.TxnState.txn, but more thought needs to be put into whether that
+		// is really needed.
+		txn = client.NewTxn(e.cfg.DB)
+		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
+			return nil, true, fmt.Errorf("cannot set up txn for prepare %q: %v", query, err)
+		}
+		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
+	}
+
+	res, err = e.doPrepare(query, session, pinfo, txn)
+	return res, false, err
+}
+
+func (e *Executor) doPrepare(
+	query string, session *Session, pinfo parser.PlaceholderTypes, txn *client.Txn,
 ) (*PreparedStatement, error) {
 	session.resetForBatch(e)
 	sessionEventf(session, "preparing: %s", query)
@@ -417,24 +449,6 @@ func (e *Executor) Prepare(
 	protoTS, err := isAsOf(session, stmt, e.cfg.Clock.Now())
 	if err != nil {
 		return nil, err
-	}
-
-	// Prepare needs a transaction because it needs to retrieve db/table
-	// descriptors for type checking.
-	txn := session.TxnState.txn
-	if txn == nil {
-		// The new txn need not be the same transaction used by statements following
-		// this prepare statement because it can only be used by prepare() to get a
-		// table lease that is eventually added to the session.
-		//
-		// TODO(vivek): perhaps we should be more consistent and update
-		// session.TxnState.txn, but more thought needs to be put into whether that
-		// is really needed.
-		txn = client.NewTxn(e.cfg.DB)
-		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
-			panic(err)
-		}
-		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
 	}
 
 	if len(session.TxnState.schemaChangers.schemaChangers) > 0 {
@@ -469,23 +483,26 @@ func (e *Executor) Prepare(
 	return prepared, nil
 }
 
-// ExecuteStatements executes the given statement(s) and returns a response.
+// ExecuteStatements executes the given statement(s) and returns a
+// response.
+// If the returned error is non-nil, the session cannot be used any
+// more and must be discarded.
+// TODO(knz) use this fatal error return to tell the
+// caller that a panic was recovered from but the session
+// is not safe any more.
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
-) StatementResults {
+) (StatementResults, error) {
 	session.resetForBatch(e)
 	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
-	defer func() {
-		if r := recover(); r != nil {
-			// On a panic, prepend the executed SQL.
-			panic(fmt.Errorf("%s: %s", stmts, r))
-		}
-	}()
+	defer session.maybeRecover("executing", stmts)
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(session, stmts, pinfo, copyMsgNone)
+	results := e.execRequest(session, stmts, pinfo, copyMsgNone)
+
+	return results, nil
 }
 
 // CopyData adds data to the COPY buffer and executes if there are enough rows.
@@ -1216,7 +1233,12 @@ func (e *Executor) execStmtInOpenTxn(
 		for i, t := range s.Types {
 			typeHints[strconv.Itoa(i+1)] = parser.CastTargetToDatumType(t)
 		}
-		_, err := session.PreparedStatements.New(e, name, s.Statement.String(), typeHints)
+		_, fatalErr, err := session.PreparedStatements.New(e, name, s.Statement.String(), typeHints)
+		if fatalErr {
+			// TODO(knz) when we support panic recovery, this will be
+			// suitably caught by maybeRecover().
+			panic(err)
+		}
 		return Result{}, err
 	case *parser.Execute:
 		name := s.Name.String()
@@ -1243,7 +1265,14 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 			qArgs[idx] = typedExpr
 		}
-		results := e.ExecuteStatements(session, prepared.Query, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
+		results, err := e.ExecuteStatements(session, prepared.Query, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
+		if err != nil {
+			// An error result in ExecuteStatements means the session is
+			// rendered unusable.
+			// TODO(knz) when we support panic recovery, this will be suitably
+			// caught by maybeRecover().
+			panic(err)
+		}
 		if results.Empty {
 			return Result{}, nil
 		}
