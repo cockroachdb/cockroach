@@ -1,5 +1,5 @@
 hash: 04cc0a18094bdfa1396e60ffa89c8dac83d14844245254335c81bcb3afb6ca01
-updated: 2017-04-26T11:05:45.889099956-04:00
+updated: 2017-04-26T14:05:42.990793673-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -304,7 +304,7 @@ imports:
   subpackages:
   - wire
 - name: github.com/opentracing/opentracing-go
-  version: eaa2524c1b95618f98127d9c4149d28b852397b4
+  version: 1949ddbfd147afd4d964a9f00b24eb291e0e7c38
   subpackages:
   - ext
   - log
@@ -381,6 +381,13 @@ imports:
   - internal
   - jws
   - jwt
+- name: golang.org/x/perf
+  version: b74b45749c47cd1edf5b64df78ecf13bd2dd944f
+  subpackages:
+  - benchstat
+  - cmd/benchstat
+  - internal/stats
+  - storage/benchfmt
 - name: golang.org/x/sync
   version: de49d9dcd27d4f764488181bea099dfe6179bcf0
   subpackages:
@@ -406,7 +413,7 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 1b22574ddb1f9559c014d7aa13416bd6f4aba26b
+  version: 9a6c6fca12efdd355f948c5b748b8b48edbb4ef0
   subpackages:
   - cmd/goimports
   - cmd/gorename
