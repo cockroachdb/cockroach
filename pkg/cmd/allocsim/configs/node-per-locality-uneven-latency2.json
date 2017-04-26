@@ -1,10 +1,10 @@
 {
+  "NumWorkers": 32,
   "Localities": [
     {
       "Name": "1",
       "LocalityStr": "continent=us,region=us-east-1",
       "NumNodes": 1,
-      "NumWorkers": 0,
       "OutgoingLatencies": [
         {
           "Name": "2",
@@ -20,7 +20,6 @@
       "Name": "2",
       "LocalityStr": "continent=us,region=us-east-2",
       "NumNodes": 1,
-      "NumWorkers": 32,
       "OutgoingLatencies": [
         {
           "Name": "1",
@@ -36,7 +35,6 @@
       "Name": "3",
       "LocalityStr": "continent=ap,region=ap-southeast-2",
       "NumNodes": 1,
-      "NumWorkers": 0,
       "OutgoingLatencies": [
         {
           "Name": "1",

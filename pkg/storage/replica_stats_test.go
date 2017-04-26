@@ -232,12 +232,12 @@ func TestReplicaStatsDecay(t *testing.T) {
 		}
 
 		for i := 0; i < len(rs.mu.requests)-1; i++ {
-			manual.Increment(int64(rotateInterval))
+			manual.Increment(int64(replStatsRotateInterval))
 			for k, v := range expected {
 				expected[k] = v * decayFactor
 			}
 			actual, dur = rs.getRequestCounts()
-			if expectedDur := rotateInterval * time.Duration(i+1); dur != expectedDur {
+			if expectedDur := replStatsRotateInterval * time.Duration(i+1); dur != expectedDur {
 				t.Errorf("expected duration = %v, got %v", expectedDur, dur)
 			}
 			// We can't just use DeepEqual to compare these due to the float
@@ -247,7 +247,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 			}
 		}
 
-		manual.Increment(int64(rotateInterval))
+		manual.Increment(int64(replStatsRotateInterval))
 		expected = make(perLocalityCounts)
 		if actual, _ := rs.getRequestCounts(); !reflect.DeepEqual(expected, actual) {
 			t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual))
@@ -259,7 +259,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 		for _, req := range []roachpb.NodeID{1, 1, 2, 2, 3} {
 			rs.record(req)
 		}
-		manual.Increment(int64(rotateInterval))
+		manual.Increment(int64(replStatsRotateInterval))
 		for _, req := range []roachpb.NodeID{2, 2, 3, 3, 3} {
 			rs.record(req)
 		}
@@ -304,7 +304,7 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 		t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual))
 	}
 
-	increment := rotateInterval / 2
+	increment := replStatsRotateInterval / 2
 	manual.Increment(int64(increment))
 	actual1, dur := rs.getRequestCounts()
 	if dur != increment {

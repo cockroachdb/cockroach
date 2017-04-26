@@ -52,9 +52,10 @@ const (
 var (
 	// MinLeaseTransferStatsDuration configures the minimum amount of time a
 	// replica must wait for stats about request counts to accumulate before
-	// making decisions based on them.
+	// making decisions based on them. The higher this is, the less likely
+	// thrashing is (up to a point).
 	// Made configurable for the sake of testing.
-	MinLeaseTransferStatsDuration = time.Minute
+	MinLeaseTransferStatsDuration = replStatsRotateInterval
 
 	// EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
 	// via the new heuristic based on request load and latency or via the simpler
@@ -663,11 +664,14 @@ func loadBasedLeaseRebalanceScore(
 	remoteLatencyMillis := float64(remoteLatency) / float64(time.Millisecond)
 	rebalanceAdjustment :=
 		LeaseRebalancingAggressiveness * 0.1 * math.Log10(remoteWeight/sourceWeight) * math.Log1p(remoteLatencyMillis)
-	rebalanceThreshold := baseRebalanceThreshold - rebalanceAdjustment
+	// Start with twice the base rebalance threshold in order to fight more
+	// strongly against thrashing caused by small variances in the distribution
+	// of request weights.
+	rebalanceThreshold := (2 * baseRebalanceThreshold) - rebalanceAdjustment
 
 	overfullLeaseThreshold := int32(math.Ceil(meanLeases * (1 + rebalanceThreshold)))
 	overfullScore := source.Capacity.LeaseCount - overfullLeaseThreshold
-	underfullLeaseThreshold := int32(math.Ceil(meanLeases * (1 - rebalanceThreshold)))
+	underfullLeaseThreshold := int32(math.Floor(meanLeases * (1 - rebalanceThreshold)))
 	underfullScore := underfullLeaseThreshold - remoteStore.Capacity.LeaseCount
 	totalScore := overfullScore + underfullScore
 
