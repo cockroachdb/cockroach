@@ -1263,8 +1263,16 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		}
 	} else {
 		// Without column equality, we cannot distribute the join. Run a
-		// single processor on this node.
+		// single processor.
 		nodes = []roachpb.NodeID{dsp.nodeDesc.NodeID}
+
+		// If either side has a single stream, put the processor on that node. We
+		// prefer the left side because that is processed first by the hash joiner.
+		if len(leftRouters) == 1 {
+			nodes[0] = p.Processors[leftRouters[0]].Node
+		} else if len(rightRouters) == 1 {
+			nodes[0] = p.Processors[rightRouters[0]].Node
+		}
 	}
 
 	var post distsqlrun.PostProcessSpec
