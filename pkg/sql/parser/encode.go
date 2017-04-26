@@ -116,8 +116,9 @@ func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 }
 
 func encodeSQLIdent(buf *bytes.Buffer, s string) {
-	// The string needs quoting if it does not match the ident format.
-	if isIdent(s) {
+	// To round trip without quotes, the string must match the identifier format
+	// and be normalized.
+	if isIdent(s) && Name(s).Normalize() == s {
 		buf.WriteString(s)
 		return
 	}

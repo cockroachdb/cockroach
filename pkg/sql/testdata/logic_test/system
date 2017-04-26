@@ -81,9 +81,9 @@ SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1
 query TTBTT
 SHOW COLUMNS FROM system.namespace
 ----
-parentID INT    false NULL {primary}
-name     STRING false NULL {primary}
-id       INT    true  NULL {}
+parentID  INT     false  NULL  {primary}
+name      STRING  false  NULL  {primary}
+id        INT     true   NULL  {}
 
 query TTBTT
 SHOW COLUMNS FROM system.descriptor
@@ -94,8 +94,8 @@ descriptor BYTES true  NULL {}
 query TTBTT
 SHOW COLUMNS FROM system.users
 ----
-username       STRING false NULL {primary}
-hashedPassword BYTES  true  NULL {}
+username        STRING  false  NULL  {primary}
+hashedPassword  BYTES   true   NULL  {}
 
 query TTBTT
 SHOW COLUMNS FROM system.zones
@@ -106,38 +106,38 @@ config BYTES true  NULL {}
 query TTBTT
 SHOW COLUMNS FROM system.lease
 ----
-descID     INT       false NULL {primary}
-version    INT       false NULL {primary}
-nodeID     INT       false NULL {primary}
-expiration TIMESTAMP false NULL {primary}
+descID      INT        false  NULL  {primary}
+version     INT        false  NULL  {primary}
+nodeID      INT        false  NULL  {primary}
+expiration  TIMESTAMP  false  NULL  {primary}
 
 query TTBTT
 SHOW COLUMNS FROM system.eventlog
 ----
-timestamp    TIMESTAMP  false  NULL      {primary}
-eventType    STRING     false  NULL      {}
-targetID     INT        false  NULL      {}
-reportingID  INT        false  NULL      {}
-info         STRING     true   NULL      {}
-uniqueID     BYTES      false  uuid_v4() {primary}
+timestamp    TIMESTAMP  false  NULL       {primary}
+eventType    STRING     false  NULL       {}
+targetID     INT        false  NULL       {}
+reportingID  INT        false  NULL       {}
+info         STRING     true   NULL       {}
+uniqueID     BYTES      false  uuid_v4()  {primary}
 
 query TTBTT
 SHOW COLUMNS FROM system.rangelog
 ----
-timestamp     TIMESTAMP  false  NULL           {primary}
-rangeID       INT        false  NULL           {}
-storeID       INT        false  NULL		       {}
-eventType     STRING     false  NULL		       {}
-otherRangeID  INT        true   NULL		       {}
-info          STRING     true   NULL           {}
-uniqueID      INT        false  unique_rowid() {primary}
+timestamp     TIMESTAMP  false  NULL            {primary}
+rangeID       INT        false  NULL            {}
+storeID       INT        false  NULL            {}
+eventType     STRING     false  NULL            {}
+otherRangeID  INT        true   NULL            {}
+info          STRING     true   NULL            {}
+uniqueID      INT        false  unique_rowid()  {primary}
 
 query TTBTT
 SHOW COLUMNS FROM system.ui
 ----
-key          STRING     false  NULL {primary}
-value        BYTES      true   NULL {}
-lastUpdated  TIMESTAMP  false  NULL {}
+key          STRING     false  NULL  {primary}
+value        BYTES      true   NULL  {}
+lastUpdated  TIMESTAMP  false  NULL  {}
 
 query TTBTT
 SHOW COLUMNS FROM system.jobs

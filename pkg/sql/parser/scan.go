@@ -468,7 +468,7 @@ func (s *Scanner) scanIdent(lval *sqlSymType) {
 	start := s.pos - 1
 	for ; isIdentMiddle(s.peek()); s.pos++ {
 	}
-	lval.str = s.in[start:s.pos]
+	lval.str = ReNormalizeName(s.in[start:s.pos])
 	if id, ok := keywords[strings.ToUpper(lval.str)]; ok {
 		lval.id = id
 	} else {
