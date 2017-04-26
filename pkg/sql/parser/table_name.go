@@ -38,7 +38,7 @@ type NormalizableTableName struct {
 
 // Format implements the NodeFormatter interface.
 func (nt NormalizableTableName) Format(buf *bytes.Buffer, f FmtFlags) {
-	tnr := nt.TableNameReference
+	var tnr NodeFormatter = nt.TableNameReference
 	if f.tableNameNormalizer != nil {
 		if tn := f.tableNameNormalizer(&nt); tn != nil {
 			tnr = tn

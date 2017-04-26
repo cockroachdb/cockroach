@@ -29,7 +29,7 @@ type fmtFlags struct {
 	// tableNameNormalizer will be called on all NormalizableTableNames if it is
 	// non-nil. Its results will be used if they are non-nil, or ignored if they
 	// are nil.
-	tableNameNormalizer func(*NormalizableTableName) *TableName
+	tableNameNormalizer func(*NormalizableTableName) NodeFormatter
 	// indexedVarFormat is an optional interceptor for
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
@@ -76,7 +76,7 @@ var FmtHideConstants FmtFlags = &fmtFlags{hideConstants: true}
 
 // FmtNormalizeTableNames returns FmtFlags that instructs the pretty-printer
 // to normalize all table names using the provided function.
-func FmtNormalizeTableNames(base FmtFlags, fn func(*NormalizableTableName) *TableName) FmtFlags {
+func FmtNormalizeTableNames(base FmtFlags, fn func(*NormalizableTableName) NodeFormatter) FmtFlags {
 	f := *base
 	f.tableNameNormalizer = fn
 	return &f

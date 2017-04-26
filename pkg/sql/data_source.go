@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // To understand dataSourceInfo below it is crucial to understand the
@@ -355,22 +356,17 @@ func (p *planner) getDataSource(
 	case *parser.ParenTableExpr:
 		return p.getDataSource(ctx, t.Expr, hints, scanVisibility)
 
+	case *parser.TableRef:
+		return p.getTableScanByRef(ctx, t, hints, scanVisibility)
+
 	case *parser.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
-
-		var src planDataSource
-		var err error
 
 		if t.Hints != nil {
 			hints = t.Hints
 		}
 
-		if tref, ok := t.Expr.(*parser.TableRef); ok {
-			// Special case: operand is a numeric table reference.
-			src, err = p.getTableScanByRef(ctx, tref, hints, scanVisibility)
-		} else {
-			src, err = p.getDataSource(ctx, t.Expr, hints, scanVisibility)
-		}
+		src, err := p.getDataSource(ctx, t.Expr, hints, scanVisibility)
 		if err != nil {
 			return src, err
 		}
@@ -383,43 +379,7 @@ func (p *planner) getDataSource(
 			src = p.wrapOrdinality(src)
 		}
 
-		var tableAlias parser.TableName
-		if t.As.Alias != "" {
-			// If an alias was specified, use that.
-			tableAlias.TableName = parser.Name(t.As.Alias.Normalize())
-			src.info.sourceAliases = sourceAliases{{
-				name:        tableAlias,
-				columnRange: fillColumnRange(0, len(src.info.sourceColumns)-1),
-			}}
-		}
-		colAlias := t.As.Cols
-
-		if len(colAlias) > 0 {
-			// Make a copy of the slice since we are about to modify the contents.
-			src.info.sourceColumns = append(sqlbase.ResultColumns(nil), src.info.sourceColumns...)
-
-			// The column aliases can only refer to explicit columns.
-			for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
-				if colIdx >= len(src.info.sourceColumns) {
-					var srcName string
-					if tableAlias.DatabaseName != "" {
-						srcName = tableAlias.String()
-					} else {
-						srcName = tableAlias.TableName.String()
-					}
-
-					return planDataSource{}, errors.Errorf(
-						"source %q has %d columns available but %d columns specified",
-						srcName, aliasIdx, len(colAlias))
-				}
-				if src.info.sourceColumns[colIdx].Hidden {
-					continue
-				}
-				src.info.sourceColumns[colIdx].Name = string(colAlias[aliasIdx])
-				aliasIdx++
-			}
-		}
-		return src, nil
+		return renameSource(src, t.As, false)
 
 	default:
 		return planDataSource{}, errors.Errorf("unsupported FROM type %T", src)
@@ -454,7 +414,7 @@ func (p *planner) getTableScanByRef(
 	}
 	desc, err := descFunc(ctx, p.txn, tableID)
 	if err != nil {
-		return planDataSource{}, err
+		return planDataSource{}, errors.Errorf("%s: %v", tref.String(), err)
 	}
 
 	tn := parser.TableName{
@@ -470,7 +430,55 @@ func (p *planner) getTableScanByRef(
 		DBNameOriginallyOmitted: true,
 	}
 
-	return p.getPlanForDesc(ctx, desc, &tn, hints, scanVisibility, tref.Columns)
+	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, scanVisibility, tref.Columns)
+	if err != nil {
+		return src, err
+	}
+
+	return renameSource(src, tref.As, true)
+}
+
+// renameSource applies an AS clause to a data source.
+func renameSource(
+	src planDataSource, as parser.AliasClause, includeHidden bool,
+) (planDataSource, error) {
+	var tableAlias parser.TableName
+	if as.Alias != "" {
+		// If an alias was specified, use that.
+		tableAlias.TableName = parser.Name(as.Alias.Normalize())
+		src.info.sourceAliases = sourceAliases{{
+			name:        tableAlias,
+			columnRange: fillColumnRange(0, len(src.info.sourceColumns)-1),
+		}}
+	}
+	colAlias := as.Cols
+
+	if len(colAlias) > 0 {
+		// Make a copy of the slice since we are about to modify the contents.
+		src.info.sourceColumns = append(sqlbase.ResultColumns(nil), src.info.sourceColumns...)
+
+		// The column aliases can only refer to explicit columns.
+		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
+			if colIdx >= len(src.info.sourceColumns) {
+				var srcName string
+				if tableAlias.DatabaseName != "" {
+					srcName = tableAlias.String()
+				} else {
+					srcName = tableAlias.TableName.String()
+				}
+
+				return planDataSource{}, errors.Errorf(
+					"source %q has %d columns available but %d columns specified",
+					srcName, aliasIdx, len(colAlias))
+			}
+			if !includeHidden && src.info.sourceColumns[colIdx].Hidden {
+				continue
+			}
+			src.info.sourceColumns[colIdx].Name = string(colAlias[aliasIdx])
+			aliasIdx++
+		}
+	}
+	return src, nil
 }
 
 // getTableScanOrViewPlan builds a planDataSource from a single data source
@@ -508,11 +516,7 @@ func (p *planner) getPlanForDesc(
 	wantedColumns []parser.ColumnID,
 ) (planDataSource, error) {
 	if desc.IsView() {
-		if wantedColumns != nil {
-			return planDataSource{},
-				errors.Errorf("cannot specify an explicit column list when accessing a view by reference")
-		}
-		return p.getViewPlan(ctx, tn, desc)
+		return p.getViewPlan(ctx, tn, desc, wantedColumns)
 	} else if !desc.IsTable() {
 		return planDataSource{},
 			errors.Errorf("unexpected table descriptor of type %s for %q", desc.TypeName(), tn)
@@ -533,7 +537,10 @@ func (p *planner) getPlanForDesc(
 // getViewPlan builds a planDataSource for the view specified by the
 // table name and descriptor, expanding out its subquery plan.
 func (p *planner) getViewPlan(
-	ctx context.Context, tn *parser.TableName, desc *sqlbase.TableDescriptor,
+	ctx context.Context,
+	tn *parser.TableName,
+	desc *sqlbase.TableDescriptor,
+	wantedColumns []parser.ColumnID,
 ) (planDataSource, error) {
 	stmt, err := parser.ParseOne(desc.ViewQuery)
 	if err != nil {
@@ -558,10 +565,40 @@ func (p *planner) getViewPlan(
 		defer func() { p.skipSelectPrivilegeChecks = false }()
 	}
 
+	var colDescs []sqlbase.ColumnDescriptor
+	if wantedColumns != nil {
+		colDescs = make([]sqlbase.ColumnDescriptor, len(wantedColumns))
+		wantedExprs := make(parser.SelectExprs, len(wantedColumns))
+		for i, id := range wantedColumns {
+			// Search the view descriptor for the wanted ID.
+			found := false
+			for j, col := range desc.Columns {
+				if col.ID == sqlbase.ColumnID(id) {
+					colDescs[i] = col
+					wantedExprs[i] = parser.SelectExpr{Expr: &parser.IndexedVar{Idx: j}, As: parser.Name(col.Name)}
+					found = true
+					break
+				}
+			}
+			if !found {
+				return planDataSource{},
+					errors.Errorf("column ID %d not found in view descriptor for %s", id, tn.String())
+			}
+		}
+
+		from := &parser.From{Tables: parser.TableExprs{&parser.Subquery{Select: sel.Select}}}
+		sel.Select = &parser.SelectClause{Exprs: wantedExprs, From: from}
+	}
+	if colDescs == nil {
+		colDescs = desc.Columns
+	}
+
+	log.Infof(ctx, "select from view: %s", sel.String())
+
 	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as
 	// just passing the entire select here or will inserting an ORDER BY in the
 	// middle of a query plan break things?
-	plan, err := p.getSubqueryPlan(ctx, sel.Select, sqlbase.ResultColumnsFromColDescs(desc.Columns))
+	plan, err := p.getSubqueryPlan(ctx, sel.Select, sqlbase.ResultColumnsFromColDescs(colDescs))
 	if err != nil {
 		return plan, err
 	}

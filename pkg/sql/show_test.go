@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestShowCreateTable(t *testing.T) {
@@ -219,6 +220,9 @@ func TestShowCreateTable(t *testing.T) {
 func TestShowCreateView(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	sc := log.Scope(t)
+	defer sc.Close(t)
+
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -231,20 +235,30 @@ func TestShowCreateView(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tests := []string{
-		`CREATE VIEW %s AS SELECT i, s, v, t FROM d.t`,
-		`CREATE VIEW %s AS SELECT i, s, t FROM d.t`,
-		`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM d.t`,
-		`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM d.t AS foo WHERE foo.i > 3`,
-		`CREATE VIEW %s AS SELECT count(*) FROM d.t`,
-		`CREATE VIEW %s AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3:::INT`,
-		`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM d.t`,
-		`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.t`,
+	tests := []struct {
+		create, expectedShow string
+	}{
+		{`CREATE VIEW %s AS SELECT i, s, v, t FROM d.t`,
+			`CREATE VIEW %s AS SELECT i, s, v, t FROM [51(1, 2, 3, 4, 5) AS t (i, s, v, t, rowid)]`},
+		{`CREATE VIEW %s AS SELECT i, s, t FROM d.t`,
+			`CREATE VIEW %s AS SELECT i, s, t FROM [51(1, 2, 3, 4, 5) AS t (i, s, v, t, rowid)]`},
+		{`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM d.t`,
+			`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM [51(1, 2, 3, 4, 5) AS t (i, s, v, t, rowid)]`},
+		{`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM d.t AS foo WHERE foo.i > 3`,
+			`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM [51(1, 2, 3, 4, 5) AS t (i, s, v, t, rowid)] AS foo WHERE foo.i > 3`},
+		{`CREATE VIEW %s AS SELECT count(*) FROM d.t`,
+			`CREATE VIEW %s AS SELECT count(*) FROM [51(1, 2, 3, 4, 5) AS t (i, s, v, t, rowid)]`},
+		{`CREATE VIEW %s AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3:::INT`,
+			`CREATE VIEW %s AS SELECT s, count(*) FROM [51(1, 2, 3, 4, 5) AS t (i, s, v, t, rowid)] GROUP BY s HAVING count(*) > 3:::INT`},
+		{`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM d.t`,
+			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM [51(1, 2, 3, 4, 5) AS t (i, s, v, t, rowid)]`},
+		{`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.t`,
+			`CREATE VIEW %s (a, b) AS SELECT i, v FROM [51(1, 2, 3, 4, 5) AS t (i, s, v, t, rowid)]`},
 	}
 	for i, test := range tests {
 		name := fmt.Sprintf("T%d", i)
-		stmt := fmt.Sprintf(test, name)
-		expect := stmt
+		stmt := fmt.Sprintf(test.create, name)
+		expect := fmt.Sprintf(test.expectedShow, name)
 		if _, err := sqlDB.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}
@@ -254,10 +268,10 @@ func TestShowCreateView(t *testing.T) {
 			t.Fatal(err)
 		}
 		if scanName != name {
-			t.Fatalf("expected view name %s, got %s", name, scanName)
+			t.Errorf("expected view name %s, got %s", name, scanName)
 		}
 		if create != expect {
-			t.Fatalf("statement: %s\ngot: %s\nexpected: %s", stmt, create, expect)
+			t.Errorf("statement: %s\ngot: %s\nexpected: %s", stmt, create, expect)
 			continue
 		}
 		if _, err := sqlDB.Exec(fmt.Sprintf("DROP VIEW %s", name)); err != nil {
@@ -265,7 +279,7 @@ func TestShowCreateView(t *testing.T) {
 		}
 		// Re-insert to make sure it's round-trippable.
 		name += "_2"
-		expect = fmt.Sprintf(test, name)
+		expect = fmt.Sprintf(test.expectedShow, name)
 		if _, err := sqlDB.Exec(expect); err != nil {
 			t.Fatalf("reinsert failure: %s: %s", expect, err)
 		}
