@@ -45,10 +45,11 @@ import (
 // AddMessage can be called multiple times before getting the rows, but this
 // will cause data to accumulate internally.
 type StreamDecoder struct {
-	typing   []DatumInfo
-	data     []byte
-	metadata []ProducerMetadata
-	rowAlloc sqlbase.EncDatumRowAlloc
+	typing       []DatumInfo
+	data         []byte
+	numEmptyRows int
+	metadata     []ProducerMetadata
+	rowAlloc     sqlbase.EncDatumRowAlloc
 
 	headerReceived bool
 	typingReceived bool
@@ -75,13 +76,11 @@ func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
 		sd.typing = msg.Typing
 	}
 
-	if len(msg.Data.RawBytes) != 0 {
+	if len(msg.Data.RawBytes) > 0 {
 		if !sd.headerReceived || !sd.typingReceived {
 			return errors.Errorf("received data before header and/or typing info")
 		}
-	}
 
-	if len(msg.Data.RawBytes) > 0 {
 		if len(sd.data) == 0 {
 			// We limit the capacity of the slice (using "three-index slices") out of
 			// paranoia: if the slice is going to need to grow later, we don't want to
@@ -94,6 +93,12 @@ func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
 			// TODO(radu): maybe don't support this case at all?
 			sd.data = append(sd.data, msg.Data.RawBytes...)
 		}
+	}
+	if msg.Data.NumEmptyRows > 0 {
+		if len(msg.Data.RawBytes) > 0 {
+			return errors.Errorf("received both data and empty rows")
+		}
+		sd.numEmptyRows += int(msg.Data.NumEmptyRows)
 	}
 	if len(msg.Data.Metadata) > 0 {
 		for _, md := range msg.Data.Metadata {
@@ -125,6 +130,12 @@ func (sd *StreamDecoder) GetRow(
 		return nil, r, nil
 	}
 
+	if sd.numEmptyRows > 0 {
+		sd.numEmptyRows--
+		row := make(sqlbase.EncDatumRow, 0) // this doesn't actually allocate.
+		return row, ProducerMetadata{}, nil
+	}
+
 	if len(sd.data) == 0 {
 		return nil, ProducerMetadata{}, nil
 	}
@@ -136,7 +147,9 @@ func (sd *StreamDecoder) GetRow(
 	}
 	for i := range rowBuf {
 		var err error
-		rowBuf[i], sd.data, err = sqlbase.EncDatumFromBuffer(sd.typing[i].Type, sd.typing[i].Encoding, sd.data)
+		rowBuf[i], sd.data, err = sqlbase.EncDatumFromBuffer(
+			sd.typing[i].Type, sd.typing[i].Encoding, sd.data,
+		)
 		if err != nil {
 			// Reset sd because it is no longer usable.
 			*sd = StreamDecoder{}
