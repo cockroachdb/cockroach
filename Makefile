@@ -32,7 +32,7 @@ BENCHTIMEOUT := 5m
 TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
-XGOFLAGS     :=
+GOFLAGS      :=
 COCKROACH    := ./cockroach
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
@@ -70,6 +70,7 @@ else ifeq ($(TYPE),$(filter $(TYPE),release release-linux-gnu))
 XHOST_TRIPLE := x86_64-unknown-linux-gnu
 override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
 override GOFLAGS += -installsuffix release
+override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
 else ifeq ($(TYPE),release-linux-musl)
 XHOST_TRIPLE := x86_64-unknown-linux-musl
 override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
