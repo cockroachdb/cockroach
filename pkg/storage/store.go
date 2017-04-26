@@ -991,7 +991,7 @@ func (s *Store) SetDraining(drain bool) {
 
 	var wg sync.WaitGroup
 
-	ctx := context.TODO()
+	ctx := log.WithLogTag(context.Background(), "drain", nil)
 	// Limit the number of concurrent lease transfers.
 	sem := make(chan struct{}, 100)
 	sysCfg, sysCfgSet := s.cfg.Gossip.GetSystemConfig()
@@ -1000,6 +1000,7 @@ func (s *Store) SetDraining(drain bool) {
 		if err := s.stopper.RunLimitedAsyncTask(
 			ctx, sem, true /* wait */, func(ctx context.Context) {
 				defer wg.Done()
+				ctx = r.AnnotateCtx(ctx)
 				var drainingLease *roachpb.Lease
 				for {
 					var leaseCh <-chan *roachpb.Error
