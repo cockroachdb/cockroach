@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1553,5 +1554,64 @@ func TestContextDoneNil(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if context.Background().Done() != nil {
 		t.Error("context.Background().Done()'s behavior has changed")
+	}
+}
+
+func TestTooManyIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(s *settings.IntSetting) {
+		maxIntents = s
+	}(maxIntents)
+	maxIntents = settings.TestingIntSetting(3)
+
+	ctx := context.Background()
+	s, _ := createTestDB(t)
+	defer s.Stop()
+
+	txn := client.NewTxn(s.DB)
+	for i := 0; i < int(maxIntents.Get()); i++ {
+		key := roachpb.Key(fmt.Sprintf("a%d", i))
+		if pErr := txn.Put(ctx, key, []byte("value")); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+	// The request that puts us over the limit causes an error. Note
+	// that this is a best-effort detection after the intents are
+	// written.
+	key := roachpb.Key(fmt.Sprintf("a%d", maxIntents.Get()))
+	if err := txn.Put(ctx, key, []byte("value")); !testutils.IsError(err,
+		"transaction is too large") {
+		t.Fatalf("did not get expected error: %v", err)
+	}
+}
+
+func TestTooManyIntentsAtCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(s *settings.IntSetting) {
+		maxIntents = s
+	}(maxIntents)
+	maxIntents = settings.TestingIntSetting(3)
+
+	ctx := context.Background()
+	s, _ := createTestDB(t)
+	defer s.Stop()
+
+	txn := client.NewTxn(s.DB)
+	b := txn.NewBatch()
+	for i := 0; i < 1+int(maxIntents.Get()); i++ {
+		key := roachpb.Key(fmt.Sprintf("a%d", i))
+		b.Put(key, []byte("value"))
+	}
+	if err := txn.CommitInBatch(ctx, b); !testutils.IsError(err,
+		"transaction is too large") {
+		t.Fatalf("did not get expected error: %v", err)
+	}
+
+	// Check that the "transaction too large" error was generated before
+	// writing to the database instead of after.
+	if kv, err := s.DB.Get(ctx, "a0"); err != nil {
+		t.Fatal(err)
+	} else if kv.Exists() {
+		t.Fatal("did not expect value to exist")
 	}
 }

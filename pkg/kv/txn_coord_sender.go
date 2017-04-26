@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,6 +48,16 @@ const (
 	opTxnCoordSender  = "txn coordinator"
 	opHeartbeatLoop   = "heartbeat"
 )
+
+// maxIntents is the limit for the number of intents that can be
+// written in a single transaction. All intents used by a transaction
+// must be included in the EndTransactionRequest, and processing a
+// large EndTransactionRequest currently consumes a larage amount of
+// memory. Limit the number of intents to keep this from causing the
+// server to run out of memory.
+var maxIntents = settings.RegisterIntSetting(
+	"kv.transaction.max_intents",
+	"maximum number of write intents allowed for a KV transaction", 100000)
 
 var errNoState = errors.New("writing transaction timed out or ran on multiple coordinators")
 
@@ -387,6 +398,12 @@ func (tc *TxnCoordSender) Send(
 				// transaction to end. Read-only txns have all of their state
 				// in the client.
 				return roachpb.NewErrorf("cannot commit a read-only transaction")
+			}
+			if int64(len(et.IntentSpans)) > maxIntents.Get() {
+				// This check prevents us from sending a very large command to
+				// the server that would consume a lot of memory at evaluation
+				// time.
+				return roachpb.NewErrorf("transaction is too large to commit: %d intents", len(et.IntentSpans))
 			}
 			if txnMeta != nil {
 				txnMeta.keys = et.IntentSpans
@@ -889,6 +906,14 @@ func (tc *TxnCoordSender) updateState(
 				EndKey: endKey,
 			})
 		})
+
+		if int64(len(keys)) > maxIntents.Get() {
+			// This check comes after the new intents have already been
+			// written, but allows us to exit early from transactions that
+			// have gotten too large to ever commit because of the other
+			// "transaction too large" check.
+			return roachpb.NewErrorf("transaction is too large to commit: %d intents", len(keys))
+		}
 
 		if txnMeta != nil {
 			txnMeta.keys = keys
