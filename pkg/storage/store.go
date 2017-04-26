@@ -108,6 +108,10 @@ const (
 	// additional work to a store that is either not keeping up or is undergoing
 	// recovery because it is on a recently restarted node.
 	prohibitRebalancesBehindThreshold = 1000
+
+	// IntersectingSnapshotMsg is part of the error message returned from
+	// canApplySnapshotLocked and is exposed here so testing can rely on it.
+	IntersectingSnapshotMsg = "snapshot intersects existing range"
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
@@ -3759,7 +3763,7 @@ func (s *Store) canApplySnapshotLocked(
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
 		exReplica, err := s.getReplicaLocked(exRange.Desc().RangeID)
-		msg := "snapshot intersects existing range"
+		msg := IntersectingSnapshotMsg
 		if err != nil {
 			log.Warning(ctx, errors.Wrapf(
 				err, "unable to look up overlapping replica on %s", exReplica))
