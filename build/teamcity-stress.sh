@@ -10,7 +10,7 @@ exit_status=0
 build/builder.sh go install ./pkg/cmd/github-post
 
 build/builder.sh env \
-		 make TYPE=release stress \
+		 make stress \
 		 PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
 		 TESTTIMEOUT=30m TESTFLAGS='-test.v' \
 		 STRESSFLAGS='-maxtime 15m -maxfails 1 -stderr' \

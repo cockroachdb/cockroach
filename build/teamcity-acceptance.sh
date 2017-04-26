@@ -6,9 +6,9 @@ export BUILDER_HIDE_GOPATH_SRC=1
 # Ensure that no stale binary remains.
 rm -f pkg/acceptance/acceptance.test
 
-build/builder.sh make TYPE=release build
-build/builder.sh make TYPE=release install
-build/builder.sh make TYPE=release testbuild TAGS=acceptance PKG=./pkg/acceptance
+build/builder.sh make TYPE=release-linux-gnu build
+mv cockroach-linux-2.6.32-gnu-amd64 cockroach
+build/builder.sh make TYPE=release-linux-gnu testbuild TAGS=acceptance PKG=./pkg/acceptance
 
 # The log files that should be created by -l below can only
 # be created if the parent directory already exists. Ensure
