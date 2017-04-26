@@ -98,7 +98,7 @@ var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 var syncRaftLog = settings.RegisterBoolSetting(
 	"kv.raft_log.synchronize",
 	"set to true to synchronize on Raft log writes to persistent storage",
-	false)
+	true)
 
 var maxCommandSize = settings.RegisterByteSizeSetting(
 	"kv.raft.command.max_size",
