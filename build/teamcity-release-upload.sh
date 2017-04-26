@@ -10,7 +10,11 @@ case "$TC_BUILD_BRANCH" in
     push=build/push-aws.sh
     ;;
 
-  beta-*)
+  # XXX(benesch): This will break for 2.0, but tamird is working on wholesale
+  # replacing this script this week (2017/04/26). In the Go replacement we
+  # should instead use github.com/hashicorp/go-versions to detect build branches
+  # that correspond to a version.
+  beta-*|v1.*)
     VERSION="$TC_BUILD_BRANCH"
     STABLE_RELEASE=true
     push=build/push-tagged-aws.sh
