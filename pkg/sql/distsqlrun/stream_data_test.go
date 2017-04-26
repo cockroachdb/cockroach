@@ -103,7 +103,7 @@ func TestStreamEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 100; test++ {
-		rowLen := 1 + rng.Intn(20)
+		rowLen := rng.Intn(20)
 		info := make([]DatumInfo, rowLen)
 		for i := range info {
 			info[i].Type = sqlbase.RandColumnType(rng)
