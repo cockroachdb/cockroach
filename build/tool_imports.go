@@ -41,6 +41,7 @@ import (
 	_ "github.com/mdempsky/unconvert"
 	_ "github.com/mibk/dupl"
 	_ "github.com/wadey/gocovmerge"
+	_ "golang.org/x/perf/cmd/benchstat"
 	_ "golang.org/x/tools/cmd/goimports"
 	_ "golang.org/x/tools/cmd/goyacc"
 	_ "golang.org/x/tools/cmd/stringer"
