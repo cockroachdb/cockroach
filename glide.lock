@@ -1,5 +1,5 @@
 hash: 04cc0a18094bdfa1396e60ffa89c8dac83d14844245254335c81bcb3afb6ca01
-updated: 2017-04-25T13:31:41.976821966-04:00
+updated: 2017-04-26T11:05:45.889099956-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -288,7 +288,7 @@ imports:
   - syntax
   - syntax/golang
 - name: github.com/Microsoft/go-winio
-  version: fff283ad5116362ca252298cfc9b95828956d85d
+  version: f3b1913901892ada21d52d0cffe1d4c7080d36b7
 - name: github.com/mitchellh/go-homedir
   version: b8bc1bf767474819792c23f32d8286a45736f1c6
 - name: github.com/mitchellh/reflectwalk
@@ -406,9 +406,10 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 75e5ff36f363f6a84a3dce209446774ff2d13076
+  version: 1b22574ddb1f9559c014d7aa13416bd6f4aba26b
   subpackages:
   - cmd/goimports
+  - cmd/gorename
   - cmd/goyacc
   - cmd/guru
   - cmd/guru/serial
@@ -428,6 +429,8 @@ imports:
   - go/types/typeutil
   - imports
   - refactor/importgraph
+  - refactor/rename
+  - refactor/satisfy
 - name: google.golang.org/api
   version: fbbaff1827317122a8a0e1b24de25df8417ce87b
   subpackages:
@@ -496,6 +499,6 @@ testImports:
 - name: github.com/ghemawat/stream
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
 - name: github.com/go-sql-driver/mysql
-  version: 9dee4ca50b83acdf57a35fb9e6fb4be640afa2f3
+  version: 15dbaaedd46b79251eaa9c8ed5f280d28978bb3f
 - name: github.com/termie/go-shutil
   version: bcacb06fecaeec8dc42af03c87c6949f4a05c74c

@@ -12,12 +12,11 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 package grpcutil
 
 import (
+	"regexp"
 	"strings"
 	"time"
 
@@ -59,15 +58,30 @@ func (*logger) Fatalln(args ...interface{}) {
 }
 
 func (*logger) Print(args ...interface{}) {
-	print("", args...)
+	log.InfofDepth(context.TODO(), 2, "", args...)
 }
 
+// https://github.com/grpc/grpc-go/blob/955c867/clientconn.go#L836
+var (
+	transportFailedRe   = regexp.MustCompile("^" + regexp.QuoteMeta("grpc: addrConn.resetTransport failed to create client transport:"))
+	connectionRefusedRe = regexp.MustCompile(
+		strings.Join([]string{
+			// *nix
+			regexp.QuoteMeta("connection refused"),
+			// Windows
+			regexp.QuoteMeta("No connection could be made because the target machine actively refused it"),
+		}, "|"),
+	)
+)
+
 func (*logger) Printf(format string, args ...interface{}) {
-	print(format, args...)
+	if shouldPrint(transportFailedRe, connectionRefusedRe, time.Minute, format, args...) {
+		log.InfofDepth(context.TODO(), 2, format, args...)
+	}
 }
 
 func (*logger) Println(args ...interface{}) {
-	print("", args...)
+	log.InfofDepth(context.TODO(), 2, "", args...)
 }
 
 var spamMu = struct {
@@ -77,31 +91,26 @@ var spamMu = struct {
 	gids: make(map[int64]time.Time),
 }
 
-func print(format string, args ...interface{}) {
-	var isSpam bool
-	if strings.Contains(format, "failed to create client transport") {
+func shouldPrint(
+	formatRe, argsRe *regexp.Regexp, freq time.Duration, format string, args ...interface{},
+) bool {
+	if formatRe.MatchString(format) {
 		for _, arg := range args {
 			if err, ok := arg.(error); ok {
-				if strings.Contains(err.Error(), "refused") {
-					isSpam = true
-					break
+				if argsRe.MatchString(err.Error()) {
+					gid := goid.Get()
+					now := timeutil.Now()
+					spamMu.Lock()
+					t, ok := spamMu.gids[gid]
+					doPrint := !(ok && now.Sub(t) < freq)
+					if doPrint {
+						spamMu.gids[gid] = now
+					}
+					spamMu.Unlock()
+					return doPrint
 				}
 			}
 		}
 	}
-	if isSpam {
-		gid := goid.Get()
-		func() {
-			spamMu.Lock()
-			defer spamMu.Unlock()
-
-			if t, ok := spamMu.gids[gid]; ok {
-				if timeutil.Since(t) < time.Minute {
-					return
-				}
-			}
-			spamMu.gids[gid] = timeutil.Now()
-		}()
-	}
-	log.InfofDepth(context.TODO(), 3, format, args...)
+	return true
 }
