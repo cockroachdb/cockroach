@@ -188,13 +188,28 @@ func (r RangeDescriptor) String() string {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			fmt.Fprintf(&buf, "(n%d,s%d):%d", rep.NodeID, rep.StoreID, rep.ReplicaID)
+			buf.WriteString(rep.String())
 		}
 	} else {
 		buf.WriteString("<no replicas>")
 	}
 	fmt.Fprintf(&buf, ", next=%d]", r.NextReplicaID)
 
+	return buf.String()
+}
+
+func (r ReplicationTarget) String() string {
+	return fmt.Sprintf("n%d,s%d", r.NodeID, r.StoreID)
+}
+
+func (r ReplicaDescriptor) String() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "(n%d,s%d):", r.NodeID, r.StoreID)
+	if r.ReplicaID == 0 {
+		buf.WriteString("?")
+	} else {
+		fmt.Fprintf(&buf, "%d", r.ReplicaID)
+	}
 	return buf.String()
 }
 
