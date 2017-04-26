@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -655,5 +656,49 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 			}
 			return nil
 		})
+	}
+}
+
+func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var injectError atomic.Value
+	var injectedErrorCount int32
+
+	injectError.Store(true)
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
+		if _, ok := args.Req.(*roachpb.ConditionalPutRequest); !ok {
+			return nil
+		}
+		if val := injectError.Load(); val != nil && val.(bool) {
+			atomic.AddInt32(&injectedErrorCount, 1)
+			injectError.Store(false)
+			return roachpb.NewError(roachpb.NewAmbiguousResultError("test"))
+		}
+		return nil
+	}
+	mtc := &multiTestContext{
+		storeConfig: &storeCfg,
+	}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+
+	// Verify retry of the ambiguous result for heartbeat loop.
+	verifyLiveness(t, mtc)
+
+	nl := mtc.nodeLivenesses[0]
+	l, err := nl.Self()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// And again on manual heartbeat.
+	injectError.Store(true)
+	if err := nl.Heartbeat(context.Background(), l); err != nil {
+		t.Fatal(err)
+	}
+	if count := atomic.LoadInt32(&injectedErrorCount); count != 2 {
+		t.Errorf("expected injected error count of 2; got %d", count)
 	}
 }
