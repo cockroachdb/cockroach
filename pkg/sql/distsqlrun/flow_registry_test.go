@@ -36,7 +36,7 @@ import (
 func lookupFlow(fr *flowRegistry, fid FlowID, timeout time.Duration) *Flow {
 	fr.Lock()
 	defer fr.Unlock()
-	entry := fr.waitForFlowLocked(fid, timeout)
+	entry := fr.waitForFlowLocked(context.TODO(), fid, timeout)
 	if entry == nil {
 		return nil
 	}
@@ -213,15 +213,15 @@ func TestStreamConnectionTimeout(t *testing.T) {
 		t.Fatalf("expected consumer to have been closed when the flow timed out")
 	}
 
-	if _, _, _, err := reg.ConnectInboundStream(id1, streamID1, jiffy); !testutils.IsError(
-		err, "came too late") {
+	_, _, _, err := reg.ConnectInboundStream(context.TODO(), id1, streamID1, jiffy)
+	if !testutils.IsError(err, "came too late") {
 		t.Fatalf("expected %q, got: %v", "came too late", err)
 	}
 
 	// Unregister the flow. Subsequent attempts to connect a stream should result
 	// in a different error than before.
 	reg.UnregisterFlow(id1)
-	_, _, _, err := reg.ConnectInboundStream(id1, streamID1, jiffy)
+	_, _, _, err = reg.ConnectInboundStream(context.TODO(), id1, streamID1, jiffy)
 	if !testutils.IsError(err, "not found") {
 		t.Fatalf("expected %q, got: %v", "not found", err)
 	}
