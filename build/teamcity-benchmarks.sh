@@ -6,7 +6,7 @@ export BUILDER_HIDE_GOPATH_SRC=1
 mkdir -p artifacts
 
 build/builder.sh env \
-	make TYPE=release bench \
+	make bench \
 	TESTFLAGS='-benchmem -count 10' \
 	BENCHTIMEOUT=24h \
 	2>    artifacts/bench.stderr.log \
