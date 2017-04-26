@@ -100,6 +100,11 @@ var syncRaftLog = settings.RegisterBoolSetting(
 	"set to true to synchronize on Raft log writes to persistent storage",
 	false)
 
+var maxCommandSize = settings.RegisterByteSizeSetting(
+	"kv.raft.command.max_size",
+	"maximum size of a raft command",
+	64<<20)
+
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
 // some discarded prefix to the log, so we must begin the log at an arbitrary
@@ -2504,6 +2509,14 @@ func (r *Replica) propose(
 		ch <- proposalResult{Err: pErr, Intents: intents}
 		close(ch)
 		return ch, func() bool { return false }, nil
+	}
+
+	if proposal.command.Size() > int(maxCommandSize.Get()) {
+		// Once a command is written to the raft log, it must be loaded
+		// into memory and repliayed on all replicas. If a command is
+		// too big, stop it here.
+		return nil, nil, errors.Errorf("command is too large: %d bytes (max: %d)",
+			proposal.command.Size(), maxCommandSize.Get())
 	}
 
 	r.mu.Lock()
