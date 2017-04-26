@@ -226,6 +226,8 @@ func init() {
 	}
 }
 
+var digitNames = []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
+
 // Builtins contains the built-in functions indexed by name.
 var Builtins = map[string][]Builtin{
 	// Keep the list of functions sorted.
@@ -1363,6 +1365,35 @@ var Builtins = map[string][]Builtin{
 		}, "Truncates the decimal values of `val`."),
 	},
 
+	"to_english": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeInt}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				val := int(*args[0].(*DInt))
+				var buf bytes.Buffer
+				if val < 0 {
+					buf.WriteString("minus-")
+				}
+				var digits []string
+				digits = append(digits, digitNames[val%10])
+				for val > 9 {
+					val /= 10
+					digits = append(digits, digitNames[val%10])
+				}
+				for i := len(digits) - 1; i >= 0; i-- {
+					if i < len(digits)-1 {
+						buf.WriteByte('-')
+					}
+					buf.WriteString(digits[i])
+				}
+				return NewDString(buf.String()), nil
+			},
+			category: categoryString,
+			Info:     "This function enunciates the value of its argument using English cardinals.",
+		},
+	},
+
 	// Array functions.
 
 	"array_length": {
@@ -1531,34 +1562,6 @@ var Builtins = map[string][]Builtin{
 			},
 			category: categorySystemInfo,
 			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
-		},
-	},
-
-	// A function used to generate strings for test tables. It takes an integer
-	// and returns a string: 1234 -> "one-two-three-four"
-	"crdb_testing.to_english": {
-		Builtin{
-			Types:      ArgTypes{{"val", TypeInt}},
-			ReturnType: fixedReturnType(TypeString),
-			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				val := int(*args[0].(*DInt))
-				if val < 0 {
-					return nil, errors.New("negative value")
-				}
-				d := []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
-				var digits []string
-				digits = append(digits, d[val%10])
-				for val > 9 {
-					val /= 10
-					digits = append(digits, d[val%10])
-				}
-				for i, j := 0, len(digits)-1; i < j; i, j = i+1, j-1 {
-					digits[i], digits[j] = digits[j], digits[i]
-				}
-				return NewDString(strings.Join(digits, "-")), nil
-			},
-			category: categoryString,
-			Info:     "Returns an English string derived from a number.",
 		},
 	},
 }
