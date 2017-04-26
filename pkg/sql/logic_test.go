@@ -625,6 +625,9 @@ func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool) {
 	// "testdata/rename_table". Figure out what's up with that.
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			// Specify a fixed memory limit (some test cases verify OOM conditions; we
+			// don't want those to take long on large machines).
+			SQLMemoryPoolSize: 128 * 1024 * 1024,
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					WaitForGossipUpdate:   true,

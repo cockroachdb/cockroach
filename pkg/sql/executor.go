@@ -984,7 +984,9 @@ func runShowTransactionState(session *Session, implicitTxn bool) (Result, error)
 	result.PGTag = (*parser.Show)(nil).StatementTag()
 	result.Type = (*parser.Show)(nil).StatementType()
 	result.Columns = sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}}
-	result.Rows = sqlbase.NewRowContainer(session.makeBoundAccount(), result.Columns, 0)
+	result.Rows = sqlbase.NewRowContainer(
+		session.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(result.Columns), 0,
+	)
 	state := session.TxnState.State
 	if implicitTxn {
 		state = NoTxn
@@ -1500,7 +1502,9 @@ func makeRes(stmt parser.Statement, planner *planner, plan planNode) (Result, er
 				return Result{}, err
 			}
 		}
-		result.Rows = sqlbase.NewRowContainer(planner.session.makeBoundAccount(), result.Columns, 0)
+		result.Rows = sqlbase.NewRowContainer(
+			planner.session.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(result.Columns), 0,
+		)
 	}
 	return result, nil
 }

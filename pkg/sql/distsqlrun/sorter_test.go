@@ -17,8 +17,10 @@
 package distsqlrun
 
 import (
+	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -30,10 +32,10 @@ import (
 func TestSorter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := &sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -41,6 +43,7 @@ func TestSorter(t *testing.T) {
 
 	testCases := []struct {
 		spec     SorterSpec
+		post     PostProcessSpec
 		input    sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
 	}{
@@ -75,7 +78,6 @@ func TestSorter(t *testing.T) {
 		}, {
 			// No specified input ordering but specified limit.
 			spec: SorterSpec{
-				Limit: 4,
 				OutputOrdering: convertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
@@ -83,6 +85,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
+			post: PostProcessSpec{Limit: 4},
 			input: sqlbase.EncDatumRows{
 				{v[3], v[3], v[0]},
 				{v[3], v[4], v[1]},
@@ -167,13 +170,20 @@ func TestSorter(t *testing.T) {
 		},
 	}
 
+	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
 	for _, c := range testCases {
 		ss := c.spec
-		in := NewRowBuffer(nil /* types */, c.input, RowBufferArgs{})
+		types := make([]sqlbase.ColumnType, len(c.input[0]))
+		for i := range types {
+			types[i] = columnTypeInt
+		}
+		in := NewRowBuffer(types, c.input, RowBufferArgs{})
 		out := &RowBuffer{}
-		flowCtx := FlowCtx{}
+		flowCtx := FlowCtx{
+			evalCtx: parser.EvalContext{Mon: &monitor},
+		}
 
-		s, err := newSorter(&flowCtx, &ss, in, &PostProcessSpec{}, out)
+		s, err := newSorter(&flowCtx, &ss, in, &c.post, out)
 		if err != nil {
 			t.Fatal(err)
 		}

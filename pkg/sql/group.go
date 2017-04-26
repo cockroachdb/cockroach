@@ -410,7 +410,9 @@ func (n *groupNode) computeAggregates(ctx context.Context) error {
 
 	// Render the results.
 	n.values.rows = sqlbase.NewRowContainer(
-		n.planner.session.TxnState.makeBoundAccount(), n.values.Columns(), len(n.buckets),
+		n.planner.session.TxnState.makeBoundAccount(),
+		sqlbase.ColTypeInfoFromResCols(n.values.Columns()),
+		len(n.buckets),
 	)
 	row := make(parser.Datums, len(n.render))
 	for k := range n.buckets {
