@@ -85,10 +85,12 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                     "This node is currently healthy." :
                     "This node has not recently reported as being live. " +
                     "It may not be functioning correctly, but no automatic action has yet been taken.";
-                  return <div>
-                    <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>
-                    <div className={"icon-circle-filled node-status-icon node-status-icon--" + s} title={tooltip} />
-                  </div>;
+                  return (
+                    <div className="sort-table__unbounded-column">
+                      <div className={"icon-circle-filled node-status-icon node-status-icon--" + s} title={tooltip} />
+                      <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>
+                    </div>
+                  );
                 },
                 sort: (ns) => ns.desc.node_id,
                 // TODO(mrtracy): Consider if there is a better way to use BEM

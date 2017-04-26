@@ -1,6 +1,6 @@
 .tooltip, .timescale-selector
   position absolute
-  z-index $tooltip-layer
+  z-index $z-index-tooltip
   padding 35px
   border 1px solid $secondary-gray-1
   box-shadow 2px 2px 0 $secondary-gray-15
@@ -48,10 +48,10 @@
 
 .hover-tooltip
   position relative
-  z-index 1
 
   &__text
     visibility hidden
+    z-index $z-index-tooltip
     position absolute
     top -10px
     left 100%
