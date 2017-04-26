@@ -7710,10 +7710,7 @@ func TestMakeTimestampCacheRequest(t *testing.T) {
 func TestCommandTooLarge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	defer func(s *settings.ByteSizeSetting) {
-		maxCommandSize = s
-	}(maxCommandSize)
-	maxCommandSize = settings.TestingByteSizeSetting(1024)
+	defer settings.TestingSetByteSize(&maxCommandSize, 1024)()
 
 	tc := testContext{}
 	stopper := stop.NewStopper()

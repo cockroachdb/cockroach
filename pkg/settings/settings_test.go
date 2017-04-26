@@ -206,24 +206,70 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("mocks", func(t *testing.T) {
-		if expected, actual := true, TestingBoolSetting(true).Get(); expected != actual {
-			t.Fatalf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := "true", TestingStringSetting("true").Get(); expected != actual {
-			t.Fatalf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := int64(9), TestingIntSetting(9).Get(); expected != actual {
-			t.Fatalf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := 9.4, TestingFloatSetting(9.4).Get(); expected != actual {
-			t.Fatalf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := time.Hour, TestingDurationSetting(time.Hour).Get(); expected != actual {
-			t.Fatalf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := mb*10, TestingByteSizeSetting(mb*10).Get(); expected != actual {
-			t.Fatalf("expected %v, got %v", expected, actual)
+		{
+			f := TestingSetBool(&boolFA, true)
+			if expected, actual := true, boolFA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+			f()
+			if expected, actual := false, boolFA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
 		}
 
+		{
+			f := TestingSetString(&strBarA, "override")
+			if expected, actual := "override", strBarA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+			f()
+			if expected, actual := "bar", strBarA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+		}
+
+		{
+			f := TestingSetInt(&i1A, 64)
+			if expected, actual := int64(64), i1A.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+			f()
+			if expected, actual := int64(0), i1A.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+		}
+
+		{
+			f := TestingSetFloat(&fA, 6.7)
+			if expected, actual := 6.7, fA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+			f()
+			if expected, actual := 5.4, fA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+		}
+
+		{
+			f := TestingSetDuration(&dA, 10*time.Hour)
+			if expected, actual := 10*time.Hour, dA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+			f()
+			if expected, actual := time.Second, dA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+		}
+
+		{
+			f := TestingSetByteSize(&byteSize, mb*7)
+			if expected, actual := mb*7, byteSize.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+			f()
+			if expected, actual := mb, byteSize.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+		}
 	})
 }
