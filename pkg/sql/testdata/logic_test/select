@@ -18,7 +18,7 @@ two four
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 
-query error syntax error at or near \"FROM\"
+query error syntax error at or near "from"
 SELECT FROM abc
 
 query error could not parse 'hello' as type bool

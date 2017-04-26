@@ -173,7 +173,7 @@ func TestShowCreateTable(t *testing.T) {
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			name := fmt.Sprintf("T%d", i)
+			name := fmt.Sprintf("t%d", i)
 			if test.expect == "" {
 				test.expect = test.stmt
 			}
@@ -242,7 +242,7 @@ func TestShowCreateView(t *testing.T) {
 		`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.t`,
 	}
 	for i, test := range tests {
-		name := fmt.Sprintf("T%d", i)
+		name := fmt.Sprintf("t%d", i)
 		stmt := fmt.Sprintf(test, name)
 		expect := stmt
 		if _, err := sqlDB.Exec(stmt); err != nil {
