@@ -175,12 +175,12 @@ type EvictionToken struct {
 
 	doOnce    sync.Once                                               // assures that do and doReplace are run up to once.
 	doLocker  sync.Locker                                             // protects do and doReplace.
-	do        func() error                                            // called on eviction.
+	do        func(context.Context) error                             // called on eviction.
 	doReplace func(context.Context, ...roachpb.RangeDescriptor) error // called after eviction on EvictAndReplace.
 }
 
 func (rdc *RangeDescriptorCache) makeEvictionToken(
-	prevDesc *roachpb.RangeDescriptor, evict func() error,
+	prevDesc *roachpb.RangeDescriptor, evict func(ctx context.Context) error,
 ) *EvictionToken {
 	return &EvictionToken{
 		prevDesc:  prevDesc,
@@ -207,7 +207,7 @@ func (et *EvictionToken) EvictAndReplace(
 	et.doOnce.Do(func() {
 		et.doLocker.Lock()
 		defer et.doLocker.Unlock()
-		err = et.do()
+		err = et.do(ctx)
 		if err == nil {
 			if len(newDescs) > 0 {
 				err = et.doReplace(ctx, newDescs...)
@@ -269,7 +269,7 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 		return nil, nil, err
 	} else if desc != nil {
 		rdc.rangeCache.RUnlock()
-		returnToken := rdc.makeEvictionToken(desc, func() error {
+		returnToken := rdc.makeEvictionToken(desc, func(ctx context.Context) error {
 			return rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
 		})
 		return desc, returnToken, nil
@@ -296,7 +296,7 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 			desc := &rs[0]
 			lookupRes = lookupResult{
 				desc: desc,
-				evictToken: rdc.makeEvictionToken(desc, func() error {
+				evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) error {
 					return rdc.evictCachedRangeDescriptorLocked(ctx, key, desc, useReverseScan)
 				}),
 			}
@@ -305,7 +305,7 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 			nextDesc := rs[1]
 			lookupRes = lookupResult{
 				desc: desc,
-				evictToken: rdc.makeEvictionToken(desc, func() error {
+				evictToken: rdc.makeEvictionToken(desc, func(ctx context.Context) error {
 					return rdc.insertRangeDescriptorsLocked(ctx, nextDesc)
 				}),
 			}
