@@ -732,7 +732,8 @@ func isIdent(s string) bool {
 			return false
 		}
 	}
-	return true
+	_, ok := reservedKeywords[strings.ToUpper(s)]
+	return !ok
 }
 
 func isIdentStart(ch int) bool {
