@@ -166,7 +166,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, TypeDate, []Expr{decConst("1.0"), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn},
 	}
 	for i, d := range testData {
-		ctx := MakeSemaContext()
+		ctx := MakeSemaContext(false)
 		ctx.Placeholders.SetTypes(d.ptypes)
 		desired := TypeAny
 		if d.desired != nil {

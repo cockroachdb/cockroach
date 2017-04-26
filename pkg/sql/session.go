@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -398,7 +399,7 @@ func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
 		phaseTimes: s.phaseTimes,
 	}
 
-	p.semaCtx = parser.MakeSemaContext()
+	p.semaCtx = parser.MakeSemaContext(s.User == security.RootUser)
 	p.semaCtx.Location = &s.Location
 	p.semaCtx.SearchPath = s.SearchPath
 
