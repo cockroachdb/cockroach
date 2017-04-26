@@ -1120,6 +1120,7 @@ ColLoop:
 
 	post := distsqlrun.PostProcessSpec{
 		Filter:        distsqlplan.MakeExpression(n.table.filter, nil),
+		Projection:    true,
 		OutputColumns: getOutputColumnsFromScanNode(n.table),
 	}
 
@@ -1281,7 +1282,9 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		}
 	}
 
-	var post distsqlrun.PostProcessSpec
+	post := distsqlrun.PostProcessSpec{
+		Projection: true,
+	}
 	// addOutCol appends to post.OutputColumns and returns the index
 	// in the slice of the added column.
 	addOutCol := func(col uint32) int {

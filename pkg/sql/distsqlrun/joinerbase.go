@@ -91,6 +91,11 @@ func (jb *joinerBase) render(
 		}
 		rrow = jb.emptyRight
 	}
+	if jb.combinedRow == nil {
+		// In the corner case where lrow, rrow are empty rows, we want a non-nil
+		// combined row (even if it is empty).
+		jb.combinedRow = make(sqlbase.EncDatumRow, len(lrow)+len(rrow))
+	}
 	jb.combinedRow = append(jb.combinedRow[:0], lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
 	res, err := jb.onCond.evalFilter(jb.combinedRow)
