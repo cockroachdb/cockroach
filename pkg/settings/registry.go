@@ -73,11 +73,17 @@ func RegisterBoolSetting(key, desc string, defVal bool) *BoolSetting {
 	return setting
 }
 
-// TestingBoolSetting returns a mock, unregistered bool setting for testing.
-func TestingBoolSetting(b bool) *BoolSetting {
-	s := &BoolSetting{defaultValue: b}
-	s.setToDefault()
-	return s
+// TestingSetBool returns a mock, unregistered bool setting for testing.
+func TestingSetBool(s **BoolSetting, v bool) func() {
+	saved := *s
+	if v {
+		*s = &BoolSetting{v: 1}
+	} else {
+		*s = &BoolSetting{v: 0}
+	}
+	return func() {
+		*s = saved
+	}
 }
 
 type numericSetting interface {
@@ -122,11 +128,13 @@ func RegisterIntSetting(key, desc string, defVal int64) *IntSetting {
 	return setting
 }
 
-// TestingIntSetting returns a mock, unregistered int setting for testing.
-func TestingIntSetting(i int64) *IntSetting {
-	s := &IntSetting{defaultValue: i}
-	s.setToDefault()
-	return s
+// TestingSetInt returns a mock, unregistered int setting for testing.
+func TestingSetInt(s **IntSetting, v int64) func() {
+	saved := *s
+	*s = &IntSetting{v: v}
+	return func() {
+		*s = saved
+	}
 }
 
 // FloatSetting is the interface of a setting variable that will be
@@ -159,11 +167,15 @@ func (f *FloatSetting) setToDefault() {
 	f.set(f.defaultValue)
 }
 
-// TestingFloatSetting returns a mock, unregistered float setting for testing.
-func TestingFloatSetting(f float64) *FloatSetting {
-	s := &FloatSetting{defaultValue: f}
-	s.setToDefault()
-	return s
+// TestingSetFloat returns a mock, unregistered float setting for testing.
+func TestingSetFloat(s **FloatSetting, v float64) func() {
+	saved := *s
+	tmp := &FloatSetting{}
+	tmp.set(v)
+	*s = tmp
+	return func() {
+		*s = saved
+	}
 }
 
 // RegisterFloatSetting defines a new setting with type float.
@@ -210,11 +222,13 @@ func RegisterDurationSetting(key, desc string, defVal time.Duration) *DurationSe
 	return setting
 }
 
-// TestingDurationSetting returns a mock, unregistered string setting for testing.
-func TestingDurationSetting(d time.Duration) *DurationSetting {
-	s := &DurationSetting{defaultValue: d}
-	s.setToDefault()
-	return s
+// TestingSetDuration returns a mock, unregistered string setting for testing.
+func TestingSetDuration(s **DurationSetting, v time.Duration) func() {
+	saved := *s
+	*s = &DurationSetting{v: int64(v)}
+	return func() {
+		*s = saved
+	}
 }
 
 // StringSetting is the interface of a setting variable that will be
@@ -254,11 +268,15 @@ func RegisterStringSetting(key, desc string, defVal string) *StringSetting {
 	return setting
 }
 
-// TestingStringSetting returns a mock, unregistered string setting for testing.
-func TestingStringSetting(v string) *StringSetting {
-	s := &StringSetting{defaultValue: v}
-	s.setToDefault()
-	return s
+// TestingSetString returns a mock, unregistered string setting for testing.
+func TestingSetString(s **StringSetting, v string) func() {
+	saved := *s
+	tmp := &StringSetting{}
+	tmp.set(v)
+	*s = tmp
+	return func() {
+		*s = saved
+	}
 }
 
 // ByteSizeSetting is the interface of a setting variable that will be
@@ -284,11 +302,13 @@ func RegisterByteSizeSetting(key, desc string, defVal int64) *ByteSizeSetting {
 	return setting
 }
 
-// TestingByteSizeSetting returns a mock bytesize setting for testing.
-func TestingByteSizeSetting(i int64) *ByteSizeSetting {
-	s := &ByteSizeSetting{IntSetting{defaultValue: i}}
-	s.setToDefault()
-	return s
+// TestingSetByteSize returns a mock bytesize setting for testing.
+func TestingSetByteSize(s **ByteSizeSetting, v int64) func() {
+	saved := *s
+	*s = &ByteSizeSetting{IntSetting{v: v}}
+	return func() {
+		*s = saved
+	}
 }
 
 // registry contains all defined settings, their types and default values.
