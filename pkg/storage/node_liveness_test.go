@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -655,5 +656,34 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 			}
 			return nil
 		})
+	}
+}
+
+func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var etCount int32
+	mtc := &multiTestContext{}
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
+		if _, ok := args.Req.(*roachpb.EndTransactionRequest); !ok {
+			return nil
+		}
+		if atomic.AddInt32(&etCount, 1) == 1 {
+			return roachpb.NewError(roachpb.NewAmbiguousResultError("test"))
+		}
+		return nil
+	}
+	mtc.storeConfig = &storeCfg
+	defer mtc.Stop()
+	mtc.Start(t, 1)
+
+	nl := mtc.nodeLivenesses[0]
+	l, err := nl.Self()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := nl.Heartbeat(context.Background(), l); err != nil {
+		t.Fatal(err)
 	}
 }
