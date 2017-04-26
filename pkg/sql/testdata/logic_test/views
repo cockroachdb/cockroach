@@ -127,22 +127,22 @@ x y
 query TT
 SHOW CREATE VIEW v1
 ----
-v1 CREATE VIEW v1 AS SELECT a, b FROM test.t
+v1 CREATE VIEW v1 AS SELECT a, b FROM [51(1, 2) AS t (a, b)]
 
 query TT
 SHOW CREATE VIEW v2
 ----
-v2 CREATE VIEW v2 (x, y) AS SELECT a, b FROM test.t
+v2 CREATE VIEW v2 (x, y) AS SELECT a, b FROM [51(1, 2) AS t (a, b)]
 
 query TT
 SHOW CREATE VIEW v6
 ----
-v6 CREATE VIEW v6 (x, y) AS SELECT a, b FROM test.v1
+v6 CREATE VIEW v6 (x, y) AS SELECT a, b FROM [52(1, 2) AS v1 (a, b)]
 
 query TT
 SHOW CREATE VIEW test2.v1
 ----
-test2.v1 CREATE VIEW v1 AS SELECT x, y FROM test.v2
+test2.v1 CREATE VIEW v1 AS SELECT x, y FROM [53(1, 2) AS v2 (x, y)]
 
 statement ok
 GRANT SELECT ON t TO testuser
@@ -191,7 +191,7 @@ SELECT * FROM v6
 query TT
 SHOW CREATE VIEW v1
 ----
-v1 CREATE VIEW v1 AS SELECT a, b FROM test.t
+v1 CREATE VIEW v1 AS SELECT a, b FROM [51(1, 2) AS t (a, b)]
 
 user root
 
@@ -245,83 +245,266 @@ DROP VIEW v1
 statement error pgcode 42P01 view "v1" does not exist
 DROP VIEW v1
 
-# Verify correct rejection of star expressions
-# TODO(a-robinson): Support star expressions as soon as we can (#10028)
-
-statement error views do not currently support \* expressions
+statement ok
 create view s1 AS SELECT * FROM t
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t.* FROM t
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT * FROM [51(1, 2) AS t (a, b)]
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT a FROM t ORDER BY t.*
+query II
+SELECT * FROM s1 ORDER BY 1
+----
+1  99
+2  98
+3  97
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT COUNT(1) FROM t GROUP BY t.*
+statement ok
+drop view s1; create view s1 AS SELECT t.* FROM t
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT alias.* FROM t AS alias
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT t.* FROM [51(1, 2) AS t (a, b)]
 
-statement error views do not currently support \* expressions
-create view s1 AS TABLE t
+query II
+SELECT * FROM s1 ORDER BY 1
+----
+1  99
+2  98
+3  97
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT a FROM (SELECT * FROM t)
+statement ok
+drop view s1; create view s1 AS SELECT a FROM t ORDER BY t.*
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT a FROM t WHERE NOT a IN (SELECT a FROM (SELECT * FROM t))
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT a FROM [51(1, 2) AS t (a, b)] ORDER BY t.*
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT a FROM t GROUP BY a HAVING a IN (SELECT a FROM (SELECT * FROM t))
+query I
+SELECT * FROM s1 ORDER BY 1
+----
+1
+2
+3
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.*, t2.a FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+statement ok
+drop view s1; create view s1 AS SELECT COUNT(1) FROM t GROUP BY t.*
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.a, t2.* FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT COUNT(1) FROM [51(1, 2) AS t (a, b)] GROUP BY t.*
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.*, t2.* FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+query I
+SELECT * FROM s1 ORDER BY 1
+----
+1
+1
+1
 
-statement error views do not currently support \* expressions
+statement ok
+drop view s1; create view s1 AS SELECT alias.* FROM t AS alias
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT alias.* FROM [51(1, 2) AS t (a, b)] AS alias
+
+query II
+SELECT * FROM s1 ORDER BY 1
+----
+1  99
+2  98
+3  97
+
+statement ok
+drop view s1; create view s1 AS TABLE t
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS TABLE [51(1, 2) AS t (a, b)]
+
+query II
+SELECT * FROM s1 ORDER BY 1
+----
+1  99
+2  98
+3  97
+
+statement ok
+drop view s1; create view s1 AS SELECT a FROM (SELECT * FROM t)
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT a FROM (SELECT * FROM [51(1, 2) AS t (a, b)])
+
+query I
+SELECT * FROM s1 ORDER BY 1
+----
+1
+2
+3
+
+statement ok
+drop view s1; create view s1 AS SELECT a FROM t WHERE NOT a IN (SELECT a FROM (SELECT * FROM t))
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT a FROM [51(1, 2) AS t (a, b)] WHERE NOT (a IN (SELECT a FROM (SELECT * FROM [51(1, 2) AS t (a, b)])))
+
+query I
+SELECT * FROM s1 ORDER BY 1
+----
+
+statement ok
+drop view s1; create view s1 AS SELECT a FROM t GROUP BY a HAVING a IN (SELECT a FROM (SELECT * FROM t))
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT a FROM [51(1, 2) AS t (a, b)] GROUP BY a HAVING a IN (SELECT a FROM (SELECT * FROM [51(1, 2) AS t (a, b)]))
+
+query I
+SELECT * FROM s1 ORDER BY 1
+----
+1
+2
+3
+
+statement ok
+drop view s1;
+
+statement error duplicate column name: \"a\"
 create view s1 AS SELECT * FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
 
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.a, t2.a FROM (SELECT * FROM t) AS t1 JOIN t AS t2 ON t1.a = t2.a
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.a, t2.a FROM t AS t1 JOIN (SELECT * FROM t) AS t2 ON t1.a = t2.a
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.a, t2.a FROM t AS t1 JOIN t AS t2 ON t1.a IN (SELECT a FROM (SELECT * FROM t))
 
 statement ok
-create view s1 AS SELECT COUNT(*) FROM t
+create view s1 AS SELECT t1.* FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT t1.* FROM [51(1, 2) AS t (a, b)] AS t1 JOIN [51(1, 2) AS t (a, b)] AS t2 ON t1.a = t2.a
+
+query II
+SELECT * FROM s1 ORDER BY 1
+----
+1  99
+2  98
+3  97
 
 statement ok
-create view s2 AS SELECT a FROM t WHERE a IN (SELECT COUNT(*) FROM t)
+drop view s1; create view s1 AS SELECT t1.a AS x, t2.a AS y FROM (SELECT * FROM t) AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT t1.a AS x, t2.a AS y FROM (SELECT * FROM [51(1, 2) AS t (a, b)]) AS t1 JOIN [51(1, 2) AS t (a, b)] AS t2 ON t1.a = t2.a
+
+query II
+SELECT * FROM s1 ORDER BY 1
+----
+1  1
+2  2
+3  3
 
 statement ok
-create view s3 AS SELECT a, COUNT(*) FROM t GROUP BY a
+drop view s1; create view s1 AS SELECT t1.a AS x, t2.a AS y FROM t AS t1 JOIN (SELECT * FROM t) AS t2 ON t1.a = t2.a
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT t1.a AS x, t2.a AS y FROM [51(1, 2) AS t (a, b)] AS t1 JOIN (SELECT * FROM [51(1, 2) AS t (a, b)]) AS t2 ON t1.a = t2.a
+
+query II
+SELECT * FROM s1 ORDER BY 1
+----
+1  1
+2  2
+3  3
 
 statement ok
-create view s4 AS SELECT a, COUNT(*) FROM t GROUP BY a HAVING a > (SELECT COUNT(*) FROM t)
+drop view s1; create view s1 AS SELECT t1.a AS x, t2.a AS y FROM t AS t1 JOIN t AS t2 ON t1.a IN (SELECT a FROM (SELECT * FROM t))
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT t1.a AS x, t2.a AS y FROM [51(1, 2) AS t (a, b)] AS t1 JOIN [51(1, 2) AS t (a, b)] AS t2 ON t1.a IN (SELECT a FROM (SELECT * FROM [51(1, 2) AS t (a, b)]))
+
+query II
+SELECT * FROM s1 ORDER BY 1
+----
+1  1
+1  2
+1  3
+2  1
+2  2
+2  3
+3  1
+3  2
+3  3
 
 statement ok
-DROP VIEW s4
+drop view s1; create view s1 AS SELECT COUNT(*) FROM t
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT COUNT(*) FROM [51(1, 2) AS t (a, b)]
+
+query I
+SELECT * FROM s1 ORDER BY 1
+----
+3
 
 statement ok
-DROP VIEW s3
+drop view s1; create view s1 AS SELECT a FROM t WHERE a IN (SELECT COUNT(*) FROM t)
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT a FROM [51(1, 2) AS t (a, b)] WHERE a IN (SELECT COUNT(*) FROM [51(1, 2) AS t (a, b)])
+
+query I
+SELECT * FROM s1 ORDER BY 1
+----
+3
 
 statement ok
-DROP VIEW s2
+drop view s1; create view s1 AS SELECT a, COUNT(*) FROM t GROUP BY a
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT a, COUNT(*) FROM [51(1, 2) AS t (a, b)] GROUP BY a
+
+query II
+SELECT * FROM s1 ORDER BY 1
+----
+1  1
+2  1
+3  1
 
 statement ok
-DROP VIEW s1
+drop view s1; create view s1 AS SELECT a, COUNT(*) FROM t GROUP BY a HAVING a > (SELECT COUNT(*) FROM t)
+
+query TT
+SHOW CREATE VIEW s1
+----
+s1  CREATE VIEW s1 AS SELECT a, COUNT(*) FROM [51(1, 2) AS t (a, b)] GROUP BY a HAVING a > (SELECT COUNT(*) FROM [51(1, 2) AS t (a, b)])
+
+query II
+SELECT * FROM s1 ORDER BY 1
+----
 
 statement ok
-DROP TABLE t
+DROP VIEW s1; DROP TABLE t
 
 # Check for memory leak (#10466)
 statement ok

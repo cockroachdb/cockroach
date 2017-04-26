@@ -2709,11 +2709,11 @@ simple_select:
     }
   }
 | values_clause
-| TABLE relation_expr
+| TABLE table_ref
   {
     $$.val = &SelectClause{
       Exprs:       SelectExprs{starSelectExpr()},
-      From:        &From{Tables: TableExprs{$2.newNormalizableTableName()}},
+      From:        &From{Tables: TableExprs{$2.tblExpr()}},
       tableSelect: true,
     }
   }
@@ -3055,7 +3055,7 @@ opt_index_hints:
 
 // table_ref is where an alias clause can be attached.
 table_ref:
-  '[' ICONST opt_tableref_col_list ']' opt_index_hints opt_ordinality alias_clause
+  '[' ICONST opt_tableref_col_list alias_clause ']' opt_index_hints opt_ordinality opt_alias_clause
   {
     /* SKIP DOC */
     id, err := $2.numVal().AsInt64()
@@ -3063,9 +3063,16 @@ table_ref:
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = &AliasedTableExpr{Expr: &TableRef{TableID: id, Columns: $3.tableRefCols()},
-                               Hints: $5.indexHints(),
-                               Ordinality: $6.bool(), As: $7.aliasClause() }
+    $$.val = &AliasedTableExpr{
+                 Expr: &TableRef{
+                    TableID: id,
+                    Columns: $3.tableRefCols(),
+		    As: $4.aliasClause(),
+                 },
+                 Hints: $6.indexHints(),
+                 Ordinality: $7.bool(),
+                 As: $8.aliasClause(),
+             }
   }
 | relation_expr opt_index_hints opt_ordinality opt_alias_clause
   {

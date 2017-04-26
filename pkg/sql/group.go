@@ -202,13 +202,12 @@ func (p *planner) groupBy(
 	// Add the group-by expressions so they are available for bucketing.
 	group.groupByIdx = make([]int, 0, len(groupByExprs))
 	for _, g := range groupByExprs {
-		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(
+		cols, exprs, _, err := s.planner.computeRenderAllowingStars(
 			ctx, parser.SelectExpr{Expr: g}, parser.TypeAny, s.sourceInfo, s.ivarHelper,
 			autoGenerateRenderOutputName)
 		if err != nil {
 			return nil, err
 		}
-		s.isStar = s.isStar || hasStar
 		colIdxs := s.addOrMergeRenders(cols, exprs, true /* reuseExistingRender */)
 		group.groupByIdx = append(group.groupByIdx, colIdxs...)
 	}

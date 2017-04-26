@@ -200,13 +200,12 @@ func (p *planner) orderBy(
 		// If we are dealing with a UNION or something else we would need
 		// to fabricate an intermediate renderNode to add the new render.
 		if index == -1 && s != nil {
-			cols, exprs, hasStar, err := p.computeRenderAllowingStars(
+			cols, exprs, _, err := p.computeRenderAllowingStars(
 				ctx, parser.SelectExpr{Expr: expr}, parser.TypeAny,
 				s.sourceInfo, s.ivarHelper, autoGenerateRenderOutputName)
 			if err != nil {
 				return nil, err
 			}
-			s.isStar = s.isStar || hasStar
 
 			if len(cols) == 0 {
 				// Nothing was expanded! No order here.

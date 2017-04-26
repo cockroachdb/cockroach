@@ -384,10 +384,73 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 	// To avoid races with ongoing schema changes to tables that the view
 	// depends on, make sure we use the most recent versions of table
 	// descriptors rather than the copies in the lease cache.
+	defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
 	p.avoidCachedDescriptors = true
+
+	// Format the query, and substitute table names by numeric IDs. This
+	// ensures the view is decoupled from table names.
+	var queryBuf bytes.Buffer
+	var fmtErr error
+	n.AsSource.Format(
+		&queryBuf,
+		parser.FmtNormalizeTableNames(
+			parser.FmtParsable,
+			func(t *parser.NormalizableTableName) parser.NodeFormatter {
+				// Qualify: this normalizes & qualifies.
+				tn, err := p.QualifyWithDatabase(ctx, t)
+				if err != nil {
+					fmtErr = err
+					return nil
+				}
+
+				desc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+				if err != nil {
+					fmtErr = errors.Errorf(
+						"internal error: cannot retrieve table descriptor for %s", tn.String())
+					log.Error(ctx, fmtErr)
+					return nil
+				}
+
+				if desc.ID == keys.VirtualDescriptorID {
+					// References a virtual table. There's no ID for it.
+					// Keep the virtual table name as-is.
+					return tn
+				}
+
+				// We need to capture in the view exactly which columns were
+				// available at the point the view was created, in case the
+				// view expands a star. For this, we list the known column IDs
+				// explicitly in the numeric table reference.
+				columns := make([]parser.ColumnID, len(desc.Columns))
+				colNames := make(parser.NameList, len(desc.Columns))
+				for i, col := range desc.Columns {
+					columns[i] = parser.ColumnID(col.ID)
+					colNames[i] = parser.Name(col.Name)
+				}
+				return &parser.TableRef{
+					TableID: int64(desc.ID),
+					Columns: columns,
+					As:      parser.AliasClause{Alias: tn.TableName, Cols: colNames},
+				}
+			}))
+	if fmtErr != nil {
+		return nil, fmtErr
+	}
+
+	// Now re-parse the result, to use as data source instead of the one originally specified.
+	stmt, err := parser.ParseOne(queryBuf.String())
+	if err != nil {
+		return nil, err
+	}
+	sel, ok := stmt.(*parser.Select)
+	if !ok {
+		return nil, errors.Errorf("view definition is not a data source: %T", stmt)
+	}
+	n.AsSource = sel
+
+	// Now generate the source plan
 	sourcePlan, err := p.Select(ctx, n.AsSource, []parser.Type{}, false)
 	if err != nil {
-		p.avoidCachedDescriptors = false
 		return nil, err
 	}
 
@@ -397,7 +460,6 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 		// construction of the planNode fails, Close() won't be called on it.
 		if result == nil {
 			sourcePlan.Close(ctx)
-			p.avoidCachedDescriptors = false
 		}
 	}()
 
@@ -408,32 +470,6 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
 			numColNames, util.Pluralize(int64(numColNames)),
 			numColumns, util.Pluralize(int64(numColumns))))
-	}
-
-	var queryBuf bytes.Buffer
-	var fmtErr error
-	n.AsSource.Format(
-		&queryBuf,
-		parser.FmtNormalizeTableNames(
-			parser.FmtParsable,
-			func(t *parser.NormalizableTableName) *parser.TableName {
-				tn, err := p.QualifyWithDatabase(ctx, t)
-				if err != nil {
-					log.Warningf(ctx, "failed to qualify table name %q with database name: %v", t, err)
-					fmtErr = err
-					return nil
-				}
-				return tn
-			},
-		),
-	)
-	if fmtErr != nil {
-		return nil, fmtErr
-	}
-
-	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
-	if p.planContainsStar(ctx, sourcePlan) {
-		return nil, fmt.Errorf("views do not currently support * expressions")
 	}
 
 	// Set result rather than just returnning to ensure the defer'ed cleanup
@@ -1670,31 +1706,4 @@ func populateViewBackrefFromViewDesc(
 	}
 	ref := sqlbase.TableDescriptor_Reference{ID: tbl.ID}
 	desc.DependedOnBy = append(desc.DependedOnBy, ref)
-}
-
-// planContainsStar returns true if one of the render nodes in the
-// plan contains a star expansion.
-func (p *planner) planContainsStar(ctx context.Context, plan planNode) bool {
-	s := &starDetector{}
-	_ = walkPlan(ctx, plan, planObserver{enterNode: s.enterNode})
-	return s.foundStar
-}
-
-// starDetector supports planContainsStar().
-type starDetector struct {
-	foundStar bool
-}
-
-// enterNode implements the planObserver interface.
-func (s *starDetector) enterNode(_ context.Context, _ string, plan planNode) bool {
-	if s.foundStar {
-		return false
-	}
-	if sel, ok := plan.(*renderNode); ok {
-		if sel.isStar {
-			s.foundStar = true
-			return false
-		}
-	}
-	return true
 }
