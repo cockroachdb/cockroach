@@ -103,6 +103,8 @@ ifdef MACOS
 export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion)
 endif
 
+XGO := $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO)
+
 .DEFAULT_GOAL := all
 .PHONY: all
 all: build test check
@@ -112,15 +114,13 @@ short: build testshort checkshort
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 
-build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)
+build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 build buildoss install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
-
-XGO := $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO)
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
