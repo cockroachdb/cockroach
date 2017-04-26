@@ -1,5 +1,5 @@
 hash: 04cc0a18094bdfa1396e60ffa89c8dac83d14844245254335c81bcb3afb6ca01
-updated: 2017-04-26T14:05:42.990793673-04:00
+updated: 2017-04-27T11:57:12.95537007-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -12,6 +12,35 @@ imports:
   - storage
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
+- name: github.com/aws/aws-sdk-go
+  version: 80dd71257d3f3b4edc647af948315f82b6262958
+  subpackages:
+  - aws
+  - aws/awserr
+  - aws/awsutil
+  - aws/client
+  - aws/client/metadata
+  - aws/corehandlers
+  - aws/credentials
+  - aws/credentials/ec2rolecreds
+  - aws/credentials/endpointcreds
+  - aws/credentials/stscreds
+  - aws/defaults
+  - aws/ec2metadata
+  - aws/endpoints
+  - aws/request
+  - aws/session
+  - aws/signer/v4
+  - private/protocol
+  - private/protocol/query
+  - private/protocol/query/queryutil
+  - private/protocol/rest
+  - private/protocol/restxml
+  - private/protocol/xml/xmlutil
+  - service/s3
+  - service/s3/s3iface
+  - service/s3/s3manager
+  - service/sts
 - name: github.com/Azure/azure-sdk-for-go
   version: 8dd1f3ff407c300cff0a4bfedd969111ca5a7903
   subpackages:
@@ -71,7 +100,7 @@ imports:
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/docker/distribution
-  version: e85ef3c019a2809b3397771d385581ee09fc7649
+  version: f4a1d3e0d5ed3fafcc6d07226aae351b8a0d9b21
   subpackages:
   - digestset
   - reference
@@ -119,6 +148,8 @@ imports:
   version: 30f82fa23fd844bd5bb1e5f216db87fd77b5eb43
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
+- name: github.com/go-ini/ini
+  version: e7fea39b01aea8d5671f6858f0532f56e8bff3a5
 - name: github.com/go-ole/go-ole
   version: de8695c8edbf8236f30d6e1376e20b198a028d42
   subpackages:
@@ -209,12 +240,16 @@ imports:
   - runtime/internal
   - third_party/googleapis/google/api
   - utilities
+- name: github.com/hashicorp/go-version
+  version: 03c5bf6be031b6dd45afec16b1cf94fc8938bc77
 - name: github.com/ianlancetaylor/cgosymbolizer
   version: 7c5585d44729f382a061b64ec9e7123724abe529
 - name: github.com/ianlancetaylor/demangle
   version: 4883227f66371e02c4948937d3e2be1664d9be38
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
+- name: github.com/jmespath/go-jmespath
+  version: bd40a432e4c76585ef6b72d3fd96fb9b6dc7b68d
 - name: github.com/jteeuwen/go-bindata
   version: a0ff2567cfb70903282db057e799fd826784d41d
   subpackages:
@@ -345,7 +380,7 @@ imports:
   subpackages:
   - doc
 - name: github.com/spf13/pflag
-  version: 2300d0f8576fe575f71aaa5b9bbe4e1b0dc2eb51
+  version: f1d95a35e132e8a1868023a08932b14f0b8b8fcb
 - name: github.com/StackExchange/wmi
   version: ea383cf3ba6ec950874b8486cd72356d007c768f
 - name: github.com/tebeka/go2xunit
@@ -399,7 +434,7 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: a9a820217f98f7c8a207ec1e45a874e1fe12c478
+  version: 470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4
   subpackages:
   - collate
   - internal/colltab
@@ -413,7 +448,7 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 9a6c6fca12efdd355f948c5b748b8b48edbb4ef0
+  version: 3aa1caa08a9813c4635689965b58bd050828f0bf
   subpackages:
   - cmd/goimports
   - cmd/gorename
