@@ -246,7 +246,12 @@ func (nl *NodeLiveness) StartHeartbeat(
 						log.Errorf(ctx, "unexpected error getting liveness: %v", err)
 					}
 					if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
+						// Retry skipped heartbeats and amibugous result errors immediately.
 						if err == errSkippedHeartbeat {
+							log.Infof(ctx, "skipped node liveness heartbeat; retrying")
+							continue
+						} else if _, ok := err.(*roachpb.AmbiguousResultError); ok {
+							log.Infof(ctx, "ambiguous node liveness heartbeat (%v); retrying", err)
 							continue
 						}
 						log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
