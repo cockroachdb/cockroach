@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -7703,5 +7704,25 @@ func TestMakeTimestampCacheRequest(t *testing.T) {
 				t.Fatalf("%s", pretty.Diff(c.expected, cr))
 			}
 		})
+	}
+}
+
+func TestCommandTooLarge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(s *settings.ByteSizeSetting) {
+		maxCommandSize = s
+	}(maxCommandSize)
+	maxCommandSize = settings.TestingByteSizeSetting(1024)
+
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	args := putArgs(roachpb.Key("k"),
+		[]byte(strings.Repeat("a", int(maxCommandSize.Get()))))
+	if _, pErr := tc.SendWrapped(&args); !testutils.IsPError(pErr, "command is too large") {
+		t.Fatalf("did not get expected error: %v", pErr)
 	}
 }
