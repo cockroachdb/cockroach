@@ -1559,10 +1559,7 @@ func TestContextDoneNil(t *testing.T) {
 
 func TestTooManyIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func(s *settings.IntSetting) {
-		maxIntents = s
-	}(maxIntents)
-	maxIntents = settings.TestingIntSetting(3)
+	defer settings.TestingSetInt(&maxIntents, 3)
 
 	ctx := context.Background()
 	s, _ := createTestDB(t)
@@ -1587,10 +1584,7 @@ func TestTooManyIntents(t *testing.T) {
 
 func TestTooManyIntentsAtCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func(s *settings.IntSetting) {
-		maxIntents = s
-	}(maxIntents)
-	maxIntents = settings.TestingIntSetting(3)
+	defer settings.TestingSetInt(&maxIntents, 3)
 
 	ctx := context.Background()
 	s, _ := createTestDB(t)

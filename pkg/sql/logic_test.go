@@ -1413,7 +1413,7 @@ func TestLogic(t *testing.T) {
 
 	// We want to collect SQL perstatement statistics in tests,
 	// regardless of what the environment / config says.
-	sql.StmtStatsEnable = settings.TestingBoolSetting(true)
+	defer settings.TestingSetBool(&sql.StmtStatsEnable, true)
 
 	// mu protects the following vars, which all get updated from within the
 	// possibly parallel subtests.
