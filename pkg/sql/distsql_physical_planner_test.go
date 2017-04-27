@@ -209,6 +209,9 @@ func TestPlanningDuringSplits(t *testing.T) {
 
 func TestDistBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		t.Skip("short flag #13645")
+	}
 
 	// This test sets up various queries using these tables:
 	//  - a NumToSquare table of size N that maps integers from 1 to n to their
