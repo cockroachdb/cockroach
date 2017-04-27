@@ -18,7 +18,7 @@ artifacts
 builds.xml
 .buildinfo
 /cockroach
-/cockroach-data
+/cockroach-data*
 /cockroach-darwin*
 /certs
 # make stress, acceptance produce stress.test, acceptance.test
