@@ -9,7 +9,7 @@ spawn /bin/bash
 send "PS1='\\h:''/# '\r"
 eexpect ":/# "
 
-# Check that the server shuts down upon receiving SIGTERM.
+start_test "Check that the server shuts down upon receiving SIGTERM"
 send "$argv start --insecure --pid-file=server_pid\r"
 eexpect "initialized"
 
@@ -17,13 +17,15 @@ system "kill `cat server_pid`"
 eexpect "initiating graceful shutdown"
 eexpect "shutdown completed"
 eexpect ":/# "
+end_test
 
-# SIGTERM finishes with exit code 0. (#9051)
+start_test "Check that server stopped with SIGTERM finishes with exit code 0. (#9051)"
 send "echo \$?\r"
 eexpect "0\r\n"
 eexpect ":/# "
+end_test
 
-# Check that the server shuts down upon receiving Ctrl+C.
+start_test "Check that the server shuts down upon receiving Ctrl+C."
 send "$argv start --insecure --pid-file=server_pid\r"
 eexpect "restarted"
 
@@ -31,13 +33,15 @@ interrupt
 eexpect "initiating graceful shutdown"
 eexpect "shutdown completed"
 eexpect ":/# "
+end_test
 
-# Ctrl+C finishes with exit code 1. (#9051)
+start_test "Check that Ctrl+C finishes with exit code 1. (#9051)"
 send "echo \$?\r"
 eexpect "1\r\n"
 eexpect ":/# "
+end_test
 
-# Check that the server shuts down fast upon receiving Ctrl+C twice.
+start_test "Check that the server shuts down fast upon receiving Ctrl+C twice."
 send "$argv start --insecure --pid-file=server_pid\r"
 eexpect "restarted"
 interrupt
@@ -47,14 +51,16 @@ interrupt
 expect {
     "hard shutdown" {}
     "shutdown completed" {}
-    timeout {exit 1}
+    timeout { handle_timeout "server shutdown message" }
 }
 eexpect ":/# "
+end_test
 
-# Ctrl+C twice finishes with exit code 130. (#9051)
+start_test "Check that Ctrl+C twice finishes with exit code 130. (#9051)"
 send "echo \$?\r"
 eexpect "130\r\n"
 eexpect ":/# "
+end_test
 
 send "exit\r"
 eexpect eof

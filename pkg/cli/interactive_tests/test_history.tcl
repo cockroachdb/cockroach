@@ -12,57 +12,63 @@ send "select 1;\r"
 eexpect "1 row"
 eexpect root@
 
-# Test that last line can be recalled with arrow-up
+start_test "Test that last line can be recalled with arrow-up"
 send "\033\[A"
 eexpect "SELECT 1;"
+end_test
 
-# Test that recalled last line can be executed
+start_test "Test that recalled last line can be executed"
 send "\r"
 eexpect "1 row"
 eexpect root@
+end_test
 
-# Test that we can recall a previous line with Ctrl+R
+start_test "Test that we can recall a previous line with Ctrl+R"
 send "foo;\r"
 eexpect "syntax error"
 eexpect root@
 send "\022sel"
 eexpect "SELECT 1;"
+end_test
 
-# Test that recalled previous line can be executed
+start_test "Test that recalled previous line can be executed"
 send "\r"
 eexpect "1 row"
 eexpect root@
+end_test
 
-# Test that last recalled line becomes top of history
+start_test "Test that last recalled line becomes top of history"
 send "\033\[A"
 eexpect "SELECT 1;"
+end_test
 
-# Test that client cannot terminate with Ctrl+D while cursor
-# is on recalled line
+start_test "Test that client cannot terminate with Ctrl+D while cursor is on recalled line"
 send "\004"
 send "\r"
 eexpect "1 row"
 eexpect root@
+end_test
 
-# Test that Ctrl+D does terminate client on empty line
+start_test "Test that Ctrl+D does terminate client on empty line"
 send "\004"
 eexpect eof
+end_test
 
-# Test that history is preserved across runs
+start_test "Test that history is preserved across runs"
 spawn $argv sql
 eexpect root@
 send "\033\[A"
 eexpect "SELECT 1;"
+end_test
 
-# Test that the client cannot terminate with Ctrl+C while
-# cursor is on recalled line
+start_test "Test that the client cannot terminate with Ctrl+C while cursor is on recalled line"
 interrupt
 send "\rselect 1;\r"
 eexpect "1 row"
 eexpect root@
+end_test
 
-# Test that ambiguous datum types are pretty-printed in a parsable
-# form. #14484
+start_test "Test that ambiguous datum types are pretty-printed in a parsable form. #14484"
 send "SELECT INTERVAL '4' SECOND;\r"
 eexpect "1 row"
 eexpect root@
@@ -71,8 +77,9 @@ eexpect "SELECT '4s':::INTERVAL;"
 send "\r"
 eexpect "1 row"
 eexpect root@
+end_test
 
-# Test that two statements on the same line can be recalled together.
+start_test "Test that two statements on the same line can be recalled together."
 send "select 2; select 3;\r"
 eexpect "1 row"
 eexpect "1 row"
@@ -83,6 +90,7 @@ send "\r"
 eexpect "1 row"
 eexpect "1 row"
 eexpect root@
+end_test
 
 # Finally terminate with Ctrl+C
 interrupt
