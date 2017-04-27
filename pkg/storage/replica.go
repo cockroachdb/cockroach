@@ -2815,9 +2815,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	writer.Close()
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
+	start := timeutil.Now()
 	if err := batch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
 		return stats, err
 	}
+	elapsed := timeutil.Since(start)
+	r.store.metrics.RaftLogCommitLatency.RecordValue(elapsed.Nanoseconds())
 
 	// Update protected state (last index, raft log size and raft leader
 	// ID) and set raft log entry cache. We clear any older, uncommitted
@@ -3919,10 +3922,13 @@ func (r *Replica) applyRaftCommand(
 	// the future.
 	writer.Close()
 
+	start := timeutil.Now()
 	if err := batch.Commit(false); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "could not commit batch")))
 	}
+	elapsed := timeutil.Since(start)
+	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
 	return rResult.Delta, nil
 }
 
