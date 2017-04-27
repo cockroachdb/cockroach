@@ -250,7 +250,9 @@ func (r *distSQLReceiver) Push(
 			r.err = meta.Err
 		}
 		if len(meta.Ranges) > 0 {
-			r.err = r.updateCaches(r.ctx, meta.Ranges)
+			if err := r.updateCaches(r.ctx, meta.Ranges); err != nil && r.err == nil {
+				r.err = err
+			}
 		}
 		return r.status
 	}
