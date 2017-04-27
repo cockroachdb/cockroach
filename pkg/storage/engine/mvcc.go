@@ -454,7 +454,7 @@ func MVCCGetProto(
 	txn *roachpb.Transaction,
 	msg proto.Message,
 ) (bool, error) {
-	// TODO(tschottdorf) Consider returning skipped intents to the caller.
+	// TODO(tschottdorf): Consider returning skipped intents to the caller.
 	value, _, mvccGetErr := MVCCGet(ctx, engine, key, timestamp, consistent, txn)
 	found := value != nil
 	// If we found a result, parse it regardless of the error returned by MVCCGet.

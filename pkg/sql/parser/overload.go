@@ -338,7 +338,7 @@ func typeCheckOverloadedExprs(
 		})
 	}
 
-	// TODO(nvanbenschoten) We should add a filtering step here to filter
+	// TODO(nvanbenschoten): We should add a filtering step here to filter
 	// out impossible candidates based on identical parameters. For instance,
 	// f(int, float) is not a possible candidate for the expression f($1, $1).
 

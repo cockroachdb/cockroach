@@ -180,7 +180,7 @@ func (p *planner) propagateFilters(
 			// are "already applied". Silently absorb any extra filter.
 			return plan, parser.DBoolTrue, nil
 		}
-		// TODO(knz) We could evaluate the filter here and set/reset
+		// TODO(knz): We could evaluate the filter here and set/reset
 		// n.results accordingly, assuming the filter is not "row
 		// dependent" (cf. resolveNames()).
 
@@ -251,7 +251,7 @@ func (p *planner) propagateFilters(
 		// However we don't do that yet.
 		// For now, simply trigger optimization for the child node.
 		//
-		// TODO(knz) implement the aforementioned optimization.
+		// TODO(knz): implement the aforementioned optimization.
 		//
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
@@ -493,7 +493,7 @@ func (p *planner) addRenderFilter(
 func (p *planner) addJoinFilter(
 	ctx context.Context, n *joinNode, extraFilter parser.TypedExpr,
 ) (planNode, parser.TypedExpr, error) {
-	// TODO(knz) support outer joins.
+	// TODO(knz): support outer joins.
 	if n.joinType != joinTypeInner {
 		// Outer joins not supported; simply trigger filter optimization in the sub-nodes.
 		var err error

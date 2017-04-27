@@ -80,7 +80,7 @@ func (r Range) String() string {
 type Interface interface {
 	Range() Range
 	// Returns a unique ID for the element.
-	// TODO(nvanbenschoten) Should this be changed to an int64?
+	// TODO(nvanbenschoten): Should this be changed to an int64?
 	ID() uintptr
 }
 

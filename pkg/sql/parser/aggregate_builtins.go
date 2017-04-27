@@ -121,7 +121,7 @@ var Aggregates = map[string][]Builtin{
 	},
 
 	"concat_agg": {
-		// TODO(knz) When CockroachDB supports STRING_AGG, CONCAT_AGG(X)
+		// TODO(knz): When CockroachDB supports STRING_AGG, CONCAT_AGG(X)
 		// should be substituted to STRING_AGG(X, '') and executed as
 		// such (no need for a separate implementation).
 		makeAggBuiltin(TypeString, TypeString, newStringConcatAggregate,
