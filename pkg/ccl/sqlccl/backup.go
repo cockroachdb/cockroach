@@ -389,7 +389,7 @@ func Backup(
 	// TODO(dan): Make this limiting per node.
 	//
 	// TODO(dan): See if there's some better solution than rate-limiting #14798.
-	maxConcurrentExports := clusterNodeCount(p.ExecCfg().Gossip) * storageccl.ParallelRequestsLimit
+	maxConcurrentExports := clusterNodeCount(p.ExecCfg().Gossip) * storageccl.ExportRequestLimit
 	exportsSem := make(chan struct{}, maxConcurrentExports)
 
 	header := roachpb.Header{Timestamp: endTime}
