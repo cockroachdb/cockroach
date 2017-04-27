@@ -14,26 +14,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-const (
-	// ParallelRequestsLimit is the number of Export or Import requests that can
-	// run at once. Both of these requests generally do some read/write from the
-	// network and cache results to a tmp file. In order to not exhaust the disk
-	// or memory, or saturate the network, limit the number of these that can be
-	// run in parallel. This number was chosen by a guess. If SST files are
-	// likely to not be over 200MB, then 5 parallel workers hopefully won't use
-	// more than 1GB of space in the tmp directory. It could be improved by more
-	// measured heuristics.
-	ParallelRequestsLimit = 5
-)
+// concurrentRequestLimiter allows a configurable number of requests to run at
+// once, while respecting context.Context cancellation and adding tracing spans
+// when a request has to block for the limiter.
+type concurrentRequestLimiter struct {
+	sem chan struct{}
+}
 
-var (
-	parallelRequestsLimiter = make(chan struct{}, ParallelRequestsLimit)
-)
+func makeConcurrentRequestLimiter(limit int) concurrentRequestLimiter {
+	return concurrentRequestLimiter{sem: make(chan struct{}, limit)}
+}
 
-func beginLimitedRequest(ctx context.Context) error {
+func (l *concurrentRequestLimiter) beginLimitedRequest(ctx context.Context) error {
 	// Check to see there's a slot immediately available.
 	select {
-	case parallelRequestsLimiter <- struct{}{}:
+	case l.sem <- struct{}{}:
 		return nil
 	default:
 	}
@@ -46,11 +41,11 @@ func beginLimitedRequest(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case parallelRequestsLimiter <- struct{}{}:
+	case l.sem <- struct{}{}:
 		return nil
 	}
 }
 
-func endLimitedRequest() {
-	<-parallelRequestsLimiter
+func (l *concurrentRequestLimiter) endLimitedRequest() {
+	<-l.sem
 }
