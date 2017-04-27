@@ -41,7 +41,10 @@ func testAggregateResultDeepCopy(
 		if err := aggImpl.Add(context.Background(), vals[i]); err != nil {
 			t.Fatal(err)
 		}
-		res := aggImpl.Result()
+		res, err := aggImpl.Result()
+		if err != nil {
+			t.Fatal(err)
+		}
 		runningDatums[i] = res
 		runningStrings[i] = res.String()
 	}
@@ -244,7 +247,8 @@ func runBenchmarkAggregate(
 				b.Fatal(err)
 			}
 		}
-		if aggImpl.Result() == nil {
+		res, err := aggImpl.Result()
+		if err != nil || res == nil {
 			b.Errorf("taking result of aggregate implementation %T failed", aggImpl)
 		}
 	}
