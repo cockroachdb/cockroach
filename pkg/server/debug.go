@@ -78,7 +78,8 @@ func init() {
 
 	debugServeMux.HandleFunc(debugEndpoint, func(w http.ResponseWriter, r *http.Request) {
 		if any, _ := trace.AuthRequest(r); !any {
-			http.Error(w, "not allowed", http.StatusUnauthorized)
+			http.Error(w, "not allowed (due to the 'server.remote_debugging.mode' setting)",
+				http.StatusForbidden)
 			return
 		}
 
