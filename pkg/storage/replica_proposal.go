@@ -45,6 +45,8 @@ const (
 	leaseTransferError
 )
 
+const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
+
 // ProposalData is data about a command which allows it to be
 // evaluated, proposed to raft, and for the result of the command to
 // be returned to the caller.
@@ -532,7 +534,6 @@ func (r *Replica) handleReplicatedEvalResult(
 	r.store.metrics.addMVCCStats(rResult.Delta)
 	rResult.Delta = enginepb.MVCCStats{}
 
-	const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
 	if rResult.State.RaftAppliedIndex%raftLogCheckFrequency == 1 {
 		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
