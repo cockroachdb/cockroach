@@ -4455,7 +4455,7 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	key := roachpb.Key("key")
@@ -4465,7 +4465,7 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 	pushee.Sequence = 2
 	ts := tc.Clock().Now()
 	pushee.Timestamp = ts
-	pushee.LastHeartbeat = &ts
+	pushee.LastHeartbeat = ts
 
 	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
 	pusher.Priority = 2
