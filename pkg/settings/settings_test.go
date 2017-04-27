@@ -12,30 +12,31 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package settings
+package settings_test
 
 import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 const mb = int64(1024 * 1024)
 
-var boolTA = RegisterBoolSetting("bool.t", "", true)
-var boolFA = RegisterBoolSetting("bool.f", "", false)
-var strFooA = RegisterStringSetting("str.foo", "", "")
-var strBarA = RegisterStringSetting("str.bar", "", "bar")
-var i1A = RegisterIntSetting("i.1", "", 0)
-var i2A = RegisterIntSetting("i.2", "", 5)
-var fA = RegisterFloatSetting("f", "", 5.4)
-var dA = RegisterDurationSetting("d", "", time.Second)
-var byteSize = RegisterByteSizeSetting("zzz", "", mb)
-var _ = RegisterBoolSetting("sekretz", "", false)
+var boolTA = settings.RegisterBoolSetting("bool.t", "", true)
+var boolFA = settings.RegisterBoolSetting("bool.f", "", false)
+var strFooA = settings.RegisterStringSetting("str.foo", "", "")
+var strBarA = settings.RegisterStringSetting("str.bar", "", "bar")
+var i1A = settings.RegisterIntSetting("i.1", "", 0)
+var i2A = settings.RegisterIntSetting("i.2", "", 5)
+var fA = settings.RegisterFloatSetting("f", "", 5.4)
+var dA = settings.RegisterDurationSetting("d", "", time.Second)
+var byteSize = settings.RegisterByteSizeSetting("zzz", "", mb)
+var _ = settings.RegisterBoolSetting("sekretz", "", false)
 
 func init() {
-	Hide("sekretz")
+	settings.Hide("sekretz")
 }
 
 func TestCache(t *testing.T) {
@@ -70,41 +71,41 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("lookup", func(t *testing.T) {
-		if actual, _, ok := Lookup("i.1"); !ok || i1A != actual {
+		if actual, _, ok := settings.Lookup("i.1"); !ok || i1A != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", i1A, actual, ok)
 		}
-		if actual, _, ok := Lookup("f"); !ok || fA != actual {
+		if actual, _, ok := settings.Lookup("f"); !ok || fA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", fA, actual, ok)
 		}
-		if actual, _, ok := Lookup("d"); !ok || dA != actual {
+		if actual, _, ok := settings.Lookup("d"); !ok || dA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", dA, actual, ok)
 		}
-		if actual, _, ok := Lookup("dne"); ok {
+		if actual, _, ok := settings.Lookup("dne"); ok {
 			t.Fatalf("expected nothing, got %v", actual)
 		}
 	})
 
 	t.Run("read and write each type", func(t *testing.T) {
-		u := MakeUpdater()
-		if err := u.Set("bool.t", EncodeBool(false), "b"); err != nil {
+		u := settings.MakeUpdater()
+		if err := u.Set("bool.t", settings.EncodeBool(false), "b"); err != nil {
 			t.Fatal(err)
 		}
-		if err := u.Set("bool.f", EncodeBool(true), "b"); err != nil {
+		if err := u.Set("bool.f", settings.EncodeBool(true), "b"); err != nil {
 			t.Fatal(err)
 		}
 		if err := u.Set("str.foo", "baz", "s"); err != nil {
 			t.Fatal(err)
 		}
-		if err := u.Set("i.2", EncodeInt(3), "i"); err != nil {
+		if err := u.Set("i.2", settings.EncodeInt(3), "i"); err != nil {
 			t.Fatal(err)
 		}
-		if err := u.Set("f", EncodeFloat(3.1), "f"); err != nil {
+		if err := u.Set("f", settings.EncodeFloat(3.1), "f"); err != nil {
 			t.Fatal(err)
 		}
-		if err := u.Set("d", EncodeDuration(2*time.Hour), "d"); err != nil {
+		if err := u.Set("d", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
 			t.Fatal(err)
 		}
-		if err := u.Set("zzz", EncodeInt(mb*5), "z"); err != nil {
+		if err := u.Set("zzz", settings.EncodeInt(mb*5), "z"); err != nil {
 			t.Fatal(err)
 		}
 		u.Done()
@@ -139,14 +140,14 @@ func TestCache(t *testing.T) {
 
 	t.Run("any setting not included in an Updater reverts to default", func(t *testing.T) {
 		{
-			u := MakeUpdater()
-			if err := u.Set("bool.f", EncodeBool(true), "b"); err != nil {
+			u := settings.MakeUpdater()
+			if err := u.Set("bool.f", settings.EncodeBool(true), "b"); err != nil {
 				t.Fatal(err)
 			}
-			if err := u.Set("i.1", EncodeInt(1), "i"); err != nil {
+			if err := u.Set("i.1", settings.EncodeInt(1), "i"); err != nil {
 				t.Fatal(err)
 			}
-			if err := u.Set("i.2", EncodeInt(7), "i"); err != nil {
+			if err := u.Set("i.2", settings.EncodeInt(7), "i"); err != nil {
 				t.Fatal(err)
 			}
 			u.Done()
@@ -157,7 +158,7 @@ func TestCache(t *testing.T) {
 		}
 		// If the updater doesn't have a key, e.g. if the setting has been deleted,
 		// Doneing it from the cache.
-		MakeUpdater().Done()
+		settings.MakeUpdater().Done()
 
 		if expected, actual := false, boolFA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
@@ -170,8 +171,8 @@ func TestCache(t *testing.T) {
 
 	t.Run("an invalid update to a given setting preserves its previously set value", func(t *testing.T) {
 		{
-			u := MakeUpdater()
-			if err := u.Set("i.2", EncodeInt(9), "i"); err != nil {
+			u := settings.MakeUpdater()
+			if err := u.Set("i.2", settings.EncodeInt(9), "i"); err != nil {
 				t.Fatal(err)
 			}
 			u.Done()
@@ -180,9 +181,9 @@ func TestCache(t *testing.T) {
 
 		// Doneing after attempting to set with wrong type preserves current value.
 		{
-			u := MakeUpdater()
+			u := settings.MakeUpdater()
 			// We don't use testutils.IsError, to avoid the import.
-			if err := u.Set("i.2", EncodeBool(false), "b"); !testutils.IsError(err,
+			if err := u.Set("i.2", settings.EncodeBool(false), "b"); !testutils.IsError(err,
 				"setting 'i.2' defined as type i, not b",
 			) {
 				t.Fatal(err)
@@ -196,8 +197,8 @@ func TestCache(t *testing.T) {
 
 		// Doneing after attempting to set with invalid format does too.
 		{
-			u := MakeUpdater()
-			if err := u.Set("i.2", EncodeBool(false), "i"); !testutils.IsError(err,
+			u := settings.MakeUpdater()
+			if err := u.Set("i.2", settings.EncodeBool(false), "i"); !testutils.IsError(err,
 				"strconv.Atoi: parsing \"false\": invalid syntax",
 			) {
 				t.Fatal(err)
@@ -212,7 +213,7 @@ func TestCache(t *testing.T) {
 
 	t.Run("mocks", func(t *testing.T) {
 		{
-			f := TestingSetBool(&boolFA, true)
+			f := settings.TestingSetBool(&boolFA, true)
 			if expected, actual := true, boolFA.Get(); expected != actual {
 				t.Fatalf("expected %v, got %v", expected, actual)
 			}
@@ -223,7 +224,7 @@ func TestCache(t *testing.T) {
 		}
 
 		{
-			f := TestingSetString(&strBarA, "override")
+			f := settings.TestingSetString(&strBarA, "override")
 			if expected, actual := "override", strBarA.Get(); expected != actual {
 				t.Fatalf("expected %v, got %v", expected, actual)
 			}
@@ -234,7 +235,7 @@ func TestCache(t *testing.T) {
 		}
 
 		{
-			f := TestingSetInt(&i1A, 64)
+			f := settings.TestingSetInt(&i1A, 64)
 			if expected, actual := int64(64), i1A.Get(); expected != actual {
 				t.Fatalf("expected %v, got %v", expected, actual)
 			}
@@ -245,7 +246,7 @@ func TestCache(t *testing.T) {
 		}
 
 		{
-			f := TestingSetFloat(&fA, 6.7)
+			f := settings.TestingSetFloat(&fA, 6.7)
 			if expected, actual := 6.7, fA.Get(); expected != actual {
 				t.Fatalf("expected %v, got %v", expected, actual)
 			}
@@ -256,7 +257,7 @@ func TestCache(t *testing.T) {
 		}
 
 		{
-			f := TestingSetDuration(&dA, 10*time.Hour)
+			f := settings.TestingSetDuration(&dA, 10*time.Hour)
 			if expected, actual := 10*time.Hour, dA.Get(); expected != actual {
 				t.Fatalf("expected %v, got %v", expected, actual)
 			}
@@ -267,7 +268,7 @@ func TestCache(t *testing.T) {
 		}
 
 		{
-			f := TestingSetByteSize(&byteSize, mb*7)
+			f := settings.TestingSetByteSize(&byteSize, mb*7)
 			if expected, actual := mb*7, byteSize.Get(); expected != actual {
 				t.Fatalf("expected %v, got %v", expected, actual)
 			}
@@ -281,7 +282,7 @@ func TestCache(t *testing.T) {
 
 func TestHide(t *testing.T) {
 	keys := make(map[string]struct{})
-	for _, k := range Keys() {
+	for _, k := range settings.Keys() {
 		keys[k] = struct{}{}
 	}
 	if _, ok := keys["bool.t"]; !ok {

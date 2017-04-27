@@ -502,13 +502,13 @@ func TestStyle(t *testing.T) {
 			}
 			return nil
 		})
-		settingsPkgPrefix := `github.com/cockroachdb/cockroach/pkg/settings: `
+		settingsPkgPrefix := `github.com/cockroachdb/cockroach/pkg/settings`
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 			stream.Sort(),
 			stream.Uniq(),
 			stream.GrepNot(`cockroach/pkg/cmd/`),
-			stream.Grep(`^`+settingsPkgPrefix+`| (github\.com/golang/protobuf/proto|github\.com/satori/go\.uuid|log|path|context|syscall)$`),
+			stream.Grep(`^`+settingsPkgPrefix+`: | (github\.com/golang/protobuf/proto|github\.com/satori/go\.uuid|log|path|context|syscall)$`),
 			stream.GrepNot(`cockroach/pkg/(cli|security): syscall$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
@@ -528,8 +528,9 @@ func TestStyle(t *testing.T) {
 				t.Errorf(`%s <- please use "golang.org/x/net/context" instead of "context"`, s)
 			case strings.HasSuffix(s, " syscall"):
 				t.Errorf(`%s <- please use "golang.org/x/sys" instead of "syscall"`, s)
-			case strings.HasPrefix(s, settingsPkgPrefix+"github.com/cockroachdb/cockroach"):
-				if !strings.HasSuffix(s, "testutils") && !strings.HasSuffix(s, "humanizeutil") {
+			case strings.HasPrefix(s, settingsPkgPrefix+": github.com/cockroachdb/cockroach"):
+				if !strings.HasSuffix(s, "testutils") && !strings.HasSuffix(s, "humanizeutil") &&
+					!strings.HasSuffix(s, settingsPkgPrefix) {
 					t.Errorf("%s <- please don't add CRDB dependencies to settings pkg", s)
 				}
 			}
