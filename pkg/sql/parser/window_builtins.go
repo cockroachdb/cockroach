@@ -135,7 +135,7 @@ var windows = map[string][]Builtin{
 		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(false, true, false))
 		}, TypesAnyNonArray...),
-		// TODO(nvanbenschoten) We still have no good way to represent two parameters that
+		// TODO(nvanbenschoten): We still have no good way to represent two parameters that
 		// can be any types but must be the same (eg. lag(T, Int, T)).
 		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},

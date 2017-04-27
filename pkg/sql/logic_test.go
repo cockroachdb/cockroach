@@ -1456,7 +1456,7 @@ func TestLogic(t *testing.T) {
 						// tests in parallel.
 						// Skip parallelizing tests that use the kv-batch-size directive since
 						// the batch size is a global variable.
-						// TODO(jordan, radu) make sqlbase.kvBatchSize non-global to fix this.
+						// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.
 						if filepath.Base(path) != "select_index_span_ranges" {
 							t.Parallel()
 						}

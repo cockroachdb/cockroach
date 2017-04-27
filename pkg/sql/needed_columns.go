@@ -56,7 +56,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		// Currently all the needed result columns are provided by the
 		// table sub-source; from the index sub-source we only need the PK
 		// columns sufficient to configure the table sub-source.
-		// TODO(radu/knz) see the comments at the start of index_join.go,
+		// TODO(radu/knz): see the comments at the start of index_join.go,
 		// perhaps this can be optimized to utilize the column values
 		// already provided by the index instead of re-retrieving them
 		// using the table scanNode.
@@ -153,33 +153,33 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.columns, sourceNeeded[:len(n.columns)])
 
 	case *groupNode:
-		// TODO(knz) This can be optimized by removing the aggregation
+		// TODO(knz): This can be optimized by removing the aggregation
 		// results that are not needed, then removing additional renders
 		// from the source that would otherwise only be needed for the
 		// omitted aggregation results.
 		setNeededColumns(n.plan, allColumns(n.plan))
 
 	case *windowNode:
-		// TODO(knz) This can be optimized by removing the window function
+		// TODO(knz): This can be optimized by removing the window function
 		// definitions that are not needed, then removing additional
 		// renders from the source that would otherwise only be needed for
 		// the omitted window definitions.
 		setNeededColumns(n.plan, allColumns(n.plan))
 
 	case *deleteNode:
-		// TODO(knz) This can be optimized by omitting the columns that
+		// TODO(knz): This can be optimized by omitting the columns that
 		// are not part of the primary key, do not participate in
 		// foreign key relations and that are not needed for RETURNING.
 		setNeededColumns(n.run.rows, allColumns(n.run.rows))
 
 	case *updateNode:
-		// TODO(knz) This can be optimized by omitting the columns that
+		// TODO(knz): This can be optimized by omitting the columns that
 		// are not part of the primary key, do not participate in
 		// foreign key relations and that are not needed for RETURNING.
 		setNeededColumns(n.run.rows, allColumns(n.run.rows))
 
 	case *insertNode:
-		// TODO(knz) This can be optimized by omitting the columns that
+		// TODO(knz): This can be optimized by omitting the columns that
 		// are not part of the primary key, do not participate in
 		// foreign key relations and that are not needed for RETURNING.
 		setNeededColumns(n.run.rows, allColumns(n.run.rows))

@@ -228,7 +228,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 		dd := &expr.resDecimal
 		s := expr.OrigString
 		if s == "" {
-			// TODO(nvanbenschoten) We should propagate width through constant folding so that we
+			// TODO(nvanbenschoten): We should propagate width through constant folding so that we
 			// can control precision on folded values as well.
 			s = expr.ExactString()
 		}
@@ -240,7 +240,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 				return nil, errors.Wrapf(err, "could not evaluate numerator of %v as Datum type DDecimal "+
 					"from string %q", expr, num)
 			}
-			// TODO(nvanbenschoten) Should we try to avoid this allocation?
+			// TODO(nvanbenschoten): Should we try to avoid this allocation?
 			denDec, err := ParseDDecimal(den)
 			if err != nil {
 				return nil, errors.Wrapf(err, "could not evaluate denominator %v as Datum type DDecimal "+
@@ -577,8 +577,8 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 
 // foldConstantLiterals folds all constant literals using exact arithmetic.
 //
-// TODO(nvanbenschoten) Can this visitor be preallocated (like normalizeVisitor)?
-// TODO(nvanbenschoten) Investigate normalizing associative operations to group
+// TODO(nvanbenschoten): Can this visitor be preallocated (like normalizeVisitor)?
+// TODO(nvanbenschoten): Investigate normalizing associative operations to group
 //     constants together and permit further numeric constant folding.
 func foldConstantLiterals(expr Expr) (Expr, error) {
 	v := constantFolderVisitor{}
