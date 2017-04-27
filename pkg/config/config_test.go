@@ -173,7 +173,7 @@ func TestGetLargestID(t *testing.T) {
 		}, 12, 0, ""},
 
 		// Real SQL layout.
-		{sqlbase.MakeMetadataSchema().GetInitialValues(), keys.MaxSystemConfigDescID + 4, 0, ""},
+		{sqlbase.MakeMetadataSchema().GetInitialValues(), keys.MaxSystemConfigDescID + 5, 0, ""},
 
 		// Test non-zero max.
 		{[]roachpb.KeyValue{
