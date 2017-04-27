@@ -108,7 +108,7 @@ The primary design goals are support for ACID transactions, horizontal scalabili
 
 It aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention.
 
-CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogeneous deployment (one binary) with minimal configuration.
+CockroachDB nodes are symmetric; a design goal is homogeneous deployment (one binary) with minimal configuration.
 
 ### How it Works in a Nutshell
 
