@@ -38,13 +38,11 @@ type NormalizableTableName struct {
 
 // Format implements the NodeFormatter interface.
 func (nt NormalizableTableName) Format(buf *bytes.Buffer, f FmtFlags) {
-	tnr := nt.TableNameReference
-	if f.tableNameNormalizer != nil {
-		if tn := f.tableNameNormalizer(&nt); tn != nil {
-			tnr = tn
-		}
+	if f.tableNameFormatter != nil {
+		f.tableNameFormatter(&nt, buf, f)
+	} else {
+		nt.TableNameReference.Format(buf, f)
 	}
-	tnr.Format(buf, f)
 }
 func (nt NormalizableTableName) String() string { return AsString(nt) }
 
@@ -111,7 +109,7 @@ type TableName struct {
 
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !t.DBNameOriginallyOmitted || f.tableNameNormalizer != nil {
+	if !t.DBNameOriginallyOmitted || f.tableNameFormatter != nil {
 		FormatNode(buf, f, t.DatabaseName)
 		buf.WriteByte('.')
 	}
