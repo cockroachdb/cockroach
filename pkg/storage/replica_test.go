@@ -4449,6 +4449,48 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 	}
 }
 
+// TestPushTxnQueryPusheerHasNewerVersion verifies that PushTxn
+// uses the newer version of the pushee in a push request.
+func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
+
+	key := roachpb.Key("key")
+	pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+	pushee.Priority = 1
+	pushee.Epoch = 12345
+	pushee.Sequence = 2
+	ts := tc.Clock().Now()
+	pushee.Timestamp = ts
+	pushee.LastHeartbeat = &ts
+
+	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+	pusher.Priority = 2
+
+	_, btH := beginTxnArgs(key, pushee)
+	put := putArgs(key, key)
+	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), tc.Sender(), btH, &put); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Make sure the pushee in the request has updated information on the pushee.
+	// Since the pushee has higher priority than the pusher, the push should fail.
+	pushee.Priority = 4
+	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
+	args.NewPriorities = false
+
+	_, pErr := tc.SendWrapped(&args)
+	if pErr == nil {
+		t.Fatalf("unexpected push success")
+	}
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
+		t.Errorf("expected txn push error: %s", pErr)
+	}
+}
+
 // TestPushTxnHeartbeatTimeout verifies that a txn which
 // hasn't been heartbeat within 2x the heartbeat interval can be
 // pushed/aborted.
