@@ -1,5 +1,5 @@
 hash: 2de92d2768ebcc7b02df420765f13fe46d2361d669b42abc384de5756ffcfc84
-updated: 2017-04-27T19:22:08.113111977-04:00
+updated: 2017-04-27T21:01:59.721639944-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -38,8 +38,6 @@ imports:
   - private/protocol/restxml
   - private/protocol/xml/xmlutil
   - service/s3
-  - service/s3/s3iface
-  - service/s3/s3manager
   - service/sts
 - name: github.com/Azure/azure-sdk-for-go
   version: 8dd1f3ff407c300cff0a4bfedd969111ca5a7903
