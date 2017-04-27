@@ -230,7 +230,12 @@ func (w *aggregateWindowFunc) Compute(
 	}
 
 	// Retrieve the value for the entire peer group, save it, and return it.
-	w.peerRes = w.agg.Result()
+
+	peerRes, err := w.agg.Result()
+	if err != nil {
+		return nil, err
+	}
+	w.peerRes = peerRes
 	return w.peerRes, nil
 }
 
