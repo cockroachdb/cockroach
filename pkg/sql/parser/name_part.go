@@ -65,7 +65,11 @@ type Name string
 
 // Format implements the NodeFormatter interface.
 func (n Name) Format(buf *bytes.Buffer, f FmtFlags) {
-	encodeSQLIdent(buf, string(n))
+	if f.anonymize {
+		buf.WriteByte('_')
+	} else {
+		encodeSQLIdent(buf, string(n))
+	}
 }
 
 // Normalize normalizes to lowercase and Unicode Normalization Form C

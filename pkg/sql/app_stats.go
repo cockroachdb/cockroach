@@ -262,3 +262,28 @@ func (s *sqlStats) startResetWorker(stopper *stop.Stopper) {
 		}
 	})
 }
+
+func (p *planner) scrubStmtStatKey(key string) (string, bool) {
+	stmt, err := parser.ParseOne(key)
+	if err != nil {
+		return "", false
+	}
+
+	formatter := parser.FmtReformatTableNames(parser.FmtAnonymize,
+		func(t *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
+			tn, err := t.Normalize()
+			if err != nil {
+				buf.WriteByte('_')
+				return
+			}
+			virtual, err := p.session.virtualSchemas.getVirtualTableEntry(tn)
+			if err != nil || virtual.desc == nil {
+				buf.WriteByte('_')
+				return
+			}
+			// Virtual table: we want to keep the name.
+			tn.Format(buf, parser.FmtParsable)
+		})
+
+	return parser.AsStringWithFlags(stmt, formatter), true
+}
