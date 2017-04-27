@@ -407,6 +407,9 @@ func (dsp *distSQLPlanner) partitionSpans(
 		var lastNodeID roachpb.NodeID
 		// lastKey maintains the EndKey of the last piece of `span`.
 		lastKey := rspan.Key
+		if log.V(1) {
+			log.Infof(ctx, "partitioning span %s", span)
+		}
 		for it.Seek(ctx, span, kv.Ascending); ; it.Next(ctx) {
 			if !it.Valid() {
 				return nil, it.Error()
@@ -416,10 +419,16 @@ func (dsp *distSQLPlanner) partitionSpans(
 				return nil, err
 			}
 			desc := it.Desc()
+			if log.V(1) {
+				log.Infof(ctx, "lastKey: %s desc: %s", lastKey, desc)
+			}
 
 			if !desc.ContainsKey(lastKey) {
 				// This range must contain the last range's EndKey.
-				log.Fatalf(ctx, "next range doesn't cover last end key: %#v %v", splits, desc.RSpan())
+				log.Fatalf(
+					ctx, "next range %v doesn't cover last end key %v. Splits: %#v",
+					desc.RSpan(), lastKey, splits,
+				)
 			}
 
 			// Limit the end key to the end of the span we are resolving.

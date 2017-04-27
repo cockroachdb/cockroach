@@ -168,6 +168,10 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 		ri.desc, ri.token, err = ri.ds.getDescriptor(
 			ctx, ri.key, ri.token, ri.scanDir == Descending)
 
+		if log.V(2) {
+			log.Infof(ctx, "key: %s, desc: %s err: %v", ri.key, ri.desc, err)
+		}
+
 		// getDescriptor may fail retryably if, for example, the first
 		// range isn't available via Gossip. Assume that all errors at
 		// this level are retryable. Non-retryable errors would be for
@@ -196,6 +200,9 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 			// On addressing errors, don't backoff; retry immediately.
 			r.Reset()
 			continue
+		}
+		if log.V(2) {
+			log.Infof(ctx, "returning; key: %s, desc: %s", ri.key, ri.desc)
 		}
 		return
 	}
