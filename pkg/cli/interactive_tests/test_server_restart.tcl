@@ -11,8 +11,8 @@ spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
 
-# Test that dropping a table a node held a lease on before a restart doesn't
-# hang. We use a SELECT statement to acquire a lease on the table.
+start_test "Test that dropping a table a node held a lease on before a restart does not hang."
+# We use a SELECT statement to acquire a lease on the table.
 send "$argv sql -e \"create database t; create table t.t (x INT); select * from t.t;\"\r"
 eexpect "(0 rows)"
 
@@ -21,5 +21,7 @@ start_server $argv
 
 send "$argv sql -e \"drop table t.t;\"\r"
 eexpect "DROP TABLE"
+eexpect ":/# "
+end_test
 
 stop_server $argv

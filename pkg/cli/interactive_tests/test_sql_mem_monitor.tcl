@@ -73,7 +73,7 @@ expect {
     "out of memory" {}
     "cannot allocate memory" {}
     "std::bad_alloc" {}
-    timeout {exit 1}
+    timeout { handle_timeout "memory allocation error" }
 }
 eexpect ":/# "
 
