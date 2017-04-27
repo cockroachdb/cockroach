@@ -26,8 +26,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
+var importRequestLimiter *concurrentRequestLimiter
+
 func init() {
 	storage.SetImportCmd(evalImport)
+
+	// importRequestLimit is the number of Import requests that can run at once.
+	// Each downloads a file from cloud storage to a temp file, iterates it, and
+	// sends WriteBatch requests to batch insert it. After accounting for write
+	// amplification, a single ImportRequest and the resulting WriteBatch
+	// requests is enough to keep an SSD busy. Any more and we risk contending
+	// RocksDB, which slows down heartbeats, which can cause mass lease
+	// transfers.
+	const importRequestLimit = 1
+	importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
 }
 
 // evalImport bulk loads key/value entries.
@@ -52,10 +64,10 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("Import [%s,%s)", importStart, importEnd))
 	defer tracing.FinishSpan(span)
 
-	if err := beginLimitedRequest(ctx); err != nil {
+	if err := importRequestLimiter.beginLimitedRequest(ctx); err != nil {
 		return nil, err
 	}
-	defer endLimitedRequest()
+	defer importRequestLimiter.endLimitedRequest()
 	log.Infof(ctx, "import [%s,%s)", importStart, importEnd)
 
 	// Arrived at by tuning and watching the effect on BenchmarkRestore.

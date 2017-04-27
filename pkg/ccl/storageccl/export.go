@@ -28,11 +28,23 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ExportRequestLimit is the number of Export requests that can run at once.
+// Each extracts data from RocksDB to a temp file and then uploads it to
+// cloud storage. In order to not exhaust the disk or memory, or saturate
+// the network, limit the number of these that can be run in parallel. This
+// number was chosen by a guess. If SST files are likely to not be over
+// 200MB, then 5 parallel workers hopefully won't use more than 1GB of space
+// in the temp directory. It could be improved by more measured heuristics.
+const ExportRequestLimit = 5
+
+var exportRequestLimiter *concurrentRequestLimiter
+
 func init() {
 	storage.SetExportCmd(storage.Command{
 		DeclareKeys: declareKeysExport,
 		Eval:        evalExport,
 	})
+	exportRequestLimiter = makeConcurrentRequestLimiter(ExportRequestLimit)
 }
 
 func declareKeysExport(
@@ -69,10 +81,10 @@ func evalExport(
 		}
 	}
 
-	if err := beginLimitedRequest(ctx); err != nil {
+	if err := exportRequestLimiter.beginLimitedRequest(ctx); err != nil {
 		return storage.EvalResult{}, err
 	}
-	defer endLimitedRequest()
+	defer exportRequestLimiter.endLimitedRequest()
 	log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
 
 	exportStore, err := MakeExportStorage(ctx, args.Storage)
