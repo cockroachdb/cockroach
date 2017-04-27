@@ -829,7 +829,7 @@ func (sc *StoreConfig) Valid() bool {
 
 // SetDefaults initializes unset fields in StoreConfig to values
 // suitable for use on a local network.
-// TODO(tschottdorf) see if this ought to be configurable via flags.
+// TODO(tschottdorf): see if this ought to be configurable via flags.
 func (sc *StoreConfig) SetDefaults() {
 	if (sc.RangeRetryOptions == retry.Options{}) {
 		sc.RangeRetryOptions = base.DefaultRetryOptions()
@@ -882,7 +882,7 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 
 // NewStore returns a new instance of a store.
 func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescriptor) *Store {
-	// TODO(tschottdorf) find better place to set these defaults.
+	// TODO(tschottdorf): find better place to set these defaults.
 	cfg.SetDefaults()
 
 	if !cfg.Valid() {
@@ -890,7 +890,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	}
 	s := &Store{
 		cfg:      cfg,
-		db:       cfg.DB, // TODO(tschottdorf) remove redundancy.
+		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
 		engine:   eng,
 		nodeDesc: nodeDesc,
 		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
@@ -2027,7 +2027,7 @@ func (s *Store) addReplicaInternalLocked(repl *Replica) error {
 		return errors.Errorf("attempted to add uninitialized range %s", repl)
 	}
 
-	// TODO(spencer); will need to determine which range is
+	// TODO(spencer): will need to determine which range is
 	// newer, and keep that one.
 	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
 		return err

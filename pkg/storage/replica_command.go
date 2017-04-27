@@ -950,7 +950,7 @@ func updateTxnWithExternalIntents(
 // A range-local intent range is never split: It's returned as either
 // belonging to or outside of the descriptor's key range, and passing an intent
 // which begins range-local but ends non-local results in a panic.
-// TODO(tschottdorf) move to proto, make more gen-purpose - kv.truncate does
+// TODO(tschottdorf): move to proto, make more gen-purpose - kv.truncate does
 // some similar things.
 func intersectSpan(
 	span roachpb.Span, desc roachpb.RangeDescriptor,
@@ -1232,7 +1232,7 @@ func evalRangeLookup(
 	}
 
 	for _, kv := range kvs {
-		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
+		// TODO(tschottdorf): Candidate for a ReplicaCorruptionError.
 		rd, err := checkAndUnmarshal(kv.Value)
 		if err != nil {
 			return EvalResult{}, err

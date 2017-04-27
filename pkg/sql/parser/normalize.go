@@ -600,7 +600,7 @@ func (v *normalizeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	case *Subquery:
 		// Avoid normalizing subqueries. We need the subquery to be expanded in
 		// order to do so properly.
-		// TODO(knz) This should happen when the prepare and execute phases are
+		// TODO(knz): This should happen when the prepare and execute phases are
 		//     separated for SelectClause.
 		return false, expr
 	}

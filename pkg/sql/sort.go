@@ -196,7 +196,7 @@ func (p *planner) orderBy(
 
 		// Finally, if we haven't found anything so far, we really
 		// need a new render.
-		// TODO(knz/dan) currently this is only possible for renderNode.
+		// TODO(knz/dan): currently this is only possible for renderNode.
 		// If we are dealing with a UNION or something else we would need
 		// to fabricate an intermediate renderNode to add the new render.
 		if index == -1 && s != nil {
@@ -568,7 +568,7 @@ func (ss *iterativeSortStrategy) Close(ctx context.Context) {
 // The strategy is intended to be used when exactly k values need to be sorted,
 // where k is known before sorting begins.
 //
-// TODO(nvanbenschoten) There are better algorithms that can achieve a sorted
+// TODO(nvanbenschoten): There are better algorithms that can achieve a sorted
 // top k in a worst-case time complexity of O(n + k*log(k)) while maintaining
 // a worst-case space complexity of O(k). For instance, the top k can be found
 // in linear time, and then this can be sorted in linearithmic time.
