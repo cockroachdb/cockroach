@@ -140,6 +140,10 @@ func MakeMessage(ctx context.Context, format string, args []interface{}) string 
 func addStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
 	file, line, _ := caller.Lookup(depth + 1)
 	msg := MakeMessage(ctx, format, args)
+
+	if s == Severity_FATAL {
+		maybeSendCrashReport(ctx, msg)
+	}
 	// MakeMessage already added the tags when forming msg, we don't want
 	// eventInternal to prepend them again.
 	eventInternal(ctx, (s >= Severity_ERROR), false /*withTags*/, "%s:%d %s", file, line, msg)

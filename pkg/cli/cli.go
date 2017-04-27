@@ -22,13 +22,13 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/mattn/go-isatty"
+	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/mattn/go-isatty"
-	"github.com/spf13/cobra"
 )
 
 // Main is the entry point for the cli, with a single line calling it intended
@@ -42,6 +42,10 @@ func Main() {
 		os.Args = append(os.Args, "help")
 	}
 
+	log.SetupCrashReporter(
+		context.Background(),
+		os.Args[1],
+	)
 	defer log.RecoverAndReportPanic(context.Background())
 
 	if err := Run(os.Args[1:]); err != nil {

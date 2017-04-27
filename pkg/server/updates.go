@@ -109,7 +109,7 @@ type storeInfo struct {
 func (s *Server) PeriodicallyCheckForUpdates() {
 	s.stopper.RunWorker(context.TODO(), func(context.Context) {
 		startup := timeutil.Now()
-		var nextUpdateCheck, nextDiagnosticReport time.Time
+		var nextUpdateCheck, nextDiagnosticReport = startup, startup
 
 		var timer timeutil.Timer
 		defer timer.Stop()
@@ -214,20 +214,10 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 	return true
 }
 
-// "diagnostics.reporting.enabled" enables reporting of metrics related to a
-// node's storage (number, size and health of ranges) back to CockroachDB.
-// Collecting this data from production clusters helps us understand and improve
-// how our storage systems behave in real-world use cases.
-//
-// Note: while the setting itself is actually defined with a default value of
-// `false`, it is usually automatically set to `true` when a cluster is created
-// (or is migrated from a earlier beta version). This can be prevented with the
-// env var COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING.
-//
-// Doing this, rather than just using a default of `true`, means that a node
-// will not errantly send a report using a default before loading settings.
-var diagnosticsReportingEnabled = settings.RegisterBoolSetting(
-	"diagnostics.reporting.enabled", "enable reporting diagnostic metrics to cockroach labs", false,
+var diagnosticsMetricsEnabled = settings.RegisterBoolSetting(
+	"diagnostics.reporting.report_metrics",
+	"enable collection and reporting diagnostic metrics to cockroach labs",
+	false,
 )
 
 func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Duration) time.Time {
@@ -235,7 +225,7 @@ func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Durati
 		return scheduled
 	}
 
-	if diagnosticsReportingEnabled.Get() {
+	if log.DiagnosticsReportingEnabled.Get() && diagnosticsMetricsEnabled.Get() {
 		s.reportDiagnostics()
 	}
 
