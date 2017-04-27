@@ -199,6 +199,9 @@ var (
 	metaRdbNumSSTables = metric.Metadata{
 		Name: "rocksdb.num-sstables",
 		Help: "Number of rocksdb SSTables"}
+	metaRdbCommitLatencyNanos = metric.Metadata{
+		Name: "rocksdb.commit.latency",
+		Help: "Latency of rocksdb commits in nanoseconds"}
 
 	// Range event metrics.
 	metaRangeSplits = metric.Metadata{
@@ -519,6 +522,7 @@ type StoreMetrics struct {
 	RdbTableReadersMemEstimate  *metric.Gauge
 	RdbReadAmplification        *metric.Gauge
 	RdbNumSSTables              *metric.Gauge
+	RdbCommitLatencyNanos       *metric.Histogram
 
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
 	// maintained to keep the current structure of StatusSummaries; it would be
@@ -700,6 +704,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbTableReadersMemEstimate:  metric.NewGauge(metaRdbTableReadersMemEstimate),
 		RdbReadAmplification:        metric.NewGauge(metaRdbReadAmplification),
 		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
+		RdbCommitLatencyNanos:       metric.NewLatency(metaRdbCommitLatencyNanos, histogramWindow),
 
 		// Range event metrics.
 		RangeSplits:                     metric.NewCounter(metaRangeSplits),
