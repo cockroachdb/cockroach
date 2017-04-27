@@ -9,18 +9,32 @@
 package storageccl
 
 import (
-	"errors"
 	"fmt"
+	"sync"
 
 	"golang.org/x/net/context"
+	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
+
+// TODO(dan): This 2 MB/s default is quite conservative. There's more tuning to
+// be done here.
+var writeBatchLimit = settings.RegisterByteSizeSetting(
+	"enterprise.writebatch.max_rate",
+	"the rate limit (bytes/sec) to use for WriteBatch requests",
+	2*1024*1024, // 2 MB/s
+)
+
+var writeBatchLimiter = rate.NewLimiter(rate.Limit(writeBatchLimit.Get()), importBatchSizeBytes)
+var writeBatchLimiterMu sync.Mutex
 
 func init() {
 	storage.SetWriteBatchCmd(storage.Command{
@@ -42,6 +56,30 @@ func evalWriteBatch(
 
 	_, span := tracing.ChildSpan(ctx, fmt.Sprintf("WriteBatch [%s,%s)", args.Key, args.EndKey))
 	defer tracing.FinishSpan(span)
+
+	// TODO(dan): If settings had callbacks, we could use one here to adjust the
+	// rate limit when it changed.
+	{
+		l := rate.Limit(writeBatchLimit.Get())
+		writeBatchLimiterMu.Lock()
+		if l != writeBatchLimiter.Limit() {
+			writeBatchLimiter.SetLimit(l)
+		}
+		writeBatchLimiterMu.Unlock()
+	}
+
+	// TODO(dan): This limiting should be per-store and shared between any
+	// operations that need lots of disk throughput.
+	cost := len(args.Data)
+	if cost > importBatchSizeBytes {
+		// The limiter disallows anything greater that its burst (set to
+		// importBatchSizeBytes), so cap the batch size if it would overflow.
+		cost = importBatchSizeBytes
+	}
+	if err := writeBatchLimiter.WaitN(ctx, cost); err != nil {
+		return storage.EvalResult{}, errors.Wrap(err, "writebatch rate limit")
+	}
+
 	if log.V(1) {
 		log.Infof(ctx, "writebatch [%s,%s)", args.Key, args.EndKey)
 	}
