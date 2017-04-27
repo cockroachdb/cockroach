@@ -1111,12 +1111,6 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// TODO(a-robinson): Remove when load-based lease rebalancing is the default.
-	defer func(v bool) {
-		EnableLoadBasedLeaseRebalancing = v
-	}(EnableLoadBasedLeaseRebalancing)
-	EnableLoadBasedLeaseRebalancing = true
-
 	stopper, g, _, storePool, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff, true /* deterministic */, nodeStatusLive)
 	defer stopper.Stop(context.Background())

@@ -395,7 +395,6 @@ func handleStart() bool {
 	// for leases to settle onto other nodes even when requests are skewed heavily
 	// onto them.
 	storage.MinLeaseTransferStatsDuration = 10 * time.Second
-	storage.EnableLoadBasedLeaseRebalancing = true
 
 	cli.Main()
 	return true
