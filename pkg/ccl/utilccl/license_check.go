@@ -17,6 +17,10 @@ var enterpriseEnabled = settings.RegisterBoolSetting(
 	"enterprise.enabled", "set to true to enable Enterprise features", false,
 )
 
+func init() {
+	settings.Hide("enterprise.enabled")
+}
+
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
 // feature is not enabled, including information or a link explaining how to
 // enable it.

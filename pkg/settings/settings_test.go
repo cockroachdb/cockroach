@@ -32,6 +32,11 @@ var i2A = RegisterIntSetting("i.2", "", 5)
 var fA = RegisterFloatSetting("f", "", 5.4)
 var dA = RegisterDurationSetting("d", "", time.Second)
 var byteSize = RegisterByteSizeSetting("zzz", "", mb)
+var sekretz = RegisterBoolSetting("sekretz", "", false)
+
+func init() {
+	Hide("sekretz")
+}
 
 func TestCache(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
@@ -272,4 +277,17 @@ func TestCache(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestHide(t *testing.T) {
+	keys := make(map[string]struct{})
+	for _, k := range Keys() {
+		keys[k] = struct{}{}
+	}
+	if _, ok := keys["bool.t"]; !ok {
+		t.Errorf("expected 'bool.t' to be unhidden")
+	}
+	if _, ok := keys["sekretz"]; ok {
+		t.Errorf("expected 'sekretz' to be hidden")
+	}
 }
