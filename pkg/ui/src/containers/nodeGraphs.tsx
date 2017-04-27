@@ -431,6 +431,32 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
+          <LineGraph title="Log Commit Latency: 99th Percentile" sources={storeSources} tooltip={`The 99th %ile latency for commits to the Raft Log.`}>
+            <Axis units={AxisUnits.Duration}>
+              {
+                _.map(nodeIDs, (nid) =>
+                  <Metric key={nid}
+                          name="cr.store.raft.process.logcommit.latency-p99"
+                          title={this.nodeAddress(nid)}
+                          sources={this.storeIDsForNode(nid)} />,
+                )
+              }
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="Command Commit Latency: 99th Percentile" sources={storeSources} tooltip={`The 99th %ile latency for commits of Raft commands.`}>
+            <Axis units={AxisUnits.Duration}>
+              {
+                _.map(nodeIDs, (nid) =>
+                  <Metric key={nid}
+                          name="cr.store.raft.process.commandcommit.latency-p99"
+                          title={this.nodeAddress(nid)}
+                          sources={this.storeIDsForNode(nid)} />,
+                )
+              }
+            </Axis>
+          </LineGraph>
+
           <LineGraph title="RocksDB Read Amplification" sources={storeSources} tooltip={`RocksDB read amplification statistic; measures the average number of real read operations
                                                                                     executed per logical read operation ${specifier}.`}>
             <Axis>
