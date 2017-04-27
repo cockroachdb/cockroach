@@ -56,9 +56,9 @@ func TestDebugRemote(t *testing.T) {
 		{"TRUE", http.StatusOK},
 		{"t", http.StatusOK},
 		{"1", http.StatusOK},
-		{"local", http.StatusUnauthorized},
-		{"false", http.StatusUnauthorized},
-		{"unrecognized", http.StatusUnauthorized},
+		{"local", http.StatusForbidden},
+		{"false", http.StatusForbidden},
+		{"unrecognized", http.StatusForbidden},
 	}
 	for _, c := range testCases {
 		t.Run(c.remoteDebug, func(t *testing.T) {
