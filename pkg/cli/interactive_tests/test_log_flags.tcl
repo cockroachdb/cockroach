@@ -15,7 +15,8 @@ eexpect ":/# "
 # Check that log files are created by default in the store directory.
 send "$argv start --insecure --store=path=mystore\r"
 eexpect "node starting"
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
 send "ls mystore/logs\r"
 eexpect "cockroach.log"
@@ -24,7 +25,8 @@ eexpect ":/# "
 # Check that an empty `-log-dir` disables file logging.
 send "$argv start --insecure --store=path=mystore2 --log-dir=\r"
 eexpect "node starting"
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
 send "ls mystore2/logs 2>/dev/null | wc -l\r"
 eexpect "0"
@@ -38,22 +40,29 @@ eexpect ":/# "
 # Check that the user can override.
 send "$argv start --insecure --log-dir=blah/\~/blah\r"
 eexpect "logs: *blah/~/blah"
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
 
 # Check that TRUE and FALSE are valid values for the severity flags.
 send "$argv start --insecure --logtostderr=false\r"
 eexpect "node starting"
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
+
 send "$argv start --insecure --logtostderr=true\r"
 eexpect "node starting"
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
+
 send "$argv start --insecure --logtostderr=2\r"
 eexpect "node starting"
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
+
 send "$argv start --insecure --logtostderr=cantparse\r"
 eexpect "parsing \"cantparse\": invalid syntax"
 eexpect ":/# "
