@@ -6035,14 +6035,12 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-7 : sqlpt+1]
 		//line sql.y:997
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &Backup{Targets: sqlDollar[2].union.targetList(), To: sqlDollar[4].union.expr(), IncrementalFrom: sqlDollar[6].union.exprs(), AsOf: sqlDollar[5].union.asOfClause(), Options: sqlDollar[7].union.kvOptions()}
 		}
 	case 63:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
 		//line sql.y:1001
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &Restore{Targets: sqlDollar[2].union.targetList(), From: sqlDollar[4].union.exprs(), AsOf: sqlDollar[5].union.asOfClause(), Options: sqlDollar[6].union.kvOptions()}
 		}
 	case 64:
