@@ -85,11 +85,11 @@ executable will be in your current directory and can be run as shown in the
   # Run the sql logic tests
   make test PKG=./pkg/sql TESTS='TestLogic$$'
   # or, using a shortcut,
-  make logictest
+  make testlogic
   # Run a specific sql logic subtest
   make test PKG=./pkg/sql TESTS='TestLogic$$/select$$'
   # or, using a shortcut,
-  make logictest FILES=select
+  make testlogic FILES=select
   ```
 
   Logs are disabled during tests by default. To enable them, include
