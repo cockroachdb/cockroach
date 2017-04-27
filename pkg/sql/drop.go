@@ -429,11 +429,8 @@ type dropViewNode struct {
 func (p *planner) DropView(ctx context.Context, n *parser.DropView) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
-		tn, err := name.NormalizeTableName()
+		tn, err := name.NormalizeWithDatabaseName(p.session.Database)
 		if err != nil {
-			return nil, err
-		}
-		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
 			return nil, err
 		}
 
@@ -542,11 +539,8 @@ type dropTableNode struct {
 func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
-		tn, err := name.NormalizeTableName()
+		tn, err := name.NormalizeWithDatabaseName(p.session.Database)
 		if err != nil {
-			return nil, err
-		}
-		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
 			return nil, err
 		}
 

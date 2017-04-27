@@ -131,8 +131,8 @@ func (u *sqlSymUnion) newNormalizableTableName() *NormalizableTableName {
 func (u *sqlSymUnion) tablePatterns() TablePatterns {
 	return u.val.(TablePatterns)
 }
-func (u *sqlSymUnion) tableNameReferences() TableNameReferences {
-	return u.val.(TableNameReferences)
+func (u *sqlSymUnion) normalizableTableNames() NormalizableTableNames {
+	return u.val.(NormalizableTableNames)
 }
 func (u *sqlSymUnion) indexHints() *IndexHints {
 	return u.val.(*IndexHints)
@@ -6182,37 +6182,37 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:1125
 		{
-			sqlVAL.union.val = &DropTable{Names: sqlDollar[3].union.tableNameReferences(), IfExists: false, DropBehavior: sqlDollar[4].union.dropBehavior()}
+			sqlVAL.union.val = &DropTable{Names: sqlDollar[3].union.normalizableTableNames(), IfExists: false, DropBehavior: sqlDollar[4].union.dropBehavior()}
 		}
 	case 92:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
 		//line sql.y:1129
 		{
-			sqlVAL.union.val = &DropTable{Names: sqlDollar[5].union.tableNameReferences(), IfExists: true, DropBehavior: sqlDollar[6].union.dropBehavior()}
+			sqlVAL.union.val = &DropTable{Names: sqlDollar[5].union.normalizableTableNames(), IfExists: true, DropBehavior: sqlDollar[6].union.dropBehavior()}
 		}
 	case 93:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:1133
 		{
-			sqlVAL.union.val = &DropView{Names: sqlDollar[3].union.tableNameReferences(), IfExists: false, DropBehavior: sqlDollar[4].union.dropBehavior()}
+			sqlVAL.union.val = &DropView{Names: sqlDollar[3].union.normalizableTableNames(), IfExists: false, DropBehavior: sqlDollar[4].union.dropBehavior()}
 		}
 	case 94:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
 		//line sql.y:1137
 		{
-			sqlVAL.union.val = &DropView{Names: sqlDollar[5].union.tableNameReferences(), IfExists: true, DropBehavior: sqlDollar[6].union.dropBehavior()}
+			sqlVAL.union.val = &DropView{Names: sqlDollar[5].union.normalizableTableNames(), IfExists: true, DropBehavior: sqlDollar[6].union.dropBehavior()}
 		}
 	case 95:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1143
 		{
-			sqlVAL.union.val = TableNameReferences{sqlDollar[1].union.unresolvedName()}
+			sqlVAL.union.val = NormalizableTableNames{NormalizableTableName{sqlDollar[1].union.unresolvedName()}}
 		}
 	case 96:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:1147
 		{
-			sqlVAL.union.val = append(sqlDollar[1].union.tableNameReferences(), sqlDollar[3].union.unresolvedName())
+			sqlVAL.union.val = append(sqlDollar[1].union.normalizableTableNames(), NormalizableTableName{sqlDollar[3].union.unresolvedName()})
 		}
 	case 97:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -7378,7 +7378,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:2091
 		{
-			sqlVAL.union.val = &Truncate{Tables: sqlDollar[3].union.tableNameReferences(), DropBehavior: sqlDollar[4].union.dropBehavior()}
+			sqlVAL.union.val = &Truncate{Tables: sqlDollar[3].union.normalizableTableNames(), DropBehavior: sqlDollar[4].union.dropBehavior()}
 		}
 	case 309:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
@@ -8682,13 +8682,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3264
 		{
-			sqlVAL.union.val = TableNameReferences{sqlDollar[1].union.unresolvedName()}
+			sqlVAL.union.val = NormalizableTableNames{NormalizableTableName{sqlDollar[1].union.unresolvedName()}}
 		}
 	case 516:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3268
 		{
-			sqlVAL.union.val = append(sqlDollar[1].union.tableNameReferences(), sqlDollar[3].union.unresolvedName())
+			sqlVAL.union.val = append(sqlDollar[1].union.normalizableTableNames(), NormalizableTableName{sqlDollar[3].union.unresolvedName()})
 		}
 	case 517:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]

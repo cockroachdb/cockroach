@@ -309,7 +309,7 @@ func (p *planner) getDataSource(
 	switch t := src.(type) {
 	case *parser.NormalizableTableName:
 		// Usual case: a table.
-		tn, err := p.QualifyWithDatabase(ctx, t)
+		tn, err := p.SearchAndQualify(ctx, t)
 		if err != nil {
 			return planDataSource{}, err
 		}
@@ -426,7 +426,14 @@ func (p *planner) getDataSource(
 	}
 }
 
-func (p *planner) QualifyWithDatabase(
+// SearchAndQualify ensures that a table name is qualified, and
+// searches through the current search path to qualify if necessary.
+// This differs from (*TableName).QualifyWithDatabase in that the latter
+// does not look through the search path. SearchAndQualify is suitable
+// when looking up names to satisfy read queries from tables, whereas
+// (*TableName).QualifyWithDatabase is suitable when preparing names of
+// tables/views being created, altered or deleted.
+func (p *planner) SearchAndQualify(
 	ctx context.Context, t *parser.NormalizableTableName,
 ) (*parser.TableName, error) {
 	tn, err := t.Normalize()
