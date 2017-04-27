@@ -1,0 +1,5 @@
+If you change jemalloc's configure flags in our build system, bump the number
+below to ensure jemalloc's Makefile is rebuilt in existing Git clones when your
+change is checked out.
+
+1

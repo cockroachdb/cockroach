@@ -304,37 +304,46 @@ $(CGO_FLAGS_FILES):
 	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR)/.libs $(ROCKSDB_DIR))' >> $@
 	@echo 'import "C"' >> $@
 
-# We package tarballs in c-deps so that DEP.src.tar.xz is guaranteed to extract to
-# folder DEP.src.
-#
-# NB: `tar -xJ` is not widely supported, so we use `xz` directly instead.
+# We package tarballs in c-deps so that DEP.src.tar.xz is guaranteed to extract
+# to folder DEP.src. Whenever we extract a tarball, whe must wholesale remove
+# the dependency's build directory. Since files extracted from the tarball will
+# have modification timestamps from when the tarball was created, existing build
+# artifacts will appear up-to-date.
 $(C_DEPS_DIR)/%.src: $(C_DEPS_DIR)/%.src.tar.xz
-	rm -rf $@
+	rm -rf $@ $(BUILD_DIR)/$*
 	$(REPO_ROOT)/scripts/untarxz.sh $< -C $(C_DEPS_DIR)
 	touch $@
 
-$(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc.src.tar.xz | $(JEMALLOC_SRC_DIR)
+# Bump the contents of $(C_DEPS_DIR)/jemalloc-rebuild if you change the
+# configure flags below to bust build artifacts in existing clones.
+$(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc.src.tar.xz $(C_DEPS_DIR)/jemalloc-rebuild | $(JEMALLOC_SRC_DIR)
 	mkdir -p $(JEMALLOC_DIR)
 	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(CONFIGURE_FLAGS) --enable-prof
 
-$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz | $(PROTOBUF_SRC_DIR)
+# Bump the contents of $(C_DEPS_DIR)/protobuf-rebuild if you change the CMake
+# flags below to bust build artifacts in existing clones.
+$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz $(C_DEPS_DIR)/protobuf-rebuild | $(PROTOBUF_SRC_DIR)
 	mkdir -p $(PROTOBUF_DIR)
 	cd $(PROTOBUF_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 
 ifneq ($(PROTOC_DIR),$(PROTOBUF_DIR))
-$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz | $(PROTOBUF_SRC_DIR)
+$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz $(C_DEPS_DIR)/protobuf-rebuild | $(PROTOBUF_SRC_DIR)
 	mkdir -p $(PROTOC_DIR)
 	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 endif
 
-$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb.src.tar.xz | libsnappy libjemalloc $(ROCKSDB_SRC_DIR)
+# Bump the contents of $(C_DEPS_DIR)/rocksdb-rebuild if you change the CMake
+# flags below to bust build artifacts in existing clones.
+$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb.src.tar.xz $(C_DEPS_DIR)/rocksdb-rebuild | libsnappy libjemalloc $(ROCKSDB_SRC_DIR)
 	mkdir -p $(ROCKSDB_DIR)
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
 	  $(if $(findstring release,$(TYPE)),,-DWITH_$(if $(findstring mingw,$(TARGET_TRIPLE)),AVX2,SSE42)=OFF) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
 	  -DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON
 
-$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy.src.tar.xz | $(SNAPPY_SRC_DIR)
+# Bump the contents of $(C_DEPS_DIR)/snappy-rebuild if you change the configure
+# flags below to bust build artifacts in existing clones.
+$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy.src.tar.xz $(C_DEPS_DIR)/snappy-rebuild | $(SNAPPY_SRC_DIR)
 	mkdir -p $(SNAPPY_DIR)
 	cd $(SNAPPY_DIR) && $(SNAPPY_SRC_DIR)/configure $(CONFIGURE_FLAGS) --disable-shared
 

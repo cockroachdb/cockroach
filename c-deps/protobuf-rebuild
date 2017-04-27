@@ -1,0 +1,5 @@
+If you change protobuf's CMake flags in our build system, bump the number below
+to ensure protobuf's Makefile is rebuilt in existing Git clones when your change
+is checked out.
+
+1
