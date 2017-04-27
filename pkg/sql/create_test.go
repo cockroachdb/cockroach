@@ -250,7 +250,6 @@ func verifyTables(
 // correctly filled.
 func TestParallelCreateTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13504 Test is flaky under stress.")
 
 	// This number has to be around 10 or else testrace will take too long to
 	// finish.
