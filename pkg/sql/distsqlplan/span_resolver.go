@@ -250,7 +250,6 @@ func (it *spanResolverIterator) Seek(
 		it.err = err
 		return
 	}
-	oldSpan := it.curSpan
 	oldDir := it.dir
 	it.curSpan = roachpb.RSpan{
 		Key:    key,
@@ -269,12 +268,18 @@ func (it *spanResolverIterator) Seek(
 	// already positioned. If so, and if the direction also corresponds, there's
 	// no need to change the underlying iterator's state.
 	if it.dir == oldDir && it.it.Valid() {
-		if it.dir == kv.Ascending && oldSpan.ContainsKey(seekKey) {
+		reverse := (it.dir == kv.Descending)
+		desc := it.it.Desc()
+		if (reverse && desc.ContainsExclusiveEndKey(seekKey)) ||
+			(!reverse && desc.ContainsKey(seekKey)) {
+			if log.V(1) {
+				log.Infof(ctx, "not seeking (key=%s); existing descriptor %s", seekKey, desc)
+			}
 			return
 		}
-		if it.dir == kv.Descending && oldSpan.ContainsExclusiveEndKey(seekKey) {
-			return
-		}
+	}
+	if log.V(1) {
+		log.Infof(ctx, "seeking (key=%s)", seekKey)
 	}
 	it.it.Seek(ctx, seekKey, scanDir)
 }
