@@ -991,14 +991,14 @@ func (s *Store) SetDraining(drain bool) {
 
 	var wg sync.WaitGroup
 
-	ctx := context.TODO()
+	ctx := log.WithLogTag(context.Background(), "drain", nil)
 	// Limit the number of concurrent lease transfers.
 	sem := make(chan struct{}, 100)
 	sysCfg, sysCfgSet := s.cfg.Gossip.GetSystemConfig()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		wg.Add(1)
 		if err := s.stopper.RunLimitedAsyncTask(
-			ctx, sem, true /* wait */, func(ctx context.Context) {
+			r.AnnotateCtx(ctx), sem, true /* wait */, func(ctx context.Context) {
 				defer wg.Done()
 				var drainingLease *roachpb.Lease
 				for {
