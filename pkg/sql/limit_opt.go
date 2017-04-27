@@ -38,7 +38,7 @@ import (
 // offset expressions. EXPLAIN also does this, see expandPlan() for
 // explainPlanNode.
 //
-// TODO(radu) Arguably, this interface has room for improvement.  A
+// TODO(radu): Arguably, this interface has room for improvement.  A
 // limitNode may have a hard limit locally which is larger than the
 // soft limit propagated up by nodes downstream. We may want to
 // improve this API to pass both the soft and hard limit.

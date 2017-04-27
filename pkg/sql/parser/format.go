@@ -77,7 +77,7 @@ var FmtHideConstants FmtFlags = &fmtFlags{hideConstants: true}
 
 // FmtAnonymize instructs the pretty-printer to remove
 // any name but function names.
-// TODO(knz) temporary until a better solution is found for #13968
+// TODO(knz): temporary until a better solution is found for #13968
 var FmtAnonymize FmtFlags = &fmtFlags{anonymize: true}
 
 // FmtReformatTableNames returns FmtFlags that instructs the pretty-printer

@@ -74,7 +74,7 @@ func (s *subquery) Format(buf *bytes.Buffer, f parser.FmtFlags) {
 		buf.WriteString("EXISTS ")
 	}
 	if f == parser.FmtShowTypes {
-		// TODO(knz/nvanbenschoten) It is not possible to extract types
+		// TODO(knz/nvanbenschoten): It is not possible to extract types
 		// from the subquery using Format, because type checking does not
 		// replace the sub-expressions of a SelectClause node in-place.
 		f = parser.FmtSimple
@@ -96,7 +96,7 @@ func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Type) (parser
 	// sub-query. For now, the type is simply derived during the subquery node
 	// creation by looking at the result column types.
 
-	// TODO(nvanbenschoten) Type checking for the comparison operator(s)
+	// TODO(nvanbenschoten): Type checking for the comparison operator(s)
 	// should take this new node into account. In particular it should
 	// check that the tuple types match pairwise.
 	return s, nil

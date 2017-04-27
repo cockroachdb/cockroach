@@ -1540,7 +1540,7 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 				// data is of variable length up to the maximum length n; longer
 				// strings will be rejected."
 				//
-				// TODO(nvanbenschoten) Because we do not propagate the "varying"
+				// TODO(nvanbenschoten): Because we do not propagate the "varying"
 				// flag on the column type, the best we can do here is conservatively
 				// assume the varying bit type and error only on longer bit strings.
 				mostSignificantBit := int32(0)

@@ -75,7 +75,7 @@ type cliState struct {
 	checkSyntax bool
 	// Determines whether to store normalized syntax in the shell history
 	// when check_syntax is set.
-	// TODO(knz) this can possibly be set back to false by default when
+	// TODO(knz): this can possibly be set back to false by default when
 	// the upstream readline library handles multi-line history entries
 	// properly.
 	normalizeHistory bool

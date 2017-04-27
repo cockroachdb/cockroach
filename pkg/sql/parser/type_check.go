@@ -1044,7 +1044,7 @@ func typeCheckSameTypedExprs(
 	}
 
 	// Hold the resolved type expressions of the provided exprs, in order.
-	// TODO(nvanbenschoten) Look into reducing allocations here.
+	// TODO(nvanbenschoten): Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))
 
 	// Split the expressions into three groups of indexed expressions:
@@ -1254,7 +1254,7 @@ func typeCheckSameTypedTupleExprs(
 	ctx *SemaContext, desired Type, exprs ...Expr,
 ) ([]TypedExpr, Type, error) {
 	// Hold the resolved type expressions of the provided exprs, in order.
-	// TODO(nvanbenschoten) Look into reducing allocations here.
+	// TODO(nvanbenschoten): Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))
 
 	// All other exprs must be tuples.
@@ -1412,7 +1412,7 @@ func (*placeholderAnnotationVisitor) VisitPost(expr Expr) Expr { return expr }
 //   map, no error will be thrown, and the placeholder will keep it's previously
 //   inferred type.
 //
-// TODO(nvanbenschoten) Can this visitor and map be preallocated (like normalizeVisitor)?
+// TODO(nvanbenschoten): Can this visitor and map be preallocated (like normalizeVisitor)?
 func (p PlaceholderTypes) ProcessPlaceholderAnnotations(stmt Statement) error {
 	v := placeholderAnnotationVisitor{make(map[string]annotationState)}
 

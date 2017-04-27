@@ -510,7 +510,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 	// server to panic (and thus the test to fail) when the connection
 	// is closed.
 	//
-	// TODO(knz) This test can be made more robust by exposing the
+	// TODO(knz): This test can be made more robust by exposing the
 	// current allocation count in monitor and checking that it has the
 	// same value at the beginning of each retry.
 	if _, err := sqlDB.Exec(`

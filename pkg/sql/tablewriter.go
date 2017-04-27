@@ -71,7 +71,7 @@ type tableWriter interface {
 	// tableWriter will touch when executed. This is contractual, and the
 	// tableWriter will not touch any keys outside of the spans reported here.
 	//
-	// TODO(nvanbenschoten) we are currently pretty pessimistic here, assuming
+	// TODO(nvanbenschoten): we are currently pretty pessimistic here, assuming
 	// that table operations will touch the entire table. In cases where we
 	// can determine ahead of time that this isn't true, we should true to
 	// constrain these spans.

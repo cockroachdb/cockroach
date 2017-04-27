@@ -86,7 +86,7 @@ func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinit
 	// Name.Normalize(), functions are special in that they are
 	// guaranteed to not contain special Unicode characters. So we can
 	// use ToLower directly.
-	// TODO(knz) this will need to be revisited once we allow
+	// TODO(knz): this will need to be revisited once we allow
 	// function names to exist in custom namespaces, whose names
 	// may contain special characters.
 	prefix := strings.ToLower(fn.prefix())

@@ -504,7 +504,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 				case sqlbase.ConstraintTypeCheck:
 					oid = h.CheckConstraintOid(db, table, c.CheckConstraint)
 					contype = conTypeCheck
-					// TODO(nvanbenschoten) We currently do not store the referenced columns for a check
+					// TODO(nvanbenschoten): We currently do not store the referenced columns for a check
 					// constraint. We should add an array of column indexes to
 					// sqlbase.TableDescriptor_CheckConstraint and use that here.
 					consrc = parser.NewDString(c.Details)

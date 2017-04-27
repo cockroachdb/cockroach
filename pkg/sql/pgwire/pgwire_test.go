@@ -817,12 +817,12 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(1),
 		},
 
-		// TODO(jordan) blocked on #13651
+		// TODO(jordan): blocked on #13651
 		//"SELECT $1::INT[]": {
 		//	baseTest.SetArgs(pq.Array([]int{10})).Results(pq.Array([]int{10})),
 		//},
 
-		// TODO(nvanbenschoten) Same class of limitation as that in logic_test/typing:
+		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
 		//   Nested constants are not exposed to the same constant type resolution rules
 		//   as top-level constants, and instead are simply resolved to their natural type.
 		//"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2": {
