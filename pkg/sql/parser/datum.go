@@ -1056,13 +1056,13 @@ func (d *DDate) IsMin() bool {
 
 // max implements the Datum interface.
 func (d *DDate) max() (Datum, bool) {
-	// TODO(knz) figure a good way to find a maximum.
+	// TODO(knz): figure a good way to find a maximum.
 	return nil, false
 }
 
 // min implements the Datum interface.
 func (d *DDate) min() (Datum, bool) {
-	// TODO(knz) figure a good way to find a minimum.
+	// TODO(knz): figure a good way to find a minimum.
 	return nil, false
 }
 
@@ -1236,13 +1236,13 @@ func (d *DTimestamp) IsMin() bool {
 
 // min implements the Datum interface.
 func (d *DTimestamp) min() (Datum, bool) {
-	// TODO(knz) figure a good way to find a minimum.
+	// TODO(knz): figure a good way to find a minimum.
 	return nil, false
 }
 
 // max implements the Datum interface.
 func (d *DTimestamp) max() (Datum, bool) {
-	// TODO(knz) figure a good way to find a minimum.
+	// TODO(knz): figure a good way to find a minimum.
 	return nil, false
 }
 
@@ -1333,13 +1333,13 @@ func (d *DTimestampTZ) IsMin() bool {
 
 // min implements the Datum interface.
 func (d *DTimestampTZ) min() (Datum, bool) {
-	// TODO(knz) figure a good way to find a minimum.
+	// TODO(knz): figure a good way to find a minimum.
 	return nil, false
 }
 
 // max implements the Datum interface.
 func (d *DTimestampTZ) max() (Datum, bool) {
-	// TODO(knz) figure a good way to find a minimum.
+	// TODO(knz): figure a good way to find a minimum.
 	return nil, false
 }
 

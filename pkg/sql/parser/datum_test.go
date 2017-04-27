@@ -164,7 +164,7 @@ func TestDatumOrdering(t *testing.T) {
 
 		// Arrays
 
-		// TODO(nathan) Until we support literals for empty arrays, this
+		// TODO(nathan): Until we support literals for empty arrays, this
 		// is the easiest way to construct one.
 		{`current_schemas(false)`, valIsMin, `{NULL}`, `{}`, noMax},
 

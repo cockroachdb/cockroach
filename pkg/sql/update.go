@@ -114,7 +114,7 @@ func (r *editNodeRun) collectSpans(ctx context.Context) (reads, writes roachpb.S
 	if len(scanWrites) > 0 {
 		return nil, nil, errors.Errorf("unexpected scan span writes: %v", scanWrites)
 	}
-	// TODO(nvanbenschoten) if we notice that r.rows is a ValuesClause, we
+	// TODO(nvanbenschoten): if we notice that r.rows is a ValuesClause, we
 	// may be able to contrain the tableWriter Spans.
 	writerReads, writerWrites, err := r.tw.spans()
 	if err != nil {

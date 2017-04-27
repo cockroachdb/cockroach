@@ -921,7 +921,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		txnState.schemaChangers.curStatementIdx = i
 
 		var stmtStrBefore string
-		// TODO(nvanbenschoten) Constant literals can change their representation (1.0000 -> 1) when type checking,
+		// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
 		// so we need to reconsider how this works.
 		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
 			(e.cfg.TestingKnobs.StatementFilter != nil) {

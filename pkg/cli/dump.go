@@ -63,7 +63,7 @@ func runDump(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// TODO(knz/mjibson) dump foreign key constraints and dump in
+	// TODO(knz/mjibson): dump foreign key constraints and dump in
 	// topological order to ensure key relationships can be verified
 	// during load.
 

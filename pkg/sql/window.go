@@ -172,7 +172,7 @@ func (n *windowNode) constructWindowDefinitions(
 			return err
 		}
 
-		// TODO(nvanbenschoten) below we add renders to the renderNode for each
+		// TODO(nvanbenschoten): below we add renders to the renderNode for each
 		// partition and order expression. We should handle cases where the expression
 		// is already referenced by the query like sortNode does.
 
@@ -640,7 +640,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 		// Partition rows into separate partitions based on hash values of the
 		// window function's PARTITION BY attribute.
 		//
-		// TODO(nvanbenschoten) Window functions with the same window definition
+		// TODO(nvanbenschoten): Window functions with the same window definition
 		// can share partition and sorting work.
 		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
 		for rowI := 0; rowI < rowCount; rowI++ {
@@ -683,7 +683,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 		//   * Segment Tree
 		// See Leis et al. [http://www.vldb.org/pvldb/vol8/p1058-leis.pdf]
 		for _, partition := range partitions {
-			// TODO(nvanbenschoten) Handle framing here. Right now we only handle the default
+			// TODO(nvanbenschoten): Handle framing here. Right now we only handle the default
 			// framing option of RANGE UNBOUNDED PRECEDING. With ORDER BY, this sets the frame
 			// to be all rows from the partition start up through the current row's last ORDER BY
 			// peer. Without ORDER BY, all rows of the partition are included in the window frame,

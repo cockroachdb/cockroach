@@ -216,7 +216,7 @@ var pgBuiltins = map[string][]Builtin{
 	},
 	"format_type": {
 		Builtin{
-			// TODO(jordan) typemod should be a Nullable TypeInt when supported.
+			// TODO(jordan): typemod should be a Nullable TypeInt when supported.
 			Types:      ArgTypes{{"type_oid", TypeOid}, {"typemod", TypeInt}},
 			ReturnType: fixedReturnType(TypeString),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {

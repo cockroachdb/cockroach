@@ -1737,7 +1737,7 @@ type EvalContext struct {
 // GetStmtTimestamp retrieves the current statement timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetStmtTimestamp() time.Time {
-	// TODO(knz) a zero timestamp should never be read, even during
+	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.stmtTimestamp.IsZero() {
 		panic("zero statement timestamp in EvalContext")
@@ -1748,7 +1748,7 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 // GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
-	// TODO(knz) a zero timestamp should never be read, even during
+	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly {
 		if ctx.clusterTimestamp == (hlc.Timestamp{}) {
@@ -1781,7 +1781,7 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 // GetTxnTimestamp retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
-	// TODO(knz) a zero timestamp should never be read, even during
+	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.txnTimestamp.IsZero() {
 		panic("zero transaction timestamp in EvalContext")
@@ -1792,7 +1792,7 @@ func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
 // GetTxnTimestampNoZone retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimestamp {
-	// TODO(knz) a zero timestamp should never be read, even during
+	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.txnTimestamp.IsZero() {
 		panic("zero transaction timestamp in EvalContext")
@@ -2236,7 +2236,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 
 	case *TimestampColType:
-		// TODO(knz) Timestamp from float, decimal.
+		// TODO(knz): Timestamp from float, decimal.
 		switch d := d.(type) {
 		case *DString:
 			return ParseDTimestamp(string(*d), time.Microsecond)
@@ -2254,7 +2254,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 
 	case *TimestampTZColType:
-		// TODO(knz) TimestampTZ from float, decimal.
+		// TODO(knz): TimestampTZ from float, decimal.
 		switch d := d.(type) {
 		case *DString:
 			return ParseDTimestampTZ(string(*d), ctx.GetLocation(), time.Microsecond)
@@ -2271,7 +2271,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 
 	case *IntervalColType:
-		// TODO(knz) Interval from float, decimal.
+		// TODO(knz): Interval from float, decimal.
 		switch v := d.(type) {
 		case *DString:
 			return ParseDInterval(string(*v))

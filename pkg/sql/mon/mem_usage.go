@@ -342,7 +342,7 @@ func (mm *MemoryMonitor) Stop(ctx context.Context) {
 	mm.releaseBudget(ctx)
 
 	if mm.maxBytesHist != nil && mm.mu.maxAllocated > 0 {
-		// TODO(knz) We record the logarithm because the UI doesn't know
+		// TODO(knz): We record the logarithm because the UI doesn't know
 		// how to do logarithmic y-axes yet. See the explanatory comments
 		// in sql/mem_metrics.go.
 		val := int64(1000 * math.Log(float64(mm.mu.maxAllocated)) / math.Ln10)

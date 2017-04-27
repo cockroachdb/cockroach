@@ -470,7 +470,7 @@ func (expr *AllColumnsSelector) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *ColumnItem) Walk(_ Visitor) Expr {
-	// TODO(knz) When ARRAY is supported, this must be extended
+	// TODO(knz): When ARRAY is supported, this must be extended
 	// to recurse into the index expressions of the ColumnItems' Selector.
 	return expr
 }
