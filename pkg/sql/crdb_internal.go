@@ -338,6 +338,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   node_id             INT NOT NULL,
   application_name    STRING NOT NULL,
   key                 STRING NOT NULL,
+  anonymized          STRING,
   count               INT NOT NULL,
   first_attempt_count INT NOT NULL,
   max_retries         INT NOT NULL,
@@ -395,6 +396,12 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 			// Now retrieve the per-stmt stats proper.
 			for _, stmtKey := range stmtKeys {
+				anonymized := parser.DNull
+				anonStr, ok := p.scrubStmtStatKey(stmtKey)
+				if ok {
+					anonymized = parser.NewDString(anonStr)
+				}
+
 				s := appStats.getStatsForStmt(stmtKey)
 
 				s.Lock()
@@ -406,6 +413,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					nodeID,
 					parser.NewDString(appName),
 					parser.NewDString(stmtKey),
+					anonymized,
 					parser.NewDInt(parser.DInt(s.data.Count)),
 					parser.NewDInt(parser.DInt(s.data.FirstAttemptCount)),
 					parser.NewDInt(parser.DInt(s.data.MaxRetries)),
