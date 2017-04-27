@@ -37,7 +37,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
@@ -207,7 +207,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("AWS session: %s", err)
 	}
-	uploader := s3manager.NewUploader(sess)
+	svc := s3.New(sess)
 
 	if isHead {
 		// Can't be const because we take its address.
@@ -226,25 +226,26 @@ func main() {
 			if err != nil {
 				log.Fatalf("os.Open(%s): %s", absolutePath, err)
 			}
-			versionKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, versionStr)
-			output, err := uploader.Upload(&s3manager.UploadInput{
+			// NB: This slash is required to make redirects work correctly
+			// since we reuse this key as the redirect location.
+			versionKey := fmt.Sprintf("/%s/%s.%s", repoName, remoteName, versionStr)
+			if _, err := svc.PutObject(&s3.PutObjectInput{
 				Bucket: &bucketName,
 				Key:    &versionKey,
 				Body:   f,
-			})
-			if err != nil {
+			}); err != nil {
 				log.Fatalf("s3 upload %s: %s", absolutePath, err)
 			}
 			if err := f.Close(); err != nil {
 				log.Fatal(err)
 			}
 			latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, "LATEST")
-			if _, err := uploader.Upload(&s3manager.UploadInput{
+			if _, err := svc.PutObject(&s3.PutObjectInput{
 				Bucket: &bucketName,
 				Key:    &latestKey,
-				WebsiteRedirectLocation: &output.Location,
+				WebsiteRedirectLocation: &versionKey,
 			}); err != nil {
-				log.Fatalf("s3 redirect to %s: %s", output.Location, err)
+				log.Fatalf("s3 redirect to %s: %s", versionKey, err)
 			}
 		}
 	} else {
@@ -278,7 +279,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("os.Open(%s): %s", absoluteSrcArchivePath, err)
 			}
-			if _, err := uploader.Upload(&s3manager.UploadInput{
+			if _, err := svc.PutObject(&s3.PutObjectInput{
 				Bucket: &bucketName,
 				Key:    &srcArchive,
 				Body:   f,
@@ -358,7 +359,7 @@ func main() {
 				if _, err := f.Seek(0, 0); err != nil {
 					log.Fatal(err)
 				}
-				if _, err := uploader.Upload(&s3manager.UploadInput{
+				if _, err := svc.PutObject(&s3.PutObjectInput{
 					Bucket: &bucketName,
 					Key:    &targetArchiveBase,
 					Body:   f,
