@@ -330,16 +330,34 @@ var frozen int32
 // has started. See settingsworker.go.
 func Freeze() { atomic.StoreInt32(&frozen, 1) }
 
-// register adds a setting to the registry.
-func register(key, desc string, s Setting) {
+func assertNotFrozen(key string) {
 	if atomic.LoadInt32(&frozen) > 0 {
 		panic(fmt.Sprintf("registration must occur before server start: %s", key))
 	}
+}
+
+// register adds a setting to the registry.
+func register(key, desc string, s Setting) {
+	assertNotFrozen(key)
 	if _, ok := registry[key]; ok {
 		panic(fmt.Sprintf("setting already defined: %s", key))
 	}
 	s.setToDefault()
 	registry[key] = wrappedSetting{description: desc, setting: s}
+}
+
+// Hide prevents a setting from showing up in SHOW ALL CLUSTER SETTINGS. It can
+// still be used with SET and SHOW if the exact setting name is known. Use Hide
+// for in-development features and other settings that should not be
+// user-visible.
+func Hide(key string) {
+	assertNotFrozen(key)
+	s, ok := registry[key]
+	if !ok {
+		panic(fmt.Sprintf("setting not found: %s", key))
+	}
+	s.hidden = true
+	registry[key] = s
 }
 
 // Value holds the (parsed, typed) value of a setting.
@@ -348,6 +366,7 @@ func register(key, desc string, s Setting) {
 // basically a poor-man's union, without boxing).
 type wrappedSetting struct {
 	description string
+	hidden      bool
 	setting     Setting
 }
 
@@ -355,6 +374,9 @@ type wrappedSetting struct {
 func Keys() (res []string) {
 	res = make([]string, 0, len(registry))
 	for k := range registry {
+		if registry[k].hidden {
+			continue
+		}
 		res = append(res, k)
 	}
 	sort.Strings(res)
