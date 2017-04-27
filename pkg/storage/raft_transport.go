@@ -337,7 +337,8 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 // RaftSnapshot handles incoming streaming snapshot requests.
 func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error {
 	errCh := make(chan error, 1)
-	if err := t.rpcContext.Stopper.RunAsyncTask(stream.Context(), func(ctx context.Context) {
+	ctx := stream.Context()
+	if err := t.rpcContext.Stopper.RunAsyncTask(ctx, func(ctx context.Context) {
 		errCh <- func() error {
 			req, err := stream.Recv()
 			if err != nil {
@@ -364,6 +365,8 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 		return err
 	}
 	select {
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-t.rpcContext.Stopper.ShouldStop():
 		return nil
 	case err := <-errCh:
