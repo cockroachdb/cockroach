@@ -23,7 +23,6 @@
 package parser
 
 import "bytes"
-import "strings"
 
 // Show represents a SHOW statement.
 type Show struct {
@@ -36,10 +35,8 @@ func (node *Show) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW ")
 	if node.ClusterSetting {
 		buf.WriteString("CLUSTER SETTING ")
-		buf.WriteString(node.Name)
-	} else {
-		buf.WriteString(strings.ToUpper(node.Name))
 	}
+	buf.WriteString(node.Name)
 }
 
 // ShowColumns represents a SHOW COLUMNS statement.

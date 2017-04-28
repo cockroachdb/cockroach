@@ -263,7 +263,14 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 		location := string(*v)
 		loc, err = timeutil.LoadLocation(location)
 		if err != nil {
-			return nil, fmt.Errorf("cannot find time zone %q: %v", location, err)
+			var err1 error
+			loc, err1 = timeutil.LoadLocation(strings.ToUpper(location))
+			if err1 != nil {
+				loc, err1 = timeutil.LoadLocation(strings.ToTitle(location))
+				if err1 != nil {
+					return nil, fmt.Errorf("cannot find time zone %q: %v", location, err)
+				}
+			}
 		}
 
 	case *parser.DInterval:

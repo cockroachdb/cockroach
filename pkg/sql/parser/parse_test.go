@@ -207,9 +207,9 @@ func TestParse(t *testing.T) {
 		{`HELP count`},
 		{`HELP varchar`},
 
-		{`SHOW BARFOO`},
-		{`SHOW DATABASE`},
-		{`SHOW SYNTAX`},
+		{`SHOW barfoo`},
+		{`SHOW database`},
+		{`SHOW syntax`},
 
 		{`SHOW CLUSTER SETTING a`},
 		{`SHOW CLUSTER SETTING all`},

@@ -39,11 +39,11 @@ SELECT * FROM crdb_internal.tables WHERE NAME = 'namespace'
 ----
     table_id  parent_id  name       database_name  version  mod_time                         mod_time_logical  format_version            state   sc_lease_node_id  sc_lease_expiration_time  create_table
     2         1          namespace  system         1        1970-01-01 00:00:00 +0000 +0000  0.0000000000      InterleavedFormatVersion  PUBLIC  NULL              NULL                      CREATE TABLE namespace (
-              parentid INT NOT NULL,
+              "parentID" INT NOT NULL,
               name STRING NOT NULL,
               id INT NULL,
-              CONSTRAINT "primary" PRIMARY KEY (parentid ASC, name ASC),
-              FAMILY "primary" (parentid, name),
+              CONSTRAINT "primary" PRIMARY KEY ("parentID" ASC, name ASC),
+              FAMILY "primary" ("parentID", name),
               FAMILY fam_3_id (id)
 )
 
