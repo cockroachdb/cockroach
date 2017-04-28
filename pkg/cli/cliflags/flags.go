@@ -221,6 +221,13 @@ communication; it must resolve from other nodes in the cluster.`,
 		Description: `The port to bind to for HTTP requests.`,
 	}
 
+	ListeningURLFile = FlagInfo{
+		Name: "listening-url-file",
+		Description: `
+After the CockroachDB node has started up successfully, it will
+write its connection URL to the specified file.`,
+	}
+
 	PIDFile = FlagInfo{
 		Name: "pid-file",
 		Description: `

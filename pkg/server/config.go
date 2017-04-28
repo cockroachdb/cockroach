@@ -183,6 +183,10 @@ type Config struct {
 	// actions.
 	EventLogEnabled bool
 
+	// ListeningURLFile indicates the file to which the server writes
+	// its listening URL when it is ready.
+	ListeningURLFile string
+
 	// PIDFile indicates the file to which the server writes its PID when
 	// it is ready.
 	PIDFile string
