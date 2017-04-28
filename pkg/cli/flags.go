@@ -247,6 +247,8 @@ func init() {
 		stringFlag(f, &serverCfg.SocketFile, cliflags.Socket, "")
 		_ = f.MarkHidden(cliflags.Socket.Name)
 
+		stringFlag(f, &serverCfg.ListeningURLFile, cliflags.ListeningURLFile, "")
+
 		stringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, "")
 
 		// Use a separate variable to store the value of ServerInsecure.
