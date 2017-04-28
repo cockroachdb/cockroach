@@ -1775,7 +1775,7 @@ func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
 }
 
 // Close finishes the writer, flushing any remaining writes to disk. At least
-// one kv entry must have been added.
+// one kv entry must have been added. Close is idempotent.
 func (fw *RocksDBSstFileWriter) Close() error {
 	if fw.fw == nil {
 		return nil
