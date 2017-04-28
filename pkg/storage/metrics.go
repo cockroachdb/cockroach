@@ -236,6 +236,12 @@ var (
 	metaRaftCommandsApplied = metric.Metadata{
 		Name: "raft.commandsapplied",
 		Help: "Count of Raft commands applied"}
+	metaRaftLogCommitLatency = metric.Metadata{
+		Name: "raft.process.logcommit.latency",
+		Help: "Latency histogram for committing Raft log entries"}
+	metaRaftCommandCommitLatency = metric.Metadata{
+		Name: "raft.process.commandcommit.latency",
+		Help: "Latency histogram for committing Raft commands"}
 
 	// Raft message metrics.
 	metaRaftRcvdProp = metric.Metadata{
@@ -539,6 +545,8 @@ type StoreMetrics struct {
 	RaftWorkingDurationNanos *metric.Counter
 	RaftTickingDurationNanos *metric.Counter
 	RaftCommandsApplied      *metric.Counter
+	RaftLogCommitLatency     *metric.Histogram
+	RaftCommandCommitLatency *metric.Histogram
 
 	// Raft message metrics.
 	RaftRcvdMsgProp           *metric.Counter
@@ -715,6 +723,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
 		RaftCommandsApplied:      metric.NewCounter(metaRaftCommandsApplied),
+		RaftLogCommitLatency:     metric.NewLatency(metaRaftLogCommitLatency, histogramWindow),
+		RaftCommandCommitLatency: metric.NewLatency(metaRaftCommandCommitLatency, histogramWindow),
 
 		// Raft message metrics.
 		RaftRcvdMsgProp:           metric.NewCounter(metaRaftRcvdProp),
