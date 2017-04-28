@@ -962,17 +962,7 @@ func (tc *TxnCoordSender) updateState(
 		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
 	}
 
-	if pErr == nil {
-		// For successful transactional requests, always send the updated txn
-		// record back. Note that we make sure not to share data with newTxn
-		// (which may have made it into txnMeta).
-		if br.Txn != nil {
-			br.Txn.Update(&newTxn)
-		} else {
-			clonedTxn := newTxn.Clone()
-			br.Txn = &clonedTxn
-		}
-	} else if pErr.GetTxn() != nil {
+	if pErr != nil && pErr.GetTxn() != nil {
 		// Avoid changing existing errors because sometimes they escape into
 		// goroutines and data races can occur.
 		pErrShallow := *pErr
