@@ -502,12 +502,12 @@ func TestEval(t *testing.T) {
 		{`lower('HELLO')`, `'hello'`},
 		{`UPPER('hello')`, `'HELLO'`},
 		// Array constructors.
-		{`ARRAY[]:::int[]`, `{}`},
-		{`ARRAY[NULL]`, `{NULL}`},
-		{`ARRAY[1, 2, 3]`, `{1,2,3}`},
-		{`ARRAY['a', 'b', 'c']`, `{'a','b','c'}`},
-		{`ARRAY[ARRAY[1, 2], ARRAY[2, 3]]`, `{{1,2},{2,3}}`},
-		{`ARRAY[1, NULL]`, `{1,NULL}`},
+		{`ARRAY[]:::int[]`, `ARRAY[]`},
+		{`ARRAY[NULL]`, `ARRAY[NULL]`},
+		{`ARRAY[1, 2, 3]`, `ARRAY[1,2,3]`},
+		{`ARRAY['a', 'b', 'c']`, `ARRAY['a','b','c']`},
+		{`ARRAY[ARRAY[1, 2], ARRAY[2, 3]]`, `ARRAY[ARRAY[1,2],ARRAY[2,3]]`},
+		{`ARRAY[1, NULL]`, `ARRAY[1,NULL]`},
 		// Array sizes.
 		{`array_length(ARRAY[1, 2, 3], 1)`, `3`},
 		{`array_length(ARRAY[1, 2, 3], 2)`, `NULL`},

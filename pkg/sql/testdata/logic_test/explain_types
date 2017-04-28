@@ -301,8 +301,9 @@ EXPLAIN (TYPES) SELECT ABS(2-3) AS a
 query ITTTTT
 EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
-0  render                                                    ("x[1]" int)
+0  render                                                         ("x[1]" int)
 0           render 0  ((x)[int[]][(1)[int]])[int]
-1  render                                                    (x int[])
-1           render 0  ({(1)[int],(2)[int],(3)[int]})[int[]]
-2  nullrow                                                   ()
+1  render                                                         (x int[])
+1           render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]
+2  nullrow                                                        ()
+
