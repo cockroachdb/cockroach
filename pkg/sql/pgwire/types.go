@@ -177,31 +177,31 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.writeLengthPrefixedVariablePutbuf()
 
 	case *parser.DArray:
-		switch d.ResolvedType().Oid() {
-		case oid.T_int2vector:
+		// Arrays are serialized as a string of comma-separated values, surrounded
+		// by braces.
+		begin, sep, end := "{", ",", "}"
+
+		if d.ResolvedType().Oid() == oid.T_int2vector {
 			// int2vectors are serialized as a string of space-separated values.
-			for i, d := range v.Array {
-				if i > 0 {
-					b.variablePutbuf.WriteString(" ")
-				}
-				d.Format(&b.variablePutbuf, parser.FmtBareStrings)
-			}
-			b.writeLengthPrefixedVariablePutbuf()
-		default:
-			// Arrays are serialized as a string of comma-separated values, surrounded
-			// by braces.
-			b.variablePutbuf.WriteString("{")
-			for i, d := range v.Array {
-				if i > 0 {
-					b.variablePutbuf.WriteString(",")
-				}
-				d.Format(&b.variablePutbuf, parser.FmtBareStrings)
-			}
-			b.variablePutbuf.WriteString("}")
-			b.writeLengthPrefixedVariablePutbuf()
+			begin, sep, end = "", " ", ""
 		}
+
+		b.variablePutbuf.WriteString(begin)
+		for i, d := range v.Array {
+			if i > 0 {
+				b.variablePutbuf.WriteString(sep)
+			}
+			// TODO(radu): we are relying on Format but this doesn't work correctly
+			// if we have an array inside this array. To support nested arrays, we
+			// would need to recurse or add a special FmtFlag.
+			d.Format(&b.variablePutbuf, parser.FmtBareStrings)
+		}
+		b.variablePutbuf.WriteString(end)
+		b.writeLengthPrefixedVariablePutbuf()
+
 	case *parser.DOid:
 		b.writeLengthPrefixedDatum(v)
+
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
 	}

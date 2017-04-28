@@ -201,3 +201,16 @@ SELECT conkey FROM pg_catalog.pg_constraint GROUP BY conkey
 
 statement ok
 SELECT indkey[0] FROM pg_catalog.pg_index
+
+# Verify serialization of array in expression (with distsql).
+statement ok
+CREATE TABLE t (k INT)
+
+statement ok
+INSERT INTO t VALUES (1), (2), (3), (4), (5)
+
+query I rowsort
+SELECT k FROM t WHERE k = ANY ARRAY[2,4]
+----
+2
+4

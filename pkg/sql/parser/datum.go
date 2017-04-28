@@ -2001,14 +2001,14 @@ func (*DArray) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteByte('{')
+	buf.WriteString("ARRAY[")
 	for i, v := range d.Array {
 		if i > 0 {
 			buf.WriteString(",")
 		}
 		FormatNode(buf, f, v)
 	}
-	buf.WriteByte('}')
+	buf.WriteByte(']')
 }
 
 // Len returns the length of the Datum array.
