@@ -337,6 +337,7 @@ var crdbInternalStmtStatsTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.node_statement_statistics (
   node_id             INT NOT NULL,
   application_name    STRING NOT NULL,
+  flags               STRING NOT NULL,
   key                 STRING NOT NULL,
   anonymized          STRING,
   count               INT NOT NULL,
@@ -396,8 +397,10 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 			// Now retrieve the per-stmt stats proper.
 			for _, stmtKey := range stmtKeys {
+				realKey, flags := splitStmtStatKey(stmtKey)
+
 				anonymized := parser.DNull
-				anonStr, ok := p.scrubStmtStatKey(stmtKey)
+				anonStr, ok := p.scrubStmtStatKey(realKey)
 				if ok {
 					anonymized = parser.NewDString(anonStr)
 				}
@@ -412,7 +415,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				err := addRow(
 					nodeID,
 					parser.NewDString(appName),
-					parser.NewDString(stmtKey),
+					parser.NewDString(flags),
+					parser.NewDString(realKey),
 					anonymized,
 					parser.NewDInt(parser.DInt(s.data.Count)),
 					parser.NewDInt(parser.DInt(s.data.FirstAttemptCount)),
