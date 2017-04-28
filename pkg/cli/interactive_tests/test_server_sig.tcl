@@ -2,9 +2,6 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
-# flaky skip: #15391
-exit 0
-
 spawn /bin/bash
 send "PS1='\\h:''/# '\r"
 eexpect ":/# "
