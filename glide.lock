@@ -1,5 +1,5 @@
 hash: 2de92d2768ebcc7b02df420765f13fe46d2361d669b42abc384de5756ffcfc84
-updated: 2017-04-27T17:10:37.813429461Z
+updated: 2017-04-28T12:24:01.904685131-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -11,7 +11,34 @@ imports:
   - internal/version
   - storage
 - name: github.com/abourget/teamcity
-  version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
+  version: e241104394f91bf4e65048f9ea5d0c0f3c25b35e
+- name: github.com/aws/aws-sdk-go
+  version: 80dd71257d3f3b4edc647af948315f82b6262958
+  subpackages:
+  - aws
+  - aws/awserr
+  - aws/awsutil
+  - aws/client
+  - aws/client/metadata
+  - aws/corehandlers
+  - aws/credentials
+  - aws/credentials/ec2rolecreds
+  - aws/credentials/endpointcreds
+  - aws/credentials/stscreds
+  - aws/defaults
+  - aws/ec2metadata
+  - aws/endpoints
+  - aws/request
+  - aws/session
+  - aws/signer/v4
+  - private/protocol
+  - private/protocol/query
+  - private/protocol/query/queryutil
+  - private/protocol/rest
+  - private/protocol/restxml
+  - private/protocol/xml/xmlutil
+  - service/s3
+  - service/sts
 - name: github.com/Azure/azure-sdk-for-go
   version: 8dd1f3ff407c300cff0a4bfedd969111ca5a7903
   subpackages:
@@ -73,7 +100,7 @@ imports:
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/docker/distribution
-  version: b7d5d9bfed2a3b06d935c9a82d0771ec44a01d87
+  version: 1d7824702bb4763786d35b7553b18722c4afce4f
   subpackages:
   - digestset
   - reference
@@ -124,6 +151,8 @@ imports:
 - name: github.com/getsentry/raven-go
   version: aa4f14680cc759ef40791558d93c90c6f629c10f
   repo: https://github.com/cockroachdb/raven-go
+- name: github.com/go-ini/ini
+  version: e7fea39b01aea8d5671f6858f0532f56e8bff3a5
 - name: github.com/go-ole/go-ole
   version: de8695c8edbf8236f30d6e1376e20b198a028d42
   subpackages:
@@ -214,12 +243,16 @@ imports:
   - runtime/internal
   - third_party/googleapis/google/api
   - utilities
+- name: github.com/hashicorp/go-version
+  version: 03c5bf6be031b6dd45afec16b1cf94fc8938bc77
 - name: github.com/ianlancetaylor/cgosymbolizer
   version: 7c5585d44729f382a061b64ec9e7123724abe529
 - name: github.com/ianlancetaylor/demangle
   version: 4883227f66371e02c4948937d3e2be1664d9be38
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
+- name: github.com/jmespath/go-jmespath
+  version: bd40a432e4c76585ef6b72d3fd96fb9b6dc7b68d
 - name: github.com/jteeuwen/go-bindata
   version: a0ff2567cfb70903282db057e799fd826784d41d
   subpackages:
@@ -269,7 +302,7 @@ imports:
 - name: github.com/Masterminds/semver
   version: 3f0ab6d4ab4bed1c61caf056b63a6e62190c7801
 - name: github.com/Masterminds/vcs
-  version: 795e20f901c3d561de52811fb3488a2cb2c8588b
+  version: 3084677c2c188840777bff30054f2b553729d329
 - name: github.com/mattn/go-isatty
   version: fc9e8d8ef48496124e79ae0df75490096eccf6fe
 - name: github.com/mattn/go-runewidth
@@ -418,7 +451,7 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 3aa1caa08a9813c4635689965b58bd050828f0bf
+  version: 2382e3994d48b1d22acc2c86bcad0a2aff028e32
   subpackages:
   - cmd/goimports
   - cmd/gorename
@@ -511,6 +544,6 @@ testImports:
 - name: github.com/ghemawat/stream
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
 - name: github.com/go-sql-driver/mysql
-  version: 15dbaaedd46b79251eaa9c8ed5f280d28978bb3f
+  version: 147bd02c2c516cf9a8878cb75898ee8a9eea0228
 - name: github.com/termie/go-shutil
   version: bcacb06fecaeec8dc42af03c87c6949f4a05c74c
