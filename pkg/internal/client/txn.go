@@ -980,7 +980,11 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(
 
 	// Reconstruct a pErr suitable for a roachpb.PrepareTransactionForRetry()
 	// call.
-	pErr := roachpb.NewErrorWithTxn(retryErr.Cause.GetValue().(roachpb.ErrorDetailInterface), retryErr.Transaction)
+	pErr := roachpb.NewErrorWithTxn(
+		retryErr.Cause.GetValue().(roachpb.ErrorDetailInterface),
+		retryErr.Transaction,
+	)
+	pErr.OriginNode = retryErr.OriginNode
 
 	// Emulate the processing that the TxnCoordSender would have done on this
 	// error.
