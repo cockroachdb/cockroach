@@ -27,11 +27,29 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+func newClient(s *server.TestServer) (*client.DB, error) {
+	cfg := &base.Config{
+		User: security.NodeUser,
+	}
+	testutils.FillCerts(cfg)
+
+	rpcContext := rpc.NewContext(log.AmbientContext{}, cfg, s.Clock(), s.Stopper())
+	conn, err := rpcContext.GRPCDial(s.ServingAddr())
+	if err != nil {
+		return nil, err
+	}
+	return client.NewDB(client.NewSender(conn), s.Clock()), nil
+}
 
 // TestSingleKey stresses the transaction retry machinery by starting
 // up an N node cluster and running N workers that are all
@@ -53,7 +71,10 @@ func TestSingleKey(t *testing.T) {
 
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
-	initDB := tc.Servers[0].DB()
+	initDB, err := newClient(tc.Servers[0])
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := initDB.Put(ctx, key, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +92,10 @@ func TestSingleKey(t *testing.T) {
 	// key. Each worker is configured to talk to a different node in the
 	// cluster.
 	for i := 0; i < num; i++ {
-		db := tc.Servers[i].DB()
+		db, err := newClient(tc.Servers[i])
+		if err != nil {
+			t.Fatal(err)
+		}
 		go func() {
 			var r result
 			for timeutil.Now().Before(deadline) {
