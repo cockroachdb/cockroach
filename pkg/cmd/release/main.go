@@ -22,9 +22,6 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
-	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"go/build"
 	"io"
@@ -38,18 +35,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/jsonmessage"
 	version "github.com/hashicorp/go-version"
-	isatty "github.com/mattn/go-isatty"
 )
 
 const (
 	awsAccessKeyIDKey      = "AWS_ACCESS_KEY_ID"
 	awsSecretAccessKeyKey  = "AWS_SECRET_ACCESS_KEY"
-	dockerAuthKey          = "DOCKER_AUTH"
-	dockerEmailKey         = "DOCKER_EMAIL"
 	teamcityBuildBranchKey = "TC_BUILD_BRANCH"
 )
 
@@ -71,15 +62,6 @@ func main() {
 	}
 	if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
 		log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
-	}
-
-	dockerAuth, ok := os.LookupEnv(dockerAuthKey)
-	if !ok {
-		log.Fatalf("docker auth environment variable %s is not set", dockerAuthKey)
-	}
-	dockerEmail, ok := os.LookupEnv(dockerEmailKey)
-	if !ok {
-		log.Fatalf("docker email environment variable %s is not set", dockerEmailKey)
 	}
 
 	branch, ok := os.LookupEnv(teamcityBuildBranchKey)
@@ -371,74 +353,5 @@ func main() {
 				}
 			}
 		}
-		authConfig := types.AuthConfig{
-			Auth:  dockerAuth,
-			Email: dockerEmail,
-		}
-		// This is the same as
-		// github.com/docker/docker/cli/command.EncodeAuthToBase64, but that
-		// package depends on a version of github.com/docker/distribution
-		// preceding https://github.com/docker/distribution/commit/7dba427, so
-		// we save some additional dependency pinning by avoiding that
-		// package.
-		buf, err := json.Marshal(authConfig)
-		if err != nil {
-			log.Fatal(err)
-		}
-		encodedAuth := base64.URLEncoding.EncodeToString(buf)
-		cmd := exec.Command("cp", "cockroach-linux-2.6.32-gnu-amd64", filepath.Join("build", "deploy", "cockroach"))
-		cmd.Dir = pkg.Dir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		log.Printf("%s %s", cmd.Env, cmd.Args)
-		if err := cmd.Run(); err != nil {
-			log.Fatalf("%s: %s", cmd.Args, err)
-		}
-		// TODO(tamird): Everything from here down doesn't work correctly for two reasons:
-		//
-		// - the unpriviledged user in the build container can't access
-		//   /var/run/docker.sock, which is owned by root
-		//
-		// - the Dockerfile location below is being evaluated in the host,
-		//   which has an entirely different path, and winds up not found.
-		//
-		// I think we're gonna have to do the docker stuff on the host.
-		cli, err := client.NewEnvClient()
-		if err != nil {
-			log.Fatal(err)
-		}
-		ctx := context.Background()
-		const image = "docker.io/cockroachdb/cockroach"
-		var tags []string
-		for _, tag := range versionStrs {
-			tags = append(tags, fmt.Sprintf("%s:%s", image, tag))
-		}
-		resp, err := cli.ImageBuild(ctx, nil, types.ImageBuildOptions{
-			Tags:       tags,
-			Dockerfile: filepath.Join(pkg.Dir, "build", "deploy", "Dockerfile"),
-		})
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := displayDockerStream(resp.Body); err != nil {
-			log.Fatal(err)
-		}
-		rc, err := cli.ImagePush(ctx, image, types.ImagePushOptions{
-			RegistryAuth: encodedAuth,
-		})
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := displayDockerStream(rc); err != nil {
-			log.Fatal(err)
-		}
 	}
-}
-
-func displayDockerStream(rc io.ReadCloser) error {
-	defer rc.Close()
-	out := os.Stderr
-	outFd := out.Fd()
-	isTerminal := isatty.IsTerminal(outFd)
-	return jsonmessage.DisplayJSONMessagesStream(rc, out, outFd, isTerminal, nil)
 }
