@@ -113,39 +113,18 @@ mkdir -p "${host_home}"/.yarn-cache
 # runs as root.
 
 vols=""
+# It would be cool to interact with Docker from inside the builder, but the
+# socket is owned by root, and our unpriviledged user can't access it. If we
+# could make this work, we could run our acceptance tests from inside the
+# builder, which would be cleaner and simpler than what we do now (which is to
+# build static binaries in the container and then run them on the host).
+#
+# vols="${vols} --volume=/var/run/docker.sock:/var/run/docker.sock"
 vols="${vols} --volume=${passwd_file}:/etc/passwd"
 vols="${vols} --volume=${host_home}:${container_home}"
-if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
-  vols="${vols} --volume=${gopath0}/src:/go/src"
-fi
-vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
-mkdir -p "${cockroach_toplevel}"/bin.docker_amd64
-vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin"
-mkdir -p "${gocache}"/native/x86_64-pc-docker-gnu
-vols="${vols} --volume=${gocache}/native:/go/native"
-vols="${vols} --volume=${gocache}/native/x86_64-pc-docker-gnu:/go/native/x86_64-pc-linux-gnu"
-mkdir -p "${gocache}"/pkg/darwin_amd64
-mkdir -p "${gocache}"/pkg/windows_amd64
-vols="${vols} --volume=${gocache}/pkg:/go/pkg"
-vols="${vols} --volume=${gocache}/pkg/darwin_amd64:/usr/local/go/pkg/darwin_amd64"
-vols="${vols} --volume=${gocache}/pkg/windows_amd64:/usr/local/go/pkg/windows_amd64"
-# NB: it would be slightly more natural to move "amd64" inside the loop body,
-# but the shell discards empty strings in this expansion, which would elide
-# the unsuffixed case.
-for suffix in amd64{,_release{,-musl}}{,_msan,_race}; do
-  mkdir -p "${gocache}/pkg/docker_${suffix}"
-  vols="${vols} --volume=${gocache}/pkg/docker_${suffix}:/go/pkg/linux_${suffix}"
-  vols="${vols} --volume=${gocache}/pkg/docker_${suffix}:/usr/local/go/pkg/linux_${suffix}"
-done
-vols="${vols} --volume=${gocache}/bin/docker_amd64:/go/bin"
+
 mkdir -p "${HOME}"/.yarn-cache
 vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
-
-backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
-if test -d "${backtrace_dir}"; then
-  vols="${vols} --volume=${backtrace_dir}:/opt/backtrace"
-  vols="${vols} --volume=${backtrace_dir}/cockroach.cf:${container_home}/.coroner.cf"
-fi
 
 # If we're running in an environment that's using git alternates, like TeamCity,
 # we must mount the path to the real git objects for git to work in the container.
@@ -154,6 +133,40 @@ if test -e "${alternates_file}"; then
   alternates_path=$(cat "${alternates_file}")
   vols="${vols} --volume=${alternates_path}:${alternates_path}"
 fi
+
+backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
+if test -d "${backtrace_dir}"; then
+  vols="${vols} --volume=${backtrace_dir}:/opt/backtrace"
+  vols="${vols} --volume=${backtrace_dir}/cockroach.cf:${container_home}/.coroner.cf"
+fi
+
+if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
+  vols="${vols} --volume=${gopath0}/src:/go/src"
+fi
+vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
+
+mkdir -p "${cockroach_toplevel}"/bin.docker_amd64
+vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin"
+
+mkdir -p "${gocache}"/docker/bin
+vols="${vols} --volume=${gocache}/docker/bin:/go/bin"
+mkdir -p "${gocache}"/docker/native
+vols="${vols} --volume=${gocache}/docker/native:/go/native"
+mkdir -p "${gocache}"/docker/pkg
+vols="${vols} --volume=${gocache}/docker/pkg:/go/pkg"
+
+# TODO(tamird,benesch): this is horrible, but we do it because we want to
+# cache stdlib artifacts and we can't mount over GOROOT. Replace with
+# `-pkgdir` when the kinks are worked out.
+for pkgdir in {darwin,windows}_amd64{,_race}; do
+  mkdir -p "${gocache}/docker/pkg/${pkgdir}"
+  vols="${vols} --volume=${gocache}/docker/pkg/${pkgdir}:/usr/local/go/pkg/${pkgdir}"
+done
+# Linux supports more stuff, so it needs a separate loop.
+for pkgdir in linux_amd64{,_release-{gnu,musl}}{,_msan,_race}; do
+  mkdir -p "${gocache}/docker/pkg/${pkgdir}"
+  vols="${vols} --volume=${gocache}/docker/pkg/${pkgdir}:/usr/local/go/pkg/${pkgdir}"
+done
 
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.

@@ -32,7 +32,7 @@ BENCHTIMEOUT := 5m
 TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
-XGOFLAGS     :=
+GOFLAGS      :=
 COCKROACH    := ./cockroach
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
@@ -58,18 +58,14 @@ LINKFLAGS ?=
 
 ifeq ($(TYPE),)
 override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
-# Temporary shim to prevent build pollution in CI, which may still have agents
-# with caches populated with the release toolchain.
-#
-# TODO(tamird): replace with `else ifeq ($(TYPE),release-linux-gnu)` when
-# sufficient time has passed.
-else ifeq ($(TYPE),$(filter $(TYPE),release release-linux-gnu))
+else ifeq ($(TYPE),release-linux-gnu)
 # We use a custom toolchain to target old Linux and glibc versions. However,
 # this toolchain's libstdc++ version is quite recent and must be statically
 # linked to avoid depending on the target's available libstdc++.
 XHOST_TRIPLE := x86_64-unknown-linux-gnu
 override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
-override GOFLAGS += -installsuffix release
+override GOFLAGS += -installsuffix release-gnu
+override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
 else ifeq ($(TYPE),release-linux-musl)
 XHOST_TRIPLE := x86_64-unknown-linux-musl
 override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
@@ -140,7 +136,7 @@ start:
 .PHONY: testbuild
 testbuild: gotestdashi
 	$(XGO) list -tags '$(TAGS)' -f \
-	'$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test$(SUFFIX)' $(PKG) | \
+	'$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
 	$(SHELL)
 
 .PHONY: gotestdashi
