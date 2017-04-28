@@ -20,10 +20,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"reflect"
 	"testing"
 	"time"
@@ -474,6 +476,43 @@ func TestClusterStores(t *testing.T) {
 		s2 := stores[1].NodeID
 		if !(n1 == s1 && n2 == s2) && !(n1 == s2 && n2 == s1) {
 			return errors.Errorf("expected stores for nodes %d, %d, got %v", n1, n2, stores)
+		}
+		return nil
+	})
+}
+
+func TestListenURLFileCreation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	filePath := path.Join(cwd, "listening_url_file")
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ListeningURLFile: filePath,
+	})
+	defer s.Stopper().Stop(context.TODO())
+	defer func() {
+		os.Remove(filePath)
+	}()
+
+	testutils.SucceedsSoon(t, func() error {
+		data, err := ioutil.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+
+		u, err := url.Parse(string(data))
+		if err != nil {
+			return err
+		}
+
+		if s.ServingAddr() != u.Host {
+			return errors.Errorf(
+				"expected address in file %s, got %s, full URL in file %s",
+				s.ServingAddr(), u.Host, string(data))
 		}
 		return nil
 	})
