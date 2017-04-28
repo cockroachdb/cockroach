@@ -50,7 +50,7 @@
 
   &__value
     float right
-    color $light-green
+    color $light-blue
     font-family Lato-Bold
 
   &__tooltip
@@ -59,8 +59,29 @@
     font-size 12px
     color $light-gray
 
-  & + .summary-stat
+  & + &
     border-top 1px solid rgb(242, 242, 242)
+
+  &--number &__value
+    color $light-green
+
+  &--dead &__value
+    color $secondary-red
+    text-transform capitalize
+
+  &--suspect &__value
+    color $secondary-gold
+    text-transform capitalize
+
+  &--healthy &__value
+    color $main-green
+    text-transform capitalize
+
+  &--link &__value
+    a
+      text-decoration none
+      font-family Lato-Regular
+      color $glow-blue
 
 .summary-stat-breakdown
   padding 2px 0
