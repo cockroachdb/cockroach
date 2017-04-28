@@ -119,6 +119,11 @@ func (dsp *distSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.planToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
+	// DistSQL needs to initialize the Transaction proto before we put it in the
+	// FlowRequest's below. This is because we might not have used the txn do to
+	// anything else (we haven't sent any requests throu
+	txn.InitProtoIfNotInitialized()
+
 	// Start all the flows except the flow on this node (there is always a flow on
 	// this node).
 	var resultChan chan runnerResult

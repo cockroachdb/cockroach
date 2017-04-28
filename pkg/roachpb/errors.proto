@@ -340,6 +340,9 @@ message DistSQLRetryableTxnError {
   // The transaction to be used when restarting, as it has been communicated by
   // the storage layer. 
   optional Transaction transaction = 4;
+
+  // Node at which the error was generated (zero if does not apply).
+  optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID" ];
 }
 
 // HandledRetryableTxnError is an error detail representing a retryable error

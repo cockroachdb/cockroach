@@ -143,6 +143,7 @@ func (e *Error) GoError() error {
 			Msg:         e.Message,
 			TxnID:       txnID,
 			Transaction: e.GetTxn(),
+			OriginNode:  e.OriginNode,
 		}
 	}
 	return e.GetDetail()

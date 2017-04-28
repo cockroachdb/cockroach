@@ -1864,6 +1864,7 @@ func isAsOf(session *Session, stmt parser.Statement, max hlc.Timestamp) (*hlc.Ti
 // not strictly needed. However, it doesn't do anything incorrect and it will
 // possibly find problems if things change in the future, so it is left in.
 func SetTxnTimestamps(txn *client.Txn, ts hlc.Timestamp) {
+	// TODO(andrei): These updates should be done with the txn locked.
 	txn.Proto().Timestamp = ts
 	txn.Proto().OrigTimestamp = ts
 	txn.Proto().MaxTimestamp = ts

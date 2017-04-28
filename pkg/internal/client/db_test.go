@@ -383,6 +383,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "Rollback"}:                        {},
 		{txnType, "CleanupOnError"}:                  {},
 		{txnType, "DebugName"}:                       {},
+		{txnType, "InitProtoIfNotInitialized"}:       {},
 		{txnType, "InternalSetPriority"}:             {},
 		{txnType, "IsFinalized"}:                     {},
 		{txnType, "NewBatch"}:                        {},
