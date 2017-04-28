@@ -111,13 +111,14 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, err
 	}
 	firstIndex, err := r.FirstIndex()
 	pendingSnapshotIndex := r.mu.pendingSnapshotIndex
+	lastIndex := r.mu.lastIndex
 	r.mu.Unlock()
 	if err != nil {
 		return 0, 0, errors.Errorf("error retrieving first index for r%d: %s", rangeID, err)
 	}
 
 	truncatableIndex := computeTruncatableIndex(
-		raftStatus, raftLogSize, targetSize, firstIndex, pendingSnapshotIndex)
+		raftStatus, raftLogSize, targetSize, firstIndex, lastIndex, pendingSnapshotIndex)
 	// Return the number of truncatable indexes.
 	return truncatableIndex - firstIndex, truncatableIndex, nil
 }
@@ -140,7 +141,12 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, err
 // and thus require another snapshot, likely entering a never ending loop of
 // snapshots. See #8629.
 func computeTruncatableIndex(
-	raftStatus *raft.Status, raftLogSize, targetSize int64, firstIndex, pendingSnapshotIndex uint64,
+	raftStatus *raft.Status,
+	raftLogSize int64,
+	targetSize int64,
+	firstIndex uint64,
+	lastIndex uint64,
+	pendingSnapshotIndex uint64,
 ) uint64 {
 	quorumIndex := getQuorumIndex(raftStatus, pendingSnapshotIndex)
 	truncatableIndex := quorumIndex
@@ -171,6 +177,14 @@ func computeTruncatableIndex(
 	// firstIndex > quorumIndex).
 	if truncatableIndex > quorumIndex {
 		truncatableIndex = quorumIndex
+	}
+	// Never truncate past the last index. Naively, you would expect lastIndex to
+	// never be smaller than quorumIndex, but RaftStatus.Progress.Match is
+	// updated on the leader when a command is proposed and in a single replica
+	// Raft group this also means that RaftStatus.Commit is updated at propose
+	// time.
+	if truncatableIndex > lastIndex {
+		truncatableIndex = lastIndex
 	}
 	return truncatableIndex
 }
