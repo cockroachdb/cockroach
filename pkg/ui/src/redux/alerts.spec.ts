@@ -9,12 +9,11 @@ import { AdminUIState, createAdminUIStore } from "./state";
 import {
   AlertLevel,
   alertDataSync,
-  helpusNotificationSelector, helpusBannerDismissedSetting,
   staggeredVersionWarningSelector, staggeredVersionDismissedSetting,
   newVersionNotificationSelector, newVersionDismissedLocalSetting,
   disconnectedAlertSelector, disconnectedDismissedLocalSetting,
 } from "./alerts";
-import { KEY_HELPUS, VERSION_DISMISSED_KEY, setUIDataKey, OptInAttributes, isInFlight } from "./uiData";
+import { VERSION_DISMISSED_KEY, setUIDataKey, isInFlight } from "./uiData";
 import {
   versionReducerObj, nodesReducerObj, clusterReducerObj, healthReducerObj,
 } from "./apiReducers";
@@ -35,61 +34,6 @@ describe("alerts", function() {
   });
 
   describe("selectors", function() {
-    describe("helpus notification", function () {
-      it("requires optinAttributes to be loaded before displaying", function () {
-        const alert = helpusNotificationSelector(state());
-        assert.isUndefined(alert);
-      });
-
-      it("displays when not dismissed or addressed", function () {
-        dispatch(setUIDataKey(KEY_HELPUS, null));
-        const alert = helpusNotificationSelector(state());
-        assert.isObject(alert);
-        assert.equal(alert.level, AlertLevel.NOTIFICATION);
-        assert.equal(alert.title, "Help Us!");
-      });
-
-      it("doesn't display when local dismissal set", function () {
-        dispatch(setUIDataKey(KEY_HELPUS, null));
-        dispatch(helpusBannerDismissedSetting.set(true));
-        const alert = helpusNotificationSelector(state());
-        assert.isUndefined(alert);
-      });
-
-      it("doesn't display when opt-in option set", function () {
-        dispatch(setUIDataKey(KEY_HELPUS, null));
-        const optInSettings = new OptInAttributes();
-        optInSettings.optin = true;
-        dispatch(setUIDataKey(KEY_HELPUS, optInSettings));
-        const alert = helpusNotificationSelector(state());
-        assert.isUndefined(alert);
-      });
-
-      it("dismisses by setting local dismissal and incrementing persistent count", function (done) {
-        fetchMock.mock({
-          matcher: `${API_PREFIX}/uidata`,
-          method: "POST",
-          response: (_url: string) => {
-            const encodedResponse = protos.cockroach.server.serverpb.SetUIDataResponse.encode({}).finish();
-            return {
-              body: encodedResponse,
-            };
-          },
-        });
-
-        dispatch(setUIDataKey(KEY_HELPUS, null));
-        const alert = helpusNotificationSelector(state());
-
-        dispatch(alert.dismiss).then(() => {
-          assert.isTrue(helpusBannerDismissedSetting.selector(state()));
-          assert.isNotNull(state().uiData[KEY_HELPUS]);
-          assert.isNotNull(state().uiData[KEY_HELPUS].data);
-          assert.equal((state().uiData[KEY_HELPUS].data as OptInAttributes).dismissed, 1);
-          done();
-        });
-      });
-    });
-
     describe("version mismatch warning", function () {
       it("requires versions to be loaded before displaying", function () {
         const alert = staggeredVersionWarningSelector(state());
@@ -348,7 +292,6 @@ describe("alerts", function() {
 
     it("dispatches requests for expected data on empty store", function() {
       sync();
-      assert.isTrue(isInFlight(state(), KEY_HELPUS));
       assert.isTrue(isInFlight(state(), VERSION_DISMISSED_KEY));
       assert.isTrue(state().cachedData.cluster.inFlight);
       assert.isTrue(state().cachedData.nodes.inFlight);
@@ -413,7 +356,6 @@ describe("alerts", function() {
       dispatch(clusterReducerObj.receiveData(new protos.cockroach.server.serverpb.ClusterResponse({
         cluster_id: "my-cluster",
       })));
-      dispatch(setUIDataKey(KEY_HELPUS, "blank"));
       dispatch(setUIDataKey(VERSION_DISMISSED_KEY, "blank"));
       dispatch(versionReducerObj.receiveData({
         details: [],
