@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,12 +39,14 @@ func BenchmarkClusterBackup(b *testing.B) {
 
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanupFn()
+	sqlDB.Exec(`DROP TABLE bench.bank`)
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	if _, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0, dir); err != nil {
+	loadDir := filepath.Join(dir, "load")
+	if _, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", loadDir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`, dir))
+	sqlDB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`, loadDir))
 
 	// TODO(dan): Ideally, this would split and rebalance the ranges in a more
 	// controlled way. A previous version of this code did it manually with
@@ -70,6 +73,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
+	sqlDB.Exec(`DROP TABLE bench.bank`)
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
 	backup, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0, dir)
@@ -90,6 +94,7 @@ func BenchmarkLoadRestore(b *testing.B) {
 
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
+	sqlDB.Exec(`DROP TABLE bench.bank`)
 
 	buf := bankStatementBuf(b.N)
 	b.SetBytes(int64(buf.Len() / b.N))
@@ -108,6 +113,7 @@ func BenchmarkLoadSQL(b *testing.B) {
 	// but this is not a pattern to cargo-cult.
 	_, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
+	sqlDB.Exec(`DROP TABLE bench.bank`)
 
 	buf := bankStatementBuf(b.N)
 	b.SetBytes(int64(buf.Len() / b.N))
