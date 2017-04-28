@@ -18,10 +18,10 @@ package client
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -492,11 +492,11 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	if err != nil {
 		txn.CleanupOnError(ctx, err)
 	}
-	// Terminate RetryableTxnError here, so it doesn't cause a higher-level txn to
-	// be retried. We don't do this in any of the other functions in DB; I guess
-	// we should.
-	if _, ok := err.(*roachpb.RetryableTxnError); ok {
-		return errors.New(err.Error())
+	// Terminate HandledRetryableTxnError here, so it doesn't cause a higher-level
+	// txn to be retried. We don't do this in any of the other functions in DB; I
+	// guess we should.
+	if _, ok := err.(*roachpb.HandledRetryableTxnError); ok {
+		return errors.Wrapf(err, "terminated retryable error")
 	}
 	return err
 }

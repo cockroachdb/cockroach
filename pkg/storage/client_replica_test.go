@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -258,7 +259,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 				return err
 			}
 			if !bytes.Equal(actual.ValueBytes(), updatedVal) {
-				t.Fatalf("unexpected get result: %s", actual)
+				return errors.Errorf("unexpected get result: %s", actual)
 			}
 
 			if epoch == 0 {
@@ -272,7 +273,9 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		})
 
 		if epoch != 2 {
-			errChan <- errors.Errorf("unexpected number of txn retries: %d", epoch)
+			file, line, _ := caller.Lookup(0)
+			errChan <- errors.Errorf("%s:%d unexpected number of txn retries. "+
+				"Expected epoch 2, got: %d.", file, line, epoch)
 		} else {
 			errChan <- nil
 		}

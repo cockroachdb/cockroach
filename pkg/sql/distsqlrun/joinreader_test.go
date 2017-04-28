@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -99,7 +100,8 @@ func TestJoinReader(t *testing.T) {
 		flowCtx := FlowCtx{
 			evalCtx:  parser.EvalContext{},
 			txnProto: &roachpb.Transaction{},
-			clientDB: kvDB,
+			// Pass a DB without a TxnCoordSender.
+			remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),
 		}
 
 		in := &RowBuffer{}
@@ -167,7 +169,8 @@ func TestJoinReaderDrain(t *testing.T) {
 	flowCtx := FlowCtx{
 		evalCtx:  parser.EvalContext{},
 		txnProto: &roachpb.Transaction{},
-		clientDB: kvDB,
+		// Pass a DB without a TxnCoordSender.
+		remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)

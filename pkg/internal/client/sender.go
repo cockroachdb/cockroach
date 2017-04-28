@@ -20,12 +20,23 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Sender is the interface used to call into a Cockroach instance.
 // If the returned *roachpb.Error is not nil, no response should be returned.
 type Sender interface {
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+}
+
+// SenderWithDistSQLBackdoor is implemented by the TxnCoordSender to give
+// DistSQL some hacky powers when handling errors that happened on remote nodes.
+type SenderWithDistSQLBackdoor interface {
+	Sender
+
+	// GetTxnState returns the state that the TxnCoordSender has for a
+	// transaction. The bool is false is no state is found.
+	GetTxnState(txnID uuid.UUID) (roachpb.Transaction, bool)
 }
 
 // SenderFunc is an adapter to allow the use of ordinary functions

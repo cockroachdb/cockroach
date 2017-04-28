@@ -664,6 +664,11 @@ func evalEndTransaction(
 	} else if !ok {
 		return EvalResult{}, roachpb.NewTransactionStatusError("does not exist")
 	}
+	// We're using existingTxn on the reply, even though it can be stale compared
+	// to the Transaction in the request (e.g. the Sequence can be stale). This is
+	// OK since we're processing an EndTransaction and so there's not going to be
+	// more requests using the transaction from this reply (or, in case of a
+	// restart, we'll reset the Transaction anyway).
 	reply.Txn = &existingTxn
 
 	// Verify that we can either commit it or abort it (according

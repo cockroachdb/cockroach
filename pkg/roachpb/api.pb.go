@@ -130,6 +130,8 @@
 		ErrorDetail
 		ErrPosition
 		Error
+		DistSQLRetryableTxnError
+		HandledRetryableTxnError
 		InternalTimeSeriesData
 		InternalTimeSeriesSample
 		RaftTruncatedState

@@ -620,13 +620,24 @@ func (e *Error) String() string {
 	return "<nil>"
 }
 
-// NewError creates an Error from an error.
+// NewError creates an Error from an error, to be sent on the wire. It will
+// recognize certain errors and marshall them accordingly, and everything
+// unrecognized is turned into a PGError with code "internal".
 func NewError(err error) *Error {
-	pgErr, ok := pgerror.GetPGCause(err)
-	if !ok {
-		pgErr = pgerror.NewError(pgerror.CodeInternalError, err.Error()).(*pgerror.Error)
+	if pgErr, ok := pgerror.GetPGCause(err); ok {
+		return &Error{Detail: &Error_PGError{PGError: pgErr}}
+	} else if retryErr, ok := err.(*roachpb.DistSQLRetryableTxnError); ok {
+		return &Error{
+			Detail: &Error_RetryableTxnError{
+				RetryableTxnError: retryErr,
+			}}
+	} else {
+		// Anything unrecognized is an "internal error".
+		return &Error{
+			Detail: &Error_PGError{
+				PGError: pgerror.NewError(
+					pgerror.CodeInternalError, err.Error()).(*pgerror.Error)}}
 	}
-	return &Error{Detail: &Error_PGError{PGError: pgErr}}
 }
 
 // ErrorDetail returns the payload as a Go error.
@@ -637,7 +648,8 @@ func (e *Error) ErrorDetail() error {
 	switch t := e.Detail.(type) {
 	case *Error_PGError:
 		return t.PGError
-
+	case *Error_RetryableTxnError:
+		return t.RetryableTxnError
 	default:
 		panic(fmt.Sprintf("bad error detail: %+v", t))
 	}

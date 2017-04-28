@@ -750,7 +750,7 @@ func (e *Executor) execRequest(
 
 		// Sanity check about not leaving KV txns open on errors.
 		if err != nil && txnState.txn != nil && !txnState.txn.IsFinalized() {
-			if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
+			if _, retryable := err.(*roachpb.HandledRetryableTxnError); !retryable {
 				log.Fatalf(session.Ctx(), "got a non-retryable error but the KV "+
 					"transaction is not finalized. TxnState: %s, err: %s\n"+
 					"err:%+v\n\ntxn: %s", txnState.State, err, err, txnState.txn.Proto())
@@ -1392,8 +1392,15 @@ func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, er
 func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
 	ctx := planner.session.Ctx()
-	recv := makeDistSQLReceiver(ctx, result.Rows, e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache)
-	err := e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv)
+	recv, err := makeDistSQLReceiver(
+		ctx, result.Rows,
+		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
+		planner.txn,
+	)
+	if err != nil {
+		return err
+	}
+	err = e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv)
 	if err != nil {
 		return err
 	}
@@ -1463,9 +1470,12 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 	var err error
 	var distribute bool
 
-	// Temporary workaround for #13376: if the transaction modified something,
-	// TxnCoordSender will freak out if it sees scans in this txn from other
-	// nodes. We detect this by checking if the transaction's "anchor" key is set.
+	// Temporary workaround for #13376: if the transaction wrote something,
+	// we can't allow it to do DistSQL reads any more because we can't guarantee
+	// that the reads don't happen after the gateway's TxnCoordSender has
+	// abandoned the transaction (and so the reads could miss to see their own
+	// writes). We detect this by checking if the transaction's "anchor" key is
+	// set.
 	if planner.txn.AnchorKey() != nil {
 		err = errors.New("writing txn")
 	} else {
@@ -1867,7 +1877,7 @@ func convertToErrWithPGCode(err error) error {
 		return nil
 	}
 	switch tErr := err.(type) {
-	case *roachpb.RetryableTxnError:
+	case *roachpb.HandledRetryableTxnError:
 		return sqlbase.NewRetryError(err)
 	case *roachpb.AmbiguousResultError:
 		// TODO(andrei): Once DistSQL starts executing writes, we'll need a
