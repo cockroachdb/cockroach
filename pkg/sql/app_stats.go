@@ -19,6 +19,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
+	"strconv"
 	"time"
 
 	"golang.org/x/net/context"
@@ -29,13 +31,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 )
+
+type stmtKey struct {
+	stmt        string
+	failed      bool
+	distSQLUsed bool
+}
 
 // appStats holds per-application statistics.
 type appStats struct {
 	syncutil.Mutex
 
-	stmts map[string]*stmtStats
+	stmts map[stmtKey]*stmtStats
 }
 
 // stmtStats holds per-statement statistics.
@@ -58,6 +67,21 @@ var SQLStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
 	"minmum execution time to cause statics to be collected",
 	0,
 )
+
+func (s stmtKey) String() string {
+	return s.flags() + s.stmt
+}
+
+func (s stmtKey) flags() string {
+	var b bytes.Buffer
+	if s.failed {
+		b.WriteByte('!')
+	}
+	if s.distSQLUsed {
+		b.WriteByte('+')
+	}
+	return b.String()
+}
 
 func (a *appStats) recordStatement(
 	stmt parser.Statement,
@@ -85,17 +109,11 @@ func (a *appStats) recordStatement(
 	// there was an error and/or whether the query was distributed, so
 	// that we use separate buckets for the different situations.
 	var buf bytes.Buffer
-	if err != nil {
-		buf.WriteByte('!')
-	}
-	if distSQLUsed {
-		buf.WriteByte('+')
-	}
+
 	parser.FormatNode(&buf, parser.FmtHideConstants, stmt)
-	stmtKey := buf.String()
 
 	// Get the statistics object.
-	s := a.getStatsForStmt(stmtKey)
+	s := a.getStatsForStmt(stmtKey{stmt: buf.String(), failed: err != nil, distSQLUsed: distSQLUsed})
 
 	// Collect the per-statement statistics.
 	s.Lock()
@@ -129,14 +147,14 @@ func (l *NumericStat) record(count int64, val float64) {
 }
 
 // getStatsForStmt retrieves the per-stmt stat object.
-func (a *appStats) getStatsForStmt(stmtKey string) *stmtStats {
+func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 	a.Lock()
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
-	s, ok := a.stmts[stmtKey]
+	s, ok := a.stmts[key]
 	if !ok {
 		s = &stmtStats{}
-		a.stmts[stmtKey] = s
+		a.stmts[key] = s
 	}
 	a.Unlock()
 	return s
@@ -168,7 +186,7 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	if a, ok := s.apps[appName]; ok {
 		return a
 	}
-	a := &appStats{stmts: make(map[string]*stmtStats)}
+	a := &appStats{stmts: make(map[stmtKey]*stmtStats)}
 	s.apps[appName] = a
 	return a
 }
@@ -212,14 +230,14 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 
 		// Clear the map, to release the memory; make the new map somewhat
 		// already large for the likely future workload.
-		a.stmts = make(map[string]*stmtStats, len(a.stmts)/2)
+		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
 		a.Unlock()
 	}
 	s.Unlock()
 }
 
 // Save the existing data for an application to the info log.
-func dumpStmtStats(ctx context.Context, appName string, stats map[string]*stmtStats) {
+func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtStats) {
 	if len(stats) == 0 {
 		return
 	}
@@ -230,10 +248,10 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[string]*stmtSt
 		json, err := json.Marshal(s.data)
 		s.Unlock()
 		if err != nil {
-			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key, err)
+			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.String(), err)
 			continue
 		}
-		fmt.Fprintf(&buf, "%q: %s\n", key, json)
+		fmt.Fprintf(&buf, "%q: %s\n", key.String(), json)
 	}
 	log.Info(ctx, buf.String())
 }
@@ -263,17 +281,7 @@ func (s *sqlStats) startResetWorker(stopper *stop.Stopper) {
 	})
 }
 
-func splitStmtStatKey(key string) (stmt, flags string) {
-	// Return the prefix indicating an error or DistSQL usage separately.
-	i := 0
-	for ; i < len(key) && (key[i] == '!' || key[i] == '+'); i++ {
-	}
-	flags = key[:i]
-	stmt = key[i:]
-	return stmt, flags
-}
-
-func (p *planner) scrubStmtStatKey(key string) (string, bool) {
+func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	// Re-parse the statement to obtain its AST.
 	stmt, err := parser.ParseOne(key)
 	if err != nil {
@@ -288,7 +296,7 @@ func (p *planner) scrubStmtStatKey(key string) (string, bool) {
 				buf.WriteByte('_')
 				return
 			}
-			virtual, err := p.session.virtualSchemas.getVirtualTableEntry(tn)
+			virtual, err := vt.getVirtualTableEntry(tn)
 			if err != nil || virtual.desc == nil {
 				buf.WriteByte('_')
 				return
@@ -297,4 +305,49 @@ func (p *planner) scrubStmtStatKey(key string) (string, bool) {
 			tn.Format(buf, parser.FmtParsable)
 		})
 	return parser.AsStringWithFlags(stmt, formatter), true
+}
+
+// AppStatementStatistics is a map: for each app name (as set in sql sessions),
+// it maps statements to their collected statistics.
+type AppStatementStatistics map[string]map[string]StatementStatistics
+
+// GetScrubbedStmtStats returns the statement statistics by app, with the
+// queries scrubbed of their identifiers. Any statements which cannot be
+// scrubbed will be omitted from the returned map.
+func (e *Executor) GetScrubbedStmtStats() AppStatementStatistics {
+	ret := make(AppStatementStatistics)
+	vt := e.virtualSchemas
+	e.sqlStats.Lock()
+	for appName, a := range e.sqlStats.apps {
+		hashedApp := HashAppName(appName)
+		a.Lock()
+		m := make(map[string]StatementStatistics)
+		for q, stats := range a.stmts {
+			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
+			if ok {
+				stats.Lock()
+				m[scrubbed] = stats.data
+				stats.Unlock()
+			}
+		}
+		ret[hashedApp] = m
+		a.Unlock()
+	}
+	e.sqlStats.Unlock()
+	return ret
+}
+
+// HashAppName 1-way hashes an application names for use in stat reporting.
+func HashAppName(appName string) string {
+	hash := fnv.New64a()
+
+	if _, err := hash.Write([]byte(appName)); err != nil {
+		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
+	}
+	return strconv.Itoa(int(hash.Sum64()))
+}
+
+// ResetStatementStats resets the executor's collected statement statistics.
+func (e *Executor) ResetStatementStats(ctx context.Context) {
+	e.sqlStats.resetStats(ctx)
 }
