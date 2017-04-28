@@ -44,5 +44,5 @@ proc start_server {argv} {
     system "mkfifo pid_fifo || true; $argv start --insecure --pid-file=pid_fifo --background >>stdout.log 2>>stderr.log & cat pid_fifo > server_pid"
 }
 proc stop_server {argv} {
-    system "set -e; if kill -CONT `cat server_pid`; then $argv quit || true & sleep 1; kill -9 `cat server_pid` || true; else $argv quit || true; fi"
+    system "$argv quit"
 }
