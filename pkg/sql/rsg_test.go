@@ -111,6 +111,10 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 	go func() {
 		for {
 			for name, variations := range parser.Builtins {
+				switch strings.ToLower(name) {
+				case "crdb_internal.force_panic":
+					continue
+				}
 				for _, builtin := range variations {
 					select {
 					case <-done:
