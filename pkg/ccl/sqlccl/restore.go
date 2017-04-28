@@ -490,11 +490,11 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 		return nil
 	}
 
-	// 100 was picked because it's small enough to work with on a 3-node cluster
-	// on my laptop and large enough that it only takes a couple minutes to
-	// presplit for a ~16000 range dataset.
+	// 20 was picked because it's small enough that the 2tb restore acceptance
+	// test finishes smoothly on GCE and large enough that it only takes ~8
+	// minutes to presplit for a ~16000 range dataset.
 	// TODO(dan): See if there's some better solution #14798.
-	const splitsPerSecond, splitsBurst = 100, 1
+	const splitsPerSecond, splitsBurst = 20, 1
 	limiter := rate.NewLimiter(splitsPerSecond, splitsBurst)
 
 	g, ctx := errgroup.WithContext(ctx)
