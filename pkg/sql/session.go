@@ -119,7 +119,7 @@ func DistSQLExecModeFromString(val string) DistSQLExecMode {
 var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"sql.defaults.distsql",
 	"Default distributed SQL execution mode",
-	"Off",
+	"Auto",
 	map[int64]string{
 		int64(distSQLOff):  "Off",
 		int64(distSQLAuto): "Auto",

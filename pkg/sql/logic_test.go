@@ -237,10 +237,10 @@ type testClusterConfig struct {
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
 var logicTestConfigs = []testClusterConfig{
-	{name: "default", numNodes: 1},
-	{name: "parallel-stmts", numNodes: 1, parallelStmts: true},
+	{name: "default", numNodes: 1, overrideDistSQLMode: "Off"},
+	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
-	{name: "5node", numNodes: 5},
+	{name: "5node", numNodes: 5, overrideDistSQLMode: "Off"},
 }
 
 // An index in the above slice.
