@@ -277,7 +277,7 @@ const debugProblemRangesTemplate = `
         <DIV CLASS="row">
           {{- if $.Unavailable}}
             {{- range $_, $r := $.Unavailable}}
-              <a href="/debug/range?id={{$r}}">{{$r}}</a> &nbsp;
+              <a href="/debug/range?id={{$r}}">{{$r}}</a>&nbsp;
             {{- end}}
           {{- else}}
             None
@@ -289,7 +289,7 @@ const debugProblemRangesTemplate = `
         <DIV CLASS="row">
           {{- if $.LeaderNotLeaseholder}}
             {{- range $_, $r := $.LeaderNotLeaseholder}}
-              <a href="/debug/range?id={{$r}}">{{$r}}</a>
+              <a href="/debug/range?id={{$r}}">{{$r}}</a>&nbsp;
             {{- end}}
           {{- else}}
             None
