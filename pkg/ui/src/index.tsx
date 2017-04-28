@@ -84,7 +84,6 @@ import { store, history } from "./redux/state";
 import Layout from "./containers/layout";
 import { DatabaseTablesList, DatabaseGrantsList } from "./containers/databases/databases";
 import TableDetails from "./containers/databases/tableDetails";
-import HelpUs from "./containers/helpus";
 import Nodes from "./containers/nodes";
 import Node from "./containers/node";
 import NodesOverview from "./containers/nodesOverview";
@@ -95,7 +94,6 @@ import { EventPage } from "./containers/events";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
 import ClusterViz from "./containers/clusterViz";
-import registrationSyncListener from "./services/registrationService";
 import { alertDataSync } from "./redux/alerts";
 
 ReactDOM.render(
@@ -128,7 +126,6 @@ ReactDOM.render(
           <Route path="grants" component={ DatabaseGrantsList } />
           <Route path={ `database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
         </Route>
-        <Route path="help-us/reporting" component={ HelpUs } />
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />
@@ -140,5 +137,4 @@ ReactDOM.render(
   document.getElementById("react-layout"),
 );
 
-store.subscribe(registrationSyncListener(store));
 store.subscribe(alertDataSync(store));
