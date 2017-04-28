@@ -166,14 +166,16 @@ func TestDatumOrdering(t *testing.T) {
 
 		// TODO(nathan): Until we support literals for empty arrays, this
 		// is the easiest way to construct one.
-		{`current_schemas(false)`, valIsMin, `{NULL}`, `{}`, noMax},
+		{`current_schemas(false)`, valIsMin, `ARRAY[NULL]`, `ARRAY[]`, noMax},
 
-		{`array[NULL]`, noPrev, `{NULL,NULL}`, `{}`, noMax},
-		{`array[true]`, noPrev, `{true,NULL}`, `{}`, noMax},
+		{`array[NULL]`, noPrev, `ARRAY[NULL,NULL]`, `ARRAY[]`, noMax},
+		{`array[true]`, noPrev, `ARRAY[true,NULL]`, `ARRAY[]`, noMax},
 
 		// Mixed tuple/array datums.
-		{`row(ARRAY[true], row(true))`, `({true}, (false))`, `({true,NULL}, (false))`, `({}, (false))`, noMax},
-		{`row(row(false), ARRAY[true])`, noPrev, `((false), {true,NULL})`, `((false), {})`, noMax},
+		{`row(ARRAY[true], row(true))`, `(ARRAY[true], (false))`, `(ARRAY[true,NULL], (false))`,
+			`(ARRAY[], (false))`, noMax},
+		{`row(row(false), ARRAY[true])`, noPrev, `((false), ARRAY[true,NULL])`,
+			`((false), ARRAY[])`, noMax},
 	}
 	for _, td := range testData {
 		expr := prepareExpr(t, td.datumExpr)

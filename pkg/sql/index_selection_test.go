@@ -706,7 +706,7 @@ func TestApplyConstraints(t *testing.T) {
 		// doesn't decompose further.
 		{`a < 3 AND (b < 2 OR a IN (0,1,2))`, `a`, `(b < 2) OR (a IN (0, 1, 2))`},
 		{`a < 3 AND (b < 2 OR a NOT IN (0,1,2))`, `a`, `(b < 2) OR (a NOT IN (0, 1, 2))`},
-		{`a < 3 AND (b < 2 OR a = ANY ARRAY[0,1,2])`, `a`, `(b < 2) OR (a = ANY {0,1,2})`},
+		{`a < 3 AND (b < 2 OR a = ANY ARRAY[0,1,2])`, `a`, `(b < 2) OR (a = ANY ARRAY[0,1,2])`},
 		{`a IN (0, 2, 3) AND (b < 2 OR a <= 4)`, `a`, `(b < 2) OR (a <= 4)`},
 		{`a IN (0, 2, 3) AND (b < 2 OR a = 2)`, `a`, `(b < 2) OR (a = 2)`},
 	}
