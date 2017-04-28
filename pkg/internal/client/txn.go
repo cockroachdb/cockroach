@@ -978,31 +978,35 @@ func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
 // the txn. If the error is not a RetryableTxnError, then this is a no-op. For a
 // retryable error, the Transaction proto is either initialized with the updated
 // proto from the error, or a new Transaction proto is initialized.
-func (txn *Txn) UpdateStateOnRemoteRetryableErr(
-	ctx context.Context, retryErr roachpb.DistSQLRetryableTxnError,
-) {
+func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr roachpb.Error) {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
+
+	if pErr.TransactionRestart == roachpb.TransactionRestart_NONE {
+		log.Fatalf(ctx, "unexpected non-retryable error: %s", pErr)
+	}
+	if pErr.GetTxn() == nil {
+		// DistSQL requests (like all SQL requests) are always supposed to be done
+		// in a transaction.
+		log.Fatalf(ctx, "unexpected retryable error with no txn ran through DistSQL: %s", pErr)
+	}
 
 	// Assert that the TxnCoordSender doesn't have any state for this transaction
 	// (and it shouldn't, since DistSQL isn't supposed to do any works in
 	// transaction that had performed writes and hence started being tracked). If
 	// the TxnCoordSender were to have state, it'd be a bad thing that we're not
 	// updating it.
-	if retryErr.TxnID != nil {
-		if _, ok := txn.db.GetSender().(SenderWithDistSQLBackdoor).GetTxnState(*retryErr.TxnID); ok {
-			log.Fatalf(ctx, "unexpected state in TxnCoordSender for transaction in error: %s", retryErr)
+	// TODO(andrei): remove nil check once #15024 is merged.
+	if txnID := pErr.GetTxn().ID; txnID != nil {
+		if _, ok := txn.db.GetSender().(SenderWithDistSQLBackdoor).GetTxnState(*txnID); ok {
+			log.Fatalf(ctx, "unexpected state in TxnCoordSender for transaction in error: %s", pErr)
 		}
 	}
 
-	// Reconstruct a pErr suitable for a roachpb.PrepareTransactionForRetry()
-	// call.
-	pErr := roachpb.NewErrorWithTxn(retryErr.Cause.GetValue().(roachpb.ErrorDetailInterface), retryErr.Transaction)
-
 	// Emulate the processing that the TxnCoordSender would have done on this
 	// error.
-	newTxn := roachpb.PrepareTransactionForRetry(ctx, pErr, txn.mu.UserPriority)
-	newErr := roachpb.NewHandledRetryableTxnError(pErr.Message, retryErr.TxnID, newTxn)
+	newTxn := roachpb.PrepareTransactionForRetry(ctx, &pErr, txn.mu.UserPriority)
+	newErr := roachpb.NewHandledRetryableTxnError(pErr.Message, pErr.GetTxn().ID, newTxn)
 
 	txn.updateStateOnRetryableErrLocked(
 		ctx, *newErr,

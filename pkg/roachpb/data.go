@@ -1008,8 +1008,9 @@ func PrepareTransactionForRetry(ctx context.Context, pErr *Error, pri UserPriori
 		ts, ok := txn.GetObservedTimestamp(pErr.OriginNode)
 		if !ok {
 			log.Fatalf(ctx,
-				"missing observed timestamp for node %d found on uncertainty restart",
-				pErr.OriginNode)
+				"missing observed timestamp for node %d found on uncertainty restart. "+
+					"err: %s. txn: %s. Observed timestamps: %s",
+				pErr.OriginNode, pErr, txn, txn.ObservedTimestamps)
 		}
 		txn.Timestamp.Forward(ts)
 	case *TransactionPushError:

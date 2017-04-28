@@ -25,7 +25,7 @@ import (
 )
 
 func (e *DistSQLRetryableTxnError) Error() string {
-	return e.Msg
+	return e.PErr.Message
 }
 
 var _ error = &DistSQLRetryableTxnError{}
@@ -129,20 +129,8 @@ func (e *Error) GoError() error {
 	}
 
 	if e.TransactionRestart != TransactionRestart_NONE {
-		var txnID *uuid.UUID
-
-		// TODO(andrei): Can e.GetTxn() be nil here? It can't be if the request that
-		// generated the error was sent through client.Txn. If client.Txn wasn't
-		// used, is it still possible to get retryable errors?
-		if e.GetTxn() != nil {
-			txnID = e.GetTxn().ID
-		}
-
 		return &DistSQLRetryableTxnError{
-			Cause:       *e.Detail,
-			Msg:         e.Message,
-			TxnID:       txnID,
-			Transaction: e.GetTxn(),
+			PErr: *e,
 		}
 	}
 	return e.GetDetail()
