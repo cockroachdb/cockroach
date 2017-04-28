@@ -78,26 +78,26 @@ SET application_name = ''
 query T
 SELECT key FROM crdb_internal.node_statement_statistics WHERE application_name = 'valuetest' ORDER BY key
 ----
++SELECT x FROM test WHERE y IN (_, _)
++SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)
++SELECT x FROM test WHERE y NOT IN (_, _)
 INSERT INTO test VALUES (_, _, _)
 SELECT ROW(_, _, _, _, _) FROM test WHERE _
 SELECT key FROM crdb_internal.node_statement_statistics
 SELECT sin(_)
 SELECT x FROM (VALUES (_, _, _)) AS t (x)
-SELECT x FROM test WHERE y IN (_, _)
-SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)
-SELECT x FROM test WHERE y NOT IN (_, _)
 
 # Check that names are anonymized properly:
 # - virtual table names are preserved
 # - function names are preserved
-query T
-SELECT anonymized FROM crdb_internal.node_statement_statistics WHERE application_name = 'valuetest' ORDER BY key
-----
-INSERT INTO _ VALUES (_, _, _)
-SELECT ROW(_, _, _, _, _) FROM _ WHERE _
-SELECT _ FROM crdb_internal.node_statement_statistics
-SELECT sin(_)
-SELECT _ FROM (VALUES (_, _, _)) AS _ (_)
-SELECT _ FROM _ WHERE _ IN (_, _)
-SELECT _ FROM _ WHERE _ IN (_, _, _ + _, _, _)
-SELECT _ FROM _ WHERE _ NOT IN (_, _)
+# query T rowsort
+# SELECT anonymized FROM crdb_internal.node_statement_statistics WHERE application_name = 'valuetest' ORDER BY key
+# ----
+# INSERT INTO _ VALUES (_, _, _)
+# SELECT ROW(_, _, _, _, _) FROM _ WHERE _
+# SELECT _ FROM crdb_internal.node_statement_statistics
+# SELECT sin(_)
+# SELECT _ FROM (VALUES (_, _, _)) AS _ (_)
+# SELECT _ FROM _ WHERE _ IN (_, _)
+# SELECT _ FROM _ WHERE _ IN (_, _, _ + _, _, _)
+# SELECT _ FROM _ WHERE _ NOT IN (_, _)

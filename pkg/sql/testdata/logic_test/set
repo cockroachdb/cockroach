@@ -81,7 +81,7 @@ client_encoding                UTF8
 client_min_messages
 database                       foo
 default_transaction_isolation  SERIALIZABLE
-distsql                        off
+distsql                        auto
 extra_float_digits
 max_index_keys                 32
 search_path                    pg_catalog
@@ -110,7 +110,7 @@ query T colnames
 SHOW DISTSQL
 ----
 distsql
-off
+auto
 
 ## Test that our no-op compatibility vars work
 
