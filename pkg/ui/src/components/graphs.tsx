@@ -197,7 +197,18 @@ function ComputeCountAxisDomain(
   } else {
       axisDomain.tickFormat = d3.format("s");
   }
-  axisDomain.guideFormat = d3.format(".4s");
+
+  // The tooltip displays fractional values with metric multiplicative prefixes.
+  // We do not display fractional metric prefixes, which are often confusing
+  // for users when mixed with whole numbers.
+  const metricFormat = d3.format(".4s");
+  const decimalFormat = d3.format(".4f");
+  axisDomain.guideFormat = (n: number) => {
+    if (n < 1) {
+      return decimalFormat(n);
+    }
+    return metricFormat(n);
+  };
   axisDomain.label = "count";
   return axisDomain;
 }

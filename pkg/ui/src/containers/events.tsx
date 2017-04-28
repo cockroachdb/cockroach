@@ -131,6 +131,7 @@ export class EventRow extends React.Component<EventRowProps, {}> {
 
 export interface EventBoxProps {
   events: Event$Properties[];
+  eventsValid: boolean;
   refreshEvents: typeof refreshEvents;
 }
 
@@ -139,6 +140,11 @@ export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
   componentWillMount() {
     // Refresh events when mounting.
     this.props.refreshEvents();
+  }
+
+  componentWillReceiveProps(props: EventPageProps) {
+    // Refresh events when props change.
+    props.refreshEvents();
   }
 
   render() {
@@ -160,6 +166,7 @@ export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
 
 export interface EventPageProps {
   events: Event$Properties[];
+  eventsValid: boolean;
   refreshEvents: typeof refreshEvents;
   sortSetting: SortSetting;
   setSort: typeof eventsSortSetting.set;
@@ -169,6 +176,11 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
   componentWillMount() {
     // Refresh events when mounting.
     this.props.refreshEvents();
+  }
+
+  componentWillReceiveProps(props: EventPageProps) {
+    // Refresh events when props change.
+    props.refreshEvents();
   }
 
   render() {
@@ -211,13 +223,20 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
   }
 }
 
-let events = (state: AdminUIState): Event$Properties[] => state.cachedData.events.data && state.cachedData.events.data.events;
+const eventsSelector = (state: AdminUIState) => {
+  return state.cachedData.events.data && state.cachedData.events.data.events;
+};
+
+const eventsValidSelector = (state: AdminUIState) => {
+  return state.cachedData.events.valid;
+};
 
 // Connect the EventsList class with our redux store.
-let eventBoxConnected = connect(
+const eventBoxConnected = connect(
   (state: AdminUIState) => {
     return {
-      events: events(state),
+      events: eventsSelector(state),
+      eventsValid: eventsValidSelector(state),
     };
   },
   {
@@ -226,10 +245,11 @@ let eventBoxConnected = connect(
 )(EventBoxUnconnected);
 
 // Connect the EventsList class with our redux store.
-let eventPageConnected = connect(
+const eventPageConnected = connect(
   (state: AdminUIState) => {
     return {
-      events: events(state),
+      events: eventsSelector(state),
+      eventsValid: eventsValidSelector(state),
       sortSetting: eventsSortSetting.selector(state),
     };
   },
