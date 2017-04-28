@@ -232,10 +232,11 @@ SHOW CLUSTER SETTING testing.enum
 statement ok
 SET CLUSTER SETTING testing.enum = 2
 
-query I
-SHOW CLUSTER SETTING testing.enum
-----
-2
+# TODO(arjun): #15448
+# query I
+# SHOW CLUSTER SETTING testing.enum
+# ----
+# 2
 
 statement ok
 SET CLUSTER SETTING testing.enum = 'foo'
