@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -278,6 +279,9 @@ type ExecutorTestingKnobs struct {
 	// StatementFilter; otherwise, the statement commits immediately after
 	// execution so there'll be nothing left to abort by the time the filter runs.
 	DisableAutoCommit bool
+
+	// If OverrideDistSQLMode is set, it is used instead of the cluster setting.
+	OverrideDistSQLMode *settings.EnumSetting
 }
 
 // NewExecutor creates an Executor and registers a callback on the

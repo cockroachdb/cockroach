@@ -223,3 +223,30 @@ query TTT
 SELECT name, value, valueType FROM system.settings WHERE name = 'testing.int'
 ----
 testing.int 5 i
+
+query I
+SHOW CLUSTER SETTING testing.enum
+----
+1
+
+statement ok
+SET CLUSTER SETTING testing.enum = 2
+
+query I
+SHOW CLUSTER SETTING testing.enum
+----
+2
+
+statement ok
+SET CLUSTER SETTING testing.enum = 'foo'
+
+query I
+SHOW CLUSTER SETTING testing.enum
+----
+1
+
+statement error pq: invalid integer value '3' for enum setting
+SET CLUSTER SETTING testing.enum TO 3
+
+statement error pq: invalid string value 'baz' for enum setting
+SET CLUSTER SETTING testing.enum TO 'baz'
