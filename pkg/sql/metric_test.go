@@ -46,12 +46,14 @@ type queryCounter struct {
 
 func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
+		{query: "SET DISTSQL = 'off'", miscCount: 1},
 		{query: "BEGIN; END", txnBeginCount: 1, txnCommitCount: 1},
 		{query: "SELECT 1", selectCount: 1, txnCommitCount: 1},
 		{query: "CREATE DATABASE mt", ddlCount: 1},
