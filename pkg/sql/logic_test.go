@@ -1347,11 +1347,6 @@ func (t *logicTest) runFile(path string, config testClusterConfig) {
 	t.logScope.KeepLogs(false)
 }
 
-// Needed for settings logic tests.
-var _ = settings.RegisterStringSetting("testing.str", "", "<default>")
-var _ = settings.RegisterIntSetting("testing.int", "", 1)
-var _ = settings.RegisterEnumSetting("testing.enum", "", "foo", map[int64]string{1: "foo", 2: "bar"})
-
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
