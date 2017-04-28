@@ -1378,6 +1378,7 @@ var Builtins = map[string][]Builtin{
 				var buf bytes.Buffer
 				if val < 0 {
 					buf.WriteString("minus-")
+					val = -val
 				}
 				var digits []string
 				digits = append(digits, digitNames[val%10])
