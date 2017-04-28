@@ -284,7 +284,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	rangeCache := kv.NewRangeDescriptorCache(nil /* db */, 2<<10 /* size */)
 	leaseCache := kv.NewLeaseHolderCache(2 << 10 /* size */)
 	r, err := makeDistSQLReceiver(
-		context.TODO(), nil /* sink */, rangeCache, leaseCache, nil /* txn */)
+		context.TODO(), nil /* sink */, rangeCache, leaseCache, nil /* txn */, nil /* updateClock */)
 	if err != nil {
 		t.Fatal(err)
 	}

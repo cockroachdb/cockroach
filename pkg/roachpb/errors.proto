@@ -320,26 +320,10 @@ message Error {
 // handled retryable pErrs and transform them, only DistSQL is supposed to see
 // this error, as it doesn't go through TxnCoordSender.
 message DistSQLRetryableTxnError {
-  // A user-readable message.
-  optional string msg = 1 [(gogoproto.nullable) = false];
-
-  // The ID of the transaction being restarted. The client is supposed to check
-  // this against the ID of its transaction and make sure the retryable error
-  // is meant for its level and didn't escape from some inner transaction.
-  //
-  // TODO(andrei): make this non-nullable (and thus required) if we manage to
-  // make Transaction.ID non-nullable.
-  optional bytes txn_id = 2 [
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
-    (gogoproto.customname) = "TxnID"];
-
-  // If an ErrorDetail is present, it may contain additional structured data
-  // about the error.
-  optional ErrorDetail cause = 3 [(gogoproto.nullable) = false];
-
-  // The transaction to be used when restarting, as it has been communicated by
-  // the storage layer. 
-  optional Transaction transaction = 4;
+  // The underlying storage error that is being marshalled.
+  // pErr.TransactionRestart is exected to be set, and the error detail is one
+  // of the retryable ones.
+  optional Error pErr = 1 [(gogoproto.nullable) = false];
 }
 
 // HandledRetryableTxnError is an error detail representing a retryable error

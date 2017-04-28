@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -229,6 +230,10 @@ type distSQLReceiver struct {
 	// RetryableTxnError's. Nil if no transaction should be updated on errors
 	// (i.e. if the flow overall doesn't run in a transaction).
 	txn *client.Txn
+
+	// A handler for clock signals arriving from remote nodes. This should update
+	// this node's clock.
+	updateClock func(observedTs hlc.Timestamp)
 }
 
 var _ distsqlrun.RowReceiver = &distSQLReceiver{}
@@ -247,13 +252,15 @@ func makeDistSQLReceiver(
 	rangeCache *kv.RangeDescriptorCache,
 	leaseCache *kv.LeaseHolderCache,
 	txn *client.Txn,
+	updateClock func(observedTs hlc.Timestamp),
 ) (distSQLReceiver, error) {
 	return distSQLReceiver{
-		ctx:        ctx,
-		rows:       sink,
-		rangeCache: rangeCache,
-		leaseCache: leaseCache,
-		txn:        txn,
+		ctx:         ctx,
+		rows:        sink,
+		rangeCache:  rangeCache,
+		leaseCache:  leaseCache,
+		txn:         txn,
+		updateClock: updateClock,
 	}, nil
 }
 
@@ -270,7 +277,13 @@ func (r *distSQLReceiver) Push(
 					// itself in non-error cases. Those updates are not necessary if we're
 					// just doing reads. Once DistSQL starts performing writes, we'll need
 					// to perform such updates too.
-					r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, *retryErr)
+					r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, retryErr.PErr)
+					// Update the clock with information from the error. On non-DistSQL
+					// code paths, the DistSender does this.
+					// TODO(andrei): We don't propagate clock signals on success cases
+					// through DistSQL; we should. We also don't propagate them through
+					// non-retryable errors; we also should.
+					r.updateClock(retryErr.PErr.Now)
 					meta.Err = roachpb.NewHandledRetryableTxnError(
 						meta.Err.Error(), r.txn.Proto().ID, *r.txn.Proto())
 				}

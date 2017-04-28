@@ -1396,6 +1396,9 @@ func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) 
 		ctx, result.Rows,
 		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
 		planner.txn,
+		func(ts hlc.Timestamp) {
+			_ = e.cfg.Clock.Update(ts)
+		},
 	)
 	if err != nil {
 		return err
