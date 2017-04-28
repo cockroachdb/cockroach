@@ -29,6 +29,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var settingsWorkerMu = make(chan struct{}, 1)
+
 // RefreshSettings starts a settings-changes listener.
 func (s *Server) refreshSettings() {
 	tbl := sqlbase.SettingsTable
@@ -106,6 +108,14 @@ func (s *Server) refreshSettings() {
 
 	ctx := s.AnnotateCtx(context.Background())
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		select {
+		case settingsWorkerMu <- struct{}{}:
+			break
+		case <-s.stopper.ShouldStop():
+			return
+		}
+		defer func() { <-settingsWorkerMu }()
+
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		// No new settings can be defined beyond this point.
 		settings.Freeze()
