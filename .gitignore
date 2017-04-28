@@ -17,8 +17,8 @@ artifacts
 # TeamCity sometimes creates this file during builds.
 builds.xml
 .buildinfo
-/cockroach
-/cockroach-data
+# cockroach-data, cockroach{,.race}-{darwin,linux,windows}-*
+/cockroach*
 /certs
 # make stress, acceptance produce stress.test, acceptance.test
 *.test*
