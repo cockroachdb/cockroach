@@ -712,6 +712,50 @@ func (txn *Txn) isRetryableErrMeantForTxnLocked(retryErr roachpb.HandledRetryabl
 	return roachpb.TxnIDEqual(errTxnID, txn.mu.Proto.ID)
 }
 
+// EnsureProto initializes an uninitialized (ID == nil) Transaction proto if
+// it's not already initialized.
+//
+// This is normally done by the fist txn.send() call on a Txn (or the first call
+// after the transaction had been aborted), but DistSQL does it explicitly on
+// the gateway.
+func (txn *Txn) EnsureProto() {
+	txn.mu.Lock()
+	txn.ensureProtoLocked()
+	txn.mu.Unlock()
+}
+
+// ensureProtoLocked is like EnsureProto, but assumes that txn.mu is locked.
+func (txn *Txn) ensureProtoLocked() {
+	if txn.mu.Proto.IsInitialized() {
+		return
+	}
+	// TODO(andrei): I think there's a bug here that we don't take into
+	// account the txn.mu.Proto.Timestamp after the proto has been wiped on a
+	// restart (but the timestamp has been preserved). Can the gateway's clock
+	// be behind that timestamp?
+
+	// The initial timestamp may be communicated by a higher layer.
+	// If so, use that. Otherwise make up a new one.
+	timestamp := txn.mu.Proto.OrigTimestamp
+	if timestamp == (hlc.Timestamp{}) {
+		timestamp = txn.db.clock.Now()
+	}
+	newTxn := roachpb.NewTransaction(
+		txn.mu.Proto.Name,
+		txn.mu.Proto.Key,
+		txn.mu.UserPriority,
+		txn.mu.Proto.Isolation,
+		timestamp,
+		txn.db.clock.MaxOffset().Nanoseconds(),
+	)
+	// Use existing priority as a minimum. This is used on transaction
+	// aborts to ratchet priority when creating successor transaction.
+	if newTxn.Priority < txn.mu.Proto.Priority {
+		newTxn.Priority = txn.mu.Proto.Priority
+	}
+	txn.mu.Proto = *newTxn
+}
+
 // send runs the specified calls synchronously in a single batch and
 // returns any errors. If the transaction is read-only or has already
 // been successfully committed or aborted, a potential trailing
@@ -794,34 +838,7 @@ func (txn *Txn) send(
 			txn.mu.writingTxnRecord = true
 		}
 
-		// Initialize an uninitialized (ID == nil) Transaction proto.
-		if !txn.mu.Proto.IsInitialized() {
-			// TODO(andrei): I think there's a bug here that we don't take into
-			// account the txn.mu.Proto.Timestamp after the proto has been wiped on a
-			// restart (but the timestamp has been preserved). Can the gateway's clock
-			// be behind that timestamp?
-
-			// The initial timestamp may be communicated by a higher layer.
-			// If so, use that. Otherwise make up a new one.
-			timestamp := txn.mu.Proto.OrigTimestamp
-			if timestamp == (hlc.Timestamp{}) {
-				timestamp = txn.db.clock.Now()
-			}
-			newTxn := roachpb.NewTransaction(
-				txn.mu.Proto.Name,
-				txn.mu.Proto.Key,
-				ba.UserPriority,
-				txn.mu.Proto.Isolation,
-				timestamp,
-				txn.db.clock.MaxOffset().Nanoseconds(),
-			)
-			// Use existing priority as a minimum. This is used on transaction
-			// aborts to ratchet priority when creating successor transaction.
-			if newTxn.Priority < txn.mu.Proto.Priority {
-				newTxn.Priority = txn.mu.Proto.Priority
-			}
-			txn.mu.Proto = *newTxn
-		}
+		txn.ensureProtoLocked()
 
 		if elideEndTxn {
 			ba.Requests = ba.Requests[:lastIndex]
