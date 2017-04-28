@@ -184,7 +184,7 @@ func checkEndTransactionTrigger(args storagebase.FilterArgs) *roachpb.Error {
 
 // createTestServerParams creates a set of params suitable for SQL tests.
 // It enables some EndTransaction sanity checking and installs a flexible
-// TestingCommandFilter.
+// TestingEvalFilter.
 // TODO(andrei): this function is not used consistently by SQL tests. Figure out
 // if the EndTransaction checks are important.
 func createTestServerParams() (base.TestServerArgs, *CommandFilters) {

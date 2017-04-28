@@ -1236,6 +1236,7 @@ INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// We're going to use FORCE_RETRY() to generate an error for a different
 	// transaction than the one we initiate. We need call that function in a
 	// transaction that already has an id (so, it can't be the first query in the
@@ -1250,10 +1251,103 @@ INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 	if isRetryableErr(err) {
 		t.Fatalf("expected non-retryable error, got: %s", err)
 	}
-	if !testutils.IsError(err, "pq: retryable error from another txn: forced by crdb_internal.force_retry()") {
+	if !testutils.IsError(err, "pq: retryable error from another txn.* forced by crdb_internal.force_retry()") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Test that retryable errors are handled properly through DistSQL.
+func TestDistSQLRetryableError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// One of the rows in the table.
+	targetKey := roachpb.Key("\273\211\212")
+
+	restarted := true
+
+	tc := serverutils.StartTestCluster(t, 3, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						TestingEvalFilter: func(fArgs storagebase.FilterArgs) *roachpb.Error {
+							_, ok := fArgs.Req.(*roachpb.ScanRequest)
+							if ok && fArgs.Req.Header().Key.Equal(targetKey) && fArgs.Hdr.Txn.Epoch == 0 {
+								restarted = true
+								err := roachpb.NewReadWithinUncertaintyIntervalError(
+									fArgs.Hdr.Timestamp, /* readTS */
+									hlc.Timestamp{})
+								errTxn := fArgs.Hdr.Txn.Clone()
+								errTxn.UpdateObservedTimestamp(roachpb.NodeID(0), hlc.Timestamp{})
+								return roachpb.NewErrorWithTxn(err, &errTxn)
+							}
+
+							return nil
+						},
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	db := tc.ServerConn(0)
+	sqlutils.CreateTable(t, db, "t",
+		"num INT PRIMARY KEY",
+		3, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	// We're going to split one of the tables, but node 4 is unaware of this.
+	_, err := db.Exec(fmt.Sprintf(`
+	ALTER TABLE "t" SPLIT AT VALUES (1), (2), (3);
+	ALTER TABLE "t" TESTING_RELOCATE VALUES (ARRAY[%d], 1), (ARRAY[%d], 2), (ARRAY[%d], 3);
+	`,
+		tc.Server(1).GetFirstStoreID(),
+		tc.Server(0).GetFirstStoreID(),
+		tc.Server(2).GetFirstStoreID()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	db.SetMaxOpenConns(1)
+
+	if _, err := db.Exec("SET DISTSQL = ALWAYS"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test that a stand-alone statement is retried by the Executor.
+	if _, err := db.Exec("SELECT COUNT(1) FROM t"); err != nil {
+		t.Fatal(err)
+	}
+	if !restarted {
+		t.Fatalf("expected the EvalFilter to restart the txn, but it didn't")
+	}
+
+	// Test that a command that can't be retried automatically generates an error
+	// with the correct code.
+	restarted = false
+
+	txn, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = txn.Exec("SELECT COUNT(1) FROM t")
+	if !restarted {
+		t.Fatalf("expected the EvalFilter to restart the txn, but it didn't")
+	}
+	if err == nil {
+		t.Fatal("expected retryable error")
+	}
+	if !isRetryableErr(err) {
+		t.Fatalf("expected retryable error, got: %s", err)
+	}
+
+	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
 	}
 }
