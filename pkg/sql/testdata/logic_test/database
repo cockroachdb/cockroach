@@ -26,10 +26,10 @@ test
 statement ok
 CREATE DATABASE b TEMPLATE=template0
 
-statement error unsupported template: NOPE
+statement error unsupported template: nope
 CREATE DATABASE c TEMPLATE=NOPE
 
-statement error unsupported template: NOPE
+statement error unsupported template: nope
 CREATE DATABASE IF NOT EXISTS c TEMPLATE=NOPE
 
 statement ok

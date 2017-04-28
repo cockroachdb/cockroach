@@ -30,15 +30,15 @@ func TestUnresolvedNameString(t *testing.T) {
 	}{
 		{"*", `"*"`},
 		// Non-reserved keyword.
-		{"DATABASE", `DATABASE`},
-		{"dAtAbAse", `dAtAbAse`},
+		{"DATABASE", `"DATABASE"`},
+		{"dAtAbAse", `"dAtAbAse"`},
 		// Reserved keyword.
 		{"SELECT", `"SELECT"`},
 		{"sElEcT", `"sElEcT"`},
 		// Ident format: starts with [a-zA-Z_] or extended ascii,
 		// and is then followed by [a-zA-Z0-9$_] or extended ascii.
 		{"foo$09", "foo$09"},
-		{"_Ab10", "_Ab10"},
+		{"_Ab10", `"_Ab10"`},
 		// Everything else quotes the string and escapes double quotes.
 		{".foobar", `".foobar"`},
 		{`".foobar"`, `""".foobar"""`},

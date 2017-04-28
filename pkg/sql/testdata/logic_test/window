@@ -632,12 +632,12 @@ EXPLAIN (TYPES) SELECT max(k), max(k) + stddev(d) OVER (PARTITION BY v, 'a') FRO
 query ITTTTT
 EXPLAIN (TYPES) SELECT MAX(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
 ----
-0  sort                                                                                              ("MAX(k)" int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)                                   +"MAX(k)"
-0          order        +"MAX(k)"
-1  window                                                                                            ("MAX(k)" int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
+0  sort                                                                                              ("max(k)" int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)                                   +"max(k)"
+0          order        +"max(k)"
+1  window                                                                                            ("max(k)" int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
 1          window 0     (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
 1          render 1     (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
-2  group                                                                                             ("MAX(k)" int, d decimal, v int, "'a'" string)
+2  group                                                                                             ("max(k)" int, d decimal, v int, "'a'" string)
 2          aggregate 0  (max((k)[int]))[int]
 2          aggregate 1  (d)[decimal]
 2          aggregate 2  (v)[int]

@@ -295,11 +295,11 @@ GRANT ALL ON * TO Vanilli
 query TTT colnames
 SHOW GRANTS ON *
 ----
-Table    User      Privileges
-t        Vanilli   ALL
-t        root      ALL
-t2       Vanilli   ALL
-t2       root      ALL
+Table  User     Privileges
+t      root     ALL
+t      vanilli  ALL
+t2     root     ALL
+t2     vanilli  ALL
 
 
 # Multiple targets.
@@ -310,19 +310,19 @@ GRANT ALL ON c.*, b.t TO Millie
 query TTT colnames
 SHOW GRANTS ON b.*
 ----
-Table    User      Privileges
-t        Millie    ALL
-t        Vanilli   ALL
-t        root      ALL
-t2       Vanilli   ALL
-t2       root      ALL
+Table  User     Privileges
+t      millie   ALL
+t      root     ALL
+t      vanilli  ALL
+t2     root     ALL
+t2     vanilli  ALL
 
 query TTT colnames
 SHOW GRANTS ON c.t
 ----
-Table    User      Privileges
-t        Millie    ALL
-t        root      ALL
+Table  User    Privileges
+t      millie  ALL
+t      root    ALL
 
 statement ok
 REVOKE ALL ON *, c.* FROM Vanilli
@@ -330,7 +330,7 @@ REVOKE ALL ON *, c.* FROM Vanilli
 query TTT colnames
 SHOW GRANTS ON b.*
 ----
-Table    User      Privileges
-t        Millie    ALL
-t        root      ALL
-t2       root      ALL
+Table  User    Privileges
+t      millie  ALL
+t      root    ALL
+t2     root    ALL

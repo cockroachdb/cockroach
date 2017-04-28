@@ -90,7 +90,7 @@ ALTER TABLE abcd ADD COLUMN g INT FAMILY foo
 statement ok
 ALTER TABLE abcd ADD COLUMN g INT CREATE FAMILY
 
-statement error family \"F1\" already exists
+statement error family "f1" already exists
 ALTER TABLE abcd ADD COLUMN h INT CREATE FAMILY F1
 
 statement ok

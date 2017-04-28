@@ -226,13 +226,13 @@ WHERE eventType = 'drop_table'
 ##################
 
 statement ok
-CREATE DATABASE eventLogTest
+CREATE DATABASE eventlogtest
 
 statement ok
-CREATE DATABASE IF NOT EXISTS otherEventLogTest
+CREATE DATABASE IF NOT EXISTS othereventlogtest
 
 statement ok
-CREATE DATABASE IF NOT EXISTS otherEventLogTest
+CREATE DATABASE IF NOT EXISTS othereventlogtest
 
 
 # Verify the two events that were logged.
@@ -242,7 +242,7 @@ query II
 SELECT targetID, reportingID
 FROM system.eventlog
 WHERE eventType = 'create_database'
-  AND info LIKE '%CREATE DATABASE eventLogTest%'
+  AND info LIKE '%CREATE DATABASE eventlogtest%'
 ----
 53 1
 
@@ -250,33 +250,33 @@ query II
 SELECT targetID, reportingID
 FROM system.eventlog
 WHERE eventType = 'create_database'
-  AND info LIKE '%CREATE DATABASE IF NOT EXISTS otherEventLogTest%'
+  AND info LIKE '%CREATE DATABASE IF NOT EXISTS othereventlogtest%'
 ----
 54 1
 
-# Add some tables to eventLogTest.
+# Add some tables to eventlogtest.
 ##################
 
 statement ok
-SET DATABASE = eventLogTest
+SET DATABASE = eventlogtest
 
 statement ok
-CREATE TABLE eventLogTest.testTable (id int PRIMARY KEY)
+CREATE TABLE eventlogtest.testtable (id int PRIMARY KEY)
 
 statement ok
-CREATE TABLE eventLogTest.anotherTestTable (id int PRIMARY KEY)
+CREATE TABLE eventlogtest.anothertesttable (id int PRIMARY KEY)
 
 # drop both databases.
 ##################
 
 statement ok
-DROP DATABASE eventLogTest
+DROP DATABASE eventlogtest
 
 statement ok
-DROP DATABASE IF EXISTS otherEventLogTest
+DROP DATABASE IF EXISTS othereventlogtest
 
 statement ok
-DROP DATABASE IF EXISTS otherEventLogTest
+DROP DATABASE IF EXISTS othereventlogtest
 
 # verify contents of drop event
 ##################
@@ -285,7 +285,7 @@ query II
 SELECT targetID, reportingID
 FROM system.eventlog
 WHERE eventType = 'drop_database'
-  AND info LIKE '%DROP DATABASE eventLogTest%'
+  AND info LIKE '%DROP DATABASE eventlogtest%'
 ----
 53 1
 
@@ -293,7 +293,7 @@ query II
 SELECT targetID, reportingID
 FROM system.eventlog
 WHERE eventType = 'drop_database'
-  AND info LIKE '%DROP DATABASE IF EXISTS otherEventLogTest%'
+  AND info LIKE '%DROP DATABASE IF EXISTS othereventlogtest%'
 ----
 54 1
 
@@ -303,7 +303,7 @@ query II
 SELECT targetID, reportingID
 FROM system.eventlog
 WHERE eventType = 'drop_database'
-  AND info LIKE '%testTable%'
-  AND info LIKE '%anotherTestTable%'
+  AND info LIKE '%testtable%'
+  AND info LIKE '%anothertesttable%'
 ----
 53 1

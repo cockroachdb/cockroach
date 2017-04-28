@@ -36,10 +36,10 @@ import (
 const (
 	NamespaceTableSchema = `
 CREATE TABLE system.namespace (
-  parentID INT,
-  name     STRING,
-  id       INT,
-  PRIMARY KEY (parentID, name)
+  "parentID" INT,
+  name       STRING,
+  id         INT,
+  PRIMARY KEY ("parentID", name)
 );`
 
 	DescriptorTableSchema = `
@@ -50,8 +50,8 @@ CREATE TABLE system.descriptor (
 
 	UsersTableSchema = `
 CREATE TABLE system.users (
-  username       STRING PRIMARY KEY,
-  hashedPassword BYTES
+  username         STRING PRIMARY KEY,
+  "hashedPassword" BYTES
 );`
 
 	// Zone settings per DB/Table.
@@ -65,9 +65,9 @@ CREATE TABLE system.zones (
 CREATE TABLE system.settings (
 	name              STRING    NOT NULL PRIMARY KEY,
 	value             STRING    NOT NULL,
-	lastUpdated       TIMESTAMP NOT NULL DEFAULT now(),
-	valueType         STRING,
-	FAMILY (name, value, lastUpdated, valueType)
+	"lastUpdated"     TIMESTAMP NOT NULL DEFAULT now(),
+	"valueType"       STRING,
+	FAMILY (name, value, "lastUpdated", "valueType")
 );`
 )
 
@@ -75,43 +75,43 @@ CREATE TABLE system.settings (
 const (
 	LeaseTableSchema = `
 CREATE TABLE system.lease (
-  descID     INT,
+  "descID"   INT,
   version    INT,
-  nodeID     INT,
+  "nodeID"   INT,
   expiration TIMESTAMP,
-  PRIMARY KEY (descID, version, expiration, nodeID)
+  PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
 
 	EventLogTableSchema = `
 CREATE TABLE system.eventlog (
-  timestamp    TIMESTAMP  NOT NULL,
-  eventType    STRING     NOT NULL,
-  targetID     INT        NOT NULL,
-  reportingID  INT        NOT NULL,
-  info         STRING,
-  uniqueID     BYTES      DEFAULT uuid_v4(),
-  PRIMARY KEY (timestamp, uniqueID)
+  timestamp     TIMESTAMP  NOT NULL,
+  "eventType"   STRING     NOT NULL,
+  "targetID"    INT        NOT NULL,
+  "reportingID" INT        NOT NULL,
+  info          STRING,
+  "uniqueID"    BYTES      DEFAULT uuid_v4(),
+  PRIMARY KEY (timestamp, "uniqueID")
 );`
 
 	// rangelog is currently envisioned as a wide table; many different event
 	// types can be recorded to the table.
 	RangeEventTableSchema = `
 CREATE TABLE system.rangelog (
-  timestamp     TIMESTAMP  NOT NULL,
-  rangeID       INT        NOT NULL,
-  storeID       INT        NOT NULL,
-  eventType     STRING     NOT NULL,
-  otherRangeID  INT,
-  info          STRING,
-  uniqueID      INT        DEFAULT unique_rowid(),
-  PRIMARY KEY (timestamp, uniqueID)
+  timestamp      TIMESTAMP  NOT NULL,
+  "rangeID"      INT        NOT NULL,
+  "storeID"      INT        NOT NULL,
+  "eventType"    STRING     NOT NULL,
+  "otherRangeID" INT,
+  info           STRING,
+  "uniqueID"     INT        DEFAULT unique_rowid(),
+  PRIMARY KEY (timestamp, "uniqueID")
 );`
 
 	UITableSchema = `
 CREATE TABLE system.ui (
-	key         STRING PRIMARY KEY,
-	value       BYTES,
-	lastUpdated TIMESTAMP NOT NULL
+	key           STRING PRIMARY KEY,
+	value         BYTES,
+	"lastUpdated" TIMESTAMP NOT NULL
 );`
 
 	JobsTableSchema = `
