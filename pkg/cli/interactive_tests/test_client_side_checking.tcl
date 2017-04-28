@@ -7,7 +7,7 @@ start_server $argv
 spawn $argv sql
 eexpect root@
 
-# Check that syntax errors are handled client-side when running interactive.
+start_test "Check that syntax errors are handled client-side when running interactive."
 send "begin;\r\r"
 eexpect BEGIN
 eexpect root@
@@ -23,8 +23,9 @@ eexpect root@
 send "commit;\r"
 eexpect COMMIT
 eexpect root@
+end_test
 
-# Check that the user can force server-side handling.
+start_test "Check that the user can force server-side handling."
 send "\\unset check_syntax\r"
 eexpect root@
 
@@ -45,8 +46,9 @@ eexpect root@
 
 interrupt
 eexpect eof
+end_test
 
-# Check that syntax errors are handled server-side by default when running non-interactive.
+start_test "Check that syntax errors are handled server-side by default when running non-interactive."
 spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
@@ -65,9 +67,9 @@ eexpect "COMMIT"
 eexpect ":/# "
 send "echo \$?\r"
 eexpect "0\r\n:/# "
+end_test
 
 send "exit 0\r"
 eexpect eof
 
 stop_server $argv
-
