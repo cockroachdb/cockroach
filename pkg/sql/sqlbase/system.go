@@ -36,10 +36,10 @@ import (
 const (
 	NamespaceTableSchema = `
 CREATE TABLE system.namespace (
-  parentID INT,
-  name     STRING,
-  id       INT,
-  PRIMARY KEY (parentID, name)
+  "parentID" INT,
+  name       STRING,
+  id         INT,
+  PRIMARY KEY ("parentID", name)
 );`
 
 	DescriptorTableSchema = `
@@ -50,8 +50,8 @@ CREATE TABLE system.descriptor (
 
 	UsersTableSchema = `
 CREATE TABLE system.users (
-  username       STRING PRIMARY KEY,
-  hashedPassword BYTES
+  username         STRING PRIMARY KEY,
+  "hashedPassword" BYTES
 );`
 
 	// Zone settings per DB/Table.
@@ -65,9 +65,9 @@ CREATE TABLE system.zones (
 CREATE TABLE system.settings (
 	name              STRING    NOT NULL PRIMARY KEY,
 	value             STRING    NOT NULL,
-	lastUpdated       TIMESTAMP NOT NULL DEFAULT now(),
-	valueType         STRING,
-	FAMILY (name, value, lastUpdated, valueType)
+	"lastUpdated"     TIMESTAMP NOT NULL DEFAULT now(),
+	"valueType"       STRING,
+	FAMILY (name, value, "lastUpdated", "valueType")
 );`
 )
 
@@ -75,43 +75,43 @@ CREATE TABLE system.settings (
 const (
 	LeaseTableSchema = `
 CREATE TABLE system.lease (
-  descID     INT,
+  "descID"   INT,
   version    INT,
-  nodeID     INT,
+  "nodeID"   INT,
   expiration TIMESTAMP,
-  PRIMARY KEY (descID, version, expiration, nodeID)
+  PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
 
 	EventLogTableSchema = `
 CREATE TABLE system.eventlog (
-  timestamp    TIMESTAMP  NOT NULL,
-  eventType    STRING     NOT NULL,
-  targetID     INT        NOT NULL,
-  reportingID  INT        NOT NULL,
-  info         STRING,
-  uniqueID     BYTES      DEFAULT uuid_v4(),
-  PRIMARY KEY (timestamp, uniqueID)
+  timestamp     TIMESTAMP  NOT NULL,
+  "eventType"   STRING     NOT NULL,
+  "targetID"    INT        NOT NULL,
+  "reportingID" INT        NOT NULL,
+  info          STRING,
+  "uniqueID"    BYTES      DEFAULT uuid_v4(),
+  PRIMARY KEY (timestamp, "uniqueID")
 );`
 
 	// rangelog is currently envisioned as a wide table; many different event
 	// types can be recorded to the table.
 	RangeEventTableSchema = `
 CREATE TABLE system.rangelog (
-  timestamp     TIMESTAMP  NOT NULL,
-  rangeID       INT        NOT NULL,
-  storeID       INT        NOT NULL,
-  eventType     STRING     NOT NULL,
-  otherRangeID  INT,
-  info          STRING,
-  uniqueID      INT        DEFAULT unique_rowid(),
-  PRIMARY KEY (timestamp, uniqueID)
+  timestamp      TIMESTAMP  NOT NULL,
+  "rangeID"      INT        NOT NULL,
+  "storeID"      INT        NOT NULL,
+  "eventType"    STRING     NOT NULL,
+  "otherRangeID" INT,
+  info           STRING,
+  "uniqueID"     INT        DEFAULT unique_rowid(),
+  PRIMARY KEY (timestamp, "uniqueID")
 );`
 
 	UITableSchema = `
 CREATE TABLE system.ui (
-	key         STRING PRIMARY KEY,
-	value       BYTES,
-	lastUpdated TIMESTAMP NOT NULL
+	key           STRING PRIMARY KEY,
+	value         BYTES,
+	"lastUpdated" TIMESTAMP NOT NULL
 );`
 
 	JobsTableSchema = `
@@ -217,13 +217,13 @@ var (
 		ParentID: 1,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "parentid", ID: 1, Type: colTypeInt},
+			{Name: "parentID", ID: 1, Type: colTypeInt},
 			{Name: "name", ID: 2, Type: colTypeString},
 			{Name: "id", ID: 3, Type: colTypeInt, Nullable: true},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"parentid", "name"}, ColumnIDs: []ColumnID{1, 2}},
+			{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "name"}, ColumnIDs: []ColumnID{1, 2}},
 			{Name: "fam_3_id", ID: 3, ColumnNames: []string{"id"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
 		},
 		NextFamilyID: 4,
@@ -231,7 +231,7 @@ var (
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
-			ColumnNames:      []string{"parentid", "name"},
+			ColumnNames:      []string{"parentID", "name"},
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
 			ColumnIDs:        []ColumnID{1, 2},
 		},
@@ -272,12 +272,12 @@ var (
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "username", ID: 1, Type: colTypeString},
-			{Name: "hashedpassword", ID: 2, Type: colTypeBytes, Nullable: true},
+			{Name: "hashedPassword", ID: 2, Type: colTypeBytes, Nullable: true},
 		},
 		NextColumnID: 3,
 		Families: []ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
-			{Name: "fam_2_hashedpassword", ID: 2, ColumnNames: []string{"hashedpassword"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
 		},
 		PrimaryIndex:   pk("username"),
 		NextFamilyID:   3,
@@ -318,15 +318,15 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "name", ID: 1, Type: colTypeString},
 			{Name: "value", ID: 2, Type: colTypeString},
-			{Name: "lastupdated", ID: 3, Type: colTypeTimestamp, DefaultExpr: &nowString},
-			{Name: "valuetype", ID: 4, Type: colTypeString, Nullable: true},
+			{Name: "lastUpdated", ID: 3, Type: colTypeTimestamp, DefaultExpr: &nowString},
+			{Name: "valueType", ID: 4, Type: colTypeString, Nullable: true},
 		},
 		NextColumnID: 5,
 		Families: []ColumnFamilyDescriptor{
 			{
-				Name:        "fam_0_name_value_lastupdated_valuetype",
+				Name:        "fam_0_name_value_lastUpdated_valueType",
 				ID:          0,
-				ColumnNames: []string{"name", "value", "lastupdated", "valuetype"},
+				ColumnNames: []string{"name", "value", "lastUpdated", "valueType"},
 				ColumnIDs:   []ColumnID{1, 2, 3, 4},
 			},
 		},
@@ -352,20 +352,20 @@ var (
 		ParentID: 1,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "descid", ID: 1, Type: colTypeInt},
+			{Name: "descID", ID: 1, Type: colTypeInt},
 			{Name: "version", ID: 2, Type: colTypeInt},
-			{Name: "nodeid", ID: 3, Type: colTypeInt},
+			{Name: "nodeID", ID: 3, Type: colTypeInt},
 			{Name: "expiration", ID: 4, Type: colTypeTimestamp},
 		},
 		NextColumnID: 5,
 		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"descid", "version", "nodeid", "expiration"}, ColumnIDs: []ColumnID{1, 2, 3, 4}},
+			{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []ColumnID{1, 2, 3, 4}},
 		},
 		PrimaryIndex: IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
-			ColumnNames:      []string{"descid", "version", "expiration", "nodeid"},
+			ColumnNames:      []string{"descID", "version", "expiration", "nodeID"},
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
 			ColumnIDs:        []ColumnID{1, 2, 4, 3},
 		},
@@ -386,25 +386,25 @@ var (
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
-			{Name: "eventtype", ID: 2, Type: colTypeString},
-			{Name: "targetid", ID: 3, Type: colTypeInt},
-			{Name: "reportingid", ID: 4, Type: colTypeInt},
+			{Name: "eventType", ID: 2, Type: colTypeString},
+			{Name: "targetID", ID: 3, Type: colTypeInt},
+			{Name: "reportingID", ID: 4, Type: colTypeInt},
 			{Name: "info", ID: 5, Type: colTypeString, Nullable: true},
-			{Name: "uniqueid", ID: 6, Type: colTypeBytes, DefaultExpr: &uuidV4String},
+			{Name: "uniqueID", ID: 6, Type: colTypeBytes, DefaultExpr: &uuidV4String},
 		},
 		NextColumnID: 7,
 		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueid"}, ColumnIDs: []ColumnID{1, 6}},
-			{Name: "fam_2_eventtype", ID: 2, ColumnNames: []string{"eventtype"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_targetid", ID: 3, ColumnNames: []string{"targetid"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
-			{Name: "fam_4_reportingid", ID: 4, ColumnNames: []string{"reportingid"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []ColumnID{1, 6}},
+			{Name: "fam_2_eventType", ID: 2, ColumnNames: []string{"eventType"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_targetID", ID: 3, ColumnNames: []string{"targetID"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_4_reportingID", ID: 4, ColumnNames: []string{"reportingID"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
 			{Name: "fam_5_info", ID: 5, ColumnNames: []string{"info"}, ColumnIDs: []ColumnID{5}, DefaultColumnID: 5},
 		},
 		PrimaryIndex: IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
-			ColumnNames:      []string{"timestamp", "uniqueid"},
+			ColumnNames:      []string{"timestamp", "uniqueID"},
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
 			ColumnIDs:        []ColumnID{1, 6},
 		},
@@ -425,27 +425,27 @@ var (
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
-			{Name: "rangeid", ID: 2, Type: colTypeInt},
-			{Name: "storeid", ID: 3, Type: colTypeInt},
-			{Name: "eventtype", ID: 4, Type: colTypeString},
-			{Name: "otherrangeid", ID: 5, Type: colTypeInt, Nullable: true},
+			{Name: "rangeID", ID: 2, Type: colTypeInt},
+			{Name: "storeID", ID: 3, Type: colTypeInt},
+			{Name: "eventType", ID: 4, Type: colTypeString},
+			{Name: "otherRangeID", ID: 5, Type: colTypeInt, Nullable: true},
 			{Name: "info", ID: 6, Type: colTypeString, Nullable: true},
-			{Name: "uniqueid", ID: 7, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
+			{Name: "uniqueID", ID: 7, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
 		},
 		NextColumnID: 8,
 		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueid"}, ColumnIDs: []ColumnID{1, 7}},
-			{Name: "fam_2_rangeid", ID: 2, ColumnNames: []string{"rangeid"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_storeid", ID: 3, ColumnNames: []string{"storeid"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
-			{Name: "fam_4_eventtype", ID: 4, ColumnNames: []string{"eventtype"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
-			{Name: "fam_5_otherrangeid", ID: 5, ColumnNames: []string{"otherrangeid"}, ColumnIDs: []ColumnID{5}, DefaultColumnID: 5},
+			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []ColumnID{1, 7}},
+			{Name: "fam_2_rangeID", ID: 2, ColumnNames: []string{"rangeID"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_storeID", ID: 3, ColumnNames: []string{"storeID"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_4_eventType", ID: 4, ColumnNames: []string{"eventType"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+			{Name: "fam_5_otherRangeID", ID: 5, ColumnNames: []string{"otherRangeID"}, ColumnIDs: []ColumnID{5}, DefaultColumnID: 5},
 			{Name: "fam_6_info", ID: 6, ColumnNames: []string{"info"}, ColumnIDs: []ColumnID{6}, DefaultColumnID: 6},
 		},
 		PrimaryIndex: IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
-			ColumnNames:      []string{"timestamp", "uniqueid"},
+			ColumnNames:      []string{"timestamp", "uniqueID"},
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
 			ColumnIDs:        []ColumnID{1, 7},
 		},
@@ -465,13 +465,13 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "key", ID: 1, Type: colTypeString},
 			{Name: "value", ID: 2, Type: colTypeBytes, Nullable: true},
-			{Name: "lastupdated", ID: 3, Type: ColumnType{Kind: ColumnType_TIMESTAMP}},
+			{Name: "lastUpdated", ID: 3, Type: ColumnType{Kind: ColumnType_TIMESTAMP}},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
 			{Name: "fam_2_value", ID: 2, ColumnNames: []string{"value"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_lastupdated", ID: 3, ColumnNames: []string{"lastupdated"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_3_lastUpdated", ID: 3, ColumnNames: []string{"lastUpdated"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
 		},
 		NextFamilyID:   4,
 		PrimaryIndex:   pk("key"),
