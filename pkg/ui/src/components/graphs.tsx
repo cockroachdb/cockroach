@@ -197,7 +197,20 @@ function ComputeCountAxisDomain(
   } else {
       axisDomain.tickFormat = d3.format("s");
   }
-  axisDomain.guideFormat = d3.format(".4s");
+
+  // For numbers larger than 1, the tooltip displays fractional values with
+  // metric multiplicative prefixes (e.g. Kilo, Mega, Giga). For numbers smaller
+  // than 1, we simply display the fractional value without converting to a
+  // fractional metric prefix; this is because the use of fractional metric
+  // prefixes (i.e. milli, micro, nano) have proved confusing to users.
+  const metricFormat = d3.format(".4s");
+  const decimalFormat = d3.format(".4f");
+  axisDomain.guideFormat = (n: number) => {
+    if (n < 1) {
+      return decimalFormat(n);
+    }
+    return metricFormat(n);
+  };
   axisDomain.label = "count";
   return axisDomain;
 }
