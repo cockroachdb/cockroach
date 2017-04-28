@@ -151,6 +151,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.HTTPAddr = params.HTTPAddr
 	}
 
+	if params.ListeningURLFile != "" {
+		cfg.ListeningURLFile = params.ListeningURLFile
+	}
+
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
 	if len(params.StoreSpecs) == 0 {
