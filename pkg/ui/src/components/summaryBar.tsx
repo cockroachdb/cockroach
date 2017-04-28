@@ -5,10 +5,16 @@ import classNames from "classnames";
 import { MetricsDataProvider } from "../containers/metricsDataProvider";
 import { MetricsDataComponentProps } from "../components/graphs";
 
+interface SummaryValueProps {
+  title: React.ReactNode;
+  value: React.ReactNode;
+  classModifier?: string;
+}
+
 interface SummaryStatProps {
   title: React.ReactNode;
   value?: number;
-  format?: (i: number) => string;
+  format?: (n: number) => string;
 }
 
 interface SummaryHeadlineStatProps extends SummaryStatProps {
@@ -49,23 +55,47 @@ export function SummaryBar(props: { children?: React.ReactNode }) {
 }
 
 /**
- * SummaryStat places a single labeled statistic onto a summary bar; this
+ * SummaryValue places a single labeled value onto a summary bar; this
  * consists of a label and a formatted value. Summary stats are visually
  * separated from other summary stats. A summary stat can contain children, such
  * as messages and breakdowns.
  */
-export function SummaryStat(props: SummaryStatProps & {children?: React.ReactNode}) {
-  return <div className="summary-stat">
-    <div className="summary-stat__body">
-      <span className="summary-stat__title">
-        { props.title }
-      </span>
-      <span className="summary-stat__value">
-        { computeValue(props.value, props.format) }
-      </span>
+export function SummaryValue(props: SummaryValueProps & {children?: React.ReactNode}) {
+  const topClasses = classNames(
+    "summary-stat",
+    props.classModifier ? `summary-stat--${props.classModifier}` : null,
+  );
+  return (
+    <div className={topClasses}>
+      <div className="summary-stat__body">
+        <span className="summary-stat__title">
+          { props.title }
+        </span>
+        <span className="summary-stat__value">
+          { props.value }
+        </span>
+      </div>
+      { props.children }
     </div>
-    { props.children }
-  </div>;
+  );
+}
+
+/**
+ * SummaryStat is a convenience component for SummaryValues where the value
+ * consists of a single formatted number; it automatically handles cases where
+ * the value is a non-numeric value and applies an appearance modifier specific
+ * to numeric values.
+ */
+export function SummaryStat(props: SummaryStatProps & {children?: React.ReactNode}) {
+  return (
+    <SummaryValue
+      title={props.title}
+      value={computeValue(props.value, props.format)}
+      classModifier="number"
+    >
+      {props.children}
+    </SummaryValue>
+  );
 }
 
 /**
