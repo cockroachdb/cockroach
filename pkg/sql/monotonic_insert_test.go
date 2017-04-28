@@ -30,6 +30,8 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,14 +83,34 @@ type mtClient struct {
 func TestMonotonicInserts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	for _, distSQLMode := range []sql.DistSQLExecMode{sql.DistSQLOff, sql.DistSQLOn} {
+		t.Run(fmt.Sprintf("distsql=%s", distSQLMode), func(t *testing.T) {
+			testMonotonicInserts(t, distSQLMode)
+		})
+	}
+}
+
+func testMonotonicInserts(t *testing.T, distSQLMode sql.DistSQLExecMode) {
+	defer leaktest.AfterTest(t)()
+
 	if testing.Short() {
 		t.Skip("short flag")
 	}
 
-	tc := testcluster.StartTestCluster(t, 3,
+	distSQLOverride := &settings.EnumSetting{}
+	settings.TestingSetEnum(&distSQLOverride, int64(distSQLMode))
+
+	tc := testcluster.StartTestCluster(
+		t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
-		})
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{OverrideDistSQLMode: distSQLOverride},
+				},
+			},
+		},
+	)
 	defer tc.Stopper().Stop(context.TODO())
 	ctx := context.Background()
 
