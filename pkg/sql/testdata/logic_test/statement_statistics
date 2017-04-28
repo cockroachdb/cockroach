@@ -23,7 +23,7 @@ SET application_name = hello; SELECT 1; SELECT 1,2; SELECT 1
 statement ok
 SET application_name = ''
 
-query TB
+query TB valuesort
 SELECT key, count >= 1 FROM crdb_internal.node_statement_statistics WHERE application_name = 'hello' AND key LIKE 'SELECT%'
 ----
 SELECT _    true
@@ -94,7 +94,7 @@ SELECT x FROM test WHERE y = 1/z
 statement ok
 SET application_name = ''; RESET distsql
 
-query TT colnames
+query TT colnames,valuesort
 SELECT key,flags FROM crdb_internal.node_statement_statistics WHERE application_name = 'valuetest' ORDER BY key
 ----
 key                                                      flags
@@ -113,7 +113,7 @@ SELECT x FROM test WHERE y NOT IN (_, _)
 # Check that names are anonymized properly:
 # - virtual table names are preserved
 # - function names are preserved
-query T
+query T valuesort
 SELECT anonymized FROM crdb_internal.node_statement_statistics WHERE application_name = 'valuetest' ORDER BY key
 ----
 INSERT INTO _ VALUES (_, _, _)
