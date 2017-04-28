@@ -332,6 +332,18 @@ CREATE TABLE crdb_internal.jobs (
 	},
 }
 
+type stmtList []stmtKey
+
+func (s stmtList) Len() int {
+	return len(s)
+}
+func (s stmtList) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s stmtList) Less(i, j int) bool {
+	return s[i].stmt < s[j].stmt
+}
+
 var crdbInternalStmtStatsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.node_statement_statistics (
@@ -387,20 +399,17 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 			// Retrieve the statement keys and sort them to ensure the
 			// output is deterministic.
-			var stmtKeys []string
+			var stmtKeys stmtList
 			appStats.Lock()
 			for k := range appStats.stmts {
 				stmtKeys = append(stmtKeys, k)
 			}
 			appStats.Unlock()
-			sort.Strings(stmtKeys)
 
 			// Now retrieve the per-stmt stats proper.
 			for _, stmtKey := range stmtKeys {
-				realKey, flags := splitStmtStatKey(stmtKey)
-
 				anonymized := parser.DNull
-				anonStr, ok := p.scrubStmtStatKey(realKey)
+				anonStr, ok := scrubStmtStatKey(p.session.virtualSchemas, stmtKey.stmt)
 				if ok {
 					anonymized = parser.NewDString(anonStr)
 				}
@@ -415,8 +424,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				err := addRow(
 					nodeID,
 					parser.NewDString(appName),
-					parser.NewDString(flags),
-					parser.NewDString(realKey),
+					parser.NewDString(stmtKey.flags()),
+					parser.NewDString(stmtKey.stmt),
 					anonymized,
 					parser.NewDInt(parser.DInt(s.data.Count)),
 					parser.NewDInt(parser.DInt(s.data.FirstAttemptCount)),

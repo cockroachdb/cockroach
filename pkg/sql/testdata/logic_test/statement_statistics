@@ -24,7 +24,7 @@ statement ok
 SET application_name = ''
 
 query TB
-SELECT key, count >= 1 FROM crdb_internal.node_statement_statistics WHERE application_name = 'hello' AND key LIKE 'SELECT%'
+SELECT key, count >= 1 FROM crdb_internal.node_statement_statistics WHERE application_name = 'hello' AND key LIKE 'SELECT%' ORDER BY key
 ----
 SELECT _    true
 SELECT _, _ true
@@ -95,7 +95,7 @@ statement ok
 SET application_name = ''; RESET distsql
 
 query TT colnames
-SELECT key,flags FROM crdb_internal.node_statement_statistics WHERE application_name = 'valuetest' ORDER BY key
+SELECT key,flags FROM crdb_internal.node_statement_statistics WHERE application_name = 'valuetest' ORDER BY key, flags
 ----
 key                                                      flags
 INSERT INTO test VALUES (_, _, _)
@@ -105,8 +105,8 @@ SELECT sin(_)
 SELECT sqrt(- _)                                         !
 SELECT x FROM (VALUES (_, _, _)) AS t (x)
 SELECT x FROM test WHERE y = (_ / z)                     !+
-SELECT x FROM test WHERE y IN (_, _)                     +
 SELECT x FROM test WHERE y IN (_, _)
+SELECT x FROM test WHERE y IN (_, _)                     +
 SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)
 SELECT x FROM test WHERE y NOT IN (_, _)
 
