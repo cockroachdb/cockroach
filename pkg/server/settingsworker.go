@@ -26,8 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
+
+var settingsWorkerMu syncutil.Mutex
 
 // RefreshSettings starts a settings-changes listener.
 func (s *Server) refreshSettings() {
@@ -106,6 +109,9 @@ func (s *Server) refreshSettings() {
 
 	ctx := s.AnnotateCtx(context.Background())
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		settingsWorkerMu.Lock()
+		defer settingsWorkerMu.Unlock()
+
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		// No new settings can be defined beyond this point.
 		settings.Freeze()
