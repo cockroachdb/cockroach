@@ -263,12 +263,24 @@ func (s *sqlStats) startResetWorker(stopper *stop.Stopper) {
 	})
 }
 
+func splitStmtStatKey(key string) (stmt, flags string) {
+	// Return the prefix indicating an error or DistSQL usage separately.
+	i := 0
+	for ; i < len(key) && (key[i] == '!' || key[i] == '+'); i++ {
+	}
+	flags = key[:i]
+	stmt = key[i:]
+	return stmt, flags
+}
+
 func (p *planner) scrubStmtStatKey(key string) (string, bool) {
+	// Re-parse the statement to obtain its AST.
 	stmt, err := parser.ParseOne(key)
 	if err != nil {
 		return "", false
 	}
 
+	// Re-format to remove most names.
 	formatter := parser.FmtReformatTableNames(parser.FmtAnonymize,
 		func(t *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
 			tn, err := t.Normalize()
@@ -284,6 +296,5 @@ func (p *planner) scrubStmtStatKey(key string) (string, bool) {
 			// Virtual table: we want to keep the name.
 			tn.Format(buf, parser.FmtParsable)
 		})
-
 	return parser.AsStringWithFlags(stmt, formatter), true
 }
