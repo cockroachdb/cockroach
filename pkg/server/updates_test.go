@@ -133,6 +133,21 @@ func TestReportUsage(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+
+	// Run some queries so we have some query statistics collected.
+	for i := 0; i < 10; i++ {
+		for _, q := range []string{
+			`SELECT * FROM %[1]s.%[1]s WHERE %[1]s = 1 AND '%[1]s' = '%[1]s'`,
+			`INSERT INTO %[1]s.%[1]s VALUES (6)`,
+			`SELECT %[1]s FROM %[1]s.%[1]s WHERE %[1]s = 1 AND lower('%[1]s') = lower('%[1]s')`,
+			`UPDATE %[1]s.%[1]s SET %[1]s = %[1]s + 1`,
+		} {
+			if _, err := db.Exec(fmt.Sprintf(q, elemName)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
 	tables, err := ts.collectSchemaInfo(context.TODO())
 	if err != nil {
 		t.Fatal(err)

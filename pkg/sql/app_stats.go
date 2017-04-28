@@ -273,7 +273,7 @@ func splitStmtStatKey(key string) (stmt, flags string) {
 	return stmt, flags
 }
 
-func (p *planner) scrubStmtStatKey(key string) (string, bool) {
+func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	// Re-parse the statement to obtain its AST.
 	stmt, err := parser.ParseOne(key)
 	if err != nil {
@@ -288,7 +288,7 @@ func (p *planner) scrubStmtStatKey(key string) (string, bool) {
 				buf.WriteByte('_')
 				return
 			}
-			virtual, err := p.session.virtualSchemas.getVirtualTableEntry(tn)
+			virtual, err := vt.getVirtualTableEntry(tn)
 			if err != nil || virtual.desc == nil {
 				buf.WriteByte('_')
 				return
@@ -297,4 +297,33 @@ func (p *planner) scrubStmtStatKey(key string) (string, bool) {
 			tn.Format(buf, parser.FmtParsable)
 		})
 	return parser.AsStringWithFlags(stmt, formatter), true
+}
+
+// AppStatementStatistics is a map: for each app name (as set in sql sessions),
+// it maps statements to their collected statistics.
+type AppStatementStatistics map[string]map[string]StatementStatistics
+
+// GetScrubbedStmtStats returns the statement statistics by app, with the
+// queries scrubbed of their identifiers. Any statements which cannot be
+// scrubbed will be omitted from the returned map.
+func (e *Executor) GetScrubbedStmtStats() AppStatementStatistics {
+	ret := make(AppStatementStatistics)
+	vt := e.virtualSchemas
+	e.sqlStats.Lock()
+	for appName, a := range e.sqlStats.apps {
+		a.Lock()
+		m := make(map[string]StatementStatistics)
+		for q, stats := range a.stmts {
+			scrubbed, ok := scrubStmtStatKey(vt, q)
+			if ok {
+				stats.Lock()
+				m[scrubbed] = stats.data
+				stats.Unlock()
+			}
+		}
+		ret[appName] = m
+		a.Unlock()
+	}
+	e.sqlStats.Unlock()
+	return ret
 }
