@@ -765,7 +765,10 @@ func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error
 		found = a.create(ctx)
 	}
 
-	result := found.Result()
+	result, err := found.Result()
+	if err != nil {
+		return nil, err
+	}
 
 	if result == nil {
 		if parser.IsIdentAggregate(found) {

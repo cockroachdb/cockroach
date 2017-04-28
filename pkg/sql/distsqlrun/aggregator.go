@@ -167,7 +167,11 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 	row := make(sqlbase.EncDatumRow, len(ag.funcs))
 	for bucket := range ag.buckets {
 		for i, f := range ag.funcs {
-			result := f.get(bucket)
+			result, err := f.get(bucket)
+			if err != nil {
+				DrainAndClose(ctx, ag.out.output, err, ag.input)
+				return
+			}
 			if result == nil {
 				// Special case useful when this is a local stage of a distributed
 				// aggregation.
@@ -284,7 +288,7 @@ func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, d parser.D
 	return impl.Add(ctx, d)
 }
 
-func (a *aggregateFuncHolder) get(bucket string) parser.Datum {
+func (a *aggregateFuncHolder) get(bucket string) (parser.Datum, error) {
 	found, ok := a.buckets[bucket]
 	if !ok {
 		found = a.create(&a.group.flowCtx.evalCtx)
