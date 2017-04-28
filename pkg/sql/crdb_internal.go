@@ -400,7 +400,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				realKey, flags := splitStmtStatKey(stmtKey)
 
 				anonymized := parser.DNull
-				anonStr, ok := p.scrubStmtStatKey(realKey)
+				anonStr, ok := scrubStmtStatKey(p.session.virtualSchemas, realKey)
 				if ok {
 					anonymized = parser.NewDString(anonStr)
 				}

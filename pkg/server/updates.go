@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,9 +85,10 @@ type versionInfo struct {
 }
 
 type reportingInfo struct {
-	Node   nodeInfo                  `json:"node"`
-	Stores []storeInfo               `json:"stores"`
-	Schema []sqlbase.TableDescriptor `json:"schema"`
+	Node       nodeInfo                                      `json:"node"`
+	Stores     []storeInfo                                   `json:"stores"`
+	Schema     []sqlbase.TableDescriptor                     `json:"schema"`
+	QueryStats map[string]map[string]sql.StatementStatistics `json:"sqlstats"`
 }
 
 type nodeInfo struct {
@@ -256,7 +258,7 @@ func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 		schema = nil
 	}
 
-	return reportingInfo{summary, stores, schema}
+	return reportingInfo{summary, stores, schema, s.sqlExecutor.GetScrubedStmtStats()}
 }
 
 func (s *Server) reportDiagnostics() {
