@@ -15,7 +15,9 @@
 package server_test
 
 import (
+	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
@@ -111,7 +113,7 @@ func TestSettingsRefresh(t *testing.T) {
 		return nil
 	})
 
-	// A mis-typed value doesn't revert previous set or block other changes.
+	// A mis-typed value doesn't revert a previous set or block other changes.
 	db.Exec(insertQ, intKey, settings.EncodeInt(7), "b")
 	db.Exec(insertQ, strKey, "after-mistype", "s")
 
@@ -125,11 +127,29 @@ func TestSettingsRefresh(t *testing.T) {
 		return nil
 	})
 
+	// Deleting a value reverts to default.
+	db.Exec(deleteQ, strKey)
+	testutils.SucceedsSoon(t, func() error {
+		if expected, actual := "<default>", strA.Get(); expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
+
+}
+
+func TestSettingsSetAndShow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	db := sqlutils.MakeSQLRunner(t, rawDB)
+
 	// TODO(dt): add placeholder support to SET and SHOW.
 	setQ := "SET CLUSTER SETTING %s = %s"
 	showQ := "SHOW CLUSTER SETTING %s"
 
-	// SET/SHOW work too.
 	db.Exec(fmt.Sprintf(setQ, strKey, "'via-set'"))
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "via-set", db.QueryStr(fmt.Sprintf(showQ, strKey))[0][0]; expected != actual {
@@ -138,7 +158,6 @@ func TestSettingsRefresh(t *testing.T) {
 		return nil
 	})
 
-	// SET/SHOW work too.
 	db.Exec(fmt.Sprintf(setQ, intKey, "5"))
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "5", db.QueryStr(fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
@@ -177,14 +196,35 @@ func TestSettingsRefresh(t *testing.T) {
 		return nil
 	})
 
-	// Deleting a value reverts to default.
-	db.Exec(deleteQ, strKey)
-	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "<default>", strA.Get(); expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		return nil
-	})
+	if _, err := db.DB.Exec(fmt.Sprintf(setQ, intKey, "'a-str'")); !testutils.IsError(
+		err, `argument of testing.int must be type int, not type string`,
+	) {
+		t.Fatal(err)
+	}
+
+	db.Exec(`CREATE USER testuser`)
+	pgURL, cleanupFunc := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User("testuser"))
+	defer cleanupFunc()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testuser.Close()
+
+	if _, err := testuser.Exec(`SET CLUSTER SETTING foo = 'bar'`); !testutils.IsError(err,
+		`only root is allowed to SET CLUSTER SETTING`,
+	) {
+		t.Fatal(err)
+	}
+}
+
+func TestSettingsShowAll(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	db := sqlutils.MakeSQLRunner(t, rawDB)
 
 	rows := db.QueryStr("SHOW ALL CLUSTER SETTINGS")
 	if len(rows) < 2 {
