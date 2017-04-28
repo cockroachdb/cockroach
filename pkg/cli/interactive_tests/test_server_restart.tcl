@@ -13,7 +13,11 @@ eexpect ":/# "
 send "$argv sql -e \"create database t; create table t.t (x INT); select * from t.t;\"\r"
 eexpect "(0 rows)"
 
-stop_server $argv
+# Send an interrupt to allow the server to gracefully shutdown. We
+# need a graceful shutdown in order for table leases to be released,
+# otherwise the DROP TABLE below will have to wait for the table lease
+# to expire (5 min).
+interrupt
 start_server $argv
 
 send "$argv sql -e \"drop table t.t;\"\r"
