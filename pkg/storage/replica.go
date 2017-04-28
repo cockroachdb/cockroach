@@ -2160,15 +2160,19 @@ func (r *Replica) tryExecuteWriteBatch(
 		return nil, roachpb.NewError(err), proposalNoRetry
 	}
 
-	// Add the write to the command queue to gate subsequent overlapping
-	// commands until this command completes. Note that this must be
-	// done before getting the max timestamp for the key(s), as
-	// timestamp cache is only updated after preceding commands have
-	// been run to successful completion.
-	log.Event(ctx, "command queue")
-	endCmds, err := r.beginCmds(ctx, &ba, spans)
-	if err != nil {
-		return nil, roachpb.NewError(err), proposalNoRetry
+	var endCmds *endCmds
+	if !ba.IsLeaseRequest() {
+		// Add the write to the command queue to gate subsequent overlapping
+		// commands until this command completes. Note that this must be
+		// done before getting the max timestamp for the key(s), as
+		// timestamp cache is only updated after preceding commands have
+		// been run to successful completion.
+		log.Event(ctx, "command queue")
+		var err error
+		endCmds, err = r.beginCmds(ctx, &ba, spans)
+		if err != nil {
+			return nil, roachpb.NewError(err), proposalNoRetry
+		}
 	}
 
 	// Guarantee we remove the commands from the command queue. This is
