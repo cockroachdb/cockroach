@@ -119,9 +119,12 @@ func (node *CreateIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	if node.Name != "" {
-		fmt.Fprintf(buf, "%s ", node.Name)
+		FormatNode(buf, f, node.Name)
+		buf.WriteByte(' ')
 	}
-	fmt.Fprintf(buf, "ON %s (", node.Table)
+	buf.WriteString("ON ")
+	FormatNode(buf, f, node.Table)
+	buf.WriteString(" (")
 	FormatNode(buf, f, node.Columns)
 	buf.WriteByte(')')
 	if len(node.Storing) > 0 {
@@ -303,10 +306,12 @@ func (node *ColumnTableDef) HasColumnFamily() bool {
 
 // Format implements the NodeFormatter interface.
 func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
-	fmt.Fprintf(buf, "%s ", node.Name)
+	FormatNode(buf, f, node.Name)
+	buf.WriteByte(' ')
 	FormatNode(buf, f, node.Type)
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
-		fmt.Fprintf(buf, " CONSTRAINT %s", node.Nullable.ConstraintName)
+		buf.WriteString(" CONSTRAINT ")
+		FormatNode(buf, f, node.Nullable.ConstraintName)
 	}
 	switch node.Nullable.Nullability {
 	case Null:
@@ -321,14 +326,16 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	if node.HasDefaultExpr() {
 		if node.DefaultExpr.ConstraintName != "" {
-			fmt.Fprintf(buf, " CONSTRAINT %s", node.DefaultExpr.ConstraintName)
+			buf.WriteString(" CONSTRAINT ")
+			FormatNode(buf, f, node.DefaultExpr.ConstraintName)
 		}
 		buf.WriteString(" DEFAULT ")
 		FormatNode(buf, f, node.DefaultExpr.Expr)
 	}
 	for _, checkExpr := range node.CheckExprs {
 		if checkExpr.ConstraintName != "" {
-			fmt.Fprintf(buf, " CONSTRAINT %s", checkExpr.ConstraintName)
+			buf.WriteString(" CONSTRAINT ")
+			FormatNode(buf, f, checkExpr.ConstraintName)
 		}
 		buf.WriteString(" CHECK (")
 		FormatNode(buf, f, checkExpr.Expr)
@@ -336,7 +343,8 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	if node.HasFKConstraint() {
 		if node.References.ConstraintName != "" {
-			fmt.Fprintf(buf, " CONSTRAINT %s", node.References.ConstraintName)
+			buf.WriteString(" CONSTRAINT ")
+			FormatNode(buf, f, node.References.ConstraintName)
 		}
 		buf.WriteString(" REFERENCES ")
 		FormatNode(buf, f, node.References.Table)
@@ -474,7 +482,9 @@ type UniqueConstraintTableDef struct {
 // Format implements the NodeFormatter interface.
 func (node *UniqueConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.Name != "" {
-		fmt.Fprintf(buf, "CONSTRAINT %s ", node.Name)
+		buf.WriteString("CONSTRAINT ")
+		FormatNode(buf, f, node.Name)
+		buf.WriteByte(' ')
 	}
 	if node.PrimaryKey {
 		buf.WriteString("PRIMARY KEY ")
@@ -505,7 +515,9 @@ type ForeignKeyConstraintTableDef struct {
 // Format implements the NodeFormatter interface.
 func (node *ForeignKeyConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.Name != "" {
-		fmt.Fprintf(buf, "CONSTRAINT %s ", node.Name)
+		buf.WriteString("CONSTRAINT ")
+		FormatNode(buf, f, node.Name)
+		buf.WriteByte(' ')
 	}
 	buf.WriteString("FOREIGN KEY (")
 	FormatNode(buf, f, node.FromCols)
@@ -544,9 +556,11 @@ func (node *CheckConstraintTableDef) setName(name Name) {
 // Format implements the NodeFormatter interface.
 func (node *CheckConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.Name != "" {
-		fmt.Fprintf(buf, "CONSTRAINT %s ", node.Name)
+		buf.WriteString("CONSTRAINT ")
+		FormatNode(buf, f, node.Name)
+		buf.WriteByte(' ')
 	}
-	fmt.Fprintf(buf, "CHECK (")
+	buf.WriteString("CHECK (")
 	FormatNode(buf, f, node.Expr)
 	buf.WriteByte(')')
 }
