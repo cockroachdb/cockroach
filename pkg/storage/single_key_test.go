@@ -14,7 +14,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package acceptance
+package storage_test
 
 import (
 	"sync/atomic"
@@ -25,8 +25,10 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -35,23 +37,23 @@ import (
 // up an N node cluster and running N workers that are all
 // incrementing the value associated with a single key.
 func TestSingleKey(t *testing.T) {
-	s := log.Scope(t)
-	defer s.Close(t)
+	defer leaktest.AfterTest(t)()
 
-	runTestOnConfigs(t, testSingleKeyInner)
-}
+	if testing.Short() {
+		t.Skip("short flag")
+	}
 
-func testSingleKeyInner(
-	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
-) {
-	num := c.NumNodes()
+	const num = 3
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+		})
+	defer tc.Stopper().Stop(context.TODO())
+	ctx := context.Background()
 
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
-	initDB, err := c.NewClient(ctx, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	initDB := tc.Servers[0].DB()
 	if err := initDB.Put(ctx, key, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -62,17 +64,14 @@ func testSingleKeyInner(
 	}
 
 	resultCh := make(chan result, num)
-	deadline := timeutil.Now().Add(cfg.Duration)
+	deadline := timeutil.Now().Add(5 * time.Second)
 	var expected int64
 
 	// Start up num workers each reading and writing the same
 	// key. Each worker is configured to talk to a different node in the
 	// cluster.
 	for i := 0; i < num; i++ {
-		db, err := c.NewClient(ctx, i)
-		if err != nil {
-			t.Fatal(err)
-		}
+		db := tc.Servers[i].DB()
 		go func() {
 			var r result
 			for timeutil.Now().Before(deadline) {
@@ -113,7 +112,7 @@ func testSingleKeyInner(
 	var results []result
 	for len(results) < num {
 		select {
-		case <-stopper.ShouldStop():
+		case <-tc.Stopper().ShouldStop():
 			t.Fatalf("interrupted")
 		case r := <-resultCh:
 			if r.err != nil {
