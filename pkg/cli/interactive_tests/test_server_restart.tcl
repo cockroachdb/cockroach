@@ -2,9 +2,6 @@
 #
 source [file join [file dirname $argv0] common.tcl]
 
-# flaky: #15391
-exit 0
-
 start_server $argv
 
 spawn /bin/bash
