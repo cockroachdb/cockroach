@@ -778,7 +778,7 @@ func Example_sql_column_labels() {
 	//   """foo" STRING,
 	//   "\foo" STRING,
 	//   """foo\nbar""" STRING,
-	//   κόσμε STRING,
+	//   "κόσμε" STRING,
 	//   "a|b" STRING,
 	//   ܈85 STRING
 	// );

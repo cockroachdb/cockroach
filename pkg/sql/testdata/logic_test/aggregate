@@ -397,8 +397,8 @@ NULL 1
 query IIII colnames
 SELECT COUNT(*), COUNT(kv.*), COUNT(k), COUNT(kv.v) FROM kv
 ----
-COUNT(*) COUNT(kv.*) COUNT(k) COUNT(kv.v)
-6        6           6        5
+count(*)  count(kv.*)  count(k)  count(kv.v)
+6         6            6         5
 
 query error source name "nonexistent" not found in FROM clause
 SELECT COUNT(nonexistent.*) FROM kv
@@ -954,52 +954,52 @@ query ITTT
 EXPLAIN (EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 ----
 0  sort
-0                 order        +"COUNT(k)"
+0          order        +"count(k)"
 1  group
-1                 aggregate 0  v
-1                 aggregate 1  count(k)
-1                 render 0     v
-1                 render 1     count(k)
+1          aggregate 0  v
+1          aggregate 1  count(k)
+1          render 0     v
+1          render 1     count(k)
 2  render
-2                 render 0     v
-2                 render 1     k
+2          render 0     v
+2          render 1     k
 3  scan
-3                 table        kv@primary
-3                 spans        ALL
+3          table        kv@primary
+3          spans        ALL
 
 query ITTT
 EXPLAIN (EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 ----
 0  sort
-0                 order        +"COUNT(*)"
+0          order        +"count(*)"
 1  group
-1                 aggregate 0  v
-1                 aggregate 1  count(*)
-1                 render 0     v
-1                 render 1     count(*)
+1          aggregate 0  v
+1          aggregate 1  count(*)
+1          render 0     v
+1          render 1     count(*)
 2  render
-2                 render 0     v
-2                 render 1     *
+2          render 0     v
+2          render 1     *
 3  scan
-3                 table        kv@primary
-3                 spans        ALL
+3          table        kv@primary
+3          spans        ALL
 
 query ITTT
 EXPLAIN (EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 ----
 0  sort
-0                 order        +"COUNT(1)"
+0          order        +"count(1)"
 1  group
-1                 aggregate 0  v
-1                 aggregate 1  count(1)
-1                 render 0     v
-1                 render 1     count(1)
+1          aggregate 0  v
+1          aggregate 1  count(1)
+1          render 0     v
+1          render 1     count(1)
 2  render
-2                 render 0     v
-2                 render 1     1
+2          render 0     v
+2          render 1     1
 3  scan
-3                 table        kv@primary
-3                 spans        ALL
+3          table        kv@primary
+3          spans        ALL
 
 
 # Verify that FILTER works.
@@ -1041,7 +1041,7 @@ NULL true 0 1 5
 query error FILTER specified but abs\(\) is not an aggregate function
 SELECT k, abs(k) FILTER (WHERE k=1) FROM kv
 
-query error syntax error at or near "FILTER"
+query error syntax error at or near "filter"
 SELECT k FILTER (WHERE k=1) FROM kv GROUP BY k
 
 query error aggregate functions are not allowed in FILTER
@@ -1067,16 +1067,16 @@ EXPLAIN (EXPRS) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) F
 query ITTTTT
 EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
-0  group                                                                                          ("COUNT(*) FILTER (WHERE k > 5)" int)
-0                 aggregate 0  (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
-0                 render 0     (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
-1  render                                                                                         ("*" int, v int, "k > 5" bool)
-1                 render 0     (*)[int]
-1                 render 1     (v)[int]
-1                 render 2     ((k)[int] > (5)[int])[bool]
-2  scan                                                                                           (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)
-2                 table        filter_test@primary
-2                 spans        ALL
+0  group                                                                                   ("count(*) FILTER (WHERE k > 5)" int)
+0          aggregate 0  (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
+0          render 0     (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
+1  render                                                                                  ("*" int, v int, "k > 5" bool)
+1          render 0     (*)[int]
+1          render 1     (v)[int]
+1          render 2     ((k)[int] > (5)[int])[bool]
+2  scan                                                                                    (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)
+2          table        filter_test@primary
+2          spans        ALL
 
 # Tests with * inside GROUP BY.
 query ITTT

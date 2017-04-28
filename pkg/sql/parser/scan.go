@@ -208,11 +208,11 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			}
 			return
 		}
-		s.scanIdent(lval, ch)
+		s.scanIdent(lval)
 		return
 
 	case 'r', 'R':
-		s.scanIdent(lval, ch)
+		s.scanIdent(lval)
 		return
 
 	case 'e', 'E':
@@ -225,7 +225,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			}
 			return
 		}
-		s.scanIdent(lval, ch)
+		s.scanIdent(lval)
 		return
 
 	case 'x', 'X':
@@ -238,7 +238,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			}
 			return
 		}
-		s.scanIdent(lval, ch)
+		s.scanIdent(lval)
 		return
 
 	case '.':
@@ -350,7 +350,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			return
 		}
 		if isIdentStart(ch) {
-			s.scanIdent(lval, ch)
+			s.scanIdent(lval)
 			return
 		}
 	}
@@ -464,23 +464,16 @@ func (s *Scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 	return false, true
 }
 
-func (s *Scanner) scanIdent(lval *sqlSymType, ch int) {
+func (s *Scanner) scanIdent(lval *sqlSymType) {
 	start := s.pos - 1
-	for {
-		ch := s.peek()
-		if isIdentMiddle(ch) {
-			s.pos++
-			continue
-		}
-		break
+	for ; isIdentMiddle(s.peek()); s.pos++ {
 	}
-	lval.str = s.in[start:s.pos]
-	uppered := strings.ToUpper(lval.str)
-	if id, ok := keywords[uppered]; ok {
+	lval.str = ReNormalizeName(s.in[start:s.pos])
+	if id, ok := keywords[strings.ToUpper(lval.str)]; ok {
 		lval.id = id
-		return
+	} else {
+		lval.id = IDENT
 	}
-	lval.id = IDENT
 }
 
 func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
@@ -739,7 +732,8 @@ func isIdent(s string) bool {
 			return false
 		}
 	}
-	return true
+	_, ok := reservedKeywords[strings.ToUpper(s)]
+	return !ok
 }
 
 func isIdentStart(ch int) bool {
