@@ -46,6 +46,7 @@ type queryCounter struct {
 
 func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skipf("TODO(arjun): #15442")
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
