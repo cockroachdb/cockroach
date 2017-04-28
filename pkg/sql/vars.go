@@ -39,7 +39,7 @@ type sessionVar struct {
 
 	// Get returns a string representation of a given variable to be used
 	// either by SHOW or in the pg_catalog table.
-	Get func(p *planner) string
+	Get func(p *planner, ac bool) string
 
 	// Reset performs mutations (usually on p.session) to effect the change
 	// desired by RESET commands.
@@ -51,7 +51,7 @@ type sessionVar struct {
 // throwing an error when trying to SET or SHOW them.
 var nopVar = sessionVar{
 	Set:   func(context.Context, *planner, []parser.TypedExpr) error { return nil },
-	Get:   func(*planner) string { return "" },
+	Get:   func(*planner, bool) string { return "" },
 	Reset: func(*planner) error { return nil },
 }
 
@@ -74,7 +74,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(p *planner) string { return p.session.Database },
+		Get: func(p *planner, ac bool) string { return p.session.Database },
 		Reset: func(p *planner) error {
 			p.session.Database = p.session.defaults.database
 			return nil
@@ -103,7 +103,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
+		Get: func(p *planner, ac bool) string { return p.session.DefaultIsolationLevel.String() },
 		Reset: func(p *planner) error {
 			p.session.DefaultIsolationLevel = enginepb.IsolationType(0)
 			return nil
@@ -130,7 +130,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(p *planner) string {
+		Get: func(p *planner, ac bool) string {
 			switch p.session.DistSQLMode {
 			case distSQLOff:
 				return "off"
@@ -181,7 +181,7 @@ var varGen = map[string]sessionVar{
 			p.session.SearchPath = newSearchPath
 			return nil
 		},
-		Get: func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
+		Get: func(p *planner, ac bool) string { return strings.Join(p.session.SearchPath, ", ") },
 		Reset: func(p *planner) error {
 			p.session.SearchPath = parser.SearchPath{"pg_catalog"}
 			return nil
@@ -202,7 +202,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get:   func(*planner) string { return "on" },
+		Get:   func(*planner, bool) string { return "on" },
 		Reset: func(*planner) error { return nil },
 	},
 	`application_name`: {
@@ -217,18 +217,33 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(p *planner) string { return p.session.ApplicationName },
+		Get: func(p *planner, ac bool) string { return p.session.ApplicationName },
 		Reset: func(p *planner) error {
 			p.session.resetApplicationName(p.session.defaults.applicationName)
 			return nil
 		},
 	},
-	`time zone`:                   {Get: func(p *planner) string { return p.session.Location.String() }},
-	`transaction isolation level`: {Get: func(p *planner) string { return p.txn.Isolation().String() }},
-	`transaction priority`:        {Get: func(p *planner) string { return p.txn.UserPriority().String() }},
-	`max_index_keys`:              {Get: func(*planner) string { return "32" }},
-	`server_version`:              {Get: func(*planner) string { return PgServerVersion }},
-	`session_user`:                {Get: func(p *planner) string { return p.session.User }},
+	`time zone`: {
+		Get: func(p *planner, ac bool) string { return p.session.Location.String() },
+	},
+	`transaction isolation level`: {
+		Get: func(p *planner, ac bool) string { return p.txn.Isolation().String() },
+	},
+	`transaction priority`: {
+		Get: func(p *planner, ac bool) string { return p.txn.UserPriority().String() },
+	},
+	`transaction status`: {
+		Get: func(p *planner, ac bool) string { return getTransactionState(&p.session.TxnState, ac) },
+	},
+	`max_index_keys`: {
+		Get: func(*planner, bool) string { return "32" },
+	},
+	`server_version`: {
+		Get: func(*planner, bool) string { return PgServerVersion },
+	},
+	`session_user`: {
+		Get: func(p *planner, ac bool) string { return p.session.User },
+	},
 
 	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	`extra_float_digits`: nopVar,
@@ -239,7 +254,7 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/9.6/static/multibyte.html
 	`client_encoding`: {
-		Get: func(*planner) string {
+		Get: func(*planner, bool) string {
 			return "UTF8"
 		},
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
