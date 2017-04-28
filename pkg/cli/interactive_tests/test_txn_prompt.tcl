@@ -11,7 +11,7 @@ eexpect ":/# "
 send "$argv sql\r"
 eexpect root@
 
-# Create test database, test database prompt.
+start_test "Check database prompt."
 send "CREATE DATABASE IF NOT EXISTS testdb;\r"
 eexpect "\nCREATE DATABASE\r\n"
 eexpect root@
@@ -23,21 +23,24 @@ send "SET DATABASE = '';\r"
 eexpect "\nSET\r\n"
 eexpect root@
 eexpect "/>"
+end_test
 
-# Test that prompt becomes "OPEN>"
+start_test "Test that prompt becomes OPEN when txn is opened."
 send "BEGIN;\r\r"
 
 eexpect "\nBEGIN\r\n"
 eexpect root@
 eexpect "OPEN>"
+end_test
 
-# Test that prompt becomes "ERROR>"
+start_test "Test that prompt becomes ERROR upon txn error."
 send "select a;\r"
 eexpect "pq: column name \"a\""
 eexpect root@
 eexpect "ERROR>"
+end_test
 
-# Test that prompt becomes "DONE>"
+start_test "Test that prompt becomes DONE after successful retry attempt."
 send "ROLLBACK;\r"
 eexpect "\nROLLBACK\r\n"
 eexpect root@
@@ -52,8 +55,9 @@ send "RELEASE SAVEPOINT cockroach_restart;\r"
 eexpect "\nCOMMIT\r\n"
 eexpect root@
 eexpect "DONE>"
+end_test
 
-# Test that prompt becomes "RETRY>"
+start_test "Test that prompt becomes RETRY upon retry error."
 send "COMMIT;\r"
 eexpect root@
 
@@ -64,22 +68,26 @@ send "SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL);\r"
 eexpect "pq: restart transaction"
 eexpect root@
 eexpect "RETRY>"
+end_test
 
+start_test "Test that prompt reverts to OPEN at beginning of new attempt."
 send "ROLLBACK TO SAVEPOINT cockroach_restart;\r"
 eexpect OK
 eexpect root@
 eexpect "OPEN>"
+end_test
 
 send "COMMIT;\r"
 eexpect root@
 
-# Test that prompt becomes " ?>"
+start_test "Test that prompt becomes ??? upon server unreachable."
 stop_server $argv
 
 send "SELECT 1; SELECT 1;\r"
 eexpect "connection lost"
 eexpect root@
 eexpect " \\?>"
+end_test
 
 # Terminate.
 send "\\q\r"

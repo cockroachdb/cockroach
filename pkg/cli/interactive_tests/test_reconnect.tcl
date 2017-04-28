@@ -23,7 +23,7 @@ eexpect "opening new connection"
 expect {
     "connection refused" {}
     "connection reset by peer" {}
-    timeout {exit 1}
+    timeout { handle_timeout "connection error" }
 }
 eexpect root@
 
