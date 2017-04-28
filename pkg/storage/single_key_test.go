@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -43,12 +44,13 @@ func newClient(s *server.TestServer) (*client.DB, error) {
 	}
 	testutils.FillCerts(cfg)
 
-	rpcContext := rpc.NewContext(log.AmbientContext{}, cfg, s.Clock(), s.Stopper())
+	clock := hlc.NewClock(hlc.UnixNano, 0)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, cfg, clock, s.Stopper())
 	conn, err := rpcContext.GRPCDial(s.ServingAddr())
 	if err != nil {
 		return nil, err
 	}
-	return client.NewDB(client.NewSender(conn), s.Clock()), nil
+	return client.NewDB(client.NewSender(conn), clock), nil
 }
 
 // TestSingleKey stresses the transaction retry machinery by starting
