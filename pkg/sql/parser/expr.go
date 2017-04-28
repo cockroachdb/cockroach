@@ -496,7 +496,7 @@ func (*IsOfTypeExpr) operatorExpr() {}
 
 // Format implements the NodeFormatter interface.
 func (node *IsOfTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Expr)
+	exprFmtWithParen(buf, f, node.Expr)
 	buf.WriteString(" IS")
 	if node.Not {
 		buf.WriteString(" NOT")
@@ -1057,7 +1057,7 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 		}
 		fallthrough
 	case castShort:
-		FormatNode(buf, f, node.Expr)
+		exprFmtWithParen(buf, f, node.Expr)
 		buf.WriteString("::")
 		FormatNode(buf, f, node.Type)
 	default:
@@ -1143,7 +1143,7 @@ type IndirectionExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *IndirectionExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Expr)
+	exprFmtWithParen(buf, f, node.Expr)
 	FormatNode(buf, f, node.Indirection)
 }
 
@@ -1166,7 +1166,7 @@ type AnnotateTypeExpr struct {
 func (node *AnnotateTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	switch node.syntaxMode {
 	case annotateShort:
-		FormatNode(buf, f, node.Expr)
+		exprFmtWithParen(buf, f, node.Expr)
 		buf.WriteString(":::")
 		FormatNode(buf, f, node.Type)
 
@@ -1198,7 +1198,7 @@ type CollateExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *CollateExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Expr)
+	exprFmtWithParen(buf, f, node.Expr)
 	buf.WriteString(" COLLATE ")
 	buf.WriteString(node.Locale)
 }
