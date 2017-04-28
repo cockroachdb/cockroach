@@ -20,6 +20,7 @@ package sql
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -43,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"strings"
 )
 
 // traceTxnThreshold can be used to log SQL transactions that take
@@ -83,16 +83,31 @@ const keyFor7881Sample = "found#7881"
 type DistSQLExecMode int64
 
 const (
-	// distSQLOff means that we never use distSQL.
-	distSQLOff DistSQLExecMode = iota
-	// distSQLAuto means that we automatically decide on a case-by-case basis if
+	// DistSQLOff means that we never use distSQL.
+	DistSQLOff DistSQLExecMode = iota
+	// DistSQLAuto means that we automatically decide on a case-by-case basis if
 	// we use distSQL.
-	distSQLAuto
-	// distSQLOn means that we use distSQL for queries that are supported.
-	distSQLOn
-	// distSQLAlways means that we only use distSQL; unsupported queries fail.
-	distSQLAlways
+	DistSQLAuto
+	// DistSQLOn means that we use distSQL for queries that are supported.
+	DistSQLOn
+	// DistSQLAlways means that we only use distSQL; unsupported queries fail.
+	DistSQLAlways
 )
+
+func (m DistSQLExecMode) String() string {
+	switch m {
+	case DistSQLOff:
+		return "off"
+	case DistSQLAuto:
+		return "auto"
+	case DistSQLOn:
+		return "on"
+	case DistSQLAlways:
+		return "always"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+}
 
 // DistSQLExecModeFromInt converts an int64 into a DistSQLExecMode
 func DistSQLExecModeFromInt(val int64) DistSQLExecMode {
@@ -103,13 +118,13 @@ func DistSQLExecModeFromInt(val int64) DistSQLExecMode {
 func DistSQLExecModeFromString(val string) DistSQLExecMode {
 	switch strings.ToUpper(val) {
 	case "OFF":
-		return distSQLOff
+		return DistSQLOff
 	case "AUTO":
-		return distSQLAuto
+		return DistSQLAuto
 	case "ON":
-		return distSQLOn
+		return DistSQLOn
 	case "ALWAYS":
-		return distSQLAlways
+		return DistSQLAlways
 	default:
 		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
 	}
@@ -121,9 +136,9 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"Default distributed SQL execution mode",
 	"Auto",
 	map[int64]string{
-		int64(distSQLOff):  "Off",
-		int64(distSQLAuto): "Auto",
-		int64(distSQLOn):   "On",
+		int64(DistSQLOff):  "Off",
+		int64(DistSQLAuto): "Auto",
+		int64(DistSQLOn):   "On",
 	},
 )
 
