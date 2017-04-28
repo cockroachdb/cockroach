@@ -304,38 +304,70 @@ $(CGO_FLAGS_FILES):
 	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR)/.libs $(ROCKSDB_DIR))' >> $@
 	@echo 'import "C"' >> $@
 
-# We package tarballs in c-deps so that DEP.src.tar.xz is guaranteed to extract to
-# folder DEP.src.
-#
-# NB: `tar -xJ` is not widely supported, so we use `xz` directly instead.
+# We package tarballs in c-deps so that DEP.src.tar.xz is guaranteed to extract
+# to folder DEP.src.
 $(C_DEPS_DIR)/%.src: $(C_DEPS_DIR)/%.src.tar.xz
 	rm -rf $@
 	$(REPO_ROOT)/scripts/untarxz.sh $< -C $(C_DEPS_DIR)
-	touch $@
 
-$(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc.src.tar.xz | $(JEMALLOC_SRC_DIR)
+# BUILD ARTIFACT CACHING
+#
+# We need to ensure that changes to a dependency's configure or CMake flags
+# below cause the corresponding dependency to be rebuilt. It would be correct to
+# have the dependencies list this file itself as a prerequisite, but *all*
+# dependencies would be rebuilt, likely unnecessarily, whenever this file
+# changed. Instead, we give each dependency its own marker file, DEP-rebuild, as
+# a prerequisite.
+#
+# It's not important *what* goes in the marker file, so long as its contents
+# change in the same commit as the configure flags. This causes Git to touch the
+# marker file when switching between revisions that span the change. For
+# simplicity, just sequentially bump the version number within.
+#
+# NB: the recipes below nuke *all* build artifacts when a dependency's source
+# tarball changes. Normally, we could rely on the dependency's build system to
+# detect modified files and only rebuild the necessary objects, but tar assigns
+# extracted files their original modification time (i.e., a time well in the
+# past, when the tarballs were packaged), and so the build artifacts always look
+# up-to-date.
+
+$(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc.src.tar.xz $(C_DEPS_DIR)/jemalloc-rebuild | $(JEMALLOC_SRC_DIR)
+	rm -rf $(JEMALLOC_DIR)
 	mkdir -p $(JEMALLOC_DIR)
+	@# NOTE: If you change the configure flags below, bump the version in
+	@# $(C_DEPS_DIR)/jemalloc-rebuild. See above for rationale.
 	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(CONFIGURE_FLAGS) --enable-prof
 
-$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz | $(PROTOBUF_SRC_DIR)
+$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz $(C_DEPS_DIR)/protobuf-rebuild | $(PROTOBUF_SRC_DIR)
+	rm -rf $(PROTOBUF_DIR)
 	mkdir -p $(PROTOBUF_DIR)
+	@# NOTE: If you change the CMake flags below, bump the version in
+	@# $(C_DEPS_DIR)/protobuf-rebuild. See above for rationale.
 	cd $(PROTOBUF_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 
 ifneq ($(PROTOC_DIR),$(PROTOBUF_DIR))
-$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz | $(PROTOBUF_SRC_DIR)
+$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tar.xz $(C_DEPS_DIR)/protobuf-rebuild | $(PROTOBUF_SRC_DIR)
+	rm -rf $(PROTOC_DIR)
 	mkdir -p $(PROTOC_DIR)
+	@# NOTE: If you change the CMake flags below, bump the version in
+	@# $(C_DEPS_DIR)/protobuf-rebuild. See above for rationale.
 	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 endif
 
-$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb.src.tar.xz | libsnappy libjemalloc $(ROCKSDB_SRC_DIR)
+$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb.src.tar.xz $(C_DEPS_DIR)/rocksdb-rebuild | libsnappy libjemalloc $(ROCKSDB_SRC_DIR)
+	rm -rf $(ROCKSDB_DIR)
 	mkdir -p $(ROCKSDB_DIR)
+	@# NOTE: If you change the CMake flags below, bump the version in
+	@# $(C_DEPS_DIR)/rocksdb-rebuild. See above for rationale.
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
 	  $(if $(findstring release,$(TYPE)),,-DWITH_$(if $(findstring mingw,$(TARGET_TRIPLE)),AVX2,SSE42)=OFF) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
 	  -DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON
 
-$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy.src.tar.xz | $(SNAPPY_SRC_DIR)
+$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy.src.tar.xz $(C_DEPS_DIR)/snappy-rebuild | $(SNAPPY_SRC_DIR)
 	mkdir -p $(SNAPPY_DIR)
+	@# NOTE: If you change the configure flags below, bump the version in
+	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
 	cd $(SNAPPY_DIR) && $(SNAPPY_SRC_DIR)/configure $(CONFIGURE_FLAGS) --disable-shared
 
 # We mark C and C++ dependencies as .PHONY (or .ALWAYS_REBUILD) to avoid
