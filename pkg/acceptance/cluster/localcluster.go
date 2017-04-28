@@ -81,11 +81,15 @@ var maxRangeBytes = config.DefaultZoneConfig().RangeMaxBytes
 const keyLen = 1024
 
 func defaultBinary() string {
-	gopath := filepath.SplitList(os.Getenv("GOPATH"))
-	if len(gopath) == 0 {
+	dir, err := os.Getwd()
+	if err != nil {
 		return ""
 	}
-	return gopath[0] + "/bin/docker_amd64/cockroach"
+	// The repository root, as seen by the caller.
+	for i := 0; i < 2; i++ {
+		dir = filepath.Dir(dir)
+	}
+	return filepath.Join(dir, "cockroach-linux-2.6.32-gnu-amd64")
 }
 
 func exists(path string) bool {
