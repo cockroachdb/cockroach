@@ -114,7 +114,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`NULL > SOME ARRAY[3, 2, 1]`, `NULL`},
 		{`NULL > ALL ARRAY[3, 2, 1]`, `NULL`},
 		{`4 > ALL ARRAY[3, 2, 1]`, `true`},
-		{`a > ALL ARRAY[3, 2, 1]`, `a > ALL {3,2,1}`},
+		{`a > ALL ARRAY[3, 2, 1]`, `a > ALL ARRAY[3,2,1]`},
 		{`3 > ALL ARRAY[3, 2, a]`, `3 > ALL ARRAY[3, 2, a]`},
 		{`3 > ANY (ARRAY[3, 2, a])`, `3 > ANY ARRAY[3, 2, a]`},
 		{`3 > SOME (((ARRAY[3, 2, a])))`, `3 > SOME ARRAY[3, 2, a]`},
