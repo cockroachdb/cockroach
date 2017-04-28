@@ -230,38 +230,6 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	}
 }
 
-// TestTxnInitialTimestamp verifies that the timestamp requested
-// before the Txn is created is honored.
-func TestTxnInitialTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, sender := createTestDB(t)
-	defer s.Stop()
-	defer teardownHeartbeats(sender)
-
-	txn := client.NewTxn(s.DB)
-
-	// Request a specific timestamp.
-	refTimestamp := s.Clock.Now().Add(42, 69)
-	txn.Proto().OrigTimestamp = refTimestamp
-
-	// Put request will create a new transaction.
-	key := roachpb.Key("key")
-	txn.InternalSetPriority(10)
-	txn.SetDebugName("test txn")
-	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-		t.Fatal(err)
-	}
-	if err := txn.Put(context.TODO(), key, []byte("value")); err != nil {
-		t.Fatal(err)
-	}
-	if txn.Proto().OrigTimestamp != refTimestamp {
-		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto().OrigTimestamp)
-	}
-	if txn.Proto().Timestamp != refTimestamp {
-		t.Errorf("expected txn ts to be %s; got %s", refTimestamp, txn.Proto().Timestamp)
-	}
-}
-
 // TestTxnCoordSenderBeginTransactionMinPriority verifies that when starting
 // a new transaction, a non-zero priority is treated as a minimum value.
 func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
@@ -788,6 +756,7 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	origTS := makeTS(123, 0)
+	plus1 := origTS.Add(0, 1)
 	plus10 := origTS.Add(10, 10)
 	plus20 := plus10.Add(10, 0)
 	testCases := []struct {
@@ -830,7 +799,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				&roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{Timestamp: plus20, Priority: 10},
 				}),
-			expPri: 10,
+			expPri:    10,
+			expTS:     plus1,
+			expOrigTS: plus1,
 		},
 		{
 			// On failed push, new epoch begins just past the pushed timestamp.

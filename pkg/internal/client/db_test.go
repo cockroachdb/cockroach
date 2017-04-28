@@ -332,6 +332,9 @@ func TestDebugName(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		// Remove the txn ID, which will be added to the name if non-nil.
+		txn.Proto().ID = nil
+
 		const expected = "unnamed"
 		if txn.DebugName() != expected {
 			t.Fatalf("expected \"%s\", but found \"%s\"", expected, txn.DebugName())
@@ -382,6 +385,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "Rollback"}:                  {},
 		{txnType, "CleanupOnError"}:            {},
 		{txnType, "DebugName"}:                 {},
+		{txnType, "ID"}:                        {},
 		{txnType, "InternalSetPriority"}:       {},
 		{txnType, "IsFinalized"}:               {},
 		{txnType, "NewBatch"}:                  {},

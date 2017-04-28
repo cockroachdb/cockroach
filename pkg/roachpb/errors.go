@@ -53,9 +53,6 @@ var _ error = &RetryableTxnError{}
 // txnID is the id of the transaction that this error is supposed to cause a
 // retry for. Can be nil, in which case it will cause retries for transactions
 // that don't have an ID set.
-// TODO(andrei): this function should really take a transaction as an argument.
-// The caller (crdb_internal.force_retry) should be given access to the current
-// transaction through the EvalContext.
 func NewRetryableTxnError(cause string, txnID *uuid.UUID) *RetryableTxnError {
 	return &RetryableTxnError{
 		message: cause,
