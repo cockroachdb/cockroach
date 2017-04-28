@@ -951,6 +951,7 @@ standard_conforming_strings    on            NULL      NULL        NULL        s
 time zone                      UTC           NULL      NULL        NULL        string
 transaction isolation level    SERIALIZABLE  NULL      NULL        NULL        string
 transaction priority           NORMAL        NULL      NULL        NULL        string
+transaction status             Open          NULL      NULL        NULL        string
 
 query TTTTTTT colnames
 SELECT name, setting, unit, context, enumvals, boot_val, reset_val FROM pg_catalog.pg_settings
@@ -971,6 +972,7 @@ standard_conforming_strings    on            NULL  user     NULL      on        
 time zone                      UTC           NULL  user     NULL      UTC           UTC
 transaction isolation level    SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
 transaction priority           NORMAL        NULL  user     NULL      NORMAL        NORMAL
+transaction status             Open          NULL  user     NULL      Open          Open
 
 query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
@@ -991,6 +993,7 @@ standard_conforming_strings    NULL    NULL     NULL     NULL        NULL
 time zone                      NULL    NULL     NULL     NULL        NULL
 transaction isolation level    NULL    NULL     NULL     NULL        NULL
 transaction priority           NULL    NULL     NULL     NULL        NULL
+transaction status             NULL    NULL     NULL     NULL        NULL
 
 
 # Verify proper functionality of system information functions.
