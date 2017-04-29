@@ -393,3 +393,6 @@ query I
 SELECT COUNT(*) FROM one AS a, one AS b, two AS c
 ----
 1000
+
+statement error memory budget exceeded
+SELECT SUM(d1.a), MAX(d1.a), MIN(d1.a) FROM data as d1, data as d2 GROUP BY (d1.b, d1.c, d1.d, d2.a, d2.b, d2.c, d2.d)
