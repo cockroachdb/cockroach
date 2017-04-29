@@ -102,10 +102,12 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.Sys
 		return nil
 	}
 
-	// Next handle case of splitting due to size.
+	// Next handle case of splitting due to size. Note that we don't perform
+	// size-based splitting if maxBytes is 0 (happens in certain test
+	// situations).
 	size := r.GetMVCCStats().Total()
 	maxBytes := r.GetMaxBytes()
-	if float64(size)/float64(maxBytes) > 1 {
+	if maxBytes > 0 && float64(size)/float64(maxBytes) > 1 {
 		log.Infof(ctx, "splitting size=%d max=%d", size, maxBytes)
 		if _, validSplitKey, pErr := r.adminSplitWithDescriptor(
 			ctx,
