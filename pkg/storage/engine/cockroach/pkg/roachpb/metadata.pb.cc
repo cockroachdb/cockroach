@@ -41,6 +41,30 @@ class TierDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyC
 
 namespace protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto {
 
+PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTableField
+    const TableStruct::entries[] = {
+  {0, 0, 0, ::google::protobuf::internal::kInvalidMask, 0, 0},
+};
+
+PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::AuxillaryParseTableField
+    const TableStruct::aux[] = {
+  ::google::protobuf::internal::AuxillaryParseTableField(),
+};
+PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTable const
+    TableStruct::schema[] = {
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+};
+
 
 void TableStruct::Shutdown() {
   _Attributes_default_instance_.Shutdown();
@@ -116,11 +140,6 @@ struct StaticDescriptorInitializer {
 
 // ===================================================================
 
-static ::std::string* MutableUnknownFieldsForAttributes(
-    Attributes* ptr) {
-  return ptr->mutable_unknown_fields();
-}
-
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Attributes::kAttrsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
@@ -185,8 +204,9 @@ bool Attributes::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForAttributes, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.Attributes)
@@ -196,7 +216,8 @@ bool Attributes::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 10u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
                 input, this->add_attrs()));
         } else {
@@ -230,7 +251,10 @@ failure:
 void Attributes::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.Attributes)
-  for (int i = 0; i < this->attrs_size(); i++) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  for (int i = 0, n = this->attrs_size(); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteString(
       1, this->attrs(i), output);
   }
@@ -248,7 +272,7 @@ size_t Attributes::ByteSizeLong() const {
 
   total_size += 1 *
       ::google::protobuf::internal::FromIntSize(this->attrs_size());
-  for (int i = 0; i < this->attrs_size(); i++) {
+  for (int i = 0, n = this->attrs_size(); i < n; i++) {
     total_size += ::google::protobuf::internal::WireFormatLite::StringSize(
       this->attrs(i));
   }
@@ -269,6 +293,9 @@ void Attributes::MergeFrom(const Attributes& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.Attributes)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
   attrs_.MergeFrom(from.attrs_);
 }
 
@@ -288,7 +315,7 @@ void Attributes::Swap(Attributes* other) {
   InternalSwap(other);
 }
 void Attributes::InternalSwap(Attributes* other) {
-  attrs_.UnsafeArenaSwap(&other->attrs_);
+  attrs_.InternalSwap(&other->attrs_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -319,7 +346,14 @@ void Attributes::set_attrs(int index, const ::std::string& value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Attributes.attrs)
   attrs_.Mutable(index)->assign(value);
 }
+#if LANG_CXX11
+void Attributes::set_attrs(int index, ::std::string&& value) {
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Attributes.attrs)
+  attrs_.Mutable(index)->assign(std::move(value));
+}
+#endif
 void Attributes::set_attrs(int index, const char* value) {
+  GOOGLE_DCHECK(value != NULL);
   attrs_.Mutable(index)->assign(value);
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Attributes.attrs)
 }
@@ -336,7 +370,14 @@ void Attributes::add_attrs(const ::std::string& value) {
   attrs_.Add()->assign(value);
   // @@protoc_insertion_point(field_add:cockroach.roachpb.Attributes.attrs)
 }
+#if LANG_CXX11
+void Attributes::add_attrs(::std::string&& value) {
+  attrs_.Add(std::move(value));
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.Attributes.attrs)
+}
+#endif
 void Attributes::add_attrs(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
   attrs_.Add()->assign(value);
   // @@protoc_insertion_point(field_add_char:cockroach.roachpb.Attributes.attrs)
 }
@@ -358,11 +399,6 @@ Attributes::mutable_attrs() {
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // ===================================================================
-
-static ::std::string* MutableUnknownFieldsForReplicationTarget(
-    ReplicationTarget* ptr) {
-  return ptr->mutable_unknown_fields();
-}
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ReplicationTarget::kNodeIdFieldNumber;
@@ -436,8 +472,9 @@ bool ReplicationTarget::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForReplicationTarget, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.ReplicationTarget)
@@ -447,7 +484,8 @@ bool ReplicationTarget::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 8u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
           set_has_node_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -459,7 +497,8 @@ bool ReplicationTarget::MergePartialFromCodedStream(
       }
 
       case 2: {
-        if (tag == 16u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u)) {
           set_has_store_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -495,11 +534,15 @@ failure:
 void ReplicationTarget::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.ReplicationTarget)
-  if (has_node_id()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
   }
 
-  if (has_store_id()) {
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->store_id(), output);
   }
 
@@ -544,13 +587,18 @@ void ReplicationTarget::MergeFrom(const ReplicationTarget& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.ReplicationTarget)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  if (from._has_bits_[0 / 32] & 3u) {
-    if (from.has_node_id()) {
-      set_node_id(from.node_id());
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 3u) {
+    if (cached_has_bits & 0x00000001u) {
+      node_id_ = from.node_id_;
     }
-    if (from.has_store_id()) {
-      set_store_id(from.store_id());
+    if (cached_has_bits & 0x00000002u) {
+      store_id_ = from.store_id_;
     }
+    _has_bits_[0] |= cached_has_bits;
   }
 }
 
@@ -634,11 +682,6 @@ void ReplicationTarget::set_store_id(::google::protobuf::int32 value) {
 
 // ===================================================================
 
-static ::std::string* MutableUnknownFieldsForReplicaDescriptor(
-    ReplicaDescriptor* ptr) {
-  return ptr->mutable_unknown_fields();
-}
-
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ReplicaDescriptor::kNodeIdFieldNumber;
 const int ReplicaDescriptor::kStoreIdFieldNumber;
@@ -712,8 +755,9 @@ bool ReplicaDescriptor::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForReplicaDescriptor, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.ReplicaDescriptor)
@@ -723,7 +767,8 @@ bool ReplicaDescriptor::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 8u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
           set_has_node_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -735,7 +780,8 @@ bool ReplicaDescriptor::MergePartialFromCodedStream(
       }
 
       case 2: {
-        if (tag == 16u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u)) {
           set_has_store_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -747,7 +793,8 @@ bool ReplicaDescriptor::MergePartialFromCodedStream(
       }
 
       case 3: {
-        if (tag == 24u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(24u)) {
           set_has_replica_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -783,15 +830,19 @@ failure:
 void ReplicaDescriptor::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.ReplicaDescriptor)
-  if (has_node_id()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
   }
 
-  if (has_store_id()) {
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->store_id(), output);
   }
 
-  if (has_replica_id()) {
+  if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->replica_id(), output);
   }
 
@@ -842,16 +893,21 @@ void ReplicaDescriptor::MergeFrom(const ReplicaDescriptor& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.ReplicaDescriptor)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  if (from._has_bits_[0 / 32] & 7u) {
-    if (from.has_node_id()) {
-      set_node_id(from.node_id());
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 7u) {
+    if (cached_has_bits & 0x00000001u) {
+      node_id_ = from.node_id_;
     }
-    if (from.has_store_id()) {
-      set_store_id(from.store_id());
+    if (cached_has_bits & 0x00000002u) {
+      store_id_ = from.store_id_;
     }
-    if (from.has_replica_id()) {
-      set_replica_id(from.replica_id());
+    if (cached_has_bits & 0x00000004u) {
+      replica_id_ = from.replica_id_;
     }
+    _has_bits_[0] |= cached_has_bits;
   }
 }
 
@@ -959,11 +1015,6 @@ void ReplicaDescriptor::set_replica_id(::google::protobuf::int32 value) {
 
 // ===================================================================
 
-static ::std::string* MutableUnknownFieldsForReplicaIdent(
-    ReplicaIdent* ptr) {
-  return ptr->mutable_unknown_fields();
-}
-
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ReplicaIdent::kRangeIdFieldNumber;
 const int ReplicaIdent::kReplicaFieldNumber;
@@ -1043,8 +1094,9 @@ bool ReplicaIdent::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForReplicaIdent, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.ReplicaIdent)
@@ -1054,7 +1106,8 @@ bool ReplicaIdent::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 8u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
           set_has_range_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
@@ -1066,7 +1119,8 @@ bool ReplicaIdent::MergePartialFromCodedStream(
       }
 
       case 2: {
-        if (tag == 18u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_replica()));
         } else {
@@ -1100,11 +1154,15 @@ failure:
 void ReplicaIdent::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.ReplicaIdent)
-  if (has_range_id()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->range_id(), output);
   }
 
-  if (has_replica()) {
+  if (cached_has_bits & 0x00000001u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       2, *this->replica_, output);
   }
@@ -1150,13 +1208,18 @@ void ReplicaIdent::MergeFrom(const ReplicaIdent& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.ReplicaIdent)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  if (from._has_bits_[0 / 32] & 3u) {
-    if (from.has_replica()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 3u) {
+    if (cached_has_bits & 0x00000001u) {
       mutable_replica()->::cockroach::roachpb::ReplicaDescriptor::MergeFrom(from.replica());
     }
-    if (from.has_range_id()) {
-      set_range_id(from.range_id());
+    if (cached_has_bits & 0x00000002u) {
+      range_id_ = from.range_id_;
     }
+    _has_bits_[0] |= cached_has_bits;
   }
 }
 
@@ -1261,11 +1324,6 @@ void ReplicaIdent::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor
 
 // ===================================================================
 
-static ::std::string* MutableUnknownFieldsForRangeDescriptor(
-    RangeDescriptor* ptr) {
-  return ptr->mutable_unknown_fields();
-}
-
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeDescriptor::kRangeIdFieldNumber;
 const int RangeDescriptor::kStartKeyFieldNumber;
@@ -1365,8 +1423,9 @@ bool RangeDescriptor::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForRangeDescriptor, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.RangeDescriptor)
@@ -1376,7 +1435,8 @@ bool RangeDescriptor::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 8u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
           set_has_range_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
@@ -1388,7 +1448,8 @@ bool RangeDescriptor::MergePartialFromCodedStream(
       }
 
       case 2: {
-        if (tag == 18u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_start_key()));
         } else {
@@ -1398,7 +1459,8 @@ bool RangeDescriptor::MergePartialFromCodedStream(
       }
 
       case 3: {
-        if (tag == 26u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_end_key()));
         } else {
@@ -1408,19 +1470,19 @@ bool RangeDescriptor::MergePartialFromCodedStream(
       }
 
       case 4: {
-        if (tag == 34u) {
-          DO_(input->IncrementRecursionDepth());
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtualNoRecursionDepth(
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(34u)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                 input, add_replicas()));
         } else {
           goto handle_unusual;
         }
-        input->UnsafeDecrementRecursionDepth();
         break;
       }
 
       case 5: {
-        if (tag == 40u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(40u)) {
           set_has_next_replica_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -1456,16 +1518,20 @@ failure:
 void RangeDescriptor::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.RangeDescriptor)
-  if (has_range_id()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->range_id(), output);
   }
 
-  if (has_start_key()) {
+  if (cached_has_bits & 0x00000001u) {
     ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
       2, this->start_key(), output);
   }
 
-  if (has_end_key()) {
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
       3, this->end_key(), output);
   }
@@ -1475,7 +1541,7 @@ void RangeDescriptor::SerializeWithCachedSizes(
       4, this->replicas(i), output);
   }
 
-  if (has_next_replica_id()) {
+  if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(5, this->next_replica_id(), output);
   }
 
@@ -1542,22 +1608,27 @@ void RangeDescriptor::MergeFrom(const RangeDescriptor& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.RangeDescriptor)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
   replicas_.MergeFrom(from.replicas_);
-  if (from._has_bits_[0 / 32] & 15u) {
-    if (from.has_start_key()) {
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 15u) {
+    if (cached_has_bits & 0x00000001u) {
       set_has_start_key();
       start_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.start_key_);
     }
-    if (from.has_end_key()) {
+    if (cached_has_bits & 0x00000002u) {
       set_has_end_key();
       end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.end_key_);
     }
-    if (from.has_range_id()) {
-      set_range_id(from.range_id());
+    if (cached_has_bits & 0x00000004u) {
+      range_id_ = from.range_id_;
     }
-    if (from.has_next_replica_id()) {
-      set_next_replica_id(from.next_replica_id());
+    if (cached_has_bits & 0x00000008u) {
+      next_replica_id_ = from.next_replica_id_;
     }
+    _has_bits_[0] |= cached_has_bits;
   }
 }
 
@@ -1577,7 +1648,7 @@ void RangeDescriptor::Swap(RangeDescriptor* other) {
   InternalSwap(other);
 }
 void RangeDescriptor::InternalSwap(RangeDescriptor* other) {
-  replicas_.UnsafeArenaSwap(&other->replicas_);
+  replicas_.InternalSwap(&other->replicas_);
   start_key_.Swap(&other->start_key_);
   end_key_.Swap(&other->end_key_);
   std::swap(range_id_, other->range_id_);
@@ -1643,11 +1714,12 @@ void RangeDescriptor::set_start_key(const ::std::string& value) {
 void RangeDescriptor::set_start_key(::std::string&& value) {
   set_has_start_key();
   start_key_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), std::move(value));
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.RangeDescriptor.start_key)
 }
 #endif
 void RangeDescriptor::set_start_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
   set_has_start_key();
   start_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.RangeDescriptor.start_key)
@@ -1704,11 +1776,12 @@ void RangeDescriptor::set_end_key(const ::std::string& value) {
 void RangeDescriptor::set_end_key(::std::string&& value) {
   set_has_end_key();
   end_key_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), std::move(value));
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.RangeDescriptor.end_key)
 }
 #endif
 void RangeDescriptor::set_end_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
   set_has_end_key();
   end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.RangeDescriptor.end_key)
@@ -1795,11 +1868,6 @@ void RangeDescriptor::set_next_replica_id(::google::protobuf::int32 value) {
 
 // ===================================================================
 
-static ::std::string* MutableUnknownFieldsForStoreCapacity(
-    StoreCapacity* ptr) {
-  return ptr->mutable_unknown_fields();
-}
-
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int StoreCapacity::kCapacityFieldNumber;
 const int StoreCapacity::kAvailableFieldNumber;
@@ -1874,8 +1942,9 @@ bool StoreCapacity::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForStoreCapacity, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.StoreCapacity)
@@ -1885,7 +1954,8 @@ bool StoreCapacity::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 8u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
           set_has_capacity();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
@@ -1897,7 +1967,8 @@ bool StoreCapacity::MergePartialFromCodedStream(
       }
 
       case 2: {
-        if (tag == 16u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u)) {
           set_has_available();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
@@ -1909,7 +1980,8 @@ bool StoreCapacity::MergePartialFromCodedStream(
       }
 
       case 3: {
-        if (tag == 24u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(24u)) {
           set_has_range_count();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -1921,7 +1993,8 @@ bool StoreCapacity::MergePartialFromCodedStream(
       }
 
       case 4: {
-        if (tag == 32u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(32u)) {
           set_has_lease_count();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -1957,19 +2030,23 @@ failure:
 void StoreCapacity::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.StoreCapacity)
-  if (has_capacity()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->capacity(), output);
   }
 
-  if (has_available()) {
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->available(), output);
   }
 
-  if (has_range_count()) {
+  if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->range_count(), output);
   }
 
-  if (has_lease_count()) {
+  if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(4, this->lease_count(), output);
   }
 
@@ -2026,19 +2103,24 @@ void StoreCapacity::MergeFrom(const StoreCapacity& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.StoreCapacity)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  if (from._has_bits_[0 / 32] & 15u) {
-    if (from.has_capacity()) {
-      set_capacity(from.capacity());
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 15u) {
+    if (cached_has_bits & 0x00000001u) {
+      capacity_ = from.capacity_;
     }
-    if (from.has_available()) {
-      set_available(from.available());
+    if (cached_has_bits & 0x00000002u) {
+      available_ = from.available_;
     }
-    if (from.has_range_count()) {
-      set_range_count(from.range_count());
+    if (cached_has_bits & 0x00000004u) {
+      range_count_ = from.range_count_;
     }
-    if (from.has_lease_count()) {
-      set_lease_count(from.lease_count());
+    if (cached_has_bits & 0x00000008u) {
+      lease_count_ = from.lease_count_;
     }
+    _has_bits_[0] |= cached_has_bits;
   }
 }
 
@@ -2170,11 +2252,6 @@ void StoreCapacity::set_lease_count(::google::protobuf::int32 value) {
 
 // ===================================================================
 
-static ::std::string* MutableUnknownFieldsForNodeDescriptor(
-    NodeDescriptor* ptr) {
-  return ptr->mutable_unknown_fields();
-}
-
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int NodeDescriptor::kNodeIdFieldNumber;
 const int NodeDescriptor::kAddressFieldNumber;
@@ -2282,8 +2359,9 @@ bool NodeDescriptor::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForNodeDescriptor, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.NodeDescriptor)
@@ -2293,7 +2371,8 @@ bool NodeDescriptor::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 8u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
           set_has_node_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -2305,7 +2384,8 @@ bool NodeDescriptor::MergePartialFromCodedStream(
       }
 
       case 2: {
-        if (tag == 18u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_address()));
         } else {
@@ -2315,7 +2395,8 @@ bool NodeDescriptor::MergePartialFromCodedStream(
       }
 
       case 3: {
-        if (tag == 26u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_attrs()));
         } else {
@@ -2325,7 +2406,8 @@ bool NodeDescriptor::MergePartialFromCodedStream(
       }
 
       case 4: {
-        if (tag == 34u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(34u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_locality()));
         } else {
@@ -2359,21 +2441,25 @@ failure:
 void NodeDescriptor::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.NodeDescriptor)
-  if (has_node_id()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
   }
 
-  if (has_address()) {
+  if (cached_has_bits & 0x00000001u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       2, *this->address_, output);
   }
 
-  if (has_attrs()) {
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       3, *this->attrs_, output);
   }
 
-  if (has_locality()) {
+  if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       4, *this->locality_, output);
   }
@@ -2431,19 +2517,24 @@ void NodeDescriptor::MergeFrom(const NodeDescriptor& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.NodeDescriptor)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  if (from._has_bits_[0 / 32] & 15u) {
-    if (from.has_address()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 15u) {
+    if (cached_has_bits & 0x00000001u) {
       mutable_address()->::cockroach::util::UnresolvedAddr::MergeFrom(from.address());
     }
-    if (from.has_attrs()) {
+    if (cached_has_bits & 0x00000002u) {
       mutable_attrs()->::cockroach::roachpb::Attributes::MergeFrom(from.attrs());
     }
-    if (from.has_locality()) {
+    if (cached_has_bits & 0x00000004u) {
       mutable_locality()->::cockroach::roachpb::Locality::MergeFrom(from.locality());
     }
-    if (from.has_node_id()) {
-      set_node_id(from.node_id());
+    if (cached_has_bits & 0x00000008u) {
+      node_id_ = from.node_id_;
     }
+    _has_bits_[0] |= cached_has_bits;
   }
 }
 
@@ -2638,11 +2729,6 @@ void NodeDescriptor::set_allocated_locality(::cockroach::roachpb::Locality* loca
 
 // ===================================================================
 
-static ::std::string* MutableUnknownFieldsForStoreDescriptor(
-    StoreDescriptor* ptr) {
-  return ptr->mutable_unknown_fields();
-}
-
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int StoreDescriptor::kStoreIdFieldNumber;
 const int StoreDescriptor::kAttrsFieldNumber;
@@ -2750,8 +2836,9 @@ bool StoreDescriptor::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForStoreDescriptor, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.StoreDescriptor)
@@ -2761,7 +2848,8 @@ bool StoreDescriptor::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 8u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
           set_has_store_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -2773,7 +2861,8 @@ bool StoreDescriptor::MergePartialFromCodedStream(
       }
 
       case 2: {
-        if (tag == 18u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_attrs()));
         } else {
@@ -2783,7 +2872,8 @@ bool StoreDescriptor::MergePartialFromCodedStream(
       }
 
       case 3: {
-        if (tag == 26u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_node()));
         } else {
@@ -2793,7 +2883,8 @@ bool StoreDescriptor::MergePartialFromCodedStream(
       }
 
       case 4: {
-        if (tag == 34u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(34u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_capacity()));
         } else {
@@ -2827,21 +2918,25 @@ failure:
 void StoreDescriptor::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.StoreDescriptor)
-  if (has_store_id()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->store_id(), output);
   }
 
-  if (has_attrs()) {
+  if (cached_has_bits & 0x00000001u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       2, *this->attrs_, output);
   }
 
-  if (has_node()) {
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       3, *this->node_, output);
   }
 
-  if (has_capacity()) {
+  if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       4, *this->capacity_, output);
   }
@@ -2899,19 +2994,24 @@ void StoreDescriptor::MergeFrom(const StoreDescriptor& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.StoreDescriptor)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  if (from._has_bits_[0 / 32] & 15u) {
-    if (from.has_attrs()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 15u) {
+    if (cached_has_bits & 0x00000001u) {
       mutable_attrs()->::cockroach::roachpb::Attributes::MergeFrom(from.attrs());
     }
-    if (from.has_node()) {
+    if (cached_has_bits & 0x00000002u) {
       mutable_node()->::cockroach::roachpb::NodeDescriptor::MergeFrom(from.node());
     }
-    if (from.has_capacity()) {
+    if (cached_has_bits & 0x00000004u) {
       mutable_capacity()->::cockroach::roachpb::StoreCapacity::MergeFrom(from.capacity());
     }
-    if (from.has_store_id()) {
-      set_store_id(from.store_id());
+    if (cached_has_bits & 0x00000008u) {
+      store_id_ = from.store_id_;
     }
+    _has_bits_[0] |= cached_has_bits;
   }
 }
 
@@ -3106,11 +3206,6 @@ void StoreDescriptor::set_allocated_capacity(::cockroach::roachpb::StoreCapacity
 
 // ===================================================================
 
-static ::std::string* MutableUnknownFieldsForStoreDeadReplicas(
-    StoreDeadReplicas* ptr) {
-  return ptr->mutable_unknown_fields();
-}
-
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int StoreDeadReplicas::kStoreIdFieldNumber;
 const int StoreDeadReplicas::kReplicasFieldNumber;
@@ -3179,8 +3274,9 @@ bool StoreDeadReplicas::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForStoreDeadReplicas, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.StoreDeadReplicas)
@@ -3190,7 +3286,8 @@ bool StoreDeadReplicas::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 8u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
           set_has_store_id();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -3202,14 +3299,13 @@ bool StoreDeadReplicas::MergePartialFromCodedStream(
       }
 
       case 2: {
-        if (tag == 18u) {
-          DO_(input->IncrementRecursionDepth());
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtualNoRecursionDepth(
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                 input, add_replicas()));
         } else {
           goto handle_unusual;
         }
-        input->UnsafeDecrementRecursionDepth();
         break;
       }
 
@@ -3238,7 +3334,11 @@ failure:
 void StoreDeadReplicas::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.StoreDeadReplicas)
-  if (has_store_id()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->store_id(), output);
   }
 
@@ -3290,6 +3390,9 @@ void StoreDeadReplicas::MergeFrom(const StoreDeadReplicas& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.StoreDeadReplicas)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
   replicas_.MergeFrom(from.replicas_);
   if (from.has_store_id()) {
     set_store_id(from.store_id());
@@ -3312,7 +3415,7 @@ void StoreDeadReplicas::Swap(StoreDeadReplicas* other) {
   InternalSwap(other);
 }
 void StoreDeadReplicas::InternalSwap(StoreDeadReplicas* other) {
-  replicas_.UnsafeArenaSwap(&other->replicas_);
+  replicas_.InternalSwap(&other->replicas_);
   std::swap(store_id_, other->store_id_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
@@ -3382,11 +3485,6 @@ StoreDeadReplicas::replicas() const {
 
 // ===================================================================
 
-static ::std::string* MutableUnknownFieldsForLocality(
-    Locality* ptr) {
-  return ptr->mutable_unknown_fields();
-}
-
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Locality::kTiersFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
@@ -3451,8 +3549,9 @@ bool Locality::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForLocality, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.Locality)
@@ -3462,14 +3561,13 @@ bool Locality::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 10u) {
-          DO_(input->IncrementRecursionDepth());
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtualNoRecursionDepth(
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                 input, add_tiers()));
         } else {
           goto handle_unusual;
         }
-        input->UnsafeDecrementRecursionDepth();
         break;
       }
 
@@ -3498,6 +3596,9 @@ failure:
 void Locality::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.Locality)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
   for (unsigned int i = 0, n = this->tiers_size(); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       1, this->tiers(i), output);
@@ -3540,6 +3641,9 @@ void Locality::MergeFrom(const Locality& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.Locality)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
   tiers_.MergeFrom(from.tiers_);
 }
 
@@ -3559,7 +3663,7 @@ void Locality::Swap(Locality* other) {
   InternalSwap(other);
 }
 void Locality::InternalSwap(Locality* other) {
-  tiers_.UnsafeArenaSwap(&other->tiers_);
+  tiers_.InternalSwap(&other->tiers_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -3604,11 +3708,6 @@ Locality::tiers() const {
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // ===================================================================
-
-static ::std::string* MutableUnknownFieldsForTier(
-    Tier* ptr) {
-  return ptr->mutable_unknown_fields();
-}
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Tier::kKeyFieldNumber;
@@ -3695,8 +3794,9 @@ bool Tier::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForTier, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.Tier)
@@ -3706,7 +3806,8 @@ bool Tier::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 10u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
                 input, this->mutable_key()));
         } else {
@@ -3716,7 +3817,8 @@ bool Tier::MergePartialFromCodedStream(
       }
 
       case 2: {
-        if (tag == 18u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
                 input, this->mutable_value()));
         } else {
@@ -3750,12 +3852,16 @@ failure:
 void Tier::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.Tier)
-  if (has_key()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
     ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
       1, this->key(), output);
   }
 
-  if (has_value()) {
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
       2, this->value(), output);
   }
@@ -3801,12 +3907,16 @@ void Tier::MergeFrom(const Tier& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.Tier)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  if (from._has_bits_[0 / 32] & 3u) {
-    if (from.has_key()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 3u) {
+    if (cached_has_bits & 0x00000001u) {
       set_has_key();
       key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_);
     }
-    if (from.has_value()) {
+    if (cached_has_bits & 0x00000002u) {
       set_has_value();
       value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.value_);
     }
@@ -3869,11 +3979,12 @@ void Tier::set_key(const ::std::string& value) {
 void Tier::set_key(::std::string&& value) {
   set_has_key();
   key_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), std::move(value));
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.Tier.key)
 }
 #endif
 void Tier::set_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Tier.key)
@@ -3930,11 +4041,12 @@ void Tier::set_value(const ::std::string& value) {
 void Tier::set_value(::std::string&& value) {
   set_has_value();
   value_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), std::move(value));
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.Tier.value)
 }
 #endif
 void Tier::set_value(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
   set_has_value();
   value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Tier.value)
