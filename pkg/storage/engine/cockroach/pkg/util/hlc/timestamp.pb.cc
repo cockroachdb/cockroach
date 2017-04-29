@@ -22,6 +22,20 @@ class TimestampDefaultTypeInternal : public ::google::protobuf::internal::Explic
 
 namespace protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto {
 
+PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTableField
+    const TableStruct::entries[] = {
+  {0, 0, 0, ::google::protobuf::internal::kInvalidMask, 0, 0},
+};
+
+PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::AuxillaryParseTableField
+    const TableStruct::aux[] = {
+  ::google::protobuf::internal::AuxillaryParseTableField(),
+};
+PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTable const
+    TableStruct::schema[] = {
+  { NULL, NULL, 0, -1, -1, false },
+};
+
 
 void TableStruct::Shutdown() {
   _Timestamp_default_instance_.Shutdown();
@@ -60,11 +74,6 @@ struct StaticDescriptorInitializer {
 
 
 // ===================================================================
-
-static ::std::string* MutableUnknownFieldsForTimestamp(
-    Timestamp* ptr) {
-  return ptr->mutable_unknown_fields();
-}
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Timestamp::kWallTimeFieldNumber;
@@ -138,8 +147,9 @@ bool Timestamp::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      NewPermanentCallback(
-          &MutableUnknownFieldsForTimestamp, this));
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.util.hlc.Timestamp)
@@ -149,7 +159,8 @@ bool Timestamp::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 8u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
           set_has_wall_time();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
@@ -161,7 +172,8 @@ bool Timestamp::MergePartialFromCodedStream(
       }
 
       case 2: {
-        if (tag == 16u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u)) {
           set_has_logical();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -197,11 +209,15 @@ failure:
 void Timestamp::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.util.hlc.Timestamp)
-  if (has_wall_time()) {
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->wall_time(), output);
   }
 
-  if (has_logical()) {
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->logical(), output);
   }
 
@@ -246,13 +262,18 @@ void Timestamp::MergeFrom(const Timestamp& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.util.hlc.Timestamp)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  if (from._has_bits_[0 / 32] & 3u) {
-    if (from.has_wall_time()) {
-      set_wall_time(from.wall_time());
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 3u) {
+    if (cached_has_bits & 0x00000001u) {
+      wall_time_ = from.wall_time_;
     }
-    if (from.has_logical()) {
-      set_logical(from.logical());
+    if (cached_has_bits & 0x00000002u) {
+      logical_ = from.logical_;
     }
+    _has_bits_[0] |= cached_has_bits;
   }
 }
 
