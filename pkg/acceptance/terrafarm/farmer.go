@@ -160,7 +160,7 @@ func (f *Farmer) CollectLogs() {
 	if f.LogDir == "" {
 		return
 	}
-	if err := os.MkdirAll(f.AbsLogDir(), 0777); err != nil {
+	if err := os.MkdirAll(f.AbsLogDir(), 0777|os.ModeSetuid|os.ModeSetgid); err != nil {
 		fmt.Fprint(os.Stderr, err)
 		return
 	}

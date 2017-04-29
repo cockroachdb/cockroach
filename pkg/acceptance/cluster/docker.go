@@ -237,7 +237,7 @@ func (c *Container) Wait(ctx context.Context) error {
 		return err
 	}
 
-	outputLog := filepath.Join(c.cluster.logDir, "console-output.log")
+	outputLog := filepath.Join(c.cluster.LogDir, "console-output.log")
 	cmdLog, err := os.Create(outputLog)
 	if err != nil {
 		return err
@@ -253,7 +253,7 @@ func (c *Container) Wait(ctx context.Context) error {
 	if exitCode != 0 {
 		resultErr = errors.Errorf("non-zero exit code: %d", exitCode)
 		fmt.Fprintln(out, resultErr.Error())
-		log.Shout(ctx, log.Severity_INFO, "command left-over files in ", c.cluster.logDir)
+		log.Shout(ctx, log.Severity_INFO, "command left-over files in ", c.cluster.LogDir)
 	}
 
 	return resultErr

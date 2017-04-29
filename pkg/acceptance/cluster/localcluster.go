@@ -151,7 +151,7 @@ type LocalCluster struct {
 	stopper              *stop.Stopper
 	monitorCtx           context.Context
 	monitorCtxCancelFunc func()
-	logDir               string // no logging if empty
+	LogDir               string // no logging if empty
 	clusterID            string
 	networkID            string
 	networkName          string
@@ -191,7 +191,19 @@ func CreateLocal(
 	// logs.
 	var uniqueLogDir string
 	if logDir != "" {
+		pwd, err := os.Getwd()
+		maybePanic(err)
+
 		uniqueLogDir = fmt.Sprintf("%s-%s", logDir, clusterIDS)
+		if !filepath.IsAbs(uniqueLogDir) {
+			uniqueLogDir = filepath.Join(pwd, uniqueLogDir)
+		}
+		// If we don't make sure the directory exists, Docker will and then we
+		// may run into ownership issues (think Docker running as root, but us
+		// running as a regular Joe as it happens on CircleCI).
+		// We also mark the directory with the setuid and setgid bits so
+		// that sub-directories and files inherit the owner.
+		maybePanic(os.MkdirAll(uniqueLogDir, 0777|os.ModeSetuid|os.ModeSetgid))
 	}
 	return &LocalCluster{
 		clusterID: clusterIDS,
@@ -201,7 +213,7 @@ func CreateLocal(
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
-		logDir:         uniqueLogDir,
+		LogDir:         uniqueLogDir,
 		privileged:     privileged,
 	}
 }
@@ -346,15 +358,8 @@ func (l *LocalCluster) initCluster(ctx context.Context) {
 		filepath.Join(pwd, "..") + ":/go/src/github.com/cockroachdb/cockroach",
 	}
 
-	if l.logDir != "" {
-		if !filepath.IsAbs(l.logDir) {
-			l.logDir = filepath.Join(pwd, l.logDir)
-		}
-		binds = append(binds, l.logDir+":/logs")
-		// If we don't make sure the directory exists, Docker will and then we
-		// may run into ownership issues (think Docker running as root, but us
-		// running as a regular Joe as it happens on CircleCI).
-		maybePanic(os.MkdirAll(l.logDir, 0777))
+	if l.LogDir != "" {
+		binds = append(binds, l.LogDir+":/logs")
 	}
 	if *cockroachImage == builderImageFull {
 		path, err := filepath.Abs(*cockroachBinary)
@@ -517,10 +522,10 @@ func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
 	}
 
 	var locallogDir string
-	if len(l.logDir) > 0 {
+	if len(l.LogDir) > 0 {
 		dockerlogDir := "/logs/" + node.nodeStr
-		locallogDir = filepath.Join(l.logDir, node.nodeStr)
-		maybePanic(os.MkdirAll(locallogDir, 0777))
+		locallogDir = filepath.Join(l.LogDir, node.nodeStr)
+		maybePanic(os.MkdirAll(locallogDir, 0777|os.ModeSetuid|os.ModeSetgid))
 		cmd = append(
 			cmd,
 			"--logtostderr=ERROR",
@@ -738,7 +743,7 @@ func (l *LocalCluster) stop(ctx context.Context) {
 		_ = os.RemoveAll(l.CertsDir)
 		l.CertsDir = ""
 	}
-	outputLogDir := l.logDir
+	outputLogDir := l.LogDir
 	for i, n := range l.Nodes {
 		if n.Container == nil {
 			continue
@@ -752,7 +757,7 @@ func (l *LocalCluster) stop(ctx context.Context) {
 				panic(err)
 			}
 		}
-		if crashed || l.logDir != "" {
+		if crashed || l.LogDir != "" {
 			// TODO(bdarnell): make these filenames more consistent with
 			// structured logs?
 			file := filepath.Join(outputLogDir, nodeStr(l, i),
