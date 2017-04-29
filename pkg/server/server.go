@@ -26,6 +26,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -858,6 +860,18 @@ func (s *Server) Start(ctx context.Context) error {
 			log.Error(ctx, err)
 		}
 	}
+
+	if s.cfg.ListeningURLFile != "" {
+		pgURL, err := s.cfg.PGURL(url.User(security.RootUser))
+		if err == nil {
+			err = ioutil.WriteFile(s.cfg.ListeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644)
+		}
+
+		if err != nil {
+			log.Error(ctx, err)
+		}
+	}
+
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
 	}
