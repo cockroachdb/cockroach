@@ -56,6 +56,8 @@ var libsRe = func() *regexp.Regexp {
 	return regexp.MustCompile(libs)
 }()
 
+var osVersionRe = regexp.MustCompile(`\d+(\.\d+)*-`)
+
 func main() {
 	if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
 		log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
@@ -93,96 +95,6 @@ func main() {
 		versionStr = branch
 	}
 
-	for _, buildType := range []string{
-		"release-darwin",
-		"release-linux-gnu",
-		"release-linux-musl",
-		"release-windows",
-	} {
-		for i, extraArgs := range []struct {
-			goflags string
-			suffix  string
-			tags    string
-		}{
-			{},
-			// TODO(tamird): re-enable deadlock builds. This really wants its
-			// own install suffix; it currently pollutes the normal release
-			// build cache.
-			//
-			// {suffix: ".deadlock", tags: "deadlock"},
-			{suffix: ".race", goflags: "-race"},
-		} {
-			// TODO(tamird): build deadlock,race binaries for all targets?
-			if i > 0 && !strings.HasSuffix(buildType, "linux-gnu") {
-				continue
-			}
-			// race doesn't work without glibc on Linux. See
-			// https://github.com/golang/go/issues/14481.
-			if strings.HasSuffix(buildType, "linux-musl") && strings.Contains(extraArgs.goflags, "-race") {
-				continue
-			}
-
-			{
-				target := "build"
-				// TODO(tamird, #14673): make CCL compile on Windows.
-				if strings.HasSuffix(buildType, "windows") {
-					target = "buildoss"
-				}
-				args := []string{target}
-				args = append(args, fmt.Sprintf("%s=%s", "TYPE", buildType))
-				args = append(args, fmt.Sprintf("%s=%s", "GOFLAGS", extraArgs.goflags))
-				args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", extraArgs.suffix))
-				args = append(args, fmt.Sprintf("%s=%s", "TAGS", extraArgs.tags))
-				cmd := exec.Command("make", args...)
-				cmd.Dir = pkg.Dir
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				log.Printf("%s %s", cmd.Env, cmd.Args)
-				if err := cmd.Run(); err != nil {
-					log.Fatalf("%s: %s", cmd.Args, err)
-				}
-			}
-
-			if strings.Contains(buildType, "linux") {
-				binaryName := fmt.Sprintf("./cockroach%s-linux-2.6.32-gnu-amd64", extraArgs.suffix)
-
-				cmd := exec.Command(binaryName, "version")
-				cmd.Dir = pkg.Dir
-				cmd.Env = append(cmd.Env, "MALLOC_CONF=prof:true")
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				log.Printf("%s %s", cmd.Env, cmd.Args)
-				if err := cmd.Run(); err != nil {
-					log.Fatalf("%s %s: %s", cmd.Env, cmd.Args, err)
-				}
-
-				// ldd only works on binaries built for the host. "linux-musl"
-				// produces fully static binaries, which cause ldd to exit
-				// non-zero.
-				//
-				// TODO(tamird): implement this for all targets.
-				if !strings.HasSuffix(buildType, "linux-musl") {
-					cmd := exec.Command("ldd", binaryName)
-					cmd.Dir = pkg.Dir
-					log.Printf("%s %s", cmd.Env, cmd.Args)
-					out, err := cmd.Output()
-					if err != nil {
-						log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
-					}
-					scanner := bufio.NewScanner(bytes.NewReader(out))
-					for scanner.Scan() {
-						if line := scanner.Text(); !libsRe.MatchString(line) {
-							log.Fatalf("%s is not properly statically linked:\n%s", binaryName, out)
-						}
-					}
-					if err := scanner.Err(); err != nil {
-						log.Fatal(err)
-					}
-				}
-			}
-		}
-	}
-
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"),
 	})
@@ -191,56 +103,19 @@ func main() {
 	}
 	svc := s3.New(sess)
 
+	bucketName := "binaries.cockroachdb.com"
 	if isHead {
-		// Can't be const because we take its address.
-		bucketName := "cockroach"
+		bucketName = "cockroach"
+	}
 
-		for relativePath, remoteName := range map[string]string{
-			"cockroach-darwin-10.9-amd64":       "cockroach.darwin-amd64",
-			"cockroach-linux-2.6.32-gnu-amd64":  "cockroach.linux-gnu-amd64",
-			"cockroach-linux-2.6.32-musl-amd64": "cockroach.linux-musl-amd64",
-			"cockroach-windows-6.2-amd64.exe":   "cockroach.windows-amd64.exe",
-		} {
-			const repoName = "cockroach"
+	// TODO(tamird,benesch,bdarnell): make "latest" a website-redirect
+	// rather than a full key. This means that the actual artifact will no
+	// longer be named "-latest".
+	releaseVersionStrs := []string{versionStr, "latest"}
 
-			absolutePath := filepath.Join(pkg.Dir, relativePath)
-			f, err := os.Open(absolutePath)
-			if err != nil {
-				log.Fatalf("os.Open(%s): %s", absolutePath, err)
-			}
-			// NB: The leading slash is required to make redirects work
-			// correctly since we reuse this key as the redirect location.
-			versionKey := fmt.Sprintf("/%s/%s.%s", repoName, remoteName, versionStr)
-			if _, err := svc.PutObject(&s3.PutObjectInput{
-				Bucket: &bucketName,
-				Key:    &versionKey,
-				Body:   f,
-			}); err != nil {
-				log.Fatalf("s3 upload %s: %s", absolutePath, err)
-			}
-			if err := f.Close(); err != nil {
-				log.Fatal(err)
-			}
-			latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, "LATEST")
-			if _, err := svc.PutObject(&s3.PutObjectInput{
-				Bucket: &bucketName,
-				Key:    &latestKey,
-				WebsiteRedirectLocation: &versionKey,
-			}); err != nil {
-				log.Fatalf("s3 redirect to %s: %s", versionKey, err)
-			}
-		}
-	} else {
-		// Can't be const because we take its address.
-		bucketName := "binaries.cockroachdb.com"
-
-		versionStrs := []string{versionStr, "latest"}
-
-		// TODO(tamird,benesch,bdarnell): make "latest" a website-redirect
-		// rather than a full key. This means that the actual artifact will no
-		// longer be named "-latest".
-		for _, archiveSuffix := range versionStrs {
-			archiveBase := fmt.Sprintf("cockroach-%s", archiveSuffix)
+	if !isHead {
+		for _, releaseVersionStr := range releaseVersionStrs {
+			archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
 			srcArchive := fmt.Sprintf("%s.%s", archiveBase, "src.tgz")
 			cmd := exec.Command(
 				"make",
@@ -271,86 +146,217 @@ func main() {
 			if err := f.Close(); err != nil {
 				log.Fatal(err)
 			}
+		}
+	}
 
-			for relativePath, targetSuffix := range map[string]string{
-				"cockroach-darwin-10.9-amd64": "darwin-10.9-amd64",
-				// TODO(tamird): make this linux-gnu-amd64 and add versions to
-				// both Linux targets. Requires updating "users" e.g. docs,
-				// https://godoc.org/github.com/cockroachdb/cockroach-
-				// go/testserver#NewTestServer, maybe others.
-				"cockroach-linux-2.6.32-gnu-amd64":  "linux-amd64",
-				"cockroach-linux-2.6.32-musl-amd64": "linux-musl-amd64",
-				"cockroach-windows-6.2-amd64.exe":   "windows-6.2-amd64",
-			} {
-				absolutePath := filepath.Join(pkg.Dir, relativePath)
-				binary, err := os.Open(absolutePath)
-				if err != nil {
-					log.Fatalf("os.Open(%s): %s", absolutePath, err)
+	for _, target := range []struct {
+		buildType  string
+		baseSuffix string
+	}{
+		// TODO(tamird): consider shifting this information into the builder
+		// image; it's conceivable that we'll want to target multiple versions
+		// of a given triple.
+		{buildType: "release-darwin", baseSuffix: "darwin-10.9-amd64"},
+		{buildType: "release-linux-gnu", baseSuffix: "linux-2.6.32-gnu-amd64"},
+		{buildType: "release-linux-musl", baseSuffix: "linux-2.6.32-musl-amd64"},
+		{buildType: "release-windows", baseSuffix: "windows-6.2-amd64.exe"},
+	} {
+		for i, extraArgs := range []struct {
+			goflags string
+			suffix  string
+			tags    string
+		}{
+			{},
+			// TODO(tamird): re-enable deadlock builds. This really wants its
+			// own install suffix; it currently pollutes the normal release
+			// build cache.
+			//
+			// {suffix: ".deadlock", tags: "deadlock"},
+			{suffix: ".race", goflags: "-race"},
+		} {
+			// TODO(tamird): build deadlock,race binaries for all targets?
+			if i > 0 && !(isHead && strings.HasSuffix(target.buildType, "linux-gnu")) {
+				continue
+			}
+			// race doesn't work without glibc on Linux. See
+			// https://github.com/golang/go/issues/14481.
+			if strings.HasSuffix(target.buildType, "linux-musl") && strings.Contains(extraArgs.goflags, "-race") {
+				continue
+			}
+
+			base := fmt.Sprintf("cockroach%s-%s", extraArgs.suffix, target.baseSuffix)
+			{
+				recipe := "build"
+				// TODO(tamird, #14673): make CCL compile on Windows.
+				if strings.HasSuffix(target.buildType, "windows") {
+					recipe = "buildoss"
 				}
-				targetArchiveBase := fmt.Sprintf("%s.%s", archiveBase, targetSuffix)
-				var f *os.File
-				if strings.HasSuffix(relativePath, ".exe") {
-					absoluteArchivePath := filepath.Join(pkg.Dir, targetArchiveBase+".zip")
-					f, err = os.Create(absoluteArchivePath)
+				args := []string{recipe}
+				args = append(args, fmt.Sprintf("%s=%s", "TYPE", target.buildType))
+				args = append(args, fmt.Sprintf("%s=%s", "GOFLAGS", extraArgs.goflags))
+				args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", extraArgs.suffix))
+				args = append(args, fmt.Sprintf("%s=%s", "TAGS", extraArgs.tags))
+				cmd := exec.Command("make", args...)
+				cmd.Dir = pkg.Dir
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				log.Printf("%s %s", cmd.Env, cmd.Args)
+				if err := cmd.Run(); err != nil {
+					log.Fatalf("%s: %s", cmd.Args, err)
+				}
+			}
+
+			if strings.Contains(target.buildType, "linux") {
+				binaryName := fmt.Sprintf("./cockroach%s-linux-2.6.32-gnu-amd64", extraArgs.suffix)
+
+				cmd := exec.Command(binaryName, "version")
+				cmd.Dir = pkg.Dir
+				cmd.Env = append(cmd.Env, "MALLOC_CONF=prof:true")
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				log.Printf("%s %s", cmd.Env, cmd.Args)
+				if err := cmd.Run(); err != nil {
+					log.Fatalf("%s %s: %s", cmd.Env, cmd.Args, err)
+				}
+
+				// ldd only works on binaries built for the host. "linux-musl"
+				// produces fully static binaries, which cause ldd to exit
+				// non-zero.
+				//
+				// TODO(tamird): implement this for all targets.
+				if !strings.HasSuffix(target.buildType, "linux-musl") {
+					cmd := exec.Command("ldd", binaryName)
+					cmd.Dir = pkg.Dir
+					log.Printf("%s %s", cmd.Env, cmd.Args)
+					out, err := cmd.Output()
 					if err != nil {
-						log.Fatalf("os.Create(%s): %s", absoluteArchivePath, err)
+						log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
 					}
-					zw := zip.NewWriter(f)
-					zfw, err := zw.Create(filepath.Join(targetArchiveBase, "cockroach.exe"))
-					if err != nil {
-						log.Fatal(err)
+					scanner := bufio.NewScanner(bytes.NewReader(out))
+					for scanner.Scan() {
+						if line := scanner.Text(); !libsRe.MatchString(line) {
+							log.Fatalf("%s is not properly statically linked:\n%s", binaryName, out)
+						}
 					}
-					if _, err := io.Copy(zfw, binary); err != nil {
-						log.Fatal(err)
-					}
-					if err := zw.Close(); err != nil {
-						log.Fatal(err)
-					}
-				} else {
-					absoluteArchivePath := filepath.Join(pkg.Dir, targetArchiveBase+".tgz")
-					f, err = os.Create(absoluteArchivePath)
-					if err != nil {
-						log.Fatalf("os.Create(%s): %s", absoluteArchivePath, err)
-					}
-					gzw := gzip.NewWriter(f)
-					tw := tar.NewWriter(gzw)
-					binaryInfo, err := binary.Stat()
-					if err != nil {
-						log.Fatal(err)
-					}
-					if err := tw.WriteHeader(&tar.Header{
-						Name: filepath.Join(targetArchiveBase, "cockroach"),
-						Mode: 0755,
-						Size: binaryInfo.Size(),
-					}); err != nil {
-						log.Fatal(err)
-					}
-					if _, err := io.Copy(tw, binary); err != nil {
-						log.Fatal(err)
-					}
-					if err := tw.Close(); err != nil {
-						log.Fatal(err)
-					}
-					if err := gzw.Close(); err != nil {
+					if err := scanner.Err(); err != nil {
 						log.Fatal(err)
 					}
 				}
-				if err := binary.Close(); err != nil {
-					log.Fatal(err)
-				}
-				if _, err := f.Seek(0, 0); err != nil {
-					log.Fatal(err)
-				}
+			}
+
+			absolutePath := filepath.Join(pkg.Dir, base)
+			binary, err := os.Open(absolutePath)
+			if err != nil {
+				log.Fatalf("os.Open(%s): %s", absolutePath, err)
+			}
+			if isHead {
+				const repoName = "cockroach"
+
+				// Replace cockroach{suffix}-{target suffix} with
+				// cockroach{suffix}.{target suffix}.
+				remoteName := strings.Replace(base, "-", ".", 1)
+				// TODO(tamird): do we want to keep doing this? No longer
+				// doing so requires updating cockroachlabs/production, and
+				// possibly cockroachdb/cockroach-go.
+				remoteName = osVersionRe.ReplaceAllLiteralString(remoteName, "")
+
+				// NB: The leading slash is required to make redirects work
+				// correctly since we reuse this key as the redirect location.
+				versionKey := fmt.Sprintf("/%s/%s.%s", repoName, remoteName, versionStr)
 				if _, err := svc.PutObject(&s3.PutObjectInput{
 					Bucket: &bucketName,
-					Key:    &targetArchiveBase,
-					Body:   f,
+					Key:    &versionKey,
+					Body:   binary,
 				}); err != nil {
-					log.Fatalf("s3 upload %s: %s", f.Name(), err)
+					log.Fatalf("s3 upload %s: %s", absolutePath, err)
 				}
-				if err := f.Close(); err != nil {
-					log.Fatal(err)
+				latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, "LATEST")
+				if _, err := svc.PutObject(&s3.PutObjectInput{
+					Bucket: &bucketName,
+					Key:    &latestKey,
+					WebsiteRedirectLocation: &versionKey,
+				}); err != nil {
+					log.Fatalf("s3 redirect to %s: %s", versionKey, err)
 				}
+			} else {
+				targetSuffix := base
+				// TODO(tamird): remove this weirdness. Requires updating
+				// "users" e.g. docs, cockroachdb/cockroach-go, maybe others.
+				if strings.Contains(target.buildType, "linux") {
+					targetSuffix = strings.Replace(targetSuffix, "gnu-", "", -1)
+					targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
+				}
+
+				for _, releaseVersionStr := range releaseVersionStrs {
+					archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
+					targetArchiveBase := fmt.Sprintf("%s.%s", archiveBase, targetSuffix)
+					var f *os.File
+					if strings.HasSuffix(base, ".exe") {
+						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchiveBase+".zip")
+						f, err = os.Create(absoluteArchivePath)
+						if err != nil {
+							log.Fatalf("os.Create(%s): %s", absoluteArchivePath, err)
+						}
+						zw := zip.NewWriter(f)
+						zfw, err := zw.Create(filepath.Join(targetArchiveBase, "cockroach.exe"))
+						if err != nil {
+							log.Fatal(err)
+						}
+						if _, err := io.Copy(zfw, binary); err != nil {
+							log.Fatal(err)
+						}
+						if err := zw.Close(); err != nil {
+							log.Fatal(err)
+						}
+					} else {
+						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchiveBase+".tgz")
+						f, err = os.Create(absoluteArchivePath)
+						if err != nil {
+							log.Fatalf("os.Create(%s): %s", absoluteArchivePath, err)
+						}
+						gzw := gzip.NewWriter(f)
+						tw := tar.NewWriter(gzw)
+						binaryInfo, err := binary.Stat()
+						if err != nil {
+							log.Fatal(err)
+						}
+						if err := tw.WriteHeader(&tar.Header{
+							Name: filepath.Join(targetArchiveBase, "cockroach"),
+							Mode: 0755,
+							Size: binaryInfo.Size(),
+						}); err != nil {
+							log.Fatal(err)
+						}
+						if _, err := binary.Seek(0, 0); err != nil {
+							log.Fatal(err)
+						}
+						if _, err := io.Copy(tw, binary); err != nil {
+							log.Fatal(err)
+						}
+						if err := tw.Close(); err != nil {
+							log.Fatal(err)
+						}
+						if err := gzw.Close(); err != nil {
+							log.Fatal(err)
+						}
+					}
+					if _, err := f.Seek(0, 0); err != nil {
+						log.Fatal(err)
+					}
+					if _, err := svc.PutObject(&s3.PutObjectInput{
+						Bucket: &bucketName,
+						Key:    &targetArchiveBase,
+						Body:   f,
+					}); err != nil {
+						log.Fatalf("s3 upload %s: %s", f.Name(), err)
+					}
+					if err := f.Close(); err != nil {
+						log.Fatal(err)
+					}
+				}
+			}
+			if err := binary.Close(); err != nil {
+				log.Fatal(err)
 			}
 		}
 	}
