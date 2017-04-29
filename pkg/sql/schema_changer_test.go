@@ -1915,6 +1915,12 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		// CREATE TABLE followed by INSERT works.
 		{`createtable-insert`, `CREATE TABLE t.origin (k CHAR PRIMARY KEY, v CHAR);`,
 			`INSERT INTO t.origin VALUES ('c', 'd')`, ``},
+		// Support multiple schema changes for ORMs: #15269
+		// Support insert into another table after schema changes: #15297
+		{`multiple-schema-change`,
+			`CREATE TABLE t.orm1 (k CHAR PRIMARY KEY, v CHAR); CREATE TABLE t.orm2 (k CHAR PRIMARY KEY, v CHAR);`,
+			`CREATE INDEX foo ON t.orm1 (v); CREATE INDEX foo ON t.orm2 (v); INSERT INTO t.origin VALUES ('e', 'f')`,
+			``},
 		// schema change at the end of a transaction that has written.
 		{`insert-create`, `INSERT INTO t.kv VALUES ('e', 'f')`, `CREATE INDEX foo ON t.kv (v)`,
 			`schema change statement cannot follow a statement that has written in the same transaction`},
