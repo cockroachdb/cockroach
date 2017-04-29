@@ -20,18 +20,12 @@ set stty_init "cols 80 rows 25"
 
 # Convenience function to tag what's going on in log files.
 proc report {text} {
-    system "echo; echo \$(date '+.%y%m%d %H:%M:%S.%N') EXPECT TEST: '$text' | tee -a cmd.log"
-}
-
-# Upon termination
-proc report_log_files {} {
-    system "(echo '==COMMAND OUTPUT=='; cat cmd.log; echo '==DB LOG=='; cat cockroach-data/logs/cockroach.log; echo '==END==') || true"
+    system "echo; echo \$(date '+.%y%m%d %H:%M:%S.%N') EXPECT TEST: '$text' | tee -a logs/expect-cmd.log"
 }
 
 # Catch signals
 proc mysig {} {
     report "EXPECT KILLED BY SIGNAL"
-    report_log_files
     exit 130
 }
 trap mysig SIGINT
@@ -50,7 +44,6 @@ proc end_test {} {
 # show up fast).
 proc handle_timeout {text} {
     report "TIMEOUT WAITING FOR \"$text\""
-    report_log_files
     exit 1
 }
 proc eexpect {text} {
@@ -72,7 +65,7 @@ proc interrupt {} {
 # in `server_pid`.
 proc start_server {argv} {
     report "BEGIN START SERVER"
-    system "mkfifo pid_fifo || true; $argv start --insecure --pid-file=pid_fifo --background >>cmd.log 2>&1 & cat pid_fifo > server_pid"
+    system "mkfifo pid_fifo || true; $argv start --insecure --pid-file=pid_fifo --background -s=path=logs/db >>logs/expect-cmd.log 2>&1 & cat pid_fifo > server_pid"
     report "START SERVER DONE"
 }
 proc stop_server {argv} {
