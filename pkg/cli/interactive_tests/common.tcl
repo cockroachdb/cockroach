@@ -26,6 +26,12 @@ set stty_init "cols 80 rows 25"
 # Convenience function to tag what's going on in log files.
 proc report {text} {
     system "echo; echo \$(date '+.%y%m%d %H:%M:%S.%N') EXPECT TEST: '$text' | tee -a logs/expect-cmd.log"
+    # We really want to have all files erasable outside of the container
+    # even though the commands here run with uid 0.
+    # Docker is obnoxious in that it doesn't support setting `umask`.
+    # Also CockroachDB doesn't honor umask anyway.
+    # So we simply come after the fact and adjust the permissions.
+    system "find logs -exec chmod a+rw '{}' \\;"
 }
 
 # Catch signals

@@ -569,7 +569,14 @@ func testDocker(
 		containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
 	}
 	hostConfig := container.HostConfig{NetworkMode: "host"}
-	return l.OneShot(ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name)
+	if err := l.OneShot(
+		ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
+	); err != nil {
+		return err
+	}
+	// Clean up the log files if the run was successful.
+	l.Cleanup(ctx)
+	return nil
 }
 
 func testDockerSingleNode(
