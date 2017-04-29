@@ -2,9 +2,14 @@
 # accordingly.
 set env(TERM) vt100
 
+# If running inside docker, change the home dir to the output log dir
+# so that any HOME-derived artifacts land there.
+set ::env(HOME) "logs"
+
 # Keep the history in a test location, so as to not override the
-# developer's own history file.
-set histfile ".cockroachdb_history_test"
+# developer's own history file when running out of Docker.
+set histfile "cockroach_sql_history"
+
 set ::env(COCKROACH_SQL_CLI_HISTORY) $histfile
 # Set client commands as insecure. The server uses --insecure.
 set ::env(COCKROACH_INSECURE) "true"

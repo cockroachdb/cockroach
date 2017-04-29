@@ -26,7 +26,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -534,14 +533,14 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 		// We only enable history management when the terminal is actually
 		// interactive. This saves on memory when e.g. piping a large SQL
 		// script through the command-line client.
-		userAcct, err := user.Current()
+		homeDir, err := envutil.HomeDir()
 		if err != nil {
 			if log.V(2) {
-				log.Warningf(context.TODO(), "cannot retrieve user information: %s", err)
+				log.Warningf(context.TODO(), "cannot retrieve user information: %v", err)
 				log.Info(context.TODO(), "cannot load or save the command-line history")
 			}
 		} else {
-			histFile := filepath.Join(userAcct.HomeDir, cmdHistFile)
+			histFile := filepath.Join(homeDir, cmdHistFile)
 			cfg := c.ins.Config.Clone()
 			cfg.HistoryFile = histFile
 			cfg.HistorySearchFold = true
