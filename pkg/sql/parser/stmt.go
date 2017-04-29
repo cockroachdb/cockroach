@@ -87,13 +87,6 @@ type IndependentFromParallelizedPriors interface {
 	independentFromParallelizedPriors()
 }
 
-// ValidAfterSchemaUpdateStatement is a pseudo-interface to be implemented by
-// statements which do not risk conflicting with an earlier schema change
-// operation issued previously within the same transaction.
-type ValidAfterSchemaUpdateStatement interface {
-	validAfterSchemaUpdateStatement()
-}
-
 // StatementType implements the Statement interface.
 func (*AlterTable) StatementType() StatementType { return DDL }
 
@@ -114,8 +107,6 @@ func (*BeginTransaction) StatementTag() string { return "BEGIN" }
 
 func (*BeginTransaction) hiddenFromStats() {}
 
-func (*BeginTransaction) validAfterSchemaUpdateStatement() {}
-
 // StatementType implements the Statement interface.
 func (*CommitTransaction) StatementType() StatementType { return Ack }
 
@@ -123,8 +114,6 @@ func (*CommitTransaction) StatementType() StatementType { return Ack }
 func (*CommitTransaction) StatementTag() string { return "COMMIT" }
 
 func (*CommitTransaction) hiddenFromStats() {}
-
-func (*CommitTransaction) validAfterSchemaUpdateStatement() {}
 
 // StatementType implements the Statement interface.
 func (*CopyFrom) StatementType() StatementType { return CopyIn }
@@ -161,8 +150,6 @@ func (*CreateUser) StatementType() StatementType { return Ack }
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateUser) StatementTag() string { return "CREATE USER" }
 
-func (*CreateUser) validAfterSchemaUpdateStatement() {}
-
 // StatementType implements the Statement interface.
 func (*CreateView) StatementType() StatementType { return DDL }
 
@@ -182,8 +169,6 @@ func (n *Deallocate) StatementTag() string {
 }
 
 func (*Deallocate) hiddenFromStats() {}
-
-func (*Deallocate) validAfterSchemaUpdateStatement() {}
 
 // StatementType implements the Statement interface.
 func (n *Delete) StatementType() StatementType { return n.Returning.statementType() }
@@ -229,8 +214,6 @@ func (*Explain) StatementTag() string { return "EXPLAIN" }
 
 func (*Explain) hiddenFromStats() {}
 
-func (*Explain) validAfterSchemaUpdateStatement() {}
-
 // StatementType implements the Statement interface.
 func (*Grant) StatementType() StatementType { return DDL }
 
@@ -238,8 +221,6 @@ func (*Grant) StatementType() StatementType { return DDL }
 func (*Grant) StatementTag() string { return "GRANT" }
 
 func (*Grant) hiddenFromStats() {}
-
-func (*Grant) validAfterSchemaUpdateStatement() {}
 
 // StatementType implements the Statement interface.
 func (n *Insert) StatementType() StatementType { return n.Returning.statementType() }
@@ -261,8 +242,6 @@ func (*Prepare) StatementTag() string { return "PREPARE" }
 
 func (*Prepare) hiddenFromStats() {}
 
-func (*Prepare) validAfterSchemaUpdateStatement() {}
-
 // StatementType implements the Statement interface.
 func (*ReleaseSavepoint) StatementType() StatementType { return Ack }
 
@@ -270,8 +249,6 @@ func (*ReleaseSavepoint) StatementType() StatementType { return Ack }
 func (*ReleaseSavepoint) StatementTag() string { return "RELEASE" }
 
 func (*ReleaseSavepoint) hiddenFromStats() {}
-
-func (*ReleaseSavepoint) validAfterSchemaUpdateStatement() {}
 
 // StatementType implements the Statement interface.
 func (*RenameColumn) StatementType() StatementType { return DDL }
@@ -322,8 +299,6 @@ func (*Revoke) StatementTag() string { return "REVOKE" }
 
 func (*Revoke) hiddenFromStats() {}
 
-func (*Revoke) validAfterSchemaUpdateStatement() {}
-
 // StatementType implements the Statement interface.
 func (*RollbackToSavepoint) StatementType() StatementType { return Ack }
 
@@ -332,8 +307,6 @@ func (*RollbackToSavepoint) StatementTag() string { return "ROLLBACK" }
 
 func (*RollbackToSavepoint) hiddenFromStats() {}
 
-func (*RollbackToSavepoint) validAfterSchemaUpdateStatement() {}
-
 // StatementType implements the Statement interface.
 func (*RollbackTransaction) StatementType() StatementType { return Ack }
 
@@ -341,8 +314,6 @@ func (*RollbackTransaction) StatementType() StatementType { return Ack }
 func (*RollbackTransaction) StatementTag() string { return "ROLLBACK" }
 
 func (*RollbackTransaction) hiddenFromStats() {}
-
-func (*RollbackTransaction) validAfterSchemaUpdateStatement() {}
 
 // StatementType implements the Statement interface.
 func (*Savepoint) StatementType() StatementType { return Ack }
@@ -376,8 +347,6 @@ func (*Set) StatementTag() string { return "SET" }
 
 func (*Set) hiddenFromStats() {}
 
-func (*Set) validAfterSchemaUpdateStatement() {}
-
 // StatementType implements the Statement interface.
 func (*SetTransaction) StatementType() StatementType { return Ack }
 
@@ -394,8 +363,6 @@ func (*SetTimeZone) StatementTag() string { return "SET TIME ZONE" }
 
 func (*SetTimeZone) hiddenFromStats() {}
 
-func (*SetTimeZone) validAfterSchemaUpdateStatement() {}
-
 // StatementType implements the Statement interface.
 func (*SetDefaultIsolation) StatementType() StatementType { return Ack }
 
@@ -403,8 +370,6 @@ func (*SetDefaultIsolation) StatementType() StatementType { return Ack }
 func (*SetDefaultIsolation) StatementTag() string { return "SET" }
 
 func (*SetDefaultIsolation) hiddenFromStats() {}
-
-func (*SetDefaultIsolation) validAfterSchemaUpdateStatement() {}
 
 // StatementType implements the Statement interface.
 func (*Show) StatementType() StatementType { return Rows }
@@ -414,8 +379,6 @@ func (*Show) StatementTag() string { return "SHOW" }
 
 func (*Show) hiddenFromStats()                   {}
 func (*Show) independentFromParallelizedPriors() {}
-
-func (*Show) validAfterSchemaUpdateStatement() {}
 
 // StatementType implements the Statement interface.
 func (*ShowColumns) StatementType() StatementType { return Rows }
@@ -462,8 +425,6 @@ func (*ShowGrants) StatementTag() string { return "SHOW GRANTS" }
 func (*ShowGrants) hiddenFromStats()                   {}
 func (*ShowGrants) independentFromParallelizedPriors() {}
 
-func (*ShowGrants) validAfterSchemaUpdateStatement() {}
-
 // StatementType implements the Statement interface.
 func (*ShowIndex) StatementType() StatementType { return Rows }
 
@@ -482,8 +443,6 @@ func (*ShowTransactionStatus) StatementTag() string { return "SHOW TRANSACTION S
 func (*ShowTransactionStatus) hiddenFromStats()                   {}
 func (*ShowTransactionStatus) independentFromParallelizedPriors() {}
 
-func (*ShowTransactionStatus) validAfterSchemaUpdateStatement() {}
-
 // StatementType implements the Statement interface.
 func (*ShowUsers) StatementType() StatementType { return Rows }
 
@@ -492,8 +451,6 @@ func (*ShowUsers) StatementTag() string { return "SHOW USERS" }
 
 func (*ShowUsers) hiddenFromStats()                   {}
 func (*ShowUsers) independentFromParallelizedPriors() {}
-
-func (*ShowUsers) validAfterSchemaUpdateStatement() {}
 
 // StatementType implements the Statement interface.
 func (*ShowRanges) StatementType() StatementType { return Rows }
@@ -511,8 +468,6 @@ func (*Help) StatementTag() string { return "HELP" }
 
 func (*Help) hiddenFromStats()                   {}
 func (*Help) independentFromParallelizedPriors() {}
-
-func (*Help) validAfterSchemaUpdateStatement() {}
 
 // StatementType implements the Statement interface.
 func (*ShowConstraints) StatementType() StatementType { return Rows }
