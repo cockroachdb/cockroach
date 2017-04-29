@@ -67,6 +67,7 @@ type TestServerArgs struct {
 	TimeSeriesQueryWorkerMax int
 	SQLMemoryPoolSize        int64
 	SendNextTimeout          time.Duration
+	ListeningURLFile         string
 
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running
