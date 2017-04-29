@@ -271,9 +271,11 @@ func main() {
 					log.Fatalf("s3 upload %s: %s", absolutePath, err)
 				}
 				latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, "LATEST")
+				noCache := "no-cache"
 				if _, err := svc.PutObject(&s3.PutObjectInput{
-					Bucket: &bucketName,
-					Key:    &latestKey,
+					Bucket:       &bucketName,
+					CacheControl: &noCache,
+					Key:          &latestKey,
 					WebsiteRedirectLocation: &versionKey,
 				}); err != nil {
 					log.Fatalf("s3 redirect to %s: %s", versionKey, err)
