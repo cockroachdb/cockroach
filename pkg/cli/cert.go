@@ -186,8 +186,7 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 			fmt.Sprintf("user=%s", name)})
 	}
 
-	printQueryOutput(os.Stdout, certTableHeaders, rows, "", cliCtx.tableDisplayFormat)
-	return nil
+	return printQueryOutput(os.Stdout, certTableHeaders, newRowSliceIter(rows), "", cliCtx.tableDisplayFormat)
 }
 
 var certCmds = []*cobra.Command{
