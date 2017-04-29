@@ -263,19 +263,15 @@ var options = map[string]struct {
 // handleSet supports the \set client-side command.
 func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cliStateEnum {
 	if len(args) == 0 {
-		err := printQueryOutput(os.Stdout,
+		printQueryOutput(os.Stdout,
 			[]string{"Option", "Value"},
-			newRowSliceIter([][]string{
+			[][]string{
 				{"display_format", cliCtx.tableDisplayFormat.String()},
 				{"errexit", strconv.FormatBool(c.errExit)},
 				{"check_syntax", strconv.FormatBool(c.checkSyntax)},
 				{"normalize_history", strconv.FormatBool(c.normalizeHistory)},
-			}),
+			},
 			"set", cliCtx.tableDisplayFormat)
-		if err != nil {
-			panic(err)
-		}
-
 		return nextState
 	}
 	opt, ok := options[args[0]]
