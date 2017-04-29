@@ -55,7 +55,6 @@ import (
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errStaleMetadata = errors.New("metadata is still stale")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
-var errStmtFollowsSchemaChange = errors.New("statement cannot follow a schema change in a transaction")
 
 func errWrongNumberOfPreparedStatements(n int) error {
 	return pgerror.NewErrorf(pgerror.CodeInvalidPreparedStatementDefinitionError,
@@ -453,12 +452,6 @@ func (e *Executor) Prepare(
 		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
 	}
 
-	if len(session.TxnState.schemaChangers.schemaChangers) > 0 {
-		if _, ok := stmt.(parser.ValidAfterSchemaUpdateStatement); !ok {
-			return nil, errStmtFollowsSchemaChange
-		}
-	}
-
 	planner := session.newPlanner(e, txn)
 	planner.semaCtx.Placeholders.SetTypes(pinfo)
 	planner.evalCtx.PrepareOnly = true
@@ -672,7 +665,6 @@ func (e *Executor) execRequest(
 
 		// Track if we are retrying this query, so that we do not double count.
 		automaticRetryCount := 0
-		schemaChangerCount := len(txnState.schemaChangers.schemaChangers)
 		txnClosure := func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			defer func() { automaticRetryCount++ }()
 			if txnState.State == Open && txnState.txn != txn {
@@ -680,12 +672,6 @@ func (e *Executor) execRequest(
 					"\ntxnState.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.txn, txn, txnState))
 			}
 			txnState.txn = txn
-
-			// Remove all schema changers added by the closure.
-			if automaticRetryCount > 0 && len(txnState.schemaChangers.schemaChangers) > 0 {
-				txnState.schemaChangers.schemaChangers =
-					txnState.schemaChangers.schemaChangers[:schemaChangerCount]
-			}
 
 			if protoTS != nil {
 				SetTxnTimestamps(txnState.txn, *protoTS)
@@ -1286,12 +1272,6 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 		}
 		return Result{PGTag: s.StatementTag()}, nil
-	}
-
-	if len(txnState.schemaChangers.schemaChangers) > 0 {
-		if _, ok := stmt.(parser.ValidAfterSchemaUpdateStatement); !ok {
-			return Result{}, errStmtFollowsSchemaChange
-		}
 	}
 
 	// Create a new planner from the Session to execute the statement.

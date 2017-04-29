@@ -495,6 +495,42 @@ func TestDropTableInterleaved(t *testing.T) {
 	}
 }
 
+func TestDropTableInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`DROP TABLE t.kv`); err != nil {
+		t.Fatal(err)
+	}
+
+	// We might still be able to read/write in the table inside this transaction
+	// until the schema changer runs, but we shouldn't be able to ALTER it.
+	if _, err := tx.Exec(`ALTER TABLE t.kv ADD COLUMN w CHAR`); !testutils.IsError(err,
+		`table "kv" is being dropped`) {
+		t.Fatalf("different error than expected: %v", err)
+	}
+
+	// Can't commit after ALTER errored, so we ROLLBACK.
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+}
+
 func TestDropAndCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
