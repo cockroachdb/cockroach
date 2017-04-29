@@ -626,7 +626,7 @@ func (ds *DistSender) Send(
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		rpl, pErr := ds.divideAndSendBatchToRanges(ctx, ba, rs, true /* isFirst */)
+		rpl, pErr := ds.divideAndSendBatchToRanges(ctx, ba, rs, 0 /* batchIdx */)
 
 		if pErr == errNo1PCTxn {
 			// If we tried to send a single round-trip EndTransaction but
@@ -668,11 +668,12 @@ type response struct {
 // divideAndSendBatchToRanges sends the supplied batch to all of the
 // ranges which comprise the span specified by rs. The batch request
 // is trimmed against each range which is part of the span and sent
-// either serially or in parallel, if possible. isFirst indicates
-// whether this is the first time this method has been called on the
-// batch. It's specified false where this method is invoked recursively.
+// either serially or in parallel, if possible. batchIdx indicates
+// which partial fragment of the larger batch is being processed by
+// this method. It's specified as non-zero when this method is invoked
+// recursively.
 func (ds *DistSender) divideAndSendBatchToRanges(
-	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, isFirst bool,
+	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// This function builds a channel of responses for each range
 	// implicated in the span (rs) and combines them into a single
@@ -744,7 +745,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		responseCh := make(chan response, 1)
 		responseChs = append(responseChs, responseCh)
 
-		if isFirst && ri.NeedAnother(rs) {
+		if batchIdx == 0 && ri.NeedAnother(rs) {
 			// TODO(tschottdorf): we should have a mechanism for discovering
 			// range merges (descriptor staleness will mostly go unnoticed),
 			// or we'll be turning single-range queries into multi-range
@@ -799,7 +800,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
 		if ba.MaxSpanRequestKeys == 0 && ri.NeedAnother(rs) && ds.rpcContext != nil &&
-			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), isFirst, responseCh) {
+			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, responseCh) {
 			// Note that we pass the batch request by value to the parallel
 			// goroutine to avoid using the cloned txn.
 
@@ -811,7 +812,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		} else {
 			// Send synchronously if there is no parallel capacity left, there's a
 			// max results limit, or this is the final request in the span.
-			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), isFirst)
+			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx)
 			responseCh <- resp
 			if resp.pErr != nil {
 				return
@@ -846,7 +847,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		if !ri.NeedAnother(rs) || !nextRS.Key.Less(nextRS.EndKey) {
 			return
 		}
-		isFirst = false // next range will not be first!
+		batchIdx++
 		rs = nextRS
 	}
 
@@ -867,13 +868,13 @@ func (ds *DistSender) sendPartialBatchAsync(
 	rs roachpb.RSpan,
 	desc *roachpb.RangeDescriptor,
 	evictToken *EvictionToken,
-	isFirst bool,
+	batchIdx int,
 	responseCh chan response,
 ) bool {
 	if err := ds.rpcContext.Stopper.RunLimitedAsyncTask(
 		ctx, ds.asyncSenderSem, false /* !wait */, func(ctx context.Context) {
 			atomic.AddInt32(&ds.asyncSenderCount, 1)
-			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, isFirst)
+			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, batchIdx)
 		},
 	); err != nil {
 		return false
@@ -896,10 +897,13 @@ func (ds *DistSender) sendPartialBatch(
 	rs roachpb.RSpan,
 	desc *roachpb.RangeDescriptor,
 	evictToken *EvictionToken,
-	isFirst bool,
+	batchIdx int,
 ) response {
-	ds.metrics.PartialBatchCount.Inc(1)
-
+	if batchIdx == 1 {
+		ds.metrics.PartialBatchCount.Inc(2) // account for first batch
+	} else if batchIdx > 1 {
+		ds.metrics.PartialBatchCount.Inc(1)
+	}
 	var reply *roachpb.BatchResponse
 	var pErr *roachpb.Error
 
@@ -994,7 +998,7 @@ func (ds *DistSender) sendPartialBatch(
 			// sending batch to just the partial span this descriptor was
 			// supposed to cover.
 			log.VEventf(ctx, 1, "likely split; resending batch to span: %s", tErr)
-			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, intersected, isFirst)
+			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, intersected, batchIdx)
 			return response{reply: reply, pErr: pErr}
 		}
 		break
