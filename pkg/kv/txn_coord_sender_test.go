@@ -1103,7 +1103,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 		roachpb.Error
 		errMsg string
 	}{
-		{*roachpb.NewError(roachpb.NewTransactionRetryError()), "retry txn"},
+		{*roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)), "retry txn"},
 		{
 			*roachpb.NewError(roachpb.NewTransactionPushError(roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{ID: &u}}),

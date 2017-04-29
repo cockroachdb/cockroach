@@ -506,9 +506,9 @@ func evalBeginTransaction(
 				reply.Txn.Update(&tmpTxn)
 			} else {
 				// Our txn record already exists. This is either a client error, sending
-				// a duplicate BeginTransaction, or it's an artefact of DistSender
+				// a duplicate BeginTransaction, or it's an artifact of DistSender
 				// re-sending a batch. Assume the latter and ask the client to restart.
-				return EvalResult{}, roachpb.NewTransactionRetryError()
+				return EvalResult{}, roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
 			}
 
 		case roachpb.COMMITTED:
@@ -761,8 +761,8 @@ func evalEndTransaction(
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter.
 	if args.Commit {
-		if isEndTransactionTriggeringRetryError(h.Txn, reply.Txn) {
-			return EvalResult{}, roachpb.NewTransactionRetryError()
+		if retry, reason := isEndTransactionTriggeringRetryError(h.Txn, reply.Txn); retry {
+			return EvalResult{}, roachpb.NewTransactionRetryError(reason)
 		}
 		reply.Txn.Status = roachpb.COMMITTED
 	} else {
@@ -823,28 +823,30 @@ func isEndTransactionExceedingDeadline(t hlc.Timestamp, args roachpb.EndTransact
 // isEndTransactionTriggeringRetryError returns true if the
 // EndTransactionRequest cannot be committed and needs to return a
 // TransactionRetryError.
-func isEndTransactionTriggeringRetryError(headerTxn, currentTxn *roachpb.Transaction) bool {
+func isEndTransactionTriggeringRetryError(
+	headerTxn, currentTxn *roachpb.Transaction,
+) (bool, roachpb.TransactionRetryReason) {
 	// If we saw any WriteTooOldErrors, we must restart to avoid lost
 	// update anomalies.
 	if headerTxn.WriteTooOld {
-		return true
+		return true, roachpb.RETRY_WRITE_TOO_OLD
 	}
 
 	isTxnPushed := currentTxn.Timestamp != headerTxn.OrigTimestamp
 
 	// If pushing requires a retry and the transaction was pushed, retry.
 	if headerTxn.RetryOnPush && isTxnPushed {
-		return true
+		return true, roachpb.RETRY_DELETE_RANGE
 	}
 
 	// If the isolation level is SERIALIZABLE, return a transaction
 	// retry error if the commit timestamp isn't equal to the txn
 	// timestamp.
 	if headerTxn.Isolation == enginepb.SERIALIZABLE && isTxnPushed {
-		return true
+		return true, roachpb.RETRY_SERIALIZABLE
 	}
 
-	return false
+	return false, 0
 }
 
 // resolveLocalIntents synchronously resolves any intents that are
