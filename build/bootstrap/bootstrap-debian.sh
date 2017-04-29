@@ -7,7 +7,7 @@ set -euxo pipefail
 
 sudo apt-get update
 sudo apt-get dist-upgrade -y
-sudo apt-get install -y --no-install-recommends docker.io git
+sudo apt-get install -y --no-install-recommends docker.io git cmake
 
 sudo adduser "${USER}" docker
 
