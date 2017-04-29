@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -232,15 +233,30 @@ var _ = (*Container).Stop
 // Wait waits for a running container to exit.
 func (c *Container) Wait(ctx context.Context) error {
 	exitCode, err := c.cluster.client.ContainerWait(ctx, c.id)
-	if err == nil && exitCode != 0 {
-		err = errors.Errorf("non-zero exit code: %d", exitCode)
-	}
 	if err != nil {
-		if err := c.Logs(ctx, os.Stderr); err != nil {
-			log.Warning(ctx, err)
-		}
+		return err
 	}
-	return err
+
+	outputLog := filepath.Join(c.cluster.logDir, "console-output.log")
+	cmdLog, err := os.Create(outputLog)
+	if err != nil {
+		return err
+	}
+	defer cmdLog.Close()
+
+	out := io.MultiWriter(cmdLog, os.Stderr)
+	if err := c.Logs(ctx, out); err != nil {
+		log.Warning(ctx, err)
+	}
+
+	var resultErr error
+	if exitCode != 0 {
+		resultErr = errors.Errorf("non-zero exit code: %d", exitCode)
+		fmt.Fprintln(out, resultErr.Error())
+		log.Shout(ctx, log.Severity_INFO, "command left-over files in ", c.cluster.logDir)
+	}
+
+	return resultErr
 }
 
 // Logs outputs the containers logs to the given io.Writer.
