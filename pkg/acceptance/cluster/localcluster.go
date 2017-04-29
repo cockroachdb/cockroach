@@ -192,6 +192,7 @@ func CreateLocal(
 	var uniqueLogDir string
 	if logDir != "" {
 		uniqueLogDir = fmt.Sprintf("%s-%s", logDir, clusterIDS)
+		log.Infof(ctx, "local cluster log directory: %s", uniqueLogDir)
 	}
 	return &LocalCluster{
 		clusterID: clusterIDS,
