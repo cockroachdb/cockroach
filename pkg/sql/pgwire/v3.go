@@ -994,9 +994,17 @@ func (c *v3Conn) sendResponse(
 				}
 			}
 
+			if nRows == 0 {
+				c.writeBuf.initMsg(serverMsgDataRow)
+				c.writeBuf.putInt16(int16(nRows))
+				if err := c.writeBuf.finishMsg(c.wr); err != nil {
+					return err
+				}
+			}
+
 			// Send CommandComplete.
 			tag = append(tag, ' ')
-			tag = strconv.AppendUint(tag, uint64(result.Rows.Len()), 10)
+			tag = strconv.AppendUint(tag, uint64(nRows), 10)
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
@@ -1042,13 +1050,14 @@ func (c *v3Conn) sendResponse(
 func (c *v3Conn) sendRowDescription(
 	ctx context.Context, columns []sqlbase.ResultColumn, formatCodes []formatCode, canSendNoData bool,
 ) error {
-	if len(columns) == 0 && canSendNoData {
+	nColumns := len(columns)
+	if nColumns == 0 && canSendNoData {
 		c.writeBuf.initMsg(serverMsgNoData)
 		return c.writeBuf.finishMsg(c.wr)
 	}
 
 	c.writeBuf.initMsg(serverMsgRowDescription)
-	c.writeBuf.putInt16(int16(len(columns)))
+	c.writeBuf.putInt16(int16(nColumns))
 	for i, column := range columns {
 		if log.V(2) {
 			log.Infof(c.session.Ctx(), "pgwire: writing column %s of type: %T", column.Name, column.Typ)
