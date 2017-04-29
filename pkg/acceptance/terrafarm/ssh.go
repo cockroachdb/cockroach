@@ -17,17 +17,18 @@
 package terrafarm
 
 import (
-	"os/user"
 	"path/filepath"
+
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 const sshUser = "ubuntu"
 
 func (f *Farmer) defaultKeyFile() string {
 	base := "."
-	me, err := user.Current()
+	me, err := envutil.HomeDir()
 	if err == nil {
-		base = me.HomeDir
+		base = me
 	}
 	return filepath.Join(base, ".ssh/"+f.KeyName)
 }
