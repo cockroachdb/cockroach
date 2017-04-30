@@ -4,7 +4,11 @@ set env(TERM) vt100
 
 # If running inside docker, change the home dir to the output log dir
 # so that any HOME-derived artifacts land there.
-set ::env(HOME) "logs"
+if {[pwd] == "/"} {
+  set ::env(HOME) "/logs"
+} else {
+  system "mkdir logs"
+}
 
 # Keep the history in a test location, so as to not override the
 # developer's own history file when running out of Docker.
