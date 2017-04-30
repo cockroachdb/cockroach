@@ -238,3 +238,91 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	// up. It needed to wait for the transaction to release its lease.
 	<-threadDone
 }
+
+// Test that a txn doing a rename can use the new name immediately.
+// It can also use the old name if it took a lease on it before the rename, for
+// better or worse.
+func TestTxnCanUseNewNameAfterRename(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t (a INT PRIMARY KEY);
+`
+	_, err := db.Exec(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	txn, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sure we take a lease on the version called "t".
+	if _, err := txn.Exec("SELECT * FROM test.t"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
+		t.Fatal(err)
+	}
+	// Check that we can use the new name.
+	if _, err := txn.Exec("SELECT * FROM test.t2"); err != nil {
+		t.Fatal(err)
+	}
+	// Check that we can also use the old name, since we have a lease on it.
+	if _, err := txn.Exec("SELECT * FROM test.t"); err != nil {
+		t.Fatal(err)
+	}
+	if err := txn.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Check that we properly cleanup all the temporary names when performing a
+// series of renames in a transaction.
+func TestSeriesOfRenames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t (a INT PRIMARY KEY);
+`
+	_, err := db.Exec(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	txn, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("ALTER TABLE test.t2 RENAME TO test.t3"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("ALTER TABLE test.t3 RENAME TO test.t4"); err != nil {
+		t.Fatal(err)
+	}
+	if err := txn.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the temp names have been properly cleaned up by creating tables
+	// with those names.
+	if _, err := db.Exec("CREATE TABLE test.t (a INT PRIMARY KEY)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("CREATE TABLE test.t2 (a INT PRIMARY KEY)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("CREATE TABLE test.t3 (a INT PRIMARY KEY)"); err != nil {
+		t.Fatal(err)
+	}
+}
