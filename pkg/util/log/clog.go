@@ -578,6 +578,15 @@ func Flush() {
 	logging.lockAndFlushAll()
 }
 
+// SetSync configures whether logging synchronizes all writes.
+func SetSync(sync bool) {
+	logging.lockAndSetSync(sync)
+	if sync {
+		// There may be something in the buffers already; flush it.
+		Flush()
+	}
+}
+
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
 	nocolor         bool          // The -nocolor flag.
@@ -1019,6 +1028,13 @@ func (l *loggingT) flushDaemon() {
 func (l *loggingT) lockAndFlushAll() {
 	l.mu.Lock()
 	l.flushAll()
+	l.mu.Unlock()
+}
+
+// lockAndSetSync configures syncWrites
+func (l *loggingT) lockAndSetSync(sync bool) {
+	l.mu.Lock()
+	l.syncWrites = sync
 	l.mu.Unlock()
 }
 
