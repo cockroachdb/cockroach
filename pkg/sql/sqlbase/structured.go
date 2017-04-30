@@ -1762,6 +1762,8 @@ func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 		ctyp.Kind = ColumnType_INTERVAL
 	case parser.TypeOid:
 		ctyp.Kind = ColumnType_OID
+	case parser.TypeNull:
+		ctyp.Kind = ColumnType_NULL
 	case parser.TypeIntArray:
 		ctyp.Kind = ColumnType_INT_ARRAY
 	case parser.TypeIntVector:
@@ -1810,6 +1812,8 @@ func (c *ColumnType) ToDatumType() parser.Type {
 		return parser.TypeName
 	case ColumnType_OID:
 		return parser.TypeOid
+	case ColumnType_NULL:
+		return parser.TypeNull
 	case ColumnType_INT_ARRAY:
 		return parser.TypeIntArray
 	case ColumnType_INT2VECTOR:
