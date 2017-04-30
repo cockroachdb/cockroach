@@ -6,7 +6,7 @@ spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
 
-start_test "Check that a server started with only in-memory stores automatically logs to stderr."
+start_test "Check that a server started with only in-memory stores and no --log-dir automatically logs to stderr."
 send "$argv start --insecure --store=type=mem,size=1GiB\r"
 eexpect "CockroachDB"
 eexpect "starting cockroach node"
@@ -24,7 +24,7 @@ eexpect ":/# "
 stop_server $argv
 
 start_test "Check that a server started with --logtostderr logs even info messages to stderr."
-send "$argv start --insecure --logtostderr\r"
+send "$argv start -s=path=logs/db --insecure --logtostderr\r"
 eexpect "CockroachDB"
 eexpect "starting cockroach node"
 end_test
@@ -34,7 +34,7 @@ interrupt
 eexpect ":/# "
 
 start_test "Check that --logtostderr can override the threshold but no error is printed on startup"
-send "echo marker; $argv start --insecure --logtostderr=ERROR 2>&1 | grep -v '^\\*'\r"
+send "echo marker; $argv start -s=path=logs/db --insecure --logtostderr=ERROR 2>&1 | grep -v '^\\*'\r"
 eexpect "marker\r\nCockroachDB node starting"
 end_test
 

@@ -151,11 +151,12 @@ type LocalCluster struct {
 	stopper              *stop.Stopper
 	monitorCtx           context.Context
 	monitorCtxCancelFunc func()
-	logDir               string // no logging if empty
 	clusterID            string
 	networkID            string
 	networkName          string
-	privileged           bool // whether to run containers in privileged mode
+	privileged           bool   // whether to run containers in privileged mode
+	logDir               string // no logging if empty
+	logDirRemovable      bool   // if true, the log directory can be removed after use
 }
 
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
@@ -190,8 +191,18 @@ func CreateLocal(
 	// Only pass a nonzero logDir down to LocalCluster when instructed to keep
 	// logs.
 	var uniqueLogDir string
+	logDirRemovable := false
 	if logDir != "" {
+		pwd, err := os.Getwd()
+		maybePanic(err)
+
 		uniqueLogDir = fmt.Sprintf("%s-%s", logDir, clusterIDS)
+		if !filepath.IsAbs(uniqueLogDir) {
+			uniqueLogDir = filepath.Join(pwd, uniqueLogDir)
+		}
+		ensureLogDirExists(uniqueLogDir)
+		logDirRemovable = true
+		log.Infof(ctx, "local cluster log directory: %s", uniqueLogDir)
 	}
 	return &LocalCluster{
 		clusterID: clusterIDS,
@@ -199,10 +210,11 @@ func CreateLocal(
 		config:    cfg,
 		stopper:   stopper,
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
-		events:         make(chan Event, 1000),
-		expectedEvents: make(chan Event, 1000),
-		logDir:         uniqueLogDir,
-		privileged:     privileged,
+		events:          make(chan Event, 1000),
+		expectedEvents:  make(chan Event, 1000),
+		logDir:          uniqueLogDir,
+		logDirRemovable: logDirRemovable,
+		privileged:      privileged,
 	}
 }
 
@@ -347,14 +359,7 @@ func (l *LocalCluster) initCluster(ctx context.Context) {
 	}
 
 	if l.logDir != "" {
-		if !filepath.IsAbs(l.logDir) {
-			l.logDir = filepath.Join(pwd, l.logDir)
-		}
 		binds = append(binds, l.logDir+":/logs")
-		// If we don't make sure the directory exists, Docker will and then we
-		// may run into ownership issues (think Docker running as root, but us
-		// running as a regular Joe as it happens on CircleCI).
-		maybePanic(os.MkdirAll(l.logDir, 0777))
 	}
 	if *cockroachImage == builderImageFull {
 		path, err := filepath.Abs(*cockroachBinary)
@@ -516,15 +521,15 @@ func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
 		cmd = append(cmd, "--join="+net.JoinHostPort(l.Nodes[0].nodeStr, base.DefaultPort))
 	}
 
-	var locallogDir string
+	var localLogDir string
 	if len(l.logDir) > 0 {
-		dockerlogDir := "/logs/" + node.nodeStr
-		locallogDir = filepath.Join(l.logDir, node.nodeStr)
-		maybePanic(os.MkdirAll(locallogDir, 0777))
+		dockerLogDir := "/logs/" + node.nodeStr
+		localLogDir = filepath.Join(l.logDir, node.nodeStr)
+		ensureLogDirExists(localLogDir)
 		cmd = append(
 			cmd,
 			"--logtostderr=ERROR",
-			"--log-dir="+dockerlogDir)
+			"--log-dir="+dockerLogDir)
 	} else {
 		cmd = append(cmd, "--logtostderr=INFO")
 	}
@@ -545,7 +550,7 @@ func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
   cockroach: %[6]s
 
   cli-env:   COCKROACH_INSECURE=false COCKROACH_CERTS_DIR=%[7]s COCKROACH_HOST=%s COCKROACH_PORT=%d`,
-		node.Name(), "https://"+httpAddr.String(), locallogDir, node.Container.id[:5],
+		node.Name(), "https://"+httpAddr.String(), localLogDir, node.Container.id[:5],
 		base.DefaultHTTPPort, cmd, l.CertsDir, httpAddr.IP, httpAddr.Port)
 }
 
@@ -908,4 +913,26 @@ func (l *LocalCluster) ExecRoot(ctx context.Context, i int, cmd []string) error 
 
 	return retry(ctx, 3, 10*time.Second, "ExecRoot",
 		matchNone, execRoot)
+}
+
+func ensureLogDirExists(logDir string) {
+	// Ensure that the path exists, with all its parents.
+	// If we don't make sure the directory exists, Docker will and then we
+	// may run into ownership issues (think Docker running as root, but us
+	// running as a regular Joe as it happens on CircleCI).
+	maybePanic(os.MkdirAll(logDir, 0755))
+	// Now make the last component, and just the last one, writable by
+	// anyone, and set the gid and uid bit so that the owner is
+	// propagated to sub-directories.
+	maybePanic(os.Chmod(logDir, 0777|os.ModeSetuid|os.ModeSetgid))
+}
+
+// Cleanup removes the log directory if it was initially created
+// by this LocalCluster.
+func (l *LocalCluster) Cleanup(ctx context.Context) {
+	if l.logDir != "" && l.logDirRemovable {
+		if err := os.RemoveAll(l.logDir); err != nil {
+			log.Warning(ctx, err)
+		}
+	}
 }

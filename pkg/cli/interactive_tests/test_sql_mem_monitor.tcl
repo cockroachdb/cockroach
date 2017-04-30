@@ -44,7 +44,7 @@ send "ulimit -v [ expr {2*$vmem+400} ]\r"
 eexpect ":/# "
 
 # Start a server with this limit set. The server will now run in the foreground.
-send "$argv start --insecure --no-redirect-stderr\r"
+send "$argv start --insecure --no-redirect-stderr -s=path=logs/db \r"
 eexpect "restarted pre-existing node"
 sleep 1
 
@@ -84,7 +84,7 @@ eexpect root@
 
 # Re-launch a server with relatively lower limit for SQL memory
 set spawn_id $shell_spawn_id
-send "$argv start --insecure --max-sql-memory=150K --no-redirect-stderr\r"
+send "$argv start --insecure --max-sql-memory=150K --no-redirect-stderr -s=path=logs/db \r"
 eexpect "restarted pre-existing node"
 sleep 2
 

@@ -7,13 +7,13 @@ set ::env(COCKROACH_INSECURE) "false"
 
 proc start_secure_server {argv certs_dir} {
     report "BEGIN START SECURE SERVER"
-    system "mkfifo pid_fifo || true; $argv start --certs-dir=$certs_dir --pid-file=pid_fifo >>cmd.log 2>&1 & cat pid_fifo > server_pid"
+    system "mkfifo pid_fifo || true; $argv start --certs-dir=$certs_dir --pid-file=pid_fifo -s=path=logs/db >>expect-cmd.log 2>&1 & cat pid_fifo > server_pid"
     report "END START SECURE SERVER"
 }
 
 proc stop_secure_server {argv certs_dir} {
     report "BEGIN STOP SECURE SERVER"
-    system "set -e; if kill -CONT `cat server_pid`; then $argv quit --certs-dir=$certs_dir || true & sleep 1; kill -9 `cat server_pid` || true; else $argv quit --certs-dir=$certs_dir || true; fi"
+    system "$argv quit --certs-dir=$certs_dir"
     report "END STOP SECURE SERVER"
 }
 
