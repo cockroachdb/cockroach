@@ -84,3 +84,9 @@ proc stop_server {argv} {
     system "$argv quit"
     report "END STOP SERVER"
 }
+
+proc force_stop_server {argv} {
+    report "BEGIN FORCE STOP SERVER"
+    system "set -x; $argv quit & sleep 1; if kill -CONT `cat server_pid`; then kill -TERM `cat server pid`; sleep 1; if kill -CONT `cat server_pid`; then kill -KILL `cat server_pid`; fi; fi"
+    report "END FORCE STOP SERVER"
+}

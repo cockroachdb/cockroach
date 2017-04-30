@@ -12,7 +12,9 @@ eexpect "1 row"
 eexpect root@
 
 # Check that the client properly detects the server went down.
-stop_server $argv
+# We need to force since the open connection may prevent a quick
+# graceful shutdown.
+force_stop_server $argv
 
 send "select 1;\r"
 eexpect "bad connection"
