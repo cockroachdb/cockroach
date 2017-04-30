@@ -603,6 +603,8 @@ type loggingT struct {
 	mu syncutil.Mutex
 	// file holds the log file writer.
 	file flushSyncWriter
+	// syncWrites if true calls file.Flush on every log write.
+	syncWrites bool
 	// pcs is used in V to avoid an allocation when computing the caller's PC.
 	pcs [1]uintptr
 	// vmap is a cache of the V Level for each V() call site, identified by PC.
@@ -734,6 +736,10 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 
 		if _, err := l.file.Write(data); err != nil {
 			panic(err)
+		}
+		if l.syncWrites {
+			l.file.Flush()
+			l.file.Sync()
 		}
 
 		l.putBuffer(buf)

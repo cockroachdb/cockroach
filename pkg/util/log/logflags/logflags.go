@@ -72,6 +72,7 @@ const (
 	LogFileMaxSizeName            = "log-file-max-size"
 	LogFilesCombinedMaxSizeName   = "log-dir-max-size"
 	LogFileVerbosityThresholdName = "log-file-verbosity"
+	LogSyncName                   = "log-sync"
 )
 
 // InitFlags creates logging flags which update the given variables. The passed mutex is
@@ -79,6 +80,7 @@ const (
 func InitFlags(
 	noRedirectStderr *bool,
 	logDir flag.Value,
+	logSync *bool,
 	showLogs *bool,
 	nocolor *bool,
 	verbosity, vmodule, traceLocation flag.Value,
@@ -90,6 +92,7 @@ func InitFlags(
 	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging")
 	flag.Var(traceLocation, LogBacktraceAtName, "when logging hits line file:N, emit a stack trace")
 	flag.Var(logDir, LogDirName, "if non-empty, write log files in this directory")
+	flag.BoolVar(logSync, LogSyncName, *logSync, "make log file writes synchronous")
 	flag.BoolVar(showLogs, ShowLogsName, *showLogs, "print logs instead of saving them in files")
 	flag.Var(humanizeutil.NewBytesValue(logFileMaxSize), LogFileMaxSizeName, "maximum size of each log file")
 	flag.Var(humanizeutil.NewBytesValue(logFilesCombinedMaxSize), LogFilesCombinedMaxSizeName, "maximum combined size of all log files")

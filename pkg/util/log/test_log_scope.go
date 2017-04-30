@@ -48,6 +48,7 @@ type tShim interface {
 	Logf(fmt string, args ...interface{})
 }
 
+// showLogs is used for testing
 var showLogs bool
 
 // Scope creates a TestLogScope which corresponds to the lifetime of a logging
