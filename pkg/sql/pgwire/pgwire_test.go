@@ -450,59 +450,76 @@ func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 	}
 	defer db.Close()
 
-	tx, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
+	{
+		tx, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	if _, err := tx.Exec(`
+		if _, err := tx.Exec(`
 	CREATE DATABASE d;
 	CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
-		t.Fatal(err)
+			t.Fatal(err)
+		}
+
+		stmt, err := tx.Prepare(`INSERT INTO d.kv (k,v) VALUES ($1, $2);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		res, err := stmt.Exec('a', 'b')
+		if err != nil {
+			t.Fatal(err)
+		}
+		stmt.Close()
+		affected, err := res.RowsAffected()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if affected != 1 {
+			t.Fatalf("unexpected number of rows affected: %d", affected)
+		}
+
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	stmt, err := tx.Prepare(`INSERT INTO d.kv (k,v) VALUES ($1, $2);`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	{
+		tx, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	res, err := stmt.Exec('a', 'b')
-	if err != nil {
-		t.Fatal(err)
-	}
-	stmt.Close()
-	affected, err := res.RowsAffected()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if affected != 1 {
-		t.Fatalf("unexpected number of rows affected: %d", affected)
-	}
-
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
-
-	tx, err = db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := tx.Exec(`
+		if _, err := tx.Exec(`
 	DROP TABLE d.kv;
 `); err != nil {
-		t.Fatal(err)
-	}
+			t.Fatal(err)
+		}
 
-	if _, err := tx.Prepare(`
-	INSERT INTO d.kv (k,v) VALUES ($1, $2);
-`); !testutils.IsError(err, "statement cannot follow a schema change in a transaction") {
-		t.Fatalf("got err: %s", err)
-	}
+		stmt, err := tx.Prepare(`INSERT INTO d.kv (k,v) VALUES ($1, $2);`)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	if err := tx.Rollback(); err != nil {
-		t.Fatal(err)
+		// INSERT works because it is using a cached descriptor that is leased.
+		res, err := stmt.Exec('c', 'd')
+		if err != nil {
+			t.Fatal(err)
+		}
+		stmt.Close()
+		affected, err := res.RowsAffected()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if affected != 1 {
+			t.Fatalf("unexpected number of rows affected: %d", affected)
+		}
+
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
