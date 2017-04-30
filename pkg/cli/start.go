@@ -326,8 +326,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 	var s *server.Server
 	errChan := make(chan error, 1)
 	go func() {
+		// Ensure that the log files see the startup messages immediately.
+		defer log.Flush()
 		defer log.RecoverAndReportPanic(startCtx)
-
 		defer sp.Finish()
 		if err := func() error {
 			if err := serverCfg.InitNode(); err != nil {
@@ -422,13 +423,22 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// is stopped externally (for example, via the quit endpoint).
 	select {
 	case err := <-errChan:
+		// SetSync both flushes and ensures that subsequent log writes are flushed too.
+		log.SetSync(true)
 		return err
 	case <-stopper.ShouldStop():
 		// Server is being stopped externally and our job is finished
 		// here since we don't know if it's a graceful shutdown or not.
 		<-stopper.IsStopped()
+		// SetSync both flushes and ensures that subsequent log writes are flushed too.
+		log.SetSync(true)
 		return nil
 	case sig := <-signalCh:
+		// We start synchronizing log writes from here, because if a
+		// signal was received there is a non-zero chance the sender of
+		// this signal will follow up with SIGKILL if the shutdown is not
+		// timely, and we don't want logs to be lost.
+		log.SetSync(true)
 		log.Infof(shutdownCtx, "received signal '%s'", sig)
 		if sig == os.Interrupt {
 			// Graceful shutdown after an interrupt should cause the process
@@ -489,7 +499,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 		log.Infof(shutdownCtx, msgDone)
 		fmt.Fprintln(os.Stdout, msgDone)
 	}
-	log.Flush()
 
 	return returnErr
 }
