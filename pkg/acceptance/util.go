@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -126,8 +125,6 @@ var flagCLTWriters = flag.Int("clt.writers", -1,
 	"# of load generators to spawn (defaults to # of nodes)")
 var flagCLTMinQPS = flag.Float64("clt.min-qps", 5.0,
 	"fail load tests when queries per second drops below this during a health check interval")
-
-var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
 var stopper = stop.NewStopper()
 
@@ -413,15 +410,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 	} else {
 		logDir := *flagLogDir
 		if logDir != "" {
-			logDir = func(d string) string {
-				for i := 1; i < 100; i++ {
-					_, _, fun := caller.Lookup(i)
-					if testFuncRE.MatchString(fun) {
-						return filepath.Join(d, fun)
-					}
-				}
-				panic("no caller matching Test(.*) in stack trace")
-			}(logDir)
+			logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
 		}
 		l := cluster.CreateLocal(ctx, cfg, logDir, *flagPrivileged, stopper)
 		l.Start(ctx)
@@ -569,7 +558,14 @@ func testDocker(
 		containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
 	}
 	hostConfig := container.HostConfig{NetworkMode: "host"}
-	return l.OneShot(ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name)
+	if err := l.OneShot(
+		ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
+	); err != nil {
+		return err
+	}
+	// Clean up the log files if the run was successful.
+	l.Cleanup(ctx)
+	return nil
 }
 
 func testDockerSingleNode(
