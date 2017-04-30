@@ -48,6 +48,10 @@ message ColumnType {
     NAME = 11;
     OID = 12;
 
+    // NULL is not supported as a table column type, however it can be
+    // transferred through distsql streams.
+    NULL = 13;
+
     // Array and vector types.
     //
     // TODO(cuongdo): Fix this before allowing persistence of array/vector types

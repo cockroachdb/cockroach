@@ -188,6 +188,9 @@ func TestEncDatumCompare(t *testing.T) {
 
 	for kind := range ColumnType_Kind_name {
 		kind := ColumnType_Kind(kind)
+		if kind == ColumnType_NULL {
+			continue
+		}
 		// TODO(cuongdo): we don't support persistence for arrays yet.
 		if kind == ColumnType_INT_ARRAY ||
 			kind == ColumnType_INT2VECTOR {

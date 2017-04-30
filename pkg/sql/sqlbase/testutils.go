@@ -66,6 +66,8 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 
 // RandDatum generates a random Datum of the given type.
 // If null is true, the datum can be DNull.
+// Note that if typ.Kind is ColumnType_NULL, the datum will always be DNull,
+// regardless of the null flag.
 func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 	if null && rng.Intn(10) == 0 {
 		return parser.DNull
@@ -133,6 +135,8 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 		return parser.NewDName(string(p))
 	case ColumnType_OID:
 		return parser.NewDOid(parser.DInt(rng.Int63()))
+	case ColumnType_NULL:
+		return parser.DNull
 	case ColumnType_INT_ARRAY, ColumnType_INT2VECTOR:
 		// TODO(cuongdo): we don't support for persistence of arrays or vectors yet
 		return parser.DNull
