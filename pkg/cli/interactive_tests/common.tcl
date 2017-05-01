@@ -85,12 +85,15 @@ proc start_server {argv} {
 }
 proc stop_server {argv} {
     report "BEGIN STOP SERVER"
+    # Trigger a normal shutdown.
     system "$argv quit"
+    # If after 5 seconds the server hasn't shut down, trigger an error.
+    system "for i in `seq 1 5`; do kill -CONT `cat server_pid` 2>/dev/null || exit 0; echo still waiting; sleep 1; done; echo 'server still running?'; exit 1"
     report "END STOP SERVER"
 }
 
 proc force_stop_server {argv} {
     report "BEGIN FORCE STOP SERVER"
-    system "set -x; $argv quit & sleep 1; if kill -CONT `cat server_pid`; then kill -TERM `cat server pid`; sleep 1; if kill -CONT `cat server_pid`; then kill -KILL `cat server_pid`; fi; fi"
+    system "$argv quit & sleep 1; if kill -CONT `cat server_pid` 2>/dev/null; then kill -TERM `cat server pid`; sleep 1; if kill -CONT `cat server_pid` 2>/dev/null; then kill -KILL `cat server_pid`; fi; fi"
     report "END FORCE STOP SERVER"
 }
