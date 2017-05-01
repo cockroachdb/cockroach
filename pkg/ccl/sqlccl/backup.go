@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"io/ioutil"
 	"sort"
-	"strings"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -231,11 +230,9 @@ func backupJobDescription(
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
 func clusterNodeCount(g *gossip.Gossip) int {
-	const nodePrefix = gossip.KeyNodeIDPrefix + ":"
-
 	var nodes int
 	for k := range g.GetInfoStatus().Infos {
-		if strings.HasPrefix(k, nodePrefix) {
+		if gossip.IsNodeIDKey(k) {
 			nodes++
 		}
 	}

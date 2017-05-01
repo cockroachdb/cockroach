@@ -269,12 +269,22 @@ func TestInfoStoreMostDistant(t *testing.T) {
 	}
 	is, stopper := newTestInfoStore()
 	defer stopper.Stop(context.TODO())
+
+	// Start with one very distant info that shouldn't affect mostDistant
+	// calculations because it isn't a node ID key.
+	scInfo := is.newInfo(nil, time.Second)
+	scInfo.Hops = 100
+	scInfo.NodeID = nodes[0]
+	if err := is.addInfo(KeySystemConfig, scInfo); err != nil {
+		t.Fatal(err)
+	}
+
 	// Add info from each address, with hop count equal to index+1.
 	for i := 0; i < len(nodes); i++ {
 		inf := is.newInfo(nil, time.Second)
 		inf.Hops = uint32(i + 1)
 		inf.NodeID = nodes[i]
-		if err := is.addInfo(fmt.Sprintf("b.%d", i), inf); err != nil {
+		if err := is.addInfo(MakeNodeIDKey(inf.NodeID), inf); err != nil {
 			t.Fatal(err)
 		}
 		nodeID, hops := is.mostDistant(func(roachpb.NodeID) bool { return false })
