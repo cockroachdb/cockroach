@@ -281,7 +281,7 @@ func main() {
 					log.Fatalf("s3 redirect to %s: %s", versionKey, err)
 				}
 			} else {
-				targetSuffix := base
+				targetSuffix := strings.TrimSuffix(target.baseSuffix, ".exe")
 				// TODO(tamird): remove this weirdness. Requires updating
 				// "users" e.g. docs, cockroachdb/cockroach-go, maybe others.
 				if strings.Contains(target.buildType, "linux") {
