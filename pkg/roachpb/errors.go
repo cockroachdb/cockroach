@@ -221,11 +221,11 @@ func (e *NotLeaseHolderError) message(_ *Error) string {
 		return prefix + e.CustomMsg
 	}
 	if e.LeaseHolder == nil {
-		return fmt.Sprintf("%srange %d: replica %s not lease holder; lease holder unknown", prefix, e.RangeID, e.Replica)
+		return fmt.Sprintf("%sr%d: replica %s not lease holder; lease holder unknown", prefix, e.RangeID, e.Replica)
 	} else if e.Lease != nil {
-		return fmt.Sprintf("%srange %d: replica %s not lease holder; current lease is %s", prefix, e.RangeID, e.Replica, e.Lease)
+		return fmt.Sprintf("%sr%d: replica %s not lease holder; current lease is %s", prefix, e.RangeID, e.Replica, e.Lease)
 	}
-	return fmt.Sprintf("%srange %d: replica %s not lease holder; replica %s is", prefix, e.RangeID, e.Replica, *e.LeaseHolder)
+	return fmt.Sprintf("%sr%d: replica %s not lease holder; replica %s is", prefix, e.RangeID, e.Replica, *e.LeaseHolder)
 }
 
 var _ ErrorDetailInterface = &NotLeaseHolderError{}
@@ -267,7 +267,7 @@ func (e *RangeNotFoundError) Error() string {
 }
 
 func (e *RangeNotFoundError) message(_ *Error) string {
-	return fmt.Sprintf("range %d was not found", e.RangeID)
+	return fmt.Sprintf("r%d was not found", e.RangeID)
 }
 
 var _ ErrorDetailInterface = &RangeNotFoundError{}
