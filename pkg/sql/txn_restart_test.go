@@ -1057,6 +1057,55 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	}
 }
 
+// TestUnexpectedStatementInRestartWait ensures that a statement other than
+// ROLLBACK [TO SAVEPOINT] while the txn is in the RetryWait state terminates
+// the transaction. More importantly than the state in which the transaction
+// transitions when this happens is that this test prevents a regression of
+// #15412, whereby the server would crash in this situation.
+func TestUnexpectedStatementInRestartWait(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(
+		"SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)"); !testutils.IsError(
+		err, `forced by crdb_internal\.force_retry\(\)`) {
+		t.Fatal(err)
+	}
+	var state string
+	if err := tx.QueryRow("SHOW TRANSACTION STATUS").Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != "RestartWait" {
+		t.Fatalf("expected state %s, got: %s", "RestartWait", state)
+	}
+
+	if _, err := tx.Exec("SELECT 1"); !testutils.IsError(err,
+		`pq: Expected "ROLLBACK TO SAVEPOINT COCKROACH_RESTART": `+
+			"current transaction is aborted, commands ignored until end of transaction block") {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow("SHOW TRANSACTION STATUS").Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != "Aborted" {
+		t.Fatalf("expected state %s, got: %s", "Aborted", state)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestNonRetryableError verifies that a non-retryable error is propagated to the client.
 func TestNonRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()

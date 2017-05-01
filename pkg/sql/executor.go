@@ -1057,8 +1057,19 @@ func (e *Executor) execStmtInAbortedTxn(session *Session, stmt parser.Statement)
 			parser.RestartSavepointName))
 		return Result{}, err
 	default:
-		err := sqlbase.NewTransactionAbortedError("")
-		return Result{}, err
+		if txnState.State == RestartWait {
+			err := sqlbase.NewTransactionAbortedError(
+				"Expected \"ROLLBACK TO SAVEPOINT COCKROACH_RESTART\"" /* customMsg */)
+			// If we were waiting for a restart, but the client failed to perform it,
+			// we'll cleanup the txn. The client is not respecting the protocol, so
+			// there seems to be little point in staying in RestartWait (plus,
+			// higher-level code asserts that we're only in RestartWait when returning
+			// retryable errors to the client).
+			txnState.updateStateAndCleanupOnErr(err, e)
+			return Result{}, err
+		} else {
+			return Result{}, sqlbase.NewTransactionAbortedError("" /*customMsg */)
+		}
 	}
 }
 
