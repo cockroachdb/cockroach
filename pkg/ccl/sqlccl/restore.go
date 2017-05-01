@@ -45,6 +45,7 @@ func Import(
 	startKey, endKey roachpb.Key,
 	files []roachpb.ImportRequest_File,
 	kr storageccl.KeyRewriter,
+	rekeys []roachpb.ImportRequest_TableRekey,
 ) (*roachpb.ImportResponse, error) {
 	var newStartKey, newEndKey roachpb.Key
 	{
@@ -77,6 +78,7 @@ func Import(
 		},
 		Files:       files,
 		KeyRewrites: kr,
+		Rekeys:      rekeys,
 	}
 	res, pErr := client.SendWrapped(ctx, db.GetSender(), req)
 	if pErr != nil {
@@ -175,13 +177,18 @@ func reassignParentIDs(
 
 // reassignTableIDs updates the tables being restored with new TableIDs reserved
 // in the restoring cluster, as well as fixing cross-table references to use the
-// new IDs. It returns a KeyRewriter that can be used to transform KV data to
-// reflect the ID remapping it has done in the descriptors.
+// new IDs. It returns a slice of TableRekeys which can be used to transform KV
+// data to reflect the ID remapping done in the descriptors.
+//
+// TODO(dan): For backward compatibility, KeyRewriter, which is a subset of the
+// information returned by the TableRekeys, is also returned. Remove this when
+// we can.
 func reassignTableIDs(
 	ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor, opt parser.KVOptions,
-) (storageccl.KeyRewriter, map[sqlbase.ID]sqlbase.ID, error) {
+) (map[sqlbase.ID]sqlbase.ID, storageccl.KeyRewriter, []roachpb.ImportRequest_TableRekey, error) {
 	var newTableIDs map[sqlbase.ID]sqlbase.ID
 	var kr storageccl.KeyRewriter
+	var rekeys []roachpb.ImportRequest_TableRekey
 
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		newTableIDs = make(map[sqlbase.ID]sqlbase.ID, len(tables))
@@ -192,18 +199,31 @@ func reassignTableIDs(
 			}
 			kr = append(kr, MakeKeyRewriterForNewTableID(table, newTableID)...)
 			newTableIDs[table.ID] = newTableID
+			oldID := table.ID
 			table.ID = newTableID
+
+			desc := sqlbase.Descriptor{
+				Union: &sqlbase.Descriptor_Table{Table: table},
+			}
+			newDescBytes, err := desc.Marshal()
+			if err != nil {
+				return errors.Wrap(err, "marshalling descriptor")
+			}
+			rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
+				OldID:   uint32(oldID),
+				NewDesc: newDescBytes,
+			})
 		}
 		return nil
 	}); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if err := reassignReferencedTables(tables, newTableIDs, opt); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return kr, newTableIDs, nil
+	return newTableIDs, kr, rekeys, nil
 }
 
 func reassignReferencedTables(
@@ -641,13 +661,13 @@ func Restore(
 	spans := spansForAllTableIndexes(tables)
 
 	// Assign new IDs to the tables and update all references to use the new IDs,
-	// and get a KeyRewriter to use when importing their raw data.
+	// and get TableRekeys to use when importing their raw data.
 	//
 	// NB: we do this in a standalone transaction, not one that covers the entire
 	// restore since restarts would be terrible (and our bulk import primitive
 	// are non-transactional), but this does mean if something fails during Import,
 	// we've "leaked" the IDs, in that the generator will have been incremented.
-	kr, newTableIDs, err := reassignTableIDs(ctx, db, tables, opt)
+	newTableIDs, kr, rekeys, err := reassignTableIDs(ctx, db, tables, opt)
 	if err != nil {
 		// We expect user-facing usage errors here, so don't wrapf.
 		return 0, err
@@ -751,7 +771,7 @@ func Restore(
 		g.Go(func() error {
 			defer func() { <-importsSem }()
 
-			res, err := Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr)
+			res, err := Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr, rekeys)
 			if err != nil {
 				return err
 			}
