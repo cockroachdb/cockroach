@@ -1016,11 +1016,9 @@ const flushInterval = 30 * time.Second
 func (l *loggingT) flushDaemon() {
 	// doesn't need to be Stop()'d as the loop never escapes
 	for range time.Tick(flushInterval) {
-		l.mu.Lock()
 		if !l.disableDaemons {
-			l.flushAll()
+			l.lockAndFlushAll()
 		}
-		l.mu.Unlock()
 	}
 }
 
