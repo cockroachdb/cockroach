@@ -293,15 +293,10 @@ func main() {
 					archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
 					targetArchiveBase := fmt.Sprintf("%s.%s", archiveBase, targetSuffix)
 					var targetArchive string
-					var f *os.File
+					var body bytes.Buffer
 					if strings.HasSuffix(base, ".exe") {
 						targetArchive = targetArchiveBase + ".zip"
-						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchive)
-						f, err = os.Create(absoluteArchivePath)
-						if err != nil {
-							log.Fatalf("os.Create(%s): %s", absoluteArchivePath, err)
-						}
-						zw := zip.NewWriter(f)
+						zw := zip.NewWriter(&body)
 						zfw, err := zw.Create(filepath.Join(targetArchiveBase, "cockroach.exe"))
 						if err != nil {
 							log.Fatal(err)
@@ -314,12 +309,7 @@ func main() {
 						}
 					} else {
 						targetArchive = targetArchiveBase + ".tgz"
-						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchive)
-						f, err = os.Create(absoluteArchivePath)
-						if err != nil {
-							log.Fatalf("os.Create(%s): %s", absoluteArchivePath, err)
-						}
-						gzw := gzip.NewWriter(f)
+						gzw := gzip.NewWriter(&body)
 						tw := tar.NewWriter(gzw)
 						binaryInfo, err := binary.Stat()
 						if err != nil {
@@ -345,18 +335,12 @@ func main() {
 							log.Fatal(err)
 						}
 					}
-					if _, err := f.Seek(0, 0); err != nil {
-						log.Fatal(err)
-					}
 					if _, err := svc.PutObject(&s3.PutObjectInput{
 						Bucket: &bucketName,
 						Key:    &targetArchive,
-						Body:   f,
+						Body:   bytes.NewReader(body.Bytes()),
 					}); err != nil {
-						log.Fatalf("s3 upload %s: %s", f.Name(), err)
-					}
-					if err := f.Close(); err != nil {
-						log.Fatal(err)
+						log.Fatalf("s3 upload %s: %s", targetArchive, err)
 					}
 				}
 			}
