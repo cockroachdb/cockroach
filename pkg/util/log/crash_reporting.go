@@ -71,7 +71,7 @@ func ReportPanic(ctx context.Context, r interface{}) interface{} {
 		r = errors.Errorf("%s: %v", e.ExtraInfo, e.Err)
 	}
 
-	maybeSendCrashReport(ctx, reportable)
+	sendCrashReport(ctx, reportable)
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
@@ -90,22 +90,10 @@ func ReportPanic(ctx context.Context, r interface{}) interface{} {
 	return r
 }
 
-var crashReports = settings.RegisterBoolSetting(
-	"diagnostics.reporting.send_crash_reports",
-	"send crash and panic reports",
-	false,
-)
-
-func maybeSendCrashReport(ctx context.Context, r interface{}) {
-	if DiagnosticsReportingEnabled.Get() && crashReports.Get() {
-		sendCrashReport(ctx, r)
-	}
-}
-
 // SetupCrashReporter sets the crash reporter info.
 func SetupCrashReporter(ctx context.Context, cmd string) {
 	url := envutil.EnvOrDefaultString(
-		"COCKROACH_CRASH_REPORTS", "https://ignored:ignored@errors.cockroachdb.com/sentry",
+		"COCKROACH_CRASH_REPORTS_URL", "https://ignored:ignored@errors.cockroachdb.com/sentry",
 	)
 	if err := errors.Wrap(raven.SetDSN(url), "failed to setup crash reporting"); err != nil {
 		panic(err)
