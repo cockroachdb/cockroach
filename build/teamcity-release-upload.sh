@@ -20,5 +20,6 @@ if [ "$TC_BUILD_BRANCH" != master ]; then
 	(cd pkg/acceptance && ./acceptance.test -i $image -b /cockroach/cockroach -nodes 3 -test.v -test.timeout -5m)
 
 	sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < build/.dockercfg.in > ~/.dockercfg
-	docker push $image:{latest,"$TC_BUILD_BRANCH"}
+	docker push "$image:latest"
+	docker push "$image:$TC_BUILD_BRANCH"
 fi
