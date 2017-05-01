@@ -123,6 +123,10 @@ func (c *channelSaveTransport) SendNext(_ context.Context, done chan<- BatchCall
 	c.ch <- done
 }
 
+func (*channelSaveTransport) NextReplica() roachpb.ReplicaDescriptor {
+	return roachpb.ReplicaDescriptor{}
+}
+
 func (*channelSaveTransport) MoveToFront(roachpb.ReplicaDescriptor) {
 }
 
@@ -329,7 +333,7 @@ func TestSendNext_AllRetryableApplicationErrors(t *testing.T) {
 		t.Fatalf("expected SendError, got err=nil and reply=%s", bc.Reply)
 	} else if _, ok := bc.Err.(*roachpb.SendError); !ok {
 		t.Fatalf("expected SendError, got err=%s", bc.Err)
-	} else if exp := "range 1 was not found"; !testutils.IsError(bc.Err, exp) {
+	} else if exp := "r1 was not found"; !testutils.IsError(bc.Err, exp) {
 		t.Errorf("expected SendError to contain %q, but got %v", exp, bc.Err)
 	}
 }
@@ -389,6 +393,10 @@ func (f *firstNErrorTransport) SendNext(_ context.Context, done chan<- BatchCall
 	}
 	f.numSent++
 	done <- call
+}
+
+func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
+	return roachpb.ReplicaDescriptor{}
 }
 
 func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
