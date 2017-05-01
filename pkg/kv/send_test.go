@@ -290,7 +290,7 @@ func TestSendNext_RetryableApplicationErrorThenSuccess(t *testing.T) {
 	doneChans[1] <- BatchCall{
 		Reply: &roachpb.BatchResponse{
 			BatchResponse_Header: roachpb.BatchResponse_Header{
-				Error: roachpb.NewError(roachpb.NewRangeNotFoundError(1)),
+				Error: roachpb.NewError(roachpb.NewStoreNotFoundError(1)),
 			},
 		},
 	}
@@ -321,7 +321,7 @@ func TestSendNext_AllRetryableApplicationErrors(t *testing.T) {
 		ch <- BatchCall{
 			Reply: &roachpb.BatchResponse{
 				BatchResponse_Header: roachpb.BatchResponse_Header{
-					Error: roachpb.NewError(roachpb.NewRangeNotFoundError(1)),
+					Error: roachpb.NewError(roachpb.NewStoreNotFoundError(1)),
 				},
 			},
 		}
@@ -333,7 +333,7 @@ func TestSendNext_AllRetryableApplicationErrors(t *testing.T) {
 		t.Fatalf("expected SendError, got err=nil and reply=%s", bc.Reply)
 	} else if _, ok := bc.Err.(*roachpb.SendError); !ok {
 		t.Fatalf("expected SendError, got err=%s", bc.Err)
-	} else if exp := "r1 was not found"; !testutils.IsError(bc.Err, exp) {
+	} else if exp := "store 1 was not found"; !testutils.IsError(bc.Err, exp) {
 		t.Errorf("expected SendError to contain %q, but got %v", exp, bc.Err)
 	}
 }
