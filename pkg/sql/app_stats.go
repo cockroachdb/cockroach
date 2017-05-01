@@ -25,6 +25,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -51,7 +52,7 @@ type appStats struct {
 type stmtStats struct {
 	syncutil.Mutex
 
-	data StatementStatistics
+	data roachpb.StatementStatistics
 }
 
 // StmtStatsEnable determines whether to collect per-statement
@@ -126,24 +127,13 @@ func (a *appStats) recordStatement(
 	} else if int64(automaticRetryCount) > s.data.MaxRetries {
 		s.data.MaxRetries = int64(automaticRetryCount)
 	}
-	s.data.NumRows.record(s.data.Count, float64(numRows))
-	s.data.ParseLat.record(s.data.Count, parseLat)
-	s.data.PlanLat.record(s.data.Count, planLat)
-	s.data.RunLat.record(s.data.Count, runLat)
-	s.data.ServiceLat.record(s.data.Count, svcLat)
-	s.data.OverheadLat.record(s.data.Count, ovhLat)
+	s.data.NumRows.Record(s.data.Count, float64(numRows))
+	s.data.ParseLat.Record(s.data.Count, parseLat)
+	s.data.PlanLat.Record(s.data.Count, planLat)
+	s.data.RunLat.Record(s.data.Count, runLat)
+	s.data.ServiceLat.Record(s.data.Count, svcLat)
+	s.data.OverheadLat.Record(s.data.Count, ovhLat)
 	s.Unlock()
-}
-
-// Retrieve the variance of the values.
-func (l *NumericStat) getVariance(count int64) float64 {
-	return l.SquaredDiffs / (float64(count) - 1)
-}
-
-func (l *NumericStat) record(count int64, val float64) {
-	delta := val - l.Mean
-	l.Mean += delta / float64(count)
-	l.SquaredDiffs += delta * (val - l.Mean)
 }
 
 // getStatsForStmt retrieves the per-stmt stat object.
@@ -309,7 +299,7 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 
 // AppStatementStatistics is a map: for each app name (as set in sql sessions),
 // it maps statements to their collected statistics.
-type AppStatementStatistics map[string]map[string]StatementStatistics
+type AppStatementStatistics map[string]map[string]roachpb.StatementStatistics
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
 // queries scrubbed of their identifiers. Any statements which cannot be
@@ -321,7 +311,7 @@ func (e *Executor) GetScrubbedStmtStats() AppStatementStatistics {
 	for appName, a := range e.sqlStats.apps {
 		hashedApp := HashAppName(appName)
 		a.Lock()
-		m := make(map[string]StatementStatistics)
+		m := make(map[string]roachpb.StatementStatistics)
 		for q, stats := range a.stmts {
 			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
 			if ok {
