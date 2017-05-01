@@ -28,16 +28,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
 )
 
 func stubURL(target **url.URL, stubURL *url.URL) func() {
@@ -88,6 +89,8 @@ func TestCheckVersion(t *testing.T) {
 func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.TODO()
+
 	usageReports := int32(0)
 	var uuid, rawReportBody string
 	reported := reportingInfo{}
@@ -124,6 +127,8 @@ func TestReportUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ts.sqlExecutor.ResetStatementStats(ctx)
+
 	const elemName = "somestring"
 	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
 		t.Fatal(err)
@@ -133,7 +138,38 @@ func TestReportUsage(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	tables, err := ts.collectSchemaInfo(context.TODO())
+
+	// Run some queries so we have some query statistics collected.
+	for i := 0; i < 10; i++ {
+		// Run some sample queries. Each are passed a string and int by Exec.
+		// Note placeholders aren't allowed in some positions, including names.
+		for _, q := range []string{
+			`SELECT * FROM %[1]s.%[1]s WHERE %[1]s = length($1::string) OR %[1]s = $2`,
+			`INSERT INTO %[1]s.%[1]s VALUES (length($1::string)), ($2)`,
+		} {
+			if _, err := db.Exec(fmt.Sprintf(q, elemName), elemName, 10003); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// Even queries that don't use placeholders and contain literal strings
+		// should still not cause those strings to appear in reports.
+		for _, q := range []string{
+			`SELECT * FROM %[1]s.%[1]s WHERE %[1]s = 1 AND '%[1]s' = '%[1]s'`,
+			`INSERT INTO %[1]s.%[1]s VALUES (6), (7)`,
+			`SET application_name = '%[1]s'`,
+			`SELECT %[1]s FROM %[1]s.%[1]s WHERE %[1]s = 1 AND lower('%[1]s') = lower('%[1]s')`,
+			`UPDATE %[1]s.%[1]s SET %[1]s = %[1]s + 1`,
+		} {
+			if _, err := db.Exec(fmt.Sprintf(q, elemName)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := db.Exec(`RESET application_name`); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tables, err := ts.collectSchemaInfo(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,6 +257,42 @@ func TestReportUsage(t *testing.T) {
 		}
 		if !reflect.DeepEqual(r, tbl) {
 			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, tbl, r)
+		}
+	}
+
+	if expected, actual := 2, len(reported.QueryStats); expected != actual {
+		t.Fatalf("expected %d apps in stats report, got %d", expected, actual)
+	}
+
+	for appName, expectedStatements := range map[string][]string{
+		"": {
+			`CREATE DATABASE _`,
+			`CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
+			`INSERT INTO _ VALUES (length(_::STRING))`,
+			`INSERT INTO _ VALUES (_)`,
+			`SELECT * FROM _ WHERE (_ = length(_::STRING)) OR (_ = $2)`,
+			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
+		},
+		elemName: {
+			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
+			`UPDATE _ SET _ = _ + _`,
+		},
+	} {
+		if app, ok := reported.QueryStats[sql.HashAppName(appName)]; !ok {
+			t.Fatalf("missing stats for default app")
+		} else {
+			if actual, expected := len(app), len(expectedStatements); expected != actual {
+				t.Fatalf("expected %d statements in app %s report, got %d", expected, appName, actual)
+			}
+			keys := make(map[string]struct{})
+			for k := range app {
+				keys[k] = struct{}{}
+			}
+			for _, expected := range expectedStatements {
+				if _, ok := app[expected]; !ok {
+					t.Fatalf("expected %q in app %s: %+v", expected, appName, keys)
+				}
+			}
 		}
 	}
 
