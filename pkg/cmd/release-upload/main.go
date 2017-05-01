@@ -26,6 +26,7 @@ import (
 	"go/build"
 	"io"
 	"log"
+	"mime"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -260,13 +261,17 @@ func main() {
 				// possibly cockroachdb/cockroach-go.
 				remoteName = osVersionRe.ReplaceAllLiteralString(remoteName, "")
 
+				fileName := fmt.Sprintf("%s.%s", remoteName, versionStr)
+				disposition := mime.FormatMediaType("attachment", map[string]string{"filename": fileName})
+
 				// NB: The leading slash is required to make redirects work
 				// correctly since we reuse this key as the redirect location.
-				versionKey := fmt.Sprintf("/%s/%s.%s", repoName, remoteName, versionStr)
+				versionKey := fmt.Sprintf("/%s/%s", repoName, fileName)
 				if _, err := svc.PutObject(&s3.PutObjectInput{
-					Bucket: &bucketName,
-					Key:    &versionKey,
-					Body:   binary,
+					Bucket:             &bucketName,
+					ContentDisposition: &disposition,
+					Key:                &versionKey,
+					Body:               binary,
 				}); err != nil {
 					log.Fatalf("s3 upload %s: %s", absolutePath, err)
 				}
