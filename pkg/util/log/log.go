@@ -56,8 +56,8 @@ func FatalOnPanic() {
 // process when a Fatal message is generated.
 func SetExitFunc(f func(int)) {
 	logging.mu.Lock()
-	defer logging.mu.Unlock()
 	logging.exitFunc = f
+	logging.mu.Unlock()
 }
 
 // logDepth uses the PrintWith to format the output string and
