@@ -57,6 +57,9 @@ const (
 	// gossipStatusInterval is the interval for logging gossip status.
 	gossipStatusInterval = 1 * time.Minute
 	// gossipNodeDescriptorInterval is the interval for gossiping the node descriptor.
+	// Note that increasing this duration may increase the likelihood of gossip
+	// thrashing, since node descriptors are used to determine the number of gossip
+	// hops between nodes (see #9819 for context).
 	gossipNodeDescriptorInterval = 1 * time.Hour
 
 	// FirstNodeID is the node ID of the first node in a new cluster.

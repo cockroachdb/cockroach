@@ -4510,11 +4510,21 @@ func (r *Replica) shouldGossip() bool {
 // maybeGossipSystemConfig must only be called from Raft commands
 // (which provide the necessary serialization to avoid data races).
 func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
-	if r.store.Gossip() == nil || !r.IsInitialized() {
+	if r.store.Gossip() == nil {
+		log.VEventf(ctx, 2, "not gossiping system config because gossip isn't initialized")
 		return nil
 	}
-
-	if !r.ContainsKey(keys.SystemConfigSpan.Key) || !r.shouldGossip() {
+	if !r.IsInitialized() {
+		log.VEventf(ctx, 2, "not gossiping system config because the replica isn't initialized")
+		return nil
+	}
+	if !r.ContainsKey(keys.SystemConfigSpan.Key) {
+		log.VEventf(ctx, 2,
+			"not gossiping system config because the replica doesn't contain the system config's start key")
+		return nil
+	}
+	if !r.shouldGossip() {
+		log.VEventf(ctx, 2, "not gossiping system config because the replica doesn't hold the lease")
 		return nil
 	}
 
@@ -4525,6 +4535,7 @@ func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 	}
 
 	if gossipedCfg, ok := r.store.Gossip().GetSystemConfig(); ok && gossipedCfg.Equal(loadedCfg) {
+		log.VEventf(ctx, 2, "not gossiping unchanged system config")
 		return nil
 	}
 
