@@ -383,6 +383,14 @@ func (r *Replica) leasePostApply(
 	iAmTheLeaseHolder := newLease.Replica.ReplicaID == replicaID
 	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID
 
+	if iAmTheLeaseHolder {
+		// Always log lease acquisition for epoch-based leases which are
+		// infrequent.
+		if newLease.Type() == roachpb.LeaseEpoch || log.V(1) && leaseChangingHands {
+			log.Infof(ctx, "new range lease %s following %s", newLease, prevLease)
+		}
+	}
+
 	if leaseChangingHands && iAmTheLeaseHolder {
 		// If this replica is a new holder of the lease, update the low water
 		// mark of the timestamp cache. Note that clock offset scenarios are
@@ -395,10 +403,6 @@ func (r *Replica) leasePostApply(
 		// requests, this is kosher). This means that we don't use the old
 		// lease's expiration but instead use the new lease's start to initialize
 		// the timestamp cache low water.
-		if log.V(1) {
-			log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
-				newLease, prevLease, r.store.Clock().PhysicalTime())
-		}
 		desc := r.Desc()
 		r.store.tsCacheMu.Lock()
 		for _, keyRange := range makeReplicatedKeyRanges(desc) {
