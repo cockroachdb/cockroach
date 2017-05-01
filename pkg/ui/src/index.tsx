@@ -85,7 +85,6 @@ import Layout from "./containers/layout";
 import { DatabaseTablesList, DatabaseGrantsList } from "./containers/databases/databases";
 import TableDetails from "./containers/databases/tableDetails";
 import Nodes from "./containers/nodes";
-import Node from "./containers/node";
 import NodesOverview from "./containers/nodesOverview";
 import NodeOverview from "./containers/nodeOverview";
 import NodeGraphs from "./containers/nodeGraphs";
@@ -107,18 +106,14 @@ ReactDOM.render(
           <Route path={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` } component={NodeGraphs} />
         </Route>
         <Route path="cluster">
-          <Route path="nodes" component={NodesOverview} />
-          <Route path="events" component={ EventPage } />
-        </Route>
-        <Route path="nodes">
-          // This path has to match the "nodes" route for the purpose of
-          // highlighting links, but the page does not render as a child of the
-          // Nodes component.
-          <Route path={ `:${nodeIDAttr}` } component={ Node }>
-            <IndexRoute component={ NodeOverview } />
-            <Route path="graphs" component={ NodeGraphs } />
-            <Route path="logs" component={ NodeLogs } />
+          <Route path="nodes">
+            <IndexRoute component={NodesOverview} />
+            <Route path={`:${nodeIDAttr}`}>
+              <IndexRoute component={NodeOverview} />
+              <Route path="logs" component={ NodeLogs } />
+            </Route>
           </Route>
+          <Route path="events" component={ EventPage } />
         </Route>
         <Route path="databases">
           <IndexRedirect to="tables" />
