@@ -203,7 +203,7 @@ func TestStoresLookupReplica(t *testing.T) {
 		{
 			start:    roachpb.RKey("z1"),
 			end:      roachpb.RKey("z2"),
-			expError: "range 0 was not found",
+			expError: "r0 was not found",
 		},
 	}
 	for testIdx, tc := range testCases {

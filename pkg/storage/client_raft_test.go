@@ -2867,7 +2867,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		// The Replica object should be removed.
-		if _, err := mtc.stores[0].GetReplica(rangeID); !testutils.IsError(err, "range [0-9]+ was not found") {
+		if _, err := mtc.stores[0].GetReplica(rangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
 			return errors.Errorf("expected replica to be missing; got %v", err)
 		}
 
