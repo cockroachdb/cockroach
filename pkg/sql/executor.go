@@ -350,11 +350,6 @@ func (e *Executor) Start(
 		}
 	})
 
-	// Until per-statement statistics are properly recorded and
-	// scrubbed, we clear them periodically.
-	// TODO(dt): remove this.
-	e.sqlStats.startResetWorker(e.stopper)
-
 	ctx = log.WithLogTag(ctx, "startup", nil)
 	startupSession := NewSession(ctx, SessionArgs{}, e, nil, startupMemMetrics)
 	startupSession.StartUnlimitedMonitor()

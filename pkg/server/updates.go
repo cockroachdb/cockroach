@@ -66,6 +66,7 @@ const (
 	updateCheckFrequency = time.Hour * 24
 	// TODO(dt): switch to settings.
 	diagnosticReportFrequency = updateCheckFrequency
+	statsResetFrequency       = time.Hour
 	updateCheckPostStartup    = time.Minute * 5
 	updateCheckRetryFrequency = time.Hour
 	updateMaxVersionsToReport = 3
@@ -109,9 +110,10 @@ type storeInfo struct {
 // PeriodicallyCheckForUpdates starts a background worker that periodically
 // phones home to check for updates and report usage.
 func (s *Server) PeriodicallyCheckForUpdates() {
-	s.stopper.RunWorker(context.TODO(), func(context.Context) {
+	s.stopper.RunWorker(context.TODO(), func(ctx context.Context) {
 		startup := timeutil.Now()
 		var nextUpdateCheck, nextDiagnosticReport = startup, startup
+		nextStatsReset := startup.Add(statsResetFrequency)
 
 		var timer timeutil.Timer
 		defer timer.Stop()
@@ -121,10 +123,14 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 
 			nextUpdateCheck = s.maybeCheckForUpdates(now, nextUpdateCheck, runningTime)
 			nextDiagnosticReport = s.maybeReportDiagnostics(now, nextDiagnosticReport, runningTime)
+			nextStatsReset = s.maybeResetStats(ctx, now, nextStatsReset, nextDiagnosticReport)
 
 			sooner := nextUpdateCheck
 			if nextDiagnosticReport.Before(sooner) {
 				sooner = nextDiagnosticReport
+			}
+			if nextStatsReset.Before(sooner) {
+				sooner = nextStatsReset
 			}
 
 			timer.Reset(addJitter(sooner.Sub(timeutil.Now()), updateCheckJitterSeconds))
@@ -261,7 +267,6 @@ func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 		schema = nil
 	}
 
-	// TODO(dt): Reporting loop should also own resetting of the collected stats.
 	return reportingInfo{summary, stores, schema, s.sqlExecutor.GetScrubbedStmtStats()}
 }
 
@@ -330,4 +335,21 @@ func (stringRedactor) Primitive(v reflect.Value) error {
 		v.Set(reflect.ValueOf("_"))
 	}
 	return nil
+}
+
+func (s *Server) maybeResetStats(
+	ctx context.Context, now, scheduledReset, scheduledDiagReport time.Time,
+) time.Time {
+	if scheduledReset.After(now) {
+		return scheduledReset
+	}
+	nextReset := scheduledReset.Add(statsResetFrequency)
+
+	// If the next diag report is within the reset interval, wait to reset then.
+	if scheduledDiagReport.Before(nextReset) {
+		return scheduledDiagReport
+	}
+
+	s.sqlExecutor.ResetStatementStats(ctx)
+	return nextReset
 }
