@@ -111,34 +111,6 @@ func SeverityByName(s string) (Severity, bool) {
 	return 0, false
 }
 
-// colorProfile defines escape sequences which provide color in
-// terminals. Some terminals support 8 colors, some 256, others
-// none at all.
-type colorProfile struct {
-	infoPrefix  []byte
-	warnPrefix  []byte
-	errorPrefix []byte
-	timePrefix  []byte
-}
-
-var colorReset = []byte("\033[0m")
-
-// For terms with 8-color support.
-var colorProfile8 = &colorProfile{
-	infoPrefix:  []byte("\033[0;36;49m"),
-	warnPrefix:  []byte("\033[0;33;49m"),
-	errorPrefix: []byte("\033[0;31;49m"),
-	timePrefix:  []byte("\033[2;37;49m"),
-}
-
-// For terms with 256-color support.
-var colorProfile256 = &colorProfile{
-	infoPrefix:  []byte("\033[38;5;33m"),
-	warnPrefix:  []byte("\033[38;5;214m"),
-	errorPrefix: []byte("\033[38;5;160m"),
-	timePrefix:  []byte("\033[38;5;246m"),
-}
-
 // Level is exported because it appears in the arguments to V and is
 // the type of the v flag, which can be set programmatically.
 // It's a distinct type because we want to discriminate it from logType.
@@ -589,10 +561,6 @@ func SetSync(sync bool) {
 
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
-	nocolor         bool          // The -nocolor flag.
-	hasColorProfile bool          // True if the color profile has been determined
-	colorProfile    *colorProfile // Set via call to getTermColorProfile
-
 	noStderrRedirect bool
 
 	// Level flag for output to stderr. Handled atomically.
@@ -777,49 +745,12 @@ func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
 
 // processForStderr formats a log entry for output to standard error.
 func (l *loggingT) processForStderr(entry Entry, stacks []byte) *buffer {
-	return formatLogEntry(entry, stacks, l.getTermColorProfile())
+	return formatLogEntry(entry, stacks, stderrColorProfile)
 }
 
 // processForFile formats a log entry for output to a file.
 func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
 	return formatLogEntry(entry, stacks, nil)
-}
-
-// checkForColorTerm attempts to verify that stderr is a character
-// device and if so, that the terminal supports color output.
-func (l *loggingT) getTermColorProfile() *colorProfile {
-	if !l.hasColorProfile {
-		l.hasColorProfile = true
-		if !l.nocolor {
-			fi, err := OrigStderr.Stat() // get the FileInfo struct describing the standard input.
-			if err != nil {
-				// Stat() will return an error on Windows in both Powershell and
-				// console until go1.9. See https://github.com/golang/go/issues/14853.
-				//
-				// Note that this bug does not affect MSYS/Cygwin terminals.
-				//
-				// TODO(bram): remove this hack once we move to go 1.9.
-				//
-				// Console does not support our color profiles but
-				// Powershell supports colorProfile256. Sadly, detecting the
-				// shell is not well supported, so default to no-color.
-				if runtime.GOOS != "windows" {
-					panic(err)
-				}
-				return l.colorProfile
-			}
-			if (fi.Mode() & os.ModeCharDevice) != 0 {
-				term := os.Getenv("TERM")
-				switch term {
-				case "ansi", "xterm-color", "screen":
-					l.colorProfile = colorProfile8
-				case "xterm-256color", "screen-256color":
-					l.colorProfile = colorProfile256
-				}
-			}
-		}
-	}
-	return l.colorProfile
 }
 
 // timeoutFlush calls Flush and returns when it completes or after timeout
