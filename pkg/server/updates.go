@@ -228,7 +228,7 @@ func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Durati
 	}
 
 	if log.DiagnosticsReportingEnabled.Get() && diagnosticsMetricsEnabled.Get() {
-		s.reportDiagnostics()
+		s.reportDiagnostics(running)
 	}
 
 	return scheduled.Add(diagnosticReportFrequency)
@@ -262,7 +262,7 @@ func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 	return reportingInfo{summary, stores, schema, s.sqlExecutor.GetScrubbedStmtStats()}
 }
 
-func (s *Server) reportDiagnostics() {
+func (s *Server) reportDiagnostics(runningTime time.Duration) {
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
 	defer span.Finish()
 
@@ -275,6 +275,7 @@ func (s *Server) reportDiagnostics() {
 	q := reportingURL.Query()
 	q.Set("version", build.GetInfo().Tag)
 	q.Set("uuid", s.node.ClusterID.String())
+	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
 	reportingURL.RawQuery = q.Encode()
 
 	res, err := http.Post(reportingURL.String(), "application/json", b)
