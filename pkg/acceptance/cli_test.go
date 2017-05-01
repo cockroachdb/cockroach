@@ -33,7 +33,8 @@ const containerPath = "/go/src/github.com/cockroachdb/cockroach/cli/interactive_
 var cmdBase = []string{
 	"/usr/bin/env",
 	"COCKROACH_SKIP_UPDATE_CHECK=1",
-	"/usr/bin/expect",
+	"/bin/bash",
+	"-c",
 }
 
 func TestDockerCLI(t *testing.T) {
@@ -63,12 +64,22 @@ func TestDockerCLI(t *testing.T) {
 		testPath := filepath.Join(containerPath, testFile)
 		t.Run(testFile, func(t *testing.T) {
 			log.Infof(ctx, "-- starting tests from: %s", testFile)
-			cmd := cmdBase
+
+			// We run the expect command using `bash -c "(expect ...)"`.
+			//
+			// We cannot run `expect` directly, nor `bash -c "expect ..."`,
+			// because both cause Expect to become the PID 1 process inside
+			// the container. On Unix, orphan processes need to be wait()ed
+			// upon by the PID 1 process when they terminate, lest they
+			// remain forever in the zombie state. Unfortunately, Expect
+			// does not contain code to do this. Bash does.
+			cmd := "(expect"
 			if verbose {
-				cmd = append(cmd, "-d")
+				cmd = cmd + " -d"
 			}
-			cmd = append(cmd, "-f", testPath, cluster.CockroachBinaryInContainer)
-			containerConfig.Cmd = cmd
+			cmd = cmd + " -f " + testPath + " " + cluster.CockroachBinaryInContainer + ")"
+			containerConfig.Cmd = append(cmdBase, cmd)
+
 			if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
 				t.Error(err)
 			}
