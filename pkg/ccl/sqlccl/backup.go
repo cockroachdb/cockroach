@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"io/ioutil"
 	"sort"
-	"strings"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -235,7 +234,7 @@ func clusterNodeCount(g *gossip.Gossip) int {
 
 	var nodes int
 	for k := range g.GetInfoStatus().Infos {
-		if strings.HasPrefix(k, nodePrefix) {
+		if gossip.IsNodeIDKey(k) {
 			nodes++
 		}
 	}
