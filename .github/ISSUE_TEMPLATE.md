@@ -8,7 +8,7 @@ Prefer live chat? Message our engineers on our Gitter channel at https://gitter.
 
 **FEATURE REQUEST**
 
-1. Has another user made the same request? Try searching for issues tagged with "community-request." If yes, please add :+1:  to the issue. If not, move on to step 2.
+1. Has another user made the same request? Try searching for issues tagged with "[community-request](https://github.com/cockroachdb/cockroach/issues?q=is%3Aopen+is%3Aissue+label%3Acommunity-request)." If yes, please add :+1:  to the issue. If not, move on to step 2.
 
 2. Please describe the feature you are requesting, as well as your proposed use case for this feature.
 
