@@ -3,12 +3,28 @@ set -euxo pipefail
 
 export BUILDER_HIDE_GOPATH_SRC=1
 
+echo 'starting release build'
+cat .buildinfo/tag || true
+cat .buildinfo/rev || true
+build/builder.sh git status
+
 build/builder.sh go install ./pkg/cmd/release-upload
+
+echo 'installed release builder'
+cat .buildinfo/tag || true
+cat .buildinfo/rev || true
+build/builder.sh git status
+
 build/builder.sh env \
 	AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
 	AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
 	TC_BUILD_BRANCH="$TC_BUILD_BRANCH" \
 	release-upload
+
+echo 'built and uploaded artifacts'
+cat .buildinfo/tag || true
+cat .buildinfo/rev || true
+build/builder.sh git status
 
 if [ "$TC_BUILD_BRANCH" != master ]; then
 	image=docker.io/cockroachdb/cockroach
