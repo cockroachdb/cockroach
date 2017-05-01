@@ -960,7 +960,7 @@ func (ds *DistSender) sendPartialBatch(
 		// row and the range descriptor hasn't changed, return the error
 		// to our caller.
 		switch tErr := pErr.GetDetail().(type) {
-		case *roachpb.SendError:
+		case *roachpb.SendError, *roachpb.RangeNotFoundError:
 			// We've tried all the replicas without success. Either
 			// they're all down, or we're using an out-of-date range
 			// descriptor. Invalidate the cache and try again with the new
@@ -1195,10 +1195,13 @@ func (ds *DistSender) sendToReplicas(
 			pending--
 			err := call.Err
 			if err == nil {
+				// Determine whether the error must be propagated immediately or whether
+				// sending can continue to alternate replicas.
+				propogateError := false
 				switch tErr := call.Reply.Error.GetDetail().(type) {
 				case nil:
 					return call.Reply, nil
-				case *roachpb.RangeNotFoundError, *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
+				case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
 					// These errors are likely to be unique to the replica that reported
 					// them, so no action is required before the next retry.
 				case *roachpb.NotLeaseHolderError:
@@ -1207,10 +1210,24 @@ func (ds *DistSender) sendToReplicas(
 						// If the replica we contacted knows the new lease holder, update the cache.
 						ds.updateLeaseHolderCache(ctx, rangeID, *lh)
 
-						// Move the new lease holder to the head of the queue for the next retry.
-						transport.MoveToFront(*lh)
+						// If the implicated leaseholder is not a known replica,
+						// return a RangeNotFoundError to signal eviction of the
+						// cached RangeDescriptor and re-send.
+						if replicas.FindReplica(lh.StoreID) == -1 {
+							// Replace NotLeaseHolderError with RangeNotFoundError.
+							log.ErrEventf(ctx, "reported lease holder %s not in replicas slice %+v", lh, replicas)
+							call.Reply.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(rangeID))
+							propogateError = true
+						} else {
+							// Move the new lease holder to the head of the queue for the next retry.
+							transport.MoveToFront(*lh)
+						}
 					}
 				default:
+					propogateError = true
+				}
+
+				if propogateError {
 					// The error received is not specific to this replica, so we
 					// should return it instead of trying other replicas. However,
 					// if we're trying to commit a transaction and there are
