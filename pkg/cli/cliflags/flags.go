@@ -324,6 +324,15 @@ disabled by setting the environment variable COCKROACH_SKIP_KEY_PERMISSION_CHECK
 		Description: `Path to the CA key.`,
 	}
 
+	MaxOffset = FlagInfo{
+		Name: "max-offset",
+		Description: `
+Maximum allowed clock offset for the cluster. If observed clock offsets exceed
+this limit, servers will crash to minimize the likelihood of reading
+inconsistent data. Increasing this value will increase the time to recovery of
+failures as well as the frequency of uncertainty-based read restarts.`,
+	}
+
 	Store = FlagInfo{
 		Name:      "store",
 		Shorthand: "s",
