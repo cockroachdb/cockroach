@@ -2513,6 +2513,14 @@ func (r *Replica) propose(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// NB: We need to check Replica.mu.destroyed again in case the Replica has
+	// been destroyed between the initial check at the beginning of this method
+	// and the acquisition of Replica.mu. Failure to do so will leave pending
+	// proposals that never get cleared.
+	if err := r.mu.destroyed; err != nil {
+		return nil, nil, err
+	}
+
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
 		return nil, nil, err
