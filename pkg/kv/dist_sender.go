@@ -1154,7 +1154,8 @@ func (ds *DistSender) sendToReplicas(
 	// Send the first request.
 	pending := 1
 	if log.V(2) || log.HasSpanOrEvent(ctx) {
-		log.VEventf(ctx, 2, "sending batch %s to r%d", args.Summary(), rangeID)
+		log.VEventf(ctx, 2, "r%d: sending batch %s to %s",
+			rangeID, args.Summary(), transport.NextReplica())
 	}
 	transport.SendNext(ctx, done)
 
@@ -1179,7 +1180,7 @@ func (ds *DistSender) sendToReplicas(
 			// On successive RPC timeouts, send to additional replicas if available.
 			if !transport.IsExhausted() {
 				ds.metrics.SendNextTimeoutCount.Inc(1)
-				log.VEventf(ctx, 2, "timeout, trying next peer")
+				log.VEventf(ctx, 2, "timeout, trying next peer: %s", transport.NextReplica())
 				pending++
 				transport.SendNext(ctx, done)
 			}
@@ -1287,7 +1288,7 @@ func (ds *DistSender) sendToReplicas(
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
 				ds.metrics.NextReplicaErrCount.Inc(1)
-				log.VEventf(ctx, 2, "error, trying next peer")
+				log.VEventf(ctx, 2, "error, trying next peer: %s", transport.NextReplica())
 				pending++
 				transport.SendNext(ctx, done)
 			}

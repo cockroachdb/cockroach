@@ -123,6 +123,10 @@ func (c *channelSaveTransport) SendNext(_ context.Context, done chan<- BatchCall
 	c.ch <- done
 }
 
+func (*channelSaveTransport) NextReplica() roachpb.ReplicaDescriptor {
+	return roachpb.ReplicaDescriptor{}
+}
+
 func (*channelSaveTransport) MoveToFront(roachpb.ReplicaDescriptor) {
 }
 
@@ -389,6 +393,10 @@ func (f *firstNErrorTransport) SendNext(_ context.Context, done chan<- BatchCall
 	}
 	f.numSent++
 	done <- call
+}
+
+func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
+	return roachpb.ReplicaDescriptor{}
 }
 
 func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
