@@ -230,10 +230,19 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 				log.Warningf(ctx, "unable to extend ownership of expiration lease: %s", err)
 			}
 			if m.leaseManager.TimeRemaining(lease) < leaseRefreshInterval {
-				// Note that we may be able to do better than this by influencing the
-				// deadline of migrations' transactions based on the least expiration
-				// time, but simply kill the process for now for the sake of simplicity.
-				log.Fatal(ctx, "not enough time left on migration lease, terminating for safety")
+				// Do one last final check of whether we're done - it's possible that
+				// ReleaseLease can sneak in and execute ahead of ExtendLease even if
+				// the ExtendLease started first (making for an unexpected value error),
+				// and doing this final check can avoid unintended shutdowns.
+				select {
+				case <-done:
+					return
+				default:
+					// Note that we may be able to do better than this by influencing the
+					// deadline of migrations' transactions based on the lease expiration
+					// time, but simply kill the process for now for the sake of simplicity.
+					log.Fatal(ctx, "not enough time left on migration lease, terminating for safety")
+				}
 			}
 		}
 	}); err != nil {
