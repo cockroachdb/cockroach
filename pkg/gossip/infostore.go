@@ -383,7 +383,11 @@ func (is *infoStore) mostDistant(
 	var nodeID roachpb.NodeID
 	var maxHops uint32
 	if err := is.visitInfos(func(key string, i *Info) error {
-		if i.Hops > maxHops && !hasOutgoingConn(i.NodeID) {
+		// Only consider NodeID keys here because they're re-gossiped every time a
+		// node restarts and periodically after that, so their hops values are more
+		// likely to be accurate than keys that could have been around for a long
+		// time and across many node restarts, such as the system config key (#9819).
+		if i.Hops > maxHops && IsNodeIDKey(key) && !hasOutgoingConn(i.NodeID) {
 			maxHops = i.Hops
 			nodeID = i.NodeID
 		}
