@@ -52,16 +52,26 @@ var DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
 // real stderr a panic has occurred.
 func RecoverAndReportPanic(ctx context.Context) {
 	if r := recover(); r != nil {
-		ReportPanic(ctx, r)
+		r = ReportPanic(ctx, r)
 		panic(r)
 	}
 }
 
 // ReportPanic reports a panic has occurred on the real stderr.
-func ReportPanic(ctx context.Context, r interface{}) {
+//
+// The passed value is returned unless it is a WrappedPanic, in which case a new
+// error is created, combining the original error plus the contextural info,
+// thus making the returned value suitable for passing back to a final panic().
+func ReportPanic(ctx context.Context, r interface{}) interface{} {
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
 
-	maybeSendCrashReport(ctx, r)
+	reportable := r
+	if e, ok := r.(WrappedPanic); ok {
+		reportable = e.Err
+		r = errors.Errorf("%s: %v", e.ExtraInfo, e.Err)
+	}
+
+	maybeSendCrashReport(ctx, reportable)
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
@@ -77,12 +87,13 @@ func ReportPanic(ctx context.Context, r interface{}) {
 	if stderrRedirected {
 		fmt.Fprintf(OrigStderr, "%v\n\n%s\n", r, debug.Stack())
 	}
+	return r
 }
 
 var crashReports = settings.RegisterBoolSetting(
 	"diagnostics.reporting.send_crash_reports",
 	"send crash and panic reports",
-	false,
+	true,
 )
 
 func maybeSendCrashReport(ctx context.Context, r interface{}) {
@@ -113,6 +124,14 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 		"rev":          info.Revision,
 		"goversion":    info.GoVersion,
 	})
+}
+
+// WrappedPanic represents a panic plus extra contextual info, which is stripped
+// if/when the panic is handled by crash reporting (e.g. if that info contains a
+// raw query, which we do not want to include in collected crash reports.
+type WrappedPanic struct {
+	ExtraInfo string
+	Err       interface{}
 }
 
 func sendCrashReport(ctx context.Context, r interface{}) {
