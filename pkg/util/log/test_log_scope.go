@@ -24,6 +24,7 @@ import (
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/pkg/errors"
 )
 
 // TestLogScope represents the lifetime of a logging output.  It
@@ -31,8 +32,7 @@ import (
 // test, and asserts that logging output is not written to this
 // directory beyond the lifetime of the scope.
 type TestLogScope struct {
-	logDir   string
-	keepLogs bool
+	logDir string
 }
 
 // tShim is the part of testing.T used by TestLogScope.
@@ -71,7 +71,7 @@ func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := dirTestOverride(tempDir); err != nil {
+	if err := dirTestOverride("", tempDir); err != nil {
 		t.Fatal(err)
 	}
 	if err := enableLogFileOutput(tempDir, Severity_ERROR); err != nil {
@@ -90,26 +90,12 @@ func enableLogFileOutput(dir string, stderrSeverity Severity) error {
 	return logDir.Set(dir)
 }
 
-// KeepLogs can be used to control whether the log files get removed by Close().
-// Log files are always kept if the test Failed() or panicked, but this doesn't
-// cover everything (e.g. race detector). Recommended usage:
-//
-//   defer l.Close(t)
-//   l.KeepLogs(true)
-//
-//   .. test code ..
-//
-//   // If we got this far, we don't need to keep logs (unless the test fails).
-//   l.KeepLogs(false)
-func (l *TestLogScope) KeepLogs(keep bool) {
-	if l != nil {
-		l.keepLogs = true
-	}
-}
-
 // Close cleans up a TestLogScope. The directory and its contents are
 // deleted, unless the test has failed and the directory is non-empty.
 func (l *TestLogScope) Close(t tShim) {
+	// Ensure any remaining logs are written.
+	Flush()
+
 	if l == nil {
 		// Never initialized.
 		return
@@ -130,7 +116,7 @@ func (l *TestLogScope) Close(t tShim) {
 					"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
 			}
 			fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
-		} else if !l.keepLogs {
+		} else {
 			// Clean up.
 			if err := os.RemoveAll(l.logDir); err != nil {
 				t.Error(err)
@@ -138,7 +124,7 @@ func (l *TestLogScope) Close(t tShim) {
 		}
 	}()
 	// Flush/Close the log files.
-	if err := dirTestOverride(""); err != nil {
+	if err := dirTestOverride(l.logDir, ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -163,22 +149,25 @@ func calledDuringPanic() bool {
 
 // dirTestOverride sets the default value for the logging output directory
 // for use in tests.
-func dirTestOverride(dir string) error {
-	// Ensure any remaining logs are written.
-	Flush()
+func dirTestOverride(expected, newDir string) error {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
 
 	logDir.Lock()
-	logDir.name = dir
+	// The following check is intended to catch concurrent uses of
+	// Scope() or TestLogScope.Close(), which would be invalid.
+	if logDir.name != expected {
+		logDir.Unlock()
+		return errors.Errorf("unexpected logDir setting: set to %q, expected %q",
+			logDir.name, expected)
+	}
+	logDir.name = newDir
 	logDir.Unlock()
 
 	// When we change the directory we close the current logging
 	// output, so that a rotation to the new directory is forced on
 	// the next logging event.
-	logging.mu.Lock()
-	err := logging.closeFileLocked()
-	logging.mu.Unlock()
-
-	return err
+	return logging.closeFileLocked()
 }
 
 func isDirEmpty(dirname string) (bool, error) {
