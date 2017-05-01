@@ -122,7 +122,6 @@ type Config struct {
 	// Increasing this value will increase time to recovery after
 	// failures, and increase the frequency and impact of
 	// ReadWithinUncertaintyIntervalError.
-	// Environment Variable: COCKROACH_MAX_OFFSET
 	MaxOffset time.Duration
 
 	// RaftTickInterval is the resolution of the Raft timer.
@@ -477,7 +476,6 @@ func (cfg *Config) readEnvironmentVariables() {
 	// cockroach-linearizable
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_LINEARIZABLE", cfg.Linearizable)
 	cfg.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", cfg.ConsistencyCheckPanicOnFailure)
-	cfg.MaxOffset = envutil.EnvOrDefaultDuration("COCKROACH_MAX_OFFSET", cfg.MaxOffset)
 	cfg.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", cfg.MetricsSampleInterval)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)

@@ -20,6 +20,7 @@ import (
 	"flag"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -83,6 +84,28 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 	const expectedSQLMemSize = 100 * 1000 * 1000
 	if expectedSQLMemSize != serverCfg.SQLMemoryPoolSize {
 		t.Errorf("expected %d, but got %d", expectedSQLMemSize, serverCfg.SQLMemoryPoolSize)
+	}
+}
+
+func TestClockOffsetFlagValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args     []string
+		expected time.Duration
+	}{
+		{nil, base.DefaultMaxClockOffset},
+		{[]string{"--max-offset", "200ms"}, 200 * time.Millisecond},
+	}
+
+	for i, td := range testData {
+		if err := f.Parse(td.args); err != nil {
+			t.Fatal(err)
+		}
+		if td.expected != serverCfg.MaxOffset {
+			t.Errorf("%d. MaxOffset expected %v, but got %v", i, td.expected, serverCfg.RaftTickInterval)
+		}
 	}
 }
 
