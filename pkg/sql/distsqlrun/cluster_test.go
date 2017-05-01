@@ -79,182 +79,198 @@ func TestClusterFlow(t *testing.T) {
 	// Note that the ranges won't necessarily be local to the table readers, but
 	// that doesn't matter for the purposes of this test.
 
-	// Start a span (useful to look at spans using Lighstep).
-	sp := tracing.NewTracer().StartSpan("cluster test")
-	ctx := opentracing.ContextWithSpan(context.Background(), sp)
-	defer sp.Finish()
+	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		// Start a span (useful to look at spans using Lighstep).
+		sp := tracing.NewTracer().StartSpan("cluster test")
+		ctx = opentracing.ContextWithSpan(ctx, sp)
+		defer sp.Finish()
 
-	tr1 := TableReaderSpec{
-		Table:    *desc,
-		IndexIdx: 1,
-		Spans:    []TableReaderSpan{makeIndexSpan(0, 8)},
-	}
+		txn.EnsureProto()
 
-	tr2 := TableReaderSpec{
-		Table:    *desc,
-		IndexIdx: 1,
-		Spans:    []TableReaderSpan{makeIndexSpan(8, 12)},
-	}
+		tr1 := TableReaderSpec{
+			Table:    *desc,
+			IndexIdx: 1,
+			Spans:    []TableReaderSpan{makeIndexSpan(0, 8)},
+		}
 
-	tr3 := TableReaderSpec{
-		Table:    *desc,
-		IndexIdx: 1,
-		Spans:    []TableReaderSpan{makeIndexSpan(12, 100)},
-	}
+		tr2 := TableReaderSpec{
+			Table:    *desc,
+			IndexIdx: 1,
+			Spans:    []TableReaderSpan{makeIndexSpan(8, 12)},
+		}
 
-	fid := FlowID{uuid.MakeV4()}
+		tr3 := TableReaderSpec{
+			Table:    *desc,
+			IndexIdx: 1,
+			Spans:    []TableReaderSpan{makeIndexSpan(12, 100)},
+		}
 
-	req1 := &SetupFlowRequest{Version: Version}
-	req1.Flow = FlowSpec{
-		FlowID: fid,
-		Processors: []ProcessorSpec{{
-			Core: ProcessorCoreUnion{TableReader: &tr1},
-			Post: PostProcessSpec{
-				OutputColumns: []uint32{0, 1},
-			},
-			Output: []OutputRouterSpec{{
-				Type: OutputRouterSpec_PASS_THROUGH,
-				Streams: []StreamEndpointSpec{
-					{Type: StreamEndpointSpec_REMOTE, StreamID: 0, TargetAddr: tc.Server(2).ServingAddr()},
-				},
-			}},
-		}},
-	}
+		fid := FlowID{uuid.MakeV4()}
 
-	req2 := &SetupFlowRequest{Version: Version}
-	req2.Flow = FlowSpec{
-		FlowID: fid,
-		Processors: []ProcessorSpec{{
-			Core: ProcessorCoreUnion{TableReader: &tr2},
-			Post: PostProcessSpec{
-				OutputColumns: []uint32{0, 1},
-			},
-			Output: []OutputRouterSpec{{
-				Type: OutputRouterSpec_PASS_THROUGH,
-				Streams: []StreamEndpointSpec{
-					{Type: StreamEndpointSpec_REMOTE, StreamID: 1, TargetAddr: tc.Server(2).ServingAddr()},
-				},
-			}},
-		}},
-	}
-
-	req3 := &SetupFlowRequest{Version: Version}
-	req3.Flow = FlowSpec{
-		FlowID: fid,
-		Processors: []ProcessorSpec{
-			{
-				Core: ProcessorCoreUnion{TableReader: &tr3},
-				Post: PostProcessSpec{
-					OutputColumns: []uint32{0, 1},
-				},
-				Output: []OutputRouterSpec{{
-					Type: OutputRouterSpec_PASS_THROUGH,
-					Streams: []StreamEndpointSpec{
-						{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
+		req1 := &SetupFlowRequest{
+			Version: Version,
+			Txn:     *txn.Proto(),
+			Flow: FlowSpec{
+				FlowID: fid,
+				Processors: []ProcessorSpec{{
+					Core: ProcessorCoreUnion{TableReader: &tr1},
+					Post: PostProcessSpec{
+						OutputColumns: []uint32{0, 1},
 					},
+					Output: []OutputRouterSpec{{
+						Type: OutputRouterSpec_PASS_THROUGH,
+						Streams: []StreamEndpointSpec{
+							{Type: StreamEndpointSpec_REMOTE, StreamID: 0, TargetAddr: tc.Server(2).ServingAddr()},
+						},
+					}},
 				}},
 			},
-			{
-				Input: []InputSyncSpec{{
-					Type:     InputSyncSpec_ORDERED,
-					Ordering: Ordering{Columns: []Ordering_Column{{1, Ordering_Column_ASC}}},
-					Streams: []StreamEndpointSpec{
-						{Type: StreamEndpointSpec_REMOTE, StreamID: 0},
-						{Type: StreamEndpointSpec_REMOTE, StreamID: 1},
-						{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
+		}
+
+		req2 := &SetupFlowRequest{
+			Version: Version,
+			Txn:     *txn.Proto(),
+			Flow: FlowSpec{
+				FlowID: fid,
+				Processors: []ProcessorSpec{{
+					Core: ProcessorCoreUnion{TableReader: &tr2},
+					Post: PostProcessSpec{
+						OutputColumns: []uint32{0, 1},
 					},
-				}},
-				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
-				Post: PostProcessSpec{
-					OutputColumns: []uint32{2},
-				},
-				Output: []OutputRouterSpec{{
-					Type:    OutputRouterSpec_PASS_THROUGH,
-					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+					Output: []OutputRouterSpec{{
+						Type: OutputRouterSpec_PASS_THROUGH,
+						Streams: []StreamEndpointSpec{
+							{Type: StreamEndpointSpec_REMOTE, StreamID: 1, TargetAddr: tc.Server(2).ServingAddr()},
+						},
+					}},
 				}},
 			},
-		},
-	}
+		}
 
-	if err := SetFlowRequestTrace(ctx, req1); err != nil {
-		t.Fatal(err)
-	}
-	if err := SetFlowRequestTrace(ctx, req2); err != nil {
-		t.Fatal(err)
-	}
-	if err := SetFlowRequestTrace(ctx, req3); err != nil {
-		t.Fatal(err)
-	}
+		req3 := &SetupFlowRequest{
+			Version: Version,
+			Txn:     *txn.Proto(),
+			Flow: FlowSpec{
+				FlowID: fid,
+				Processors: []ProcessorSpec{
+					{
+						Core: ProcessorCoreUnion{TableReader: &tr3},
+						Post: PostProcessSpec{
+							OutputColumns: []uint32{0, 1},
+						},
+						Output: []OutputRouterSpec{{
+							Type: OutputRouterSpec_PASS_THROUGH,
+							Streams: []StreamEndpointSpec{
+								{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
+							},
+						}},
+					},
+					{
+						Input: []InputSyncSpec{{
+							Type:     InputSyncSpec_ORDERED,
+							Ordering: Ordering{Columns: []Ordering_Column{{1, Ordering_Column_ASC}}},
+							Streams: []StreamEndpointSpec{
+								{Type: StreamEndpointSpec_REMOTE, StreamID: 0},
+								{Type: StreamEndpointSpec_REMOTE, StreamID: 1},
+								{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
+							},
+						}},
+						Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
+						Post: PostProcessSpec{
+							OutputColumns: []uint32{2},
+						},
+						Output: []OutputRouterSpec{{
+							Type:    OutputRouterSpec_PASS_THROUGH,
+							Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+						}},
+					},
+				},
+			},
+		}
 
-	var clients []DistSQLClient
-	for i := 0; i < 3; i++ {
-		s := tc.Server(i)
-		conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
-		if err != nil {
+		if err := SetFlowRequestTrace(ctx, req1); err != nil {
 			t.Fatal(err)
 		}
-		clients = append(clients, NewDistSQLClient(conn))
-	}
+		if err := SetFlowRequestTrace(ctx, req2); err != nil {
+			t.Fatal(err)
+		}
+		if err := SetFlowRequestTrace(ctx, req3); err != nil {
+			t.Fatal(err)
+		}
 
-	log.Infof(ctx, "Setting up flow on 0")
-	if resp, err := clients[0].SetupFlow(ctx, req1); err != nil {
-		t.Fatal(err)
-	} else if resp.Error != nil {
-		t.Fatal(resp.Error)
-	}
-
-	log.Infof(ctx, "Setting up flow on 1")
-	if resp, err := clients[1].SetupFlow(ctx, req2); err != nil {
-		t.Fatal(err)
-	} else if resp.Error != nil {
-		t.Fatal(resp.Error)
-	}
-
-	log.Infof(ctx, "Running flow on 2")
-	stream, err := clients[2].RunSyncFlow(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = stream.Send(&ConsumerSignal{SetupFlowRequest: req3})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var decoder StreamDecoder
-	var rows sqlbase.EncDatumRows
-	var metas []ProducerMetadata
-	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
+		var clients []DistSQLClient
+		for i := 0; i < 3; i++ {
+			s := tc.Server(i)
+			conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
+			if err != nil {
+				t.Fatal(err)
 			}
-			t.Fatal(err)
+			clients = append(clients, NewDistSQLClient(conn))
 		}
-		err = decoder.AddMessage(msg)
+
+		log.Infof(ctx, "Setting up flow on 0")
+		if resp, err := clients[0].SetupFlow(ctx, req1); err != nil {
+			t.Fatal(err)
+		} else if resp.Error != nil {
+			t.Fatal(resp.Error)
+		}
+
+		log.Infof(ctx, "Setting up flow on 1")
+		if resp, err := clients[1].SetupFlow(ctx, req2); err != nil {
+			t.Fatal(err)
+		} else if resp.Error != nil {
+			t.Fatal(resp.Error)
+		}
+
+		log.Infof(ctx, "Running flow on 2")
+		stream, err := clients[2].RunSyncFlow(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
-	}
-	metas = ignoreMisplannedRanges(metas)
-	if len(metas) != 0 {
-		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
-	}
-	// The result should be all the numbers in string form, ordered by the
-	// digit sum (and then by number).
-	var results []string
-	for sum := 1; sum <= 50; sum++ {
-		for i := 1; i <= numRows; i++ {
-			if int(parser.MustBeDInt(sumDigitsFn(i))) == sum {
-				results = append(results, fmt.Sprintf("['%s']", sqlutils.IntToEnglish(i)))
+		err = stream.Send(&ConsumerSignal{SetupFlowRequest: req3})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var decoder StreamDecoder
+		var rows sqlbase.EncDatumRows
+		var metas []ProducerMetadata
+		for {
+			msg, err := stream.Recv()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+			err = decoder.AddMessage(msg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
+		}
+		metas = ignoreMisplannedRanges(metas)
+		if len(metas) != 0 {
+			t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
+		}
+		// The result should be all the numbers in string form, ordered by the
+		// digit sum (and then by number).
+		var results []string
+		for sum := 1; sum <= 50; sum++ {
+			for i := 1; i <= numRows; i++ {
+				if int(parser.MustBeDInt(sumDigitsFn(i))) == sum {
+					results = append(results, fmt.Sprintf("['%s']", sqlutils.IntToEnglish(i)))
+				}
 			}
 		}
-	}
-	expected := strings.Join(results, " ")
-	expected = "[" + expected + "]"
-	if rowStr := rows.String(); rowStr != expected {
-		t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
+		expected := strings.Join(results, " ")
+		expected = "[" + expected + "]"
+		if rowStr := rows.String(); rowStr != expected {
+			t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
+		}
+		return nil
+	}); err != nil {
+		t.Error(err)
 	}
 }
 
