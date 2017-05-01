@@ -7,6 +7,7 @@
 
 	It is generated from these files:
 		cockroach/pkg/roachpb/api.proto
+		cockroach/pkg/roachpb/app_stats.proto
 		cockroach/pkg/roachpb/data.proto
 		cockroach/pkg/roachpb/errors.proto
 		cockroach/pkg/roachpb/internal.proto
@@ -92,6 +93,8 @@
 		Header
 		BatchRequest
 		BatchResponse
+		StatementStatistics
+		NumericStat
 		Span
 		Value
 		KeyValue
