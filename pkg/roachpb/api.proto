@@ -828,6 +828,20 @@ message ImportRequest {
   // imported data. Any kv entry not matching one of these rules will not be
   // imported.
   repeated KeyRewrite key_rewrites = 4 [(gogoproto.nullable) = false];
+
+  message TableRekey {
+    // OldID is the previous ID of `new_desc`.
+    optional uint32 old_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "OldID"];
+    // NewDesc is an encoded Descriptor message.
+    optional bytes new_desc = 2;
+  }
+  // Rekeys contains the descriptors for the data being Imported and the
+  // previous ID for each (which is the ID used in the source data pointed to by
+  // `files`).
+  // TODO(dan): This field is a superset of the information represented by
+  // `key_rewrites` and will supercede it once rekeying of interleaved tables is
+  // fixed.
+  repeated TableRekey rekeys = 5 [(gogoproto.nullable) = false];
 }
 
 // ImportResponse is the response to a Import() operation.
