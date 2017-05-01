@@ -131,6 +131,10 @@ func (l *legacyTransportAdapter) SendNext(ctx context.Context, done chan<- Batch
 	}
 }
 
+func (l *legacyTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
+	return roachpb.ReplicaDescriptor{}
+}
+
 func (*legacyTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) {
 }
 
@@ -1938,10 +1942,14 @@ func (t *slowLeaseHolderTransport) SendNext(_ context.Context, done chan<- Batch
 	}
 }
 
-func (t *slowLeaseHolderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
+func (*slowLeaseHolderTransport) NextReplica() roachpb.ReplicaDescriptor {
+	return roachpb.ReplicaDescriptor{}
 }
 
-func (t *slowLeaseHolderTransport) Close() {
+func (*slowLeaseHolderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
+}
+
+func (*slowLeaseHolderTransport) Close() {
 }
 
 func getSlowLeaseHolderTransportFactory() func(SendOptions, *rpc.Context, ReplicaSlice, roachpb.BatchRequest) (Transport, error) {
