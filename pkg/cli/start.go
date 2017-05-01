@@ -343,7 +343,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 			var err error
 			s, err = server.NewServer(serverCfg, stopper)
 			if err != nil {
-				return errors.Wrap(err, "failed to start Cockroach server")
+				return errors.Wrap(err, "failed to start CockroachDB server")
 			}
 
 			serverStatusMu.Lock()
