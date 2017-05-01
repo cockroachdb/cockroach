@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -156,10 +157,18 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationAuto,
+			// Use manual replication so that we can ensure the range is properly
+			// replicated to all three nodes before stopping one of them.
+			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      serverArgs,
 		})
 	defer tc.Stopper().Stop(context.TODO())
+
+	// Ensure that the first range is fully replicated before moving on.
+	firstRangeKey := keys.MinKey
+	if _, err := tc.AddReplicas(firstRangeKey, tc.Target(1), tc.Target(2)); err != nil {
+		t.Fatal(err)
+	}
 
 	// Take down a node other than the first node and replace it with a new one.
 	// Replacing the first node would be better from an adversarial testing
@@ -170,6 +179,13 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	newServerArgs.Addr = tc.Servers[oldNodeIdx].ServingAddr()
 	newServerArgs.PartOfCluster = true
 	newServerArgs.JoinAddr = tc.Servers[1].ServingAddr()
+	// We have to manually disable these because the testcluster only handles
+	// translating the ReplicationManual setting into store knobs for its
+	// initial nodes.
+	newServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		DisableSplitQueue:     true,
+		DisableReplicateQueue: true,
+	}
 	tc.StopServer(oldNodeIdx)
 	tc.AddServer(t, newServerArgs)
 	tc.WaitForStores(t, tc.Server(1).Gossip())
