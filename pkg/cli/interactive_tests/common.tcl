@@ -85,7 +85,10 @@ proc start_server {argv} {
 }
 proc stop_server {argv} {
     report "BEGIN STOP SERVER"
+    # Trigger a normal shutdown.
     system "$argv quit"
+    # If after 5 seconds the server hasn't shut down, trigger an error.
+    system "set -x; i=0; while test \$i -lt 5; do ps aux; wait `cat server_pid`; kill -CONT `cat server_pid` || exit 0; echo still waiting; sleep 1; i=`expr \$i + 1`; done; echo 'server still running?'; exit 1"
     report "END STOP SERVER"
 }
 
