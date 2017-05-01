@@ -64,12 +64,25 @@ func init() {
 const (
 	updateCheckFrequency = time.Hour * 24
 	// TODO(dt): switch to settings.
-	diagnosticReportFrequency = updateCheckFrequency
 	updateCheckPostStartup    = time.Minute * 5
 	updateCheckRetryFrequency = time.Hour
 	updateMaxVersionsToReport = 3
 
 	updateCheckJitterSeconds = 120
+)
+
+var (
+	diagnosticReportFrequency = settings.RegisterDurationSetting(
+		"diagnostics.reporting.interval",
+		"interval at which diagnostics data should be reported",
+		time.Hour*24,
+	)
+
+	statsResetFrequency = settings.RegisterDurationSetting(
+		"sql.metrics.statement_details.reset_interval",
+		"interval at which the collected statement statistics should be reset",
+		time.Hour,
+	)
 )
 
 // randomly shift `d` to be up to `jitterSec` shorter or longer.
@@ -108,21 +121,28 @@ type storeInfo struct {
 // PeriodicallyCheckForUpdates starts a background worker that periodically
 // phones home to check for updates and report usage.
 func (s *Server) PeriodicallyCheckForUpdates() {
-	s.stopper.RunWorker(context.TODO(), func(context.Context) {
+	s.stopper.RunWorker(context.TODO(), func(ctx context.Context) {
 		startup := timeutil.Now()
-		var nextUpdateCheck, nextDiagnosticReport = startup, startup
+		nextUpdateCheck := startup
+		nextDiagnosticReport := startup
+		nextStatsReset := startup.Add(statsResetFrequency.Get())
 
 		var timer timeutil.Timer
 		defer timer.Stop()
 		for {
-			runningTime := timeutil.Since(startup)
+			now := timeutil.Now()
+			runningTime := now.Sub(startup)
 
-			nextUpdateCheck = s.maybeCheckForUpdates(nextUpdateCheck, runningTime)
-			nextDiagnosticReport = s.maybeReportDiagnostics(nextDiagnosticReport, runningTime)
+			nextUpdateCheck = s.maybeCheckForUpdates(now, nextUpdateCheck, runningTime)
+			nextDiagnosticReport = s.maybeReportDiagnostics(now, nextDiagnosticReport, runningTime)
+			nextStatsReset = s.maybeResetStats(ctx, now, nextStatsReset, nextDiagnosticReport)
 
 			sooner := nextUpdateCheck
-			if nextDiagnosticReport.Before(nextUpdateCheck) {
+			if nextDiagnosticReport.Before(sooner) {
 				sooner = nextDiagnosticReport
+			}
+			if nextStatsReset.Before(sooner) {
+				sooner = nextStatsReset
 			}
 
 			timer.Reset(addJitter(sooner.Sub(timeutil.Now()), updateCheckJitterSeconds))
@@ -138,15 +158,17 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 
 // maybeCheckForUpdates determines if it is time to check for updates and does
 // so if it is, before returning the time at which the next check be done.
-func (s *Server) maybeCheckForUpdates(scheduled time.Time, runningTime time.Duration) time.Time {
-	if scheduled.After(timeutil.Now()) {
+func (s *Server) maybeCheckForUpdates(
+	now, scheduled time.Time, runningTime time.Duration,
+) time.Time {
+	if scheduled.After(now) {
 		return scheduled
 	}
 
 	// checkForUpdates handles its own errors, but it returns a bool indicating if
 	// it succeeded, so we can schedule a re-attempt if it did not.
 	if succeeded := s.checkForUpdates(runningTime); !succeeded {
-		return timeutil.Now().Add(updateCheckRetryFrequency)
+		return now.Add(updateCheckRetryFrequency)
 	}
 
 	// If we've just started up, we want to check again shortly after.
@@ -154,10 +176,10 @@ func (s *Server) maybeCheckForUpdates(scheduled time.Time, runningTime time.Dura
 	// human operator so we check as early as possible, but this makes it hard to
 	// differentiate real deployments vs short-lived instances for tests.
 	if runningTime < updateCheckPostStartup {
-		return timeutil.Now().Add(time.Hour - runningTime)
+		return now.Add(time.Hour - runningTime)
 	}
 
-	return timeutil.Now().Add(updateCheckFrequency)
+	return now.Add(updateCheckFrequency)
 }
 
 // checkForUpdates calls home to check for new versions for the current platform
@@ -221,16 +243,16 @@ var diagnosticsMetricsEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Duration) time.Time {
-	if scheduled.After(timeutil.Now()) {
+func (s *Server) maybeReportDiagnostics(now, scheduled time.Time, running time.Duration) time.Time {
+	if scheduled.After(now) {
 		return scheduled
 	}
 
 	if log.DiagnosticsReportingEnabled.Get() && diagnosticsMetricsEnabled.Get() {
-		s.reportDiagnostics()
+		s.reportDiagnostics(running)
 	}
 
-	return scheduled.Add(diagnosticReportFrequency)
+	return scheduled.Add(diagnosticReportFrequency.Get())
 }
 
 func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
@@ -257,11 +279,10 @@ func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 		schema = nil
 	}
 
-	// TODO(dt): Reporting loop should also own resetting of the collected stats.
 	return reportingInfo{summary, stores, schema, s.sqlExecutor.GetScrubbedStmtStats()}
 }
 
-func (s *Server) reportDiagnostics() {
+func (s *Server) reportDiagnostics(runningTime time.Duration) {
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
 	defer span.Finish()
 
@@ -274,6 +295,7 @@ func (s *Server) reportDiagnostics() {
 	q := reportingURL.Query()
 	q.Set("version", build.GetInfo().Tag)
 	q.Set("uuid", s.node.ClusterID.String())
+	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
 	reportingURL.RawQuery = q.Encode()
 
 	res, err := http.Post(reportingURL.String(), "application/json", b)
@@ -325,4 +347,21 @@ func (stringRedactor) Primitive(v reflect.Value) error {
 		v.Set(reflect.ValueOf("_"))
 	}
 	return nil
+}
+
+func (s *Server) maybeResetStats(
+	ctx context.Context, now, scheduledReset, scheduledDiagReport time.Time,
+) time.Time {
+	if scheduledReset.After(now) {
+		return scheduledReset
+	}
+	nextReset := scheduledReset.Add(statsResetFrequency.Get())
+
+	// If the next diag report is within the reset interval, wait to reset then.
+	if scheduledDiagReport.Before(nextReset) {
+		return scheduledDiagReport
+	}
+
+	s.sqlExecutor.ResetStatementStats(ctx)
+	return nextReset
 }
