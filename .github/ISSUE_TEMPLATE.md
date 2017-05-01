@@ -8,11 +8,11 @@ Prefer live chat? Message our engineers on our Gitter channel at https://gitter.
 
 **FEATURE REQUEST**
 
-1. Please describe the feature you are requesting.
+1. Does an issue already exist addressing this request? If yes, please add a :+1: reaction to the existing issue. If not, move on to step 2.
 
-2. Indicate the importance of this issue to you (blocker, must-have, should-have, nice-to-have). Are you currently using any workarounds to address this issue?
+2. Please describe the feature you are requesting, as well as your proposed use case for this feature.
 
-3. Provide any additional detail on your proposed use case for this feature.
+3. Indicate the importance of this issue to you (blocker, must-have, should-have, nice-to-have). Are you currently using any workarounds to address this issue?
 
 **BUG REPORT**
 
