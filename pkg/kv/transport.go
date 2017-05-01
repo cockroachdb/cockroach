@@ -101,6 +101,11 @@ type Transport interface {
 	// as needed.
 	SendNext(context.Context, chan<- BatchCall)
 
+	// NextReplica returns the replica descriptor of the replica to be tried in
+	// the next call to SendNext. MoveToFront will cause the return value to
+	// change. Returns a zero value if the transport is exhausted.
+	NextReplica() roachpb.ReplicaDescriptor
+
 	// MoveToFront locates the specified replica and moves it to the
 	// front of the ordering of replicas to try. If the replica has
 	// already been tried, it will be retried. If the specified replica
@@ -278,6 +283,13 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	}()
 }
 
+func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
+	if gt.IsExhausted() {
+		return roachpb.ReplicaDescriptor{}
+	}
+	return gt.orderedClients[gt.clientIndex].args.Replica
+}
+
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 	gt.clientPendingMu.Lock()
 	defer gt.clientPendingMu.Unlock()
@@ -406,6 +418,13 @@ func (s *senderTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 		log.Event(ctx, "error: "+pErr.String())
 	}
 	done <- BatchCall{Reply: br}
+}
+
+func (s *senderTransport) NextReplica() roachpb.ReplicaDescriptor {
+	if s.IsExhausted() {
+		return roachpb.ReplicaDescriptor{}
+	}
+	return s.args.Replica
 }
 
 func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
