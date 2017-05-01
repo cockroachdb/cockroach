@@ -46,10 +46,11 @@ import (
 // TestCluster represents a set of TestServers. The hope is that it can be used
 // analoguous to TestServer, but with control over range replication.
 type TestCluster struct {
-	Servers []*server.TestServer
-	Conns   []*gosql.DB
-	stopper *stop.Stopper
-	mu      struct {
+	Servers         []*server.TestServer
+	Conns           []*gosql.DB
+	stopper         *stop.Stopper
+	replicationMode base.TestClusterReplicationMode
+	mu              struct {
 		syncutil.Mutex
 		serverStoppers []*stop.Stopper
 	}
@@ -138,21 +139,14 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		t.Fatal("can't disable an individual server's queues when starting a cluster; " +
 			"the cluster controls replication")
 	}
-
-	switch args.ReplicationMode {
-	case base.ReplicationAuto:
-	case base.ReplicationManual:
-		if args.ServerArgs.Knobs.Store == nil {
-			args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{}
-		}
-		storeKnobs := args.ServerArgs.Knobs.Store.(*storage.StoreTestingKnobs)
-		storeKnobs.DisableSplitQueue = true
-		storeKnobs.DisableReplicateQueue = true
-	default:
+	if args.ReplicationMode != base.ReplicationAuto && args.ReplicationMode != base.ReplicationManual {
 		t.Fatal("unexpected replication mode")
 	}
 
-	tc := &TestCluster{}
+	tc := &TestCluster{
+		stopper:         stop.NewStopper(),
+		replicationMode: args.ReplicationMode,
+	}
 	tc.stopper = stop.NewStopper()
 
 	for i := 0; i < nodes; i++ {
@@ -175,7 +169,7 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 
 	tc.WaitForStores(t, tc.Servers[0].Gossip())
 
-	if args.ReplicationMode == base.ReplicationAuto {
+	if tc.replicationMode == base.ReplicationAuto {
 		if err := tc.WaitForFullReplication(); err != nil {
 			t.Fatal(err)
 		}
@@ -187,6 +181,15 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 // the TestCluster.
 func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) {
 	serverArgs.Stopper = stop.NewStopper()
+	if tc.replicationMode == base.ReplicationManual {
+		if serverArgs.Knobs.Store == nil {
+			serverArgs.Knobs.Store = &storage.StoreTestingKnobs{}
+		}
+		storeKnobs := serverArgs.Knobs.Store.(*storage.StoreTestingKnobs)
+		storeKnobs.DisableSplitQueue = true
+		storeKnobs.DisableReplicateQueue = true
+	}
+
 	s, conn, _ := serverutils.StartServer(t, serverArgs)
 	tc.Servers = append(tc.Servers, s.(*server.TestServer))
 	tc.Conns = append(tc.Conns, conn)
