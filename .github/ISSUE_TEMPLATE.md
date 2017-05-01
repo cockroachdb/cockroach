@@ -8,7 +8,7 @@ Prefer live chat? Message our engineers on our Gitter channel at https://gitter.
 
 **FEATURE REQUEST**
 
-1. Does an issue already exist addressing this request? If yes, please react to the existing issue with :+1:. If not, move on to step 2.
+1. Does an issue already exist addressing this request? If yes, please add a :+1: reaction to the existing issue. If not, move on to step 2.
 
 2. Please describe the feature you are requesting, as well as your proposed use case for this feature.
 
