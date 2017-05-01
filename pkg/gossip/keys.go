@@ -96,6 +96,11 @@ func MakeNodeIDKey(nodeID roachpb.NodeID) string {
 	return MakeKey(KeyNodeIDPrefix, nodeID.String())
 }
 
+// IsNodeIDKey returns true iff the provided key is a valid node ID key.
+func IsNodeIDKey(key string) bool {
+	return strings.HasPrefix(key, KeyNodeIDPrefix+separator)
+}
+
 // NodeIDFromKey attempts to extract a NodeID from the provided key.
 // The key should have been constructed by MakeNodeIDKey.
 // Returns an error if the key is not of the correct type or is not parsable.
