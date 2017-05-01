@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -68,6 +69,15 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	}
 	defer importRequestLimiter.endLimitedRequest()
 	log.Infof(ctx, "import [%s,%s)", importStart, importEnd)
+
+	descs := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	for _, rekey := range args.Rekeys {
+		var desc sqlbase.Descriptor
+		if err := desc.Unmarshal(rekey.NewDesc); err != nil {
+			return nil, err
+		}
+		descs[sqlbase.ID(rekey.OldID)] = desc.GetTable()
+	}
 
 	// Arrived at by tuning and watching the effect on BenchmarkRestore.
 	const batchSizeBytes = 1000000
@@ -191,7 +201,11 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		value := roachpb.Value{RawBytes: valueScratch}
 
 		var ok bool
-		key.Key, ok = kr.RewriteKey(key.Key)
+		var err error
+		key.Key, ok, err = RewriteInterleavedKey(kr, descs, 0, key.Key)
+		if err != nil {
+			return nil, err
+		}
 		if !ok {
 			// If the key rewriter didn't match this key, it's not data for the
 			// table(s) we're interested in.

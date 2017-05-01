@@ -550,6 +550,8 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+		// Create a dummy database to verify rekeying is correctly performed.
+		sqlDBRestore.Exec(`CREATE DATABASE ignored`)
 		sqlDBRestore.Exec(bankCreateDatabase)
 
 		sqlDBRestore.Exec(`RESTORE bench.* FROM $1`, dir)
