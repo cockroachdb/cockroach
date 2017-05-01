@@ -1460,7 +1460,7 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 // on the session settings.
 func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, error) {
 	distSQLMode := planner.session.DistSQLMode
-	if distSQLMode == distSQLOff {
+	if distSQLMode == DistSQLOff {
 		return false, nil
 	}
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
@@ -1487,7 +1487,7 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 
 	if err != nil {
 		// If the distSQLMode is ALWAYS, any unsupported statement is an error.
-		if distSQLMode == distSQLAlways {
+		if distSQLMode == DistSQLAlways {
 			return false, err
 		}
 		// Don't use distSQL for this request.
@@ -1495,7 +1495,7 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 		return false, nil
 	}
 
-	if distSQLMode == distSQLAuto && !distribute {
+	if distSQLMode == DistSQLAuto && !distribute {
 		log.VEventf(planner.session.Ctx(), 1, "not distributing query")
 		return false, nil
 	}
