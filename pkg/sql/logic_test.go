@@ -525,14 +525,9 @@ type logicTest struct {
 	// been marked using a result label in the input. See the
 	// explanation for labels in processInputFiles().
 	labelMap map[string]string
-
-	// logScope binds the lifetime of the log files to this test.
-	logScope *log.TestLogScope
 }
 
 func (t *logicTest) close() {
-	defer t.logScope.Close(t.t)
-
 	t.traceStop()
 
 	for _, cleanup := range t.cleanupFuncs {
@@ -617,8 +612,6 @@ func (t *logicTest) setUser(user string) func() {
 func (t *logicTest) setup(
 	numNodes int, useFakeSpanResolver bool, distSQLOverride *settings.EnumSetting,
 ) {
-	t.logScope = log.Scope(t.t)
-
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
@@ -1337,14 +1330,9 @@ func (t *logicTest) runFile(path string, config testClusterConfig) {
 		}
 	}()
 
-	t.logScope.KeepLogs(true)
-
 	if err := t.processTestFile(path, config); err != nil {
 		t.Fatal(err)
 	}
-
-	// If we got this far, we don't need to keep logs (unless the test fails).
-	t.logScope.KeepLogs(false)
 }
 
 func TestLogic(t *testing.T) {
@@ -1432,6 +1420,12 @@ func TestLogic(t *testing.T) {
 			configPaths[idx] = append(configPaths[idx], path)
 		}
 	}
+
+	// The tests below are likely to run concurrently; `log` is shared
+	// between all the goroutines and thus all tests, so it doesn't make
+	// sense to try to use separate `log.Scope` instances for each test.
+	logScope := log.Scope(t)
+	defer logScope.Close(t)
 
 	verbose := testing.Verbose() || log.V(1)
 	for idx, cfg := range logicTestConfigs {
