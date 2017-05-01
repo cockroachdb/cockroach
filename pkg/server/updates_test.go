@@ -187,7 +187,7 @@ func TestReportUsage(t *testing.T) {
 		expectedUsageReports++
 
 		node := ts.node.recorder.GetStatusSummary()
-		ts.reportDiagnostics()
+		ts.reportDiagnostics(0)
 
 		keyCounts := make(map[roachpb.StoreID]int)
 		rangeCounts := make(map[roachpb.StoreID]int)

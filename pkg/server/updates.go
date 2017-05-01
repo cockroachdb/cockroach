@@ -116,13 +116,14 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 		var timer timeutil.Timer
 		defer timer.Stop()
 		for {
-			runningTime := timeutil.Since(startup)
+			now := timeutil.Now()
+			runningTime := now.Sub(startup)
 
-			nextUpdateCheck = s.maybeCheckForUpdates(nextUpdateCheck, runningTime)
-			nextDiagnosticReport = s.maybeReportDiagnostics(nextDiagnosticReport, runningTime)
+			nextUpdateCheck = s.maybeCheckForUpdates(now, nextUpdateCheck, runningTime)
+			nextDiagnosticReport = s.maybeReportDiagnostics(now, nextDiagnosticReport, runningTime)
 
 			sooner := nextUpdateCheck
-			if nextDiagnosticReport.Before(nextUpdateCheck) {
+			if nextDiagnosticReport.Before(sooner) {
 				sooner = nextDiagnosticReport
 			}
 
@@ -139,15 +140,17 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 
 // maybeCheckForUpdates determines if it is time to check for updates and does
 // so if it is, before returning the time at which the next check be done.
-func (s *Server) maybeCheckForUpdates(scheduled time.Time, runningTime time.Duration) time.Time {
-	if scheduled.After(timeutil.Now()) {
+func (s *Server) maybeCheckForUpdates(
+	now, scheduled time.Time, runningTime time.Duration,
+) time.Time {
+	if scheduled.After(now) {
 		return scheduled
 	}
 
 	// checkForUpdates handles its own errors, but it returns a bool indicating if
 	// it succeeded, so we can schedule a re-attempt if it did not.
 	if succeeded := s.checkForUpdates(runningTime); !succeeded {
-		return timeutil.Now().Add(updateCheckRetryFrequency)
+		return now.Add(updateCheckRetryFrequency)
 	}
 
 	// If we've just started up, we want to check again shortly after.
@@ -155,10 +158,10 @@ func (s *Server) maybeCheckForUpdates(scheduled time.Time, runningTime time.Dura
 	// human operator so we check as early as possible, but this makes it hard to
 	// differentiate real deployments vs short-lived instances for tests.
 	if runningTime < updateCheckPostStartup {
-		return timeutil.Now().Add(time.Hour - runningTime)
+		return now.Add(time.Hour - runningTime)
 	}
 
-	return timeutil.Now().Add(updateCheckFrequency)
+	return now.Add(updateCheckFrequency)
 }
 
 // checkForUpdates calls home to check for new versions for the current platform
@@ -222,8 +225,8 @@ var diagnosticsMetricsEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
-func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Duration) time.Time {
-	if scheduled.After(timeutil.Now()) {
+func (s *Server) maybeReportDiagnostics(now, scheduled time.Time, running time.Duration) time.Time {
+	if scheduled.After(now) {
 		return scheduled
 	}
 
