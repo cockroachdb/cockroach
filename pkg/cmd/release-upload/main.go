@@ -294,7 +294,8 @@ func main() {
 					targetArchiveBase := fmt.Sprintf("%s.%s", archiveBase, targetSuffix)
 					var f *os.File
 					if strings.HasSuffix(base, ".exe") {
-						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchiveBase+".zip")
+						targetArchiveBase += ".zip"
+						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchiveBase)
 						f, err = os.Create(absoluteArchivePath)
 						if err != nil {
 							log.Fatalf("os.Create(%s): %s", absoluteArchivePath, err)
@@ -311,7 +312,8 @@ func main() {
 							log.Fatal(err)
 						}
 					} else {
-						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchiveBase+".tgz")
+						targetArchiveBase += ".tgz"
+						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchiveBase)
 						f, err = os.Create(absoluteArchivePath)
 						if err != nil {
 							log.Fatalf("os.Create(%s): %s", absoluteArchivePath, err)
