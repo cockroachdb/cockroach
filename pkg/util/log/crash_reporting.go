@@ -71,6 +71,13 @@ func ReportPanic(ctx context.Context, r interface{}) interface{} {
 		r = errors.Errorf("%s: %v", e.ExtraInfo, e.Err)
 	}
 
+	// TODO(dt,knz,sql-team): we need to audit all sprintf'ing of values into the
+	// errors and strings passed to panic, to ensure raw user data is kept
+	// separate and can thus be elided here. For now, the type is about all we can
+	// assume is safe to report, which combined with file and line info should be
+	// at least somewhat helpful in telling us where crashes are coming from.
+	reportable = fmt.Sprintf("%T", reportable)
+
 	maybeSendCrashReport(ctx, reportable)
 
 	// Ensure that the logs are flushed before letting a panic
@@ -93,7 +100,7 @@ func ReportPanic(ctx context.Context, r interface{}) interface{} {
 var crashReports = settings.RegisterBoolSetting(
 	"diagnostics.reporting.send_crash_reports",
 	"send crash and panic reports",
-	false,
+	true,
 )
 
 func maybeSendCrashReport(ctx context.Context, r interface{}) {
