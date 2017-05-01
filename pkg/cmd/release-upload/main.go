@@ -112,7 +112,10 @@ func main() {
 	// TODO(tamird,benesch,bdarnell): make "latest" a website-redirect
 	// rather than a full key. This means that the actual artifact will no
 	// longer be named "-latest".
-	releaseVersionStrs := []string{versionStr, "latest"}
+	latestStr := "latest"
+	releaseVersionStrs := []string{versionStr, latestStr}
+
+	noCache := "no-cache"
 
 	if !isHead {
 		for _, releaseVersionStr := range releaseVersionStrs {
@@ -137,11 +140,15 @@ func main() {
 			if err != nil {
 				log.Fatalf("os.Open(%s): %s", absoluteSrcArchivePath, err)
 			}
-			if _, err := svc.PutObject(&s3.PutObjectInput{
+			putObjectInput := s3.PutObjectInput{
 				Bucket: &bucketName,
 				Key:    &srcArchive,
 				Body:   f,
-			}); err != nil {
+			}
+			if releaseVersionStr == latestStr {
+				putObjectInput.CacheControl = &noCache
+			}
+			if _, err := svc.PutObject(&putObjectInput); err != nil {
 				log.Fatalf("s3 upload %s: %s", absoluteSrcArchivePath, err)
 			}
 			if err := f.Close(); err != nil {
@@ -276,7 +283,6 @@ func main() {
 					log.Fatalf("s3 upload %s: %s", absolutePath, err)
 				}
 				latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, "LATEST")
-				noCache := "no-cache"
 				if _, err := svc.PutObject(&s3.PutObjectInput{
 					Bucket:       &bucketName,
 					CacheControl: &noCache,
@@ -340,11 +346,15 @@ func main() {
 							log.Fatal(err)
 						}
 					}
-					if _, err := svc.PutObject(&s3.PutObjectInput{
+					putObjectInput := s3.PutObjectInput{
 						Bucket: &bucketName,
 						Key:    &targetArchive,
 						Body:   bytes.NewReader(body.Bytes()),
-					}); err != nil {
+					}
+					if releaseVersionStr == latestStr {
+						putObjectInput.CacheControl = &noCache
+					}
+					if _, err := svc.PutObject(&putObjectInput); err != nil {
 						log.Fatalf("s3 upload %s: %s", targetArchive, err)
 					}
 				}
