@@ -428,13 +428,6 @@ is the prefix for range local keys.`}
 		Description: `Print key and value sizes along with their associated key.`,
 	}
 
-	RaftTickInterval = FlagInfo{
-		Name: "raft-tick-interval",
-		Description: `
-The resolution of the Raft timer; other raft timeouts are
-defined in terms of multiples of this value.`,
-	}
-
 	Replicated = FlagInfo{
 		Name:        "replicated",
 		Description: "Restrict scan to replicated data.",
