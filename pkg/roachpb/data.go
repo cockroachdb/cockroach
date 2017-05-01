@@ -818,8 +818,10 @@ func MakePriority(userPriority UserPriority) int32 {
 	// For userPriority=MaxUserPriority, the probability of overflow is 0.7%.
 	// For userPriority=(MaxUserPriority/2), the probability of overflow is 0.005%.
 	val = (val / (5 * MaxUserPriority)) * math.MaxInt32
-	if val >= MaxTxnPriority {
-		return MaxTxnPriority
+	if val <= MinTxnPriority {
+		return MinTxnPriority + 1
+	} else if val >= MaxTxnPriority {
+		return MaxTxnPriority - 1
 	}
 	return int32(val)
 }
