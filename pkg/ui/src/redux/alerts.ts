@@ -11,8 +11,7 @@ import { ThunkAction } from "redux-thunk";
 
 import { LocalSetting } from "./localsettings";
 import {
-  OptInAttributes, saveUIData, KEY_HELPUS, VERSION_DISMISSED_KEY, loadUIData, isInFlight,
-  UIDataSet,
+  saveUIData, VERSION_DISMISSED_KEY, loadUIData, isInFlight, UIDataSet,
 } from "./uiData";
 import { refreshCluster, refreshNodes, refreshVersion, refreshHealth } from "./apiReducers";
 import { nodeStatusesSelector } from "./nodes";
@@ -42,71 +41,6 @@ export interface Alert extends AlertInfo {
 }
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;
-
-export const helpusBannerDismissedSetting = new LocalSetting(
-  "helpus_alert_dismissed", localSettingsSelector, false,
-);
-
-// optinAttributes are the saved attributes that indicate whether the user has
-// opted in to usage reporting.
-export const optinAttributesSelector = createSelector(
-  (state: AdminUIState) => state.uiData,
-  (uiData) => uiData && uiData[KEY_HELPUS] && uiData[KEY_HELPUS].data as OptInAttributes,
-);
-
-// optinAttributesLoaded is a boolean that indicates whether the optinAttributes
-// have been loaded yet.
-// TODO(mrtracy): Refactor so that we can distinguish "never loaded" from
-// "loaded, doesn't exist on server" without a separate selector
-export const optinAttributesLoadedSelector = createSelector(
-  (state: AdminUIState) => state.uiData,
-  (uiData) => uiData && _.has(uiData, KEY_HELPUS),
-);
-
-/**
- * Notification if the user has not yet explicitly opted in or out of usage
- * reporting.
- */
-export const helpusNotificationSelector = createSelector(
-  optinAttributesSelector,
-  optinAttributesLoadedSelector,
-  helpusBannerDismissedSetting.selector,
-  (optinAttributes, attributesLoaded, helpusBannerDismissed): Alert => {
-    if (helpusBannerDismissed) {
-      return undefined;
-    }
-    // If we haven't yet checked the server for current opt-in settings, do not
-    // yet display the notification.
-    if (!attributesLoaded) {
-      return undefined;
-    }
-    // If server-side opt-in settings indicate the user has already explicitly
-    // set an opt-in preference, do not display the notification.
-    if (optinAttributes && _.isBoolean(optinAttributes.optin)) {
-      return undefined;
-    }
-
-    return {
-      level: AlertLevel.NOTIFICATION,
-      title: "Help Us!",
-      link: "#/help-us/reporting",
-      text: "Help Cockroach DB improve: opt in to share usage statistics",
-      dismiss: (dispatch) => {
-        // Dismiss locally.
-        dispatch(helpusBannerDismissedSetting.set(true));
-        // Dismiss with persistence on server.
-        const newAttributes = optinAttributes ? _.clone(optinAttributes) : new OptInAttributes();
-        // "dismissed" counts the number of times this banner has been
-        // dismissed. It is not currently being used anywhere to my knowledge,
-        // it might be wholly replaceable by "dismissedAt".
-        newAttributes.dismissed = 1;
-        return dispatch(saveUIData({
-          key: KEY_HELPUS,
-          value: newAttributes,
-        }));
-      },
-    };
-  });
 
 ////////////////////////////////////////
 // Version mismatch.
@@ -259,7 +193,6 @@ export const disconnectedAlertSelector = createSelector(
 export const panelAlertsSelector = createSelector(
   newVersionNotificationSelector,
   staggeredVersionWarningSelector,
-  helpusNotificationSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
@@ -313,7 +246,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
     const uiData = state.uiData;
     if (uiData !== lastUIData) {
       lastUIData = uiData;
-      const keysToMaybeLoad = [KEY_HELPUS, VERSION_DISMISSED_KEY];
+      const keysToMaybeLoad = [VERSION_DISMISSED_KEY];
       const keysToLoad = _.filter(keysToMaybeLoad, (key) => {
         return !(_.has(uiData, key) || isInFlight(state, key));
       });
