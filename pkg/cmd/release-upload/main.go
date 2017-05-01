@@ -292,9 +292,11 @@ func main() {
 				for _, releaseVersionStr := range releaseVersionStrs {
 					archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
 					targetArchiveBase := fmt.Sprintf("%s.%s", archiveBase, targetSuffix)
+					var targetArchive string
 					var f *os.File
 					if strings.HasSuffix(base, ".exe") {
-						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchiveBase+".zip")
+						targetArchive = targetArchiveBase + ".zip"
+						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchive)
 						f, err = os.Create(absoluteArchivePath)
 						if err != nil {
 							log.Fatalf("os.Create(%s): %s", absoluteArchivePath, err)
@@ -311,7 +313,8 @@ func main() {
 							log.Fatal(err)
 						}
 					} else {
-						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchiveBase+".tgz")
+						targetArchive = targetArchiveBase + ".tgz"
+						absoluteArchivePath := filepath.Join(pkg.Dir, targetArchive)
 						f, err = os.Create(absoluteArchivePath)
 						if err != nil {
 							log.Fatalf("os.Create(%s): %s", absoluteArchivePath, err)
@@ -347,7 +350,7 @@ func main() {
 					}
 					if _, err := svc.PutObject(&s3.PutObjectInput{
 						Bucket: &bucketName,
-						Key:    &targetArchiveBase,
+						Key:    &targetArchive,
 						Body:   f,
 					}); err != nil {
 						log.Fatalf("s3 upload %s: %s", f.Name(), err)
