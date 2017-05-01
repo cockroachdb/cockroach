@@ -88,7 +88,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                   return (
                     <div className="sort-table__unbounded-column">
                       <div className={"icon-circle-filled node-status-icon node-status-icon--" + s} title={tooltip} />
-                      <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>
+                      <Link to={`/cluster/nodes/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
                     </div>
                   );
                 },
@@ -129,7 +129,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               // Logs - a link to the logs data for this node.
               {
                 title: "Logs",
-                cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id + "/logs"}>Logs</Link>,
+                cell: (ns) => <Link to={`/cluster/nodes/${ns.desc.node_id}/logs`}>Logs</Link>,
                 className: "expand-link",
               },
             ]} />
@@ -139,21 +139,25 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
             <SummaryHeadlineStat
               title="Total Live Nodes"
               tooltip="Total number of live nodes in the cluster."
-              value={statuses.length} />
+              value={statuses.length}
+            />
             <SummaryHeadlineStat
               title={"Total Bytes"}
               tooltip="The total number of bytes stored across all live nodes."
               value={nodesSummary.nodeSums.usedBytes}
-              format={Bytes} />
+              format={Bytes}
+            />
             <SummaryHeadlineStat
               title="Total Replicas"
               tooltip="The total number of replicas stored across all live nodes."
-              value={nodesSummary.nodeSums.replicas} />
+              value={nodesSummary.nodeSums.replicas}
+            />
             <SummaryHeadlineStat
               title={"Total Memory Usage"}
               tooltip="The total amount of memory used across all live nodes."
               value={nodesSummary.nodeSums.usedMem}
-              format={Bytes} />
+              format={Bytes}
+            />
           </SummaryBar>
         </div>
       </section>
@@ -193,12 +197,15 @@ class DeadNodeList extends React.Component<NodeCategoryListProps, {}> {
               {
                 title: "Address",
                 cell: (ns) => {
-                  return <div>
-                    <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>
-                    <div className="icon-circle-filled node-status-icon node-status-icon--dead"
-                         title={`This node has not reported as live for over ${deadTimeout.humanize()} and is considered dead.`}
-                         />
-                  </div>;
+                  return (
+                    <div>
+                      <div
+                        className="icon-circle-filled node-status-icon node-status-icon--dead"
+                        title={`This node has not reported as live for over ${deadTimeout.humanize()} and is considered dead.`}
+                      />
+                      <Link to={`/cluster/nodes/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
+                    </div>
+                  );
                 },
                 sort: (ns) => ns.desc.node_id,
                 // TODO(mrtracy): Consider if there is a better way to use BEM
