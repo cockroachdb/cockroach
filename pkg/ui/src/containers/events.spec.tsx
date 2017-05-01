@@ -16,7 +16,13 @@ function makeEventBox(
   events: protos.cockroach.server.serverpb.EventsResponse.Event$Properties[],
   refreshEventsFn: typeof refreshEvents,
 ) {
-  return shallow(<EventBox events={events} refreshEvents={refreshEventsFn}></EventBox>);
+  return shallow(
+    <EventBox
+      events={events}
+      refreshEvents={refreshEventsFn}
+      eventsValid={true}
+    />,
+  );
 }
 
 function makeEvent(event: Event) {
