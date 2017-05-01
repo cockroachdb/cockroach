@@ -432,17 +432,17 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					parser.NewDInt(parser.DInt(s.data.MaxRetries)),
 					errString,
 					parser.NewDFloat(parser.DFloat(s.data.NumRows.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.NumRows.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.NumRows.GetVariance(s.data.Count))),
 					parser.NewDFloat(parser.DFloat(s.data.ParseLat.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.ParseLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.ParseLat.GetVariance(s.data.Count))),
 					parser.NewDFloat(parser.DFloat(s.data.PlanLat.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.PlanLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.PlanLat.GetVariance(s.data.Count))),
 					parser.NewDFloat(parser.DFloat(s.data.RunLat.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.RunLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.RunLat.GetVariance(s.data.Count))),
 					parser.NewDFloat(parser.DFloat(s.data.ServiceLat.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.ServiceLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.ServiceLat.GetVariance(s.data.Count))),
 					parser.NewDFloat(parser.DFloat(s.data.OverheadLat.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.OverheadLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.OverheadLat.GetVariance(s.data.Count))),
 				)
 				s.Unlock()
 				if err != nil {
