@@ -495,7 +495,7 @@ func (e *Executor) ExecuteStatements(
 	defer func() {
 		if r := recover(); r != nil {
 			// On a panic, prepend the executed SQL.
-			panic(fmt.Errorf("%s: %s", stmts, r))
+			panic(log.WrappedPanic{ExtraInfo: stmts, Err: r})
 		}
 	}()
 

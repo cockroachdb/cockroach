@@ -196,7 +196,7 @@ func (s *Stopper) Recover(ctx context.Context) {
 			s.onPanic(r)
 			return
 		}
-		log.ReportPanic(ctx, r)
+		r = log.ReportPanic(ctx, r)
 		panic(r)
 	}
 }
