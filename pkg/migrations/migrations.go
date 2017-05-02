@@ -113,6 +113,8 @@ type db interface {
 	Txn(ctx context.Context, retryable func(ctx context.Context, txn *client.Txn) error) error
 }
 
+var _ db = &client.DB{}
+
 // Manager encapsulates the necessary functionality for handling migrations
 // of data in the cluster.
 type Manager struct {
