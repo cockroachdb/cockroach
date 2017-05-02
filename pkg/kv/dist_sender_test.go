@@ -73,6 +73,27 @@ var testRangeDescriptor = roachpb.RangeDescriptor{
 	},
 }
 
+// test descriptor using three replicas.
+var testRangeDescriptor2 = roachpb.RangeDescriptor{
+	RangeID:  2,
+	StartKey: roachpb.RKey("a"),
+	EndKey:   roachpb.RKey("z"),
+	Replicas: []roachpb.ReplicaDescriptor{
+		{
+			NodeID:  1,
+			StoreID: 1,
+		},
+		{
+			NodeID:  2,
+			StoreID: 2,
+		},
+		{
+			NodeID:  3,
+			StoreID: 3,
+		},
+	},
+}
+
 var testAddress = util.NewUnresolvedAddr("tcp", "node1")
 
 // rpcSendFn is the function type used to dispatch RPC calls.
@@ -378,6 +399,13 @@ var defaultMockRangeDescriptorDB = MockRangeDescriptorDB(func(key roachpb.RKey, 
 	return []roachpb.RangeDescriptor{testRangeDescriptor}, nil, nil
 })
 
+var threeReplicaMockRangeDescriptorDB = MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	if bytes.HasPrefix(key, keys.Meta2Prefix) {
+		return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
+	}
+	return []roachpb.RangeDescriptor{testRangeDescriptor2}, nil, nil
+})
+
 func TestOwnNodeCertain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -605,7 +633,6 @@ func makeGossip(t *testing.T, stopper *stop.Stopper) (*gossip.Gossip, *hlc.Clock
 	}); err != nil {
 		t.Fatal(err)
 	}
-
 	if err := g.AddInfo(gossip.KeySentinel, nil, time.Hour); err != nil {
 		t.Fatal(err)
 	}
@@ -706,10 +733,17 @@ func TestEvictCacheOnError(t *testing.T) {
 	// the RPC call succeeds but there is an error in the RequestHeader.
 	// Currently lease holder and cached range descriptor are treated equally.
 	// TODO(bdarnell): refactor to cover different types of retryable errors.
-	testCases := []struct{ rpcError, retryable, shouldClearLeaseHolder, shouldClearReplica bool }{
-		{false, false, false, false}, // non-retryable replica error
-		{false, true, false, false},  // retryable replica error
-		{true, true, false, false},   // RPC error aka all nodes dead
+	testCases := []struct {
+		rpcError               bool
+		replicaError           error
+		shouldClearLeaseHolder bool
+		shouldClearReplica     bool
+	}{
+		{false, nil, false, false},                              // non-retryable replica error
+		{false, &roachpb.RangeKeyMismatchError{}, false, false}, // RangeKeyMismatch replica error
+		{true, &roachpb.RangeKeyMismatchError{}, false, false},  // RPC error aka all nodes dead
+		{false, &roachpb.RangeNotFoundError{}, false, false},    // RangeNotFound replica error
+		{true, &roachpb.RangeNotFoundError{}, false, false},     // RPC error aka all nodes dead
 	}
 
 	const errString = "boom"
@@ -740,8 +774,8 @@ func TestEvictCacheOnError(t *testing.T) {
 				return nil, roachpb.NewSendError(errString)
 			}
 			var err error
-			if tc.retryable {
-				err = &roachpb.RangeKeyMismatchError{}
+			if tc.replicaError != nil {
+				err = tc.replicaError
 			} else {
 				err = errors.New(errString)
 			}
@@ -771,6 +805,65 @@ func TestEvictCacheOnError(t *testing.T) {
 		} else if cachedDesc == nil != tc.shouldClearReplica {
 			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
 		}
+	}
+}
+
+func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+
+	// Gossip the two nodes referred to in testRangeDescriptor2.
+	for i := 2; i <= 3; i++ {
+		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
+		nd := &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		}
+		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var count int32
+	var testFn rpcSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		args roachpb.BatchRequest,
+		_ *rpc.Context,
+	) (*roachpb.BatchResponse, error) {
+		var err error
+		switch count {
+		case 0, 1:
+			err = &roachpb.NotLeaseHolderError{LeaseHolder: &roachpb.ReplicaDescriptor{NodeID: 99, StoreID: 999}}
+		case 2:
+			err = roachpb.NewRangeNotFoundError(0)
+		default:
+			return args.CreateReply(), nil
+		}
+		count++
+		reply := &roachpb.BatchResponse{}
+		reply.Error = roachpb.NewError(err)
+		return reply, nil
+	}
+
+	cfg := DistSenderConfig{
+		Clock:             clock,
+		TransportFactory:  adaptLegacyTransport(testFn),
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+	}
+	ds := NewDistSender(cfg, g)
+	key := roachpb.Key("a")
+	put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
+
+	if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil {
+		t.Errorf("put encountered unexpected error: %s", pErr)
+	}
+	if count != 3 {
+		t.Errorf("expected three retries; got %d", count)
 	}
 }
 
@@ -991,7 +1084,7 @@ func TestSendRPCRetry(t *testing.T) {
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
 		t.Fatal(err)
 	}
-	// Fill RangeDescriptor with 2 replicas
+	// Fill RangeDescriptor with 2 replicas.
 	var descriptor = roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKey("a"),
