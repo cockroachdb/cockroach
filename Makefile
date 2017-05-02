@@ -110,7 +110,7 @@ short: build testshort checkshort
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 
-build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
+build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)$$($(XGO) env GOEXE)
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 build buildoss install: override LINKFLAGS += \

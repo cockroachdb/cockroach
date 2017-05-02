@@ -170,7 +170,7 @@ ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
 	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/{metacheck,ncpus,returncheck} \
-	$(shell $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build)
+	$$($(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build)
 	touch $@
 
 # Make doesn't expose a list of the variables declared in a given file, so we
