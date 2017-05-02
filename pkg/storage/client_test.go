@@ -513,6 +513,11 @@ func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- 
 }
 
 func (t *multiTestContextKVTransport) NextReplica() roachpb.ReplicaDescriptor {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.idx < len(t.replicas) {
+		return t.replicas[t.idx].ReplicaDescriptor
+	}
 	return roachpb.ReplicaDescriptor{}
 }
 
