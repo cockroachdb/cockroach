@@ -156,7 +156,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	ctx := s.AnnotateCtx(context.Background())
 	if s.cfg.Insecure {
-		log.Shout(ctx, log.Severity_WARNING,
+		// Use a non-annotated context here since the annotation just looks funny,
+		// particularly to new users (made worse by it always printing as [n?]).
+		log.Shout(context.Background(), log.Severity_WARNING,
 			"running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
 
