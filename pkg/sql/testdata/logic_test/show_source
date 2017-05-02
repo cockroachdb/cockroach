@@ -1,0 +1,206 @@
+query T colnames
+SELECT * FROM [SHOW client_encoding]
+----
+client_encoding
+UTF8
+
+query T colnames
+SELECT c.x FROM [SHOW client_encoding] AS c(x)
+----
+x
+UTF8
+
+query TI colnames
+SELECT * FROM [SHOW client_encoding] WITH ORDINALITY
+----
+client_encoding     ordinality
+UTF8                1
+
+query TT colnames
+SELECT * FROM [SHOW ALL]
+----
+Variable                       Value
+application_name
+client_encoding                UTF8
+client_min_messages
+database                       test
+default_transaction_isolation  SERIALIZABLE
+distsql                        off
+extra_float_digits
+max_index_keys                 32
+search_path                    pg_catalog
+server_version                 9.5.0
+session_user                   root
+standard_conforming_strings    on
+time zone                      UTC
+transaction isolation level    SERIALIZABLE
+transaction priority           NORMAL
+transaction status             NoTxn
+
+query I colnames
+SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
+----
+sql.defaults.distsql
+1
+
+query TTTT colnames
+SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE name != 'diagnostics.reporting.enabled'
+----
+name                                               current_value  type  description
+diagnostics.reporting.interval                     1h0m0s         d     interval at which diagnostics data should be reported
+diagnostics.reporting.report_metrics               true           b     enable collection and reporting diagnostic metrics to cockroach labs
+diagnostics.reporting.send_crash_reports           true           b     send crash and panic reports
+kv.allocator.lease_rebalancing_aggressiveness      1E+00          f     set greater than 1.0 to rebalance leases toward load more aggressively, or between 0 and 1.0 to be more conservative about rebalancing leases
+kv.allocator.load_based_lease_rebalancing.enabled  true           b     set to enable rebalancing of range leases based on load and latency
+kv.raft.command.max_size                           64 MiB         z     maximum size of a raft command
+kv.raft_log.synchronize                            true           b     set to true to synchronize on Raft log writes to persistent storage
+kv.snapshot_rebalance.max_rate                     2.0 MiB        z     the rate limit (bytes/sec) to use for rebalance snapshots
+kv.snapshot_recovery.max_rate                      8.0 MiB        z     the rate limit (bytes/sec) to use for recovery snapshots
+kv.transaction.max_intents                         100000         i     maximum number of write intents allowed for a KV transaction
+server.declined_reservation_timeout                5s             d     the amount of time to consider the store throttled for up-replication after a reservation was declined
+server.failed_reservation_timeout                  0s             d     the amount of time to consider the store throttled for up-replication after a failed reservation call
+server.remote_debugging.mode                       local          s     set to enable remote debugging, localhost-only or disable (any, local, off)
+server.time_until_store_dead                       5m0s           d     the time after which if there is no new gossiped information about a store, it is considered dead
+sql.defaults.distsql                               1              e     Default distributed SQL execution mode [off = 0, auto = 1, on = 2]
+sql.metrics.statement_details.dump_to_logs         false          b     dump collected statement statistics to node logs when periodically cleared
+sql.metrics.statement_details.enabled              true           b     collect per-statement query statistics
+sql.metrics.statement_details.threshold            0s             d     minmum execution time to cause statics to be collected
+sql.trace.log_statement_execute                    false          b     set to true to enable logging of executed statements
+sql.trace.session_eventlog.enabled                 false          b     set to true to enable session tracing
+sql.trace.txn.enable_threshold                     0s             d     duration beyond which all transactions are traced (set to 0 to disable)
+
+query T colnames
+SELECT * FROM [SHOW SESSION_USER]
+----
+session_user
+root
+
+query T colnames
+SELECT * FROM [SHOW DATABASE]
+----
+database
+test
+
+query T colnames
+SELECT * FROM [SHOW DATABASES]
+----
+Database
+crdb_internal
+information_schema
+pg_catalog
+system
+test
+
+query TTT colnames
+SELECT * FROM [SHOW GRANTS ON system.descriptor]
+----
+Table       User  Privileges
+descriptor  root  GRANT
+descriptor  root  SELECT
+
+query TTBITTBB colnames
+SELECT * FROM [SHOW INDEX FROM system.descriptor]
+----
+Table       Name     Unique  Seq  Column  Direction  Storing  Implicit
+descriptor  primary  true    1    id      ASC        false    false
+
+query TTTTT colnames
+SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
+----
+Table       Name     Type         Column(s)  Details
+descriptor  primary  PRIMARY KEY  id         NULL
+
+query TTBITTBB colnames
+SELECT * FROM [SHOW KEYS FROM system.descriptor]
+----
+Table       Name     Unique  Seq  Column  Direction  Storing  Implicit
+descriptor  primary  true    1    id      ASC        false    false
+
+query T colnames
+SELECT * FROM [SHOW TABLES FROM system]
+----
+Table
+descriptor
+eventlog
+jobs
+lease
+namespace
+rangelog
+settings
+ui
+users
+zones
+
+
+query T colnames
+CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
+----
+Table
+foo
+
+
+query T colnames
+SELECT * FROM [SHOW TIME ZONE]
+----
+time zone
+UTC
+
+
+query T colnames
+SELECT * FROM [SHOW TRANSACTION ISOLATION LEVEL]
+----
+transaction isolation level
+SERIALIZABLE
+
+
+query T colnames
+SELECT * FROM [SHOW TRANSACTION PRIORITY]
+----
+transaction priority
+NORMAL
+
+query T colnames
+SELECT * FROM [SHOW TRANSACTION STATUS]
+----
+transaction status
+NoTxn
+
+
+query TT colnames
+SELECT * FROM [SHOW CREATE TABLE system.descriptor]
+----
+Table              CreateTable
+system.descriptor  CREATE TABLE descriptor (
+		   id INT NOT NULL,
+		   descriptor BYTES NULL,
+		   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+		   FAMILY "primary" (id),
+		   FAMILY fam_2_descriptor (descriptor)
+)
+
+
+query TT colnames
+CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
+----
+View  CreateView
+v     CREATE VIEW v AS SELECT id FROM system.descriptor
+
+
+query T colnames
+SELECT * FROM [SHOW USERS]
+----
+username
+testuser
+
+
+query TTTI colnames
+SELECT * FROM [SHOW TESTING_RANGES FROM TABLE system.descriptor]
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       NULL     {1}       1
+
+query TTTI colnames
+CREATE INDEX ix ON foo(x); SELECT * FROM [SHOW TESTING_RANGES FROM INDEX foo@ix]
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       NULL     {1}       1

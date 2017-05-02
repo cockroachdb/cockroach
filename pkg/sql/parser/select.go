@@ -221,6 +221,10 @@ func (*FuncExpr) tableExpr()         {}
 
 func (*Explain) tableExpr() {}
 
+// Ditto for ShowSource, used for [SHOW ...]
+
+func (*ShowSource) tableExpr() {}
+
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID uint32
 
