@@ -464,3 +464,61 @@ EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 query I
 SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
+
+# Regression tests for #12022
+
+statement ok
+CREATE TABLE t12022 (
+  c1 INT,
+  c2 BOOL,
+  UNIQUE INDEX i (c1, c2)
+);
+
+statement ok
+INSERT INTO t12022 VALUES
+  (1, NULL), (1, false), (1, true),
+  (2, NULL), (2, false), (2, true);
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) > (1, NULL) ORDER BY (c1, c2);
+----
+2  NULL
+2  false
+2  true
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) > (1, false) ORDER BY (c1, c2);
+----
+1  true
+2  NULL
+2  false
+2  true
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) > (1, true) ORDER BY (c1, c2);
+----
+2  NULL
+2  false
+2  true
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) < (2, NULL) ORDER BY (c1, c2);
+----
+1  NULL
+1  false
+1  true
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) < (2, false) ORDER BY (c1, c2);
+----
+1  NULL
+1  false
+1  true
+
+query IB
+SELECT * FROM t12022@i WHERE (c1, c2) < (2, true) ORDER BY (c1, c2);
+----
+1  NULL
+1  false
+1  true
+2  false
