@@ -545,5 +545,3 @@ testImports:
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
 - name: github.com/go-sql-driver/mysql
   version: 147bd02c2c516cf9a8878cb75898ee8a9eea0228
-- name: github.com/termie/go-shutil
-  version: bcacb06fecaeec8dc42af03c87c6949f4a05c74c
