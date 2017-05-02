@@ -147,6 +147,9 @@ func (p *planner) toSettingString(
 	case *settings.StringSetting:
 		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
 			if s, ok := d.(*parser.DString); ok {
+				if err := setting.Validate(string(*s)); err != nil {
+					return "", err
+				}
 				return string(*s), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
@@ -161,6 +164,9 @@ func (p *planner) toSettingString(
 	case *settings.IntSetting:
 		return typeCheckAndParse(parser.TypeInt, func(d parser.Datum) (string, error) {
 			if i, ok := d.(*parser.DInt); ok {
+				if err := setting.Validate(int64(*i)); err != nil {
+					return "", err
+				}
 				return settings.EncodeInt(int64(*i)), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for int setting", d.ResolvedType(), d)
@@ -168,6 +174,9 @@ func (p *planner) toSettingString(
 	case *settings.FloatSetting:
 		return typeCheckAndParse(parser.TypeFloat, func(d parser.Datum) (string, error) {
 			if f, ok := d.(*parser.DFloat); ok {
+				if err := setting.Validate(float64(*f)); err != nil {
+					return "", err
+				}
 				return settings.EncodeFloat(float64(*f)), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for float setting", d.ResolvedType(), d)
@@ -197,6 +206,9 @@ func (p *planner) toSettingString(
 				if err != nil {
 					return "", err
 				}
+				if err := setting.Validate(bytes); err != nil {
+					return "", err
+				}
 				return settings.EncodeInt(bytes), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for byte size setting", d.ResolvedType(), d)
@@ -207,7 +219,11 @@ func (p *planner) toSettingString(
 				if f.Duration.Months > 0 || f.Duration.Days > 0 {
 					return "", errors.Errorf("cannot use day or month specifiers: %s", d.String())
 				}
-				return settings.EncodeDuration(time.Duration(f.Duration.Nanos) * time.Nanosecond), nil
+				d := time.Duration(f.Duration.Nanos) * time.Nanosecond
+				if err := setting.Validate(d); err != nil {
+					return "", err
+				}
+				return settings.EncodeDuration(d), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for duration setting", d.ResolvedType(), d)
 		})

@@ -57,8 +57,7 @@ func (e *EnumSetting) set(k int64) error {
 	if _, ok := e.enumValues[k]; !ok {
 		return errors.Errorf("unrecognized value %d", k)
 	}
-	e.IntSetting.set(k)
-	return nil
+	return e.IntSetting.set(k)
 }
 
 func enumValuesToDesc(enumValues map[int64]string) string {
@@ -94,6 +93,7 @@ func RegisterEnumSetting(
 	if !found {
 		panic(fmt.Sprintf("enum registered with default value %s not in map %s", defaultValue, enumValuesToDesc(enumValuesLower)))
 	}
+
 	setting := &EnumSetting{
 		IntSetting: IntSetting{defaultValue: i},
 		enumValues: enumValuesLower,

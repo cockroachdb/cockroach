@@ -24,5 +24,6 @@ type Setting interface {
 
 type numericSetting interface {
 	Setting
-	set(i int64)
+	Validate(i int64) error
+	set(i int64) error
 }

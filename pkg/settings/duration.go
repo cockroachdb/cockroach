@@ -17,6 +17,8 @@ package settings
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 // DurationSetting is the interface of a setting variable that will be
@@ -25,6 +27,7 @@ import (
 type DurationSetting struct {
 	defaultValue time.Duration
 	v            int64
+	validateFn   func(time.Duration) error
 }
 
 var _ Setting = &DurationSetting{}
@@ -43,17 +46,48 @@ func (*DurationSetting) Typ() string {
 	return "d"
 }
 
-func (d *DurationSetting) set(v time.Duration) {
+// Validate that a value conforms with the validation function.
+func (d *DurationSetting) Validate(v time.Duration) error {
+	if d.validateFn != nil {
+		if err := d.validateFn(v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DurationSetting) set(v time.Duration) error {
+	if err := d.Validate(v); err != nil {
+		return err
+	}
 	atomic.StoreInt64(&d.v, int64(v))
+	return nil
 }
 
 func (d *DurationSetting) setToDefault() {
-	d.set(d.defaultValue)
+	if err := d.set(d.defaultValue); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterDurationSetting defines a new setting with type duration.
 func RegisterDurationSetting(key, desc string, defaultValue time.Duration) *DurationSetting {
-	setting := &DurationSetting{defaultValue: defaultValue}
+	return RegisterValidatedDurationSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterValidatedDurationSetting defines a new setting with type duration.
+func RegisterValidatedDurationSetting(
+	key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
+) *DurationSetting {
+	if validateFn != nil {
+		if err := validateFn(defaultValue); err != nil {
+			panic(errors.Wrap(err, "invalid default"))
+		}
+	}
+	setting := &DurationSetting{
+		defaultValue: defaultValue,
+		validateFn:   validateFn,
+	}
 	register(key, desc, setting)
 	return setting
 }

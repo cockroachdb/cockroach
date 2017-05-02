@@ -14,7 +14,11 @@
 
 package settings
 
-import "github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+import (
+	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+)
 
 // ByteSizeSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
@@ -36,7 +40,23 @@ func (b *ByteSizeSetting) String() string {
 
 // RegisterByteSizeSetting defines a new setting with type bytesize.
 func RegisterByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
-	setting := &ByteSizeSetting{IntSetting{defaultValue: defaultValue}}
+	return RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterValidatedByteSizeSetting defines a new setting with type bytesize
+// with a validation function.
+func RegisterValidatedByteSizeSetting(
+	key, desc string, defaultValue int64, validateFn func(int64) error,
+) *ByteSizeSetting {
+	if validateFn != nil {
+		if err := validateFn(defaultValue); err != nil {
+			panic(errors.Wrap(err, "invalid default"))
+		}
+	}
+	setting := &ByteSizeSetting{IntSetting{
+		defaultValue: defaultValue,
+		validateFn:   validateFn,
+	}}
 	register(key, desc, setting)
 	return setting
 }
