@@ -51,9 +51,9 @@ Install the pinned version of `glide` with `go install ./vendor/github.com/Maste
 `glide` uses import statements in our code to discover what it needs to vendor.
 
 - When introducing a new library, adding an import and running `glide up` will fetch it to `vendor`.
-  - Don't try to use `glide get`, since it [will delete all comments](Masterminds/glide/issues/691) in `glide.yaml`.
+  - Don't try to use `glide get`, since it [will delete all comments](https://github.com/Masterminds/glide/issues/691) in `glide.yaml`.
 - If you are adding a non-import dependency (e.g. a binary tool to be used in development),
-  please add a dummy import to `build/tool_imports.go` to ensure glide remains [aware of it](Masterminds/glide/issues/690).
+  please add a dummy import to `build/tool_imports.go` to ensure glide remains [aware of it](https://github.com/Masterminds/glide/issues/690).
 - [glide-diff-parser](cockroachdb/glide-diff-parser) can be useful to inspect or summarize changes.
 
 ### Version Pins
