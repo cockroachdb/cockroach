@@ -65,7 +65,10 @@ type Farmer struct {
 	// state.
 	StateFile string
 	// AddVars are additional Terraform variables to be set during calls to Add.
-	AddVars     map[string]string
+	AddVars map[string]string
+	// AddFlags are additional command-line flags to be passed to the cockroachdb
+	// process.
+	AddFlags    []string
 	KeepCluster string
 	nodes       []node
 	// RPCContext is used to open an ExternalClient which provides a KV connection
@@ -118,6 +121,11 @@ func (f *Farmer) AddEnvVar(key, value string) {
 	}
 }
 
+// AddFlag add a command-line flag to include when starting cockroach.
+func (f *Farmer) AddFlag(flagVal string) {
+	f.AddFlags = append(f.AddFlags, flagVal)
+}
+
 // Add provisions the given number of nodes.
 func (f *Farmer) Add(nodes int) error {
 	nodes += f.NumNodes()
@@ -132,6 +140,9 @@ func (f *Farmer) Add(nodes int) error {
 
 	for v, val := range f.AddVars {
 		args = append(args, fmt.Sprintf(`-var=%s="%s"`, v, val))
+	}
+	if len(f.AddFlags) > 0 {
+		args = append(args, fmt.Sprintf("cockroach_flags=%q", strings.Join(f.AddFlags, " ")))
 	}
 
 	if nodes == 0 {
