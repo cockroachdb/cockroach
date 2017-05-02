@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -52,7 +53,6 @@ const (
 	defaultConsistencyCheckInterval = 24 * time.Hour
 	defaultScanMaxIdleTime          = 200 * time.Millisecond
 	defaultMetricsSampleInterval    = 10 * time.Second
-	defaultTimeUntilStoreDead       = 5 * time.Minute
 	defaultStorePath                = "cockroach-data"
 	defaultEventLogEnabled          = true
 
@@ -61,6 +61,11 @@ const (
 
 	productionSettingsWebpage = "please see https://www.cockroachlabs.com/docs/recommended-production-settings.html for more details"
 )
+
+var timeUntilStoreDead = settings.RegisterPositiveDurationSetting(
+	"server.time_until_store_dead",
+	"the time after which if there is no new gossiped information about a store, it is considered dead",
+	5*time.Minute)
 
 // Config holds parameters needed to setup a server.
 type Config struct {
@@ -160,7 +165,7 @@ type Config struct {
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it is considered dead.
 	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
-	TimeUntilStoreDead time.Duration
+	TimeUntilStoreDead *settings.DurationSetting
 
 	// SendNextTimeout is the time after which an alternate replica will
 	// be used to attempt sending a KV batch.
@@ -314,7 +319,7 @@ func MakeConfig() Config {
 		ScanMaxIdleTime:          defaultScanMaxIdleTime,
 		ConsistencyCheckInterval: defaultConsistencyCheckInterval,
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
-		TimeUntilStoreDead:       defaultTimeUntilStoreDead,
+		TimeUntilStoreDead:       timeUntilStoreDead,
 		SendNextTimeout:          base.DefaultSendNextTimeout,
 		EventLogEnabled:          defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
@@ -479,7 +484,6 @@ func (cfg *Config) readEnvironmentVariables() {
 	cfg.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", cfg.MetricsSampleInterval)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
-	cfg.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("COCKROACH_TIME_UNTIL_STORE_DEAD", cfg.TimeUntilStoreDead)
 	cfg.SendNextTimeout = envutil.EnvOrDefaultDuration("COCKROACH_SEND_NEXT_TIMEOUT", cfg.SendNextTimeout)
 	cfg.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("COCKROACH_CONSISTENCY_CHECK_INTERVAL", cfg.ConsistencyCheckInterval)
 }

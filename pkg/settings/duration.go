@@ -113,3 +113,9 @@ func TestingSetDuration(s **DurationSetting, v time.Duration) func() {
 		*s = saved
 	}
 }
+
+// TestingDuration returns a one off, unregistered duration setting for test use
+// only.
+func TestingDuration(v time.Duration) *DurationSetting {
+	return &DurationSetting{v: int64(v)}
+}
