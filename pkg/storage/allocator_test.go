@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -2188,6 +2189,8 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64) {
 func Example_rebalancing() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
+	var timeUntilStoreDead *settings.DurationSetting
+	stopper.AddCloser(stop.CloserFn(settings.TestingSetDuration(&timeUntilStoreDead, TestTimeUntilStoreDeadOff)))
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
@@ -2208,7 +2211,7 @@ func Example_rebalancing() {
 		g,
 		clock,
 		newMockNodeLiveness(nodeStatusLive).nodeLivenessFunc,
-		TestTimeUntilStoreDeadOff,
+		timeUntilStoreDead,
 		/* deterministic */ true,
 	)
 	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {

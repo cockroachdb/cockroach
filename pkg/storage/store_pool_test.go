@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -88,7 +89,7 @@ func (m *mockNodeLiveness) nodeLivenessFunc(
 // createTestStorePool creates a stopper, gossip and storePool for use in
 // tests. Stopper must be stopped by the caller.
 func createTestStorePool(
-	timeUntilStoreDead time.Duration, deterministic bool, defaultNodeStatus nodeStatus,
+	timeUntilStoreDeadValue time.Duration, deterministic bool, defaultNodeStatus nodeStatus,
 ) (*stop.Stopper, *gossip.Gossip, *hlc.ManualClock, *StorePool, *mockNodeLiveness) {
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(123)
@@ -97,6 +98,8 @@ func createTestStorePool(
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 	mnl := newMockNodeLiveness(defaultNodeStatus)
+	var timeUntilStoreDead *settings.DurationSetting
+	stopper.AddCloser(stop.CloserFn(settings.TestingSetDuration(&timeUntilStoreDead, timeUntilStoreDeadValue)))
 	storePool := NewStorePool(
 		log.AmbientContext{},
 		g,

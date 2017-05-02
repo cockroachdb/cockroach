@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -660,13 +661,17 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	m.dbs[idx] = client.NewDB(sender, m.clock)
 }
 
-func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
+func (m *multiTestContext) populateStorePool(
+	idx int, nodeLiveness *storage.NodeLiveness, stopper *stop.Stopper,
+) {
+	var timeUntilStoreDead *settings.DurationSetting
+	stopper.AddCloser(stop.CloserFn(settings.TestingSetDuration(&timeUntilStoreDead, m.timeUntilStoreDead)))
 	m.storePools[idx] = storage.NewStorePool(
 		log.AmbientContext{},
 		m.gossips[idx],
 		m.clock,
 		storage.MakeStorePoolNodeLivenessFunc(nodeLiveness),
-		m.timeUntilStoreDead,
+		timeUntilStoreDead,
 		/* deterministic */ false,
 	)
 }
@@ -734,7 +739,7 @@ func (m *multiTestContext) addStore(idx int) {
 		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
 		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration,
 	)
-	m.populateStorePool(idx, m.nodeLivenesses[idx])
+	m.populateStorePool(idx, m.nodeLivenesses[idx], stopper)
 	cfg.DB = m.dbs[idx]
 	cfg.NodeLiveness = m.nodeLivenesses[idx]
 	cfg.StorePool = m.storePools[idx]
@@ -879,7 +884,7 @@ func (m *multiTestContext) restartStore(i int) {
 		log.AmbientContext{Tracer: tracing.NewTracer()}, m.clocks[i], m.dbs[i], m.gossips[i],
 		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration,
 	)
-	m.populateStorePool(i, m.nodeLivenesses[i])
+	m.populateStorePool(i, m.nodeLivenesses[i], stopper)
 	cfg.DB = m.dbs[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
 	cfg.StorePool = m.storePools[i]
@@ -1002,7 +1007,7 @@ func (m *multiTestContext) changeReplicasLocked(
 		}
 
 		if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
-			// Try again after an AmbigousResultError. If the operation
+			// Try again after an AmbiguousResultError. If the operation
 			// succeeded, then the next attempt will return alreadyDoneErr;
 			// if it failed then the next attempt should succeed.
 			continue

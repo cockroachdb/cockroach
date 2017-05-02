@@ -2242,7 +2242,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 
 // Test that we remove snapshot placeholders when raft ignores the
 // snapshot. This is testing the removal of placeholder after handleRaftReady
-// processing for an unitialized Replica.
+// processing for an uninitialized Replica.
 func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -2507,7 +2507,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	}
 	newBatch := e.NewBatch
 
-	// Test that a failed Recv() fauses a fail throttle
+	// Test that a failed Recv() causes a fail throttle
 	{
 		sp := &fakeStorePool{}
 		expectedErr := errors.New("")
