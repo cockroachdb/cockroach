@@ -115,28 +115,30 @@ func SeverityByName(s string) (Severity, bool) {
 // terminals. Some terminals support 8 colors, some 256, others
 // none at all.
 type colorProfile struct {
-	infoPrefix  []byte
-	warnPrefix  []byte
-	errorPrefix []byte
-	timePrefix  []byte
+	infoPrefix  []Attribute
+	warnPrefix  []Attribute
+	errorPrefix []Attribute
+	timePrefix  []Attribute
 }
 
-var colorReset = []byte("\033[0m")
+//int,err:=strconv.Atoi(string)
+
+//var colorReset = Color.unformat()
 
 // For terms with 8-color support.
 var colorProfile8 = &colorProfile{
-	infoPrefix:  []byte("\033[0;36;49m"),
-	warnPrefix:  []byte("\033[0;33;49m"),
-	errorPrefix: []byte("\033[0;31;49m"),
-	timePrefix:  []byte("\033[2;37;49m"),
+	infoPrefix:  []Attribute{0, 49, 36},
+	warnPrefix:  []Attribute{0, 33, 49},
+	errorPrefix: []Attribute{0, 31, 49},
+	timePrefix:  []Attribute{2, 37, 49},
 }
 
 // For terms with 256-color support.
 var colorProfile256 = &colorProfile{
-	infoPrefix:  []byte("\033[38;5;33m"),
-	warnPrefix:  []byte("\033[38;5;214m"),
-	errorPrefix: []byte("\033[38;5;160m"),
-	timePrefix:  []byte("\033[38;5;246m"),
+	infoPrefix:  []Attribute{38, 5, 33},
+	warnPrefix:  []Attribute{38, 5, 214},
+	errorPrefix: []Attribute{38, 5, 160},
+	timePrefix:  []Attribute{38, 5, 246},
 }
 
 // Level is exported because it appears in the arguments to V and is
@@ -410,17 +412,17 @@ type flushSyncWriter interface {
 // line number. Log lines are colorized depending on severity.
 //
 // Log lines have this form:
-// 	Lyymmdd hh:mm:ss.uuuuuu goid file:line msg...
+//     Lyymmdd hh:mm:ss.uuuuuu goid file:line msg...
 // where the fields are defined as follows:
-// 	L                A single character, representing the log level (eg 'I' for INFO)
-// 	yy               The year (zero padded; ie 2016 is '16')
-// 	mm               The month (zero padded; ie May is '05')
-// 	dd               The day (zero padded)
-// 	hh:mm:ss.uuuuuu  Time in hours, minutes and fractional seconds
-// 	goid             The goroutine id (omitted if zero for use by tests)
-// 	file             The file name
-// 	line             The line number
-// 	msg              The user-supplied message
+//     L                A single character, representing the log level (eg 'I' for INFO)
+//     yy               The year (zero padded; ie 2016 is '16')
+//     mm               The month (zero padded; ie May is '05')
+//     dd               The day (zero padded)
+//     hh:mm:ss.uuuuuu  Time in hours, minutes and fractional seconds
+//     goid             The goroutine id (omitted if zero for use by tests)
+//     file             The file name
+//     line             The line number
+//     msg              The user-supplied message
 func formatHeader(
 	s Severity, now time.Time, gid int, file string, line int, colors *colorProfile,
 ) *buffer {
@@ -435,7 +437,7 @@ func formatHeader(
 	tmp := buf.tmp[:len(buf.tmp)]
 	var n int
 	if colors != nil {
-		var prefix []byte
+		var prefix []Attribute
 		switch s {
 		case Severity_INFO:
 			prefix = colors.infoPrefix
@@ -444,7 +446,7 @@ func formatHeader(
 		case Severity_ERROR, Severity_FATAL:
 			prefix = colors.errorPrefix
 		}
-		n += copy(tmp, prefix)
+		n += copy(tmp, []byte(New(prefix...).format()))
 	}
 	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
 	// It's worth about 3X. Fprintf is hard.
@@ -457,7 +459,7 @@ func formatHeader(
 	n += buf.twoDigits(n, int(month))
 	n += buf.twoDigits(n, day)
 	if colors != nil {
-		n += copy(tmp[n:], colors.timePrefix) // gray for time, file & line
+		n += copy(tmp[n:], []byte(New(colors.timePrefix...).format())) // gray for time, file & line
 	}
 	tmp[n] = ' '
 	n++
@@ -487,7 +489,7 @@ func formatHeader(
 	tmp[n] = ' '
 	n++
 	if colors != nil {
-		n += copy(tmp[n:], colorReset)
+		n += copy(tmp[n:], []byte(New(colors.timePrefix...).unformat()))
 	}
 	tmp[n] = ' '
 	n++
@@ -578,15 +580,6 @@ func Flush() {
 	logging.lockAndFlushAll()
 }
 
-// SetSync configures whether logging synchronizes all writes.
-func SetSync(sync bool) {
-	logging.lockAndSetSync(sync)
-	if sync {
-		// There may be something in the buffers already; flush it.
-		Flush()
-	}
-}
-
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
 	nocolor         bool          // The -nocolor flag.
@@ -612,8 +605,6 @@ type loggingT struct {
 	mu syncutil.Mutex
 	// file holds the log file writer.
 	file flushSyncWriter
-	// syncWrites if true calls file.Flush on every log write.
-	syncWrites bool
 	// pcs is used in V to avoid an allocation when computing the caller's PC.
 	pcs [1]uintptr
 	// vmap is a cache of the V Level for each V() call site, identified by PC.
@@ -745,10 +736,6 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 
 		if _, err := l.file.Write(data); err != nil {
 			panic(err)
-		}
-		if l.syncWrites {
-			_ = l.file.Flush()
-			_ = l.file.Sync()
 		}
 
 		l.putBuffer(buf)
@@ -1028,13 +1015,6 @@ func (l *loggingT) flushDaemon() {
 func (l *loggingT) lockAndFlushAll() {
 	l.mu.Lock()
 	l.flushAll()
-	l.mu.Unlock()
-}
-
-// lockAndSetSync configures syncWrites
-func (l *loggingT) lockAndSetSync(sync bool) {
-	l.mu.Lock()
-	l.syncWrites = sync
 	l.mu.Unlock()
 }
 
