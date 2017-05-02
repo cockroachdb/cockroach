@@ -670,6 +670,7 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		SyncFilter:            sql.TestingSchemaChangerCollection.ClearSchemaChangers,
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)

@@ -2148,3 +2148,86 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		})
 	}
 }
+
+// Tests that a schema change that is queued behind another schema change
+// is executed through the synchronous execution path properly even if it
+// gets to run before the first schema change.
+func TestSchemaChangeCompletion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	var notifySchemaChange chan struct{}
+	var restartSchemaChange chan struct{}
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				notify := notifySchemaChange
+				restart := restartSchemaChange
+				if notify != nil {
+					close(notify)
+					<-restart
+				}
+			},
+			// Turn off asynchronous schema change manager.
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add some data
+	const maxValue = 200
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Do not execute the first schema change so that the second schema
+	// change gets queued up behind it. The second schema change will be
+	// given the green signal to execute before the first one.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	notifySchemaChange = make(chan struct{})
+	restartSchemaChange = make(chan struct{})
+	restart := restartSchemaChange
+	go func() {
+		if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-notifySchemaChange
+
+	notifySchemaChange = make(chan struct{})
+	restartSchemaChange = make(chan struct{})
+	go func() {
+		if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX bar ON t.test (v)`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-notifySchemaChange
+	// Allow second schema change to execute.
+	close(restartSchemaChange)
+
+	// Allow first schema change to execute after a bit.
+	time.Sleep(time.Millisecond)
+	close(restart)
+
+	// Check that both schema changes have completed.
+	wg.Wait()
+	if err := checkTableKeyCount(ctx, kvDB, 3, maxValue); err != nil {
+		t.Fatal(err)
+	}
+}
