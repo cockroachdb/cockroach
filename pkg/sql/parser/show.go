@@ -187,3 +187,15 @@ func (node *ShowRanges) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.Table)
 	}
 }
+
+// ShowSource encapsulates one of the other SHOW statements as a data source.
+type ShowSource struct {
+	Statement Statement
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowSource) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('[')
+	node.Statement.Format(buf, f)
+	buf.WriteByte(']')
+}
