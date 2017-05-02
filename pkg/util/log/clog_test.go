@@ -716,3 +716,23 @@ func BenchmarkHeader(b *testing.B) {
 		logging.putBuffer(buf)
 	}
 }
+
+// test the function "formatHeader()" in the file "color.go"
+func TestFormatHeader(t *testing.T) {
+	buf := formatHeader(Severity_INFO, time.Now(), 200, "file.go", 100, colorProfile8)
+	fmt.Printf("Severity_INFO Color : %s\n", buf.String())
+	buf = formatHeader(Severity_WARNING, time.Now(), 200, "file.go", 100, colorProfile8)
+	fmt.Printf("Severity_WARNING Color : %s\n", buf.String())
+	buf = formatHeader(Severity_ERROR, time.Now(), 200, "file.go", 100, colorProfile8)
+	fmt.Printf("Severity_ERROR  Color : %s\n", buf.String())
+	buf = formatHeader(Severity_FATAL, time.Now(), 200, "file.go", 100, colorProfile8)
+	fmt.Printf("Severity_FATAL Color : %s\n", buf.String())
+	buf = formatHeader(Severity_INFO, time.Now(), 200, "file.go", 100, colorProfile256)
+	fmt.Printf("Severity_INFO Color : %s\n", buf.String())
+	buf = formatHeader(Severity_WARNING, time.Now(), 200, "file.go", 100, colorProfile256)
+	fmt.Printf("Severity_WARNING Color : %s\n", buf.String())
+	buf = formatHeader(Severity_ERROR, time.Now(), 200, "file.go", 100, colorProfile256)
+	fmt.Printf("Severity_ERROR  Color : %s\n", buf.String())
+	buf = formatHeader(Severity_FATAL, time.Now(), 200, "file.go", 100, colorProfile256)
+	fmt.Printf("Severity_FATAL Color : %s\n", buf.String())
+}
