@@ -719,12 +719,6 @@ message DeprecatedVerifyChecksumResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// KeyRewrite is rule to replace one prefix (if matching) with another.
-message KeyRewrite {
-  optional bytes old_prefix = 1;
-  optional bytes new_prefix = 2;
-}
-
 enum ExportStorageProvider {
   Unknown = 0;
   LocalFile = 1;
@@ -824,11 +818,7 @@ message ImportRequest {
   repeated File files = 2 [(gogoproto.nullable) = false];
   // DataSpan is the pre-rewrite keyrange of the data in `Files`.
   optional Span data_span = 3 [(gogoproto.nullable) = false];
-  // KeyRewrites contains rules to transform keys which will be run on all
-  // imported data. Any kv entry not matching one of these rules will not be
-  // imported.
-  repeated KeyRewrite key_rewrites = 4 [(gogoproto.nullable) = false];
-
+  reserved 4;
   message TableRekey {
     // OldID is the previous ID of `new_desc`.
     optional uint32 old_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "OldID"];
