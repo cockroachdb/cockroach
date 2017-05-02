@@ -17,12 +17,14 @@
 package distsqlrun
 
 import (
+	"math"
 	"sort"
 	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -483,13 +485,14 @@ func TestHashJoiner(t *testing.T) {
 		},
 	}
 
+	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			hs := c.spec
 			leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
 			rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
 			out := &RowBuffer{}
-			flowCtx := FlowCtx{evalCtx: parser.EvalContext{}}
+			flowCtx := FlowCtx{evalCtx: parser.EvalContext{Mon: &monitor}}
 
 			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
 			h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
@@ -595,7 +598,8 @@ func TestHashJoinerDrain(t *testing.T) {
 	out := NewRowBuffer(
 		nil /* types */, nil, /* rows */
 		RowBufferArgs{AccumulateRowsWhileDraining: true})
-	flowCtx := FlowCtx{evalCtx: parser.EvalContext{}}
+	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
+	flowCtx := FlowCtx{evalCtx: parser.EvalContext{Mon: &monitor}}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
@@ -702,7 +706,8 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	out := NewRowBuffer(
 		nil /* types */, nil, /* rows */
 		RowBufferArgs{})
-	flowCtx := FlowCtx{evalCtx: parser.EvalContext{}}
+	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
+	flowCtx := FlowCtx{evalCtx: parser.EvalContext{Mon: &monitor}}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)

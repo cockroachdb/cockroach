@@ -619,13 +619,9 @@ SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON a.y > y)
 statement ok
 CREATE TABLE s(x INT); INSERT INTO s(x) VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)
 
-# TODO(radu): test case disabled due to lack of memory accounting in distsqlrun
-# (which causes timeout when running with COCKROACH_DISTSQL_MODE=on). Reenable
-# this test when distsqlrun has memory accounting.
-#
-# # The following query demands at least 100GB of RAM if unoptimized.
-# query error memory budget exceeded
-# SELECT COUNT(*) FROM s AS a, s AS b, s AS c, s AS d, s AS e, s AS f, s AS g, s AS h, s AS i, s AS j, s AS k
+# The following query demands at least 100GB of RAM if unoptimized.
+query error memory budget exceeded
+SELECT COUNT(a.x+b.x+c.x+d.x+e.x+f.x+g.x+h.x+i.x+j.x+k.x) FROM s AS a, s AS b, s AS c, s AS d, s AS e, s AS f, s AS g, s AS h, s AS i, s AS j, s AS k
 
 # THe following queries verify that only the necessary columns are scanned.
 query ITTTTT
