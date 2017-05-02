@@ -1,0 +1,117 @@
+query I
+SELECT 1 FROM [SHOW client_encoding] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW ALL] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW CLUSTER SETTING sql.defaults.distsql] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW ALL CLUSTER SETTINGS] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW SESSION_USER] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW DATABASE] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW DATABASES] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW GRANTS ON system.descriptor] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW INDEX FROM system.descriptor] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW CONSTRAINT FROM system.descriptor] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW KEYS FROM system.descriptor] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW TABLES FROM system] LIMIT 1
+----
+1
+
+
+query I
+CREATE TABLE foo(x INT); SELECT 1 FROM [SHOW TABLES] LIMIT 1
+----
+1
+
+
+query I
+SELECT 1 FROM [SHOW TIME ZONE] LIMIT 1
+----
+1
+
+
+query I
+SELECT 1 FROM [SHOW TRANSACTION ISOLATION LEVEL] LIMIT 1
+----
+1
+
+
+query I
+SELECT 1 FROM [SHOW TRANSACTION PRIORITY] LIMIT 1
+----
+1
+
+query I
+SELECT 1 FROM [SHOW TRANSACTION STATUS] LIMIT 1
+----
+1
+
+
+query I
+SELECT 1 FROM [SHOW CREATE TABLE system.descriptor] LIMIT 1
+----
+1
+
+
+query I
+CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT 1 FROM [SHOW CREATE VIEW v] LIMIT 1
+----
+1
+
+
+query I
+SELECT 1 FROM [SHOW USERS] LIMIT 1
+----
+1
+
+
+query I
+SELECT 1 FROM [SHOW TESTING_RANGES FROM TABLE system.descriptor] LIMIT 1
+----
+1
+
+query I
+CREATE INDEX ix ON foo(x); SELECT 1 FROM [SHOW TESTING_RANGES FROM INDEX foo@ix] LIMIT 1
+----
+1
