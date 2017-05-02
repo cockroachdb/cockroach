@@ -4524,12 +4524,9 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		{hlc.Timestamp{}, ns * 2, roachpb.PUSH_TIMESTAMP, false},
 		{hlc.Timestamp{}, ns * 2, roachpb.PUSH_ABORT, false},
 		{hlc.Timestamp{}, ns * 2, roachpb.PUSH_TOUCH, false},
-		{ts, ns*2 + 1, roachpb.PUSH_TIMESTAMP, false},
-		{ts, ns*2 + 1, roachpb.PUSH_ABORT, false},
-		{ts, ns*2 + 1, roachpb.PUSH_TOUCH, false},
-		{ts, ns*2 + 2, roachpb.PUSH_TIMESTAMP, true},
-		{ts, ns*2 + 2, roachpb.PUSH_ABORT, true},
-		{ts, ns*2 + 2, roachpb.PUSH_TOUCH, true},
+		{ts, ns*2 + 1, roachpb.PUSH_TIMESTAMP, true},
+		{ts, ns*2 + 1, roachpb.PUSH_ABORT, true},
+		{ts, ns*2 + 1, roachpb.PUSH_TOUCH, true},
 	}
 
 	for i, test := range testCases {
@@ -4542,22 +4539,22 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			pushee.LastHeartbeat = test.heartbeat
 		}
 		_, btH := beginTxnArgs(key, pushee)
-		btH.Timestamp = tc.repl.store.Clock().Now()
+		btH.Timestamp = pushee.Timestamp
 		put := putArgs(key, key)
 		if _, pErr := maybeWrapWithBeginTransaction(context.Background(), tc.Sender(), btH, &put); pErr != nil {
 			t.Fatalf("%d: %s", i, pErr)
 		}
 
-		// Now, attempt to push the transaction with Now set to our current time.
+		// Now, attempt to push the transaction with Now set to the txn start time + offset.
 		args := pushTxnArgs(pusher, pushee, test.pushType)
-		args.Now = now.Add(test.timeOffset, 0)
+		args.Now = pushee.Timestamp.Add(test.timeOffset, 0)
 		args.PushTo = args.Now
 
 		reply, pErr := tc.SendWrapped(&args)
 
 		if test.expSuccess != (pErr == nil) {
-			t.Fatalf("%d: expSuccess=%t; got pErr %s, reply %+v", i,
-				test.expSuccess, pErr, reply)
+			t.Fatalf("%d: expSuccess=%t; got pErr %s, args=%+v, reply=%+v", i,
+				test.expSuccess, pErr, args, reply)
 		}
 		if pErr != nil {
 			if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
