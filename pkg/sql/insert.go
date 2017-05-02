@@ -53,14 +53,14 @@ type insertNode struct {
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
-	ctx context.Context, n *parser.Insert, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, n *parser.Insert, desiredTypes []parser.Type,
 ) (planNode, error) {
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err
 	}
 
-	en, err := p.makeEditNode(ctx, tn, autoCommit, privilege.INSERT)
+	en, err := p.makeEditNode(ctx, tn, privilege.INSERT)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (p *planner) Insert(
 	// Create the plan for the data source.
 	// This performs type checking on source expressions, collecting
 	// types for placeholders in the process.
-	rows, err := p.newPlan(ctx, insertRows, desiredTypesFromSelect, false)
+	rows, err := p.newPlan(ctx, insertRows, desiredTypesFromSelect)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (p *planner) Insert(
 
 	var tw tableWriter
 	if n.OnConflict == nil {
-		tw = &tableInserter{ri: ri, autoCommit: autoCommit}
+		tw = &tableInserter{ri: ri, autoCommit: p.autoCommit}
 	} else {
 		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.InsertCols)
 		if err != nil {
@@ -152,7 +152,7 @@ func (p *planner) Insert(
 			// someone needs it.
 			tw = &tableUpserter{
 				ri:            ri,
-				autoCommit:    autoCommit,
+				autoCommit:    p.autoCommit,
 				conflictIndex: *conflictIndex,
 			}
 		} else {
@@ -192,7 +192,7 @@ func (p *planner) Insert(
 			}
 			tw = &tableUpserter{
 				ri:            ri,
-				autoCommit:    autoCommit,
+				autoCommit:    p.autoCommit,
 				fkTables:      fkTables,
 				updateCols:    updateCols,
 				conflictIndex: *conflictIndex,

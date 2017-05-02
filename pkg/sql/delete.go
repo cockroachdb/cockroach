@@ -47,14 +47,14 @@ type deleteNode struct {
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(
-	ctx context.Context, n *parser.Delete, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, n *parser.Delete, desiredTypes []parser.Type,
 ) (planNode, error) {
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err
 	}
 
-	en, err := p.makeEditNode(ctx, tn, autoCommit, privilege.DELETE)
+	en, err := p.makeEditNode(ctx, tn, privilege.DELETE)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (p *planner) Delete(
 	if err != nil {
 		return nil, err
 	}
-	tw := tableDeleter{rd: rd, autoCommit: autoCommit}
+	tw := tableDeleter{rd: rd, autoCommit: p.autoCommit}
 
 	// TODO(knz): Until we split the creation of the node from Start()
 	// for the SelectClause too, we cannot cache this. This is because

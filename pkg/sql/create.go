@@ -385,7 +385,7 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 	// depends on, make sure we use the most recent versions of table
 	// descriptors rather than the copies in the lease cache.
 	p.avoidCachedDescriptors = true
-	sourcePlan, err := p.Select(ctx, n.AsSource, []parser.Type{}, false)
+	sourcePlan, err := p.Select(ctx, n.AsSource, []parser.Type{})
 	if err != nil {
 		p.avoidCachedDescriptors = false
 		return nil, err
@@ -575,7 +575,7 @@ func (p *planner) CreateTable(ctx context.Context, n *parser.CreateTable) (planN
 		// to populate the new table descriptor in Start() below. We
 		// instantiate the sourcePlan as early as here so that EXPLAIN has
 		// something useful to show about CREATE TABLE .. AS ...
-		sourcePlan, err = p.Select(ctx, n.AsSource, []parser.Type{}, false)
+		sourcePlan, err = p.Select(ctx, n.AsSource, []parser.Type{})
 		if err != nil {
 			return nil, err
 		}
@@ -725,7 +725,7 @@ func (n *createTableNode) Start(ctx context.Context) error {
 			Rows:      n.n.AsSource,
 			Returning: parser.AbsentReturningClause,
 		}
-		insertPlan, err := n.p.Insert(ctx, insert, nil /* desiredTypes */, false /* autoCommit */)
+		insertPlan, err := n.p.Insert(ctx, insert, nil /* desiredTypes */)
 		if err != nil {
 			return err
 		}
