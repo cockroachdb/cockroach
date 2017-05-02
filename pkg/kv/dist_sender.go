@@ -45,7 +45,7 @@ import (
 // Default constants for timeouts.
 const (
 	defaultClientTimeout     = 10 * time.Second
-	defaultPendingRPCTimeout = 500 * time.Millisecond
+	defaultPendingRPCTimeout = 1 * time.Second
 
 	// The default maximum number of ranges to return from a range
 	// lookup.
