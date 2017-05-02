@@ -406,8 +406,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			msg := buf.String()
-			log.Infof(startCtx, "Startup message:\n%s", msg)
-			fmt.Print(msg)
+			log.Infof(startCtx, "node startup completed:\n%s", msg)
+			if !log.LoggingToStderr(log.Severity_INFO) {
+				fmt.Print(msg)
+			}
 			return nil
 		}(); err != nil {
 			errChan <- err
