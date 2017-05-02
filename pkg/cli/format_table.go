@@ -149,6 +149,26 @@ func printQueryOutput(
 		_ = csvWriter.Write(cols)
 		_ = csvWriter.WriteAll(allRowsSlice)
 
+	case tableDisplayRaw:
+		fmt.Fprintf(w, "# %d column%s\n", len(cols),
+			util.Pluralize(int64(len(cols))))
+		nRows := 0
+		for {
+			row, err := allRows.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			nRows++
+			fmt.Fprintf(w, "# row %d\n", nRows)
+			for _, r := range row {
+				fmt.Fprintf(w, "## %d\n%s\n", len(r), r)
+			}
+		}
+		fmt.Fprintf(w, "# %d row%s\n", nRows, util.Pluralize(int64(nRows)))
+
 	case tableDisplayHTML:
 		fmt.Fprint(w, "<table>\n<thead><tr>")
 		for _, col := range cols {
