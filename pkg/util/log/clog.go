@@ -121,10 +121,6 @@ type colorProfile struct {
 	timePrefix  []Attribute
 }
 
-//int,err:=strconv.Atoi(string)
-
-//var colorReset = Color.unformat()
-
 // For terms with 8-color support.
 var colorProfile8 = &colorProfile{
 	infoPrefix:  []Attribute{0, 49, 36},
@@ -580,6 +576,15 @@ func Flush() {
 	logging.lockAndFlushAll()
 }
 
+// SetSync configures whether logging synchronizes all writes.
+func SetSync(sync bool) {
+	logging.lockAndSetSync(sync)
+	if sync {
+		// There may be something in the buffers already; flush it.
+		Flush()
+	}
+}
+
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
 	nocolor         bool          // The -nocolor flag.
@@ -605,6 +610,8 @@ type loggingT struct {
 	mu syncutil.Mutex
 	// file holds the log file writer.
 	file flushSyncWriter
+	// syncWrites if true calls file.Flush on every log write.
+	syncWrites bool
 	// pcs is used in V to avoid an allocation when computing the caller's PC.
 	pcs [1]uintptr
 	// vmap is a cache of the V Level for each V() call site, identified by PC.
@@ -736,6 +743,10 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 
 		if _, err := l.file.Write(data); err != nil {
 			panic(err)
+		}
+		if l.syncWrites {
+			_ = l.file.Flush()
+			_ = l.file.Sync()
 		}
 
 		l.putBuffer(buf)
@@ -1015,6 +1026,13 @@ func (l *loggingT) flushDaemon() {
 func (l *loggingT) lockAndFlushAll() {
 	l.mu.Lock()
 	l.flushAll()
+	l.mu.Unlock()
+}
+
+// lockAndSetSync configures syncWrites
+func (l *loggingT) lockAndSetSync(sync bool) {
+	l.mu.Lock()
+	l.syncWrites = sync
 	l.mu.Unlock()
 }
 
