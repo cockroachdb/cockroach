@@ -187,7 +187,7 @@ type StorePool struct {
 	clock              *hlc.Clock
 	gossip             *gossip.Gossip
 	nodeLivenessFn     NodeLivenessFunc
-	timeUntilStoreDead time.Duration
+	timeUntilStoreDead *settings.DurationSetting
 	startTime          time.Time
 	deterministic      bool
 	// We use separate mutexes for storeDetails and nodeLocalities because the
@@ -211,7 +211,7 @@ func NewStorePool(
 	g *gossip.Gossip,
 	clock *hlc.Clock,
 	nodeLivenessFn NodeLivenessFunc,
-	timeUntilStoreDead time.Duration,
+	timeUntilStoreDead *settings.DurationSetting,
 	deterministic bool,
 ) *StorePool {
 	sp := &StorePool{
@@ -250,7 +250,7 @@ func (sp *StorePool) String() string {
 	for _, id := range ids {
 		detail := sp.detailsMu.storeDetails[id]
 		fmt.Fprintf(&buf, "%d", id)
-		status := detail.status(now, sp.timeUntilStoreDead, 0, sp.nodeLivenessFn)
+		status := detail.status(now, sp.timeUntilStoreDead.Get(), 0, sp.nodeLivenessFn)
 		if status != storeStatusAvailable {
 			fmt.Fprintf(&buf, " (status=%d)", status)
 		}
@@ -357,7 +357,7 @@ func (sp *StorePool) liveAndDeadReplicas(
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
 		// Mark replica as dead if store is dead.
-		switch detail.status(now, sp.timeUntilStoreDead, rangeID, sp.nodeLivenessFn) {
+		switch detail.status(now, sp.timeUntilStoreDead.Get(), rangeID, sp.nodeLivenessFn) {
 		case storeStatusDead:
 			deadReplicas = append(deadReplicas, repl)
 		case storeStatusReplicaCorrupted:
@@ -519,7 +519,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 	now := sp.clock.PhysicalTime()
 	for _, storeID := range storeIDs {
 		detail := sp.detailsMu.storeDetails[storeID]
-		switch s := detail.status(now, sp.timeUntilStoreDead, rangeID, sp.nodeLivenessFn); s {
+		switch s := detail.status(now, sp.timeUntilStoreDead.Get(), rangeID, sp.nodeLivenessFn); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
 			throttledStoreCount++

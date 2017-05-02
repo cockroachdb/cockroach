@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -143,7 +144,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 		cfg.Gossip,
 		cfg.Clock,
 		storage.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
-		storage.TestTimeUntilStoreDead,
+		settings.TestingDuration(storage.TestTimeUntilStoreDead),
 		/* deterministic */ false,
 	)
 	cfg.Transport = transport
