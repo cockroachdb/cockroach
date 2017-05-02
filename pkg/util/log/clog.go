@@ -566,6 +566,12 @@ func init() {
 	go logging.flushDaemon()
 }
 
+// LoggingToStderr returns true if log messages of the given severity
+// are visible on stderr.
+func LoggingToStderr(s Severity) bool {
+	return s >= logging.stderrThreshold.get()
+}
+
 // StartGCDaemon starts the log file GC -- this must be called after
 // command-line parsing has completed so that no data is lost when the
 // user configures larger max sizes than the defaults.
