@@ -22,8 +22,9 @@ To install CockroachDB onto your PATH:
 
 To interact with a one-node SQL cluster:
 
-     $ ./cockroach start --background
-     $ ./cockroach sql
+     $ cockroach start --background --insecure
+     $ cockroach sql --insecure
+     $ cockroach quit --insecure
 
 Next steps:
 
