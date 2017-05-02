@@ -16,6 +16,8 @@ package settings
 
 import (
 	"sync/atomic"
+
+	"github.com/pkg/errors"
 )
 
 // StringSetting is the interface of a setting variable that will be
@@ -24,6 +26,7 @@ import (
 type StringSetting struct {
 	defaultValue string
 	v            atomic.Value
+	validateFn   func(string) error
 }
 
 var _ Setting = &StringSetting{}
@@ -42,17 +45,49 @@ func (s *StringSetting) Get() string {
 	return s.v.Load().(string)
 }
 
-func (s *StringSetting) set(v string) {
+// Validate that a value conforms with the validation function.
+func (s *StringSetting) Validate(v string) error {
+	if s.validateFn != nil {
+		if err := s.validateFn(v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *StringSetting) set(v string) error {
+	if err := s.Validate(v); err != nil {
+		return err
+	}
 	s.v.Store(v)
+	return nil
 }
 
 func (s *StringSetting) setToDefault() {
-	s.set(s.defaultValue)
+	if err := s.set(s.defaultValue); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterStringSetting defines a new setting with type string.
 func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting {
-	setting := &StringSetting{defaultValue: defaultValue}
+	return RegisterValidatedStringSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterValidatedStringSetting defines a new setting with type string with a
+// validation function.
+func RegisterValidatedStringSetting(
+	key, desc string, defaultValue string, validateFn func(string) error,
+) *StringSetting {
+	if validateFn != nil {
+		if err := validateFn(defaultValue); err != nil {
+			panic(errors.Wrap(err, "invalid default"))
+		}
+	}
+	setting := &StringSetting{
+		defaultValue: defaultValue,
+		validateFn:   validateFn,
+	}
 	register(key, desc, setting)
 	return setting
 }
@@ -62,7 +97,9 @@ func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting
 func TestingSetString(s **StringSetting, v string) func() {
 	saved := *s
 	tmp := &StringSetting{}
-	tmp.set(v)
+	if err := tmp.set(v); err != nil {
+		panic(err)
+	}
 	*s = tmp
 	return func() {
 		*s = saved
