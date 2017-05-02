@@ -591,29 +591,35 @@ func (dsp *distSQLPlanner) createTableReaders(
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
 
-	if overrideResultColumns != nil {
-		post.OutputColumns = overrideResultColumns
-	} else {
-		post.OutputColumns = getOutputColumnsFromScanNode(n)
+	planToStreamColMap := make([]int, len(n.resultColumns))
+	for i := range planToStreamColMap {
+		planToStreamColMap[i] = i
 	}
 
-	planToStreamColMap := makePlanToStreamColMap(len(n.resultColumns))
-	for i, col := range post.OutputColumns {
-		planToStreamColMap[col] = i
-	}
 	if len(p.ResultRouters) > 1 && len(n.ordering.ordering) > 0 {
-		// We have to maintain a certain ordering between the parallel streams. This
-		// might mean we need to add output columns.
-		for _, col := range n.ordering.ordering {
-			if planToStreamColMap[col.ColIdx] == -1 {
-				// This column is not part of the output; add it.
-				planToStreamColMap[col.ColIdx] = len(post.OutputColumns)
-				post.OutputColumns = append(post.OutputColumns, uint32(col.ColIdx))
-			}
-		}
+		// Make a note of the fact that we have to maintain a certain ordering
+		// between the parallel streams.
+		//
+		// This information is taken into account by the AddProjection call below:
+		// specifically, it will make sure these columns are kept even if they are
+		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
 		p.SetMergeOrdering(dsp.convertOrdering(n.ordering.ordering, planToStreamColMap))
 	}
 	p.SetLastStagePost(post, getTypesForPlanResult(n, planToStreamColMap))
+
+	outCols := overrideResultColumns
+	if outCols == nil {
+		outCols = getOutputColumnsFromScanNode(n)
+	}
+	p.AddProjection(outCols)
+
+	post = p.GetLastStagePost()
+	for i := range planToStreamColMap {
+		planToStreamColMap[i] = -1
+	}
+	for i, col := range post.OutputColumns {
+		planToStreamColMap[col] = i
+	}
 	p.planToStreamColMap = planToStreamColMap
 	return p, nil
 }
@@ -1114,6 +1120,7 @@ ColLoop:
 
 	post := distsqlrun.PostProcessSpec{
 		Filter:        distsqlplan.MakeExpression(n.table.filter, nil),
+		Projection:    true,
 		OutputColumns: getOutputColumnsFromScanNode(n.table),
 	}
 
@@ -1263,11 +1270,21 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		}
 	} else {
 		// Without column equality, we cannot distribute the join. Run a
-		// single processor on this node.
+		// single processor.
 		nodes = []roachpb.NodeID{dsp.nodeDesc.NodeID}
+
+		// If either side has a single stream, put the processor on that node. We
+		// prefer the left side because that is processed first by the hash joiner.
+		if len(leftRouters) == 1 {
+			nodes[0] = p.Processors[leftRouters[0]].Node
+		} else if len(rightRouters) == 1 {
+			nodes[0] = p.Processors[rightRouters[0]].Node
+		}
 	}
 
-	var post distsqlrun.PostProcessSpec
+	post := distsqlrun.PostProcessSpec{
+		Projection: true,
+	}
 	// addOutCol appends to post.OutputColumns and returns the index
 	// in the slice of the added column.
 	addOutCol := func(col uint32) int {

@@ -67,7 +67,10 @@ func (h *procOutputHelper) init(
 	evalCtx *parser.EvalContext,
 	output RowReceiver,
 ) error {
-	if len(post.OutputColumns) > 0 && len(post.RenderExprs) > 0 {
+	if !post.Projection && len(post.OutputColumns) > 0 {
+		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
+	}
+	if post.Projection && len(post.RenderExprs) > 0 {
 		return errors.Errorf("post-processing has both projection and rendering: %s", post)
 	}
 	h.output = output
@@ -78,13 +81,17 @@ func (h *procOutputHelper) init(
 			return err
 		}
 	}
-	if len(post.OutputColumns) > 0 {
+	if post.Projection {
 		for _, col := range post.OutputColumns {
 			if int(col) >= h.numInternalCols {
 				return errors.Errorf("invalid output column %d (only %d available)", col, h.numInternalCols)
 			}
 		}
 		h.outputCols = post.OutputColumns
+		if h.outputCols == nil {
+			// nil indicates no projection; use an empty slice.
+			h.outputCols = make([]uint32, 0)
+		}
 	} else if len(post.RenderExprs) > 0 {
 		h.renderExprs = make([]exprHelper, len(post.RenderExprs))
 		h.renderTypes = make([]sqlbase.ColumnType, len(post.RenderExprs))

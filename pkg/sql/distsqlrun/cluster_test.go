@@ -122,6 +122,7 @@ func TestClusterFlow(t *testing.T) {
 			Processors: []ProcessorSpec{{
 				Core: ProcessorCoreUnion{TableReader: &tr1},
 				Post: PostProcessSpec{
+					Projection:    true,
 					OutputColumns: []uint32{0, 1},
 				},
 				Output: []OutputRouterSpec{{
@@ -142,6 +143,7 @@ func TestClusterFlow(t *testing.T) {
 			Processors: []ProcessorSpec{{
 				Core: ProcessorCoreUnion{TableReader: &tr2},
 				Post: PostProcessSpec{
+					Projection:    true,
 					OutputColumns: []uint32{0, 1},
 				},
 				Output: []OutputRouterSpec{{
@@ -163,6 +165,7 @@ func TestClusterFlow(t *testing.T) {
 				{
 					Core: ProcessorCoreUnion{TableReader: &tr3},
 					Post: PostProcessSpec{
+						Projection:    true,
 						OutputColumns: []uint32{0, 1},
 					},
 					Output: []OutputRouterSpec{{
@@ -184,6 +187,7 @@ func TestClusterFlow(t *testing.T) {
 					}},
 					Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
 					Post: PostProcessSpec{
+						Projection:    true,
 						OutputColumns: []uint32{2},
 					},
 					Output: []OutputRouterSpec{{

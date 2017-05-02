@@ -68,6 +68,7 @@ func TestJoinReader(t *testing.T) {
 	}{
 		{
 			post: PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{0, 1, 2},
 			},
 			input: [][]parser.Datum{
@@ -81,6 +82,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 <= 5"}, // sum <= 5
+				Projection:    true,
 				OutputColumns: []uint32{3},
 			},
 			input: [][]parser.Datum{

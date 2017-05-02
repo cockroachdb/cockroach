@@ -160,13 +160,17 @@ message ProducerHeader {
 }
 
 // ProducerData is a message that can be sent multiple times as part of a stream
-// from a producer to a consumer.
+// from a producer to a consumer. It contains 0 or more rows and/or 0 or more
+// metadata messages.
 message ProducerData {
-  // ProducerData contains 0 or more rows and/or 0 or more metadata messages.
-  
   // A bunch of rows, encoded. Each datum is encoded according to the
   // corresponding DatumInfo.
   optional bytes raw_bytes = 1;
+
+  // In the special case when the stream contains empty rows, the count is
+  // passed instead.
+  optional int32 num_empty_rows = 3 [(gogoproto.nullable) = false];
+
   // A bunch of metadata messages.
   repeated RemoteProducerMetadata metadata = 2 [(gogoproto.nullable) = false];
 }

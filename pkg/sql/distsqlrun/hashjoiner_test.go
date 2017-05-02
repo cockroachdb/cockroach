@@ -491,7 +491,7 @@ func TestHashJoiner(t *testing.T) {
 			out := &RowBuffer{}
 			flowCtx := FlowCtx{evalCtx: parser.EvalContext{}}
 
-			post := PostProcessSpec{OutputColumns: c.outCols}
+			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
 			h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
 			if err != nil {
 				t.Fatal(err)
@@ -597,7 +597,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		RowBufferArgs{AccumulateRowsWhileDraining: true})
 	flowCtx := FlowCtx{evalCtx: parser.EvalContext{}}
 
-	post := PostProcessSpec{OutputColumns: outCols}
+	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
 	if err != nil {
 		t.Fatal(err)
@@ -704,7 +704,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		RowBufferArgs{})
 	flowCtx := FlowCtx{evalCtx: parser.EvalContext{}}
 
-	post := PostProcessSpec{OutputColumns: outCols}
+	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
 	if err != nil {
 		t.Fatal(err)
