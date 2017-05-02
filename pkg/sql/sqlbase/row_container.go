@@ -268,7 +268,10 @@ func (c *RowContainer) At(i int) parser.Datums {
 		panic(fmt.Sprintf("row index %d out of range", i))
 	}
 	if c.numCols == 0 {
-		return nil
+		// We don't want to return nil, as in some contexts nil is used as a special
+		// value to indicate that there are no more rows. Note that this doesn't
+		// actually allocate anything.
+		return make(parser.Datums, 0)
 	}
 	chunk, pos := c.getChunkAndPos(i)
 	return c.chunks[chunk][pos : pos+c.numCols : pos+c.numCols]
@@ -288,11 +291,13 @@ func (c *RowContainer) PopFirst() {
 	if c.numRows == 0 {
 		panic("no rows added to container, nothing to pop")
 	}
-	c.deletedRows++
 	c.numRows--
-	if c.deletedRows == c.rowsPerChunk {
-		c.deletedRows = 0
-		c.chunks = c.chunks[1:]
+	if c.numCols != 0 {
+		c.deletedRows++
+		if c.deletedRows == c.rowsPerChunk {
+			c.deletedRows = 0
+			c.chunks = c.chunks[1:]
+		}
 	}
 }
 

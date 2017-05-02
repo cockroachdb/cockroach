@@ -27,9 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// sorterValues is the internal wrapper around the collection of rows added to
-// a sorter strategy, it is at this level that the rows to be sorted are stored.
-type sorterValues struct {
+// rowContainer is the wrapper around sqlbase.RowContainer that provides more
+// functionality, especially around converting to/from EncDatumRows and
+// facilitating sorting.
+type rowContainer struct {
 	sqlbase.RowContainer
 	types         []sqlbase.ColumnType
 	invertSorting bool // Inverts the sorting predicate.
@@ -42,13 +43,13 @@ type sorterValues struct {
 	datumAlloc sqlbase.DatumAlloc
 }
 
-var _ heap.Interface = &sorterValues{}
+var _ heap.Interface = &rowContainer{}
 
-func makeSorterValues(
+func makeRowContainer(
 	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *parser.EvalContext,
-) sorterValues {
+) rowContainer {
 	acc := evalCtx.Mon.MakeBoundAccount()
-	return sorterValues{
+	return rowContainer{
 		RowContainer:  sqlbase.MakeRowContainer(acc, sqlbase.ColTypeInfoFromColTypes(types), 0),
 		types:         types,
 		ordering:      ordering,
@@ -59,7 +60,7 @@ func makeSorterValues(
 }
 
 // Less is part of heap.Interface and is only meant to be used internally.
-func (sv *sorterValues) Less(i, j int) bool {
+func (sv *rowContainer) Less(i, j int) bool {
 	cmp := sqlbase.CompareDatums(sv.ordering, sv.evalCtx, sv.At(i), sv.At(j))
 	if sv.invertSorting {
 		cmp = -cmp
@@ -69,7 +70,7 @@ func (sv *sorterValues) Less(i, j int) bool {
 
 // EncRow returns the idx-th row as an EncDatumRow. The slice itself is reused
 // so it is only valid until the next call to EncRow.
-func (sv *sorterValues) EncRow(idx int) sqlbase.EncDatumRow {
+func (sv *rowContainer) EncRow(idx int) sqlbase.EncDatumRow {
 	datums := sv.At(idx)
 	for i, d := range datums {
 		sv.scratchEncRow[i] = sqlbase.DatumToEncDatum(sv.types[i], d)
@@ -78,7 +79,7 @@ func (sv *sorterValues) EncRow(idx int) sqlbase.EncDatumRow {
 }
 
 // AddRow adds a row to the container.
-func (sv *sorterValues) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (sv *rowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	if len(row) != len(sv.types) {
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(sv.types))
 	}
@@ -93,20 +94,20 @@ func (sv *sorterValues) AddRow(ctx context.Context, row sqlbase.EncDatumRow) err
 	return err
 }
 
-func (sv *sorterValues) Sort() {
+func (sv *rowContainer) Sort() {
 	sv.invertSorting = false
 	sort.Sort(sv)
 }
 
 // Push is part of heap.Interface.
-func (sv *sorterValues) Push(_ interface{}) { panic("unimplemented") }
+func (sv *rowContainer) Push(_ interface{}) { panic("unimplemented") }
 
 // Pop is part of heap.Interface.
-func (sv *sorterValues) Pop() interface{} { panic("unimplemented") }
+func (sv *rowContainer) Pop() interface{} { panic("unimplemented") }
 
 // MaybeReplaceMax replaces the maximum element with the given row, if it is smaller.
 // Assumes InitMaxHeap was called.
-func (sv *sorterValues) MaybeReplaceMax(row sqlbase.EncDatumRow) error {
+func (sv *rowContainer) MaybeReplaceMax(row sqlbase.EncDatumRow) error {
 	max := sv.At(0)
 	cmp, err := row.CompareToDatums(&sv.datumAlloc, sv.ordering, sv.evalCtx, max)
 	if err != nil {
@@ -125,8 +126,8 @@ func (sv *sorterValues) MaybeReplaceMax(row sqlbase.EncDatumRow) error {
 	return nil
 }
 
-// Initializes the rows contained within sorterValues as a MaxHeap.
-func (sv *sorterValues) InitMaxHeap() {
+// InitMaxHeap rearranges the rows in the rowContainer into a Max-Heap.
+func (sv *rowContainer) InitMaxHeap() {
 	sv.invertSorting = true
 	heap.Init(sv)
 }
