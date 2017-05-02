@@ -62,6 +62,7 @@ const (
 	tableDisplayRecords
 	tableDisplaySQL
 	tableDisplayHTML
+	tableDisplayRaw
 )
 
 // Type implements the pflag.Value interface.
@@ -82,6 +83,8 @@ func (f *tableDisplayFormat) String() string {
 		return "sql"
 	case tableDisplayHTML:
 		return "html"
+	case tableDisplayRaw:
+		return "raw"
 	}
 	return ""
 }
@@ -101,9 +104,11 @@ func (f *tableDisplayFormat) Set(s string) error {
 		*f = tableDisplaySQL
 	case "html":
 		*f = tableDisplayHTML
+	case "raw":
+		*f = tableDisplayRaw
 	default:
 		return fmt.Errorf("invalid table display format: %s "+
-			"(possible values: tsv, csv, pretty, records, sql, html)", s)
+			"(possible values: tsv, csv, pretty, records, sql, html, raw)", s)
 	}
 	return nil
 }
