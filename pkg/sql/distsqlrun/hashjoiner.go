@@ -113,6 +113,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	defer h.bucketsAcc.Close(ctx)
+	defer h.rows.Close(ctx)
 
 	moreRows, err := h.buildPhase(ctx)
 	if err != nil {
