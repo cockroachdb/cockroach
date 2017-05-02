@@ -171,6 +171,7 @@ func TestSorter(t *testing.T) {
 	}
 
 	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
+	defer monitor.Stop(context.Background())
 	for _, c := range testCases {
 		ss := c.spec
 		types := make([]sqlbase.ColumnType, len(c.input[0]))
