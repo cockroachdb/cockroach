@@ -319,8 +319,6 @@ func waitClientsStop(ctx context.Context, num int, state *testState, stallDurati
 // being killed and restarted continuously. The test doesn't measure write
 // performance, but cluster recovery.
 func TestClusterRecovery(t *testing.T) {
-	t.Skip("Skipped due to flakiness until we can investigate #8538 further.")
-
 	s := log.Scope(t)
 	defer s.Close(t)
 
