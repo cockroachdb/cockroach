@@ -343,7 +343,7 @@ func (p *planner) getDataSource(
 		return p.makeJoin(ctx, t.Join, left, right, t.Cond)
 
 	case *parser.Explain:
-		plan, err := p.Explain(ctx, t, false)
+		plan, err := p.Explain(ctx, t)
 		if err != nil {
 			return planDataSource{}, err
 		}
@@ -574,7 +574,7 @@ func (p *planner) getViewPlan(
 func (p *planner) getSubqueryPlan(
 	ctx context.Context, sel parser.SelectStatement, cols sqlbase.ResultColumns,
 ) (planDataSource, error) {
-	plan, err := p.newPlan(ctx, sel, nil, false)
+	plan, err := p.newPlan(ctx, sel, nil)
 	if err != nil {
 		return planDataSource{}, err
 	}

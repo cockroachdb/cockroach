@@ -61,6 +61,13 @@ type planner struct {
 	// initializing plans to read from a table. This should be used with care.
 	skipSelectPrivilegeChecks bool
 
+	// autoCommit indicates whether we're planning for a spontaneous transaction.
+	// If autoCommit is true, the plan is allowed (but not required) to
+	// commit the transaction along with other KV operations.
+	// Note: The autoCommit parameter enables operations to enable the
+	// 1PC optimization. This is a bit hackish/preliminary at present.
+	autoCommit bool
+
 	// phaseTimes helps measure the time spent in each phase of SQL execution.
 	// See executor_statement_metrics.go for details.
 	phaseTimes phaseTimes
@@ -172,7 +179,7 @@ func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (p
 		return nil, err
 	}
 	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
-	return p.makePlan(ctx, stmt, false)
+	return p.makePlan(ctx, stmt)
 }
 
 // QueryRow implements the parser.EvalPlanner interface.

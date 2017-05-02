@@ -53,9 +53,7 @@ var explainStrings = map[explainMode]string{
 // info about the wrapped statement.
 //
 // Privileges: the same privileges as the statement being explained.
-func (p *planner) Explain(
-	ctx context.Context, n *parser.Explain, autoCommit bool,
-) (planNode, error) {
+func (p *planner) Explain(ctx context.Context, n *parser.Explain) (planNode, error) {
 	mode := explainNone
 
 	optimized := true
@@ -136,7 +134,7 @@ func (p *planner) Explain(
 
 	p.evalCtx.SkipNormalize = !normalizeExprs
 
-	plan, err := p.newPlan(ctx, n.Statement, nil, autoCommit)
+	plan, err := p.newPlan(ctx, n.Statement, nil)
 	if err != nil {
 		return nil, err
 	}

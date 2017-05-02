@@ -35,14 +35,13 @@ import (
 // editNodeBase holds the common (prepare+execute) state needed to run
 // row-modifying statements.
 type editNodeBase struct {
-	p          *planner
-	rh         *returningHelper
-	tableDesc  *sqlbase.TableDescriptor
-	autoCommit bool
+	p         *planner
+	rh        *returningHelper
+	tableDesc *sqlbase.TableDescriptor
 }
 
 func (p *planner) makeEditNode(
-	ctx context.Context, tn *parser.TableName, autoCommit bool, priv privilege.Kind,
+	ctx context.Context, tn *parser.TableName, priv privilege.Kind,
 ) (editNodeBase, error) {
 	tableDesc, err := p.session.leases.getTableLease(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
@@ -59,9 +58,8 @@ func (p *planner) makeEditNode(
 	}
 
 	return editNodeBase{
-		p:          p,
-		tableDesc:  tableDesc,
-		autoCommit: autoCommit,
+		p:         p,
+		tableDesc: tableDesc,
 	}, nil
 }
 
@@ -223,7 +221,7 @@ func addOrMergeExpr(
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 // TODO(guanqun): need to support CHECK in UPDATE
 func (p *planner) Update(
-	ctx context.Context, n *parser.Update, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, n *parser.Update, desiredTypes []parser.Type,
 ) (planNode, error) {
 	tracing.AnnotateTrace()
 
@@ -232,7 +230,7 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	en, err := p.makeEditNode(ctx, tn, autoCommit, privilege.UPDATE)
+	en, err := p.makeEditNode(ctx, tn, privilege.UPDATE)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +276,7 @@ func (p *planner) Update(
 	if err != nil {
 		return nil, err
 	}
-	tw := tableUpdater{ru: ru, autoCommit: autoCommit}
+	tw := tableUpdater{ru: ru, autoCommit: p.autoCommit}
 
 	tracing.AnnotateTrace()
 

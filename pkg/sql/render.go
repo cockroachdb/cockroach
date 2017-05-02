@@ -167,7 +167,7 @@ func (s *renderNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx 
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
 func (p *planner) Select(
-	ctx context.Context, n *parser.Select, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, n *parser.Select, desiredTypes []parser.Type,
 ) (planNode, error) {
 	wrapped := n.Select
 	limit := n.Limit
@@ -201,7 +201,7 @@ func (p *planner) Select(
 	// investigating a general mechanism for passing some context down during
 	// plan node construction.
 	default:
-		plan, err := p.newPlan(ctx, s, desiredTypes, autoCommit)
+		plan, err := p.newPlan(ctx, s, desiredTypes)
 		if err != nil {
 			return nil, err
 		}

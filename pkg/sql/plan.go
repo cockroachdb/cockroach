@@ -40,7 +40,7 @@ type planMaker interface {
 	// This method should not be used directly; instead prefer makePlan()
 	// or prepare() below.
 	newPlan(
-		ctx context.Context, stmt parser.Statement, desiredTypes []parser.Type, autoCommit bool,
+		ctx context.Context, stmt parser.Statement, desiredTypes []parser.Type,
 	) (planNode, error)
 
 	// makePlan prepares the query plan for a single SQL statement.  it
@@ -56,11 +56,7 @@ type planMaker interface {
 	// must start by calling Start() first and then iterating using
 	// Next() and Values() in order to retrieve matching
 	// rows.
-	// If autoCommit is true, the plan is allowed (but not required) to
-	// commit the transaction along with other KV operations.
-	// Note: The autoCommit parameter enables operations to enable the
-	// 1PC optimization. This is a bit hackish/preliminary at present.
-	makePlan(ctx context.Context, stmt parser.Statement, autoCommit bool) (planNode, error)
+	makePlan(ctx context.Context, stmt parser.Statement) (planNode, error)
 
 	// prepare does the same checks as makePlan but skips building some
 	// data structures necessary for execution, based on the assumption
@@ -214,10 +210,8 @@ var _ planNode = &windowNode{}
 var _ planNodeFastPath = &deleteNode{}
 
 // makePlan implements the Planner interface.
-func (p *planner) makePlan(
-	ctx context.Context, stmt parser.Statement, autoCommit bool,
-) (planNode, error) {
-	plan, err := p.newPlan(ctx, stmt, nil, autoCommit)
+func (p *planner) makePlan(ctx context.Context, stmt parser.Statement) (planNode, error) {
+	plan, err := p.newPlan(ctx, stmt, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +263,7 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt parser.Statement) (pla
 // newPlan constructs a planNode from a statement. This is used
 // recursively by the various node constructors.
 func (p *planner) newPlan(
-	ctx context.Context, stmt parser.Statement, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, stmt parser.Statement, desiredTypes []parser.Type,
 ) (planNode, error) {
 	tracing.AnnotateTrace()
 
@@ -295,9 +289,9 @@ func (p *planner) newPlan(
 	case *parser.BeginTransaction:
 		return p.BeginTransaction(n)
 	case CopyDataBlock:
-		return p.CopyData(ctx, n, autoCommit)
+		return p.CopyData(ctx, n)
 	case *parser.CopyFrom:
-		return p.CopyFrom(ctx, n, autoCommit)
+		return p.CopyFrom(ctx, n)
 	case *parser.CreateDatabase:
 		return p.CreateDatabase(n)
 	case *parser.CreateIndex:
@@ -309,7 +303,7 @@ func (p *planner) newPlan(
 	case *parser.CreateView:
 		return p.CreateView(ctx, n)
 	case *parser.Delete:
-		return p.Delete(ctx, n, desiredTypes, autoCommit)
+		return p.Delete(ctx, n, desiredTypes)
 	case *parser.DropDatabase:
 		return p.DropDatabase(ctx, n)
 	case *parser.DropIndex:
@@ -319,15 +313,15 @@ func (p *planner) newPlan(
 	case *parser.DropView:
 		return p.DropView(ctx, n)
 	case *parser.Explain:
-		return p.Explain(ctx, n, autoCommit)
+		return p.Explain(ctx, n)
 	case *parser.Grant:
 		return p.Grant(ctx, n)
 	case *parser.Help:
 		return p.Help(ctx, n)
 	case *parser.Insert:
-		return p.Insert(ctx, n, desiredTypes, autoCommit)
+		return p.Insert(ctx, n, desiredTypes)
 	case *parser.ParenSelect:
-		return p.newPlan(ctx, n.Select, desiredTypes, autoCommit)
+		return p.newPlan(ctx, n.Select, desiredTypes)
 	case *parser.Relocate:
 		return p.Relocate(ctx, n)
 	case *parser.RenameColumn:
@@ -343,7 +337,7 @@ func (p *planner) newPlan(
 	case *parser.Scatter:
 		return p.Scatter(ctx, n)
 	case *parser.Select:
-		return p.Select(ctx, n, desiredTypes, autoCommit)
+		return p.Select(ctx, n, desiredTypes)
 	case *parser.SelectClause:
 		return p.SelectClause(ctx, n, nil, nil, desiredTypes, publicColumns)
 	case *parser.Set:
@@ -355,7 +349,7 @@ func (p *planner) newPlan(
 	case *parser.SetDefaultIsolation:
 		return p.SetDefaultIsolation(n)
 	case *parser.Show:
-		return p.Show(n, autoCommit)
+		return p.Show(n)
 	case *parser.ShowColumns:
 		return p.ShowColumns(ctx, n)
 	case *parser.ShowConstraints:
@@ -381,9 +375,9 @@ func (p *planner) newPlan(
 	case *parser.Truncate:
 		return p.Truncate(ctx, n)
 	case *parser.UnionClause:
-		return p.UnionClause(ctx, n, desiredTypes, autoCommit)
+		return p.UnionClause(ctx, n, desiredTypes)
 	case *parser.Update:
-		return p.Update(ctx, n, desiredTypes, autoCommit)
+		return p.Update(ctx, n, desiredTypes)
 	case *parser.ValuesClause:
 		return p.ValuesClause(ctx, n, desiredTypes)
 	default:
@@ -402,19 +396,19 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 
 	switch n := stmt.(type) {
 	case *parser.Delete:
-		return p.Delete(ctx, n, nil, false)
+		return p.Delete(ctx, n, nil)
 	case *parser.Explain:
-		return p.Explain(ctx, n, false)
+		return p.Explain(ctx, n)
 	case *parser.Help:
 		return p.Help(ctx, n)
 	case *parser.Insert:
-		return p.Insert(ctx, n, nil, false)
+		return p.Insert(ctx, n, nil)
 	case *parser.Select:
-		return p.Select(ctx, n, nil, false)
+		return p.Select(ctx, n, nil)
 	case *parser.SelectClause:
 		return p.SelectClause(ctx, n, nil, nil, nil, publicColumns)
 	case *parser.Show:
-		return p.Show(n, false)
+		return p.Show(n)
 	case *parser.ShowCreateTable:
 		return p.ShowCreateTable(ctx, n)
 	case *parser.ShowCreateView:
@@ -442,7 +436,7 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 	case *parser.Scatter:
 		return p.Scatter(ctx, n)
 	case *parser.Update:
-		return p.Update(ctx, n, nil, false)
+		return p.Update(ctx, n, nil)
 	default:
 		// Other statement types do not have result columns and do not
 		// support placeholders so there is no need for any special

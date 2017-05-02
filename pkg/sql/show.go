@@ -213,7 +213,7 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 }
 
 // Show a session-local variable name.
-func (p *planner) Show(n *parser.Show, autoCommit bool) (planNode, error) {
+func (p *planner) Show(n *parser.Show) (planNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
 
@@ -246,7 +246,7 @@ func (p *planner) Show(n *parser.Show, autoCommit bool) (planNode, error) {
 			case `all`:
 				for _, vName := range varNames {
 					gen := varGen[vName]
-					value := gen.Get(p, autoCommit)
+					value := gen.Get(p)
 					if _, err := v.rows.AddRow(
 						ctx, parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
 					); err != nil {
@@ -258,7 +258,7 @@ func (p *planner) Show(n *parser.Show, autoCommit bool) (planNode, error) {
 				// The key in varGen is guaranteed to exist thanks to the
 				// check above.
 				gen := varGen[name]
-				value := gen.Get(p, autoCommit)
+				value := gen.Get(p)
 				if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
 					v.rows.Close(ctx)
 					return nil, err
@@ -564,7 +564,7 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 			p.skipSelectPrivilegeChecks = true
 			defer func() { p.skipSelectPrivilegeChecks = false }()
 
-			sourcePlan, err := p.Select(ctx, sel, []parser.Type{}, false)
+			sourcePlan, err := p.Select(ctx, sel, []parser.Type{})
 			if err != nil {
 				return nil, err
 			}
@@ -606,7 +606,7 @@ func (p *planner) ShowDatabases(ctx context.Context, n *parser.ShowDatabases) (p
 	if err != nil {
 		return nil, err
 	}
-	return p.newPlan(ctx, stmt, nil, true)
+	return p.newPlan(ctx, stmt, nil)
 }
 
 // ShowGrants returns grant details for the specified objects and users.
@@ -922,7 +922,7 @@ func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode,
 	if err != nil {
 		return nil, err
 	}
-	return p.newPlan(ctx, stmt, nil, true)
+	return p.newPlan(ctx, stmt, nil)
 }
 
 // Help returns usage information for the builtin functions
