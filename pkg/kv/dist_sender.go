@@ -1197,7 +1197,7 @@ func (ds *DistSender) sendToReplicas(
 			if err == nil {
 				// Determine whether the error must be propagated immediately or whether
 				// sending can continue to alternate replicas.
-				propogateError := false
+				propagateError := false
 				switch tErr := call.Reply.Error.GetDetail().(type) {
 				case nil:
 					return call.Reply, nil
@@ -1217,17 +1217,17 @@ func (ds *DistSender) sendToReplicas(
 							// Replace NotLeaseHolderError with RangeNotFoundError.
 							log.ErrEventf(ctx, "reported lease holder %s not in replicas slice %+v", lh, replicas)
 							call.Reply.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(rangeID))
-							propogateError = true
+							propagateError = true
 						} else {
 							// Move the new lease holder to the head of the queue for the next retry.
 							transport.MoveToFront(*lh)
 						}
 					}
 				default:
-					propogateError = true
+					propagateError = true
 				}
 
-				if propogateError {
+				if propagateError {
 					// The error received is not specific to this replica, so we
 					// should return it instead of trying other replicas. However,
 					// if we're trying to commit a transaction and there are
@@ -1235,25 +1235,25 @@ func (ds *DistSender) sendToReplicas(
 					// was already received, we must return an ambiguous commit
 					// error instead of returned error.
 					log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
-					if haveCommit {
-						timer := time.NewTimer(defaultPendingRPCTimeout)
-						defer timer.Stop()
-						// If there are still pending RPC(s), try to wait them out.
-						for timedOut := false; pending > 0 && !timedOut; {
-							select {
-							case pendingCall := <-done:
-								pending--
-								if err := pendingCall.Err; err != nil {
-									if grpc.Code(err) != codes.Unavailable {
-										ambiguousResult = true
-									}
-								} else if pendingCall.Reply.Error == nil {
-									return pendingCall.Reply, nil
+					timer := time.NewTimer(defaultPendingRPCTimeout)
+					defer timer.Stop()
+					// If there are still pending RPC(s), try to wait them out.
+					for timedOut := false; pending > 0 && !timedOut; {
+						select {
+						case pendingCall := <-done:
+							pending--
+							if err := pendingCall.Err; err != nil {
+								if grpc.Code(err) != codes.Unavailable {
+									ambiguousResult = true
 								}
-							case <-timer.C:
-								timedOut = true
+							} else if pendingCall.Reply.Error == nil {
+								return pendingCall.Reply, nil
 							}
+						case <-timer.C:
+							timedOut = true
 						}
+					}
+					if haveCommit {
 						if pending > 0 || ambiguousResult {
 							log.ErrEventf(ctx, "returning ambiguous result (pending=%d)", pending)
 							return nil, roachpb.NewAmbiguousResultError(

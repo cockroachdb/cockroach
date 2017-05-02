@@ -513,7 +513,10 @@ func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- 
 }
 
 func (t *multiTestContextKVTransport) NextReplica() roachpb.ReplicaDescriptor {
-	return roachpb.ReplicaDescriptor{}
+	if t.IsExhausted() {
+		return roachpb.ReplicaDescriptor{}
+	}
+	return t.replicas[t.idx].ReplicaDescriptor
 }
 
 func (t *multiTestContextKVTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
