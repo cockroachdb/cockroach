@@ -25,6 +25,7 @@ import (
 type DurationSetting struct {
 	defaultValue time.Duration
 	v            int64
+	validate     func(time.Duration) error
 }
 
 var _ Setting = &DurationSetting{}
@@ -43,17 +44,35 @@ func (*DurationSetting) Typ() string {
 	return "d"
 }
 
-func (d *DurationSetting) set(v time.Duration) {
+func (d *DurationSetting) set(v time.Duration) error {
+	if d.validate != nil {
+		if err := d.validate(v); err != nil {
+			return err
+		}
+	}
 	atomic.StoreInt64(&d.v, int64(v))
+	return nil
 }
 
 func (d *DurationSetting) setToDefault() {
-	d.set(d.defaultValue)
+	if err := d.set(d.defaultValue); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterDurationSetting defines a new setting with type duration.
 func RegisterDurationSetting(key, desc string, defaultValue time.Duration) *DurationSetting {
-	setting := &DurationSetting{defaultValue: defaultValue}
+	return RegisterValidatedDurationSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterValidatedDurationSetting defines a new setting with type duration.
+func RegisterValidatedDurationSetting(
+	key, desc string, defaultValue time.Duration, validate func(time.Duration) error,
+) *DurationSetting {
+	setting := &DurationSetting{
+		defaultValue: defaultValue,
+		validate:     validate,
+	}
 	register(key, desc, setting)
 	return setting
 }

@@ -25,6 +25,7 @@ import (
 type FloatSetting struct {
 	defaultValue float64
 	v            uint64
+	validate     func(float64) error
 }
 
 var _ Setting = &FloatSetting{}
@@ -43,17 +44,35 @@ func (*FloatSetting) Typ() string {
 	return "f"
 }
 
-func (f *FloatSetting) set(v float64) {
+func (f *FloatSetting) set(v float64) error {
+	if f.validate != nil {
+		if err := f.validate(v); err != nil {
+			return err
+		}
+	}
 	atomic.StoreUint64(&f.v, math.Float64bits(v))
+	return nil
 }
 
 func (f *FloatSetting) setToDefault() {
-	f.set(f.defaultValue)
+	if err := f.set(f.defaultValue); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterFloatSetting defines a new setting with type float.
 func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	setting := &FloatSetting{defaultValue: defaultValue}
+	return RegisterValidatedFloatSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterValidatedFloatSetting defines a new setting with type float.
+func RegisterValidatedFloatSetting(
+	key, desc string, defaultValue float64, validate func(float64) error,
+) *FloatSetting {
+	setting := &FloatSetting{
+		defaultValue: defaultValue,
+		validate:     validate,
+	}
 	register(key, desc, setting)
 	return setting
 }
@@ -63,7 +82,9 @@ func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting 
 func TestingSetFloat(s **FloatSetting, v float64) func() {
 	saved := *s
 	tmp := &FloatSetting{}
-	tmp.set(v)
+	if err := tmp.set(v); err != nil {
+		panic(err)
+	}
 	*s = tmp
 	return func() {
 		*s = saved

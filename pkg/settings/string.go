@@ -24,6 +24,7 @@ import (
 type StringSetting struct {
 	defaultValue string
 	v            atomic.Value
+	validate     func(string) error
 }
 
 var _ Setting = &StringSetting{}
@@ -42,17 +43,36 @@ func (s *StringSetting) Get() string {
 	return s.v.Load().(string)
 }
 
-func (s *StringSetting) set(v string) {
+func (s *StringSetting) set(v string) error {
+	if s.validate != nil {
+		if err := s.validate(v); err != nil {
+			return err
+		}
+	}
 	s.v.Store(v)
+	return nil
 }
 
 func (s *StringSetting) setToDefault() {
-	s.set(s.defaultValue)
+	if err := s.set(s.defaultValue); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterStringSetting defines a new setting with type string.
 func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting {
-	setting := &StringSetting{defaultValue: defaultValue}
+	return RegisterValidatedStringSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterValidatedStringSetting defines a new setting with type string with a
+// validation function.
+func RegisterValidatedStringSetting(
+	key, desc string, defaultValue string, validate func(string) error,
+) *StringSetting {
+	setting := &StringSetting{
+		defaultValue: defaultValue,
+		validate:     validate,
+	}
 	register(key, desc, setting)
 	return setting
 }
@@ -62,7 +82,9 @@ func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting
 func TestingSetString(s **StringSetting, v string) func() {
 	saved := *s
 	tmp := &StringSetting{}
-	tmp.set(v)
+	if err := tmp.set(v); err != nil {
+		panic(err)
+	}
 	*s = tmp
 	return func() {
 		*s = saved

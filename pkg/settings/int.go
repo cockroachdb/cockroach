@@ -18,11 +18,13 @@ import (
 	"sync/atomic"
 )
 
+// IntSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
 // of type "int" is updated.
 type IntSetting struct {
 	defaultValue int64
 	v            int64
+	validate     func(int64) error
 }
 
 var _ Setting = &IntSetting{}
@@ -41,17 +43,36 @@ func (*IntSetting) Typ() string {
 	return "i"
 }
 
-func (i *IntSetting) set(v int64) {
+func (i *IntSetting) set(v int64) error {
+	if i.validate != nil {
+		if err := i.validate(v); err != nil {
+			return err
+		}
+	}
 	atomic.StoreInt64(&i.v, v)
+	return nil
 }
 
 func (i *IntSetting) setToDefault() {
-	i.set(i.defaultValue)
+	if err := i.set(i.defaultValue); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterIntSetting defines a new setting with type int.
 func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	setting := &IntSetting{defaultValue: defaultValue}
+	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterValidatedIntSetting defines a new setting with type int with a
+// validation function.
+func RegisterValidatedIntSetting(
+	key, desc string, defaultValue int64, validate func(int64) error,
+) *IntSetting {
+	setting := &IntSetting{
+		defaultValue: defaultValue,
+		validate:     validate,
+	}
 	register(key, desc, setting)
 	return setting
 }
