@@ -16,13 +16,17 @@ package settings
 
 import (
 	"sync/atomic"
+
+	"github.com/pkg/errors"
 )
 
+// IntSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
 // of type "int" is updated.
 type IntSetting struct {
 	defaultValue int64
 	v            int64
+	validateFn   func(int64) error
 }
 
 var _ Setting = &IntSetting{}
@@ -41,17 +45,49 @@ func (*IntSetting) Typ() string {
 	return "i"
 }
 
-func (i *IntSetting) set(v int64) {
+// Validate that a value conforms with the validation function.
+func (i *IntSetting) Validate(v int64) error {
+	if i.validateFn != nil {
+		if err := i.validateFn(v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *IntSetting) set(v int64) error {
+	if err := i.Validate(v); err != nil {
+		return err
+	}
 	atomic.StoreInt64(&i.v, v)
+	return nil
 }
 
 func (i *IntSetting) setToDefault() {
-	i.set(i.defaultValue)
+	if err := i.set(i.defaultValue); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterIntSetting defines a new setting with type int.
 func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	setting := &IntSetting{defaultValue: defaultValue}
+	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterValidatedIntSetting defines a new setting with type int with a
+// validation function.
+func RegisterValidatedIntSetting(
+	key, desc string, defaultValue int64, validateFn func(int64) error,
+) *IntSetting {
+	if validateFn != nil {
+		if err := validateFn(defaultValue); err != nil {
+			panic(errors.Wrap(err, "invalid default"))
+		}
+	}
+	setting := &IntSetting{
+		defaultValue: defaultValue,
+		validateFn:   validateFn,
+	}
 	register(key, desc, setting)
 	return setting
 }

@@ -17,6 +17,8 @@ package settings
 import (
 	"math"
 	"sync/atomic"
+
+	"github.com/pkg/errors"
 )
 
 // FloatSetting is the interface of a setting variable that will be
@@ -25,6 +27,7 @@ import (
 type FloatSetting struct {
 	defaultValue float64
 	v            uint64
+	validateFn   func(float64) error
 }
 
 var _ Setting = &FloatSetting{}
@@ -43,17 +46,48 @@ func (*FloatSetting) Typ() string {
 	return "f"
 }
 
-func (f *FloatSetting) set(v float64) {
+// Validate that a value conforms with the validation function.
+func (f *FloatSetting) Validate(v float64) error {
+	if f.validateFn != nil {
+		if err := f.validateFn(v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *FloatSetting) set(v float64) error {
+	if err := f.Validate(v); err != nil {
+		return err
+	}
 	atomic.StoreUint64(&f.v, math.Float64bits(v))
+	return nil
 }
 
 func (f *FloatSetting) setToDefault() {
-	f.set(f.defaultValue)
+	if err := f.set(f.defaultValue); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterFloatSetting defines a new setting with type float.
 func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	setting := &FloatSetting{defaultValue: defaultValue}
+	return RegisterValidatedFloatSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterValidatedFloatSetting defines a new setting with type float.
+func RegisterValidatedFloatSetting(
+	key, desc string, defaultValue float64, validateFn func(float64) error,
+) *FloatSetting {
+	if validateFn != nil {
+		if err := validateFn(defaultValue); err != nil {
+			panic(errors.Wrap(err, "invalid default"))
+		}
+	}
+	setting := &FloatSetting{
+		defaultValue: defaultValue,
+		validateFn:   validateFn,
+	}
 	register(key, desc, setting)
 	return setting
 }
@@ -63,7 +97,9 @@ func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting 
 func TestingSetFloat(s **FloatSetting, v float64) func() {
 	saved := *s
 	tmp := &FloatSetting{}
-	tmp.set(v)
+	if err := tmp.set(v); err != nil {
+		panic(err)
+	}
 	*s = tmp
 	return func() {
 		*s = saved

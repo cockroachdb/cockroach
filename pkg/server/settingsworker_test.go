@@ -38,10 +38,31 @@ const durationKey = "testing.duration"
 const byteSizeKey = "testing.bytesize"
 const enumKey = "testing.enum"
 
-var strA = settings.RegisterStringSetting(strKey, "", "<default>")
-var intA = settings.RegisterIntSetting(intKey, "", 1)
-var durationA = settings.RegisterDurationSetting(durationKey, "", time.Minute)
-var byteSizeA = settings.RegisterByteSizeSetting(byteSizeKey, "", 1024*1024)
+var strA = settings.RegisterValidatedStringSetting(strKey, "", "<default>", func(v string) error {
+	if len(v) > 15 {
+		return errors.Errorf("can't set %s to string longer than 15: %s", strKey, v)
+	}
+	return nil
+})
+var intA = settings.RegisterValidatedIntSetting(intKey, "", 1, func(v int64) error {
+	if v < 0 {
+		return errors.Errorf("can't set %s to a negative value: %d", intKey, v)
+	}
+	return nil
+
+})
+var durationA = settings.RegisterValidatedDurationSetting(durationKey, "", time.Minute, func(v time.Duration) error {
+	if v < 0 {
+		return errors.Errorf("can't set %s to a negative duration: %s", durationKey, v)
+	}
+	return nil
+})
+var byteSizeA = settings.RegisterValidatedByteSizeSetting(byteSizeKey, "", 1024*1024, func(v int64) error {
+	if v < 0 {
+		return errors.Errorf("can't set %s to a negative value: %d", byteSizeKey, v)
+	}
+	return nil
+})
 var enumA = settings.RegisterEnumSetting(enumKey, "", "foo", map[int64]string{1: "foo", 2: "bar"})
 
 func TestSettingsRefresh(t *testing.T) {
@@ -124,6 +145,32 @@ func TestSettingsRefresh(t *testing.T) {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := "after-mistype", strA.Get(); expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
+
+	// An invalid value doesn't revert a previous set or block other changes.
+	prevStrA := strA.Get()
+	prevIntA := intA.Get()
+	prevDurationA := durationA.Get()
+	prevByteSizeA := byteSizeA.Get()
+	db.Exec(insertQ, strKey, "this is too big for this setting", "s")
+	db.Exec(insertQ, intKey, settings.EncodeInt(-1), "i")
+	db.Exec(insertQ, durationKey, settings.EncodeDuration(-time.Minute), "d")
+	db.Exec(insertQ, byteSizeKey, settings.EncodeInt(-1), "z")
+
+	testutils.SucceedsSoon(t, func() error {
+		if expected, actual := prevStrA, strA.Get(); expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := prevIntA, intA.Get(); expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := prevDurationA, durationA.Get(); expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := prevByteSizeA, byteSizeA.Get(); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
