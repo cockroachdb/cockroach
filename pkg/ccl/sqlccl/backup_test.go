@@ -1082,6 +1082,45 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	}
 }
 
+func TestBackupRestoreConcurrent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
+	const numAccounts = 1000
+	const concurrency = 3
+
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+
+	var wg util.WaitGroupWithError
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(backupDir string) {
+			if _, err := sqlDB.DB.Exec(
+				fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, backupDir),
+			); err != nil {
+				wg.Done(err)
+				return
+			}
+			_, err := sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, backupDir))
+			wg.Done(err)
+		}(filepath.Join(dir, strconv.Itoa(i)))
+	}
+	if err := wg.Wait(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	var rowCount int64
+	sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
+	if rowCount != numAccounts {
+		t.Fatalf("got %d rows but expected %d", rowCount, numAccounts)
+	}
+}
+
 func TestBackupAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
