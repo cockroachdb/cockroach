@@ -147,15 +147,14 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
               <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
             </Axis>
           </LineGraph>
-          <LineGraph title="Exec Latency: 99th percentile"
-          tooltip={`The 99th percentile of latency between query requests and responses
-                    over a 1 minute period.
-                    Values are displayed individually for each node on each node.`}>
+
+          <LineGraph title="Service Latency: SQL, 99th percentile"
+                       tooltip={`The latency of SQL statements serviced over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
                   <Metric key={node}
-                          name="cr.node.exec.latency-p99"
+                          name="cr.node.sql.service.latency-p99"
                           title={this.nodeAddress(node)}
                           sources={[node]}
                           downsampleMax />,
@@ -163,22 +162,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
               }
             </Axis>
           </LineGraph>
-          <LineGraph title="Exec Latency: 90th percentile"
-                    tooltip={`The 90th percentile of latency between query requests and responses
-                              over a 1 minute period.
-                              Values are displayed individually for each node on each node.`}>
-            <Axis units={ AxisUnits.Duration }>
-              {
-                _.map(nodeIDs, (node) =>
-                  <Metric key={node}
-                          name="cr.node.exec.latency-p90"
-                          title={this.nodeAddress(node)}
-                          sources={[node]}
-                          downsampleMax />,
-                )
-              }
-            </Axis>
-          </LineGraph>
+
           <LineGraph title="Replicas per Node"
                     tooltip={`The number of replicas on each node.`}>
             <Axis>
@@ -299,8 +283,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Backend Statement Service Latency: SQL, 99th percentile"
-                       tooltip={`The latency of backend statements serviced over 10 second periods ${specifier}.`}>
+          <LineGraph title="Service Latency: SQL, 99th percentile"
+                       tooltip={`The latency of SQL statements serviced over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
@@ -314,8 +298,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Backend Statement Service Latency: SQL, 90th percentile"
-                       tooltip={`The latency of backend statements serviced over 10 second periods ${specifier}.`}>
+          <LineGraph title="Service Latency: SQL, 90th percentile"
+                       tooltip={`The latency of SQL statements serviced over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
@@ -329,8 +313,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Backend Statement Service Latency: DistSQL, 99th percentile"
-                       tooltip={`The latency of backend statements serviced over 10 second periods ${specifier}.`}>
+          <LineGraph title="Service Latency: DistSQL, 99th percentile"
+                       tooltip={`The latency of distributed SQL statements serviced over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
@@ -344,8 +328,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Backend Statement Service Latency: DistSQL, 90th percentile"
-                       tooltip={`The latency of backend statements serviced over 10 second periods ${specifier}.`}>
+          <LineGraph title="Service Latency: DistSQL, 90th percentile"
+                       tooltip={`The latency of distributed SQL statements serviced over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
@@ -359,7 +343,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Exec Latency: 99th percentile"
+          <LineGraph title="Execution Latency: 99th percentile"
                     tooltip={`The 99th percentile of latency between query requests and responses
                               over a 1 minute period.
                               Values are displayed individually for each node on each node.`}>
@@ -376,7 +360,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Exec Latency: 90th percentile"
+          <LineGraph title="Execution Latency: 90th percentile"
                     tooltip={`The 90th percentile of latency between query requests and responses
                               over a 1 minute period.
                               Values are displayed individually for each node on each node.`}>
