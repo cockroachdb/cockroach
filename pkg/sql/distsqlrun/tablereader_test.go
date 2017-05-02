@@ -82,6 +82,7 @@ func TestTableReader(t *testing.T) {
 			},
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"}, // sum < 5 && b != 3
+				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
 			expected: "[[0 1] [0 2] [0 4] [1 0] [1 1] [1 2] [2 0] [2 1] [2 2] [3 0] [3 1] [4 0]]",
@@ -92,6 +93,7 @@ func TestTableReader(t *testing.T) {
 			},
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"},
+				Projection:    true,
 				OutputColumns: []uint32{3}, // s
 				Limit:         4,
 			},
@@ -106,6 +108,7 @@ func TestTableReader(t *testing.T) {
 			},
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@1 < 3"}, // sum < 8
+				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
 			expected: "[[2 5] [1 5] [0 5] [2 4] [1 4] [0 4]]",
@@ -194,6 +197,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 		Table: *td,
 	}
 	post := PostProcessSpec{
+		Projection:    true,
 		OutputColumns: []uint32{0},
 	}
 

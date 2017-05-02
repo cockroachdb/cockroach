@@ -72,25 +72,30 @@ message PostProcessSpec {
   // processor via ordinal references (@1, @2, etc).
   optional Expression filter = 1 [(gogoproto.nullable) = false];
 
-  // The output columns describe a projection on the internal set of columns;
-  // only the columns in this list will be emitted. This can be omitted if the
-  // set of output columns is a trivial identity (in which case all the internal
-  // columns will be emitted).
+  // If true, output_columns describes a projection. Used to differentiate
+  // between an empty projection and no projection.
   //
   // Cannot be set at the same time with render expressions.
-  repeated uint32 output_columns = 2 [packed = true];
+  optional bool projection = 2 [(gogoproto.nullable) = false];
+
+  // The output columns describe a projection on the internal set of columns;
+  // only the columns in this list will be emitted.
+  //
+  // Can only be set if projection is true. Cannot be set at the same time with
+  // render expressions.
+  repeated uint32 output_columns = 3 [packed = true];
 
   // If set, the output is the result of rendering these expressions. The
   // expressions reference the internal columns of the processor.
   //
   // Cannot be set at the same time with output columns.
-  repeated Expression render_exprs = 3 [(gogoproto.nullable) = false];
+  repeated Expression render_exprs = 4 [(gogoproto.nullable) = false];
 
   // If nonzero, the first <offset> rows will be suppressed.
-  optional uint64 offset = 4 [(gogoproto.nullable) = false];
+  optional uint64 offset = 5 [(gogoproto.nullable) = false];
 
   // If nonzero, the processor will stop after emitting this many rows.
-  optional uint64 limit = 5 [(gogoproto.nullable) = false];
+  optional uint64 limit = 6 [(gogoproto.nullable) = false];
 }
 
 message ProcessorCoreUnion {

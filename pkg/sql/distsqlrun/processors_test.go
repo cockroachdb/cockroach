@@ -74,6 +74,7 @@ func TestPostProcess(t *testing.T) {
 		// Projection.
 		{
 			post: PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
 			expNeededCols: []int{0, 2},
@@ -84,6 +85,7 @@ func TestPostProcess(t *testing.T) {
 		{
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@1 = 1"},
+				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
 			expNeededCols: []int{0, 2},
@@ -94,6 +96,7 @@ func TestPostProcess(t *testing.T) {
 		{
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@2 = 2"},
+				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
 			expNeededCols: []int{0, 1, 2},

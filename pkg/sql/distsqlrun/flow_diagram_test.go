@@ -63,6 +63,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
 			Post: PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
 			Output: []OutputRouterSpec{{
@@ -78,6 +79,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
 			Post: PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
 			Output: []OutputRouterSpec{{
@@ -94,6 +96,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 			{
 				Core: ProcessorCoreUnion{TableReader: &tr},
 				Post: PostProcessSpec{
+					Projection:    true,
 					OutputColumns: []uint32{0, 1},
 				},
 				Output: []OutputRouterSpec{{
@@ -116,6 +119,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
 				Post: PostProcessSpec{
 					Filter:        Expression{Expr: "@1+@2<@3"},
+					Projection:    true,
 					OutputColumns: []uint32{2},
 				},
 				Output: []OutputRouterSpec{{
@@ -180,6 +184,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
 				Post: PostProcessSpec{
+					Projection:    true,
 					OutputColumns: []uint32{0, 1, 3},
 				},
 				Output: []OutputRouterSpec{{
@@ -199,6 +204,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
 				Post: PostProcessSpec{
+					Projection:    true,
 					OutputColumns: []uint32{0, 1, 3},
 				},
 				Output: []OutputRouterSpec{{
@@ -230,6 +236,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 				},
 				Core: ProcessorCoreUnion{HashJoiner: &hj},
 				Post: PostProcessSpec{
+					Projection:    true,
 					OutputColumns: []uint32{0, 1, 2, 3, 4, 5},
 				},
 				Output: []OutputRouterSpec{{
@@ -260,6 +267,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
 				Post: PostProcessSpec{
+					Projection:    true,
 					OutputColumns: []uint32{0, 1, 3},
 				},
 				Output: []OutputRouterSpec{{
@@ -274,6 +282,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 			{
 				Core: ProcessorCoreUnion{TableReader: &trB},
 				Post: PostProcessSpec{
+					Projection:    true,
 					OutputColumns: []uint32{1, 2, 4},
 				},
 				Output: []OutputRouterSpec{{
@@ -318,6 +327,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &trB},
 			Post: PostProcessSpec{
+				Projection:    true,
 				OutputColumns: []uint32{1, 2, 4},
 			},
 			Output: []OutputRouterSpec{{
