@@ -29,7 +29,7 @@ import (
 
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
 func (p *planner) UnionClause(
-	ctx context.Context, n *parser.UnionClause, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, n *parser.UnionClause, desiredTypes []parser.Type,
 ) (planNode, error) {
 	var emitAll = false
 	var emit unionNodeEmit
@@ -56,11 +56,11 @@ func (p *planner) UnionClause(
 		return nil, errors.Errorf("%v is not supported", n.Type)
 	}
 
-	left, err := p.newPlan(ctx, n.Left, desiredTypes, autoCommit)
+	left, err := p.newPlan(ctx, n.Left, desiredTypes)
 	if err != nil {
 		return nil, err
 	}
-	right, err := p.newPlan(ctx, n.Right, desiredTypes, autoCommit)
+	right, err := p.newPlan(ctx, n.Right, desiredTypes)
 	if err != nil {
 		return nil, err
 	}

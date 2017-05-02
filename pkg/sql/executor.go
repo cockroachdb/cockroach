@@ -1304,8 +1304,8 @@ func (e *Executor) execStmtInOpenTxn(
 		// immediately blocking.
 		result, err = e.execStmtInParallel(stmt, planner)
 	} else {
-		autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-		result, err = e.execStmt(stmt, planner, autoCommit,
+		planner.autoCommit = implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
+		result, err = e.execStmt(stmt, planner,
 			automaticRetryCount, parallelize /* mockResults */)
 	}
 
@@ -1541,16 +1541,12 @@ func makeRes(stmt parser.Statement, planner *planner, plan planNode) (Result, er
 // If mockResults is set, these results will be replaced by the "zero value" of the
 // statement's result type, identical to the mock results returned by execStmtInParallel.
 func (e *Executor) execStmt(
-	stmt parser.Statement,
-	planner *planner,
-	autoCommit bool,
-	automaticRetryCount int,
-	mockResults bool,
+	stmt parser.Statement, planner *planner, automaticRetryCount int, mockResults bool,
 ) (Result, error) {
 	session := planner.session
 
 	planner.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
-	plan, err := planner.makePlan(session.Ctx(), stmt, autoCommit)
+	plan, err := planner.makePlan(session.Ctx(), stmt)
 	planner.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
 	if err != nil {
 		return Result{}, err
@@ -1603,7 +1599,7 @@ func (e *Executor) execStmtInParallel(stmt parser.Statement, planner *planner) (
 	session := planner.session
 	ctx := session.Ctx()
 
-	plan, err := planner.makePlan(ctx, stmt, false)
+	plan, err := planner.makePlan(ctx, stmt)
 	if err != nil {
 		return Result{}, err
 	}
