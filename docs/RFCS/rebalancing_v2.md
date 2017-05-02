@@ -1,8 +1,10 @@
 - Feature name: Rebalancing V2
-- Status: draft
+- Status: completed
 - Start date: 2016-04-20
 - Last revised: 2016-05-03
 - Authors: Bram Gruneir & Cuong Do
+- RFC PR: [#6484](https://github.com/cockroachdb/cockroach/pull/6484)
+- Cockroach Issue:
 
 # Table of Contents
 
@@ -118,12 +120,12 @@ in no particular order:
   The choice of 32 nodes here matches our OKRs. This limit is to make testing more tractable.
   Performance will be measured using the metrics described in the Metrics section below.
 
-- Is performant in a dynamic cluster. A dynamic cluster is one is which nodes can be added and
+- Is performant in a dynamic cluster. A dynamic cluster is one in which nodes can be added and
   removed arbitrarily.
 
-  While this may seem like an obvious goal, concentrating on cases when one or more nodes are added
-  and removed at once to ensure that equilibrium is reached quickly. It should be noted that only a
-  single node can be removed at a time but any number of nodes can be added.
+  While this may seem like an obvious goal, we should ensure that equilibrium is reached quickly
+  in cases when one or more nodes are added and removed at once. It should be noted that only
+  a single node can be removed at a time but any number of nodes can be added.
 
 - Handles outages of any number of nodes gracefully, as long as quorum is maintained.
 
@@ -152,8 +154,7 @@ priority:
 
 - Replicas are moved to where there is demand for them.
 
-  Experiment to see if this would be useful. However, with a proper load balancer, there should be
-  nothing to gain from doing this. There may however be performance gains on keeping replicas of
+  Experiment to see if this would be useful. There may be performance gains on keeping replicas of
   single tables together on the same set of stores.
 
 - Globally distributed data.
@@ -476,8 +477,8 @@ The likely failure modes can largely be alleviated by using short allocation lea
 - When making rebalancing decisions, there is a lack of information that must be overcome.
   Specifically, the lack of `RangeDescriptor`s that are required when actually making the final
   decision. These are too numerous to be gossiped and must be stored and retrieved from the db
-  directly. In a decentralized system, all `RangeDescriptor`s are already available directly in
-  memory in the store, while in a decentralize .
+  directly. On the other hand, in a decentralized system, all `RangeDescriptor`s are already
+  available directly in memory in the store.
 - When dealing with a cluster that use attributes, the central allocator will have to handle all
   rebalancing decisions by either using a full knowledge of a cluster or by using subsets of the
   cluster based on combinations of all available attributes.

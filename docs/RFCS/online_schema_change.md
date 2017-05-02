@@ -18,7 +18,7 @@ any significant amount of data. Additionally, the single transaction
 approach necessitates reading the table descriptor on every SQL
 operation which is a significant performance bottleneck.
 
-We will implement online schema changed which breaks down a high-level
+We will implement online schema change which breaks down a high-level
 schema change operation such as `CREATE INDEX` into a series of
 discrete steps in such a way that user transactions are never blocked
 from accessing the table and yet never leave table or index data in an
@@ -89,7 +89,7 @@ data. This operation is performed when the index is in the
 table. As such, it is infeasible for this backfilling to be performed
 transactionally: the transaction would create an unreasonable number
 of write intents and user transactions could cause the transaction to
-abort. Instead, backfill be performed as a series of small
+abort. Instead, backfill will be performed as a series of small
 transactions that process a fraction of the table at a time:
 
 ```go
@@ -97,7 +97,7 @@ transactions that process a fraction of the table at a time:
   endKey := startKey.PrefixEnd()
   for startKey != endKey {
     var lastKey roachpb.Key
-    err := db.Txn(func(txn *Txn) error {
+    err := db.Txn(func(ctx context.Context, txn *Txn) error {
       txn.SetPriority(VeryLowPriority)
       scan, err := txn.Scan(startKey, endKey, 1000)
       if err != nil {
@@ -105,7 +105,7 @@ transactions that process a fraction of the table at a time:
       }
       lastKey = getLastKeyOfFullRowInScan(scan)
       b := makeIndexKeysBatch(scan)
-      return txn.CommitInBatch(b)
+      return txn.CommitInBatch(ctx, b)
     })
     if err != nil {
       // Abort!

@@ -1,0 +1,485 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Cuong Do (cdo@cockroachlabs.com)
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "serverpb";
+
+import "cockroach/pkg/config/config.proto";
+import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/storage/liveness.proto";
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+// ZoneConfigurationLevel indicates, for objects with a Zone Configuration,
+// the object level at which the configuration is defined. This is needed
+// because objects without a specifically indicated Zone Configuration will
+// inherit the configuration of their "parent".
+enum ZoneConfigurationLevel {
+  UNKNOWN = 0;
+  // CLUSTER indicates that this object uses the cluster default Zone Configuration.
+  CLUSTER = 1;
+  // DATABASE indicates that this object uses a database-level Zone Configuration.
+  DATABASE = 2;
+  // TABLE indicates that this object uses a table-level Zone Configuration.
+  TABLE = 3;
+}
+
+// DatabasesRequest requests a list of databases.
+message DatabasesRequest {
+}
+
+// DatabasesResponse contains a list of databases.
+message DatabasesResponse {
+  repeated string databases = 1;
+}
+
+// DatabaseDetailsRequest requests detailed information about the specified
+// database
+message DatabaseDetailsRequest {
+  // database is the name of the database we are querying.
+  string database = 1;
+}
+
+// DatabaseDetailsResponse contains grant information and table names for a
+// database.
+message DatabaseDetailsResponse {
+  message Grant {
+    // user is the user that this grant applies to.
+    string user = 1;
+
+    // privileges are the abilities this grant gives to the user.
+    repeated string privileges = 2;
+  }
+
+  // grants are the results of SHOW GRANTS for this database.
+  repeated Grant grants = 1 [(gogoproto.nullable) = false];
+
+  // table_names contains the names of all tables (SHOW TABLES) in this
+  // database.
+  repeated string table_names = 2;
+  // descriptor_id is an identifier used to uniquely identify this database.
+  // It can be used to find events pertaining to this database by filtering on
+  // the 'target_id' field of events.
+  int64 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID"];
+  // The zone configuration in effect for this database.
+  cockroach.config.ZoneConfig zone_config = 4 [(gogoproto.nullable) = false];
+  // The level at which this object's zone configuration is set.
+  ZoneConfigurationLevel zone_config_level = 5;
+}
+
+// TableDetailsRequest is a request for detailed information about a table.
+message TableDetailsRequest {
+  // database is the database that contains the table we're interested in.
+  string database = 1;
+
+  // table is the name of the table that we're querying.
+  string table = 2;
+}
+
+// TableDetailsResponse contains grants, column names, and indexes for
+// a table.
+message TableDetailsResponse {
+  // Grant is an entry from SHOW GRANTS.
+  message Grant {
+    // user is the user that this grant applies to.
+    string user = 1;
+
+    // privileges are the abilities this grant gives to the user.
+    repeated string privileges = 2;
+  }
+
+  message Column {
+    // name is the name of the column.
+    string name = 1;
+
+    // type is the SQL type (INT, STRING, etc.) of this column.
+    string type = 2;
+
+    // nullable is whether this column can contain NULL.
+    bool nullable = 3;
+
+    // default_value is the default value of this column.
+    string default_value = 4;
+  }
+
+  message Index {
+    // name is the name of this index.
+    string name = 1;
+
+    // unique is whether this a unique index (i.e. CREATE UNIQUE INDEX).
+    bool unique = 2;
+
+    // seq is an internal variable that's passed along.
+    int64 seq = 3;
+
+    // column is the column that this index indexes.
+    string column = 4;
+
+    // direction is either "ASC" (ascending) or "DESC" (descending).
+    string direction = 5;
+
+    // storing is an internal variable that's passed along.
+    bool storing = 6;
+
+    // implicit is an internal variable that's passed along.
+    bool implicit = 7;
+  }
+
+  repeated Grant grants = 1 [(gogoproto.nullable) = false];
+  repeated Column columns = 2 [(gogoproto.nullable) = false];
+  repeated Index indexes = 3 [(gogoproto.nullable) = false];
+
+  // range_count is the size of the table in ranges. This provides a rough
+  // estimate of the storage requirements for the table.
+  // TODO(mrtracy): The TableStats method also returns a range_count field which
+  // is more accurate than this one; TableDetails calculates this number using
+  // a potentially faster method that is subject to cache staleness. We should
+  // consider removing or renaming this field to reflect that difference. See
+  // Github issue #5435 for more information.
+  int64 range_count = 4;
+  // create_table_statement is the output of "SHOW CREATE TABLE" for this table;
+  // it is a SQL statement that would re-create the table's current schema if
+  // executed.
+  string create_table_statement = 5;
+  // The zone configuration in effect for this table.
+  cockroach.config.ZoneConfig zone_config = 6 [(gogoproto.nullable) = false];
+  // The level at which this object's zone configuration is set.
+  ZoneConfigurationLevel zone_config_level = 7;
+  // descriptor_id is an identifier used to uniquely identify this table.
+  // It can be used to find events pertaining to this table by filtering on
+  // the 'target_id' field of events.
+  int64 descriptor_id = 8 [(gogoproto.customname) = "DescriptorID"];
+}
+
+// TableStatsRequest is a request for detailed, computationally expensive
+// information about a table.
+message TableStatsRequest {
+  // database is the database that contains the table we're interested in.
+  string database = 1;
+  // table is the name of the table that we're querying.
+  string table = 2;
+}
+
+// TableStatsResponse contains detailed, computationally expensive information
+// about a table.
+message TableStatsResponse {
+  // range_count is the number of ranges, as determined from a query of range
+  // meta keys.
+  int64 range_count = 1;
+  // replica_count is the number of replicas of any range of this table, as
+  // found by querying nodes which are known to have replicas. When compared
+  // with range_count, this can be used to estimate the current replication
+  // factor of the table.
+  int64 replica_count = 2;
+  // node_count is the number of nodes which contain data for this table,
+  // according to a query of range meta keys.
+  int64 node_count = 3;
+  // stats is the summation of MVCCStats for all replicas of this table
+  // across the cluster.
+  cockroach.storage.engine.enginepb.MVCCStats stats = 4 [(gogoproto.nullable) = false];
+  // MissingNode represents information on a node which should contain data
+  // for this table, but could not be contacted during this request.
+  message MissingNode {
+    // The ID of the missing node.
+    string node_id = 1 [(gogoproto.customname) = "NodeID"];
+    // The error message that resulted when the query sent to this node failed.
+    string error_message = 2;
+  }
+  // A list of nodes which should contain data for this table (according to
+  // cluster metadata), but could not be contacted during this request.
+  repeated MissingNode missing_nodes = 5 [(gogoproto.nullable) = false];
+}
+
+// UsersRequest requests a list of users.
+message UsersRequest {
+}
+
+// UsersResponse returns a list of users.
+message UsersResponse {
+  // User is a CockroachDB user.
+  message User {
+    string username = 1;
+  }
+
+  // usernames is a list of users for the CockroachDB cluster.
+  repeated User users = 1 [(gogoproto.nullable) = false];
+}
+
+// EventsRequest is a request for event log entries, optionally filtered
+// by the specified event type and/or target_id.
+message EventsRequest {
+  string type = 1;
+  int64 target_id = 2;
+}
+
+// EventsResponse contains a set of event log entries. This is always limited
+// to the latest N entries (N is enforced in the associated endpoint).
+message EventsResponse {
+  message Event {
+    // timestamp is the time at which the event occurred.
+    google.protobuf.Timestamp timestamp = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+    // event_type is the type of the event (e.g. "create_table", "drop_table".
+    string event_type = 2;
+
+    // target_id is the target for this event.
+    int64 target_id = 3 [(gogoproto.customname) = "TargetID"];
+
+    // reporting_id is the reporting ID for this event.
+    int64 reporting_id = 4 [(gogoproto.customname) = "ReportingID"];
+
+    // info has more detailed information for the event. The contents vary
+    // depending on the vent.
+    string info = 5;
+
+    // unique_id is a unique identifier for this event.
+    bytes unique_id = 6 [(gogoproto.customname) = "UniqueID"];
+  }
+
+  repeated Event events = 1 [(gogoproto.nullable) = false];
+}
+
+// SetUIDataRequest stores the given key/value pairs in the system.ui table.
+message SetUIDataRequest {
+  // key_values is a map of keys to bytes values. Each key will be stored
+  // with its corresponding value as a separate row in system.ui.
+  map<string, bytes> key_values = 1;
+}
+
+// SetUIDataResponse is currently an empty response.
+message SetUIDataResponse {
+}
+
+// GETUIDataRequest requests the values for the given keys from the system.ui
+// table.
+message GetUIDataRequest {
+  repeated string keys = 1;
+}
+
+// GetUIDataResponse contains the requested values and the times at which
+// the values were last updated.
+message GetUIDataResponse {
+  message Value {
+    // value is the value of the requested key.
+    bytes value = 1;
+
+    // last_updated is the time at which the value was last updated.
+    google.protobuf.Timestamp last_updated = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  }
+
+  // key_values maps keys to their retrieved values. If this doesn't contain a
+  // a requested key, that key was not found.
+  map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
+}
+
+// ClusterRequest requests metadata for the cluster.
+message ClusterRequest {
+}
+
+// ClusterResponse contains metadata for the cluster.
+message ClusterResponse {
+  string cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
+}
+
+enum DrainMode {
+    // CLIENT instructs the server to refuse new SQL clients.
+    // TODO(tschottdorf): also terminate existing clients in a graceful manner.
+    CLIENT = 0;
+    // LEADERSHIP instructs the server to gracefully let all its Replicas'
+    // range leases expire.
+    LEASES = 1;
+}
+
+// DrainRequest requests the server to enter the specified draining mode. The
+// server first deactivates all the modes specified in 'off' and then activates
+// all those in 'on'.
+message DrainRequest {
+  // These are actually of type DrainMode, but grpc-gateway does not support
+  // proxying enum fields (yet:
+  // https://github.com/grpc-ecosystem/grpc-gateway/issues/5) and it fails in
+  // pretty dramatic ways (panics the server).
+  repeated int32 on = 1;
+  repeated int32 off = 2;
+  // When true, terminates the process after the given drain modes have been
+  // activated.
+  bool shutdown = 3;
+}
+
+// DrainResponse is the response to a successful DrainRequest and lists the
+// modes which are activated after having processing the request.
+message DrainResponse {
+  repeated int32 on = 1;
+}
+
+// SettingsRequest inquires what are the current settings in the cluster.
+message SettingsRequest {
+  // The array of setting names to retrieve.
+  // An empty keys array means "all".
+  repeated string keys = 1;
+}
+
+// SettingsResponse is the response to SettingsRequest.
+message SettingsResponse {
+   message Value {
+      string value = 1;
+      string type = 2;
+      string description = 3;
+   }
+   map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
+}
+
+// HealthRequest inquires whether the addressed node is healthy.
+message HealthRequest {
+}
+
+// HealthResponse is the response to HealthRequest. It currently does not
+// contain any information. The request fails however if the node is not live.
+// TODO(tschottdorf): Should it contain information, and if so, what?
+message HealthResponse {
+}
+
+// LivenessRequest requests liveness data for all nodes on the cluster.
+message LivenessRequest {
+}
+
+// LivenessResponse contains the liveness status of each node on the cluster.
+message LivenessResponse {
+  repeated cockroach.storage.Liveness livenesses = 1 [(gogoproto.nullable) = false];
+}
+
+// Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
+// REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
+service Admin {
+  // URL: /_admin/v1/users
+  rpc Users(UsersRequest) returns (UsersResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/users"
+    };
+  }
+
+  // URL: /_admin/v1/databases
+  rpc Databases(DatabasesRequest) returns (DatabasesResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/databases"
+    };
+  }
+
+  // Example URL: /_admin/v1/databases/system
+  rpc DatabaseDetails(DatabaseDetailsRequest) returns (DatabaseDetailsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/databases/{database}"
+    };
+  }
+
+  // Example URL: /_admin/v1/databases/system/tables/ui
+  rpc TableDetails(TableDetailsRequest) returns (TableDetailsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/databases/{database}/tables/{table}"
+    };
+  }
+
+  // Example URL: /_admin/v1/databases/system/tables/ui/stats
+  rpc TableStats(TableStatsRequest) returns (TableStatsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/databases/{database}/tables/{table}/stats"
+    };
+  }
+
+  // Example URLs:
+  // - /_admin/v1/events?type=create_table
+  // - /_admin/v1/events?type=drop_table&target_id=4
+  // - /_admin/v1/events
+  rpc Events(EventsRequest) returns (EventsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/events"
+    };
+  }
+
+  // This requires a POST. Because of the libraries we're using, the POST body
+  // must be in the following format:
+  //
+  // {"key_values":
+  //   { "key1": "base64_encoded_value1"},
+  //   ...
+  //   { "keyN": "base64_encoded_valueN"},
+  // }
+  //
+  // Note that all keys are quoted strings and that all values are base64-
+  // encoded.
+  //
+  // Together, SetUIData and GetUIData provide access to a "cookie jar" for the
+  // admin UI. The structure of the underlying data is meant to be opaque to the
+  // server.
+  rpc SetUIData(SetUIDataRequest) returns (SetUIDataResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/uidata"
+      body: "*"
+    };
+  }
+
+  // Example URLs:
+  // - /_admin/v1/uidata?keys=MYKEY
+  // - /_admin/v1/uidata?keys=MYKEY1&keys=MYKEY2
+  //
+  // Yes, it's a little odd that the query parameter is named "keys" instead of
+  // "key". I would've preferred that the URL parameter be named "key". However,
+  // it's clearer for the protobuf field to be named "keys," which makes the URL
+  // parameter "keys" as well.
+  rpc GetUIData(GetUIDataRequest) returns (GetUIDataResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/uidata"
+    };
+  }
+
+  // Cluster returns metadata for the cluster.
+  rpc Cluster(ClusterRequest) returns (ClusterResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/cluster"
+    };
+  }
+
+  // Settings returns the cluster-wide settings for the cluster.
+  rpc Settings(SettingsRequest) returns (SettingsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/settings"
+    };
+  }
+
+  // Health returns liveness for the node target of the request.
+  rpc Health(HealthRequest) returns (HealthResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/health"
+    };
+  }
+
+  // Liveness returns the liveness state of all nodes on the cluster.
+  rpc Liveness(LivenessRequest) returns (LivenessResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/liveness"
+    };
+  }
+
+  // Drain puts the node into the specified drain mode(s) and optionally
+  // instructs the process to terminate.
+  rpc Drain(DrainRequest) returns (stream DrainResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/drain"
+      body: "*"
+    };
+  }
+}

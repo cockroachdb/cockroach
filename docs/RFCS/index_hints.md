@@ -2,8 +2,8 @@
 - Status: completed
 - Start Date: 2014-03-31
 - Authors: Radu
-- RFC PR: #5762
-- Cockroach Issue: #5625
+- RFC PR: [#5762](https://github.com/cockroachdb/cockroach/pull/5762)
+- Cockroach Issue: [#5625](https://github.com/cockroachdb/cockroach/issues/5625)
 
 # Summary
 

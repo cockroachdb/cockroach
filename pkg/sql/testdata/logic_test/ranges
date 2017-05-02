@@ -1,0 +1,237 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE t (k1 INT, k2 INT, v INT, w INT, PRIMARY KEY (k1, k2))
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE t
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       NULL     {1}       1
+
+statement ok
+ALTER TABLE t SPLIT AT VALUES (1), (10)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE t
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /1       {1}       1
+/1         /10      {1}       1
+/10        NULL     {1}       1
+
+statement ok
+ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[4], 1, 12)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE t
+----
+Start Key  End Key   Replicas  Lease Holder
+NULL       /1        {1}       1
+/1         /10       {4}       4
+/10        NULL      {1}       1
+
+statement ok
+ALTER TABLE t SPLIT AT VALUES (5,1), (5,2), (5,3)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE t
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /1       {1}       1
+/1         /5/1     {4}       4
+/5/1       /5/2     {4}       4
+/5/2       /5/3     {4}       4
+/5/3       /10      {4}       4
+/10        NULL     {1}       1
+
+statement ok
+ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[1,2,3], 5, 1), (ARRAY[5,2,3], 5, 2), (ARRAY[4,1,2], 5, 3)
+
+statement ok
+ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[3,4], 4)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE t
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /1       {1}       1
+/1         /5/1     {3,4}     3
+/5/1       /5/2     {1,2,3}   1
+/5/2       /5/3     {2,3,5}   5
+/5/3       /10      {1,2,4}   4
+/10        NULL     {1}       1
+
+statement ok
+CREATE INDEX idx ON t(v, w)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM INDEX t@idx
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       NULL     {1}       1
+
+statement ok
+ALTER INDEX t@idx SPLIT AT VALUES (100,1), (100,50)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM INDEX t@idx
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /100/1   {1}       1
+/100/1     /100/50  {1}       1
+/100/50    NULL     {1}       1
+
+statement ok
+ALTER INDEX t@idx SPLIT AT VALUES (8), (9)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM INDEX t@idx
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /8       {1}       1
+/8         /9       {1}       1
+/9         /100/1   {1}       1
+/100/1     /100/50  {1}       1
+/100/50    NULL     {1}       1
+
+statement ok
+ALTER INDEX t@idx TESTING_RELOCATE VALUES (ARRAY[5], 100, 10), (ARRAY[3], 100, 11)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM INDEX t@idx
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /8       {1}       1
+/8         /9       {1}       1
+/9         /100/1   {1}       1
+/100/1     /100/50  {3}       3
+/100/50    NULL     {1}       1
+
+# Verify limits and orderings are propagated correctly to the select.
+query ITTTTT colnames
+EXPLAIN (METADATA) ALTER TABLE t SPLIT AT SELECT k1,k2 FROM t ORDER BY k1 LIMIT 3
+----
+Level  Type    Field  Description  Columns                           Ordering
+0      split                       (key, pretty)
+1      limit                       (k1, k2)                          +k1
+2      render                      (k1, k2)                          +k1
+3      scan                        (k1, k2, v[omitted], w[omitted])  +k1
+3              table  t@primary
+3              spans  ALL
+3              limit  3
+
+# -- Tests with interleaved tables --
+
+statement ok
+CREATE TABLE t0 (
+  k1 INT, k2 INT, k3 INT, v INT, PRIMARY KEY (k1, k2, k3)
+) INTERLEAVE IN PARENT t(k1, k2)
+
+# We expect the splits for t0 to be the same as the splits for t.
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE t0
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /1       {1}       1
+/1         /5/1     {3,4}     3
+/5/1       /5/2     {1,2,3}   1
+/5/2       /5/3     {2,3,5}   5
+/5/3       /10      {1,2,4}   4
+/10        NULL     {1}       1
+
+statement ok
+ALTER TABLE t0 SPLIT AT VALUES (7, 8, 9)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE t0
+----
+Start Key      End Key        Replicas  Lease Holder
+NULL           /1             {1}       1
+/1             /5/1           {3,4}     3
+/5/1           /5/2           {1,2,3}   1
+/5/2           /5/3           {2,3,5}   5
+/5/3           /7/8/#/52/1/9  {1,2,4}   4
+/7/8/#/52/1/9  /10            {1,2,4}   4
+/10            NULL           {1}       1
+
+statement ok
+ALTER TABLE t0 SPLIT AT VALUES (11)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE t0
+----
+Start Key      End Key        Replicas  Lease Holder
+NULL           /1             {1}       1
+/1             /5/1           {3,4}     3
+/5/1           /5/2           {1,2,3}   1
+/5/2           /5/3           {2,3,5}   5
+/5/3           /7/8/#/52/1/9  {1,2,4}   4
+/7/8/#/52/1/9  /10            {1,2,4}   4
+/10            /11            {1}       1
+/11            NULL           {1}       1
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE t
+----
+Start Key      End Key        Replicas  Lease Holder
+NULL           /1             {1}       1
+/1             /5/1           {3,4}     3
+/5/1           /5/2           {1,2,3}   1
+/5/2           /5/3           {2,3,5}   5
+/5/3           /7/8/#/52/1/9  {1,2,4}   4
+/7/8/#/52/1/9  /10            {1,2,4}   4
+/10            /11            {1}       1
+/11            NULL           {1}       1
+
+statement ok
+CREATE TABLE t1 (k INT PRIMARY KEY, v1 INT, v2 INT, v3 INT)
+
+statement ok
+CREATE INDEX idx on t1(v1,v2,v3) INTERLEAVE IN PARENT t(v1,v2)
+
+# We expect the splits for the index to be the same as the splits for t.
+query TTTI colnames
+SHOW TESTING_RANGES FROM INDEX t1@idx
+----
+Start Key      End Key        Replicas  Lease Holder
+NULL           /1             {1}       1
+/1             /5/1           {3,4}     3
+/5/1           /5/2           {1,2,3}   1
+/5/2           /5/3           {2,3,5}   5
+/5/3           /7/8/#/52/1/9  {1,2,4}   4
+/7/8/#/52/1/9  /10            {1,2,4}   4
+/10            /11            {1}       1
+/11            NULL           {1}       1
+
+statement ok
+ALTER INDEX t1@idx SPLIT AT VALUES (15,16)
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM INDEX t1@idx
+----
+Start Key      End Key        Replicas  Lease Holder
+NULL           /1             {1}       1
+/1             /5/1           {3,4}     3
+/5/1           /5/2           {1,2,3}   1
+/5/2           /5/3           {2,3,5}   5
+/5/3           /7/8/#/52/1/9  {1,2,4}   4
+/7/8/#/52/1/9  /10            {1,2,4}   4
+/10            /11            {1}       1
+/11            /15/16/#/53/2  {1}       1
+/15/16/#/53/2  NULL           {1}       1
+
+statement error too many columns in SPLIT AT data
+ALTER TABLE t SPLIT AT VALUES (1, 2, 3)
+
+statement error SPLIT AT data column 1 \(k1\) must be of type int, not type string
+ALTER TABLE t SPLIT AT VALUES ('foo')
+
+statement error too many columns in TESTING_RELOCATE data
+ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[1], 1, 2, 3)
+
+statement error TESTING_RELOCATE data column 2 \(k1\) must be of type int, not type string
+ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[4], 'foo')
+
+statement error TESTING_RELOCATE data column 1 \(relocation array\) must be of type int\[\], not type string
+ALTER TABLE t TESTING_RELOCATE VALUES ('foo', 1)

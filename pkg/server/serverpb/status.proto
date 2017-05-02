@@ -1,0 +1,316 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Tristan Rice (wiz@cockroachlabs.com)
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "serverpb";
+
+import "cockroach/pkg/build/info.proto";
+import "cockroach/pkg/gossip/gossip.proto";
+import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/server/status/status.proto";
+import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/storage/storagebase/state.proto";
+import "cockroach/pkg/util/log/log.proto";
+import "cockroach/pkg/util/unresolved_addr.proto";
+
+import "etcd/raft/raftpb/raft.proto";
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+
+// DetailsRequest requests a nodes details.
+message DetailsRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+message DetailsResponse {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
+  build.Info build_info = 3 [(gogoproto.nullable) = false];
+}
+
+message NodesRequest {
+}
+
+message NodesResponse {
+  repeated status.NodeStatus nodes = 1 [(gogoproto.nullable) = false];
+}
+
+message NodeRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+// RaftState gives internal details about a Raft group's state.
+// Closely mirrors the upstream definitions in github.com/coreos/etcd/raft.
+message RaftState {
+  message Progress {
+    uint64 match = 1;
+    uint64 next = 2;
+    string state = 3;
+    bool paused = 4;
+    uint64 pending_snapshot = 5;
+  }
+
+  uint64 replica_id = 1 [(gogoproto.customname) = "ReplicaID"];
+  raftpb.HardState hard_state  = 2 [(gogoproto.nullable) = false];
+  // Lead is part of Raft's SoftState.
+  uint64 lead = 3;
+  // State is part of Raft's SoftState.
+  // It's not an enum because this is primarily for ui consumption and there
+  // are issues associated with them.
+  string state = 4;
+  uint64 applied = 5;
+  map<uint64, Progress> progress = 6 [(gogoproto.nullable) = false];
+}
+
+message RangeProblems {
+    bool unavailable = 1;
+    bool leader_not_lease_holder = 2;
+}
+
+message RangeInfo {
+  PrettySpan span = 1 [(gogoproto.nullable) = false];
+  RaftState raft_state = 2 [(gogoproto.nullable) = false];
+  storage.storagebase.RangeInfo state = 4 [(gogoproto.nullable) = false];
+  int32 source_node_id = 5 [
+    (gogoproto.customname) = "SourceNodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  int32 source_store_id = 6 [
+     (gogoproto.customname) = "SourceStoreID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+  ];
+  string error_message = 7;
+  repeated roachpb.Lease lease_history = 8 [(gogoproto.nullable) = false];
+  RangeProblems problems = 9 [(gogoproto.nullable) = false];
+}
+
+message RangesRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  repeated int64 range_ids = 2 [(gogoproto.customname) = "RangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+}
+
+message RangesResponse {
+  repeated RangeInfo ranges = 1 [(gogoproto.nullable) = false];
+}
+
+message GossipRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+message JSONResponse {
+  bytes data = 1;
+}
+
+message LogsRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  string level = 2;
+  string start_time = 3;
+  string end_time = 4;
+  string max = 5;
+  string pattern = 6;
+}
+
+message LogEntriesResponse {
+  repeated cockroach.util.log.Entry entries = 1 [(gogoproto.nullable) = false];
+}
+
+message LogFilesListRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+message LogFilesListResponse {
+  repeated cockroach.util.log.FileInfo files = 1 [(gogoproto.nullable) = false];
+}
+
+message LogFileRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  string file = 2;
+}
+
+message StacksRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+message MetricsRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+message RaftRangeNode {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  RangeInfo range = 2 [(gogoproto.nullable) = false];
+}
+
+message RaftRangeError {
+  string message = 1;
+}
+
+message RaftRangeStatus {
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
+  repeated RaftRangeNode nodes = 3 [(gogoproto.nullable) = false];
+}
+
+message RaftDebugRequest {
+  repeated int64 range_ids = 1 [(gogoproto.customname) = "RangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+}
+
+message RaftDebugResponse {
+  map<int64, RaftRangeStatus> ranges = 1 [(gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
+}
+
+message SpanStatsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+}
+
+message SpanStatsResponse {
+  int32 range_count = 2;
+  cockroach.storage.engine.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
+}
+
+service Status {
+  rpc Details(DetailsRequest) returns (DetailsResponse) {
+    option (google.api.http) = {
+      get: "/_status/details/{node_id}"
+      additional_bindings {
+        get: "/health"
+      }
+    };
+  }
+  rpc Nodes(NodesRequest) returns (NodesResponse) {
+    option (google.api.http) = {
+      get: "/_status/nodes"
+    };
+  }
+  rpc Node(NodeRequest) returns (status.NodeStatus) {
+    option (google.api.http) = {
+      get: "/_status/nodes/{node_id}"
+    };
+  }
+  rpc RaftDebug(RaftDebugRequest) returns (RaftDebugResponse) {
+    option (google.api.http) = {
+      get: "/_status/raft"
+    };
+  }
+  rpc Ranges(RangesRequest) returns (RangesResponse) {
+    option (google.api.http) = {
+      get: "/_status/ranges/{node_id}"
+    };
+  }
+  rpc Gossip(GossipRequest) returns (gossip.InfoStatus) {
+    option (google.api.http) = {
+      get: "/_status/gossip/{node_id}"
+    };
+  }
+
+  // SpanStats accepts a key span and node ID, and returns a set of stats
+  // summed from all ranges on the stores on that node which contain keys
+  // in that span. This is designed to compute stats specific to a SQL table:
+  // it will be called with the highest/lowest key for a SQL table, and return
+  // information about the resources on a node used by that table.
+  rpc SpanStats(SpanStatsRequest) returns (SpanStatsResponse) {
+    option (google.api.http) = {
+      post: "/_status/span"
+      body: "*"
+    };
+  }
+  rpc Stacks(StacksRequest) returns (JSONResponse) {
+    option (google.api.http) = {
+      get: "/_status/stacks/{node_id}"
+    };
+  }
+  rpc Metrics(MetricsRequest) returns (JSONResponse) {
+    option (google.api.http) = {
+      get: "/_status/metrics/{node_id}"
+    };
+  }
+  rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {
+    option (google.api.http) = {
+      get: "/_status/logfiles/{node_id}"
+    };
+  }
+  rpc LogFile(LogFileRequest) returns (LogEntriesResponse) {
+    option (google.api.http) = {
+      get: "/_status/logfiles/{node_id}/{file}"
+    };
+  }
+  rpc Logs(LogsRequest) returns (LogEntriesResponse) {
+    option (google.api.http) = {
+      get: "/_status/logs/{node_id}"
+    };
+  }
+}
+
+// PrettySpan holds a pretty-printed key range.
+message PrettySpan {
+  string start_key = 1;
+  string end_key = 2;
+}

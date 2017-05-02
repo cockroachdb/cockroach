@@ -1,0 +1,289 @@
+# LogicTest: default parallel-stmts distsql
+
+# Grandparent table
+statement ok
+CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
+
+# Two tables interleaved at the same level
+statement ok
+CREATE TABLE p1_0 (
+  i INT,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL,
+  PRIMARY KEY (i, s1),
+  FAMILY (i, s1, s2),
+  FAMILY (d)
+) INTERLEAVE IN PARENT p2 (i)
+
+statement ok
+CREATE TABLE p1_1 (
+  i INT PRIMARY KEY,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL
+) INTERLEAVE IN PARENT p2 (i)
+
+# Two level deep interleave
+statement ok
+CREATE TABLE p0 (
+  i INT,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL,
+  PRIMARY KEY (i, s1, s2)
+) INTERLEAVE IN PARENT p1_0 (i, s1)
+
+statement ok
+INSERT INTO p2 VALUES (2, '2'), (3, '3'), (5, '5'), (7, '7')
+
+statement ok
+INSERT INTO p1_0 VALUES (2, '2', '2.01', 2), (3, '3', '3.01', 3), (5, '5', NULL, NULL)
+
+statement ok
+INSERT INTO p1_1 VALUES (2, '2', '2.11', 2), (3, '3', '3.11', 3)
+
+statement ok
+INSERT INTO p0 VALUES (2, '2', '2.0', 2), (3, '3', '3.0', 3), (5, '5', '5.0', 5)
+
+query IT rowsort
+SELECT * FROM p2
+----
+2  2
+3  3
+5  5
+7  7
+
+query ITTT rowsort
+EXPLAIN (DEBUG) SELECT * FROM p1_0
+----
+0  /p1_0/primary/2/'2'/s2  /'2.01'  PARTIAL
+0  /p1_0/primary/2/'2'/d   2        ROW
+1  /p1_0/primary/3/'3'/s2  /'3.01'  PARTIAL
+1  /p1_0/primary/3/'3'/d   3        ROW
+2  /p1_0/primary/5/'5'     NULL     ROW
+
+query ITTT rowsort
+SELECT * FROM p1_0
+----
+2  2  2.01  2
+3  3  3.01  3
+5  5  NULL  NULL
+
+query ITTT rowsort
+SELECT * FROM p1_1
+----
+2  2  2.11  2
+3  3  3.11  3
+
+query ITTT rowsort
+SELECT * FROM p0
+----
+2  2  2.0  2
+3  3  3.0  3
+5  5  5.0  5
+
+statement ok
+CREATE INDEX p0i ON p0 (i) INTERLEAVE IN PARENT p1_1 (i)
+
+statement ok
+CREATE INDEX p1_id ON p1_1 (i, d) INTERLEAVE IN PARENT p1_1 (i)
+
+query ITTT rowsort
+SELECT * FROM p0@p0i WHERE i BETWEEN 2 AND 4
+----
+2  2  2.0  2
+3  3  3.0  3
+
+query ITTT rowsort
+SELECT * FROM p1_1@p1_id WHERE d BETWEEN 1.5 AND 4.0
+----
+2  2  2.11  2
+3  3  3.11  3
+
+statement ok
+DELETE FROM p1_0 WHERE i = 3
+
+statement ok
+INSERT INTO p1_0 (i, s1) VALUES (5, '5') ON CONFLICT (i, s1) DO UPDATE SET i = 7, s2 = '7.01', d = 7.0
+
+statement ok
+DELETE FROM p2 WHERE i = 2 OR i = 7
+
+query IT rowsort
+SELECT * FROM p2
+----
+3  3
+5  5
+
+# Check that we're skipping first/last row of a block of interleaved data correctly
+query ITTT rowsort
+SELECT * FROM p0
+----
+2  2  2.0  2
+3  3  3.0  3
+5  5  5.0  5
+
+# Check that fast delete is disabled when run on a table with child interleaves
+statement ok
+DELETE FROM p2
+
+query IT rowsort
+SELECT * FROM p2
+----
+
+query ITTT rowsort
+SELECT * FROM p1_0
+----
+2  2  2.01  2
+7  5  7.01  7.0
+
+query ITTT rowsort
+SELECT * FROM p0
+----
+2  2  2.0  2
+3  3  3.0  3
+5  5  5.0  5
+
+statement ok
+DROP INDEX p0@p0i
+
+query ITTT rowsort
+SELECT * FROM p0
+----
+2  2  2.0  2
+3  3  3.0  3
+5  5  5.0  5
+
+statement ok
+DROP TABLE p0
+
+query ITTT rowsort
+SELECT * FROM p1_0
+----
+2  2  2.01  2
+7  5  7.01  7.0
+
+statement ok
+TRUNCATE TABLE p2
+
+statement error unimplemented
+DROP TABLE p2
+
+statement ok
+CREATE INDEX p1_s2 ON p1_1 (s2)
+
+query ITTT rowsort
+SELECT * FROM p1_0
+----
+2  2  2.01  2
+7  5  7.01  7.0
+
+statement ok
+DROP TABLE p2 CASCADE
+
+statement error table "p0" does not exist
+SELECT * FROM p0
+
+# Validation and descriptor bookkeeping
+
+# TODO(dan): Interleave these two indexes once we support the syntax.
+statement ok
+CREATE TABLE all_interleaves (
+  b INT PRIMARY KEY,
+  c INT,
+  d INT,
+  INDEX (c),
+  UNIQUE INDEX (d)
+) INTERLEAVE IN PARENT p1_1 (b)
+
+statement ok
+CREATE INDEX ON all_interleaves (c, d) INTERLEAVE IN PARENT p1_1 (c)
+
+statement ok
+CREATE UNIQUE INDEX ON all_interleaves (d, c) INTERLEAVE IN PARENT p1_1 (d)
+
+query TT
+SHOW CREATE TABLE all_interleaves
+----
+all_interleaves   CREATE TABLE all_interleaves (
+                    b INT NOT NULL,
+                    c INT NULL,
+                    d INT NULL,
+                    CONSTRAINT "primary" PRIMARY KEY (b ASC),
+                    INDEX all_interleaves_c_idx (c ASC),
+                    UNIQUE INDEX all_interleaves_d_key (d ASC),
+                    INDEX all_interleaves_c_d_idx (c ASC, d ASC) INTERLEAVE IN PARENT p1_1 (c),
+                    UNIQUE INDEX all_interleaves_d_c_key (d ASC, c ASC) INTERLEAVE IN PARENT p1_1 (d),
+                    FAMILY "primary" (b, c, d)
+                  ) INTERLEAVE IN PARENT p1_1 (b)
+
+statement error table "missing" does not exist
+CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT missing (f)
+
+statement error interleaved columns must match parent
+CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (f)
+
+statement error interleaved columns must match parent
+CREATE INDEX ON p1_0 (i DESC) INTERLEAVE IN PARENT p1_1 (i)
+
+statement error interleaved columns must match parent
+CREATE INDEX ON p1_0 (d) INTERLEAVE IN PARENT p1_1 (d)
+
+statement error declared columns must match index being interleaved
+CREATE TABLE err (i INT, j INT, PRIMARY KEY (i, j)) INTERLEAVE IN PARENT p1_1 (j)
+
+statement error unimplemented
+CREATE TABLE err (i INT PRIMARY KEY, INDEX (i) INTERLEAVE IN PARENT p1_1 (i))
+
+statement error unimplemented
+CREATE TABLE err (i INT PRIMARY KEY, UNIQUE INDEX (i) INTERLEAVE IN PARENT p1_1 (i))
+
+statement error unimplemented: unsupported shorthand CASCADE
+CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (i) CASCADE
+
+statement error unimplemented: unsupported shorthand RESTRICT
+CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (i) RESTRICT
+
+# Regression test for #13451
+
+statement ok
+CREATE TABLE customers (
+  id INT PRIMARY KEY,
+  name STRING (50)
+)
+
+statement ok
+CREATE TABLE orders (
+  customer INT,
+  id INT,
+  total DECIMAL (20, 5),
+  PRIMARY KEY (customer, id),
+  CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers
+) INTERLEAVE IN PARENT customers (customer)
+
+statement ok
+INSERT INTO customers
+  (id, name) VALUES
+  (1, 'Ha-Yun'),
+  (2, 'Emanuela')
+
+statement ok
+INSERT INTO orders
+  (customer, id, total) VALUES
+  (1, 1000, 100.00),
+  (2, 1001, 90.00),
+  (1, 1002, 80.00),
+  (2, 1003, 70.00)
+
+query IIR
+SELECT * FROM orders WHERE customer = 1 AND id = 1000
+----
+1 1000 100.00000
+
+query ITTT
+EXPLAIN SELECT * FROM orders WHERE customer = 1 AND id = 1000
+----
+0  scan
+0        table  orders@primary
+0        spans  /1/#/57/1/1000-/1/#/57/1/1001

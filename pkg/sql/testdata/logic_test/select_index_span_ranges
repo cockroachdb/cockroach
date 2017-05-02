@@ -1,0 +1,76 @@
+# LogicTest: default parallel-stmts distsql
+
+# This test verifies that we correctly perform an index join when the KV
+# batches span ranges. This is testing that SQL disables batch limits for index
+# join; otherwise it can get out of order results from KV that it can't handle.
+
+kv-batch-size 10
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d),
+  INDEX c (c)
+)
+
+statement ok
+INSERT INTO t VALUES
+(1, 0, 99, 0),
+(2, 0, 80, 0),
+(3, 0, 90, 0),
+(4, 0, 10, 0),
+(5, 0, 20, 0),
+(6, 0, 85, 0),
+(7, 0, 91, 0),
+(8, 0, 12, 0),
+(9, 0, 91, 0),
+(10, 0, 11, 0),
+(11, 0, 12, 0),
+(12, 0, 88, 0),
+(13, 0, 13, 0)
+
+# Split the table across multiple ranges.
+statement ok
+ALTER TABLE t SPLIT AT VALUES (2)
+
+statement ok
+ALTER TABLE t SPLIT AT VALUES (3)
+
+statement ok
+ALTER TABLE t SPLIT AT VALUES (5)
+
+statement ok
+ALTER TABLE t SPLIT AT VALUES (8)
+
+statement ok
+ALTER INDEX t@c SPLIT AT VALUES (90)
+
+statement ok
+ALTER INDEX c SPLIT AT VALUES (10)
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE (c >= 80) ORDER BY c
+----
+0  index-join
+1  scan
+1              table  t@c
+1              spans  /80-
+1  scan
+1              table  t@primary
+
+query IIII partialsort(3)
+SELECT * FROM t WHERE (c >= 80) ORDER BY c
+----
+2   0  80  0
+6   0  85  0
+12  0  88  0
+3   0  90  0
+7   0  91  0
+9   0  91  0
+1   0  99  0

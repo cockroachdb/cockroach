@@ -1,0 +1,466 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE t (
+  a INT,
+  b CHAR,
+  c INT,
+  d CHAR,
+  PRIMARY KEY (a, b),
+  INDEX bc (b, c),
+  INDEX dc (d, c),
+  INDEX a_desc (a DESC),
+  FAMILY (a, b),
+  FAMILY (c),
+  FAMILY (d)
+)
+
+statement ok
+INSERT INTO t VALUES
+  (1, 'one', 11, 'foo'),
+  (2, 'two', 22, 'bar'),
+  (3, 'three', 33, 'blah')
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 2
+----
+0 /t/primary/2/'two'   NULL  PARTIAL
+0 /t/primary/2/'two'/c 22    PARTIAL
+0 /t/primary/2/'two'/d 'bar' ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a IN (1, 3)
+----
+0 /t/primary/1/'one'     NULL   PARTIAL
+0 /t/primary/1/'one'/c   11     PARTIAL
+0 /t/primary/1/'one'/d   'foo'  ROW
+1 /t/primary/3/'three'   NULL   PARTIAL
+1 /t/primary/3/'three'/c 33     PARTIAL
+1 /t/primary/3/'three'/d 'blah' ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE d = 'foo' OR d = 'bar'
+----
+0 /t/dc/'bar'/22/2/'two' NULL ROW
+1 /t/dc/'foo'/11/1/'one' NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22))
+----
+0 /t/dc/'bar'/22/2/'two' NULL ROW
+1 /t/dc/'foo'/11/1/'one' NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE (d, c) = ('foo', 11)
+----
+0 /t/dc/'foo'/11/1/'one' NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a < 2
+----
+0 /t/primary/1/'one'   NULL  PARTIAL
+0 /t/primary/1/'one'/c 11    PARTIAL
+0 /t/primary/1/'one'/d 'foo' ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a <= (1 + 1)
+----
+0 /t/primary/1/'one'   NULL  PARTIAL
+0 /t/primary/1/'one'/c 11    PARTIAL
+0 /t/primary/1/'one'/d 'foo' ROW
+1 /t/primary/2/'two'   NULL  PARTIAL
+1 /t/primary/2/'two'/c 22    PARTIAL
+1 /t/primary/2/'two'/d 'bar' ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT a, b FROM t WHERE b > 't'
+----
+0 /t/bc/'three'/33/3 NULL ROW
+1 /t/bc/'two'/22/2   NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE d < ('b' || 'l')
+----
+0 /t/dc/'bar'/22/2/'two' NULL ROW
+
+# The where-clause does not contain columns matching a prefix of any
+# index. Note that the index "dc" was chosen because it contains fewer
+# keys per row than the primary key index while still containing all
+# of the needed columns.
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE c = 22
+----
+0 /t/dc/'bar'/22/2/'two'    NULL ROW
+1 /t/dc/'blah'/33/3/'three' NULL FILTERED
+2 /t/dc/'foo'/11/1/'one'    NULL FILTERED
+
+# Use the descending index
+query ITTT
+EXPLAIN (DEBUG) SELECT a FROM t ORDER BY a DESC
+----
+0  /t/a_desc/3/'three'  NULL  ROW
+1  /t/a_desc/2/'two'    NULL  ROW
+2  /t/a_desc/1/'one'    NULL  ROW
+
+# Use the descending index with multiple spans.
+query ITTT
+EXPLAIN (DEBUG) SELECT a FROM t WHERE a in (2, 3) ORDER BY a DESC
+----
+0  /t/a_desc/3/'three'  NULL  ROW
+1  /t/a_desc/2/'two'    NULL  ROW
+
+# Index selection occurs in direct join operands too.
+query ITTT
+EXPLAIN SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
+----
+0  render
+1  join
+1              type      inner
+1              equality  (b) = (b)
+2  index-join
+3  scan
+3              table     t@bc
+3              spans     /#-/"3"
+3  scan
+3              table     t@primary
+2  scan
+2              table     t@primary
+2              spans     ALL
+
+statement ok
+TRUNCATE TABLE t
+
+statement ok
+INSERT INTO t VALUES
+  (1, 'a', NULL, NULL),
+  (1, 'b', NULL, NULL),
+  (1, 'c', NULL, NULL)
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND b > 'b'
+----
+0 /t/primary/1/'c' NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 0 AND b > 'b'
+----
+0 /t/primary/1/'c' NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 1 AND b > 'b'
+----
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
+----
+0 render
+1 empty
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b
+----
+0 /t/primary/1/'b' NULL ROW
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  INDEX ab (a, b)
+)
+
+statement ok
+INSERT INTO t VALUES (1, 2), (3, 4), (5, 6)
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a >= 3 AND a < 5
+----
+0 /t/ab/3/4 NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a BETWEEN 3 AND 4
+----
+0 /t/ab/3/4 NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a BETWEEN 3 AND 5
+----
+0 /t/ab/3/4 NULL ROW
+1 /t/ab/5/6 NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 2 OR a < 4
+----
+0 /t/ab/1/2 NULL ROW
+1 /t/ab/3/4 NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 3 OR a <= 3
+----
+0 /t/ab/1/2 NULL ROW
+1 /t/ab/3/4 NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a <= 3 OR a < 3
+----
+0 /t/ab/1/2 NULL ROW
+1 /t/ab/3/4 NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a > 3 OR a >= 3
+----
+0 /t/ab/3/4 NULL ROW
+1 /t/ab/5/6 NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a >= 3 OR a > 3
+----
+0 /t/ab/3/4 NULL ROW
+1 /t/ab/5/6 NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a = 3 OR a = 5
+----
+0 /t/ab/3/4 NULL ROW
+1 /t/ab/5/6 NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 3 OR a > 3
+----
+0 /t/ab/1/2 NULL ROW
+1 /t/ab/3/4 NULL FILTERED
+2 /t/ab/5/6 NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a + 1 = 4
+----
+0 /t/ab/3/4 NULL ROW
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE a = 1 AND false
+----
+0 render
+1 empty
+
+# Make sure that mixed type comparison operations are not used
+# for selecting indexes.
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX b_desc (b DESC),
+  INDEX bc (b, c)
+)
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3), (3, 4, 5), (5, 6, 7)
+
+query I rowsort
+SELECT a FROM t WHERE a < 4.0
+----
+1
+3
+
+query I
+SELECT b FROM t WHERE c > 4.0 AND a < 4
+----
+4
+
+query ITTT
+EXPLAIN SELECT a FROM t WHERE c > 1
+----
+0  render
+1  scan
+1        table  t@bc
+1        spans  ALL
+
+query ITTT
+EXPLAIN SELECT a FROM t WHERE c < 1 AND b < 5
+----
+0  render
+1  scan
+1        table  t@bc
+1        spans  /#-/4/1
+
+query ITTT
+EXPLAIN SELECT a FROM t WHERE c > 1.0
+----
+0  render
+1  scan
+1        table  t@bc
+1        spans  ALL
+
+query ITTT
+EXPLAIN SELECT a FROM t WHERE c < 1.0
+----
+0  render
+1  scan
+1        table  t@bc
+1        spans  ALL
+
+query ITTT
+EXPLAIN SELECT a FROM t WHERE c > 1.0 AND b < 5
+----
+0  render
+1  scan
+1        table  t@bc
+1        spans  /#-/5
+
+query ITTT
+EXPLAIN SELECT a FROM t WHERE b < 5.0 AND c < 1
+----
+0  render
+1  scan
+1        table  t@bc
+1        spans  /#-/4/1
+
+query ITTT
+EXPLAIN SELECT a FROM t WHERE (b, c) = (5, 1)
+----
+0  render
+1  scan
+1        table  t@bc
+1        spans  /5/1-/5/2
+
+query ITTT
+EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
+----
+0  render
+1  scan
+1        table  t@bc
+1        spans  /5/1-/5/2
+
+query ITTT
+EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
+----
+0  render
+1  scan
+1          table  t@bc
+1          spans  ALL
+
+query ITTT
+EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
+----
+0  render
+1  scan
+1        table  t@b_desc
+1        spans  /-6-/-5 /-2-/-1
+
+statement ok
+CREATE TABLE abcd (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  INDEX adb (a, d, b),
+  INDEX abcd (a, b, c, d)
+)
+
+# Verify that we prefer the index where more columns are constrained, even if it
+# has more keys per row.
+query ITTT
+EXPLAIN SELECT b FROM abcd WHERE (a, b) = (1, 4)
+----
+0  render
+1  scan
+1        table  abcd@abcd
+1        spans  /1/4-/1/5
+
+query ITTT
+EXPLAIN SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
+----
+0  render
+1  scan
+1        table  abcd@abcd
+1        spans  /1/4-/1/5 /2/9-/2/10
+
+statement ok
+CREATE TABLE ab (
+  s STRING,
+  i INT
+); INSERT INTO ab VALUES ('a', 1), ('b', 1), ('c', 1)
+
+query IT rowsort
+SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
+----
+1 a
+1 b
+
+statement ok
+CREATE INDEX baz ON ab (i, s)
+
+query IT rowsort
+SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
+----
+1 a
+1 b
+
+query ITTT
+EXPLAIN SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
+----
+0  render
+1  scan
+1        table  ab@baz
+1        spans  /#-/1/"c"
+
+# Check that primary key definitions can indicate index ordering,
+# and this information is subsequently used during index selection
+# and span generation. #13882
+query TTBITTBB
+CREATE TABLE abz(a INT, b INT, c INT, PRIMARY KEY (a DESC, b ASC), UNIQUE(c DESC, b ASC)); SHOW INDEX FROM abz
+----
+abz    primary      true      1  a       DESC       false    false
+abz    primary      true      2  b       ASC        false    false
+abz    abz_c_b_key  true      1  c       DESC       false    false
+abz    abz_c_b_key  true      2  b       ASC        false    false
+abz    abz_c_b_key  true      3  a       ASC        false    true
+
+query ITTT
+EXPLAIN SELECT a FROM abz ORDER BY a DESC LIMIT 1
+----
+0  limit
+1  render
+2  scan
+2          table  abz@primary
+2          spans  ALL
+2          limit            1
+
+query ITTT
+EXPLAIN SELECT c FROM abz ORDER BY c DESC LIMIT 1
+----
+0  limit
+1  render
+2  scan
+2          table  abz@abz_c_b_key
+2          spans  ALL
+2          limit            1
+
+# Issue #14426: verify we don't have an internal filter that contains "a IN ()"
+# (which causes an error in DistSQL due to expression serialization).
+statement ok
+CREATE TABLE tab0(
+  k INT PRIMARY KEY,
+  a INT,
+  b INT
+)
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
+----
+0  render                                                  (k)
+0          render 0  test.tab0.k
+1  scan                                                    (k, a, b)
+1          table     tab0@primary
+1          spans     ALL
+1          filter    ((a IN (6)) AND (a > 6)) OR (b >= 4)
+
+query I
+SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
+----

@@ -1,0 +1,168 @@
+From d90e76a20648b8bf0aacad7adf6c0106349dc281 Mon Sep 17 00:00:00 2001
+From: Tamir Duberstein <tamird@gmail.com>
+Date: Thu, 6 Apr 2017 13:54:49 -0700
+Subject: [PATCH 7/8] CMake: more MinGW fixes
+
+Summary:
+siying this is a resubmission of #2081 with the 4th commit fixed. From that commit message:
+
+> Note that the previous use of quotes in PLATFORM_{CC,CXX}FLAGS was
+incorrect and caused GCC to produce the incorrect define:
+>
+>  #define ROCKSDB_JEMALLOC -DJEMALLOC_NO_DEMANGLE 1
+>
+> This was the cause of the Linux build failure on the previous version
+of this change.
+
+I've tested this locally, and the Linux build succeeds now.
+Closes https://github.com/facebook/rocksdb/pull/2097
+
+Differential Revision: D4839964
+
+Pulled By: siying
+
+fbshipit-source-id: cc51322
+---
+ CMakeLists.txt                   | 13 ++++++-------
+ Makefile                         |  7 ++++---
+ cmake/modules/FindJeMalloc.cmake | 23 +++++++++++------------
+ cmake/modules/Findsnappy.cmake   |  2 --
+ db/db_impl.cc                    |  2 +-
+ examples/Makefile                |  2 +-
+ 6 files changed, 23 insertions(+), 26 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d2f04faf..cbc1bd2e 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -41,20 +41,19 @@ endif()
+ 
+ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
+ 
+-if(WIN32)
++if(MSVC)
+   include(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty.inc)
+ else()
+   option(WITH_JEMALLOC "build with JeMalloc" OFF)
++  if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
++    # FreeBSD has jemaloc as default malloc
++    set(WITH_JEMALLOC ON)
++  endif()
+   if(WITH_JEMALLOC)
+     find_package(JeMalloc REQUIRED)
+-    add_definitions(-DROCKSDB_JEMALLOC)
++    add_definitions(-DROCKSDB_JEMALLOC -DJEMALLOC_NO_DEMANGLE)
+     include_directories(${JEMALLOC_INCLUDE_DIR})
+   endif()
+-  if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+-    # FreeBSD has jemaloc as default malloc
+-    add_definitions(-DROCKSDB_JEMALLOC)
+-    set(WITH_JEMALLOC ON)
+-  endif()
+   option(WITH_SNAPPY "build with SNAPPY" OFF)
+   if(WITH_SNAPPY)
+     find_package(snappy REQUIRED)
+diff --git a/Makefile b/Makefile
+index 11220ffa..5a4c297f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -204,15 +204,16 @@ endif
+ 
+ ifndef DISABLE_JEMALLOC
+ 	ifdef JEMALLOC
+-		PLATFORM_CXXFLAGS += "-DROCKSDB_JEMALLOC"
+-		PLATFORM_CCFLAGS +=  "-DROCKSDB_JEMALLOC"
++		PLATFORM_CXXFLAGS += -DROCKSDB_JEMALLOC -DJEMALLOC_NO_DEMANGLE
++		PLATFORM_CCFLAGS  += -DROCKSDB_JEMALLOC -DJEMALLOC_NO_DEMANGLE
+ 	endif
+ 	EXEC_LDFLAGS := $(JEMALLOC_LIB) $(EXEC_LDFLAGS)
+ 	PLATFORM_CXXFLAGS += $(JEMALLOC_INCLUDE)
+ 	PLATFORM_CCFLAGS += $(JEMALLOC_INCLUDE)
+ endif
+ 
+-export GTEST_THROW_ON_FAILURE=1 GTEST_HAS_EXCEPTIONS=1
++export GTEST_THROW_ON_FAILURE=1
++export GTEST_HAS_EXCEPTIONS=1
+ GTEST_DIR = ./third-party/gtest-1.7.0/fused-src
+ PLATFORM_CCFLAGS += -isystem $(GTEST_DIR)
+ PLATFORM_CXXFLAGS += -isystem $(GTEST_DIR)
+diff --git a/cmake/modules/FindJeMalloc.cmake b/cmake/modules/FindJeMalloc.cmake
+index bb9cc18c..7911f77c 100644
+--- a/cmake/modules/FindJeMalloc.cmake
++++ b/cmake/modules/FindJeMalloc.cmake
+@@ -1,22 +1,21 @@
+ # - Find JeMalloc library
+ # Find the native JeMalloc includes and library
+-# This module defines
+-#  JEMALLOC_INCLUDE_DIRS, where to find jemalloc.h, Set when
+-#                        JEMALLOC_INCLUDE_DIR is found.
+-#  JEMALLOC_LIBRARIES, libraries to link against to use JeMalloc.
+-#  JEMALLOC_FOUND, If false, do not try to use JeMalloc.
+ #
++# JEMALLOC_INCLUDE_DIR - where to find jemalloc.h, etc.
++# JEMALLOC_LIBRARIES - List of libraries when using jemalloc.
++# JEMALLOC_FOUND - True if jemalloc found.
++
+ find_path(JEMALLOC_INCLUDE_DIR
+-  jemalloc/jemalloc.h)
++  NAMES jemalloc/jemalloc.h
++  HINTS ${JEMALLOC_ROOT_DIR}/include)
+ 
+ find_library(JEMALLOC_LIBRARIES
+-  jemalloc)
++  NAMES jemalloc
++  HINTS ${JEMALLOC_ROOT_DIR}/lib)
+ 
+ include(FindPackageHandleStandardArgs)
+-find_package_handle_standard_args(JeMalloc DEFAULT_MSG
+-    JEMALLOC_LIBRARIES JEMALLOC_INCLUDE_DIR)
++find_package_handle_standard_args(jemalloc DEFAULT_MSG JEMALLOC_LIBRARIES JEMALLOC_INCLUDE_DIR)
+ 
+-MARK_AS_ADVANCED(
+-  JEMALLOC_INCLUDE_DIR
++mark_as_advanced(
+   JEMALLOC_LIBRARIES
+-)
++  JEMALLOC_INCLUDE_DIR)
+diff --git a/cmake/modules/Findsnappy.cmake b/cmake/modules/Findsnappy.cmake
+index b298cd25..6ed5fda3 100644
+--- a/cmake/modules/Findsnappy.cmake
++++ b/cmake/modules/Findsnappy.cmake
+@@ -13,8 +13,6 @@ find_library(SNAPPY_LIBRARIES
+   NAMES snappy
+   HINTS ${SNAPPY_ROOT_DIR}/lib)
+ 
+-# handle the QUIETLY and REQUIRED arguments and set UUID_FOUND to TRUE if
+-# all listed variables are TRUE
+ include(FindPackageHandleStandardArgs)
+ find_package_handle_standard_args(snappy DEFAULT_MSG SNAPPY_LIBRARIES SNAPPY_INCLUDE_DIR)
+ 
+diff --git a/db/db_impl.cc b/db/db_impl.cc
+index 1aeac56d..3d980fb6 100644
+--- a/db/db_impl.cc
++++ b/db/db_impl.cc
+@@ -605,7 +605,7 @@ static void DumpMallocStats(std::string* stats) {
+   std::unique_ptr<char> buf{new char[kMallocStatusLen + 1]};
+   mstat.cur = buf.get();
+   mstat.end = buf.get() + kMallocStatusLen;
+-  malloc_stats_print(GetJemallocStatus, &mstat, "");
++  je_malloc_stats_print(GetJemallocStatus, &mstat, "");
+   stats->append(buf.get());
+ #endif  // ROCKSDB_JEMALLOC
+ }
+diff --git a/examples/Makefile b/examples/Makefile
+index 812b327f..5dff7c9e 100644
+--- a/examples/Makefile
++++ b/examples/Makefile
+@@ -2,7 +2,7 @@ include ../make_config.mk
+ 
+ ifndef DISABLE_JEMALLOC
+ 	ifdef JEMALLOC
+-		PLATFORM_CXXFLAGS += "-DROCKSDB_JEMALLOC"
++		PLATFORM_CXXFLAGS += -DROCKSDB_JEMALLOC -DJEMALLOC_NO_DEMANGLE
+ 	endif
+ 	EXEC_LDFLAGS := $(JEMALLOC_LIB) $(EXEC_LDFLAGS) -lpthread
+ 	PLATFORM_CXXFLAGS += $(JEMALLOC_INCLUDE)
+-- 
+2.12.1
+

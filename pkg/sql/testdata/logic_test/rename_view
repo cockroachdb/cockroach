@@ -1,0 +1,179 @@
+# LogicTest: default parallel-stmts distsql
+
+statement error pgcode 42P01 view "foo" does not exist
+ALTER VIEW foo RENAME TO bar
+
+statement ok
+ALTER VIEW IF EXISTS foo RENAME TO bar
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4)
+
+statement ok
+CREATE VIEW v as SELECT k,v FROM kv
+
+query II rowsort
+SELECT * FROM v
+----
+1 2
+3 4
+
+query T
+SHOW TABLES
+----
+kv
+v
+
+statement error pgcode 42809 "kv" is not a view
+ALTER VIEW kv RENAME TO new_kv
+
+statement error pgcode 42809 "v" is not a table
+ALTER TABLE v RENAME TO new_v
+
+statement ok
+ALTER VIEW v RENAME TO new_v
+
+statement error pgcode 42P01 table "v" does not exist
+SELECT * FROM v
+
+query II rowsort
+SELECT * FROM new_v
+----
+1 2
+3 4
+
+query T
+SHOW TABLES
+----
+kv
+new_v
+
+# check the name in the descriptor, which is used by SHOW GRANTS, is also changed
+query TTT
+SHOW GRANTS ON new_v
+----
+new_v  root  ALL
+
+statement error empty table name
+ALTER VIEW "" RENAME TO foo
+
+statement error empty table name
+ALTER VIEW new_v RENAME TO ""
+
+statement ok
+ALTER VIEW new_v RENAME TO new_v
+
+statement ok
+CREATE TABLE t (
+  c1 INT PRIMARY KEY,
+  c2 INT
+)
+
+statement ok
+INSERT INTO t VALUES (4, 16), (5, 25)
+
+statement ok
+CREATE VIEW v as SELECT c1,c2 from t
+
+statement error pgcode 42P07 relation "new_v" already exists
+ALTER VIEW v RENAME TO new_v
+
+user testuser
+
+statement error user testuser does not have DROP privilege on view v
+ALTER VIEW test.v RENAME TO v2
+
+user root
+
+statement ok
+GRANT DROP ON test.v TO testuser
+
+statement ok
+create database test2
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test
+ALTER VIEW test.v RENAME TO v2
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+statement ok
+ALTER VIEW test.v RENAME TO v2
+
+query T
+SHOW TABLES FROM test
+----
+kv
+new_v
+t
+v2
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test2
+ALTER VIEW test.v2 RENAME TO test2.v
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test2 TO testuser
+
+statement ok
+GRANT DROP ON test.new_v TO testuser
+
+user testuser
+
+statement ok
+ALTER VIEW test.new_v RENAME TO test2.v
+
+statement ok
+ALTER VIEW test.v2 RENAME TO test2.v2
+
+query T
+SHOW TABLES FROM test
+----
+
+query T
+SHOW TABLES FROM test2
+----
+v
+v2
+
+user root
+
+query II rowsort
+SELECT * FROM test2.v
+----
+1 2
+3 4
+
+query II rowsort
+SELECT * FROM test2.v2
+----
+4 16
+5 25
+
+statement ok
+CREATE VIEW v3 AS SELECT COUNT(*) FROM test2.v AS v JOIN test2.v2 AS v2 ON v.k > v2.c1
+
+statement error cannot rename view "test2.v" because view "test.v3" depends on it
+ALTER VIEW test2.v RENAME TO test2.v3
+
+statement error cannot rename view "test2.v2" because view "test.v3" depends on it
+ALTER VIEW test2.v2 RENAME TO v4
+
+statement ok
+ALTER VIEW v3 RENAME TO v4
+
+statement error cannot rename view "test2.v2" because view "test.v4" depends on it
+ALTER VIEW test2.v2 RENAME TO v5

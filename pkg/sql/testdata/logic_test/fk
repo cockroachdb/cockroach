@@ -1,0 +1,645 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE customers (id INT PRIMARY KEY, email STRING UNIQUE)
+
+statement ok
+INSERT INTO customers VALUES (1, 'a@co.tld'), (2, 'b@co.tld')
+
+statement ok
+CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
+
+statement ok
+INSERT INTO products VALUES ('VP-W9QH-W44L', '867072000006', 'Dave'), ('780', '885155001450', 'iRobot')
+
+statement error referenced table "productz" not found
+CREATE TABLE missing (product STRING REFERENCES productz)
+
+statement error referenced table "customerz" not found
+CREATE TABLE missing_with_col (customer INT REFERENCES customerz (id))
+
+statement error column "idz" does not exist
+CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
+
+statement ok
+CREATE TABLE unindexed (customer INT REFERENCES customers)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM unindexed
+----
+Table      Name                                            Unique  Seq  Column    Direction  Storing  Implicit
+unindexed  primary                                         true    1    rowid     ASC        false    false
+unindexed  unindexed_auto_index_fk_customer_ref_customers  false   1    customer  ASC        false    false
+unindexed  unindexed_auto_index_fk_customer_ref_customers  false   2    rowid     ASC        false    true
+
+statement error foreign key requires table "products" have a unique index on \("vendor"\)
+CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
+
+statement error type of "customer" \(INT\) does not match foreign key "customers"."email" \(STRING\)
+CREATE TABLE mismatch (customer INT REFERENCES customers (email))
+
+statement error columns cannot be used by multiple foreign key constraints
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  product STRING REFERENCES products,
+  customer INT CONSTRAINT valid_customer REFERENCES customers (id),
+  CONSTRAINT fk FOREIGN KEY (product) REFERENCES products,
+  INDEX (product),
+  INDEX (customer)
+)
+
+statement ok
+CREATE TABLE orders (
+  id INT,
+  shipment INT,
+  product STRING REFERENCES products,
+  customer INT CONSTRAINT valid_customer REFERENCES customers (id),
+  PRIMARY KEY (id, shipment),
+  INDEX (product),
+  INDEX (customer)
+)
+
+statement ok
+CREATE DATABASE "user content"
+
+# "reviews" makes "products" have multiple inbound references, as well as making
+# "orders" have both directions, and makes sure that we're handling escaping and
+# cross-database referenced.
+statement ok
+CREATE TABLE "user content"."customer reviews" (
+  id INT PRIMARY KEY,
+  product STRING NOT NULL REFERENCES products,
+  customer INT,
+  "order" INT,
+  shipment int,
+  body STRING,
+  CONSTRAINT customerfk FOREIGN KEY (customer) REFERENCES customers,
+  CONSTRAINT orderfk FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment),
+  INDEX (product),
+  INDEX (customer),
+  INDEX ("order")
+)
+
+statement ok
+INSERT INTO orders VALUES (1, 1, '780', 2)
+
+statement error foreign key violation: values \['780'\] in columns \[sku\] referenced in table "orders"
+DELETE FROM products
+
+statement ok
+INSERT INTO "user content"."customer reviews" VALUES (1, '780', 2, 1, 1, NULL)
+
+statement error foreign key violation: value \['790'\] not found in products@primary \[sku\]
+INSERT INTO "user content"."customer reviews" (id, product, body) VALUES (2, '790', 'would not buy again')
+
+statement ok
+INSERT INTO "user content"."customer reviews" (id, product, body) VALUES (2, '780', 'would not buy again')
+
+statement ok
+DELETE FROM "user content"."customer reviews"
+
+statement error foreign key violation: value \['790'\] not found in products@primary \[sku\]
+INSERT INTO orders VALUES (2, 1, '790', 2)
+
+statement error foreign key violation: value \[43\] not found in customers@primary \[id\]
+INSERT INTO orders VALUES (2, 1, '780', 43)
+
+statement ok
+INSERT INTO orders VALUES (2, 1, '780', 1)
+
+# Try to point to missing FK.
+statement error foreign key violation: value \['790'\] not found in products@primary \[sku\]
+UPDATE orders SET product = '790' WHERE id = 2
+
+# Try to point to missing fk *while changing PK*.
+statement error foreign key violation: value \['790'\] not found in products@primary \[sku\]
+UPDATE orders SET id = 3, product = '790' WHERE id = 2
+
+# Change PK while leaving everything else is fine though.
+statement ok
+UPDATE orders SET id = 3 WHERE id = 2
+
+# Change PK and point to different product.
+statement ok
+UPDATE orders SET id = 2, product = 'VP-W9QH-W44L' WHERE id = 3
+
+statement ok
+UPDATE orders SET product = '780' WHERE id = 2
+
+# "delivery" is interesting since it references a secondary index with different col names.
+statement ok
+CREATE TABLE delivery (
+  ts TIMESTAMP DEFAULT NOW(),
+  "order" int,
+  shipment int,
+  item STRING REFERENCES products (upc),
+  FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment),
+  INDEX (item)
+)
+
+query TT
+SHOW CREATE TABLE delivery
+----
+delivery  CREATE TABLE delivery (
+              ts TIMESTAMP NULL DEFAULT now(),
+              "order" INT NULL,
+              shipment INT NULL,
+              item STRING NULL,
+              CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products (upc),
+              CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment),
+              FAMILY "primary" (ts, "order", shipment, item, rowid)
+)
+
+statement ok
+INSERT INTO delivery ("order", shipment, item) VALUES
+  (1, 1, '867072000006'), (1, 1, '867072000006'), (1, 1, '885155001450'), (1, 1, '867072000006')
+
+statement error foreign key violation: value \['missing'\] not found in products@products_upc_key \[upc\]
+INSERT INTO delivery ("order", shipment, item) VALUES
+  (1, 1, '867072000006'), (1, 1, 'missing'), (1, 1, '885155001450'), (1, 1, '867072000006')
+
+statement error foreign key violation: value \[1 99\] not found in orders@primary \[id shipment\]
+INSERT INTO delivery ("order", shipment, item) VALUES
+  (1, 1, '867072000006'), (1, 99, '867072000006')
+
+statement error foreign key violation: values \['867072000006'\] in columns \[upc\] referenced in table "delivery"
+DELETE FROM products WHERE sku = 'VP-W9QH-W44L'
+
+# Blanking a field nobody cares about is fine.
+statement ok
+UPDATE products SET vendor = '' WHERE sku = '780'
+
+# No-op update should be fine.
+statement ok
+UPDATE products SET sku = '770' WHERE sku = '750'
+
+# Changing referenced PK fails.
+statement error foreign key violation: values \['780'\] in columns \[sku\] referenced in table "orders"
+UPDATE products SET sku = '770' WHERE sku = '780'
+
+# No-op change to existing data is fine.
+statement ok
+UPDATE products SET upc = '885155001450' WHERE sku = '780'
+
+# Changing referenced non-pk index fails.
+statement error foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"
+UPDATE products SET upc = 'blah' WHERE sku = '780'
+
+statement ok
+ALTER TABLE delivery DROP CONSTRAINT fk_item_ref_products
+
+statement ok
+UPDATE products SET upc = 'blah' WHERE sku = '780'
+
+statement ok
+ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc)
+
+query TTTTT
+SHOW CONSTRAINTS FROM delivery
+----
+delivery  fk_item_ref_products   FOREIGN KEY (UNVALIDATED)  item             products.[upc]
+delivery  fk_order_ref_orders    FOREIGN KEY                order, shipment  orders.[id shipment]
+
+statement error foreign key violation: "delivery" row item='885155001450' has no match in "products"
+ALTER TABLE delivery VALIDATE CONSTRAINT fk_item_ref_products
+
+query TTTTT
+SHOW CONSTRAINTS FROM delivery
+----
+delivery  fk_item_ref_products   FOREIGN KEY (UNVALIDATED)  item             products.[upc]
+delivery  fk_order_ref_orders    FOREIGN KEY                order, shipment  orders.[id shipment]
+
+statement ok
+UPDATE products SET upc = '885155001450' WHERE sku = '780'
+
+# Changing referenced non-pk index fails once again with constraint re-added.
+statement error foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"
+UPDATE products SET upc = 'blah' WHERE sku = '780'
+
+statement ok
+ALTER TABLE delivery VALIDATE CONSTRAINT fk_item_ref_products
+
+query TTTTT
+SHOW CONSTRAINTS FROM delivery
+----
+delivery  fk_item_ref_products   FOREIGN KEY        item             products.[upc]
+delivery  fk_order_ref_orders    FOREIGN KEY        order, shipment  orders.[id shipment]
+
+statement ok
+ALTER TABLE "user content"."customer reviews"
+  DROP CONSTRAINT orderfk
+
+statement ok
+INSERT INTO "user content"."customer reviews" (id, product, body, "order") VALUES (3, '780', 'i ordered 100 of them', 9)
+
+statement ok
+ALTER TABLE "user content"."customer reviews"
+  ADD CONSTRAINT orderfk2 FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment)
+
+statement error missing value for column "shipment" in multi-part foreign key
+INSERT INTO "user content"."customer reviews" (id, product, body, "order") VALUES (4, '780', 'i ordered 101 of them', 9)
+
+statement error foreign key violation: value \[9 1\] not found in orders@primary \[id shipment\]
+INSERT INTO "user content"."customer reviews" (id, product, body, "order", shipment) VALUES (4, '780', 'i ordered 101 of them', 9, 1)
+
+statement error foreign key violation: value \[1 9\] not found in orders@primary \[id shipment\]
+INSERT INTO "user content"."customer reviews" (id, product, body, shipment, "order") VALUES (4, '780', 'i ordered 101 of them', 9, 1)
+
+statement error foreign key violation: "customer reviews" row order=9, shipment=NULL has no match in "orders"
+ALTER TABLE "user content"."customer reviews"
+  VALIDATE CONSTRAINT orderfk2
+
+statement ok
+DELETE FROM "user content"."customer reviews" WHERE "order" = 9
+
+statement ok
+ALTER TABLE "user content"."customer reviews"
+  VALIDATE CONSTRAINT orderfk2
+
+statement ok
+ALTER TABLE delivery DROP CONSTRAINT fk_order_ref_orders
+
+statement ok
+TRUNCATE orders, "user content"."customer reviews"
+
+# Changing now non-referenced and secondary field is fine.
+statement ok
+UPDATE products SET sku = '750', vendor = 'roomba' WHERE sku = '780'
+
+# Changing PK and referenced secondary index is not ok.
+statement error foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"
+UPDATE products SET sku = '780', upc = 'blah' WHERE sku = '750'
+
+statement error foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"
+DELETE FROM products WHERE sku = '750'
+
+statement error "products" is referenced by foreign key from table "orders"
+TRUNCATE products
+
+query I
+SELECT COUNT(*) FROM delivery
+----
+4
+
+statement ok
+TRUNCATE products CASCADE
+
+query I
+SELECT COUNT(*) FROM delivery
+----
+0
+
+statement ok
+TRUNCATE delivery, products, orders, "user content"."customer reviews"
+
+query TTTTT colnames
+SHOW CONSTRAINTS FROM orders
+----
+Table   Name                        Type         Column(s)   Details
+orders  fk_product_ref_products     FOREIGN KEY  product     products.[sku]
+orders  primary                     PRIMARY KEY  id, shipment          NULL
+orders  valid_customer              FOREIGN KEY  customer    customers.[id]
+
+statement error "products_upc_key" is referenced by foreign key from table "delivery"
+DROP INDEX products@products_upc_key
+
+statement error "products_upc_key" is referenced by foreign key from table "delivery"
+DROP INDEX products@products_upc_key RESTRICT
+
+statement ok
+DROP TABLE delivery
+
+statement ok
+DROP INDEX products@products_upc_key
+
+statement error index "orders_product_idx" is in use as a foreign key constraint
+DROP INDEX orders@orders_product_idx
+
+statement error index "orders_product_idx" is in use as a foreign key constraint
+DROP INDEX orders@orders_product_idx RESTRICT
+
+statement error "products" is referenced by foreign key from table "orders"
+DROP TABLE products
+
+statement error referenced by foreign key from table "orders"
+DROP TABLE products RESTRICT
+
+statement error referenced by foreign key from table "customer reviews"
+DROP TABLE orders
+
+statement ok
+DROP TABLE "user content"."customer reviews"
+
+statement ok
+DROP TABLE orders
+
+statement ok
+DROP TABLE products
+
+statement ok
+CREATE TABLE parent (id int primary key)
+
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, parent_id INT UNIQUE REFERENCES parent)
+
+statement ok
+CREATE TABLE grandchild (id INT PRIMARY KEY, parent_id INT REFERENCES child (parent_id), INDEX (parent_id))
+
+statement error "parent" is referenced by foreign key from table "child"
+DROP TABLE parent
+
+statement error "child" is referenced by foreign key from table "grandchild"
+DROP TABLE child
+
+statement error foreign key violation
+INSERT INTO child VALUES (2, 2)
+
+statement ok
+DROP TABLE parent CASCADE
+
+statement ok
+INSERT INTO child VALUES (2, 2)
+
+statement error foreign key violation
+INSERT INTO grandchild VALUES (1, 1)
+
+statement error in use as a foreign key constraint
+DROP INDEX grandchild@grandchild_parent_id_idx
+
+statement ok
+DROP INDEX grandchild@grandchild_parent_id_idx CASCADE
+
+statement ok
+INSERT INTO grandchild VALUES (1, 1)
+
+statement ok
+DROP TABLE grandchild
+
+statement ok
+CREATE TABLE grandchild (id INT PRIMARY KEY, parent_id INT REFERENCES child (parent_id), INDEX (parent_id))
+
+statement error foreign key violation
+INSERT INTO grandchild VALUES (1, 1)
+
+statement error "child_parent_id_key" is referenced by foreign key from table "grandchild"
+DROP INDEX child@child_parent_id_key
+
+statement ok
+DROP INDEX child@child_parent_id_key CASCADE
+
+statement ok
+INSERT INTO grandchild VALUES (1, 1)
+
+statement ok
+CREATE TABLE employees (id INT PRIMARY KEY, manager INT REFERENCES employees, INDEX (manager))
+
+statement ok
+INSERT INTO employees VALUES (1, NULL)
+
+statement ok
+INSERT INTO employees VALUES (2, 1), (3, 1)
+
+statement ok
+INSERT INTO employees VALUES (4, 2), (5, 3)
+
+statement error foreign key violation
+DELETE FROM employees WHERE id = 2
+
+statement error foreign key violation
+DELETE FROM employees WHERE id > 1
+
+statement ok
+DROP TABLE employees
+
+statement ok
+CREATE TABLE pairs (id INT PRIMARY KEY, src INT, dest STRING, UNIQUE (src, dest))
+
+statement ok
+INSERT INTO pairs VALUES (1, 100, 'one'), (2, 200, 'two')
+
+statement error type of "b" \(STRING\) does not match foreign key "pairs"."id" \(INT\)
+CREATE TABLE refpairs (a INT, b STRING, CONSTRAINT fk FOREIGN KEY (b) REFERENCES pairs)
+
+statement error 2 columns must reference exactly 2 columns in referenced table \(found 1\)
+CREATE TABLE refpairs (a INT, b STRING, CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES pairs)
+
+# TODO(dt): remove ordering constraint on matching index
+statement ok
+CREATE TABLE refpairs_wrong_order (a INT, b STRING, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (b, a))
+
+query TTBITTBB colnames
+SHOW INDEXES FROM refpairs_wrong_order
+----
+Table                 Name                                            Unique  Seq  Column  Direction  Storing  Implicit
+refpairs_wrong_order  primary                                         true    1    rowid   ASC        false    false
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    false   1    b       ASC        false    false
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    false   2    a       ASC        false    false
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    false   3    rowid   ASC        false    true
+refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  false   1    a       ASC        false    false
+refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  false   2    b       ASC        false    false
+refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  false   3    rowid   ASC        false    true
+
+statement ok
+CREATE TABLE refpairs_c_between (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, c, b))
+
+query TTBITTBB colnames
+SHOW INDEXES FROM refpairs_c_between
+----
+Table               Name                                          Unique  Seq  Column  Direction  Storing  Implicit
+refpairs_c_between  primary                                       true    1    rowid   ASC        false    false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                  false   1    a       ASC        false    false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                  false   2    c       ASC        false    false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                  false   3    b       ASC        false    false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                  false   4    rowid   ASC        false    true
+refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  false   1    a       ASC        false    false
+refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  false   2    b       ASC        false    false
+refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  false   3    rowid   ASC        false    true
+
+statement ok
+CREATE TABLE refpairs (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, b, c))
+
+query TTBITTBB colnames
+SHOW INDEXES FROM refpairs
+----
+Table     Name                Unique  Seq  Column  Direction  Storing  Implicit
+refpairs  primary             true    1    rowid   ASC        false    false
+refpairs  refpairs_a_b_c_idx  false   1    a       ASC        false    false
+refpairs  refpairs_a_b_c_idx  false   2    b       ASC        false    false
+refpairs  refpairs_a_b_c_idx  false   3    c       ASC        false    false
+refpairs  refpairs_a_b_c_idx  false   4    rowid   ASC        false    true
+
+statement error foreign key violation: value \[100 'two'\] not found in pairs@pairs_src_dest_key \[src dest\]
+INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
+
+statement ok
+INSERT INTO refpairs VALUES (100, 'one'), (200, 'two')
+
+statement error foreign key violation: values \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
+UPDATE pairs SET dest = 'too' WHERE id = 2
+
+statement error foreign key violation: values \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
+DELETE FROM pairs WHERE id = 2
+
+# since PKs are handled differently than other indexes, check pk<->pk ref with no other indexes in play.
+statement ok
+CREATE TABLE foo (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE bar (id INT PRIMARY KEY REFERENCES foo)
+
+statement ok
+INSERT INTO foo VALUES (2)
+
+statement ok
+INSERT INTO bar VALUES (2)
+
+statement error foreign key violation: values \[2] in columns \[id\] referenced in table "bar"
+DELETE FROM foo
+
+statement ok
+CREATE DATABASE otherdb
+
+statement ok
+CREATE TABLE otherdb.othertable (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE crossdb (id INT PRIMARY KEY, FOREIGN KEY (id) REFERENCES otherdb.othertable)
+
+statement error foreign key violation: value \[2\] not found in othertable@primary \[id\]
+INSERT INTO crossdb VALUES (2)
+
+statement ok
+INSERT INTO otherdb.othertable VALUES (1), (2)
+
+statement ok
+INSERT INTO crossdb VALUES (2)
+
+statement error foreign key violation: values \[2] in columns \[id\] referenced in table "crossdb"
+DELETE FROM otherdb.othertable WHERE id = 2
+
+statement error "othertable" is referenced by foreign key from table "crossdb"
+DROP TABLE otherdb.othertable
+
+statement ok
+DROP TABLE otherdb.othertable, crossdb
+
+statement ok
+CREATE TABLE modules (id BIGSERIAL NOT NULL PRIMARY KEY)
+
+statement ok
+CREATE TABLE domains (id BIGSERIAL NOT NULL PRIMARY KEY)
+
+# We'll use the unique index for the domain fk (since it is a prefix), but we
+# we correctly only mark the prefix as used and thus still allow module_id to be
+# used in another FK.
+statement ok
+CREATE TABLE domain_modules (
+  id         BIGSERIAL    NOT NULL PRIMARY KEY,
+  domain_id  BIGINT       NOT NULL,
+  module_id  BIGINT       NOT NULL,
+  CONSTRAINT domain_modules_domain_id_fk FOREIGN KEY (domain_id) REFERENCES domains (id),
+  CONSTRAINT domain_modules_module_id_fk FOREIGN KEY (module_id) REFERENCES modules (id),
+  CONSTRAINT domain_modules_uq UNIQUE (domain_id, module_id)
+)
+
+query TTTTT
+SHOW CONSTRAINTS FROM domain_modules
+----
+domain_modules  domain_modules_domain_id_fk  FOREIGN KEY  domain_id             domains.[id]
+domain_modules  domain_modules_module_id_fk  FOREIGN KEY  module_id             modules.[id]
+domain_modules  domain_modules_uq            UNIQUE       domain_id, module_id  NULL
+domain_modules  primary                      PRIMARY KEY  id                    NULL
+
+statement ok
+CREATE TABLE tx (
+  id INT NOT NULL PRIMARY KEY
+)
+
+statement ok
+CREATE TABLE tx_leg (
+  leg_id SERIAL NOT NULL PRIMARY KEY,
+  tx_id INT NOT NULL REFERENCES tx
+)
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+INSERT INTO tx VALUES (2)
+
+statement ok
+INSERT INTO tx_leg VALUES (201, 2);
+
+statement ok
+INSERT INTO tx_leg VALUES (202, 2);
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN TRANSACTION
+
+statement error foreign key violation: value \[3\] not found in tx@primary \[id\]
+INSERT INTO tx_leg VALUES (302, 3);
+
+statement ok
+COMMIT
+
+statement ok
+CREATE TABLE a (id SERIAL NOT NULL, self_id INT, b_id INT NOT NULL, PRIMARY KEY (id))
+
+statement ok
+CREATE TABLE b (id SERIAL NOT NULL, PRIMARY KEY (id))
+
+# Adding a self-ref FK to an _existing_ table also works.
+statement ok
+ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a;
+
+statement ok
+ALTER TABLE a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES b;
+
+statement ok
+INSERT INTO b VALUES (1), (2), (3);
+
+statement ok
+INSERT INTO a VALUES (1, NULL, 1)
+
+statement ok
+INSERT INTO a VALUES (2, 1, 1), (3, 1, 2)
+
+statement ok
+INSERT INTO a VALUES (4, 2, 2)
+
+statement ok
+DELETE FROM b WHERE id = 3
+
+statement error foreign key violation
+DELETE FROM b WHERE id = 2
+
+statement error foreign key violation
+DELETE FROM a WHERE id = 1
+
+statement ok
+DELETE FROM a WHERE id > 2
+
+statement ok
+DELETE FROM b WHERE id = 2
+
+statement ok
+DROP TABLE a
+
+statement ok
+DROP TABLE b
+
+# A CREATE TABLE with a FK reference within a transaction.
+statement ok
+CREATE TABLE referee (id INT PRIMARY KEY);
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+CREATE TABLE refers (a INT REFERENCES referee);
+
+statement ok
+COMMIT

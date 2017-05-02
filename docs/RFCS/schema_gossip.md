@@ -1,7 +1,7 @@
-- Feature Name: schema_distribution
-- Status: unstarted
-- Start Date: TBD
-- RFC PR: #1743
+- Feature Name: schema_gossip
+- Status: completed
+- Start Date: 2015-07-20
+- RFC PR: [#1743](https://github.com/cockroachdb/cockroach/pull/1743)
 - Cockroach Issue:
 
 # Summary
@@ -33,7 +33,7 @@ This will be strictly less performant than the gossip approach but will be more 
 
 We could have a special metadata range which all nodes have a replica of. This would probably result in unacceptable read and write times and induce lots of network traffic.
 
-We could implement this on top of non-voting replicas (which we don't yet support). That would give us eventual consistency without having to outside of raft, but enforcement of schema freshness remains an open question.
+We could implement this on top of non-voting replicas (which we don't yet support). That would give us eventual consistency without having to go outside of raft, but enforcement of schema freshness remains an open question.
 
 # Unresolved questions
 

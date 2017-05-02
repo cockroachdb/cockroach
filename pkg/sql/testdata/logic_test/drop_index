@@ -1,0 +1,171 @@
+# LogicTest: default
+
+statement ok
+CREATE TABLE users (
+  id    INT PRIMARY KEY,
+  name  VARCHAR NOT NULL,
+  title VARCHAR,
+  INDEX foo (name),
+  UNIQUE INDEX bar (id, name),
+  INDEX baw (name, title)
+)
+
+statement ok
+CREATE TABLE othertable (
+   x INT,
+   INDEX baw (x)
+)
+
+statement error index name "baw" is ambiguous
+DROP INDEX baw
+
+statement ok
+DROP TABLE othertable
+
+statement ok
+DROP INDEX baw
+
+statement ok
+INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+users  foo      false   1    name    ASC        false    false
+users  foo      false   2    id      ASC        false    true
+users  bar      true    1    id      ASC        false    false
+users  bar      true    2    name    ASC        false    false
+
+statement error index "ffo" does not exist
+DROP INDEX users@ffo
+
+statement ok
+DROP INDEX IF EXISTS users@ffo
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+users  foo      false   1    name    ASC        false    false
+users  foo      false   2    id      ASC        false    true
+users  bar      true    1    id      ASC        false    false
+users  bar      true    2    name    ASC        false    false
+
+statement ok
+DROP INDEX IF EXISTS users@foo
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+users  bar      true    1    id      ASC        false    false
+users  bar      true    2    name    ASC        false    false
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on table users
+DROP INDEX users@bar
+
+user root
+
+statement ok
+GRANT CREATE ON TABLE users TO testuser
+
+user testuser
+
+statement ok
+DROP INDEX users@bar
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+
+user root
+
+query ITT rowsort
+SELECT * FROM users
+----
+1 tom   cat
+2 jerry rat
+
+statement ok
+CREATE INDEX foo ON users (name)
+
+statement ok
+CREATE INDEX bar ON users (title)
+
+statement ok
+CREATE INDEX baz ON users (name, title)
+
+statement ok
+DROP INDEX IF EXISTS users@invalid, users@baz
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+users  foo      false   1    name    ASC        false    false
+users  foo      false   2    id      ASC        false    true
+users  bar      false   1    title   ASC        false    false
+users  bar      false   2    id      ASC        false    true
+
+statement ok
+CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=foo}
+
+statement error cannot drop index "foo" because view "v" depends on it
+DROP INDEX users@foo
+
+statement ok
+DROP INDEX users@bar
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+users  foo      false   1    name    ASC        false    false
+users  foo      false   2    id      ASC        false    true
+
+statement ok
+CREATE VIEW v2 AS SELECT name FROM v
+
+query T
+SHOW TABLES
+----
+users
+v
+v2
+
+statement ok
+GRANT ALL ON users to testuser
+
+statement ok
+GRANT ALL ON v to testuser
+
+user testuser
+
+statement error user testuser does not have DROP privilege on view v2
+DROP INDEX users@foo CASCADE
+
+user root
+
+statement ok
+DROP INDEX users@foo CASCADE
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+
+query T
+SHOW TABLES
+----
+users

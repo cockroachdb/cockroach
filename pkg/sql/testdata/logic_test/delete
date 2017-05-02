@@ -1,0 +1,172 @@
+# LogicTest: default parallel-stmts
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT,
+  UNIQUE INDEX foo (v),
+  INDEX bar (k, v)
+)
+
+statement ok
+CREATE TABLE unindexed (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+statement ok
+INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+CREATE VIEW kview AS SELECT k,v FROM kv
+
+query II rowsort
+SELECT * FROM kview
+----
+1 2
+3 4
+5 6
+7 8
+
+statement error cannot run DELETE on view "kview" - views are not updateable
+DELETE FROM kview
+
+query II rowsort
+SELECT * FROM kview
+----
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+DELETE FROM kv WHERE k=3 OR v=6
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+7 8
+
+# delete a non-existent value.
+statement ok
+DELETE FROM kv WHERE k=5
+
+query II
+DELETE FROM kv RETURNING k, v
+----
+1 2
+7 8
+
+query II
+SELECT * FROM kv
+----
+
+query TTTT
+EXPLAIN (DEBUG) SELECT * FROM kv
+----
+
+query TTTT
+EXPLAIN (DEBUG) SELECT * FROM kv@foo
+----
+
+query TTTT
+EXPLAIN (DEBUG) SELECT * FROM kv@bar
+----
+
+statement error column name "nonexistent" not found
+DELETE FROM kv WHERE nonexistent = 1
+
+statement ok
+DELETE FROM unindexed WHERE k=3 OR v=6
+
+query II rowsort
+SELECT * FROM unindexed
+----
+1 2
+7 8
+
+query II
+DELETE FROM unindexed RETURNING k, v
+----
+1 2
+7 8
+
+query II
+SELECT * FROM unindexed
+----
+
+statement ok
+INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+query II colnames
+DELETE FROM unindexed WHERE k=3 or v=6 RETURNING *
+----
+k v
+3 4
+5 6
+
+query II colnames
+DELETE FROM unindexed RETURNING unindexed.*
+----
+k v
+1 2
+7 8
+
+statement ok
+INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+query II colnames,rowsort
+SELECT k, v FROM unindexed
+----
+k v
+1 2
+3 4
+5 6
+7 8
+
+# Check that EXPLAIN does not destroy data (#6613)
+query ITTT colnames
+EXPLAIN DELETE FROM unindexed
+----
+Level  Type    Field  Description
+0      delete
+0              from   unindexed
+1      render
+2      scan
+2              table  unindexed@primary
+2              spans  ALL
+
+query II colnames,rowsort
+SELECT k, v FROM unindexed
+----
+k v
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+DELETE FROM unindexed
+
+query II colnames
+SELECT k, v FROM unindexed
+----
+k v
+
+statement ok
+CREATE TABLE indexed (id int primary key, value int, other int, index (value))
+
+statement ok
+DELETE FROM indexed WHERE value = 5

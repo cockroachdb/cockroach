@@ -1,10 +1,9 @@
 - Feature Name: Foreign Keys
-- Status: in-progress
+- Status: completed
 - Start Date: 2016-04-20
 - Authors: David Taylor
-- RFC PR: (PR # after acceptance of initial draft)
-- Cockroach Issue: 2968
-
+- RFC PR: [#6309](https://github.com/cockroachdb/cockroach/pull/6309)
+- Cockroach Issue: [#2968](https://github.com/cockroachdb/cockroach/issues/2968)
 
 # Summary
 Support REFERENCES / FOREIGN KEY constraints to enforce referential integrity
@@ -138,7 +137,7 @@ are using a particular version of one descriptor before initiating a change to
 another.
 
 Transactional modification of multiple table descriptors makes modifying FK
-relationships much more difficuly, since it needs to be denormalized to both
+relationships much more difficult, since it needs to be denormalized to both
 of the referencing and referenced table. Managing updates to a single record
 per-database, e.g. a list of all the FK relationships or even just a single
 record with all the table descriptors embedded in it, might be easier to reason

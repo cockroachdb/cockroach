@@ -14,7 +14,7 @@ resource "aws_instance" "cockroach" {
   count = "${var.num_instances}"
 }
 
-resource "template_file" "supervisor" {
+data "template_file" "supervisor" {
   count = "${var.num_instances}"
   template = "${file("supervisor.conf.tpl")}"
   vars {
@@ -22,7 +22,7 @@ resource "template_file" "supervisor" {
     # The value of the --join flag must be empty for the first node,
     # and a running node for all others. We built a list of addresses
     # shifted by one (first element is empty), then take the value at index "instance.index".
-    join_address = "${element(concat(split(",", ""), aws_instance.cockroach.*.private_ip), count.index)}"
+    join_address = "${element(concat(split(",", ""), aws_instance.cockroach.*.private_ip), count.index == 0 ? 0 : 1)}"
     # We need to provide one node address for the block writer.
     node_address = "${aws_instance.cockroach.0.private_ip}"
   }
@@ -35,7 +35,7 @@ resource "null_resource" "cockroach-runner" {
   count = "${var.num_instances}"
   connection {
     user = "ubuntu"
-    key_file = "~/.ssh/${var.key_name}.pem"
+    private_key = "${file(format("~/.ssh/%s.pem", var.key_name))}"
     host = "${element(aws_instance.cockroach.*.public_ip, count.index)}"
   }
 
@@ -52,7 +52,7 @@ resource "null_resource" "cockroach-runner" {
   # use rendered templates in the file provisioner.
   provisioner "remote-exec" {
     inline = <<FILE
-echo '${element(template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
+echo '${element(data.template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
 FILE
   }
 

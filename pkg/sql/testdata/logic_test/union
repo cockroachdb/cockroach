@@ -1,0 +1,185 @@
+# LogicTest: default distsql
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) UNION VALUES (1), (3), (1)
+----
+1
+2
+3
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)
+----
+1
+1
+1
+1
+1
+2
+2
+3
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) INTERSECT VALUES (1), (3), (1)
+----
+1
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) INTERSECT ALL VALUES (1), (3), (1)
+----
+1
+1
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) EXCEPT VALUES (1), (3), (1)
+----
+2
+
+query I rowsort
+VALUES (1), (1), (1), (2), (2) EXCEPT ALL VALUES (1), (3), (1)
+----
+1
+2
+2
+
+query II rowsort
+VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)
+----
+1 1
+1 2
+1 3
+2 1
+3 4
+
+query I
+(VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
+# The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
+query I
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
+statement ok
+CREATE TABLE uniontest (
+  k INT,
+  v INT
+)
+
+statement OK
+INSERT INTO uniontest VALUES
+(1, 1),
+(1, 1),
+(1, 1),
+(1, 2),
+(1, 2),
+(2, 1),
+(2, 3),
+(2, 1)
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 UNION SELECT v FROM uniontest WHERE k = 2
+----
+1
+2
+3
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2
+----
+1
+1
+1
+1
+1
+2
+2
+3
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 INTERSECT SELECT v FROM uniontest WHERE k = 2
+----
+1
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM uniontest WHERE k = 2
+----
+1
+1
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 EXCEPT SELECT v FROM uniontest WHERE k = 2
+----
+2
+
+query I rowsort
+SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k = 2
+----
+1
+2
+2
+
+query I
+(SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2) ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
+# The ORDER BY and LIMIT apply to the UNION, not the last SELECT.
+query I
+SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2 ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
+query ITTT rowsort
+EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
+----
+0  union
+1  render
+2  scan
+2          table  uniontest@primary
+2          spans  ALL
+1  render
+2  scan
+2          table  uniontest@primary
+2          spans  ALL
+
+query ITTT rowsort
+EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
+----
+0  append
+1  render
+2  scan
+2          table  uniontest@primary
+2          spans  ALL
+1  render
+2  scan
+2          table  uniontest@primary
+2          spans  ALL
+
+
+query error each UNION query must have the same number of columns: 2 vs 1
+SELECT 1, 2 UNION SELECT 3
+
+query error each INTERSECT query must have the same number of columns: 2 vs 1
+SELECT 1, 2 INTERSECT SELECT 3
+
+query error each EXCEPT query must have the same number of columns: 2 vs 1
+SELECT 1, 2 EXCEPT SELECT 3
+
+query error UNION types int and string cannot be matched
+SELECT 1 UNION SELECT '3'
+
+query error INTERSECT types int and string cannot be matched
+SELECT 1 INTERSECT SELECT '3'
+
+query error EXCEPT types int and string cannot be matched
+SELECT 1 EXCEPT SELECT '3'
+
+query error column z does not exist
+SELECT 1 UNION SELECT 3 ORDER BY z

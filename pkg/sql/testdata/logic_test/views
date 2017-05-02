@@ -1,0 +1,358 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO t VALUES (1, 99), (2, 98), (3, 97)
+
+statement ok
+CREATE VIEW v1 AS select a, b from t
+
+statement error pgcode 42P07 relation \"v1\" already exists
+CREATE VIEW v1 AS select a, b from t
+
+statement error pgcode 42P07 relation \"t\" already exists
+CREATE VIEW t AS select a, b from t
+
+statement ok
+CREATE VIEW v2 (x, y) AS select a, b from t
+
+statement error pgcode 42601 CREATE VIEW specifies 1 column name, but data source has 2 columns
+CREATE VIEW v3 (x) AS select a, b from t
+
+statement error pgcode 42601 CREATE VIEW specifies 3 column names, but data source has 2 columns
+CREATE VIEW v4 (x, y, z) AS select a, b from t
+
+statement error pgcode 42P01 table "dne" does not exist
+CREATE VIEW v5 AS select a, b from dne
+
+statement ok
+CREATE VIEW v6 (x, y) AS select a, b from v1
+
+query II colnames,rowsort
+SELECT * FROM v1
+----
+a b
+1 99
+2 98
+3 97
+
+query II colnames,rowsort
+SELECT * FROM v2
+----
+x y
+1 99
+2 98
+3 97
+
+query II colnames,rowsort
+SELECT * FROM v6
+----
+x y
+1 99
+2 98
+3 97
+
+query II
+SELECT * FROM v2 ORDER BY x DESC LIMIT 1
+----
+3 97
+
+query I rowsort
+SELECT x FROM v2
+----
+1
+2
+3
+
+query I rowsort
+SELECT y FROM v2
+----
+99
+98
+97
+
+query IIII rowsort
+SELECT * FROM v1 AS v1 INNER JOIN v2 AS v2 ON v1.a = v2.x
+----
+1 99 1 99
+2 98 2 98
+3 97 3 97
+
+statement ok
+CREATE DATABASE test2
+
+statement ok
+SET DATABASE = test2
+
+query II colnames,rowsort
+SELECT * FROM test.v1
+----
+a b
+1 99
+2 98
+3 97
+
+query II colnames,rowsort
+SELECT * FROM test.v2
+----
+x y
+1 99
+2 98
+3 97
+
+query II colnames,rowsort
+SELECT * FROM test.v6
+----
+x y
+1 99
+2 98
+3 97
+
+statement ok
+CREATE VIEW v1 AS SELECT x, y FROM test.v2
+
+statement ok
+SET DATABASE = test
+
+query II colnames,rowsort
+SELECT * FROM test2.v1
+----
+x y
+1 99
+2 98
+3 97
+
+query TT
+SHOW CREATE VIEW v1
+----
+v1 CREATE VIEW v1 AS SELECT a, b FROM test.t
+
+query TT
+SHOW CREATE VIEW v2
+----
+v2 CREATE VIEW v2 (x, y) AS SELECT a, b FROM test.t
+
+query TT
+SHOW CREATE VIEW v6
+----
+v6 CREATE VIEW v6 (x, y) AS SELECT a, b FROM test.v1
+
+query TT
+SHOW CREATE VIEW test2.v1
+----
+test2.v1 CREATE VIEW v1 AS SELECT x, y FROM test.v2
+
+statement ok
+GRANT SELECT ON t TO testuser
+
+user testuser
+
+query II rowsort
+SELECT * FROM t
+----
+1 99
+2 98
+3 97
+
+query error user testuser does not have SELECT privilege on view v1
+SELECT * FROM v1
+
+query error user testuser does not have SELECT privilege on view v6
+SELECT * FROM v6
+
+query error user testuser has no privileges on view v1
+SHOW CREATE VIEW v1
+
+user root
+
+statement ok
+REVOKE SELECT ON t FROM testuser
+
+statement ok
+GRANT SELECT ON v1 TO testuser
+
+user testuser
+
+query error user testuser does not have SELECT privilege on table t
+SELECT * FROM t
+
+query II rowsort
+SELECT * FROM v1
+----
+1 99
+2 98
+3 97
+
+query error user testuser does not have SELECT privilege on view v6
+SELECT * FROM v6
+
+query TT
+SHOW CREATE VIEW v1
+----
+v1 CREATE VIEW v1 AS SELECT a, b FROM test.t
+
+user root
+
+statement ok
+REVOKE SELECT ON v1 FROM testuser
+
+statement ok
+GRANT SELECT ON v6 TO testuser
+
+user testuser
+
+query error user testuser does not have SELECT privilege on table t
+SELECT * FROM t
+
+query error user testuser does not have SELECT privilege on view v1
+SELECT * FROM v1
+
+query II rowsort
+SELECT * FROM v6
+----
+1 99
+2 98
+3 97
+
+user root
+
+statement error pgcode 42809 "v1" is not a table
+DROP TABLE v1
+
+statement error pgcode 42809 "t" is not a view
+DROP VIEW t
+
+statement error cannot drop view "v1" because view "v6" depends on it
+DROP VIEW v1
+
+statement error cannot drop view "v2" because view "test2.v1" depends on it
+DROP VIEW v2
+
+statement ok
+DROP VIEW test2.v1
+
+statement ok
+DROP VIEW v6
+
+statement ok
+DROP VIEW v2
+
+statement ok
+DROP VIEW v1
+
+statement error pgcode 42P01 view "v1" does not exist
+DROP VIEW v1
+
+# Verify correct rejection of star expressions
+# TODO(a-robinson): Support star expressions as soon as we can (#10028)
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT * FROM t
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT t.* FROM t
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT a FROM t ORDER BY t.*
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT COUNT(1) FROM t GROUP BY t.*
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT alias.* FROM t AS alias
+
+statement error views do not currently support \* expressions
+create view s1 AS TABLE t
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT a FROM (SELECT * FROM t)
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT a FROM t WHERE NOT a IN (SELECT a FROM (SELECT * FROM t))
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT a FROM t GROUP BY a HAVING a IN (SELECT a FROM (SELECT * FROM t))
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT t1.*, t2.a FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT t1.a, t2.* FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT t1.*, t2.* FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT * FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT t1.a, t2.a FROM (SELECT * FROM t) AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT t1.a, t2.a FROM t AS t1 JOIN (SELECT * FROM t) AS t2 ON t1.a = t2.a
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT t1.a, t2.a FROM t AS t1 JOIN t AS t2 ON t1.a IN (SELECT a FROM (SELECT * FROM t))
+
+statement ok
+create view s1 AS SELECT COUNT(*) FROM t
+
+statement ok
+create view s2 AS SELECT a FROM t WHERE a IN (SELECT COUNT(*) FROM t)
+
+statement ok
+create view s3 AS SELECT a, COUNT(*) FROM t GROUP BY a
+
+statement ok
+create view s4 AS SELECT a, COUNT(*) FROM t GROUP BY a HAVING a > (SELECT COUNT(*) FROM t)
+
+statement ok
+DROP VIEW s4
+
+statement ok
+DROP VIEW s3
+
+statement ok
+DROP VIEW s2
+
+statement ok
+DROP VIEW s1
+
+statement ok
+DROP TABLE t
+
+# Check for memory leak (#10466)
+statement ok
+CREATE VIEW foo AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
+
+statement error pq: relation "foo" already exists
+CREATE VIEW foo AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
+
+# Ensure views work with dates/timestamps (#12420)
+statement ok
+CREATE TABLE t (d DATE, t TIMESTAMP)
+
+statement ok
+CREATE VIEW dt AS SELECT d, t FROM t WHERE d > DATE '1988-11-12' AND t < TIMESTAMP '2017-01-01'
+
+statement ok
+SELECT * FROM dt
+
+statement ok
+CREATE VIEW dt2 AS SELECT d, t FROM t WHERE d > d + INTERVAL '10h'
+
+statement ok
+SELECT * FROM dt2
+
+# Ensure that creating a view doesn't leak any session-level settings that
+# could affect subsequent AS OF SYSTEM TIME queries (#13547).
+statement ok
+CREATE VIEW v AS SELECT d, t FROM t
+
+statement error pq: unexpected AS OF SYSTEM TIME
+CREATE TABLE t2 AS SELECT d, t FROM t AS OF SYSTEM TIME '2017-02-13 21:30:00'
+
+statement ok
+DROP TABLE t CASCADE

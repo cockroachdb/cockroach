@@ -1,0 +1,76 @@
+# LogicTest: default parallel-stmts distsql
+
+query error duplicate column name: "rowid"
+CREATE TABLE t (
+  rowid INT
+)
+
+statement ok
+CREATE TABLE t (
+  a INT,
+  b INT
+)
+
+statement ok
+INSERT INTO t VALUES (1, 2)
+
+statement ok
+INSERT INTO t VALUES (1, 2)
+
+statement ok
+INSERT INTO t VALUES (3, 4)
+
+query II rowsort
+SELECT a, b FROM t
+----
+1 2
+1 2
+3 4
+
+query I
+SELECT count(rowid) FROM t
+----
+3
+
+# Make sure column order for insertion is not affected by the rowid column.
+
+statement ok
+ALTER TABLE t ADD c STRING
+
+statement ok
+INSERT INTO t VALUES (5, 6, '7')
+
+query IIT rowsort
+select * from t
+----
+1 2 NULL
+1 2 NULL
+3 4 NULL
+5 6 7
+
+statement ok
+SELECT a, b, c, rowid FROM t
+
+statement ok
+INSERT INTO t (a, rowid) VALUES (10, 11)
+
+query I
+SELECT rowid FROM t WHERE a = 10
+----
+11
+
+query TTBTT
+SHOW COLUMNS FROM t
+----
+a  INT     true  NULL {}
+b  INT     true  NULL {}
+c  STRING  true  NULL {}
+
+statement ok
+CREATE INDEX a_idx ON t (a)
+
+statement ok
+INSERT INTO t DEFAULT VALUES
+
+statement error syntax error
+INSERT INTO t (a, b) DEFAULT VALUES

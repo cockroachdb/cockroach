@@ -1,0 +1,38 @@
+# LogicTest: default parallel-stmts distsql
+
+# -0 and 0 should not be possible in a unique index.
+
+statement ok
+CREATE TABLE p (f float primary key)
+
+statement ok
+INSERT INTO p VALUES ('NaN'::float), ('Inf'::float), ('-Inf'::float), ('0'::float), (1), (-1)
+
+statement error duplicate key value
+INSERT INTO p VALUES ('-0'::float)
+
+# -0 and 0 should both equate to zero with or without an index
+
+statement ok
+CREATE TABLE i (f float)
+
+statement ok
+INSERT INTO i VALUES (0), ('-0'::float)
+
+query R rowsort
+SELECT * FROM i WHERE f = 0
+----
+-0
+0
+
+statement ok
+CREATE INDEX ON i (f)
+
+query R rowsort
+SELECT * FROM i WHERE f = 0
+----
+-0
+0
+
+statement error duplicate key value
+CREATE UNIQUE INDEX ON i (f)

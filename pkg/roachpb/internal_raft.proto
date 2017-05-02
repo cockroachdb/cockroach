@@ -1,0 +1,58 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
+
+syntax = "proto2";
+package cockroach.roachpb;
+option go_package = "roachpb";
+
+import "cockroach/pkg/roachpb/metadata.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// RaftTruncatedState contains metadata about the truncated portion of the raft log.
+// Raft requires access to the term of the last truncated log entry even after the
+// rest of the entry has been discarded.
+message RaftTruncatedState {
+  option (gogoproto.populate) = true;
+
+  // The highest index that has been removed from the log.
+  optional uint64 index = 1 [(gogoproto.nullable) = false];
+  // The term corresponding to 'index'.
+  optional uint64 term = 2 [(gogoproto.nullable) = false];
+}
+
+// RaftTombstone contains information about a replica that has been deleted.
+message RaftTombstone {
+  optional int32 next_replica_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
+}
+
+// RaftSnapshotData is the payload of a raftpb.Snapshot. It contains a raw copy of
+// all of the range's data and metadata, including the raft log, sequence cache, etc.
+message RaftSnapshotData {
+  message KeyValue {
+    optional bytes key = 1;
+    optional bytes value = 2;
+    optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  }
+  // The latest RangeDescriptor
+  optional RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
+  repeated KeyValue KV = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "KV"];
+  // These are really raftpb.Entry, but we model them as raw bytes to avoid
+  // roundtripping through memory.
+  repeated bytes log_entries = 3;
+}

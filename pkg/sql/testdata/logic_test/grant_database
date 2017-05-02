@@ -1,0 +1,132 @@
+# LogicTest: default
+
+statement ok
+CREATE DATABASE a
+
+query TTT colnames
+SHOW GRANTS ON DATABASE a
+----
+Database User Privileges
+a        root ALL
+
+statement error TODO\(marc\): implement SHOW GRANT with no targets
+SHOW GRANTS
+
+statement error user root does not have ALL privileges
+REVOKE SELECT ON DATABASE a FROM root
+
+statement ok
+GRANT ALL ON DATABASE a TO readwrite, "test-user"
+
+statement error syntax error
+GRANT SELECT,ALL ON DATABASE a TO readwrite
+
+statement error syntax error
+REVOKE SELECT,ALL ON DATABASE a FROM readwrite
+
+query TTT
+SHOW GRANTS ON DATABASE a
+----
+a        readwrite ALL
+a        root      ALL
+a        test-user ALL
+
+# Create table to inherit DB permissions.
+statement ok
+CREATE TABLE a.t (id INT PRIMARY KEY)
+
+query TTT colnames
+SHOW GRANTS ON a.t
+----
+Table    User      Privileges
+t        readwrite ALL
+t        root      ALL
+t        test-user ALL
+
+query TTT
+SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
+----
+a        readwrite ALL
+a        test-user ALL
+
+statement ok
+REVOKE INSERT,UPDATE ON DATABASE a FROM "test-user",readwrite
+
+query TTT
+SHOW GRANTS ON DATABASE a
+----
+a  readwrite  CREATE
+a  readwrite  DELETE
+a  readwrite  DROP
+a  readwrite  GRANT
+a  readwrite  SELECT
+a  root       ALL
+a  test-user  CREATE
+a  test-user  DELETE
+a  test-user  DROP
+a  test-user  GRANT
+a  test-user  SELECT
+
+query TTT
+SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
+----
+a  readwrite  CREATE
+a  readwrite  DELETE
+a  readwrite  DROP
+a  readwrite  GRANT
+a  readwrite  SELECT
+a  test-user  CREATE
+a  test-user  DELETE
+a  test-user  DROP
+a  test-user  GRANT
+a  test-user  SELECT
+
+statement ok
+REVOKE SELECT ON DATABASE a FROM "test-user"
+
+query TTT
+SHOW GRANTS ON DATABASE a
+----
+a  readwrite  CREATE
+a  readwrite  DELETE
+a  readwrite  DROP
+a  readwrite  GRANT
+a  readwrite  SELECT
+a  root       ALL
+a  test-user  CREATE
+a  test-user  DELETE
+a  test-user  DROP
+a  test-user  GRANT
+
+statement ok
+REVOKE ALL ON DATABASE a FROM "test-user"
+
+query TTT
+SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
+----
+a  readwrite  CREATE
+a  readwrite  DELETE
+a  readwrite  DROP
+a  readwrite  GRANT
+a  readwrite  SELECT
+
+statement ok
+REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
+
+query TTT
+SHOW GRANTS ON DATABASE a
+----
+a        root      ALL
+
+query TTT
+SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
+----
+
+# Verify that the table privileges have not changed.
+query TTT colnames
+SHOW GRANTS ON a.t
+----
+Table    User      Privileges
+t        readwrite ALL
+t        root      ALL
+t        test-user ALL

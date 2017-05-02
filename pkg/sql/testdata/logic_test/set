@@ -1,0 +1,172 @@
+# LogicTest: default
+
+statement error unknown variable: "foo"
+SET FOO = bar
+
+statement error unknown variable: "foo"
+SHOW FOO
+
+statement error database "foo" does not exist
+SET DATABASE = foo
+
+# Ensure that the failing SET DATABASE call did not alter the session.
+# The default session.database value is "test".
+statement ok
+SHOW TABLES
+
+statement ok
+CREATE DATABASE foo
+
+statement ok
+SET DATABASE = foo
+
+# Create a table in the session database.
+statement ok
+CREATE TABLE bar (k INT PRIMARY KEY)
+
+# Verify that the table is indeed in "foo".
+query T colnames
+SHOW TABLES FROM foo
+----
+Table
+bar
+
+# Verify set to empty string.
+statement ok
+SET DATABASE = ""
+
+query T colnames
+SHOW DATABASE
+----
+database
+
+
+statement error no database specified
+SHOW TABLES
+
+# SET statement succeeds, CREATE TABLE fails.
+statement error pgcode 42P07 relation \"bar\" already exists
+SET DATABASE = foo; CREATE TABLE bar (k INT PRIMARY KEY)
+
+query T colnames
+SHOW DATABASE
+----
+database
+foo
+
+# SET succeeds
+query T colnames
+SHOW TABLES from foo
+----
+Table
+bar
+
+statement error invalid statement
+SET ROW (1, TRUE, NULL)
+
+statement ok
+SET APPLICATION_NAME = helloworld
+
+query T colnames
+SHOW APPLICATION_NAME
+----
+application_name
+helloworld
+
+query TT
+SHOW ALL
+----
+application_name               helloworld
+client_encoding                UTF8
+client_min_messages
+database                       foo
+default_transaction_isolation  SERIALIZABLE
+distsql                        off
+extra_float_digits
+max_index_keys                 32
+search_path                    pg_catalog
+server_version                 9.5.0
+session_user                   root
+standard_conforming_strings    on
+time zone                      UTC
+transaction isolation level    SERIALIZABLE
+transaction priority           NORMAL
+transaction status             NoTxn
+
+# SESSION_USER is a special keyword, check that SHOW knows about it.
+query T
+SHOW session_user
+----
+root
+
+## Test SET ... TO DEFAULT works
+
+statement ok
+SET DISTSQL TO ON
+
+query T colnames
+SHOW DISTSQL
+----
+distsql
+on
+
+statement ok
+SET DISTSQL TO DEFAULT
+
+query T colnames
+SHOW DISTSQL
+----
+distsql
+off
+
+## Test that our no-op compatibility vars work
+
+statement ok
+SET APPLICATION_NAME = 'hello'
+
+statement ok
+SET EXTRA_FLOAT_DIGITS = 3
+
+statement ok
+SET CLIENT_MIN_MESSAGES = 'debug'
+
+statement ok
+SET STANDARD_CONFORMING_STRINGS = 'on'
+
+statement error set standard_conforming_strings: "off" not supported
+SET STANDARD_CONFORMING_STRINGS = 'off'
+
+statement ok
+SET CLIENT_ENCODING = 'UTF8'
+
+statement error non-UTF8 encoding other not supported
+SET CLIENT_ENCODING = 'other'
+
+statement ok
+SET SEARCH_PATH = 'blah'
+
+statement ok
+SET DISTSQL = ALWAYS
+
+statement ok
+SET DISTSQL = ON
+
+statement ok
+SET DISTSQL = OFF
+
+statement error not supported
+SET DISTSQL = bogus
+
+query T colnames
+SHOW SERVER_VERSION
+----
+server_version
+9.5.0
+
+# Test read-only variables
+statement error variable "max_index_keys" cannot be changed
+SET max_index_keys = 32
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'testing.str'
+----

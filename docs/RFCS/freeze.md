@@ -2,9 +2,8 @@
 - Status: in-progress
 - Start Date: 2016-02-18
 - Authors: Ben Darnell
-- RFC PR: #4499
+- RFC PR: [#4499](https://github.com/cockroachdb/cockroach/pull/4499)
 - Cockroach Issue:
-
 
 # Summary
 

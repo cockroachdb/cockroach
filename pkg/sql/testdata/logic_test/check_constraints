@@ -1,0 +1,196 @@
+# LogicTest: default parallel-stmts distsql
+
+#### column CHECK constraints
+
+statement ok
+CREATE TABLE t1 (a INT CHECK (a > 0), to_delete INT, b INT CHECK (b < 0) CHECK (b > -100))
+
+statement error string value does not match CHECK expr type int
+INSERT INTO t1 VALUES ('3', 0, -1)
+
+statement ok
+INSERT INTO t1 VALUES (3, 0, -1)
+
+statement ok
+ALTER TABLE t1 DROP COLUMN to_delete
+
+statement ok
+INSERT INTO t1 (a, b) VALUES (4, -2)
+
+statement error pq: failed to satisfy CHECK constraint \(a > 0\)
+INSERT INTO t1 VALUES (-3, -1)
+
+statement error pq: failed to satisfy CHECK constraint \(b < 0\)
+INSERT INTO t1 VALUES (3, 1)
+
+statement error pq: failed to satisfy CHECK constraint \(b > -100\)
+INSERT INTO t1 VALUES (3, -101)
+
+statement ok
+INSERT INTO t1 (b, a) VALUES (-2, 4)
+
+statement ok
+INSERT INTO t1 (a) VALUES (10)
+
+statement ok
+INSERT INTO t1 (b) VALUES (-1)
+
+statement ok
+CREATE TABLE t2 (a INT DEFAULT -1 CHECK (a >= 0), b INT CHECK (b <= 0), CHECK (b < a))
+
+statement error pq: failed to satisfy CHECK constraint \(a >= 0\)
+INSERT INTO t2 (b) VALUES (-2)
+
+### Rename column with check constraint
+
+statement ok
+ALTER TABLE t2 RENAME COLUMN b TO c
+
+statement error pq: failed to satisfy CHECK constraint \(c <= 0\)
+INSERT INTO t2 (a, c) VALUES (2, 1)
+
+statement error pq: failed to satisfy CHECK constraint \(c < a\)
+INSERT INTO t2 (a, c) VALUES (0, 0)
+
+statement ok
+INSERT INTO t2 (a, c) VALUES (2, -1)
+
+statement ok
+CREATE TABLE t3 (a INT, b INT CHECK (b < a))
+
+statement ok
+INSERT INTO t3 (a, b) VALUES (3, 2)
+
+statement error pq: failed to satisfy CHECK constraint \(b < a\)
+INSERT INTO t3 (a, b) VALUES (2, 3)
+
+# Verify we don't accept COUNT(*)
+statement error aggregate functions are not allowed in CHECK expressions
+CREATE TABLE t4 (a INT, b INT CHECK (COUNT(*) = 1))
+
+# no subqueries either.
+statement error CHECK expression .* may not contain variable sub-expressions
+CREATE TABLE t4 (a INT, b INT CHECK (EXISTS (SELECT * FROM t2)))
+
+# non-boolean expressions are errors
+statement error pq: incompatible type for CHECK expression: bool vs int
+CREATE TABLE t4 (a INT CHECK(1))
+
+# Function calls in CHECK are okay.
+statement ok
+CREATE TABLE calls_func (a INT CHECK(abs(a) < 2))
+
+statement ok
+INSERT INTO calls_func VALUES (1), (-1)
+
+statement error failed to satisfy CHECK
+INSERT INTO calls_func VALUES (-5)
+
+# Aggregate function calls in CHECK are not ok.
+statement error aggregate functions are not allowed in CHECK expressions
+CREATE TABLE bad (a INT CHECK(SUM(a) > 1))
+
+# Window function calls in CHECK are not ok.
+statement error window functions are not allowed in CHECK expressions
+CREATE TABLE bad (a INT CHECK(SUM(a) OVER () > 1))
+
+# fail on bad check types
+statement error pq: unsupported binary operator: <bool> - <bool>
+CREATE TABLE t4 (a INT CHECK (false - true))
+
+statement error column "b" not found for constraint
+CREATE TABLE t4 (a INT, CHECK (a < b), CHECK (a+b+c+d < 20))
+
+statement ok
+CREATE TABLE t4 (a INT, b INT DEFAULT 5, c INT, d INT, CHECK (a < b), CONSTRAINT "all" CHECK (a+b+c+d < 20))
+
+statement ok
+INSERT INTO t4 (a, b) VALUES (2, 3)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t4 (a) VALUES (6)
+
+statement ok
+INSERT INTO t4 VALUES (1, 2, 3, 4)
+
+statement ok
+INSERT INTO t4 VALUES (NULL, 2, 22, NULL)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t4 VALUES (1, 2, 3, 19)
+
+query II
+SELECT * from t3
+----
+3 2
+
+statement error failed to satisfy CHECK constraint
+UPDATE t3 SET b = 3 WHERE a = 3
+
+statement ok
+UPDATE t3 SET b = 1 WHERE a = 3
+
+statement error failed to satisfy CHECK constraint
+UPDATE t4 SET a = 2 WHERE c = 3
+
+statement ok
+UPDATE t4 SET a = 0 WHERE c = 3
+
+statement ok
+CREATE TABLE t5 (k INT PRIMARY KEY, a INT, b int CHECK (a > b))
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
+
+statement ok
+INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE k = 2
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO t5 VALUES (2, 11, 12)
+
+statement ok
+UPSERT INTO t5 VALUES (2, 11, 10)
+
+query III rowsort
+SELECT * FROM t5
+----
+1 10  9
+2 11  10
+
+statement ok
+UPSERT INTO t5 VALUES (2, 11, 9)
+
+query III rowsort
+SELECT * FROM t5
+----
+1 10  9
+2 11  9
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE k = 2
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO t5 VALUES (2, 11, 12)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = t5.a + 1 WHERE k = 2
+
+query III rowsort
+SELECT * FROM t5
+----
+1 10  9
+2 11  9
+
+statement error CHECK expression .* may not contain variable sub-expressions
+CREATE TABLE t6 (x INT CHECK (x = $1))
+
+statement error CHECK expression .* may not contain variable sub-expressions
+CREATE TABLE t6 (x INT CHECK (x = (SELECT 1)))
+
+

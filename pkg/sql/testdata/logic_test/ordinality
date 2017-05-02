@@ -1,0 +1,102 @@
+# LogicTest: default parallel-stmts distsql
+
+query TI colnames
+SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS X(name, i)
+----
+name i
+a 1
+b 2
+
+query I colnames
+SELECT ordinality FROM (VALUES ('a'), ('b')) WITH ORDINALITY
+----
+ordinality
+1
+2
+
+statement ok
+CREATE TABLE foo (x CHAR PRIMARY KEY); INSERT INTO foo(x) VALUES ('a'), ('b')
+
+query TI
+SELECT * FROM foo WITH ORDINALITY
+----
+a 1
+b 2
+
+query TI
+SELECT * FROM foo WITH ORDINALITY LIMIT 1
+----
+a 1
+
+query I
+SELECT MAX(ordinality) FROM foo WITH ORDINALITY
+----
+2
+
+query TITI
+SELECT * FROM foo WITH ORDINALITY AS a, foo WITH ORDINALITY AS b
+----
+a 1 a 1
+a 1 b 2
+b 2 a 1
+b 2 b 2
+
+query TI
+SELECT * FROM (SELECT x||x FROM foo) WITH ORDINALITY
+----
+aa 1
+bb 2
+
+query TII
+SELECT * FROM (SELECT x, ordinality*2 FROM foo WITH ORDINALITY AS a) JOIN foo WITH ORDINALITY AS b USING(x)
+----
+a 2 1
+b 4 2
+
+statement ok
+INSERT INTO foo(x) VALUES ('c')
+
+query TI
+SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
+----
+b 2
+c 3
+
+query TI
+SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
+----
+c 3
+b 2
+
+query TI
+SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
+----
+b 1
+c 2
+
+query B
+SELECT ordinality = row_number() OVER () FROM foo WITH ORDINALITY
+----
+true
+true
+true
+
+# Show that the primary key is used under ordinalityNode.
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
+----
+0  ordinality                      (x, ordinality)  +x,unique
+1  scan                            (x)              +x,unique
+1              table  foo@primary
+1              spans  /"a\x00"-
+
+# Show that the primary key cannot be used with a PK predicate
+# outside of ordinalityNode.
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
+----
+0  filter                          (x, ordinality)  +x,unique
+1  ordinality                      (x, ordinality)  +x,unique
+2  scan                            (x)              +x,unique
+2              table  foo@primary
+2              spans  ALL

@@ -2,8 +2,13 @@
 - Status: rejected
 - Start Date: 2016-02-01
 - Authors: knz
-- RFC PR: #4059
-- Cockroach Issue #4052, #4016, #4018, #4017, #3985, perhaps #3529
+- RFC PR: [#4059](https://github.com/cockroachdb/cockroach/pull/4059)
+- Cockroach Issue: [#4052](https://github.com/cockroachdb/cockroach/issues/4052),
+                   [#4016](https://github.com/cockroachdb/cockroach/issues/4016),
+                   [#4018](https://github.com/cockroachdb/cockroach/issues/4018),
+                   [#4017](https://github.com/cockroachdb/cockroach/issues/4017),
+                   [#3985](https://github.com/cockroachdb/cockroach/issues/3985),
+                   perhaps [#3529](https://github.com/cockroachdb/cockroach/issues/3529)
 
 Summary
 =======

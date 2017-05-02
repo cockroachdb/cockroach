@@ -3,4 +3,4 @@ set -e
 
 [[ ! $GIT_REFLOG_ACTION =~ rebase ]] && exit 0
 
-make .bootstrap
+exec git submodule update --init

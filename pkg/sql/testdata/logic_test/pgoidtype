@@ -1,0 +1,253 @@
+# LogicTest: default distsql
+
+query OO
+SELECT 3::OID, '3'::OID
+----
+3  3
+
+query O
+SELECT 3::OID::INT::OID
+----
+3
+
+query OOOOOO
+SELECT 1::OID, 1::REGCLASS, 1::REGNAMESPACE, 1::REGPROC, 1::REGPROCEDURE, 1::REGTYPE
+----
+1  1  1  1  1  1
+
+query OOOOO
+SELECT 1::OID::REGCLASS, 1::OID::REGNAMESPACE, 1::OID::REGPROC, 1::OID::REGPROCEDURE, 1::OID::REGTYPE
+----
+1  1  1  1  1
+
+query TTT
+SELECT pg_typeof(1::OID), pg_typeof(1::REGCLASS), pg_typeof(1::REGNAMESPACE)
+----
+oid  regclass  regnamespace
+
+query TTT
+SELECT pg_typeof(1::REGPROC), pg_typeof(1::REGPROCEDURE), pg_typeof(1::REGTYPE)
+----
+regproc  regprocedure  regtype
+
+query TTT
+SELECT pg_typeof('1'::OID), pg_typeof('pg_constraint'::REGCLASS), pg_typeof('system'::REGNAMESPACE)
+----
+oid  regclass  regnamespace
+
+query TTT
+SELECT pg_typeof('upper'::REGPROC), pg_typeof('upper'::REGPROCEDURE), pg_typeof('bool'::REGTYPE)
+----
+regproc  regprocedure  regtype
+
+query O
+SELECT 'pg_constraint'::REGCLASS
+----
+pg_constraint
+
+query ITTTTT
+EXPLAIN (TYPES) SELECT 'pg_constraint'::REGCLASS
+----
+0  render                                        ("'pg_constraint'::REGCLASS" regclass)
+0           render 0  (pg_constraint)[regclass]
+1  nullrow                                       ()
+
+query OO
+SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS
+----
+pg_constraint  pg_constraint
+
+query OO
+SELECT 'pg_constraint '::REGCLASS, '  pg_constraint '::REGCLASS
+----
+pg_constraint  pg_constraint
+
+query OO
+SELECT 'pg_constraint '::REGCLASS, '"pg_constraint"'::REGCLASS::OID
+----
+pg_constraint  402060402
+
+query O
+SELECT 402060402::REGCLASS
+----
+pg_constraint
+
+query OOIOT
+SELECT oid, oid::regclass, oid::regclass::int, oid::regclass::int::regclass, oid::regclass::text
+FROM pg_class
+WHERE relname = 'pg_constraint'
+----
+402060402  pg_constraint  402060402  pg_constraint  pg_constraint
+
+query OOO
+SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'upper'::REGPROC::OID
+----
+upper  upper  1736923753
+
+query OOO
+SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE, 'upper(int)'::REGPROC::OID
+----
+upper  upper  1736923753
+
+query error unknown function: blah\(\)
+SELECT 'blah(ignored, ignored)'::REGPROC, 'blah(ignored, ignored)'::REGPROCEDURE
+
+query error unknown function: blah\(\)
+SELECT ' blah ( ignored , ignored ) '::REGPROC
+
+query error unknown function: blah\(\)
+SELECT 'blah ()'::REGPROC
+
+query error unknown function: blah\(\)
+SELECT 'blah( )'::REGPROC
+
+query error unknown function: "blah\(, \)"\(\)
+SELECT 'blah(, )'::REGPROC
+
+query error more than one function named 'sqrt'
+SELECT 'sqrt'::REGPROC
+
+query OOOO
+SELECT 'array_in'::REGPROC, 'array_in(a,b,c)'::REGPROC, 'pg_catalog.array_in'::REGPROC, 'pg_catalog.array_in( a ,b, c )'::REGPROC
+----
+array_in  array_in  array_in  array_in
+
+query OOOO
+SELECT 'array_in'::REGPROCEDURE, 'array_in(a,b,c)'::REGPROCEDURE, 'pg_catalog.array_in'::REGPROCEDURE, 'pg_catalog.array_in( a ,b, c )'::REGPROCEDURE
+----
+array_in  array_in  array_in  array_in
+
+query OO
+SELECT 'system'::REGNAMESPACE, 'system'::REGNAMESPACE::OID
+----
+system  2939540337
+
+query OO
+SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID
+----
+bool  16
+
+query OO
+SELECT 'numeric(10,3)'::REGTYPE, 'numeric( 10, 3 )'::REGTYPE
+----
+numeric  numeric
+
+query error type 'foo.' does not exist
+SELECT 'foo.'::REGTYPE
+
+query error table "blah" does not exist
+SELECT 'blah'::REGCLASS
+
+query error unknown function: blah\(\)
+SELECT 'blah'::REGPROC
+
+query error unknown function: blah\(\)
+SELECT 'blah'::REGPROCEDURE
+
+query error namespace 'blah' does not exist
+SELECT 'blah'::REGNAMESPACE
+
+query error type 'blah' does not exist
+SELECT 'blah'::REGTYPE
+
+## Test other cast syntaxes
+
+query O
+SELECT CAST ('pg_constraint' AS REGCLASS)
+----
+pg_constraint
+
+# This forces the b_expr form of the cast syntax.
+query OO
+SELECT ('pg_constraint')::REGCLASS, ('pg_constraint')::REGCLASS::OID
+----
+pg_constraint  402060402
+
+## Test visibility of pg_* via oid casts.
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+query T
+SELECT relname from pg_class where oid='a'::regclass
+----
+a
+
+# a non-root user with sufficient permissions can get the OID of a table from
+# the current database
+
+statement ok
+GRANT ALL ON DATABASE test TO testuser
+
+statement ok
+GRANT SELECT ON test.* TO testuser
+
+user testuser
+
+query T
+SELECT relname from pg_class where oid='a'::regclass
+----
+a
+
+user root
+
+statement ok
+CREATE DATABASE otherdb
+
+statement ok
+SET DATABASE = otherdb
+
+## a non-root user can't get the OID of a table from a different database
+
+user testuser
+
+query error table "a" does not exist
+SELECT 'a'::regclass
+
+user root
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY, foo STRING)
+
+## There is now a table named 'a' in both the database 'otherdb' and the
+## database 'test'. The following query shows that the root user can still
+## determine the OID of the table 'a' by using a regclass cast, despite the
+## fact that the root user has visibility into both of the tables. The 'a' that
+## gets selected should be the 'a' that exists in the current database.
+## See https://github.com/cockroachdb/cockroach/issues/13695
+
+query OI
+SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+----
+a  2
+
+statement ok
+SET DATABASE = test
+
+query OI
+SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+----
+a  1
+
+statement ok
+CREATE DATABASE thirddb
+
+statement ok
+SET DATABASE = thirddb
+
+# Ensure that if there's no such table in the search path, but it still exists
+# in another database, the query fails.
+
+query error table "a" does not exist
+SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+
+statement ok
+SET SEARCH_PATH = otherdb,test
+
+# Ensure that the search path is respected properly: the table named "a" from
+# otherdb should be selected.
+
+query OI
+SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+----
+a  2

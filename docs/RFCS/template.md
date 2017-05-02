@@ -5,7 +5,6 @@
 - RFC PR: (PR # after acceptance of initial draft)
 - Cockroach Issue: (one or more # from the issue tracker)
 
-
 # Summary
 
 # Motivation

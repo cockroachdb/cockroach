@@ -1,0 +1,200 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Radu Berinde (radu@cockroachlabs.com)
+//
+// Data structures and basic infrastructure for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+package cockroach.sql.distsqlrun;
+option go_package = "distsqlrun";
+
+import "cockroach/pkg/roachpb/api.proto";
+import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/roachpb/errors.proto";
+import "cockroach/pkg/sql/pgwire/pgerror/errors.proto";
+import "cockroach/pkg/sql/sqlbase/structured.proto";
+import "cockroach/pkg/sql/sqlbase/encoded_datum.proto";
+import "gogoproto/gogo.proto";
+
+// Error is a generic representation including a string message.
+message Error {
+  option (gogoproto.goproto_stringer) = false;
+
+  oneof detail {
+    pgerror.Error pg_error = 1 [(gogoproto.customname) = "PGError"];
+    roachpb.DistSQLRetryableTxnError retryableTxnError = 2;
+    // TODO(andrei): Add AmbiguousResultError here once DistSQL starts executing
+    // writes.
+  }
+}
+
+message Expression {
+  // TODO(radu): TBD how this will be used
+  optional string version = 1 [(gogoproto.nullable) = false];
+
+  // SQL expressions are passed as a string, with ordinal references
+  // (@1, @2, @3 ..) used for "input" variables.
+  optional string expr = 2 [(gogoproto.nullable) = false];
+}
+
+// Ordering defines an order - specifically a list of column indices and
+// directions. See sqlbase.ColumnOrdering.
+message Ordering {
+  message Column {
+    // The direction of the desired ordering for a column.
+    enum Direction {
+      ASC = 0;
+      DESC = 1;
+    }
+    optional uint32 col_idx = 1 [(gogoproto.nullable) = false];
+    optional Direction direction = 2 [(gogoproto.nullable) = false];
+  }
+  repeated Column columns = 1 [(gogoproto.nullable) = false];
+}
+
+// StreamEndpointSpec describes one of the endpoints (input or output) of a physical
+// stream.
+message StreamEndpointSpec {
+  enum Type {
+    // Stream that is part of the local flow.
+    LOCAL = 0;
+    // Stream that has the other endpoint on a different node.
+    REMOTE = 1;
+    // Special stream used when in "sync flow" mode. In this mode, we return
+    // results directly as part of the RPC call that set up the flow. This saves
+    // overhead (extra RPCs) compared to the normal mode where the RPC just sets
+    // up the flow. This type can only be used with outbound endpoints.
+    SYNC_RESPONSE = 2;
+  }
+  optional Type type = 1 [(gogoproto.nullable) = false];
+
+  // The ID of this stream.
+  //
+  // For LOCAL streams, both ends of the stream are part of the flow on this
+  // machine (and there must be a corresponding endpoint with the same ID).
+  //
+  // For REMOTE streams, this ID is used in the ProducerHeader when connecting to
+  // the other host.
+  //
+  // For SYNC_RESPONSE streams, the ID is unused.
+  optional int32 stream_id = 2 [(gogoproto.nullable) = false,
+                                (gogoproto.customname) = "StreamID",
+                                (gogoproto.casttype) = "StreamID"];
+  // Serving address for the target host, only used for outgoing REMOTE streams.
+  optional string target_addr = 3 [(gogoproto.nullable) = false];
+}
+
+// InputSyncSpec is the specification for an input synchronizer; it decides how
+// to interleave rows from multiple input streams.
+message InputSyncSpec {
+  enum Type {
+    // Rows from the input streams are interleaved arbitrarily.
+    UNORDERED = 0;
+    // The input streams are guaranteed to be ordered according to the column
+    // ordering field; rows from the streams are interleaved to preserve that
+    // ordering.
+    ORDERED = 1;
+  }
+  optional Type type = 1 [(gogoproto.nullable) = false];
+
+  optional Ordering ordering = 2 [(gogoproto.nullable) = false];
+
+  repeated StreamEndpointSpec streams = 3 [(gogoproto.nullable) = false];
+
+  // Schema for the streams entering this synchronizer.
+  repeated sqlbase.ColumnType column_types = 4 [(gogoproto.nullable) = false];
+}
+
+// OutputRouterSpec is the specification for the output router of a processor;
+// it decides how to send results to multiple output streams.
+message OutputRouterSpec {
+  enum Type {
+    // Single output stream.
+    PASS_THROUGH = 0;
+    // Each row is sent to all output streams.
+    MIRROR = 1;
+    // Each row is sent to one stream, chosen by hashing certain columns of
+    // the row (specified by the hash_columns field).
+    BY_HASH = 2;
+    // Each row is sent to one stream, chosen according to preset boundaries
+    // for the values of certain columns of the row. TODO(radu): an extra
+    // optional structure below for the range details.
+    BY_RANGE = 3;
+  }
+  optional Type type = 1 [(gogoproto.nullable) = false];
+  repeated StreamEndpointSpec streams = 2 [(gogoproto.nullable) = false];
+
+  // Only used for the BY_HASH type; these are the indexes of the columns we are
+  // hashing.
+  repeated uint32 hash_columns = 3;
+}
+
+message DatumInfo {
+  optional sqlbase.DatumEncoding encoding = 1 [(gogoproto.nullable) = false];
+  optional sqlbase.ColumnType type = 2 [(gogoproto.nullable) = false];
+}
+
+// ProducerHeader is a message that is sent once at the beginning of a stream.
+message ProducerHeader {
+  optional bytes flow_id = 1 [(gogoproto.nullable) = false,
+                              (gogoproto.customname) = "FlowID",
+                              (gogoproto.customtype) = "FlowID"];
+
+  optional int32 stream_id = 2 [(gogoproto.nullable) = false,
+                                (gogoproto.customname) = "StreamID",
+                                (gogoproto.casttype) = "StreamID"];
+}
+
+// ProducerData is a message that can be sent multiple times as part of a stream
+// from a producer to a consumer.
+message ProducerData {
+  // ProducerData contains 0 or more rows and/or 0 or more metadata messages.
+  
+  // A bunch of rows, encoded. Each datum is encoded according to the
+  // corresponding DatumInfo.
+  optional bytes raw_bytes = 1;
+  // A bunch of metadata messages.
+  repeated RemoteProducerMetadata metadata = 2 [(gogoproto.nullable) = false];
+}
+
+message ProducerMessage {
+  optional ProducerHeader header = 1;
+
+  // Typing information. There will be one DatumInfo for each element in a row.
+  // This field has to be populated on, or before, a ProducerMessage with data
+  // in it, and can only be populated once.
+  // TODO(andrei): It'd be nice if the typing information for streams would be
+  // configured statically at plan creation time, instead of being discovered
+  // dynamically through the first rows that flow.
+  repeated DatumInfo typing = 2 [(gogoproto.nullable) = false];
+
+  optional ProducerData data = 3 [(gogoproto.nullable) = false];
+}
+
+// RemoteProducerMetadata represents records that a producer wants to pass to
+// a consumer, other than data rows. It's named RemoteProducerMetadata to not
+// clash with ProducerMetadata, which is used internally within a node and has
+// a different go error instead of a proto error inside.
+message RemoteProducerMetadata {
+  message RangeInfos {
+    repeated roachpb.RangeInfo range_info = 1 [(gogoproto.nullable) = false];
+  }
+  oneof value {
+    RangeInfos range_info = 1;
+    Error error = 2;
+  }
+}

@@ -1,0 +1,171 @@
+# LogicTest: default
+
+statement ok
+CREATE TABLE a (k STRING PRIMARY KEY, v STRING)
+
+statement ok
+INSERT INTO a VALUES ('a', '1'), ('b', '2'), ('c', '3')
+
+statement ok
+CREATE VIEW b AS SELECT k,v from a
+
+statement ok
+CREATE VIEW c AS SELECT k,v from b
+
+query T
+SHOW TABLES FROM test
+----
+a
+b
+c
+
+statement error cannot drop table "a" because view "b" depends on it
+DROP TABLE a
+
+statement error pgcode 42809 "b" is not a table
+DROP TABLE b
+
+statement error cannot drop view "b" because view "c" depends on it
+DROP VIEW b
+
+statement ok
+CREATE VIEW d AS SELECT k,v FROM a
+
+statement ok
+CREATE VIEW diamond AS SELECT COUNT(*) FROM b AS b JOIN d AS d ON b.k = d.k
+
+statement error cannot drop view "d" because view "diamond" depends on it
+DROP VIEW d
+
+statement ok
+GRANT ALL ON d TO testuser
+
+query T
+SHOW TABLES FROM test
+----
+a
+b
+c
+d
+diamond
+
+user testuser
+
+statement error user testuser does not have DROP privilege on view diamond
+DROP VIEW diamond
+
+statement error cannot drop view "d" because view "diamond" depends on it
+DROP VIEW d
+
+user root
+
+statement ok
+CREATE VIEW testuser1 AS SELECT k,v FROM a
+
+statement ok
+CREATE VIEW testuser2 AS SELECT k,v FROM testuser1
+
+statement ok
+CREATE VIEW testuser3 AS SELECT k,v FROM testuser2
+
+statement ok
+GRANT ALL ON testuser1 to testuser
+
+statement ok
+GRANT ALL ON testuser2 to testuser
+
+statement ok
+GRANT ALL ON testuser3 to testuser
+
+query T
+SHOW TABLES FROM test
+----
+a
+b
+c
+d
+diamond
+testuser1
+testuser2
+testuser3
+
+user testuser
+
+statement ok
+DROP VIEW testuser3
+
+query T
+SHOW TABLES FROM test
+----
+d
+testuser1
+testuser2
+
+statement error cannot drop view "testuser1" because view "testuser2" depends on it
+DROP VIEW testuser1
+
+statement error cannot drop view "testuser1" because view "testuser2" depends on it
+DROP VIEW testuser1 RESTRICT
+
+statement ok
+DROP VIEW testuser1 CASCADE
+
+query T
+SHOW TABLES FROM test
+----
+d
+
+statement error pgcode 42P01 view "testuser2" does not exist
+DROP VIEW testuser2
+
+user root
+
+statement ok
+GRANT ALL ON a to testuser
+
+statement ok
+GRANT ALL ON b to testuser
+
+statement ok
+GRANT ALL ON c to testuser
+
+statement ok
+GRANT ALL ON d to testuser
+
+user testuser
+
+statement error user testuser does not have DROP privilege on view diamond
+DROP TABLE a CASCADE
+
+user root
+
+statement ok
+DROP TABLE a CASCADE
+
+query T
+SHOW TABLES FROM test
+----
+
+statement ok
+CREATE VIEW x AS VALUES (1, 2), (3, 4)
+
+statement ok
+CREATE VIEW y AS SELECT column1, column2 FROM x
+
+statement error cannot drop view "x" because view "y" depends on it
+DROP VIEW x
+
+statement ok
+DROP VIEW x, y
+
+statement ok
+CREATE VIEW x AS VALUES (1, 2), (3, 4)
+
+statement ok
+CREATE VIEW y AS SELECT column1, column2 FROM x
+
+statement error cannot drop view "x" because view "y" depends on it
+DROP VIEW x
+
+statement ok
+DROP VIEW y, x

@@ -19,7 +19,7 @@ latency.
 
 Table descriptors are currently distributed to every node in the
 cluster via gossipping of the system config (see
-[schema_distribution](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/schema_gossip.md)). Unfortunately,
+[schema_gossip](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/schema_gossip.md)). Unfortunately,
 it is not safe to use these gossipped table descriptors in almost any
 circumstance. Consider the statements:
 
@@ -62,7 +62,7 @@ following steps:
 * Wait for the table descriptor change to propagate to all nodes in
   the cluster and all uses of the previous version to finish.
 
-This RFC is focused on how to wait for the table descriptor change
+This RFC is focused on how to wait for the table descriptor change to
 propagate to all nodes in the cluster. More accurately, it is focused
 on how to determine when the previous version of the descriptor is no
 longer in use. Additionally, we need mechanisms to ensure that

@@ -2,7 +2,7 @@
 - Status: rejected
 - Start Date: 2016-04-10
 - Authors: Tobias Schottdorf
-- RFC PR: #5985
+- RFC PR: [#5985](https://github.com/cockroachdb/cockroach/pull/5985)
 - Cockroach Issue:
 
 # Rejection notes
@@ -256,7 +256,7 @@ version they've been proposed with). That naturally leads again to a Raft
 command:
 
 The update sends a `ChangeVersion` (which is more of a `StopForUpgrade` command
-in this section) to all Replicas, with teh following semantics:
+in this section) to all Replicas, with the following semantics:
 * It's the highest committed command when it applies (i.e. the Replica won't
   acknowledge receipt of additional log entries after the one containing
   `ChangeVersion`) and,

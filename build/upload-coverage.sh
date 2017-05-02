@@ -1,75 +1,52 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-if [ -z "$COVERALLS_TOKEN" ]; then
+set -euxo pipefail
+
+if [ -z "${COVERALLS_TOKEN-}" ]; then
   echo "FAIL: Missing or empty COVERALLS_TOKEN."
   exit 1
 fi
-if [ -z "$CODECOV_TOKEN" ]; then
+if [ -z "${CODECOV_TOKEN-}" ]; then
   echo "FAIL: Missing or empty CODECOV_TOKEN."
   exit 1
 fi
 
-if [ -n "${TMPDIR-}" ]; then
-  outdir="${TMPDIR}"
-else
-  outdir="/tmp"
-fi
+prefix=github.com/cockroachdb/cockroach/pkg
 
-main_package="github.com/cockroachdb/cockroach"
-# This regex removes files from the uploaded coverage.
-ignore_files="$main_package/(acceptance|cmd|ui/embedded|storage/simulation|sql/pgbench|.*\.(pb|pb\.gw)\.go)"
+coverage_dir=coverage
+coverage_profile=$coverage_dir/coverage.out
 
-coverage_dir="${outdir}/coverage"
-coverage_profile="${coverage_dir}/coverage.out"
-coverage_mode=count
+trap "rm -rf $coverage_dir" EXIT
 
-# iterative_coverpkg fetches all test deps and main deps, filters them, and
-# converts them into a comma separated list stored in $coverpkg.
-iterative_coverpkg() {
-  imports="$1"
-  old_line_count="-1"
-  while [ "$old_line_count" != "$line_count" ]; do
-    old_line_count=$line_count
-    imports=$(go list  -f '{{join .Imports "\n"}}
-{{join .TestImports "\n"}}
-{{join .XTestImports "\n"}}' $imports | grep $main_package | sort | uniq)
-    line_count=$(echo $imports | wc -w)
-  done
-  coverpkg=$(echo $imports | sed 's/ /,/g')
-}
+rm -rf $coverage_dir
+mkdir -p $coverage_dir
 
-rm -rf "$coverage_dir"
-mkdir -p "$coverage_dir"
-
-# Run "make coverage" on each package.
-for pkg in $(go list ./...); do
-  # Verify package has test files.
-  if [ -z "$(go list -f '{{join .TestGoFiles ""}}{{join .XTestGoFiles ""}}' $pkg)" ]; then
-    echo "$pkg: Skipping due to no test files."
-    continue
-  fi
-
+# Run coverage on each package, because go test "cannot use test profile flag
+# with multiple packages". See https://github.com/golang/go/issues/6909.
+for pkg in $(go list $prefix/...); do
   # Only generate coverage for cockroach dependencies.
-  iterative_coverpkg $pkg
+  #
+  # Note that grep's exit status is ignored here to allow for packages with no
+  # dependencies.
+  coverpkg=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{"\n"}}{{join .XTestImports "\n"}}' $pkg | \
+    sort -u | grep -v '^C$' | \
+    xargs go list -f '{{if not .Standard}}{{join .Deps "\n" }}{{end}}' | \
+    sort -u | grep -v '^C$' | \
+    xargs go list -f '{{if not .Standard}}{{.ImportPath}}{{end}}' | \
+    grep $prefix || true)
 
-  # Find all cockroach packages that are imported by this package or in it's
-  # tests.
-  f="${coverage_dir}/$(echo $pkg | tr / -).cover"
-  touch $f
-  time ${builder} make coverage \
-    PKG="$pkg" \
-    TESTFLAGS="-v -coverprofile=$f -covermode=$coverage_mode -coverpkg=$coverpkg" | \
-    tee "${outdir}/coverage.log"
+  time make test PKG="$pkg" TESTFLAGS="-coverpkg=${coverpkg//$'\n'/,} -coverprofile=${coverage_dir}/${pkg//\//-}.cover -covermode=count"
 done
 
 # Merge coverage profiles and remove lines that match our ignore filter.
-gocovmerge "$coverage_dir"/*.cover | grep -vE "$ignore_files" > "$coverage_profile"
+gocovmerge $coverage_dir/*.cover | \
+  grep -vE "$prefix/(acceptance|cmd|ui/embedded|sql/pgbench|.*\.pb(\.gw)?\.go)" > $coverage_profile
 
 # Upload profiles to coveralls.io.
 goveralls \
-  -coverprofile="$coverage_profile" \
+  -coverprofile=$coverage_profile \
   -service=teamcity \
-  -repotoken=$COVERALLS_TOKEN
+  -repotoken="$COVERALLS_TOKEN"
 
-# Upload profiles to codecov.io.
-bash <(curl -s https://codecov.io/bash) -f "$coverage_profile"
+# Upload profiles to codecov.io. Uses CODECOV_TOKEN.
+bash <(curl -s https://codecov.io/bash) -f $coverage_profile

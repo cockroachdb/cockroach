@@ -1,0 +1,51 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+CREATE VIEW kview AS SELECT k,v FROM kv
+
+query II rowsort
+SELECT * FROM kview
+----
+1 2
+3 4
+5 6
+7 8
+
+statement error cannot run TRUNCATE on view "kview" - views are not updateable
+TRUNCATE TABLE kview
+
+query II rowsort
+SELECT * FROM kview
+----
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+TRUNCATE TABLE kv
+
+query II
+SELECT * FROM kv
+----
+
+query II
+SELECT * FROM kview
+----

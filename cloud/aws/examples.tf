@@ -1,7 +1,7 @@
 # Various examples that can be run against a cockroach cluster in AWS.
 # A cockroach cluster should be created first by following the steps in README.md.
 # To enable an example, change the number of instances on the command line. eg:
-# terraform apply <flags for cockroach cluster> --var=example_block_writer_instances=1
+# terraform apply <flags for cockroach cluster> --var=example_block_writer_instances=\"1\"
 
 # Number of instances for the block writer example. Set to 1 to enable the example.
 # The block writer example does not support multiple instances. Expect badness if
@@ -27,7 +27,7 @@ resource "aws_instance" "example_block_writer" {
 
   connection {
     user = "ubuntu"
-    key_file = "~/.ssh/${var.key_name}.pem"
+    private_key = "${file(format("~/.ssh/%s.pem", var.key_name))}"
   }
 
   provisioner "file" {
@@ -39,7 +39,7 @@ resource "aws_instance" "example_block_writer" {
   # use rendered templates in the file provisioner.
   provisioner "remote-exec" {
     inline = <<FILE
-echo '${template_file.supervisor.0.rendered}' > supervisor.conf
+echo '${data.template_file.supervisor.0.rendered}' > supervisor.conf
 FILE
   }
 

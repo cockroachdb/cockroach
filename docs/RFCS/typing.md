@@ -2,8 +2,15 @@
 - Status: completed
 - Authors: Andrei, knz, Nathan
 - Start date: 2016-01-29
-- RFC PR: #4121 #6189
-- Cockroach Issue: #4024  #4026  #3633  #4073  #4088  #3271 #1795
+- RFC PR: [#4121](https://github.com/cockroachdb/cockroach/pull/4121),
+          [#6189](https://github.com/cockroachdb/cockroach/pull/6189)
+- Cockroach Issue: [#4024](https://github.com/cockroachdb/cockroach/issues/4024),
+                   [#4026](https://github.com/cockroachdb/cockroach/issues/4026),
+                   [#3633](https://github.com/cockroachdb/cockroach/issues/3633),
+                   [#4073](https://github.com/cockroachdb/cockroach/issues/4073),
+                   [#4088](https://github.com/cockroachdb/cockroach/issues/4088),
+                   [#327](https://github.com/cockroachdb/cockroach/pull/327),
+                   [#1795](https://github.com/cockroachdb/cockroach/issues/1795)
 
 # Summary
 
@@ -223,7 +230,7 @@ For example:
       prepare a as select (3 + $1) + ($1 + 3.5)
    ```
 
-   PostgreSQL resolves #1 as `decimal`. CockroachDB can't infer.
+   PostgreSQL resolves $1 as `decimal`. CockroachDB can't infer.
    Arguably both "int" and "float" may come to mind as well.
 
 
@@ -245,7 +252,7 @@ For example:
    the +, and not the fact that $1 may have a richer type.
 
    One may argue that a typing algorithm that only performs "locally"
-   is sufficient, and that this statement can be reliabily understood
+   is sufficient, and that this statement can be reliably understood
    to perform an integer operation in all cases, with a forced cast of
    the value filled in the placeholder. The problem with this argument
    is that this interpretation loses the equivalence between a direct
@@ -448,7 +455,7 @@ In the first pass we check the following:
   occurrences of a placeholder appear as immediate argument
   to a cast expression then:
 
-  - if all the cast(s)  are homogenous,
+  - if all the cast(s) are homogenous,
     then assign the placeholder the type indicated by the cast.
 
   - otherwise, assign the type "string" to the placeholder.
@@ -545,6 +552,25 @@ being type checked, it is up to the caller to assert a specific type
 is returned from the expression typing and throw a type checking error
 if necessary.
 
+Desired type classes can be:
+
+- fully unspecified (the top level specification is a wildcard)
+- structurally specified (the top level specification is not a wildcard, but the desired
+  type may contain wildcards)
+
+We also say that a desired type is "fully specified" if it doesn't contain any wildcard.
+
+We say that two desired type patterns are "equivalent" when they are structurally
+equivalent given that a wildcard is equivalent to any type.
+
+While a specified (fully or partially) desired type indicates a preference to
+the sub-expression being type checked, an unspecified desired type indicates
+no preference. This means that the sub-expression should type itself naturally
+(see *natural type* discussion above). Generally speaking, wildcard types can be
+thought of as accepting any type in their place. In certain cases, such as with
+placeholders, a desired type must be fully-specified or an ambiguity error will
+be thrown.
+
 The alternative would be to propagate the desired type down as a constraint,
 and fail as soon as this constraint is violated. However by doing so we would
 dilute the clarity of the origin of the error. Consider for example `insert into (text_column) values (1+floor(1.5))`;
@@ -580,21 +606,24 @@ The function then works as follows:
 
 1. if the node is a constant literal: if the desired type is within the constant's
    **resolvable type set**, convert the literal to the desired type. Otherwise, resolve
-   the literal as its **natural type**.
+   the literal as its **natural type**. Note that only fully-specified types will ever
+   be in a constant's **resolvable type set**.
 
 2. if the node is a column reference or a datum: use the type determined by the node regardless
    of the desired type.
 
-3. if the node is a placeholder: if there is no desired type, report an error.
-   if there is a desired type, and the placeholder was not yet assigned a type,
-   assign the desired type to the placeholder and return that type as natural type, and the set of all types
-   as resolvable type set. If the placeholder was already assigned a different natural type, report an error.
+3. if the node is a placeholder: if the desired type is not fully-specified, report an error.
+   if there is a fully-specified desired type, and the placeholder was not yet assigned a type,
+   assign the desired type to the placeholder. If the placeholder was already assigned a
+   different type, report an error.
 
-4. if the node is NULL: if there is a desired type, annotate the node with the desired type and return that,
-   otherwise return the NULL type as natural type and a resolve set containing all types.
+4. if the node is NULL: if there is a fully-specified desired type, annotate the node with
+   the equivalent type and return that, otherwise return the NULL type as the expression's resolved
+   type.
 
-5. if the node is a simple statement (or sub-select, not CASE!). Propagate the desired types down, then look at what comes
-   up when the recursion returns, then check the inferred type are compatible with the statement semantics.
+5. if the node is a simple statement (or sub-select, not CASE!). Propagate the desired
+   types down, then look at what comes up when the recursion returns, then check the
+   inferred type are compatible with the statement semantics.
 
 6. for statements or variadic function calls with a homogeneity requirement, we use the rules in the section
    [below](#required-homogeneity) for typing.
@@ -629,15 +658,15 @@ subsequent step, we check the remaining overload set:
 - If there are no candidates left, type checking fails ("no matching overload").
 - if there is only one candidate left, this is used as the implementation function to use for the call, any
   yet untyped placeholder or constant literal is typed recursively using the type defined by its argument position as desired type,
-  (it is possible to prove, and we could assert here, that the inferred type here is always the desired type)
-  then subsequent steps are skipped.
+  (it is possible to prove, and we could assert here, that the inferred type here is always
+  equivalent to the desired type) then subsequent steps are skipped.
 - if there is more than one candidate left, the next filter is applied and the resolution
   continues.
 
 
 1. (7.1) candidates are filtered based on the number of arguments
 
-2. (7.2) the pre-typable sub-nodes (and only those) are typed, starting without a desired type.
+2. (7.2) the pre-typable sub-nodes (and only those) are typed, starting with an unspecified desired type.
    At every sub-node, the candidate list is filtered using the types found so far. If at
    any point there is only one candidate remaining, further pre-typable sub-nodes are typed using
    the remaining candidate's argument type at that position as desired type.
@@ -650,7 +679,7 @@ subsequent step, we check the remaining overload set:
 
    For example: `select mod(extract(seconds from now()), $1*20)`. There
    are 3 candidates for `mod`, on `int`, `float` and `decimal`. The
-   first argument `extract` is typed without a desired type and
+   first argument `extract` is typed with an unspecified desired type and
    resolves to `int`. This selects the candidate `mod(int, int)`. From then on only one candidate
    remains so `$1*20` gets typed using desired type `int` and `$1` gets typed as `int`.
 
@@ -718,23 +747,24 @@ These situations may or may not also desire a given type for all subexpressions.
 examples of this type of situation are in CASE statements (both for the condition set and the
 value set) and in COALESCE statements. Because this is a common need for a number of statement
 types, the typing resolution of this situation should be specified. Here we present a list of
-rules to be applied to a given list of untyped expressions and an optional desired type.
+rules to be applied to a given list of untyped expressions and a desired type.
 
 1. (6.1) as we did with overload resolution, split the provided expressions into three groups:
   - pre-typable nodes unambiguously resolvable expressions, previously resolved arguments, and constant string literals
   - constant numeric literals
   - unresolved placeholders
 
-2. (6.2) if there is a desired type, type all the sub-nodes using this type as desired type. If any
-   of the sub-nodes resolves to a different type, report an error (expecting X, got Y).
+2. (6.2) if there is a specified (partially or fully) desired type, type all the sub-nodes using
+   this type as desired type. If any of the sub-nodes resolves to a different type, report an
+   error (expecting X, got Y).
 
-3. (6.3) otherwise (no desired type), if there is any pre-typable node, then
-   type this node without a desired type.
+3. (6.3) otherwise (wildcard desired type), if there is any pre-typable node, then
+   type this node with an unspecified desired type.
    Call the resulting type T.
    Then for all remaining sub-nodes, type it desiring T. If the resulting type is different from T, report an error.
    The result of typing is T.
 
-4. (6.4) (no desired type, no pre-typable node, all remaining nodes are either constant number literals or untyped placeholders)
+4. (6.4) (wildcard desired type, no pre-typable node, all remaining nodes are either constant number literals or untyped placeholders)
 
    If there is at least one constant literal, then pick the best mutual type of all constant literals, if any, call that T,
    type all sub-nodes using T as desired type, and return T as resolved type.
@@ -743,11 +773,13 @@ rules to be applied to a given list of untyped expressions and an optional desir
 
 ## Examples with Summer
 
+### Example 1
+
 ```sql
     prepare a as select 3 + case (4) when 4 then $1 end
   Tree:
        select
-       |
+         |
          +
        /   \
       3    case
@@ -757,15 +789,15 @@ rules to be applied to a given list of untyped expressions and an optional desir
 
 Constant folding happens, nothing changes.
 
-Typing of the select begins. Since this is not a sub-select there is no desired type.
-Typing of "+" begins. Again no desired type.
+Typing of the select begins. Since this is not a sub-select there is wildcard desired type.
+Typing of "+" begins. Again wildcard desired type.
 
 Rule 7.1 then 7.2 applies.
 
-Typing of "case" begins without a desired type.
+Typing of "case" begins without a specified desired type.
 
-Then "case" recursively types its condition variable without desired type.
-Typing of "4" begins. No desired type here, resolves to int as natural type, [int, float, dec] as resolvable type set.
+Then "case" recursively types its condition variable with a wildcard desired type.
+Typing of "4" begins. unspecified desired type here, resolves to int as natural type, [int, float, dec] as resolvable type set.
 Typing of "case" continues. Now it knows the condition is an "int" it will demand "int" for the WHEN branches.
 Typing of "4" (the 2nd one) begins. Type "int" is desired so the 2nd "4" is typed to that.
 Typing of "case" continues. Here rule 6.4 applies, and a failure occurs.
@@ -774,15 +806,15 @@ Typing of "case" continues. Here rule 6.4 applies, and a failure occurs.
  prepare a as select 3 + case (4) when 4 then $1 else 42 end
 ```
 
-Typing of the select begins. Since this is not a sub-select there is no desired type.
-Typing of "+" begins. Again no desired type.
+Typing of the select begins. Since this is not a sub-select there is wildcard desired type.
+Typing of "+" begins. Again wildcard desired type.
 
 Rule 7.1 then 7.2 applies.
 
-Typing of "case" begins without a desired type.
+Typing of "case" begins without a specified desired type.
 
-Then "case" recursively types its condition variable without desired type.
-Typing of "4" begins. No desired type here, resolves to int as natural type, [int, float, dec] as resolvable type set.
+Then "case" recursively types its condition variable with a wildcard desired type.
+Typing of "4" begins. wildcard desired type, resolves to int as natural type, [int, float, dec] as resolvable type set.
 Typing of "case" continues. Now it knows the condition is an "int" it will demand "int" for the WHEN branches.
 Typing of "4" (the 2nd one) begins. Type "int" is desired so the 2nd "4" is typed to that.
 
@@ -800,7 +832,7 @@ typing completes for "+" with "int".
 Typing completes.
 
 
-Another example:
+### Example 2
 
 ```sql
     create table t (x float);
@@ -820,14 +852,15 @@ Typing of insert ends. All is well. Result:
      10:float
 ```
 
-Other example:
+
+### Example 3
 
 ```
    select floor($1 + $2)
 ```
 
 Assuming `floor` is only defined for floats.
-Typing of "floor" begins with no desired type.
+Typing of "floor" begins with an unspecified desired type.
 
 Rule 7.2 applies.
 There is only one candidate, so there is a desired type for the remaining arguments (here the only one of them) based on the arguments taken by floor.
@@ -845,7 +878,6 @@ typing of "floor" completes with type "float".
 
 Typing completes.
 
-
 ```
    select
     |
@@ -854,7 +886,8 @@ Typing completes.
 $1:float    $2:float
 ```
 
-Another example:
+
+### Example 4
 
 ```sql
    select ($1+$1)+current_date()
@@ -864,12 +897,12 @@ Another example:
    $1 $1
 ```
 
-Typing of "+(a)" begins without a desired type.
+Typing of "+(a)" begins with a wildcard desired type.
 Rule 7.2 applies.
 All candidates for "+" take different types,
 so we don't find any desired type
 
-Typing of "+(b)" begins without a desired type.
+Typing of "+(b)" begins without a specified desired type.
 Rules 7.1 to 7.6 fail to reduce the overload set, so typing fails with ambiguous types.
 
 Possible fix:
@@ -878,7 +911,7 @@ Possible fix:
 with those nodes.
 
 
-Another example:
+### Example 5
 
 Consider a library containing the following functions::
 
@@ -893,7 +926,7 @@ Then consider the following statement::
 ```
 
 Typing starts for "select".
-Typing starts for the call to "g" without a desired type.
+Typing starts for the call to "g" without a specified desired type.
 Rule 7.2 applies. Only 1 candidate so the sub-nodes are typed
 with its argument type as desired type.
 
@@ -934,7 +967,8 @@ Typing completes.
 
 Ambiguous on overload resolution of "-"
 
-Example:
+
+### Example 6
 
 ```sql
   insert into (str_col) values (coalesce(1, "foo"))
@@ -954,7 +988,8 @@ then ($2 + 2.5) doesn't type.
 
 (Morty would have done $1 = exact)
 
-Another example:
+
+### Example 7
 
 ```sql
       create table t (x float);
@@ -962,7 +997,7 @@ Another example:
 ```
 Constant folding reduces 3/2 into 1.5.
 
-Typing "1.5" stars with desired type float, succeeds, 1.5 gets inserted.
+Typing "1.5" stars with desired type "float", succeeds, 1.5 gets inserted.
 
 ```sql
       create table u (x int);
@@ -973,7 +1008,8 @@ annotated with natural type "int" and resolvable type set [int].
 
 Then typing succeeds.
 
-Another example:
+
+### Example 8
 
 ```sql
      create table t (x int, s text);
@@ -983,14 +1019,15 @@ Another example:
 First "$1" gets typed with desired type "int", gets assigned "int".
 Then "+"  is typed.
 Rule 7.2 applies.
-The cast "cast ($1 as text)" is typed with no desired type.
+The cast "cast ($1 as text)" is typed with a wildcard desired type.
 This succeeds, leaves the $1 unchanged (it is agnostic of its argument)
 and resolves to type "text".
 "+" resolves to 1 candidate, is typed as "string"
 Typing ends. $1 is int.
 (better than Morty!)
 
-Another example:
+
+### Example 9
 
 ```sql
     select $1::int
@@ -999,7 +1036,8 @@ Another example:
 First pass annotates $1 as int (all occurrences are argument of
 cast). Typing completes with int.
 
-Next example:
+
+### Example 10
 
 ```sql
     f:int,int->int
@@ -1011,7 +1049,10 @@ Typing of "f" starts,
 Multiple candidate remain after overload resolution.
 Typing fails with ambiguous types.
 
-Next example:
+
+### Example 11
+
+#### Part a
 
 ```sql
     f:int,int->int
@@ -1025,6 +1066,8 @@ the argument have reduced the candidate set to just one.
 Typing completes
 $1 is assigned "float"
 
+#### Part b
+
 ```sql
     PREPARE a AS SELECT ($1 + 4) + $1::int
 ```
@@ -1037,6 +1080,7 @@ Rule 7.6 applies, $1 gets assigned "int".
 Top level plus is +(int,int)->int
 Typing end with int.
 
+#### Part c
 
 ```sql
     PREPARE a AS SELECT ($1 + 4) + $1:int
@@ -1046,6 +1090,8 @@ Typing end with int.
 "+" resolves 1 candidate
 [...]
 Typing ends.
+
+#### Part d
 
 ```sql
     PREPARE a AS SELECT ($2 - $2) * $1:int, $2:int
@@ -1063,6 +1109,8 @@ $2 already has type int, so one candidate remains.
 [...]
 Typing ends successfully.
 
+
+### Example 12
 
 ```sql
     f : int -> int
@@ -1091,13 +1139,43 @@ Then typing of "$1" assigns "string" (desired).
 Then typing completes.
 
 
-Example:
+### Example 13
 
 ```sql
   select max($1, $1):int
 ```
 
 Annotation demands "int" so rule 6 demands "int" from max, resolves "int" for $1 and max.
+
+
+### Example 14
+
+```sql
+  select array_length(ARRAY[1, 2, 3])
+```
+
+Typing starts for "select".
+Typing starts for the call to "array_length" without a specified desired type.
+Rule 7.2 applies. Only 1 candidate is available so the sub-nodes are typed with
+its argument type as a desired type, which is "array<*>".
+
+Typing starts for the ARRAY constructor with desired type "array<*>".
+The ARRAY expression checks that the desired type is present and has a
+base type of "array". Because it does, it unwraps the desired type, pulls
+out the parameterized type "*", and passes this as the desired type when
+requiring homogeneous types for all elements. 
+
+Typing starts for the array's expressions. These elements, in the presence
+of an unspecified desired type, naturally type themselves as "int"s using
+rule 6.4.
+
+The ARRAY expression types itself as "array\<int\>".
+
+The overload resolution for "array_length" finds that this resolved type is
+equivalent to its single candidate's parameter (`array<*> ≡ array<int>`), so
+it picks that candidate and resolves to that candidate's return type of "int".
+
+Typing completes.
 
 
 # Alternatives
@@ -1146,13 +1224,13 @@ is determined by the column names targeted by the insert.
 First pass: populating initial types for literals and placeholders.
 
 - for each numeric literal, annotate with an internal type
-  `exact`. Just like for Rick, we can do arithmethic in this type for
+  `exact`. Just like for Rick, we can do arithmetic in this type for
   constant folding.
 
 - for each placeholder, process immediate casts if any by annotating
   the placeholder by the type indicated by the cast *when there is no
   other type discovered earlier for this placeholder* during this
-  phase. If the same placehoder is encountered a 2nd time with a
+  phase. If the same placeholder is encountered a 2nd time with a
   conflicting cast, report a typing error ("conflicting types for $n
   ...")
 
@@ -1168,7 +1246,7 @@ Third pass, type inference and soundness analysis:
    that position, and *also* there is only one candidate that accepts
    a numeric type T at that position, then the expression E is
    automatically substituted by `TYPEASSERT_NUMERIC(E,T)[T]` and
-   typing continues assuming E[T] (see rule 11 below for a definition of `TYPEASSERT_NUMERIC`).
+   typing continues assuming `E[T]` (see rule 11 below for a definition of `TYPEASSERT_NUMERIC`).
 3. If, during overload resolution, a *literal* `string` E is
    found at some argument position and no candidate accepts `string`
    at that position, and *also* there is only one candidate left based

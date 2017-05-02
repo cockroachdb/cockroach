@@ -1,8 +1,8 @@
 - Feature Name: Stateless Replica Relocation
-- Status: complete
+- Status: completed
 - Start Date: 2015-08-19
-- RFC PR:
-- Cockroach Issue: #620
+- RFC PR: [#2171](https://github.com/cockroachdb/cockroach/pull/2171)
+- Cockroach Issue: [#620](https://github.com/cockroachdb/cockroach/issues/620)
 
 # Summary
 A relocation is, conceptually, the transfer of a single replica from one store to
@@ -77,8 +77,7 @@ The second piece, the core mechanic, will be performed by the existing
 "replicate queue" which will be renamed the "*replication queue*". This queue is
 already used to add replicas to ranges which are under-replicated; it can be
 enhanced to remove replicas from over-replicated ranges, thus satisfying the
-basic requirements of the core mechanic. Detailed design for these changes are
-in a [separate RFC (#2153)](https://github.com/cockroachdb/cockroach/pull/2153).
+basic requirements of the core mechanic.
 
 The third piece simply informs the design of systems performing relocations; for
 example, the upcoming repair and rebalance systems (still being planned).  After

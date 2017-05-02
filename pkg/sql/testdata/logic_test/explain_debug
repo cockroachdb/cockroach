@@ -1,0 +1,277 @@
+# LogicTest: default distsql
+
+statement ok
+CREATE TABLE abc (
+  a INT,
+  b TEXT,
+  c FLOAT,
+  PRIMARY KEY (a, b),
+  UNIQUE INDEX foo (b),
+  INDEX bar (a),
+  FAMILY (a, b),
+  FAMILY (c)
+)
+
+query ITTT colnames
+EXPLAIN (DEBUG) SELECT * FROM abc
+----
+RowIdx  Key  Value  Disposition
+
+statement ok
+INSERT INTO abc VALUES (1, 'one', 1.1), (2, 'two', NULL), (3, 'three', NULL)
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc
+----
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   ROW
+1  /abc/primary/2/'two'    NULL  ROW
+2  /abc/primary/3/'three'  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc LIMIT 2
+----
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   ROW
+1  /abc/primary/2/'two'    NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc OFFSET 2
+----
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   FILTERED
+1  /abc/primary/2/'two'    NULL  FILTERED
+2  /abc/primary/3/'three'  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc LIMIT 1 OFFSET 1
+----
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   FILTERED
+1  /abc/primary/2/'two'    NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
+----
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   ROW
+1  /abc/primary/2/'two'    NULL  ROW
+2  /abc/primary/3/'three'  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b DESC
+----
+0  /abc/primary/1/'one'    NULL               PARTIAL
+0  /abc/primary/1/'one'/c  1.1                BUFFERED
+1  /abc/primary/2/'two'    NULL               BUFFERED
+2  /abc/primary/3/'three'  NULL               BUFFERED
+0  0                       (2, 'two', NULL)   ROW
+1  1                       (3, 'three', NULL) ROW
+2  2                       (1, 'one', 1.1)    ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b DESC LIMIT 1 OFFSET 1
+----
+0  /abc/foo/'two'          /2    PARTIAL
+0  /abc/primary/2/'two'    NULL  FILTERED
+1  /abc/foo/'three'        /3    PARTIAL
+1  /abc/primary/3/'three'  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc WHERE a = 2
+----
+0  /abc/primary/2/'two'  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT b FROM abc@foo
+----
+0  /abc/foo/'one'    /1  ROW
+1  /abc/foo/'three'  /3  ROW
+2  /abc/foo/'two'    /2  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT a FROM abc@bar
+----
+0  /abc/bar/1/'one'    NULL  ROW
+1  /abc/bar/2/'two'    NULL  ROW
+2  /abc/bar/3/'three'  NULL  ROW
+
+statement ok
+UPDATE abc SET c = NULL WHERE a = 1
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc
+----
+0  /abc/primary/1/'one'    NULL  ROW
+1  /abc/primary/2/'two'    NULL  ROW
+2  /abc/primary/3/'three'  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT 3
+----
+0 NULL NULL ROW
+
+query ITTT
+EXPLAIN (DEBUG) VALUES (1, 2, 3), (4, 5, 6)
+----
+0 0 (1, 2, 3) ROW
+1 1 (4, 5, 6) ROW
+
+query ITTT
+EXPLAIN (DEBUG) VALUES (1, 2, 3), (4, 5, 6) ORDER BY 1 DESC
+----
+0 0 (4, 5, 6) ROW
+1 1 (1, 2, 3) ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS a
+----
+0 0 (1, 2, 3) ROW
+1 1 (4, 5, 6) ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc) AS sub WHERE a % 2 = 0
+----
+0  /abc/primary/1/'one'    NULL  FILTERED
+1  /abc/primary/2/'two'    NULL  ROW
+2  /abc/primary/3/'three'  NULL  FILTERED
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM (SELECT a+a/a-1 FROM abc) AS sub(a) WHERE a > 1 OFFSET 1
+----
+0  /abc/primary/1/'one'    NULL  FILTERED
+1  /abc/primary/2/'two'    NULL  FILTERED
+2  /abc/primary/3/'three'  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc WHERE a = 2) AS sub
+----
+0  /abc/primary/2/'two'    NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT DISTINCT * FROM (VALUES (1, 2, 3), (4, 5, 6), (1, 2, 3), (1, 2, 4)) AS a
+----
+0 0 (1, 2, 3) ROW
+1 1 (4, 5, 6) ROW
+2 2 (1, 2, 3) FILTERED
+3 3 (1, 2, 4) ROW
+
+statement ok
+CREATE TABLE ab (a INT, b INT, PRIMARY KEY(a, b))
+
+statement ok
+INSERT INTO ab VALUES (1, 4), (1, 5), (2, 1), (2, 2), (2, 6), (3, 9)
+
+# Note: the output from GROUP BY is in random order; the example is constructed so
+# those rows are identical.
+query ITTT
+EXPLAIN (DEBUG) SELECT SUM(b) FROM ab GROUP BY a
+----
+0  /ab/primary/1/4  NULL  BUFFERED
+1  /ab/primary/1/5  NULL  BUFFERED
+2  /ab/primary/2/1  NULL  BUFFERED
+3  /ab/primary/2/2  NULL  BUFFERED
+4  /ab/primary/2/6  NULL  BUFFERED
+5  /ab/primary/3/9  NULL  BUFFERED
+0  0                (9)   ROW
+1  1                (9)   ROW
+2  2                (9)   ROW
+
+query ITTT
+EXPLAIN (DEBUG) VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)
+----
+0 0 (1, 3) ROW
+1 1 (3, 4) ROW
+2 2 (1, 1) ROW
+0 0 (1, 2) ROW
+1 1 (1, 1) FILTERED
+2 2 (1, 2) FILTERED
+3 3 (2, 1) ROW
+4 4 (2, 1) FILTERED
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc EXCEPT SELECT * FROM abc WHERE b > 'p'
+----
+0  /abc/foo/'three'        /3    PARTIAL
+0  /abc/primary/3/'three'  NULL  FILTERED
+1  /abc/foo/'two'          /2    PARTIAL
+1  /abc/primary/2/'two'    NULL  FILTERED
+0  /abc/primary/1/'one'    NULL  ROW
+1  /abc/primary/2/'two'    NULL  FILTERED
+2  /abc/primary/3/'three'  NULL  FILTERED
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM ab WHERE a > 1 INTERSECT SELECT * FROM ab WHERE b > 1
+----
+0  /ab/primary/1/4  NULL  FILTERED
+1  /ab/primary/1/5  NULL  FILTERED
+2  /ab/primary/2/1  NULL  FILTERED
+3  /ab/primary/2/2  NULL  FILTERED
+4  /ab/primary/2/6  NULL  FILTERED
+5  /ab/primary/3/9  NULL  FILTERED
+0  /ab/primary/2/1  NULL  FILTERED
+1  /ab/primary/2/2  NULL  ROW
+2  /ab/primary/2/6  NULL  ROW
+3  /ab/primary/3/9  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) INSERT INTO ab(a, b) VALUES (42, 51)
+----
+0 0 (42, 51) ROW
+
+query ITTT
+EXPLAIN (DEBUG) INSERT INTO ab(a, b) SELECT a+1, b+1 FROM ab WHERE b > 6
+----
+0  /ab/primary/1/4  NULL  FILTERED
+1  /ab/primary/1/5  NULL  FILTERED
+2  /ab/primary/2/1  NULL  FILTERED
+3  /ab/primary/2/2  NULL  FILTERED
+4  /ab/primary/2/6  NULL  FILTERED
+5  /ab/primary/3/9  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) UPDATE ab SET a = a + 1 WHERE b > 6
+----
+0  /ab/primary/1/4  NULL  FILTERED
+1  /ab/primary/1/5  NULL  FILTERED
+2  /ab/primary/2/1  NULL  FILTERED
+3  /ab/primary/2/2  NULL  FILTERED
+4  /ab/primary/2/6  NULL  FILTERED
+5  /ab/primary/3/9  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) DELETE FROM ab WHERE b > 6
+----
+0  /ab/primary/1/4  NULL  FILTERED
+1  /ab/primary/1/5  NULL  FILTERED
+2  /ab/primary/2/1  NULL  FILTERED
+3  /ab/primary/2/2  NULL  FILTERED
+4  /ab/primary/2/6  NULL  FILTERED
+5  /ab/primary/3/9  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) DELETE FROM ab
+----
+0  /ab/primary/1/4  NULL  ROW
+1  /ab/primary/1/5  NULL  ROW
+2  /ab/primary/2/1  NULL  ROW
+3  /ab/primary/2/2  NULL  ROW
+4  /ab/primary/2/6  NULL  ROW
+5  /ab/primary/3/9  NULL  ROW
+
+statement ok
+UPDATE abc SET c = 1.1 WHERE a = 1
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM ab, abc WHERE abc.a+ab.b = abc.a*ab.a
+----
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   BUFFERED
+1  /abc/primary/2/'two'    NULL  BUFFERED
+2  /abc/primary/3/'three'  NULL  BUFFERED
+0  /ab/primary/1/4         NULL  BUFFERED
+1  /ab/primary/1/5         NULL  BUFFERED
+2  /ab/primary/2/1         NULL  BUFFERED
+3  /ab/primary/2/2         NULL  BUFFERED
+4  /ab/primary/2/6         NULL  BUFFERED
+5  /ab/primary/3/9         NULL  BUFFERED

@@ -1,0 +1,183 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX foo (z, y)
+)
+
+statement ok
+INSERT INTO xyz VALUES (1, 2, 3), (2, 5, 6), (3, 2, 3), (4, 5, 6), (5, 2, 6), (6, 3, 5), (7, 2, 9)
+
+query II rowsort
+SELECT y, z FROM xyz
+----
+2 3
+5 6
+2 3
+5 6
+2 6
+3 5
+2 9
+
+query II rowsort
+SELECT DISTINCT y, z FROM xyz
+----
+2 3
+5 6
+2 6
+3 5
+2 9
+
+# TODO(vivek): Use the secondary index. Use distinct in index selection.
+query ITTT
+EXPLAIN SELECT DISTINCT y, z FROM xyz
+----
+0  distinct
+1  render
+2  scan
+2            table  xyz@primary
+2            spans  ALL
+
+query II partialsort(2)
+SELECT DISTINCT y, z FROM xyz ORDER BY z
+----
+2 3
+3 5
+2 6
+5 6
+2 9
+
+query ITTT
+EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
+----
+0  distinct
+0            key    y, z
+1  render
+2  scan
+2            table  xyz@foo
+2            spans  ALL
+
+query II partialsort(1)
+SELECT DISTINCT y, z FROM xyz ORDER BY y
+----
+2 3
+2 6
+2 9
+3 5
+5 6
+
+query ITTT
+EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
+----
+0  distinct
+0            key    y
+1  sort
+1            order  +y
+2  render
+3  scan
+3            table  xyz@foo
+3            spans  ALL
+
+query II
+SELECT DISTINCT y, z FROM xyz ORDER BY y, z
+----
+2 3
+2 6
+2 9
+3 5
+5 6
+
+query ITTT
+EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
+----
+0  distinct
+0            key    y, z
+1  sort
+1            order  +y,+z
+2  render
+3  scan
+3            table  xyz@foo
+3            spans  ALL
+
+query I
+SELECT DISTINCT y + z FROM xyz ORDER by (y + z)
+----
+5
+8
+11
+
+query ITTT
+EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
+----
+0  distinct
+0            key    y + z
+1  sort
+1            order  +"y + z"
+2  render
+3  scan
+3            table  xyz@primary
+3            spans  ALL
+
+query I
+SELECT DISTINCT y AS w FROM xyz ORDER by z
+----
+2
+3
+5
+
+query ITTT
+EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY z
+----
+0  distinct
+1  nosort
+1            order  +z
+2  render
+3  scan
+3            table  xyz@foo
+3            spans  ALL
+
+query I
+SELECT DISTINCT y AS w FROM xyz ORDER by y
+----
+2
+3
+5
+
+query ITTT
+EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
+----
+0  distinct
+0            key    w
+1  sort
+1            order  +w
+2  render
+3  scan
+3            table  xyz@foo
+3            spans  ALL
+
+# Insert NULL values for z.
+statement ok
+INSERT INTO xyz (x, y) VALUES (8, 2), (9, 2)
+
+query II rowsort
+SELECT DISTINCT y,z FROM xyz
+----
+2 3
+5 6
+2 6
+3 5
+2 9
+2 NULL
+
+query T rowsort
+SELECT DISTINCT (y,z) FROM xyz
+----
+(2,3)
+(5,6)
+(2,6)
+(3,5)
+(2,9)
+(2,)

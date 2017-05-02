@@ -16,167 +16,200 @@
 # Author: Shawn Morel (shawnmorel@gmail.com)
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-# Cockroach build rules.
-GO ?= go
-# Allow setting of go build flags from the command line.
-GOFLAGS :=
-# Set to 1 to use static linking for all builds (including tests).
-STATIC :=
-
-# Variables to be overridden on the command line, e.g.
-#   make test PKG=./storage TESTFLAGS=--vmodule=raft=1
-PKG          := ./...
+# Variables to be overridden on the command line only, e.g.
+#
+#   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
+#
+# Note that environment variable overrides are intentionally ignored.
+PKG          := ./pkg/...
 TAGS         :=
 TESTS        := .
-TESTTIMEOUT  := 2m
-RACETIMEOUT  := 5m
+BENCHES      :=
+FILES        :=
+TESTTIMEOUT  := 4m
+RACETIMEOUT  := 15m
 BENCHTIMEOUT := 5m
 TESTFLAGS    :=
-STRESSFLAGS  := -stderr -maxfails 1
+STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
+GOFLAGS      :=
+COCKROACH    := ./cockroach
+ARCHIVE      := cockroach.src.tgz
+STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
 BUILDMODE    := install
-CURRENTDIR   := $(realpath .)
-export GOPATH := $(realpath ../../../..)
-# Prefer tools from $GOPATH/bin over those elsewhere on the path.
-# This ensures that we get the versions pinned in the GLOCKFILE.
-export PATH := $(GOPATH)/bin:$(PATH)
-# HACK: Make has a fast path and a slow path for command execution,
-# but the fast path uses the PATH variable from when make was started,
-# not the one we set on the previous line. In order for the above
-# line to have any effect, we must force make to always take the slow path.
-# Setting the SHELL variable to a value other than the default (/bin/sh)
-# is one way to do this globally.
-# http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile/13468229#13468229
-SHELL := $(shell which bash)
-ifeq ($(SHELL),)
-$(error bash is required)
+BUILDTARGET  := .
+SUFFIX       :=
+
+# Possible values:
+# <empty>: use the default toolchain
+# release-linux-gnu:  target Linux 2.6.32, dynamically link GLIBC 2.12.2
+# release-linux-musl: target Linux 2.6.32, statically link musl 1.1.16
+# release-darwin:     target OS X 10.9
+# release-windows:    target Windows 8, statically link all non-Windows libraries
+#
+# All non-empty variants only work in the cockroachdb/builder docker image, as
+# they depend on cross-compilation toolchains available there.
+TYPE :=
+
+# We intentionally use LINKFLAGS instead of the more traditional LDFLAGS
+# because LDFLAGS has built-in semantics that don't make sense with the Go
+# toolchain.
+LINKFLAGS ?=
+
+ifeq ($(TYPE),)
+override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
+else ifeq ($(TYPE),release-linux-gnu)
+# We use a custom toolchain to target old Linux and glibc versions. However,
+# this toolchain's libstdc++ version is quite recent and must be statically
+# linked to avoid depending on the target's available libstdc++.
+XHOST_TRIPLE := x86_64-unknown-linux-gnu
+override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+override GOFLAGS += -installsuffix release-gnu
+override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
+else ifeq ($(TYPE),release-linux-musl)
+XHOST_TRIPLE := x86_64-unknown-linux-musl
+override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
+override GOFLAGS += -installsuffix release-musl
+override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
+else ifeq ($(TYPE),release-darwin)
+XGOOS := darwin
+export CGO_ENABLED := 1
+XHOST_TRIPLE := x86_64-apple-darwin13
+override SUFFIX := $(SUFFIX)-darwin-10.9-amd64
+override LINKFLAGS += -s -w -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+else ifeq ($(TYPE),release-windows)
+XGOOS := windows
+export CGO_ENABLED := 1
+XHOST_TRIPLE := x86_64-w64-mingw32
+override SUFFIX := $(SUFFIX)-windows-6.2-amd64
+override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+else
+$(error unknown build type $(TYPE))
 endif
-export GIT_PAGER :=
+
+REPO_ROOT := .
+include $(REPO_ROOT)/build/common.mk
+override TAGS += make $(TARGET_TRIPLE_TAG)
+
+# On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
+# symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
+# to the host machine's actual macOS version works around this. See:
+# https://github.com/jemalloc/jemalloc/issues/494.
+ifdef MACOS
+export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion)
+endif
+
+XGO := $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO)
+
+.DEFAULT_GOAL := all
+.PHONY: all
+all: build test check
+
+.PHONY: short
+short: build testshort checkshort
+
+buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
+
+build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
+
+# The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
+build buildoss install: override LINKFLAGS += \
+	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
+.PHONY: build buildoss install
+build buildoss install: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
+	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
-ifeq ($(STATIC),1)
-# Static linking with glibc is a bad time; see
-# https://github.com/golang/go/issues/13470. If a static build is
-# requested, only link libgcc and libstdc++ statically.
-# TODO(peter): Allow this only when `go env CC` reports "gcc".
-LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
-endif
-
-.PHONY: all
-all: build test check
-
-.PHONY: release
-release: build
-
-.PHONY: build
-build: GOFLAGS += -i -o cockroach
-build: BUILDMODE = build
-build: install
-
-.PHONY: install
-install: LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
-install:
-	@echo "GOPATH set to $$GOPATH"
-	@echo "$$GOPATH/bin added to PATH"
-	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS)
-	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)'
+.PHONY: start
+start: build
+start:
+	$(COCKROACH) start $(STARTFLAGS)
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
-# If STATIC=1, tests are statically linked.
-# eg: to statically build the sql tests, run:
-#   make STATIC=1 testbuild PKG=./sql
 .PHONY: testbuild
-testbuild: GOFLAGS += -c
-testbuild:
-	for p in $(shell $(GO) list -tags '$(TAGS)' $(PKG)); do \
-	  NAME=$$(basename "$$p"); \
-	  OUT="$$NAME.test"; \
-	  DIR=$$($(GO) list -f {{.Dir}} -tags '$(TAGS)' $$p); \
-	  $(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -o "$$DIR"/"$$OUT" -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
-	done
+testbuild: gotestdashi
+	$(XGO) list -tags '$(TAGS)' -f \
+	'$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
+	$(SHELL)
 
-# Build all tests into DIR and strips each.
-# DIR is required.
-.PHONY: testbuildall
-testbuildall: GOFLAGS += -c
-testbuildall:
-ifndef DIR
-	$(error DIR is undefined)
-endif
-	for p in $(shell $(GO) list $(PKG)); do \
-	  NAME=$$(basename "$$p"); \
-	  PKGDIR=$$($(GO) list -f {{.ImportPath}} $$p); \
-	  OUTPUT_FILE="$(DIR)/$${PKGDIR}/$${NAME}.test"; \
-	  $(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -o $${OUTPUT_FILE} -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
-	  if [ -s $${OUTPUT_FILE} ]; then strip -S $${OUTPUT_FILE}; fi; \
-	  if [ $${NAME} = "sql" ]; then \
-	     cp -r sql/testdata sql/partestdata "$(DIR)/$${PKGDIR}/" || exit 1; \
-	  fi \
-	done
+.PHONY: gotestdashi
+gotestdashi: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
+	$(XGO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
 
-# Similar to "testrace", we want to cache the build before running the
-# tests.
-.PHONY: test
-test:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+testshort: override TESTFLAGS += -short
 
-.PHONY: testslow
-testslow: TESTFLAGS += -v
-testslow:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+testrace: override GOFLAGS += -race
+testrace: export GORACE := halt_on_error=1
+testrace: TESTTIMEOUT := $(RACETIMEOUT)
 
-.PHONY: testraceslow
-testraceslow: TESTFLAGS += -v
-testraceslow:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -race -run "$(TESTS)" -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+# Directory scans in the builder image are excruciatingly slow when running
+# Docker for Mac, so we filter out the 20k+ UI dependencies that are
+# guaranteed to be irrelevant to save nearly 10s on every Make invocation.
+FIND_RELEVANT := find pkg -name node_modules -prune -o
 
-# "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
-# tests. Run it as a part of "testrace" since race-enabled builds are not covered by
-# "make build", and so they would be built from scratch every time (including the
-# slow-to-compile cgo packages).
-.PHONY: testrace
-testrace:
-	$(GO) test -v $(GOFLAGS) -race -i $(PKG)
-	$(GO) test $(GOFLAGS) -race -run "$(TESTS)" -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS)
+bin/sql.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/sql.test ./pkg/sql
 
-.PHONY: bench
-bench:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -run - -bench "$(TESTS)" -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
+bench: BENCHES := .
+bench: TESTS := -
+bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
-.PHONY: coverage
-coverage:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -cover -run "$(TESTS)" $(PKG) $(TESTFLAGS)
+.PHONY: test testshort testrace testlogic bench
+test testshort testrace bench: gotestdashi
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
-# "make stress PKG=./storage TESTS=TestBlah" will build the given test
-# and run it in a loop (the PKG argument is required; if TESTS is not
-# given all tests in the package will be run).
-.PHONY: stress
-stress:
-	$(GO) test -v $(GOFLAGS) -i -c $(PKG) -o stress.test
-	cd $(PKG) && stress $(STRESSFLAGS) $(CURRENTDIR)/stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+# Run make testlogic to run all of the logic tests. Specify test files to run
+# with make testlogic FILES="foo bar".
+testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$,TestLogic)
+testlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
+testlogic: bin/sql.test
+	cd pkg/sql && sql.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
-.PHONY: stressrace
-stressrace:
-	$(GO) test $(GOFLAGS) -race -v -i -c $(PKG) -o stress.test
-	cd $(PKG) && stress $(STRESSFLAGS) $(CURRENTDIR)/stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+testraceslow: override GOFLAGS += -race
+testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
+
+.PHONY: testslow testraceslow
+testslow testraceslow: override TESTFLAGS += -v
+testslow testraceslow: gotestdashi
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+
+stressrace: override GOFLAGS += -race
+stressrace: TESTTIMEOUT := $(RACETIMEOUT)
+
+# Beware! This target is complicated because it needs to handle complexity:
+# - PKG may be specified as relative (e.g. './gossip') or absolute (e.g.
+# github.com/cockroachdb/cockroach/gossip), and this target needs to create
+# the test binary in the correct location and `cd` to the correct directory.
+# This is handled by having `go list` produce the command line.
+# - PKG may also be recursive (e.g. './pkg/...'). This is also handled by piping
+# through `go list`.
+# - PKG may not contain any tests! This is handled with an `if` statement that
+# checks for the presence of a test binary before running `stress` on it.
+.PHONY: stress stressrace
+stress stressrace: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
+	$(GO) list -tags '$(TAGS)' -f '$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
+
+.PHONY: upload-coverage
+upload-coverage: $(BOOTSTRAP_TARGET)
+	$(GO) install ./vendor/github.com/wadey/gocovmerge
+	$(GO) install ./vendor/github.com/mattn/goveralls
+	@build/upload-coverage.sh
 
 .PHONY: acceptance
 acceptance:
-	@acceptance/run.sh
+	@pkg/acceptance/run.sh
 
 .PHONY: dupl
-dupl:
-	find . -name '*.go'             \
+dupl: $(BOOTSTRAP_TARGET)
+	$(FIND_RELEVANT) \
+	       -name '*.go'             \
 	       -not -name '*.pb.go'     \
 	       -not -name '*.pb.gw.go'  \
 	       -not -name 'embedded.go' \
@@ -184,61 +217,71 @@ dupl:
 	       -not -name 'sql.go'      \
 	| dupl -files $(DUPLFLAGS)
 
+# All packages need to be installed before we can run (some) of the checks and
+# code generators reliably. More precisely, anything that uses x/tools/go/loader
+# is fragile (this includes stringer, vet and others). The blocking issue is
+# https://github.com/golang/go/issues/14120.
+
+# `go generate` uses stringer and so must depend on gotestdashi per the above
+# comment. See https://github.com/golang/go/issues/10249 for details.
+.PHONY: generate
+generate: gotestdashi
+	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
+
+# The style checks depend on `go vet` and so must depend on gotestdashi per the
+# above comment. See https://github.com/golang/go/issues/16086 for details.
 .PHONY: check
-check:
-	# compile everything; go vet sometimes reports incorrect errors if
-	# the build artifacts are stale.
-	$(GO) test -i ./...
-	@build/check-style.sh
+check: override TAGS += check
+check: gotestdashi
+	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
+
+.PHONY: checkshort
+checkshort: override TAGS += check
+checkshort: gotestdashi
+	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
-clean:
-	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
-	find . -name '*.test' -type f -exec rm -f {} \;
-	rm -f .bootstrap
-	make -C ui clean
+clean: clean-c-deps
+	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
+	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
+	rm -f $(BOOTSTRAP_TARGET) $(ARCHIVE)
 
 .PHONY: protobuf
 protobuf:
-	$(MAKE) -C .. -f cockroach/build/protobuf.mk
+	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
 
-# The .go-version target is phony so that it is rebuilt every time.
-.PHONY: .go-version
-.go-version:
-	@actual=$$($(GO) version); \
-	echo "$${actual}" | grep -q -E '\b$(GOVERS)\b' || \
-	  (echo "$(GOVERS) required (see CONTRIBUTING.md): $${actual}" && false)
+# archive builds a source tarball out of this repository. Files in the special
+# directory build/archive/contents are inserted directly into $(ARCHIVE_BASE).
+# All other files in the repository are inserted into the archive with prefix
+# $(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach to allow the extracted
+# archive to serve directly as a GOPATH root.
+.PHONY: archive
+archive: $(ARCHIVE)
 
-include .go-version
+$(ARCHIVE): $(ARCHIVE).tmp
+	gzip -c $< > $@
 
-ifneq ($(SKIP_BOOTSTRAP),1)
+# TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
+# instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
+.INTERMEDIATE: $(ARCHIVE).tmp
+$(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
+$(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev
+	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
+	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
-GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
-.git/hooks/%: githooks/%
-	@echo installing $<
-	@rm -f $@
-	@mkdir -p $(dir $@)
-	@ln -s ../../$(basename $<) $(dir $@)
+.buildinfo:
+	@mkdir -p $@
 
-GLOCK := ../../../../bin/glock
-#        ^  ^  ^  ^~ GOPATH
-#        |  |  |~ GOPATH/src
-#        |  |~ GOPATH/src/github.com
-#        |~ GOPATH/src/github.com/cockroachdb
+.buildinfo/tag: | .buildinfo
+	@{ git describe --tags --exact-match 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
+	@git diff-index --quiet HEAD || echo -dirty >> $@
 
-$(GLOCK):
-	$(GO) get github.com/robfig/glock
+.buildinfo/rev: | .buildinfo
+	@git rev-parse HEAD > $@
 
-# Update the git hooks and run the bootstrap script whenever any
-# of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE
-	@unset GIT_WORK_TREE; $(GLOCK) sync github.com/cockroachdb/cockroach
-	touch $@
-
-.PHONY: upload-coverage
-upload-coverage:
-	@build/upload-coverage.sh
-
-include .bootstrap
-
+ifneq ($(GIT_DIR),)
+# If we're in a Git checkout, we update the buildinfo information on every build
+# to keep it up-to-date.
+.buildinfo/tag: .ALWAYS_REBUILD
+.buildinfo/rev: .ALWAYS_REBUILD
 endif

@@ -1,0 +1,55 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Tobias Schottdorf (tobias@cockroachlabs.com)
+
+syntax = "proto3";
+package cockroach.storage;
+option go_package = "storage";
+
+import "cockroach/pkg/roachpb/internal_raft.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
+import "gogoproto/gogo.proto";
+
+// StoreRequestHeader locates a Store on a Node.
+message StoreRequestHeader {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int32 store_id = 2 [(gogoproto.customname) = "StoreID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+}
+
+// A CollectChecksumRequest asks the addressed replica for the result of a
+// roachpb.ComputeChecksumRequest.
+message CollectChecksumRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // checksum_id identifies the corresponding roachpb.ComputeChecksumRequest.
+  bytes checksum_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ChecksumID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  bytes checksum = 4;
+}
+
+message CollectChecksumResponse {
+  bytes checksum = 1;
+  // snapshot is set if the roachpb.ComputeChecksumRequest had snapshot = true
+  // and the response checksum is different from the request checksum.
+  roachpb.RaftSnapshotData snapshot = 2;
+}
+
+service Consistency {
+  rpc CollectChecksum(CollectChecksumRequest) returns (CollectChecksumResponse) {}
+}

@@ -1,0 +1,233 @@
+# LogicTest: default parallel-stmts distsql
+
+# The following tests have results equivalent to Postgres (differences
+# in string representation and number of decimals returned, but otherwise
+# the same). These do not pass using the inf package. The inf package
+# (http://gopkg.in/inf.v0) is what we used to use, but it had various problems
+# (for example, all the test cases below), and was replaced with apd.
+
+# inf returns 0
+query R
+SELECT (1.4238790346995263e-40::DECIMAL / 6.011482313728436e+41::DECIMAL)
+----
+0.00000000000000000000000000000000000000000000000000000000000000000000000000000000023685988919035999994
+
+# inf returns -108.4851126682386588
+query R
+SELECT ln(7.682705743584112e-48::DECIMAL)
+----
+-108.48511266823882051
+
+# inf returns 0
+query R
+SELECT sqrt(9.789765531128956e-34::DECIMAL)
+----
+0.000000000000000031288601009199749773
+
+# inf returns 0.1547300000000000
+query R
+SELECT pow(4.727998800941528e-14::DECIMAL, 0.06081860494226844::DECIMAL)
+----
+0.15472926640705911955
+
+# inf returns 0, 0
+query RR
+SELECT pow(sqrt(1e-10::DECIMAL), 2), sqrt(pow(1e-5::DECIMAL, 2))
+----
+0.0000000001  0.00001
+
+# inf returns 1e-16, 0, 2e-16
+query RRR
+SELECT 1e-16::DECIMAL / 2, 1e-16::DECIMAL / 3, 1e-16::DECIMAL / 2 * 2
+----
+0.00000000000000005  0.000000000000000033333333333333333333  0.00000000000000010
+
+# inf returns 1e-8, 0, 0, 0
+query RRRR
+SELECT pow(1e-4::DECIMAL, 2), pow(1e-5::DECIMAL, 2), pow(1e-8::DECIMAL, 2), pow(1e-9::DECIMAL, 2)
+----
+0.00000001  0.0000000001  0.0000000000000001  0.000000000000000001
+
+# inf returns argument too large
+query R
+SELECT pow(1e-10::DECIMAL, 2)
+----
+0.00000000000000000001
+
+# inf panics (#13051)
+query RR
+SELECT 'NaN'::FLOAT::DECIMAL, 'NaN'::DECIMAL
+----
+NaN NaN
+
+# Ensure trailing zeros are kept for decimal types with no listed scale,
+# and enforced when the scale is listed.
+
+statement ok
+CREATE TABLE t (d decimal, v decimal(3, 1))
+
+statement ok
+INSERT INTO t VALUES (1.00::decimal, 1.00::decimal), (2.0::decimal, 2.0::decimal), (3::decimal, 3::decimal)
+
+query RR
+SELECT * FROM t ORDER BY d
+----
+1.00 1.0
+2.0  2.0
+3    3.0
+
+# Ensure trailing zeros are kept in an index.
+
+statement ok
+CREATE TABLE t2 (d decimal, v decimal(3, 1), primary key (d, v))
+
+statement ok
+INSERT INTO t2 VALUES
+  (1.00::decimal, 1.00::decimal),
+  (2.0::decimal, 2.0::decimal),
+  (3::decimal, 3::decimal),
+  ('NaN'::decimal, 'NaN'::decimal),
+  ('Inf'::decimal, 'Inf'::decimal),
+  ('-Inf'::decimal, '-Inf'::decimal),
+  ('-0.0000'::decimal, '-0.0000'::decimal)
+
+query RR
+SELECT * FROM t2 ORDER BY d
+----
+NaN        NaN
+-Infinity  -Infinity
+-0.0000    -0.0
+1.00       1.0
+2.0        2.0
+3          3.0
+Infinity   Infinity
+
+# Ensure uniqueness in PK columns with +/- NaN and 0.
+
+statement error duplicate key value
+INSERT INTO t2 VALUES ('-NaN'::decimal, '-NaN'::decimal)
+
+statement error duplicate key value
+INSERT INTO t2 VALUES (0, 0)
+
+# Ensure NaN cannot be signaling or negative.
+
+query RRRR
+SELECT 'NaN'::decimal, '-NaN'::decimal, 'sNaN'::decimal, '-sNaN'::decimal
+----
+NaN NaN NaN NaN
+
+# Ensure special values are handled correctly.
+
+statement ok
+CREATE TABLE s (d decimal null)
+
+statement ok
+INSERT INTO s VALUES
+  (null),
+  ('NaN'::decimal),
+  ('-NaN'::decimal),
+  ('Inf'::decimal),
+  ('-Inf'::decimal),
+  ('0'::decimal),
+  (1),
+  (-1)
+
+query R
+SELECT * FROM s ORDER BY d
+----
+NULL
+NaN
+NaN
+-Infinity
+-1
+0
+1
+Infinity
+
+query R
+SELECT * FROM s ORDER BY d DESC
+----
+Infinity
+1
+0
+-1
+-Infinity
+NaN
+NaN
+NULL
+
+statement ok
+INSERT INTO s VALUES
+  ('-0'::decimal),
+  ('-0.0'::decimal),
+  ('-0.00'::decimal),
+  ('-0.00E-1'::decimal),
+  ('-0.0E-3'::decimal)
+
+query R rowsort
+SELECT * FROM s WHERE d = 0
+----
+0
+-0
+-0.0
+-0.00
+-0.000
+-0.0000
+
+query R
+SELECT * FROM s WHERE d IS NAN
+----
+NaN
+NaN
+
+query R
+SELECT * FROM s WHERE d = 'inf'::decimal
+----
+Infinity
+
+# Verify that decimals don't lose trailing 0s even when used for an index.
+statement ok
+CREATE INDEX idx ON s (d)
+
+query R rowsort
+SELECT * FROM s@idx WHERE d = 0
+----
+0
+-0
+-0.0
+-0.00
+-0.000
+-0.0000
+
+statement ok
+INSERT INTO s VALUES
+  ('10'::decimal),
+  ('10.0'::decimal),
+  ('10.00'::decimal),
+  ('10.000'::decimal),
+  ('100000E-4'::decimal),
+  ('1000000E-5'::decimal),
+  ('1.0000000E+1'::decimal)
+
+query R rowsort
+SELECT * FROM s@primary WHERE d = 10
+----
+10
+10.0
+10.00
+10.000
+10.0000
+10.00000
+10.000000
+
+query R rowsort
+SELECT * FROM s@idx WHERE d = 10
+----
+10
+10.0
+10.00
+10.000
+10.0000
+10.00000
+10.000000

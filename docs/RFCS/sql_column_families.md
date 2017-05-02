@@ -1,5 +1,5 @@
 - Feature Name: sql_column_families
-- Status: draft
+- Status: completed
 - Start Date: 2015-12-14
 - Authors: Daniel Harrison, Peter Mattis
 - RFC PR: [#6712](https://github.com/cockroachdb/cockroach/pull/6712)
@@ -172,7 +172,7 @@ no non-NULL/non-primary-key column. For example, we could omit the
 sentinel key in the following table because we know there will always
 be one KV pair:
 
-  ```
+```
 CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT NOT NULL

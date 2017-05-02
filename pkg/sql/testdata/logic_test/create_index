@@ -1,0 +1,150 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  FAMILY (a),
+  FAMILY (b)
+)
+
+statement ok
+INSERT INTO t VALUES (1,1)
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t
+----
+0  /t/primary/1    NULL  PARTIAL
+0  /t/primary/1/b  1     ROW
+
+user root
+
+statement ok
+CREATE INDEX foo ON t (b)
+
+statement error duplicate index name: \"foo\"
+CREATE INDEX foo ON t (a)
+
+statement error index \"bar\" contains unknown column \"c\"
+CREATE INDEX bar ON t (c)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM t
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+t      primary  true    1    a       ASC        false    false
+t      foo      false   1    b       ASC        false    false
+t      foo      false   2    a       ASC        false    true
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@foo
+----
+0  /t/foo/1/1  NULL  ROW
+
+statement ok
+INSERT INTO t VALUES (2,1)
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@foo
+----
+0  /t/foo/1/1  NULL  ROW
+1  /t/foo/1/2  NULL  ROW
+
+statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
+CREATE UNIQUE INDEX bar ON t (b)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM t
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+t      primary  true    1    a       ASC        false    false
+t      foo      false   1    b       ASC        false    false
+t      foo      false   2    a       ASC        false    true
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@foo
+----
+0  /t/foo/1/1  NULL  ROW
+1  /t/foo/1/2  NULL  ROW
+
+# test for DESC index
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+
+statement ok
+INSERT INTO t VALUES (1,1,1), (2,2,2)
+
+statement ok
+CREATE INDEX b_desc ON t (b DESC)
+
+statement ok
+CREATE INDEX b_asc ON t (b ASC, c DESC)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM t
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+t      primary  true    1    a       ASC        false    false
+t      b_desc   false   1    b       DESC       false    false
+t      b_desc   false   2    a       ASC        false    true
+t      b_asc    false   1    b       ASC        false    false
+t      b_asc    false   2    c       DESC       false    false
+t      b_asc    false   3    a       ASC        false    true
+
+# index b_desc is well formed and column c is scanned using the primary index.
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@b_desc
+----
+0  /t/b_desc/2/2     NULL  PARTIAL
+0  /t/primary/2/b/c  /2/2  ROW
+1  /t/b_desc/1/1     NULL  PARTIAL
+1  /t/primary/1/b/c  /1/1  ROW
+
+statement error pgcode 42P01 table "foo" does not exist
+CREATE INDEX fail ON foo (b DESC)
+
+statement ok
+CREATE VIEW v AS SELECT a,b FROM t
+
+statement error pgcode 42809 "v" is not a table
+CREATE INDEX failview ON v (b DESC)
+
+statement ok
+CREATE TABLE privs (a INT PRIMARY KEY, b INT)
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on table privs
+CREATE INDEX foo ON privs (b)
+
+user root
+
+query TTBITTBB colnames
+SHOW INDEXES FROM privs
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+privs  primary  true    1    a       ASC        false    false
+
+statement ok
+GRANT CREATE ON privs TO testuser
+
+user testuser
+
+statement ok
+CREATE INDEX foo ON privs (b)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM privs
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+privs  primary  true    1    a       ASC        false    false
+privs  foo      false   1    b       ASC        false    false
+privs  foo      false   2    a       ASC        false    true

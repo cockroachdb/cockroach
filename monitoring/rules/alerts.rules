@@ -1,0 +1,73 @@
+# Alert for any instance that is unreachable for >5 minutes.
+ALERT InstanceDown
+  IF up{job="cockroach"} == 0
+  FOR 5m
+  ANNOTATIONS {
+    summary = "Instance {{ $labels.instance }} down",
+    description = "{{ $labels.instance }} for cluster {{ $labels.cluster }} has been down for more than 5 minutes.",
+  }
+
+# Alert for any instance that is unreachable for >15 minutes.
+ALERT InstanceDead
+  IF up{job="cockroach"} == 0
+  FOR 15m
+  ANNOTATIONS {
+    summary = "Instance {{ $labels.instance }} dead",
+    description = "{{ $labels.instance }} for cluster {{ $labels.cluster }} has been down for more than 15 minutes.",
+  }
+
+# Alert on instance restarts.
+ALERT InstanceRestart
+  IF resets(sys_uptime{job="cockroach"}[10m]) > 0 and resets(sys_uptime{job="cockroach"}[10m]) < 5
+  ANNOTATIONS {
+    summary = "Instance {{ $labels.instance }} restarted",
+    description = "{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted {{ $value }} time(s) in 10m"
+  }
+
+# Alert on flapping instances (frequent restarts).
+ALERT InstanceFlapping
+  IF resets(sys_uptime{job="cockroach"}[10m]) > 5
+  ANNOTATIONS {
+    summary = "Instance {{ $labels.instance }} flapping",
+    description = "{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted {{ $value }} time(s) in 10m"
+  }
+
+# Alert on version mismatch.
+# This alert is intentionally loose (30 minutes) to allow for rolling upgrades.
+# This may need to be adjusted for large clusters.
+ALERT VersionMismatch
+  IF count(count_values("version",build_timestamp{job="cockroach"}) by (tag,cluster)) by (cluster) > 1
+  FOR 30m
+  ANNOTATIONS {
+    summary = "Binary version mismatch on {{ $labels.cluster }}",
+    description = "Cluster {{ $labels.cluster }} running {{ $value }} different versions",
+  }
+
+# Available capacity alerts.
+ALERT StoreDiskLow
+  IF capacity_available:ratio{job="cockroach"} < 0.15
+  ANNOTATIONS {
+    summary = "Store {{ $labels.store }} on node {{ $labels.instance }} at {{ $value }} available disk fraction",
+  }
+
+ALERT ClusterDiskLow
+  IF cluster:capacity_available:ratio{job="cockroach"} < 0.2
+  ANNOTATIONS {
+    summary = "Cluster {{ $labels.cluster }} at {{ $value }} available disk fraction",
+  }
+
+# Zero SQL qps.
+ALERT ZeroSQLQps
+  IF sql_conns > 0 and rate(sql_query_count[5m]) == 0.0
+  FOR 10m
+  ANNOTATIONS {
+    summary = "Instance {{ $labels.instance }} has SQL connections but no queries",
+  }
+
+# Prometheus disk getting full..
+ALERT PrometheusDiskLow
+  IF node_filesystem_free{cluster="prometheus",mountpoint="/mnt/data"} / node_filesystem_size{cluster="prometheus",mountpoint="/mnt/data"} < 0.2
+  FOR 10m
+  ANNOTATIONS {
+    summary = "Prometheus storage is almost full: {{ $value }} fraction free"
+  }

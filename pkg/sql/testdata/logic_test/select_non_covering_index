@@ -1,0 +1,168 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX b (b),
+  UNIQUE INDEX c (c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
+)
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8)
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE b = 2
+----
+0  index-join
+1  scan
+1              table  t@b
+1              spans  /2-/3
+1  scan
+1              table  t@primary
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2
+----
+0 /t/b/2/1       NULL PARTIAL
+0 /t/primary/1   NULL PARTIAL
+0 /t/primary/1/b 2    PARTIAL
+0 /t/primary/1/c 3    PARTIAL
+0 /t/primary/1/d 4    ROW
+
+query IIII
+SELECT * FROM t WHERE b = 2
+----
+1 2 3 4
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE c = 6
+----
+0  index-join
+1  scan
+1              table  t@c
+1              spans  /6-/7
+1  scan
+1              table  t@primary
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE c = 7
+----
+0 /t/c/7         /5   PARTIAL
+0 /t/primary/5   NULL PARTIAL
+0 /t/primary/5/b 6    PARTIAL
+0 /t/primary/5/c 7    PARTIAL
+0 /t/primary/5/d 8    ROW
+
+query IIII
+SELECT * FROM t WHERE c = 7
+----
+5 6 7 8
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM t WHERE c > 0 ORDER BY c DESC
+----
+0  index-join                    (a, b, c, d)                             -c,unique
+1  revscan                       (a, b[omitted], c[omitted], d[omitted])  -c,unique
+1              table  t@c
+1              spans  /1-
+1  scan                          (a, b, c, d)
+1              table  t@primary
+
+query IIII
+SELECT * FROM t WHERE c > 0 ORDER BY c DESC
+----
+5 6 7 8
+1 2 3 4
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c
+----
+0  index-join
+1  scan
+1              table  t@c
+1              spans  /1-
+1  scan
+1              table  t@primary
+
+query IIII
+SELECT * FROM t WHERE c > 0 AND d = 8
+----
+5 6 7 8
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE c > 0 AND d = 8
+----
+0  index-join
+1  scan
+1              table  t@c
+1              spans  /1-
+1  scan
+1              table  t@primary
+
+# The following testcases verify that when we have a small limit, we prefer an
+# order-matching index.
+
+query ITTT
+EXPLAIN SELECT * FROM t ORDER BY c
+----
+0  sort
+0        order  +c
+1  scan
+1        table  t@primary
+1        spans  ALL
+
+query ITTT
+EXPLAIN SELECT * FROM t ORDER BY c LIMIT 5
+----
+0  limit
+1  index-join
+2  scan
+2              table  t@c
+2              spans  ALL
+2              limit  5
+2  scan
+2              table  t@primary
+
+query ITTT
+EXPLAIN (EXPRS) SELECT * FROM t ORDER BY c OFFSET 5
+----
+0  limit
+0         offset    5
+1  sort
+1         order     +c
+2  scan
+2         table     t@primary
+2         spans     ALL
+
+query ITTT
+EXPLAIN (EXPRS) SELECT * FROM t ORDER BY c LIMIT 5 OFFSET 5
+----
+0  limit
+0              count     5
+0              offset    5
+1  index-join
+2  scan
+2              table     t@c
+2              spans     ALL
+2              limit     10
+2  scan
+2              table     t@primary
+
+query ITTT
+EXPLAIN (EXPRS) SELECT * FROM t ORDER BY c LIMIT 1000000
+----
+0  limit
+0          count     1000000
+1  sort
+1          order     +c
+1          strategy  top 1000000
+2  scan
+2          table     t@primary
+2          spans     ALL

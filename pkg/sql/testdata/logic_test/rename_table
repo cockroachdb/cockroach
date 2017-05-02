@@ -1,0 +1,160 @@
+# LogicTest: default parallel-stmts distsql
+
+statement error pgcode 42P01 table "foo" does not exist
+ALTER TABLE foo RENAME TO bar
+
+statement ok
+ALTER TABLE IF EXISTS foo RENAME TO bar
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4)
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+3 4
+
+query T
+SHOW TABLES
+----
+kv
+
+statement ok
+ALTER TABLE kv RENAME TO new_kv
+
+statement error pgcode 42P01 table "kv" does not exist
+SELECT * FROM kv
+
+query II rowsort
+SELECT * FROM new_kv
+----
+1 2
+3 4
+
+query T
+SHOW TABLES
+----
+new_kv
+
+# check the name in the descriptor, which is used by SHOW GRANTS, is also changed
+query TTT
+SHOW GRANTS ON TABLE new_kv
+----
+new_kv        root      ALL
+
+statement error empty table name
+ALTER TABLE "" RENAME TO foo
+
+statement error empty table name
+ALTER TABLE new_kv RENAME TO ""
+
+statement ok
+ALTER TABLE new_kv RENAME TO new_kv
+
+statement ok
+CREATE TABLE t (
+  c1 INT PRIMARY KEY,
+  c2 INT
+)
+
+statement ok
+INSERT INTO t VALUES (4, 16), (5, 25)
+
+statement error pgcode 42P07 relation "new_kv" already exists
+ALTER TABLE t RENAME TO new_kv
+
+user testuser
+
+statement error user testuser does not have DROP privilege on table t
+ALTER TABLE test.t RENAME TO t2
+
+user root
+
+statement ok
+GRANT DROP ON TABLE test.t TO testuser
+
+statement ok
+create database test2
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test
+ALTER TABLE test.t RENAME TO t2
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+statement ok
+ALTER TABLE test.t RENAME TO t2
+
+query T
+SHOW TABLES FROM test
+----
+new_kv
+t2
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test2
+ALTER TABLE test.t2 RENAME TO test2.t
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test2 TO testuser
+
+statement ok
+GRANT DROP ON test.new_kv TO testuser
+
+user testuser
+
+statement ok
+ALTER TABLE test.new_kv RENAME TO test2.t
+
+statement ok
+ALTER TABLE test.t2 RENAME TO test2.t2
+
+query T
+SHOW TABLES FROM test
+----
+
+query T
+SHOW TABLES FROM test2
+----
+t
+t2
+
+user root
+
+query II rowsort
+SELECT * FROM test2.t
+----
+1 2
+3 4
+
+query II rowsort
+SELECT * FROM test2.t2
+----
+4 16
+5 25
+
+statement ok
+CREATE VIEW test2.v1 AS SELECT c1,c2 FROM test2.t2
+
+statement error pgcode 42809 "test2.v1" is not a table
+ALTER TABLE test2.v1 RENAME TO test2.v2
+
+statement error pgcode 42809 "test2.v1" is not a table
+ALTER TABLE test2.v1 RENAME TO test2.v1
+
+statement error cannot rename table "test2.t2" because view "v1" depends on it
+ALTER TABLE test2.t2 RENAME TO test2.t3

@@ -1,0 +1,121 @@
+# LogicTest: default distsql
+
+# Test that pg_catalog tables are accessible without qualifying table/view
+# names.
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_attrdef
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_attribute
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_class
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_namespace
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_tables
+----
+1
+
+
+statement ok
+CREATE DATABASE t1
+
+statement ok
+CREATE TABLE t1.numbers (n INTEGER)
+
+statement ok
+CREATE DATABASE t2
+
+statement ok
+CREATE TABLE t2.words (w TEXT)
+
+# Test that we can query with unqualified table names from t1 and pg_catalog
+# (but not t2) when t1 is the session database.
+
+statement ok
+SET DATABASE = t1
+
+query I
+SELECT COUNT(*) FROM numbers
+----
+0
+
+query error pq: table "words" does not exist
+SELECT COUNT(*) FROM words
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_attrdef
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_attribute
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_class
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_namespace
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_tables
+----
+1
+
+# Test that we can query with unqualified table names from t2 and pg_catalog
+# (but not t1) when t2 is the session database.
+
+statement ok
+SET DATABASE = t2
+
+query error pq: table "numbers" does not exist
+SELECT COUNT(*) FROM numbers
+
+query I
+SELECT COUNT(*) FROM words
+----
+0
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_attrdef
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_attribute
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_class
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_namespace
+----
+1
+
+query I
+SELECT COUNT(DISTINCT(1)) FROM pg_tables
+----
+1
+

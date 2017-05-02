@@ -1,0 +1,78 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Radu Berinde (radu@cockroachlabs.com)
+//
+// APIs for distributed SQL; see docs/RFCS/distributed_sql.md
+
+syntax = "proto2";
+package cockroach.sql.distsqlrun;
+option go_package = "distsqlrun";
+
+import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/sql/distsqlrun/data.proto";
+import "cockroach/pkg/sql/distsqlrun/processors.proto";
+import "cockroach/pkg/util/tracing/span_context_carrier.proto";
+import "gogoproto/gogo.proto";
+
+message SetupFlowRequest {
+  optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
+
+  // Version of distsqlrun protocol; a server accepts a certain range of
+  // versions, up to its own version. See server.go for more details.
+  optional uint32 version = 5 [(gogoproto.nullable) = false];
+
+  // If set, the context of an active tracing span.
+  optional util.tracing.SpanContextCarrier trace_context = 2;
+  optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
+}
+
+message SimpleResponse {
+  optional Error error = 1;
+}
+
+message ConsumerSignal {
+  option (gogoproto.onlyone) = true;
+
+  // The consumer is done (doesn't need to consume any more rows) and is asking
+  // the producer to push whatever trailing metadata it has and close its
+  // stream.
+  optional DrainRequest drain_request = 1;
+
+  // Used in the RunSyncFlow case; the first message on the client stream must
+  // contain this message.
+  optional SetupFlowRequest setup_flow_request = 2;
+}
+
+message DrainRequest {
+}
+
+service DistSQL {
+  // RunSyncFlow instantiates a flow and streams back results of that flow.
+  // The request must contain one flow, and that flow must have a single mailbox
+  // of the special sync response type.
+  rpc RunSyncFlow(stream ConsumerSignal) returns (stream ProducerMessage) {}
+
+  // SetupFlow instantiates a flow (subgraphs of a distributed SQL
+  // computation) on the receiving node.
+  rpc SetupFlow(SetupFlowRequest) returns (SimpleResponse) {}
+
+  // FlowStream is used to push a stream of messages that is part of a flow. The
+  // first message will have a StreamHeader which identifies the flow and the
+  // stream (mailbox).
+  //
+  // The response is a stream because the consumer can signal the producer at
+  // any point to start draining.
+  rpc FlowStream(stream ProducerMessage) returns (stream ConsumerSignal) {}
+}

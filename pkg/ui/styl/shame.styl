@@ -1,0 +1,122 @@
+// This is an attempt to override settings from the react-select component.
+// react-select's css file uses rules with extremely high specificity, making
+// numerous !important statements necessary.
+// @stylint off
+.has-value.Select--single > .Select-control .Select-value .Select-value-label,
+.has-value.is-pseudo-focused.Select--single > .Select-control .Select-value .Select-value-label
+  color $secondary-blue-3 !important
+
+.Select-option
+  padding 10px 25px !important
+  &.is-selected
+    color $secondary-blue-3 !important
+
+.Select-value
+  line-height inherit !important
+  height auto !important
+  position relative !important
+  white-space nowrap !important
+  max-width 250px !important
+
+.Select-control
+  line-height inherit !important
+  height auto !important
+  border-width 0 !important
+  box-shadow 0 0 0 black !important
+  border-radius 0 3px 3px 0 !important
+  background-color transparent !important
+
+.Select-input
+  line-height inherit !important
+  height auto !important
+  position absolute !important
+  top 0 !important
+
+.Select-input > input
+  padding 0 !important
+
+.Select-menu-outer
+  width auto !important
+  top calc(100% + 21px) !important
+  border none !important
+  box-shadow 0 2px 4px rgba(0, 0, 0, .2) !important
+  max-height 200px !important
+  font-family Lato-Regular
+  font-size 14px
+  text-transform none
+  letter-spacing 0
+  border-radius 4px !important
+  padding 0 0
+
+.Select-menu, .Select-menu-outer
+  max-height 300px !important
+
+.Select-value-label
+  display block !important
+
+.Select-arrow
+  border-top-color $secondary-blue-3 !important
+
+.Select
+  display inline-block
+  width 100%
+
+.dropdown--side-arrows
+  .Select
+    padding 1rem 20px !important
+  .Select-arrow-zone
+    display none
+
+// NVD3 Style overrides.
+.nvtooltip
+  font-family Lato-Regular !important
+  color $light-blue !important
+  padding 15px 20px !important
+  background rgba(255, 255, 255, .98) !important
+  border-radius 5px !important
+  border 1px solid rgba(0, 0, 0, .1) !important
+  box-shadow 0px 0px 4px rgba(0, 0, 0, .2)
+
+.nvtooltip table
+  margin 0 !important
+
+.nvtooltip .legend-color-guide div
+  width 7px !important
+  height 7px !important
+  border-radius 50% !important
+  border none !important
+
+.nvtooltip table tr.highlight td
+  padding 2px 9px 2px 0 !important
+  border none !important
+
+.nvtooltip table tr.highlight td:first-child
+  padding 2px 9px 2px 3rem
+
+.nvtooltip strong
+  font-weight 400 !important
+
+.legend-subtext
+  color $light-gray !important
+  font-weight 300
+
+.nvd3 .nv-axis
+  .tick line
+    stroke $lighter-gray
+
+  text
+    fill $dark-blue
+    font-family Lato-Regular
+    font-size 11px
+
+  .nv-axislabel
+    text-transform lowercase
+    font-family Lato-Regular
+    fill $lighter-blue
+
+.nv-y .nv-axis .domain
+  opacity 0
+
+.nvd3 text
+  opacity .6
+  font-size 10px

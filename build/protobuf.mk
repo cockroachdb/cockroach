@@ -16,110 +16,108 @@
 
 # This file is evaluated in the repo's parent directory. See main.go's
 # go:generate invocation.
+REPO_ROOT := ./cockroach
+include $(REPO_ROOT)/build/common.mk
 
-ORG_ROOT       := .
-REPO_ROOT      := $(ORG_ROOT)/cockroach
-GITHUB_ROOT    := $(ORG_ROOT)/..
-GOGOPROTO_ROOT := $(GITHUB_ROOT)/gogo/protobuf
+NATIVE_ROOT := $(PKG_ROOT)/storage/engine
+GITHUB_ROOT := $(REPO_ROOT)/vendor/github.com
 
-NATIVE_ROOT := $(REPO_ROOT)/storage/engine/rocksdb
+GOGO_PROTOBUF_PACKAGE := github.com/gogo/protobuf
+GOGO_PROTOBUF_TYPES_PACKAGE := $(GOGO_PROTOBUF_PACKAGE)/types
+GOGO_PROTOBUF_PATH := $(GITHUB_ROOT)/../$(GOGO_PROTOBUF_PACKAGE)
+PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
 
-# Ensure we have an unambiguous GOPATH
-GOPATH := $(realpath $(GITHUB_ROOT)/../..)
-#                                   ^  ^~ GOPATH
-#                                   |~ GOPATH/src
-
-GOPATH_BIN      := $(GOPATH)/bin
-PROTOC          := $(GOPATH_BIN)/protoc
 PLUGIN_SUFFIX   := gogoroach
-PROTOC_PLUGIN   := $(GOPATH_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
-GOGOPROTO_PROTO := $(GOGOPROTO_ROOT)/gogoproto/gogo.proto
-GOGOPROTO_PATH  := $(GOGOPROTO_ROOT):$(GOGOPROTO_ROOT)/protobuf
-CPROTOBUF_PATH  := $(ORG_ROOT)/c-protobuf/internal/src
+PROTOC_PLUGIN   := $(LOCAL_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
+GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
 
 COREOS_PATH := $(GITHUB_ROOT)/coreos
+COREOS_RAFT_PROTOS := $(addprefix $(COREOS_PATH)/etcd/raft/, $(sort $(shell git -C $(COREOS_PATH)/etcd/raft ls-files --exclude-standard --cached --others -- '*.proto')))
 
 GRPC_GATEWAY_PACKAGE := github.com/grpc-ecosystem/grpc-gateway
+GRPC_GATEWAY_PLUGIN  := $(LOCAL_BIN)/protoc-gen-grpc-gateway
 GRPC_GATEWAY_GOOGLEAPIS_PACKAGE := $(GRPC_GATEWAY_PACKAGE)/third_party/googleapis
 GRPC_GATEWAY_GOOGLEAPIS_PATH := $(GITHUB_ROOT)/../$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
 
-# Map protobuf includes of annotations.proto to the Go package containing the
-# generated Go code.
-GRPC_GATEWAY_MAPPING := Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api
+# Map protobuf includes to the Go package containing the generated Go code.
+MAPPINGS :=
+MAPPINGS := $(MAPPINGS)Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api,
+MAPPINGS := $(MAPPINGS)Mgoogle/protobuf/timestamp.proto=$(GOGOPROTO_ROOT)/protobuf/types,
 
-GW_SERVER_PROTOS := $(REPO_ROOT)/server/serverpb/admin.proto $(REPO_ROOT)/server/serverpb/status.proto
-GW_TS_PROTOS := $(REPO_ROOT)/ts/tspb/timeseries.proto
+GW_SERVER_PROTOS := $(PKG_ROOT)/server/serverpb/admin.proto $(PKG_ROOT)/server/serverpb/status.proto
+GW_TS_PROTOS := $(PKG_ROOT)/ts/tspb/timeseries.proto
 
 GW_PROTOS  := $(GW_SERVER_PROTOS) $(GW_TS_PROTOS)
 GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 
-GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.proto')))
+GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell git -C $(REPO_ROOT) ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
-UI_SOURCES := $(REPO_ROOT)/ui/app/js/protos.js $(REPO_ROOT)/ui/generated/protos.json $(REPO_ROOT)/ui/generated/protos.d.ts
+UI_JS := $(UI_ROOT)/src/js/protos.js
+UI_TS := $(UI_ROOT)/src/js/protos.d.ts
+UI_SOURCES := $(UI_JS) $(UI_TS)
 
-CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
+CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/rocksdb.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
 CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 
-ENGINE_CPP_PROTOS := $(filter $(NATIVE_ROOT)%,$(GO_PROTOS))
-ENGINE_CPP_HEADERS := $(ENGINE_CPP_PROTOS:%.proto=%.pb.h)
-ENGINE_CPP_SOURCES := $(ENGINE_CPP_PROTOS:%.proto=%.pb.cc)
+$(PROTOC_PLUGIN):
+	$(GO_INSTALL) $(REPO_ROOT)/pkg/cmd/protoc-gen-gogoroach
 
-.PHONY: protos
-protos: $(GO_SOURCES) $(UI_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES) $(GW_SOURCES)
+$(GRPC_GATEWAY_PLUGIN):
+	$(GO_INSTALL) $(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 
 REPO_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(REPO_NAME)/
 
-$(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
+GO_SOURCES_TARGET := $(LOCAL_BIN)/.go_protobuf_sources
+$(GO_SOURCES_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
-	  $(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(GRPC_GATEWAY_MAPPING),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
+	  $(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(MAPPINGS),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
 	done
-	sed -i~ -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $(GO_SOURCES)
-	sed -i~ -E 's!$(IMPORT_PREFIX)(errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $(GO_SOURCES)
-	sed -i~ -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $(GO_SOURCES)
+	$(SED_INPLACE) '/import _/d' $(GO_SOURCES)
+	$(SED_INPLACE) '/gogoproto/d' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $(GO_SOURCES)
+	# Fixup standard packages wrongly imported by gogo because of import_prefix.
+	$(SED_INPLACE) -E 's!$(IMPORT_PREFIX)(bytes|errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $(GO_SOURCES)
 	gofmt -s -w $(GO_SOURCES)
-
-$(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
-	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_SERVER_PROTOS)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_TS_PROTOS)
-
-$(REPO_ROOT)/build/npm.installed: $(REPO_ROOT)/build/package.json
-	rm -rf $(REPO_ROOT)/build/node_modules
-	cd $(REPO_ROOT)/build && npm install --no-progress
 	touch $@
 
-PBJS_ARGS = --path $(ORG_ROOT) $(GW_PROTOS)
+GW_SOURCES_TARGET := $(LOCAL_BIN)/.gw_protobuf_sources
+$(GW_SOURCES_TARGET): $(PROTOC) $(GRPC_GATEWAY_PLUGIN) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO)
+	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
+	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_SERVER_PROTOS)
+	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_TS_PROTOS)
+	touch $@
 
-$(REPO_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/npm.installed $(GO_PROTOS)
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(REPO_ROOT)/build/node_modules/.bin/pbjs -t commonjs $(PBJS_ARGS) >> $@
-
-$(REPO_ROOT)/ui/generated/protos.json: $(REPO_ROOT)/build/npm.installed $(GO_PROTOS)
-	$(REPO_ROOT)/build/node_modules/.bin/pbjs $(PBJS_ARGS) > $@
-
-$(REPO_ROOT)/ui/generated/protos.d.ts: $(REPO_ROOT)/ui/generated/protos.json
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(REPO_ROOT)/build/node_modules/.bin/proto2ts --file $(REPO_ROOT)/ui/generated/protos.json >> $@
-
-$(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS)
+CPP_SOURCES_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
+$(CPP_SOURCES_TARGET): $(PROTOC) $(CPP_PROTOS)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(CPP_PROTOS)
-	sed -i~ -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
+	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(CPP_PROTOS)
+	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
 	@# For c++, protoc generates a directory structure mirroring the package
-	@# structure (and these directories must be in the include path), but cgo can
-	@# only compile a single directory so we symlink the generated pb.cc files
-	@# into the storage/engine directory.
+	@# structure (and these directories must be in the include path), but cgo
+	@# only compiles a single directory so we "symlink" the generated pb.cc files
+	@# into the storage/engine directory, taking care to avoid collisions between
+	@# files with identical names.
 	@# We use `find` and not `git ls-files` here because `git ls-files` will
-	@# include deleted files (i.e. these very symlinks) in its output, resulting
-	@# in recursive symlinks, which is Bad™.
-	(cd $(NATIVE_ROOT) && find . -name *.pb.cc | xargs -I % ln -sf % .)
+	@# include deleted files (i.e. these very "symlinks") in its output,
+	@# resulting in recursive "symlinks", which is Bad™.
+	(cd $(NATIVE_ROOT) && find . -name *.pb.cc | sed 's!./!!' | xargs -I % sh -c 'echo "#include \"%\"" > $$(echo % | tr / _)')
+	touch $@
 
-$(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES): $(PROTOC) $(ENGINE_CPP_PROTOS)
-	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=lite:$(ORG_ROOT) $(ENGINE_CPP_PROTOS)
-	sed -i~ -E '/gogoproto/d' $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES)
+$(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(YARN_INSTALLED_TARGET)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	pbjs -t static-module -w es6 --strict-long --keep-case --path $(ORG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
+
+$(UI_TS): $(UI_JS)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	pbts $(UI_JS) >> $@
+
+.DEFAULT_GOAL := protos
+.PHONY: protos
+protos: $(GO_SOURCES_TARGET) $(GW_SOURCES_TARGET) $(CPP_SOURCES_TARGET) $(UI_SOURCES)

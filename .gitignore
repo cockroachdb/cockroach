@@ -11,12 +11,27 @@
 #   git ls-files '*.gitignore' | xargs cat >> ~/.gitignore_global &&
 #   git config --global core.excludesfile ~/.gitignore_global)
 
-.bootstrap
-/cockroach
-/cockroach-data
-/cockroach-darwin*
+artifacts
+/bin
+/bin.*
+# TeamCity sometimes creates this file during builds.
+builds.xml
+.buildinfo
+# cockroach-data, cockroach{,.race}-{darwin,linux,windows}-*
+/cockroach*
 /certs
-# make stress
-stress.test
+# make stress, acceptance produce stress.test, acceptance.test
+*.test*
 # Various `sed -i~` invocations in our scripts.
 *~
+
+# TODO(benesch): the .bootstrap file has moved into the bin directory; remove
+# this entry once it's unlikely developers have branches that straddle this
+# change (a few weeks after 4/7/2017).
+.bootstrap
+
+# Custom or private env vars (e.g. internal keys, access tokens, etc).
+customenv.mk
+
+# Generated files containing include paths.
+zcgo_flags*.go

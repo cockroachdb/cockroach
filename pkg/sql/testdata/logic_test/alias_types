@@ -1,0 +1,62 @@
+# LogicTest: default distsql
+
+statement ok
+CREATE TABLE aliases (
+    a OID,
+    b NAME,
+    FAMILY "primary" (a, rowid),
+    FAMILY fam_1_b (b)
+)
+
+query TT colnames
+SHOW CREATE TABLE aliases
+----
+Table    CreateTable
+aliases  CREATE TABLE aliases (
+           a OID NULL,
+           b NAME NULL,
+           FAMILY "primary" (a, rowid),
+           FAMILY fam_1_b (b)
+         )
+
+statement ok
+INSERT INTO aliases VALUES (100, 'abc')
+
+statement ok
+INSERT INTO aliases VALUES (2, 'def')
+
+statement ok
+INSERT INTO aliases VALUES ('bool'::REGTYPE, ('ghi':::STRING)::NAME)
+
+query OT
+SELECT a, b FROM aliases ORDER BY a
+----
+2    def
+16   ghi
+100  abc
+
+query TT
+SELECT pg_typeof(a), pg_typeof(b) FROM aliases LIMIT 1
+----
+oid  name
+
+query T
+SELECT b || 'cat' FROM aliases ORDER BY a
+----
+defcat
+ghicat
+abccat
+
+query T
+SELECT reverse(b) FROM aliases ORDER BY a
+----
+fed
+ihg
+cba
+
+query I
+SELECT length(b::BYTES) FROM aliases ORDER BY a
+----
+3
+3
+3

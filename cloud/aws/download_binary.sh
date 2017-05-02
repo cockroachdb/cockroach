@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
 # This script takes the name of a binary and downloads it from S3.
 # It takes the repo_name/binary_name and an optional sha.
 # If the sha is not specified, the latest binary is downloaded.
@@ -29,18 +32,17 @@
 # }
 # ...
 # <<<
-set -ex
 
 BUCKET_NAME="cockroach"
 LATEST_SUFFIX=".LATEST"
 
-binary_path=$1
+binary_path=${1-}
 if [ -z "${binary_path}" ]; then
   echo "binary not specified, run with: $0 [repo-name]/[binary-name]"
   exit 1
 fi
 
-sha=$2
+sha=${2-}
 if [ -z "${sha}" ]; then
   echo "Looking for latest sha for ${binary_path}"
   latest_url="https://s3.amazonaws.com/${BUCKET_NAME}/${binary_path}${LATEST_SUFFIX}"

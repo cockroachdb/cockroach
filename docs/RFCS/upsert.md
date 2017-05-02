@@ -5,7 +5,6 @@
 - RFC PR: [#6331](https://github.com/cockroachdb/cockroach/pull/6331)
 - Cockroach Issue: [#1962](https://github.com/cockroachdb/cockroach/issues/1962)
 
-
 # Summary
 
 `UPSERT` allows a user to atomically either insert a row, or on the basis of the

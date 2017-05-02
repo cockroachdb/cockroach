@@ -1,0 +1,143 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Matt Tracy (matt@cockroachlabs.com)
+
+syntax = "proto2";
+package cockroach.ts.tspb;
+option go_package = "tspb";
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+
+// TimeSeriesDatapoint is a single point of time series data; a value associated
+// with a timestamp.
+message TimeSeriesDatapoint {
+  // The timestamp when this datapoint is located, expressed in nanoseconds
+  // since the unix epoch.
+  optional int64 timestamp_nanos = 1 [(gogoproto.nullable) = false];
+  // A floating point representation of the value of this datapoint.
+  optional double value = 2 [(gogoproto.nullable) = false];
+}
+
+// TimeSeriesData is a set of measurements of a single named variable at
+// multiple points in time. This message contains a name and a source which, in
+// combination, uniquely identify the time series being measured. Measurement
+// data is represented as a repeated set of TimeSeriesDatapoint messages.
+message TimeSeriesData {
+  // A string which uniquely identifies the variable from which this data was
+  // measured.
+  optional string name = 1 [(gogoproto.nullable) = false];
+  // A string which identifies the unique source from which the variable was measured.
+  optional string source = 2 [(gogoproto.nullable) = false];
+  // Datapoints representing one or more measurements taken from the variable.
+  repeated TimeSeriesDatapoint datapoints = 3 [(gogoproto.nullable) = false];
+}
+
+// TimeSeriesQueryAggregator describes a set of aggregation functions which can
+// be used to combine multiple datapoints into a single datapoint.
+//
+// Aggregators are used to "downsample" series by combining datapoints from the
+// same series at different times. They are also used to "aggregate" values from
+// different series, combining data points from different series at the same
+// time.
+enum TimeSeriesQueryAggregator {
+  // AVG returns the average value of datapoints.
+  AVG = 1;
+  // SUM returns the sum value of datapoints.
+  SUM = 2;
+  // MAX returns the maximum value of datapoints.
+  MAX = 3;
+  // MIN returns the minimum value of datapoints.
+  MIN = 4;
+}
+
+// TimeSeriesQueryDerivative describes a derivative function used to convert
+// returned datapoints into a rate-of-change.
+enum TimeSeriesQueryDerivative {
+  // NONE is the default value, and does not apply a derivative function.
+  NONE = 0;
+  // DERIVATIVE returns the first-order derivative of values in the time series.
+  DERIVATIVE = 1;
+  // NON_NEGATIVE_DERIVATIVE returns only non-negative values of the first-order
+  // derivative; negative values are returned as zero. This should be used for
+  // counters that monotonically increase, but might wrap or reset.
+  NON_NEGATIVE_DERIVATIVE = 2;
+}
+
+// Each Query defines a specific metric to query over the time span of
+// this request.
+message Query {
+  option (gogoproto.goproto_getters) = true;
+
+  // The name of the time series to query.
+  optional string name = 1 [(gogoproto.nullable) = false];
+  // A downsampling aggregation function to apply to datapoints within the
+  // same sample period.
+  optional TimeSeriesQueryAggregator downsampler = 2 [default = AVG];
+  // An aggregation function used to combine timelike datapoints from the
+  // different sources being queried.
+  optional TimeSeriesQueryAggregator source_aggregator = 3 [default = SUM];
+  // If set to a value other than 'NONE', query will return a derivative
+  // (rate of change) of the aggregated datapoints.
+  optional TimeSeriesQueryDerivative derivative = 4 [default = NONE];
+  // An optional list of sources to restrict the time series query. If no
+  // sources are provided, all available sources will be queried.
+  repeated string sources = 5;
+}
+
+// TimeSeriesQueryRequest is the standard incoming time series query request
+// accepted from cockroach clients.
+message TimeSeriesQueryRequest {
+  // A timestamp in nanoseconds which defines the early bound of the time span
+  // for this query.
+  optional int64 start_nanos = 1 [(gogoproto.nullable) = false];
+  // A timestamp in nanoseconds which defines the late bound of the time span
+  // for this query. Must be greater than start_nanos.
+  optional int64 end_nanos = 2 [(gogoproto.nullable) = false];
+  // A set of Queries for this request. A request must have at least one
+  // Query.
+  repeated Query queries = 3 [(gogoproto.nullable) = false];
+  // Duration of requested sample period in nanoseconds. Returned data for each
+  // query will be downsampled into periods of the supplied length. The
+  // supplied duration must be a multiple of ten seconds.
+  optional int64 sample_nanos = 4 [(gogoproto.nullable) = false];
+}
+
+// TimeSeriesQueryResponse is the standard response for time series queries
+// returned to cockroach clients.
+message TimeSeriesQueryResponse {
+  // Result is the data returned from a single metric query over a time span.
+  message Result {
+    optional Query query = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+    repeated TimeSeriesDatapoint datapoints = 2 [(gogoproto.nullable) = false];
+  }
+
+  // A set of Results; there will be one result for each Query in the matching
+  // TimeSeriesQueryRequest, in the same order. A Result will be present for
+  // each Query even if there are zero datapoints to return.
+  repeated Result results = 1 [(gogoproto.nullable) = false];
+}
+
+// TimeSeries is the gRPC API for the time series server. Through grpc-gateway,
+// we offer REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
+service TimeSeries {
+  // URL: /ts/query
+  rpc Query(TimeSeriesQueryRequest) returns (TimeSeriesQueryResponse) {
+    option (google.api.http) = {
+      post: "/ts/query"
+      body: "*"
+    };
+  }
+}

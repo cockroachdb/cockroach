@@ -1,0 +1,31 @@
+CockroachDB is a scalable, survivable, strongly-consistent SQL database.
+
+You have downloaded a source archive, which requires a Go toolchain to compile.
+For other installation options, including pre-compiled binaries, see
+https://www.cockroachlabs.com/docs/install-cockroachdb.html.
+
+To build CockroachDB from this source archive:
+
+     $ make build
+
+See src/github.com/cockroachdb/cockroach/CONTRIBUTING.md for a complete list of
+build requirements.
+
+To install CockroachDB to ./bin/cockroach:
+
+     $ make install
+
+To install CockroachDB onto your PATH:
+
+     $ make install
+     $ sudo cp -i ./bin/cockroach /usr/local/bin/cockroach
+
+To interact with a one-node SQL cluster:
+
+     $ ./cockroach start --background
+     $ ./cockroach sql
+
+Next steps:
+
+    * Read the docs: https://cockroachlabs.com/docs/
+    * Check out the GitHub repository: https://github.com/cockroachdb/cockroach

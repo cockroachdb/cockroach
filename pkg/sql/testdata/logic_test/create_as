@@ -1,0 +1,100 @@
+# LogicTest: default
+
+statement ok
+CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 15), ('forks', 30)
+
+statement ok
+CREATE TABLE runningOut AS SELECT * FROM stock WHERE quantity < 12
+
+query TI
+SELECT * FROM runningOut
+----
+cups 10
+
+statement ok
+CREATE TABLE itemColors (color) AS VALUES ('blue'), ('red'), ('green')
+
+statement ok
+CREATE TABLE itemTypes AS (SELECT item, color FROM stock, itemColors)
+
+query TT rowsort
+SELECT * FROM itemTypes
+----
+cups blue
+cups red
+cups green
+plates blue
+plates red
+plates green
+forks blue
+forks red
+forks green
+
+statement error pq: unexpected AS OF SYSTEM TIME
+CREATE TABLE t AS SELECT * FROM stock AS OF SYSTEM TIME '2016-01-01'
+
+statement error pgcode 42601 CREATE TABLE specifies 3 column names, but data source has 2 columns
+CREATE TABLE t2 (col1, col2, col3) AS SELECT * FROM stock
+
+statement error pgcode 42601 CREATE TABLE specifies 1 column name, but data source has 2 columns
+CREATE TABLE t2 (col1) AS SELECT * FROM stock
+
+statement ok
+CREATE TABLE unionstock AS SELECT * FROM stock UNION VALUES ('spoons', 25), ('knives', 50)
+
+query TI
+SELECT * FROM unionstock ORDER BY quantity
+----
+cups 10
+plates 15
+spoons 25
+forks 30
+knives 50
+
+statement ok
+CREATE TABLE IF NOT EXISTS unionstock AS VALUES ('foo', 'bar')
+
+query TI
+SELECT * FROM unionstock ORDER BY quantity LIMIT 1
+----
+cups 10
+
+statement ok
+CREATE DATABASE smtng
+
+statement ok
+CREATE TABLE smtng.something AS SELECT * FROM stock
+
+statement ok
+CREATE TABLE IF NOT EXISTS smtng.something AS SELECT * FROM stock
+
+query TI
+SELECT * FROM smtng.something ORDER BY 1 LIMIT 1
+----
+cups 10
+
+statement error pq: table "something" does not exist
+SELECT * FROM something LIMIT 1
+
+# Check for memory leak (#10466)
+statement ok
+CREATE TABLE foo (x, y, z) AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
+
+statement error pq: relation "foo" already exists
+CREATE TABLE foo (x, y, z) AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
+
+statement error pq: value type tuple{} cannot be used for table columns
+CREATE TABLE foo2 (x) AS (VALUES(ROW()))
+
+statement error pq: value type setof tuple{int} cannot be used for table columns
+CREATE TABLE foo2 (x) AS (VALUES(generate_series(1,3)))
+
+statement error pq: value type NULL cannot be used for table columns
+CREATE TABLE foo2 (x) AS (VALUES(NULL))
+
+# Check nulls are handled properly (#13921)
+query I
+CREATE TABLE foo3 (x) AS VALUES (1), (NULL); SELECT * FROM foo3 ORDER BY x
+----
+NULL
+1

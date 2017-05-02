@@ -1,0 +1,107 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE users (
+  uid    INT PRIMARY KEY,
+  name  VARCHAR NOT NULL,
+  title VARCHAR,
+  INDEX foo (name),
+  UNIQUE INDEX bar (uid, name)
+)
+
+statement ok
+INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
+
+query ITT colnames,rowsort
+SELECT * FROM users
+----
+uid name  title
+1  tom   cat
+2  jerry rat
+
+statement error column name "name" already exists
+ALTER TABLE users RENAME COLUMN title TO name
+
+statement error empty column name
+ALTER TABLE users RENAME COLUMN title TO ""
+
+statement error column "ttle" does not exist
+ALTER TABLE users RENAME COLUMN ttle TO species
+
+statement error table "uses" does not exist
+ALTER TABLE uses RENAME COLUMN title TO species
+
+statement ok
+ALTER TABLE IF EXISTS uses RENAME COLUMN title TO species
+
+statement ok
+ALTER TABLE users RENAME COLUMN uid TO id
+
+statement ok
+ALTER TABLE users RENAME COLUMN title TO species
+
+query ITT colnames,rowsort
+SELECT * FROM users
+----
+id name  species
+1  tom   cat
+2  jerry rat
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on table users
+ALTER TABLE users RENAME COLUMN name TO username
+
+user root
+
+statement ok
+GRANT CREATE ON TABLE users TO testuser
+
+user testuser
+
+statement ok
+ALTER TABLE users RENAME COLUMN name TO username
+
+user root
+
+query ITT colnames,rowsort
+SELECT * FROM users
+----
+id username  species
+1  tom       cat
+2  jerry     rat
+
+# Renaming a column updates the column names in an index.
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+Table  Name     Unique  Seq  Column    Direction  Storing  Implicit
+users  primary  true    1    id        ASC        false    false
+users  foo      false   1    username  ASC        false    false
+users  foo      false   2    id        ASC        false    true
+users  bar      true    1    id        ASC        false    false
+users  bar      true    2    username  ASC        false    false
+
+statement ok
+CREATE VIEW v1 AS SELECT id FROM users WHERE username = 'tom'
+
+statement error cannot rename column "id" because view "v1" depends on it
+ALTER TABLE users RENAME COLUMN id TO uid
+
+statement error cannot rename column "username" because view "v1" depends on it
+ALTER TABLE users RENAME COLUMN username TO name
+
+statement ok
+ALTER TABLE users RENAME COLUMN species TO title
+
+statement ok
+CREATE VIEW v2 AS SELECT id from users
+
+statement ok
+DROP VIEW v1
+
+statement error cannot rename column "id" because view "v2" depends on it
+ALTER TABLE users RENAME COLUMN id TO uid
+
+statement ok
+ALTER TABLE users RENAME COLUMN username TO name

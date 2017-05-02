@@ -1,0 +1,118 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE foo(a INT, b CHAR)
+
+query I
+INSERT INTO foo(a, b) VALUES (1,'c'), (2,'b'), (3,'a') RETURNING @1
+----
+1
+2
+3
+
+query error invalid column ordinal
+SELECT @0 FROM foo
+
+query error invalid column ordinal
+SELECT @42 FROM foo
+
+query TI rowsort
+SELECT @2, @1 FROM foo
+----
+c 1
+b 2
+a 3
+
+# Traditional SQL ordinals refer to the render list.
+query TI
+SELECT b, a FROM foo ORDER BY 1
+----
+a 3
+b 2
+c 1
+
+# CockroachDB column ordinals refer to the data source.
+query TI
+SELECT b, a FROM foo ORDER BY @1
+----
+c 1
+b 2
+a 3
+
+query TI
+SELECT b, a FROM foo ORDER BY @1 % 2, a
+----
+b 2
+c 1
+a 3
+
+# Check that sort by ordinal picks up the existing render.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
+----
+0  sort                           (b, a)                         +a
+0          order     +a
+1  render                         (b, a)
+1          render 0  test.foo.b
+1          render 1  test.foo.a
+2  scan                           (a, b, rowid[hidden,omitted])
+2          table     foo@primary
+2          spans     ALL
+
+statement ok
+INSERT INTO foo(a, b) VALUES (4, 'c'), (5, 'c'), (6, 'c')
+
+query R
+SELECT SUM(a) AS s FROM foo GROUP BY @1 ORDER BY s
+----
+1
+2
+3
+4
+5
+6
+
+query R
+SELECT SUM(a) AS s FROM foo GROUP BY @2 ORDER BY s
+----
+2
+3
+16
+
+# Check that GROUP BY picks up column ordinals.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
+----
+0  group                                 (m)
+0          aggregate 0  min(test.foo.a)
+0          render 0     min(test.foo.a)
+1  render                                (a)
+1          render 0     test.foo.a
+2  scan                                  (a, b[omitted], rowid[hidden,omitted])
+2          table        foo@primary
+2          spans        ALL
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
+----
+0  group                                 (m)
+0          aggregate 0  min(test.foo.a)
+0          render 0     min(test.foo.a)
+1  render                                (a, b)
+1          render 0     test.foo.a
+1          render 1     test.foo.b
+2  scan                                  (a, b, rowid[hidden,omitted])
+2          table        foo@primary
+2          spans        ALL
+
+statement error column reference @1 not allowed in this context
+INSERT INTO foo(a, b) VALUES (@1, @2)
+
+query error column reference @485 not allowed in this context
+VALUES (@485)
+
+query error column reference @1 not allowed in this context
+SELECT * FROM foo LIMIT @1
+
+query error column reference @1 not allowed in this context
+SELECT * FROM foo OFFSET @1
