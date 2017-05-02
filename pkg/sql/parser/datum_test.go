@@ -121,7 +121,7 @@ func TestDatumOrdering(t *testing.T) {
 
 		{`row(true, false, false)`, `(false, true, true)`, `(true, false, true)`,
 			`(false, false, false)`, `(true, true, true)`},
-		{`row(false, true, true)`, `(false, true, false)`, `(true, false, false)`,
+		{`row(false, true, true)`, `(false, true, false)`, `(true, NULL, NULL)`,
 			`(false, false, false)`, `(true, true, true)`},
 
 		{`row(0, 0)`, `(0, -1)`, `(0, 1)`,
@@ -129,7 +129,7 @@ func TestDatumOrdering(t *testing.T) {
 			`(9223372036854775807, 9223372036854775807)`},
 
 		{`row(0, 9223372036854775807)`,
-			`(0, 9223372036854775806)`, `(1, -9223372036854775808)`,
+			`(0, 9223372036854775806)`, `(1, NULL)`,
 			`(-9223372036854775808, -9223372036854775808)`,
 			`(9223372036854775807, 9223372036854775807)`},
 		{`row(9223372036854775807, 9223372036854775807)`,
@@ -154,12 +154,12 @@ func TestDatumOrdering(t *testing.T) {
 
 		{`row(true, NULL, false)`, `(false, NULL, true)`, `(true, NULL, true)`,
 			`(false, NULL, false)`, `(true, NULL, true)`},
-		{`row(false, NULL, true)`, `(false, NULL, false)`, `(true, NULL, false)`,
+		{`row(false, NULL, true)`, `(false, NULL, false)`, `(true, NULL, NULL)`,
 			`(false, NULL, false)`, `(true, NULL, true)`},
 
 		{`row(row(true), row(false))`, `((false), (true))`, `((true), (true))`,
 			`((false), (false))`, `((true), (true))`},
-		{`row(row(false), row(true))`, `((false), (false))`, `((true), (false))`,
+		{`row(row(false), row(true))`, `((false), (false))`, `((true), NULL)`,
 			`((false), (false))`, `((true), (true))`},
 
 		// Arrays
@@ -172,7 +172,7 @@ func TestDatumOrdering(t *testing.T) {
 		{`array[true]`, noPrev, `ARRAY[true,NULL]`, `ARRAY[]`, noMax},
 
 		// Mixed tuple/array datums.
-		{`row(ARRAY[true], row(true))`, `(ARRAY[true], (false))`, `(ARRAY[true,NULL], (false))`,
+		{`row(ARRAY[true], row(true))`, `(ARRAY[true], (false))`, `(ARRAY[true,NULL], NULL)`,
 			`(ARRAY[], (false))`, noMax},
 		{`row(row(false), ARRAY[true])`, noPrev, `((false), ARRAY[true,NULL])`,
 			`((false), ARRAY[])`, noMax},

@@ -70,24 +70,40 @@ type Datum interface {
 	// equal to other and +1 if receiver is greater than other.
 	Compare(ctx *EvalContext, other Datum) int
 
-	// Prev returns the previous datum and true, if one exists, or nil
-	// and false.  The previous datum satisfied the following
-	// definition: if the receiver is "b" and the returned datum is "a",
-	// then "a < b" and no other datum will compare such that "a < c <
-	// b".
-	// The return value is undefined if `IsMin()` returns true.
+	// Prev returns the previous datum and true, if one exists, or nil and false.
+	// The previous datum satisfies the following definition: if the receiver is
+	// "b" and the returned datum is "a", then for every compatible datum "x", it
+	// holds that "x < b" is true if and only if "x <= a" is true.
+	//
+	// The return value is undefined if IsMin() returns true.
+	//
+	// TODO(#12022): for DTuple, the contract is actually that "x < b" (SQL order,
+	// where NULL < x is unknown for all x) is true only if "x <= a"
+	// (.Compare/encoding order, where NULL <= x is true for all x) is true. This
+	// is okay for now: the returned datum is used only to construct a span, which
+	// uses .Compare/encoding order and is guaranteed to be large enough by this
+	// weaker contract. The original filter expression is left in place to catch
+	// false positives.
 	Prev() (Datum, bool)
 
 	// IsMin returns true if the datum is equal to the minimum value the datum
 	// type can hold.
 	IsMin() bool
 
-	// Next returns the next datum and true, if one exists, or nil
-	// and false otherwise. The next datum satisfied the following
-	// definition: if the receiver is "a" and the returned datum is "b",
-	// then "a < b" and no other datum will compare such that "a < c <
-	// b".
-	// The return value is undefined if `IsMax()` returns true.
+	// Next returns the next datum and true, if one exists, or nil and false
+	// otherwise. The next datum satisfies the following definition: if the
+	// receiver is "a" and the returned datum is "b", then for every compatible
+	// datum "x", it holds that "x > a" is true if and only if "x >= b" is true.
+	//
+	// The return value is undefined if IsMax() returns true.
+	//
+	// TODO(#12022): for DTuple, the contract is actually that "x > a" (SQL order,
+	// where x > NULL is unknown for all x) is true only if "x >= b"
+	// (.Compare/encoding order, where x >= NULL is true for all x) is true. This
+	// is okay for now: the returned datum is used only to construct a span, which
+	// uses .Compare/encoding order and is guaranteed to be large enough by this
+	// weaker contract. The original filter expression is left in place to catch
+	// false positives.
 	Next() (Datum, bool)
 
 	// IsMax returns true if the datum is equal to the maximum value the datum
@@ -1683,11 +1699,8 @@ func (d *DTuple) Next() (Datum, bool) {
 			res.D[i] = nextVal
 			break
 		}
-		minVal, ok := res.D[i].min()
-		if !ok {
-			return nil, false
-		}
-		res.D[i] = minVal
+		// TODO(#12022): temporary workaround; see the interface comment.
+		res.D[i] = DNull
 	}
 	return res, true
 }
