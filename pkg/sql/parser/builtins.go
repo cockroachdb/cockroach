@@ -771,10 +771,11 @@ var Builtins = map[string][]Builtin{
 
 	"unique_rowid": {
 		Builtin{
-			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeInt),
-			category:   categoryIDGeneration,
-			impure:     true,
+			Types:        ArgTypes{},
+			ReturnType:   fixedReturnType(TypeInt),
+			category:     categoryIDGeneration,
+			impure:       true,
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return NewDInt(GenerateUniqueInt(ctx.NodeID)), nil
 			},
@@ -1465,9 +1466,10 @@ var Builtins = map[string][]Builtin{
 
 	"current_database": {
 		Builtin{
-			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeString),
-			category:   categorySystemInfo,
+			Types:        ArgTypes{},
+			ReturnType:   fixedReturnType(TypeString),
+			category:     categorySystemInfo,
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				if len(ctx.Database) == 0 {
 					return DNull, nil
@@ -1480,9 +1482,10 @@ var Builtins = map[string][]Builtin{
 
 	"current_schema": {
 		Builtin{
-			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeString),
-			category:   categorySystemInfo,
+			Types:        ArgTypes{},
+			ReturnType:   fixedReturnType(TypeString),
+			category:     categorySystemInfo,
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				if len(ctx.Database) == 0 {
 					return DNull, nil
@@ -1558,10 +1561,11 @@ var Builtins = map[string][]Builtin{
 
 	"crdb_internal.force_retry": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeInterval}},
-			ReturnType: fixedReturnType(TypeInt),
-			impure:     true,
-			privileged: true,
+			Types:        ArgTypes{{"val", TypeInterval}},
+			ReturnType:   fixedReturnType(TypeInt),
+			impure:       true,
+			privileged:   true,
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				minDuration := args[0].(*DInterval).Duration
 				elapsed := duration.Duration{
@@ -1582,8 +1586,9 @@ var Builtins = map[string][]Builtin{
 			Types: ArgTypes{
 				{"val", TypeInterval},
 				{"txnID", TypeString}},
-			ReturnType: fixedReturnType(TypeInt),
-			impure:     true,
+			ReturnType:   fixedReturnType(TypeInt),
+			impure:       true,
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				minDuration := args[0].(*DInterval).Duration
 				txnID := args[1].(*DString)
