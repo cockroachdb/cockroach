@@ -44,17 +44,17 @@ func Import(
 	db client.DB,
 	startKey, endKey roachpb.Key,
 	files []roachpb.ImportRequest_File,
-	kr storageccl.KeyRewriter,
+	kr *storageccl.KeyRewriter,
 	rekeys []roachpb.ImportRequest_TableRekey,
 ) (*roachpb.ImportResponse, error) {
 	var newStartKey, newEndKey roachpb.Key
 	{
 		var ok bool
-		newStartKey, ok = kr.RewriteKey(append([]byte(nil), startKey...))
+		newStartKey, ok, _ = kr.RewriteKey(append([]byte(nil), startKey...))
 		if !ok {
 			return nil, errors.Errorf("could not rewrite key: %s", newStartKey)
 		}
-		newEndKey, ok = kr.RewriteKey(append([]byte(nil), endKey...))
+		newEndKey, ok, _ = kr.RewriteKey(append([]byte(nil), endKey...))
 		if !ok {
 			return nil, errors.Errorf("could not rewrite key: %s", newEndKey)
 		}
@@ -76,9 +76,8 @@ func Import(
 			Key:    startKey,
 			EndKey: endKey,
 		},
-		Files:       files,
-		KeyRewrites: kr,
-		Rekeys:      rekeys,
+		Files:  files,
+		Rekeys: rekeys,
 	}
 	res, pErr := client.SendWrapped(ctx, db.GetSender(), req)
 	if pErr != nil {
@@ -185,9 +184,8 @@ func reassignParentIDs(
 // we can.
 func reassignTableIDs(
 	ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor, opt parser.KVOptions,
-) (map[sqlbase.ID]sqlbase.ID, storageccl.KeyRewriter, []roachpb.ImportRequest_TableRekey, error) {
+) (map[sqlbase.ID]sqlbase.ID, *storageccl.KeyRewriter, []roachpb.ImportRequest_TableRekey, error) {
 	var newTableIDs map[sqlbase.ID]sqlbase.ID
-	var kr storageccl.KeyRewriter
 	var rekeys []roachpb.ImportRequest_TableRekey
 
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -197,7 +195,6 @@ func reassignTableIDs(
 			if err != nil {
 				return err
 			}
-			kr = append(kr, MakeKeyRewriterForNewTableID(table, newTableID)...)
 			newTableIDs[table.ID] = newTableID
 			oldID := table.ID
 			table.ID = newTableID
@@ -220,6 +217,11 @@ func reassignTableIDs(
 	}
 
 	if err := reassignReferencedTables(tables, newTableIDs, opt); err != nil {
+		return nil, nil, nil, err
+	}
+
+	kr, err := storageccl.MakeKeyRewriter(rekeys)
+	if err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -701,7 +703,7 @@ func Restore(
 	splitKeys := make([]roachpb.Key, len(importRequests))
 	for i, r := range importRequests {
 		var ok bool
-		splitKeys[i], ok = kr.RewriteKey(append([]byte(nil), r.Key...))
+		splitKeys[i], ok, _ = kr.RewriteKey(append([]byte(nil), r.Key...))
 		if !ok {
 			return 0, errors.Errorf("failed to rewrite key: %s", r.Key)
 		}

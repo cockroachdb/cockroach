@@ -45,18 +45,21 @@ func init() {
 func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.ImportResponse, error) {
 	args := cArgs.Args.(*roachpb.ImportRequest)
 	db := cArgs.EvalCtx.DB()
-	kr := KeyRewriter(args.KeyRewrites)
+	kr, err := MakeKeyRewriter(args.Rekeys)
+	if err != nil {
+		return nil, errors.Wrap(err, "make key rewriter")
+	}
 
 	var importStart, importEnd roachpb.Key
 	{
 		var ok bool
-		importStart, ok = kr.RewriteKey(append([]byte(nil), args.DataSpan.Key...))
+		importStart, ok, _ = kr.RewriteKey(append([]byte(nil), args.DataSpan.Key...))
 		if !ok {
-			return nil, errors.Errorf("could not rewrite key: %s", importStart)
+			return nil, errors.Errorf("could not rewrite start span key: %s", importStart)
 		}
-		importEnd, ok = kr.RewriteKey(append([]byte(nil), args.DataSpan.EndKey...))
+		importEnd, ok, _ = kr.RewriteKey(append([]byte(nil), args.DataSpan.EndKey...))
 		if !ok {
-			return nil, errors.Errorf("could not rewrite key: %s", importEnd)
+			return nil, errors.Errorf("could not rewrite end span key: %s", importEnd)
 		}
 	}
 
@@ -191,7 +194,11 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		value := roachpb.Value{RawBytes: valueScratch}
 
 		var ok bool
-		key.Key, ok = kr.RewriteKey(key.Key)
+		var err error
+		key.Key, ok, err = kr.RewriteKey(key.Key)
+		if err != nil {
+			return nil, err
+		}
 		if !ok {
 			// If the key rewriter didn't match this key, it's not data for the
 			// table(s) we're interested in.

@@ -544,12 +544,18 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		_ = sqlDB.Exec(`INSERT INTO i0_0 VALUES ($1, 1, 1), ($1, 2, 2), ($1, 3, 3)`, i)
 		_ = sqlDB.Exec(`INSERT INTO i1 VALUES ($1, 1), ($1, 2), ($1, 3), ($1, 4)`, i)
 	}
+	// Split some rows to attempt to exercise edge conditions in the key rewriter.
+	_ = sqlDB.Exec(`ALTER TABLE i0 SPLIT AT SELECT * from i0 LIMIT $1`, numAccounts)
+	_ = sqlDB.Exec(`ALTER TABLE i0_0 SPLIT AT SELECT * from i0 LIMIT $1`, numAccounts)
+	_ = sqlDB.Exec(`ALTER TABLE i1 SPLIT AT SELECT * from i0 LIMIT $1`, numAccounts)
 	_ = sqlDB.Exec(`BACKUP DATABASE bench TO $1`, dir)
 
 	t.Run("all tables in interleave hierarchy", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+		// Create a dummy database to verify rekeying is correctly performed.
+		sqlDBRestore.Exec(`CREATE DATABASE ignored`)
 		sqlDBRestore.Exec(bankCreateDatabase)
 
 		sqlDBRestore.Exec(`RESTORE bench.* FROM $1`, dir)

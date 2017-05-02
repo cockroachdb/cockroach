@@ -406,9 +406,7 @@ func (s *azureStorage) Conf() roachpb.ExportStorage {
 	}
 }
 
-func (s *azureStorage) WriteFile(
-	ctx context.Context, basename string, content io.ReadSeeker,
-) error {
+func (s *azureStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
 	name := filepath.Join(s.prefix, basename)
 	// A blob in Azure is composed of an ordered list of blocks. To create a
 	// blob, we must first create an empty block blob (i.e., a blob backed
