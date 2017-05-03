@@ -39,7 +39,7 @@ import (
 )
 
 func slurpSSTablesLatestKey(
-	t *testing.T, dir string, paths []string, kr PrefixRewriter,
+	t *testing.T, dir string, paths []string, kr prefixRewriter,
 ) []engine.MVCCKeyValue {
 	start, end := engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}
 
@@ -69,7 +69,7 @@ func slurpSSTablesLatestKey(
 		}
 		if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
 			var ok bool
-			kv.Key.Key, ok = kr.RewriteKey(kv.Key.Key)
+			kv.Key.Key, ok = kr.rewriteKey(kv.Key.Key)
 			if !ok {
 				return true, errors.Errorf("could not rewrite key: %s", roachpb.Key(kv.Key.Key))
 			}
@@ -152,7 +152,7 @@ func TestImport(t *testing.T) {
 		indexID = 1
 	)
 
-	kr := PrefixRewriter{
+	kr := prefixRewriter{
 		{OldPrefix: makeKeyRewriterPrefixIgnoringInterleaved(oldID, indexID), NewPrefix: makeKeyRewriterPrefixIgnoringInterleaved(newID, indexID)},
 	}
 	var keys [][]byte
@@ -162,22 +162,15 @@ func TestImport(t *testing.T) {
 		keys = append(keys, key)
 	}
 
-	desc := sqlbase.Descriptor{
-		Union: &sqlbase.Descriptor_Table{Table: &sqlbase.TableDescriptor{
-			ID: newID,
-			PrimaryIndex: sqlbase.IndexDescriptor{
-				ID: indexID,
-			},
-		}},
-	}
-	newDescBytes, err := desc.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
 	rekeys := []roachpb.ImportRequest_TableRekey{
 		{
-			OldID:   oldID,
-			NewDesc: newDescBytes,
+			OldID: oldID,
+			NewDesc: mustMarshalDesc(t, &sqlbase.TableDescriptor{
+				ID: newID,
+				PrimaryIndex: sqlbase.IndexDescriptor{
+					ID: indexID,
+				},
+			}),
 		},
 	}
 
@@ -189,11 +182,11 @@ func TestImport(t *testing.T) {
 
 	dataStartKey := roachpb.Key(keys[0])
 	dataEndKey := roachpb.Key(keys[3]).PrefixEnd()
-	reqStartKey, ok := kr.RewriteKey(append([]byte(nil), dataStartKey...))
+	reqStartKey, ok := kr.rewriteKey(append([]byte(nil), dataStartKey...))
 	if !ok {
 		t.Fatalf("failed to rewrite key: %s", reqStartKey)
 	}
-	reqEndKey, ok := kr.RewriteKey(append([]byte(nil), dataEndKey...))
+	reqEndKey, ok := kr.rewriteKey(append([]byte(nil), dataEndKey...))
 	if !ok {
 		t.Fatalf("failed to rewrite key: %s", reqEndKey)
 	}
