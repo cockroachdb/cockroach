@@ -144,6 +144,45 @@ func (r *RSG) Int63() int64 {
 	return v
 }
 
+// Int returns a random int. It attempts to distribute results among small,
+// large, and normal scale numbers.
+func (r *RSG) Int() int64 {
+	r.lock.Lock()
+	var i int64
+	switch r.src.Intn(9) {
+	case 0:
+		i = 0
+	case 1:
+		i = 1
+	case 2:
+		i = -1
+	case 3:
+		i = 2
+	case 4:
+		i = -2
+	case 5:
+		i = math.MaxInt64
+	case 6:
+		// math.MinInt64 isn't a valid integer in SQL
+		i = math.MinInt64 + 1
+	case 7:
+		i = r.src.Int63()
+		if r.src.Intn(2) == 1 {
+			i = -i
+		}
+	case 8:
+		for v := r.src.Intn(10) + 1; v > 0; v-- {
+			i *= 10
+			i += r.src.Int63n(10)
+		}
+		if r.src.Intn(2) == 1 {
+			i = -i
+		}
+	}
+	r.lock.Unlock()
+	return i
+}
+
 // Float64 returns a random float. It is sometimes +/-Inf, NaN, and attempts to
 // be distributed among very small, large, and normal scale numbers.
 func (r *RSG) Float64() float64 {
@@ -178,24 +217,18 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 	var v interface{}
 	switch parser.UnwrapType(typ) {
 	case parser.TypeInt:
-		i := r.Int63()
-		i -= r.Int63()
-		v = i
+		v = r.Int()
 	case parser.TypeFloat, parser.TypeDecimal:
 		v = r.Float64()
 	case parser.TypeString:
-		v = `'string'`
+		v = stringArgs[r.Intn(len(stringArgs))]
 	case parser.TypeBytes:
-		v = `b'bytes'`
+		v = fmt.Sprintf("b%s", stringArgs[r.Intn(len(stringArgs))])
 	case parser.TypeTimestamp, parser.TypeTimestampTZ:
 		t := time.Unix(0, r.Int63())
 		v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
 	case parser.TypeBool:
-		if r.Intn(2) == 0 {
-			v = "false"
-		} else {
-			v = "true"
-		}
+		v = boolArgs[r.Intn(2)]
 	case parser.TypeDate:
 		i := r.Int63()
 		i -= r.Int63()
@@ -224,4 +257,18 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 		}
 	}
 	return fmt.Sprintf("%v::%s", v, typ.String())
+}
+
+var stringArgs = map[int]string{
+	0: `''`,
+	1: `'1'`,
+	2: `'12345'`,
+	3: `'1234567890'`,
+	4: `'12345678901234567890'`,
+	5: `'123456789123456789123456789123456789123456789123456789123456789123456789'`,
+}
+
+var boolArgs = map[int]string{
+	0: "false",
+	1: "true",
 }
