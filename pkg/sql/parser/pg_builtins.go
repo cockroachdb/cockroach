@@ -198,7 +198,8 @@ var pgBuiltins = map[string][]Builtin{
 			Types: ArgTypes{
 				{"role_oid", TypeOid},
 			},
-			ReturnType: fixedReturnType(TypeString),
+			ReturnType:   fixedReturnType(TypeString),
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				oid := args[0]
 				t, err := ctx.Planner.QueryRow(
