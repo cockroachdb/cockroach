@@ -468,7 +468,7 @@ func (n *createViewNode) Start(ctx context.Context) error {
 
 	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	desc, err := n.makeViewTableDesc(
-		ctx, n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs, affected)
+		ctx, n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs, affected, &n.p.evalCtx)
 	if err != nil {
 		return err
 	}
@@ -649,7 +649,7 @@ func (n *createTableNode) Start(ctx context.Context) error {
 	var desc sqlbase.TableDescriptor
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
 	if n.n.As() {
-		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs)
+		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs, &n.p.evalCtx)
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 		desc, err = n.p.makeTableDesc(ctx, n.n, n.dbDesc.ID, id, privs, affected)
@@ -1157,6 +1157,7 @@ func (n *createViewNode) makeViewTableDesc(
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
+	evalCtx *parser.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
 	desc := sqlbase.TableDescriptor{
 		ID:            id,
@@ -1178,7 +1179,7 @@ func (n *createViewNode) makeViewTableDesc(
 			columnTableDef.Name = p.ColumnNames[i]
 		}
 		// We pass an empty search path here because there are no names to resolve.
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil, evalCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -1197,6 +1198,7 @@ func makeTableDescIfAs(
 	parentID, id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
+	evalCtx *parser.EvalContext,
 ) (desc sqlbase.TableDescriptor, err error) {
 	desc = sqlbase.TableDescriptor{
 		ID:            id,
@@ -1221,7 +1223,7 @@ func makeTableDescIfAs(
 			columnTableDef.Name = p.AsColumnNames[i]
 		}
 		// We pass an empty search path here because we do not have any expressions to resolve.
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil, evalCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -1242,6 +1244,7 @@ func MakeTableDesc(
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
 	sessionDB string,
+	evalCtx *parser.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
 	desc := sqlbase.TableDescriptor{
 		ID:            id,
@@ -1267,7 +1270,7 @@ func MakeTableDesc(
 				}
 			}
 
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, searchPath)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, searchPath, evalCtx)
 			if err != nil {
 				return desc, err
 			}
@@ -1440,6 +1443,7 @@ func (p *planner) makeTableDesc(
 		privileges,
 		affected,
 		p.session.Database,
+		&p.evalCtx,
 	)
 }
 

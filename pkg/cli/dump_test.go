@@ -538,7 +538,7 @@ INSERT INTO t (i) VALUES
 	const want2 = `dump d t
 CREATE TABLE t (
 	i INT NULL,
-	j INT NULL DEFAULT 2,
+	j INT NULL DEFAULT 2:::INT,
 	FAMILY "primary" (i, rowid, j)
 );
 

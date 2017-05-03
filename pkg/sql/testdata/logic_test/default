@@ -35,7 +35,7 @@ query TTBTT colnames
 SHOW COLUMNS FROM t
 ----
 Field Type      Null  Default  Indices
-a     INT       false 42       {primary}
+a     INT       false 42:::INT {primary}
 b     TIMESTAMP true  now()    {}
 c     FLOAT     true  random() {}
 
