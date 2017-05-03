@@ -158,6 +158,15 @@ func (node *ShowUsers) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW USERS")
 }
 
+// ShowProcessList represents a SHOW PRPCESSLIST statement.
+type ShowProcessList struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowProcessList) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW PROCESSLIST")
+}
+
 // Help represents a HELP statement.
 type Help struct {
 	Name Name

@@ -63,6 +63,7 @@ var reservedKeywords = map[string]struct{}{
 	"ORDER":             {},
 	"PLACING":           {},
 	"PRIMARY":           {},
+	"PROCESSLIST":       {},
 	"REFERENCES":        {},
 	"RETURNING":         {},
 	"SELECT":            {},

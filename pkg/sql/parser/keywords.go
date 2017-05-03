@@ -187,6 +187,7 @@ var keywords = map[string]int{
 	"PREPARE":           PREPARE,
 	"PRIMARY":           PRIMARY,
 	"PRIORITY":          PRIORITY,
+	"PROCESSLIST":       PROCESSLIST,
 	"RANGE":             RANGE,
 	"READ":              READ,
 	"REAL":              REAL,

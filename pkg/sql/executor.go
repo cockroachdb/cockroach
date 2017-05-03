@@ -190,6 +190,7 @@ type Executor struct {
 	reCache        *parser.RegexpCache
 	virtualSchemas virtualSchemaHolder
 
+	sessionRegistry sessionRegistry
 	// Transient stats.
 	SelectCount *metric.Counter
 	// The subset of SELECTs that are processed through DistSQL.
@@ -304,6 +305,8 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		cfg:     cfg,
 		stopper: stopper,
 		reCache: parser.NewRegexpCache(512),
+
+		sessionRegistry: makeSessionRegistry(),
 
 		TxnBeginCount:      metric.NewCounter(MetaTxnBegin),
 		TxnCommitCount:     metric.NewCounter(MetaTxnCommit),
@@ -1575,6 +1578,17 @@ func (e *Executor) execStmt(
 		return Result{}, err
 	}
 
+	session.Lock()
+	session.QueryStatements[plan] = stmt.String()
+	session.Unlock()
+
+	defer func() {
+		session.Lock()
+		delete(session.QueryStatements, plan)
+		session.Unlock()
+
+	}()
+
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	if useDistSQL {
 		err = e.execDistSQL(planner, plan, &result)
@@ -1627,6 +1641,17 @@ func (e *Executor) execStmtInParallel(stmt parser.Statement, planner *planner) (
 			return err
 		}
 		defer result.Close(ctx)
+
+		session.Lock()
+		session.QueryStatements[plan] = stmt.String()
+		session.Unlock()
+
+		defer func() {
+			session.Lock()
+			delete(session.QueryStatements, plan)
+			session.Unlock()
+
+		}()
 
 		planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 		err = e.execClassic(planner, plan, &result)
