@@ -32,6 +32,10 @@ import:
   version: aa4f14680cc759ef40791558d93c90c6f629c10f
   repo: https://github.com/cockroachdb/raven-go
 
+# The collation tables must never change.
+- package: golang.org/x/text
+  version: 470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4
+
 # Pins to prevent unintended version changes to libs we care about when adding/
 # removing/changing other deps. These are grouped separately to make it easier
 # to comment them out in bulk when running an across-the-board dep update.
