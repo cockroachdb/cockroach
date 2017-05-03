@@ -995,7 +995,7 @@ const sqlEofCode = 1
 const sqlErrCode = 2
 const sqlInitialStackSize = 16
 
-//line sql.y:5470
+//line sql.y:5467
 
 //line yacctab:1
 var sqlExca = [...]int{
@@ -10908,43 +10908,43 @@ sqldefault:
 		}
 	case 914:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:5046
+		//line sql.y:5045
 		{
-			sqlVAL.union.val = &CastExpr{Expr: &StrVal{s: sqlDollar[5].str}, Type: sqlDollar[1].union.colType(), syntaxMode: castPrepend}
+			return unimplemented(sqllex)
 		}
 	case 915:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:5050
+		//line sql.y:5047
 		{
 			sqlVAL.union.val = MakeDBool(true)
 		}
 	case 916:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:5054
+		//line sql.y:5051
 		{
 			sqlVAL.union.val = MakeDBool(false)
 		}
 	case 917:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:5058
+		//line sql.y:5055
 		{
 			sqlVAL.union.val = DNull
 		}
 	case 919:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:5065
+		//line sql.y:5062
 		{
 			sqlVAL.union.val = sqlDollar[2].union.numVal()
 		}
 	case 920:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:5069
+		//line sql.y:5066
 		{
 			sqlVAL.union.val = &NumVal{Value: constant.UnaryOp(token.SUB, sqlDollar[2].union.numVal().Value, 0)}
 		}
 	case 921:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:5075
+		//line sql.y:5072
 		{
 			// We don't carry opt_interval information into the column type, so we need
 			// to parse the interval directly.
@@ -10963,19 +10963,19 @@ sqldefault:
 		}
 	case 926:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:5110
+		//line sql.y:5107
 		{
 			sqlVAL.str = ""
 		}
 	case 927:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:5116
+		//line sql.y:5113
 		{
 			sqlVAL.str = sqlDollar[2].str
 		}
 	case 928:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:5120
+		//line sql.y:5117
 		{
 			sqlVAL.str = ""
 		}
