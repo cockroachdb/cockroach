@@ -724,8 +724,16 @@ func NewSchemaChangeManager(
 		leaseMgr:       leaseMgr,
 		testingKnobs:   testingKnobs,
 		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
+		// TODO(radu): investigate using the same distSQLPlanner from the executor.
 		distSQLPlanner: newDistSQLPlanner(
-			nodeDesc, rpcContext, distSQLServ, distSender, gossip, leaseMgr.stopper,
+			nodeDesc,
+			rpcContext,
+			distSQLServ,
+			distSender,
+			gossip,
+			leaseMgr.stopper,
+			// TODO(radu): pass these knobs
+			DistSQLPlannerTestingKnobs{},
 		),
 		clock: clock,
 	}

@@ -22,6 +22,8 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -35,15 +37,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // SplitTable splits a range in the table, creates a replica for the right
@@ -527,4 +532,253 @@ func TestDistSQLDeadHosts(t *testing.T) {
 		"SELECT URL FROM [EXPLAIN (DISTSQL) SELECT SUM(xsquared) FROM t]",
 		[][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html?eJy8kkFLwzAUx-9-CvmfFHIwXZ3QUz3uoJOpJ8khNo9S6JrykoIy-t2lDaItkk02dkxe_r_fe-Ht0FhDj3pLDtkbJAQWEEihBFq2BTlneSiFhyvzgexGoGrazg_XSqCwTMh28JWvCRle9HtNG9KGGAKGvK7qEd5ytdX8mXsIrDufXeYJVC9gO_9N68XhnvuyZCq1tzPN8-vDVS6vD0b_ELvGsiEmMwGq_sRyeab_2-M5ZoTkTCPs8ZxqBf5Ab8i1tnE0W4UpTwmQKSlskbMdF_TEthjh4bgeX48XhpwPVRkOqyaUhrZ-h2U0nEzCch5OouG7uHkRDafxcHpM27fR8DJuXv7LrPqLrwAAAP__vMyldA=="}},
 	)
+}
+
+// testSpanResolverRange describes a range in a test. The ranges are specified
+// in order, so only the start key is needed.
+type testSpanResolverRange struct {
+	startKey string
+	node     int
+}
+
+// testSpanResolver is a SpanResolver that uses a fixed set of ranges.
+type testSpanResolver struct {
+	nodes []*roachpb.NodeDescriptor
+
+	ranges []testSpanResolverRange
+}
+
+// NewSpanResolverIterator is part of the SpanResolver interface.
+func (tsr *testSpanResolver) NewSpanResolverIterator(
+	_ *client.Txn,
+) distsqlplan.SpanResolverIterator {
+	return &testSpanResolverIterator{tsr: tsr}
+}
+
+type testSpanResolverIterator struct {
+	tsr         *testSpanResolver
+	curRangeIdx int
+	endKey      string
+}
+
+var _ distsqlplan.SpanResolverIterator = &testSpanResolverIterator{}
+
+// Seek is part of the SpanResolverIterator interface.
+func (it *testSpanResolverIterator) Seek(
+	ctx context.Context, span roachpb.Span, scanDir kv.ScanDirection,
+) {
+	if scanDir != kv.Ascending {
+		panic("descending not implemented")
+	}
+	it.endKey = string(span.EndKey)
+	key := string(span.Key)
+	i := 0
+	for ; i < len(it.tsr.ranges)-1; i++ {
+		if key < it.tsr.ranges[i+1].startKey {
+			break
+		}
+	}
+	it.curRangeIdx = i
+}
+
+// Valid is part of the SpanResolverIterator interface.
+func (*testSpanResolverIterator) Valid() bool {
+	return true
+}
+
+// Error is part of the SpanResolverIterator interface.
+func (*testSpanResolverIterator) Error() error {
+	return nil
+}
+
+// NeedAnother is part of the SpanResolverIterator interface.
+func (it *testSpanResolverIterator) NeedAnother() bool {
+	return it.curRangeIdx < len(it.tsr.ranges)-1 &&
+		it.tsr.ranges[it.curRangeIdx+1].startKey < it.endKey
+}
+
+// Next is part of the SpanResolverIterator interface.
+func (it *testSpanResolverIterator) Next(_ context.Context) {
+	if !it.NeedAnother() {
+		panic("Next called with NeedAnother false")
+	}
+	it.curRangeIdx++
+}
+
+// Desc is part of the SpanResolverIterator interface.
+func (it *testSpanResolverIterator) Desc() roachpb.RangeDescriptor {
+	endKey := roachpb.RKeyMax
+	if it.curRangeIdx < len(it.tsr.ranges)-1 {
+		endKey = roachpb.RKey(it.tsr.ranges[it.curRangeIdx+1].startKey)
+	}
+	return roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey(it.tsr.ranges[it.curRangeIdx].startKey),
+		EndKey:   endKey,
+	}
+}
+
+// ReplicaInfo is part of the SpanResolverIterator interface.
+func (it *testSpanResolverIterator) ReplicaInfo(_ context.Context) (kv.ReplicaInfo, error) {
+	n := it.tsr.nodes[it.tsr.ranges[it.curRangeIdx].node-1]
+	return kv.ReplicaInfo{
+		ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: n.NodeID},
+		NodeDesc:          n,
+	}, nil
+}
+
+func TestPartitionSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		ranges    []testSpanResolverRange
+		deadNodes []int
+
+		gatewayNode int
+
+		// spans to be passed to partitionSpans
+		spans [][2]string
+
+		// expected result: a list of spans, one for each node.
+		partitions map[int][][2]string
+	}{
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}},
+				3: {{"D1", "X"}},
+			},
+		},
+
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			deadNodes:   []int{1}, // The health status of the gateway node shouldn't matter.
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}},
+				3: {{"D1", "X"}},
+			},
+		},
+
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			deadNodes:   []int{2},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "C1"}},
+				3: {{"D1", "X"}},
+			},
+		},
+
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			deadNodes:   []int{3},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
+				2: {{"B", "C"}},
+			},
+		},
+
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			deadNodes:   []int{1},
+			gatewayNode: 2,
+
+			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
+
+			partitions: map[int][][2]string{
+				2: {{"A1", "C1"}},
+				3: {{"D1", "X"}},
+			},
+		},
+
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			deadNodes:   []int{1},
+			gatewayNode: 3,
+
+			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
+
+			partitions: map[int][][2]string{
+				2: {{"B", "C"}},
+				3: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
+			},
+		},
+	}
+
+	for testIdx, tc := range testCases {
+		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+
+			tsp := &testSpanResolver{}
+			for i := 1; i <= 10; i++ {
+				tsp.nodes = append(tsp.nodes, &roachpb.NodeDescriptor{
+					NodeID: roachpb.NodeID(i),
+					Address: util.UnresolvedAddr{
+						AddressField: fmt.Sprintf("addr%d", i),
+					},
+				})
+			}
+			tsp.ranges = tc.ranges
+
+			dsp := distSQLPlanner{
+				nodeDesc:     *tsp.nodes[tc.gatewayNode-1],
+				stopper:      stopper,
+				spanResolver: tsp,
+				testingKnobs: DistSQLPlannerTestingKnobs{
+					OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
+						for _, n := range tc.deadNodes {
+							if int(node) == n {
+								return fmt.Errorf("test node is unhealthy")
+							}
+						}
+						return nil
+					},
+				},
+			}
+
+			planCtx := dsp.NewPlanningCtx(context.Background(), nil /* txn */)
+			var spans []roachpb.Span
+			for _, s := range tc.spans {
+				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
+			}
+
+			partitions, err := dsp.partitionSpans(&planCtx, spans)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			resMap := make(map[int][][2]string)
+			for _, p := range partitions {
+				if _, ok := resMap[int(p.node)]; ok {
+					t.Fatalf("node %d shows up in multiple partitions", p)
+				}
+				var spans [][2]string
+				for _, s := range p.spans {
+					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
+				}
+				resMap[int(p.node)] = spans
+			}
+
+			if !reflect.DeepEqual(resMap, tc.partitions) {
+				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
+			}
+		})
+	}
 }
