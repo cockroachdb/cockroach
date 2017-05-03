@@ -5062,10 +5062,7 @@ a_expr_const:
   {
     $$.val = $1.expr()
   }
-| const_interval '(' ICONST ')' SCONST
-  {
-    $$.val = &CastExpr{Expr: &StrVal{s: $5}, Type: $1.colType(), syntaxMode: castPrepend}
-  }
+| const_interval '(' ICONST ')' SCONST { return unimplemented(sqllex) }
 | TRUE
   {
     $$.val = MakeDBool(true)
