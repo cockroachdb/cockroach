@@ -333,6 +333,8 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	if f.status == FlowFinished {
 		panic("flow cleanup called twice")
 	}
+	// This closes the account and monitor opened in ServerImpl.setupFlow
+	f.evalCtx.Mon.Stop(ctx)
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
 	}
