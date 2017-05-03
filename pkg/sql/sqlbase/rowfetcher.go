@@ -342,7 +342,7 @@ func (rf *RowFetcher) ProcessKV(
 			// This is a unique index; decode the extra column values from
 			// the value.
 			var err error
-			valueBytes, err = DecodeKeyVals(&rf.alloc, rf.extraVals, nil, valueBytes)
+			valueBytes, err = DecodeKeyVals(rf.extraVals, nil, valueBytes)
 			if err != nil {
 				return "", "", err
 			}

@@ -247,7 +247,7 @@ func ConvertBatchError(tableDesc *TableDescriptor, b *client.Batch) error {
 			}
 			dirs = append(dirs, convertedDir)
 		}
-		if _, err := DecodeKeyVals(&alloc, vals, dirs, key); err != nil {
+		if _, err := DecodeKeyVals(vals, dirs, key); err != nil {
 			return err
 		}
 		decodedVals := make([]parser.Datum, len(vals))
