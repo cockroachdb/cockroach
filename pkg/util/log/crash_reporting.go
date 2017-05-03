@@ -78,7 +78,7 @@ func ReportPanic(ctx context.Context, r interface{}) interface{} {
 	// at least somewhat helpful in telling us where crashes are coming from.
 	reportable = fmt.Sprintf("%T", reportable)
 
-	maybeSendCrashReport(ctx, reportable)
+	sendCrashReport(ctx, reportable, 2)
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
@@ -103,12 +103,6 @@ var crashReports = settings.RegisterBoolSetting(
 	true,
 )
 
-func maybeSendCrashReport(ctx context.Context, r interface{}) {
-	if DiagnosticsReportingEnabled.Get() && crashReports.Get() {
-		sendCrashReport(ctx, r)
-	}
-}
-
 // SetupCrashReporter sets the crash reporter info.
 func SetupCrashReporter(ctx context.Context, cmd string) {
 	url := envutil.EnvOrDefaultString(
@@ -123,13 +117,13 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	}
 	info := build.GetInfo()
 	raven.SetRelease(info.Tag)
-	raven.SetIncludePaths([]string{"github.com/cockroachdb/cockroach"})
 	raven.SetTagsContext(map[string]string{
 		"cmd":          cmd,
 		"platform":     info.Platform,
 		"distribution": info.Distribution,
 		"rev":          info.Revision,
 		"goversion":    info.GoVersion,
+		"buildtype":    info.Type,
 	})
 }
 
@@ -141,12 +135,30 @@ type WrappedPanic struct {
 	Err       interface{}
 }
 
-func sendCrashReport(ctx context.Context, r interface{}) {
-	if err, ok := r.(error); ok {
-		id := raven.CaptureErrorAndWait(err, nil)
-		Shout(ctx, Severity_ERROR, "Reported as error "+id)
-	} else {
-		id := raven.CaptureMessageAndWait(fmt.Sprint(r), nil)
-		Shout(ctx, Severity_ERROR, "Reported as error "+id)
+var crdbPaths = []string{"github.com/cockroachdb/cockroach"}
+
+func sendCrashReport(ctx context.Context, r interface{}, depth int) {
+	if !DiagnosticsReportingEnabled.Get() || !crashReports.Get() {
+		return // disabled via settings.
 	}
+	if raven.DefaultClient == nil {
+		return // disabled via empty URL env var.
+	}
+
+	var err error
+	if e, ok := r.(error); ok {
+		err = e
+	} else {
+		err = fmt.Errorf("%v", r)
+	}
+
+	// This is close to inlining raven.CaptureErrorAndWait(), except it lets us
+	// control the stack depth of the collected trace.
+	const contextLines = 3
+
+	ex := raven.NewException(err, raven.NewStacktrace(depth+1, contextLines, crdbPaths))
+	packet := raven.NewPacket(err.Error(), ex)
+	eventID, ch := raven.DefaultClient.Capture(packet, nil /* tags */)
+	<-ch
+	Shout(ctx, Severity_ERROR, "Reported as error "+eventID)
 }

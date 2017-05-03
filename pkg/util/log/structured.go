@@ -142,7 +142,7 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 	msg := MakeMessage(ctx, format, args)
 
 	if s == Severity_FATAL {
-		maybeSendCrashReport(ctx, msg)
+		sendCrashReport(ctx, msg, depth+1)
 	}
 	// MakeMessage already added the tags when forming msg, we don't want
 	// eventInternal to prepend them again.

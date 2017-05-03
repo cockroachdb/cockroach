@@ -102,3 +102,6 @@ select crdb_internal.force_internal_error('foo')
 
 query error pq: insufficient privilege
 select crdb_internal.force_panic('foo')
+
+query error pq: insufficient privilege
+select crdb_internal.force_log_fatal('foo')
