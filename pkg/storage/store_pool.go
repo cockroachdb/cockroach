@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
@@ -42,14 +42,18 @@ const (
 	// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
 	// prevents the store pool from marking stores as dead.
 	TestTimeUntilStoreDeadOff = 24 * time.Hour
+)
 
-	// defaultFailedReservationsTimeout is the amount of time to consider the
-	// store throttled for up-replication after a failed reservation call.
-	defaultFailedReservationsTimeout = 5 * time.Second
+var declinedReservationsTimeout = settings.RegisterPositiveDurationSetting(
+	"server.declined_reservation_timeout",
+	"the amount of time to consider the store throttled for up-replication after a reservation was declined",
+	5*time.Second,
+)
 
-	// defaultDeclinedReservationsTimeout is the amount of time to consider the
-	// store throttled for up-replication after a reservation was declined.
-	defaultDeclinedReservationsTimeout = 0 * time.Second
+var failedReservationsTimeout = settings.RegisterPositiveDurationSetting(
+	"server.failed_reservation_timeout",
+	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
+	0,
 )
 
 type nodeStatus int
@@ -180,14 +184,12 @@ type localityWithString struct {
 type StorePool struct {
 	log.AmbientContext
 
-	clock                       *hlc.Clock
-	gossip                      *gossip.Gossip
-	nodeLivenessFn              NodeLivenessFunc
-	timeUntilStoreDead          time.Duration
-	failedReservationsTimeout   time.Duration
-	declinedReservationsTimeout time.Duration
-	startTime                   time.Time
-	deterministic               bool
+	clock              *hlc.Clock
+	gossip             *gossip.Gossip
+	nodeLivenessFn     NodeLivenessFunc
+	timeUntilStoreDead *settings.DurationSetting
+	startTime          time.Time
+	deterministic      bool
 	// We use separate mutexes for storeDetails and nodeLocalities because the
 	// nodeLocalities map is used in the critical code path of Replica.Send()
 	// and we'd rather not block that on something less important accessing
@@ -209,7 +211,7 @@ func NewStorePool(
 	g *gossip.Gossip,
 	clock *hlc.Clock,
 	nodeLivenessFn NodeLivenessFunc,
-	timeUntilStoreDead time.Duration,
+	timeUntilStoreDead *settings.DurationSetting,
 	deterministic bool,
 ) *StorePool {
 	sp := &StorePool{
@@ -218,12 +220,8 @@ func NewStorePool(
 		gossip:             g,
 		nodeLivenessFn:     nodeLivenessFn,
 		timeUntilStoreDead: timeUntilStoreDead,
-		failedReservationsTimeout: envutil.EnvOrDefaultDuration("COCKROACH_FAILED_RESERVATION_TIMEOUT",
-			defaultFailedReservationsTimeout),
-		declinedReservationsTimeout: envutil.EnvOrDefaultDuration("COCKROACH_DECLINED_RESERVATION_TIMEOUT",
-			defaultDeclinedReservationsTimeout),
-		startTime:     clock.PhysicalTime(),
-		deterministic: deterministic,
+		startTime:          clock.PhysicalTime(),
+		deterministic:      deterministic,
 	}
 	sp.detailsMu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
 	sp.localitiesMu.nodeLocalities = make(map[roachpb.NodeID]localityWithString)
@@ -252,7 +250,7 @@ func (sp *StorePool) String() string {
 	for _, id := range ids {
 		detail := sp.detailsMu.storeDetails[id]
 		fmt.Fprintf(&buf, "%d", id)
-		status := detail.status(now, sp.timeUntilStoreDead, 0, sp.nodeLivenessFn)
+		status := detail.status(now, sp.timeUntilStoreDead.Get(), 0, sp.nodeLivenessFn)
 		if status != storeStatusAvailable {
 			fmt.Fprintf(&buf, " (status=%d)", status)
 		}
@@ -359,7 +357,7 @@ func (sp *StorePool) liveAndDeadReplicas(
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
 		// Mark replica as dead if store is dead.
-		switch detail.status(now, sp.timeUntilStoreDead, rangeID, sp.nodeLivenessFn) {
+		switch detail.status(now, sp.timeUntilStoreDead.Get(), rangeID, sp.nodeLivenessFn) {
 		case storeStatusDead:
 			deadReplicas = append(deadReplicas, repl)
 		case storeStatusReplicaCorrupted:
@@ -521,7 +519,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 	now := sp.clock.PhysicalTime()
 	for _, storeID := range storeIDs {
 		detail := sp.detailsMu.storeDetails[storeID]
-		switch s := detail.status(now, sp.timeUntilStoreDead, rangeID, sp.nodeLivenessFn); s {
+		switch s := detail.status(now, sp.timeUntilStoreDead.Get(), rangeID, sp.nodeLivenessFn); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
 			throttledStoreCount++
@@ -563,18 +561,20 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 	// timeout period has passed.
 	switch reason {
 	case throttleDeclined:
-		detail.throttledUntil = sp.clock.PhysicalTime().Add(sp.declinedReservationsTimeout)
+		timeout := declinedReservationsTimeout.Get()
+		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "snapshot declined, s%d will be throttled for %s until %s",
-				storeID, sp.declinedReservationsTimeout, detail.throttledUntil)
+				storeID, timeout, detail.throttledUntil)
 		}
 	case throttleFailed:
-		detail.throttledUntil = sp.clock.PhysicalTime().Add(sp.failedReservationsTimeout)
+		timeout := failedReservationsTimeout.Get()
+		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "snapshot failed, s%d will be throttled for %s until %s",
-				storeID, sp.failedReservationsTimeout, detail.throttledUntil)
+				storeID, timeout, detail.throttledUntil)
 		}
 	}
 }

@@ -75,6 +75,18 @@ func RegisterDurationSetting(key, desc string, defaultValue time.Duration) *Dura
 	return RegisterValidatedDurationSetting(key, desc, defaultValue, nil)
 }
 
+// RegisterPositiveDurationSetting defines a new setting with type duration.
+func RegisterPositiveDurationSetting(
+	key, desc string, defaultValue time.Duration,
+) *DurationSetting {
+	return RegisterValidatedDurationSetting(key, desc, defaultValue, func(v time.Duration) error {
+		if v < 0 {
+			return errors.Errorf("cannot set %s to a negative duration: %s", key, v)
+		}
+		return nil
+	})
+}
+
 // RegisterValidatedDurationSetting defines a new setting with type duration.
 func RegisterValidatedDurationSetting(
 	key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
@@ -100,4 +112,10 @@ func TestingSetDuration(s **DurationSetting, v time.Duration) func() {
 	return func() {
 		*s = saved
 	}
+}
+
+// TestingDuration returns a one off, unregistered duration setting for test use
+// only.
+func TestingDuration(v time.Duration) *DurationSetting {
+	return &DurationSetting{v: int64(v)}
 }

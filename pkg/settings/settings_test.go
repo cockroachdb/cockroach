@@ -46,13 +46,7 @@ var strVal = settings.RegisterValidatedStringSetting(
 		}
 		return nil
 	})
-var dVal = settings.RegisterValidatedDurationSetting(
-	"dVal", "", time.Second, func(v time.Duration) error {
-		if v < 0 {
-			return errors.Errorf("duration cannot be negative")
-		}
-		return nil
-	})
+var dVal = settings.RegisterPositiveDurationSetting("dVal", "", time.Second)
 var byteSizeVal = settings.RegisterValidatedByteSizeSetting(
 	"byteSize.Val", "", mb, func(v int64) error {
 		if v < 0 {
@@ -338,7 +332,7 @@ func TestCache(t *testing.T) {
 		{
 			u := settings.MakeUpdater()
 			if err := u.Set("dVal", settings.EncodeDuration(-time.Hour), "d"); !testutils.IsError(err,
-				"duration cannot be negative",
+				"cannot set dVal to a negative duration: -1h0m0s",
 			) {
 				t.Fatal(err)
 			}

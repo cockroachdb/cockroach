@@ -151,10 +151,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgExpected.ConsistencyCheckPanicOnFailure = true
-	if err := os.Setenv("COCKROACH_TIME_UNTIL_STORE_DEAD", "10ms"); err != nil {
-		t.Fatal(err)
-	}
-	cfgExpected.TimeUntilStoreDead = time.Millisecond * 10
 
 	envutil.ClearEnvCache()
 	cfg.readEnvironmentVariables()

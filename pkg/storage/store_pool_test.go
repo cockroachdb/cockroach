@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -88,7 +89,7 @@ func (m *mockNodeLiveness) nodeLivenessFunc(
 // createTestStorePool creates a stopper, gossip and storePool for use in
 // tests. Stopper must be stopped by the caller.
 func createTestStorePool(
-	timeUntilStoreDead time.Duration, deterministic bool, defaultNodeStatus nodeStatus,
+	timeUntilStoreDeadValue time.Duration, deterministic bool, defaultNodeStatus nodeStatus,
 ) (*stop.Stopper, *gossip.Gossip, *hlc.ManualClock, *StorePool, *mockNodeLiveness) {
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(123)
@@ -102,7 +103,7 @@ func createTestStorePool(
 		g,
 		clock,
 		mnl.nodeLivenessFunc,
-		timeUntilStoreDead,
+		settings.TestingDuration(timeUntilStoreDeadValue),
 		deterministic,
 	)
 	return stopper, g, mc, storePool, mnl
@@ -449,7 +450,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	sg.GossipStores(uniqueStore, t)
 
 	{
-		expected := sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
+		expected := sp.clock.Now().GoTime().Add(declinedReservationsTimeout.Get())
 		sp.throttle(throttleDeclined, 1)
 
 		sp.detailsMu.Lock()
@@ -462,7 +463,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	}
 
 	{
-		expected := sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
+		expected := sp.clock.Now().GoTime().Add(failedReservationsTimeout.Get())
 		sp.throttle(throttleFailed, 1)
 
 		sp.detailsMu.Lock()
