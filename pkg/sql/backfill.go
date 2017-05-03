@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -94,7 +95,7 @@ func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
 
 // runBackfill runs the backfill for the schema changer.
 func (sc *SchemaChanger) runBackfill(
-	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease, evalCtx parser.EvalContext,
 ) error {
 	if sc.testingKnobs.RunBeforeBackfill != nil {
 		if err := sc.testingKnobs.RunBeforeBackfill(); err != nil {
@@ -175,14 +176,14 @@ func (sc *SchemaChanger) runBackfill(
 
 	// Add and drop columns.
 	if needColumnBackfill {
-		if err := sc.truncateAndBackfillColumns(ctx, lease, version); err != nil {
+		if err := sc.truncateAndBackfillColumns(ctx, evalCtx, lease, version); err != nil {
 			return err
 		}
 	}
 
 	// Add new indexes.
 	if len(addedIndexDescs) > 0 {
-		if err := sc.backfillIndexes(ctx, lease, version); err != nil {
+		if err := sc.backfillIndexes(ctx, evalCtx, lease, version); err != nil {
 			return err
 		}
 	}
@@ -364,6 +365,7 @@ func (sc *SchemaChanger) getSpansToBackfill(
 // MutationFilter.
 func (sc *SchemaChanger) distBackfill(
 	ctx context.Context,
+	evalCtx parser.EvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
@@ -435,7 +437,7 @@ func (sc *SchemaChanger) distBackfill(
 			if err != nil {
 				return err
 			}
-			if err := sc.distSQLPlanner.Run(&planCtx, txn, &plan, &recv); err != nil {
+			if err := sc.distSQLPlanner.Run(&planCtx, txn, &plan, &recv, evalCtx); err != nil {
 				return err
 			}
 			return recv.err
@@ -448,16 +450,23 @@ func (sc *SchemaChanger) distBackfill(
 
 func (sc *SchemaChanger) backfillIndexes(
 	ctx context.Context,
+	evalCtx parser.EvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
-	return sc.distBackfill(ctx, lease, version, indexBackfill, indexBackfillChunkSize, distsqlrun.IndexMutationFilter)
+	return sc.distBackfill(
+		ctx, evalCtx, lease, version, indexBackfill, indexBackfillChunkSize,
+		distsqlrun.IndexMutationFilter)
 }
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	ctx context.Context,
+	evalCtx parser.EvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
-	return sc.distBackfill(ctx, lease, version, columnBackfill, columnTruncateAndBackfillChunkSize, distsqlrun.ColumnMutationFilter)
+	return sc.distBackfill(
+		ctx, evalCtx,
+		lease, version, columnBackfill, columnTruncateAndBackfillChunkSize,
+		distsqlrun.ColumnMutationFilter)
 }

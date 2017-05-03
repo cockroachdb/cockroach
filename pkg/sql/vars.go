@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
@@ -174,7 +175,7 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
 		Reset: func(p *planner) error {
-			p.session.SearchPath = parser.SearchPath{"pg_catalog"}
+			p.session.SearchPath = sqlbase.DefaultSearchPath
 			return nil
 		},
 	},
@@ -215,7 +216,17 @@ var varGen = map[string]sessionVar{
 		},
 	},
 	`time zone`: {
-		Get: func(p *planner) string { return p.session.Location.String() },
+		Get: func(p *planner) string {
+			// If the time zone is a "fixed offset" one, initialized from an offset
+			// and not a standard name, then we use a magic format in the Location's
+			// name. We attempt to parse that here and retrieve the original offset
+			// specified by the user.
+			_, origRepr, parsed := sqlbase.ParseFixedOffsetTimeZone(p.session.Location.String())
+			if parsed {
+				return origRepr
+			}
+			return p.session.Location.String()
+		},
 	},
 	`transaction isolation level`: {
 		Get: func(p *planner) string { return p.txn.Isolation().String() },

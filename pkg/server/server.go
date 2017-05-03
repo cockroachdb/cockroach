@@ -732,6 +732,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.distSender,
 		s.gossip,
 		s.leaseMgr,
+		s.clock,
 	).Start(s.stopper)
 
 	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.node.Descriptor)

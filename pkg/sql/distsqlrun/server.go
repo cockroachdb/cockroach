@@ -18,6 +18,7 @@ package distsqlrun
 
 import (
 	"io"
+	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -59,11 +61,11 @@ import (
 //  - at some later point, we can choose to deprecate version 1 and have
 //    servers only accept versions >= 2 (by setting
 //    MinAcceptedVersion to 2).
-const Version = 2
+const Version = 3
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion = 2
+const MinAcceptedVersion = 3
 
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 10*1024)
 
@@ -93,10 +95,10 @@ type ServerConfig struct {
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	ServerConfig
-	evalCtx       parser.EvalContext
 	flowRegistry  *flowRegistry
 	flowScheduler *flowScheduler
 	memMonitor    mon.MemoryMonitor
+	regexpCache   *parser.RegexpCache
 }
 
 var _ DistSQLServer = &ServerImpl{}
@@ -104,10 +106,8 @@ var _ DistSQLServer = &ServerImpl{}
 // NewServer instantiates a DistSQLServer.
 func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
-		ServerConfig: cfg,
-		evalCtx: parser.EvalContext{
-			ReCache: parser.NewRegexpCache(512),
-		},
+		ServerConfig:  cfg,
+		regexpCache:   parser.NewRegexpCache(512),
 		flowRegistry:  makeFlowRegistry(),
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper),
 		memMonitor: mon.MakeMonitor("distsql",
@@ -160,14 +160,31 @@ func (ds *ServerImpl) setupFlow(
 		return nil, nil, errors.Errorf("setupFlow called before the NodeID was resolved")
 	}
 
-	evalCtx := ds.evalCtx
-
 	monitor := mon.MakeMonitor("flow",
 		ds.Counter, ds.Hist, -1 /* use default block size */, noteworthyMemoryUsageBytes)
 	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
-	evalCtx.Mon = &monitor
 
-	// TODO(andrei): more fields from evalCtx need to be initialized (#13821).
+	location, err := sqlbase.TimeZoneStringToLocation(req.EvalContext.Location)
+	if err != nil {
+		tracing.FinishSpan(sp)
+		return ctx, nil, err
+	}
+	evalCtx := parser.EvalContext{
+		Location:   &location,
+		Database:   req.EvalContext.Database,
+		SearchPath: parser.SearchPath(req.EvalContext.SearchPath),
+		NodeID:     nodeID,
+		ReCache:    ds.regexpCache,
+		Mon:        &monitor,
+		Ctx: func() context.Context {
+			// TODO(andrei): This is wrong. Each processor should override Ctx with its
+			// own context.
+			return ctx
+		},
+	}
+	evalCtx.SetStmtTimestamp(time.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
+	evalCtx.SetTxnTimestamp(time.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
+	evalCtx.SetClusterTimestamp(req.EvalContext.ClusterTimestamp)
 
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
@@ -184,11 +201,6 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	ctx = flowCtx.AnnotateCtx(ctx)
-	flowCtx.evalCtx.Ctx = func() context.Context {
-		// TODO(andrei): This is wrong. Each processor should override Ctx with its
-		// own context.
-		return ctx
-	}
 
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
 	flowCtx.AddLogTagStr("f", f.id.Short())
