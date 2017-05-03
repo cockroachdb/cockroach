@@ -141,6 +141,13 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 	defer ag.bucketsAcc.Close(ctx)
+	defer func() {
+		for _, f := range ag.funcs {
+			for _, aggFunc := range f.buckets {
+				aggFunc.Close(ctx)
+			}
+		}
+	}()
 
 	ctx = log.WithLogTag(ctx, "Agg", nil)
 	ctx, span := tracing.ChildSpan(ctx, "aggregator")
