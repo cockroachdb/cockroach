@@ -130,13 +130,23 @@ func (cm *CertificateManager) ClientKeyPath(user string) string {
 }
 
 // CACert returns the CA cert. May be nil.
+// Callers should check for an internal Error field.
 func (cm *CertificateManager) CACert() *CertInfo {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.caCert
 }
 
+// checkCertIsValid returns an error if the passed cert is missing or has an error.
+func checkCertIsValid(cert *CertInfo) error {
+	if cert == nil {
+		return errors.New("not found")
+	}
+	return cert.Error
+}
+
 // NodeCert returns the Node cert. May be nil.
+// Callers should check for an internal Error field.
 func (cm *CertificateManager) NodeCert() *CertInfo {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -144,6 +154,7 @@ func (cm *CertificateManager) NodeCert() *CertInfo {
 }
 
 // ClientCerts returns the Client certs.
+// Callers should check for internal Error fields.
 func (cm *CertificateManager) ClientCerts() map[string]*CertInfo {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -155,7 +166,7 @@ func (cm *CertificateManager) ClientCerts() map[string]*CertInfo {
 func (cm *CertificateManager) LoadCertificates() error {
 	cl := NewCertificateLoader(cm.certsDir)
 	if err := cl.Load(); err != nil {
-		return errors.Errorf("problem loading certs directory %s", cm.certsDir)
+		return errors.Wrapf(err, "problem loading certs directory %s", cm.certsDir)
 	}
 
 	var caCert, nodeCert *CertInfo
@@ -174,12 +185,12 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	if cm.initialized {
-		// If we ran before, make sure we don't reload with missing certificates.
-		if cm.caCert != nil && caCert == nil {
-			return errors.New("CA certificate has disappeared")
+		// If we ran before, make sure we don't reload with missing/bad certificates.
+		if err := checkCertIsValid(caCert); checkCertIsValid(cm.caCert) == nil && err != nil {
+			return errors.Wrap(err, "reload would lose valid CA cert")
 		}
-		if cm.nodeCert != nil && nodeCert == nil {
-			return errors.New("node certificate has disappeared")
+		if err := checkCertIsValid(nodeCert); checkCertIsValid(cm.nodeCert) == nil && err != nil {
+			return errors.Wrap(err, "reload would lose valid node cert")
 		}
 	}
 
@@ -220,11 +231,11 @@ func (cm *CertificateManager) GetEmbeddedServerTLSConfig(
 		return cm.serverConfig, nil
 	}
 
-	if cm.caCert == nil {
-		return nil, errors.New("no CA certificate found")
+	if err := checkCertIsValid(cm.caCert); err != nil {
+		return nil, errors.Wrap(err, "problem with CA certificate")
 	}
-	if cm.nodeCert == nil {
-		return nil, errors.New("no node certificate found")
+	if err := checkCertIsValid(cm.nodeCert); err != nil {
+		return nil, errors.Wrap(err, "problem with node certificate")
 	}
 
 	cfg, err := newServerTLSConfig(
@@ -243,9 +254,9 @@ func (cm *CertificateManager) GetEmbeddedServerTLSConfig(
 // or an error if not found.
 // cm.mu must be held.
 func (cm *CertificateManager) getClientCertsLocked(user string) (*CertInfo, error) {
-	ci, ok := cm.clientCerts[user]
-	if !ok {
-		return nil, errors.Errorf("no client certificate found for user %s", user)
+	ci := cm.clientCerts[user]
+	if err := checkCertIsValid(ci); err != nil {
+		return nil, errors.Wrapf(err, "problem with client cert for user %s", user)
 	}
 
 	return ci, nil
@@ -254,8 +265,8 @@ func (cm *CertificateManager) getClientCertsLocked(user string) (*CertInfo, erro
 // getNodeClientCertsLocked returns the client cert/key for the node user.
 // cm.mu must be held.
 func (cm *CertificateManager) getNodeClientCertsLocked() (*CertInfo, error) {
-	if cm.nodeCert == nil {
-		return nil, errors.New("no node certificate found")
+	if err := checkCertIsValid(cm.nodeCert); err != nil {
+		return nil, errors.Wrap(err, "problem with node certificate")
 	}
 
 	return cm.nodeCert, nil
@@ -268,8 +279,8 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 	defer cm.mu.Unlock()
 
 	// We always need the CA cert.
-	if cm.caCert == nil {
-		return nil, errors.New("no CA certificate found")
+	if err := checkCertIsValid(cm.caCert); err != nil {
+		return nil, errors.Wrap(err, "problem with CA certificate")
 	}
 
 	if user != NodeUser {
@@ -341,8 +352,8 @@ func (cm *CertificateManager) GetCACertPath() (string, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
-	if cm.caCert == nil {
-		return "", errors.New("no CA certificate found")
+	if err := checkCertIsValid(cm.caCert); err != nil {
+		return "", errors.Wrap(err, "problem with CA certificate")
 	}
 
 	return filepath.Join(cm.certsDir, cm.caCert.Filename), nil
