@@ -11,19 +11,15 @@ To build CockroachDB from this source archive:
 See src/github.com/cockroachdb/cockroach/CONTRIBUTING.md for a complete list of
 build requirements.
 
-To install CockroachDB to ./bin/cockroach:
+To install CockroachDB as /usr/local/bin/cockroach:
 
      $ make install
-
-To install CockroachDB onto your PATH:
-
-     $ make install
-     $ sudo cp -i ./bin/cockroach /usr/local/bin/cockroach
 
 To interact with a one-node SQL cluster:
 
-     $ ./cockroach start --background
-     $ ./cockroach sql
+     $ cockroach start --background --insecure
+     $ cockroach sql --insecure
+     $ cockroach quit --insecure
 
 Next steps:
 
