@@ -140,3 +140,21 @@ CREATE TABLE t15050a (c DECIMAL DEFAULT CASE WHEN NOW() < '2017-04-18 18:00' THE
 
 statement error error type checking constant value: could not parse '2017-04-18 18:00' as type timestamp
 CREATE TABLE t15050b (c DECIMAL DEFAULT IF(NOW() < '2017-04-18 18:00', 2, 2));
+
+# Regression tests for #15632
+
+statement error incompatible IFNULL expressions: could not parse 'foo' as type bool: strconv.ParseBool: parsing "foo": invalid syntax
+SELECT IFNULL('foo', false)
+
+statement error incompatible IFNULL expressions: could not parse 'foo' as type bool: strconv.ParseBool: parsing "foo": invalid syntax
+SELECT IFNULL(true, 'foo')
+
+query B
+SELECT IFNULL(false, 'true')
+----
+false
+
+query B
+SELECT IFNULL('true', false)
+----
+true

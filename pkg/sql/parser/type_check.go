@@ -1081,14 +1081,18 @@ func typeCheckSameTypedExprs(
 	// provided to signify the desired shared type, which can be set to the
 	// required shared type using the second parameter.
 	typeCheckSameTypedConsts := func(typ Type, required bool) (Type, error) {
-		setTypeForConsts := func(typ Type) {
+		setTypeForConsts := func(typ Type) (Type, error) {
 			for _, constExpr := range constExprs {
 				typedExpr, err := typeCheckAndRequire(ctx, constExpr.e, typ, "constant")
 				if err != nil {
-					panic(err)
+					// In this case, even though the constExpr has been shown to be
+					// upcastable to typ based on canConstantBecome, it can't actually be
+					// parsed as typ.
+					return nil, err
 				}
 				typedExprs[constExpr.i] = typedExpr
 			}
+			return typ, nil
 		}
 
 		// If typ is not a wildcard, all consts try to become typ.
@@ -1108,8 +1112,7 @@ func typeCheckSameTypedExprs(
 				}
 			}
 			if all {
-				setTypeForConsts(typ)
-				return typ, nil
+				return setTypeForConsts(typ)
 			}
 		}
 
