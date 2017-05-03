@@ -428,8 +428,9 @@ var Builtins = map[string][]Builtin{
 
 	"repeat": {
 		Builtin{
-			Types:      ArgTypes{{"input", TypeString}, {"repeat_counter", TypeInt}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:            ArgTypes{{"input", TypeString}, {"repeat_counter", TypeInt}},
+			distsqlBlacklist: true,
+			ReturnType:       fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args Datums) (_ Datum, err error) {
 				s := string(MustBeDString(args[0]))
 				count := int(MustBeDInt(args[1]))
