@@ -19,7 +19,6 @@ package server
 import (
 	"fmt"
 	"net/http"
-	"strings"
 
 	// Register the net/trace endpoint with http.DefaultServeMux.
 	"golang.org/x/net/trace"
@@ -41,11 +40,22 @@ const debugEndpoint = "/debug/"
 // register to that via import, and go-metrics registers to that via exp.Exp())
 var debugServeMux = http.DefaultServeMux
 
-// TODO(arjun): use an Enum setting here.
-var debugRemote = settings.RegisterStringSetting(
+const (
+	debugRemoteOff = iota
+	debugRemoteLocal
+	debugRemoteAny
+)
+
+var debugRemote = settings.RegisterEnumSetting(
 	"server.remote_debugging.mode",
-	"set to enable remote debugging, localhost-only or disable (all, local, false)",
-	"local")
+	"set to enable remote debugging, localhost-only or disable (any, local, off)",
+	"local",
+	map[int64]string{
+		int64(debugRemoteOff):   "off",
+		int64(debugRemoteLocal): "local",
+		int64(debugRemoteAny):   "any",
+	},
+)
 
 // handleDebug passes requests with the debugPathPrefix onto the default
 // serve mux, which is preconfigured (by import of net/http/pprof and registration
@@ -65,10 +75,10 @@ func init() {
 	origAuthRequest := trace.AuthRequest
 	trace.AuthRequest = func(req *http.Request) (bool, bool) {
 		allow, sensitive := origAuthRequest(req)
-		switch strings.ToLower(debugRemote.Get()) {
-		case "any", "true", "t", "1":
+		switch debugRemote.Get() {
+		case debugRemoteAny:
 			allow = true
-		case "local":
+		case debugRemoteLocal:
 			break
 		default:
 			allow = false
