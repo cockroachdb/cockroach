@@ -120,7 +120,7 @@ FILE
       "mkdir /mnt/data0/logs",
       "ln -sf /mnt/data0/logs logs",
       "chmod 755 cockroach nodectl",
-      "[ $(stat --format=%s cockroach) -ne 0 ] || bash download_binary.sh cockroach/cockroach ${var.cockroach_sha}",
+      "[ $(stat --format=%s cockroach) -ne 0 ] || bash download_binary.sh cockroach/cockroach.linux-gnu-amd64 ${var.cockroach_sha} cockroach",
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
       "supervisorctl -c supervisor.conf start cockroach",
       # Install load generators.
