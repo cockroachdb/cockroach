@@ -12,14 +12,13 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestKeyRewriter(t *testing.T) {
+func TestPrefixRewriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	kr := KeyRewriter([]roachpb.KeyRewrite{
+	kr := PrefixRewriter{
 		{
 			OldPrefix: []byte{1, 2, 3},
 			NewPrefix: []byte{4, 5, 6},
@@ -28,7 +27,7 @@ func TestKeyRewriter(t *testing.T) {
 			OldPrefix: []byte{7, 8, 9},
 			NewPrefix: []byte{10},
 		},
-	})
+	}
 
 	t.Run("match", func(t *testing.T) {
 		key := []byte{1, 2, 3, 4}
@@ -50,8 +49,8 @@ func TestKeyRewriter(t *testing.T) {
 	})
 }
 
-func BenchmarkKeyRewriter(b *testing.B) {
-	kr := KeyRewriter([]roachpb.KeyRewrite{
+func BenchmarkPrefixRewriter(b *testing.B) {
+	kr := PrefixRewriter{
 		{
 			OldPrefix: []byte{1, 2, 3},
 			NewPrefix: []byte{4, 5, 6},
@@ -60,7 +59,7 @@ func BenchmarkKeyRewriter(b *testing.B) {
 			OldPrefix: []byte{7, 8, 9},
 			NewPrefix: []byte{10},
 		},
-	})
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
