@@ -23,6 +23,7 @@ option go_package = "distsqlrun";
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/sql/distsqlrun/data.proto";
 import "cockroach/pkg/sql/distsqlrun/processors.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
 import "cockroach/pkg/util/tracing/span_context_carrier.proto";
 import "gogoproto/gogo.proto";
 
@@ -36,6 +37,20 @@ message SetupFlowRequest {
   // If set, the context of an active tracing span.
   optional util.tracing.SpanContextCarrier trace_context = 2;
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
+
+  optional EvalContext evalContext = 6 [(gogoproto.nullable) = false];
+}
+
+// EvalContext is used to marshall some planner.EvalContext members.
+message EvalContext {
+  optional int64 stmtTimestampNanos = 1 [(gogoproto.nullable) = false];
+  optional int64 txnTimestampNanos = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp clusterTimestamp = 3 [(gogoproto.nullable) = false];
+  // The name of the location according to whose current timezone we're going to
+  // parse timestamps. Used to init EvalContext.Location.
+  optional string location = 4 [(gogoproto.nullable) = false];
+  optional string database = 5 [(gogoproto.nullable) = false];
+  repeated string searchPath = 6 [(gogoproto.nullable) = false];
 }
 
 message SimpleResponse {
