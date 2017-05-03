@@ -55,19 +55,19 @@ variable "key_name" {
   default = "google_compute_engine"
 }
 
-# SHA of the cockroach binary to pull down. If none, the latest is fetched.
+# SHA of the cockroach binary to pull down. If default, the latest is fetched.
 variable "cockroach_sha" {
-  default = ""
+  default = "LATEST"
 }
 
-# SHA of the block_writer binary to pull down. If none, the latest is fetched.
+# SHA of the block_writer binary to pull down. If default, the latest is fetched.
 variable "block_writer_sha" {
-  default = ""
+  default = "LATEST"
 }
 
-# SHA of the photos binary to pull down. If none, the latest is fetched.
+# SHA of the photos binary to pull down. If default, the latest is fetched.
 variable "photos_sha" {
-  default = ""
+  default = "LATEST"
 }
 
 # Prefix to prepend to all GC resource names.
