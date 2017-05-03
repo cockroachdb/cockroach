@@ -170,20 +170,48 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(os.Stdout, "Certificate directory: %s\n", baseCfg.SSLCertsDir)
 
-	certTableHeaders := []string{"Usage", "Certificate File", "Key File", "Notes"}
+	certTableHeaders := []string{"Usage", "Certificate File", "Key File", "Notes", "Error"}
 	var rows [][]string
 
 	if ca := cm.CACert(); ca != nil {
-		rows = append(rows, []string{ca.FileUsage.String(), ca.Filename, ca.KeyFilename, ""})
+		var errString string
+		if ca.Error != nil {
+			errString = ca.Error.Error()
+		}
+		rows = append(rows, []string{
+			ca.FileUsage.String(),
+			ca.Filename,
+			ca.KeyFilename,
+			"",
+			errString,
+		})
 	}
 
 	if node := cm.NodeCert(); node != nil {
-		rows = append(rows, []string{node.FileUsage.String(), node.Filename, node.KeyFilename, ""})
+		var errString string
+		if node.Error != nil {
+			errString = node.Error.Error()
+		}
+		rows = append(rows, []string{
+			node.FileUsage.String(),
+			node.Filename,
+			node.KeyFilename,
+			"",
+			errString,
+		})
 	}
 
 	for name, cert := range cm.ClientCerts() {
-		rows = append(rows, []string{cert.FileUsage.String(), cert.Filename, cert.KeyFilename,
-			fmt.Sprintf("user=%s", name)})
+		var errString string
+		if cert.Error != nil {
+			errString = cert.Error.Error()
+		}
+		rows = append(rows, []string{cert.FileUsage.String(),
+			cert.Filename,
+			cert.KeyFilename,
+			fmt.Sprintf("user=%s", name),
+			errString,
+		})
 	}
 
 	return printQueryOutput(os.Stdout, certTableHeaders, newRowSliceIter(rows), "", cliCtx.tableDisplayFormat)
