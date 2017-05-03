@@ -16,6 +16,7 @@ package log
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime/debug"
 
 	raven "github.com/getsentry/raven-go"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
@@ -52,33 +54,25 @@ var DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
 // real stderr a panic has occurred.
 func RecoverAndReportPanic(ctx context.Context) {
 	if r := recover(); r != nil {
-		r = ReportPanic(ctx, r)
+		ReportPanic(ctx, r, 1)
 		panic(r)
 	}
 }
 
 // ReportPanic reports a panic has occurred on the real stderr.
-//
-// The passed value is returned unless it is a WrappedPanic, in which case a new
-// error is created, combining the original error plus the contextural info,
-// thus making the returned value suitable for passing back to a final panic().
-func ReportPanic(ctx context.Context, r interface{}) interface{} {
+func ReportPanic(ctx context.Context, r interface{}, depth int) {
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
-
-	reportable := r
-	if e, ok := r.(WrappedPanic); ok {
-		reportable = e.Err
-		r = errors.Errorf("%s: %v", e.ExtraInfo, e.Err)
-	}
 
 	// TODO(dt,knz,sql-team): we need to audit all sprintf'ing of values into the
 	// errors and strings passed to panic, to ensure raw user data is kept
 	// separate and can thus be elided here. For now, the type is about all we can
 	// assume is safe to report, which combined with file and line info should be
 	// at least somewhat helpful in telling us where crashes are coming from.
-	reportable = fmt.Sprintf("%T", reportable)
-
-	sendCrashReport(ctx, reportable, 2)
+	// We capture the full stacktrace below, so we only need the short file and
+	// line here help uniquely identify the error.
+	file, line, _ := caller.Lookup(depth + 3)
+	reportable := fmt.Sprintf("%T %s:%d", r, filepath.Base(file), line)
+	sendCrashReport(ctx, reportable, depth+3)
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
@@ -94,7 +88,6 @@ func ReportPanic(ctx context.Context, r interface{}) interface{} {
 	if stderrRedirected {
 		fmt.Fprintf(OrigStderr, "%v\n\n%s\n", r, debug.Stack())
 	}
-	return r
 }
 
 var crashReports = settings.RegisterBoolSetting(
@@ -117,22 +110,14 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	}
 	info := build.GetInfo()
 	raven.SetRelease(info.Tag)
+	raven.SetEnvironment(info.Type)
 	raven.SetTagsContext(map[string]string{
 		"cmd":          cmd,
 		"platform":     info.Platform,
 		"distribution": info.Distribution,
 		"rev":          info.Revision,
 		"goversion":    info.GoVersion,
-		"buildtype":    info.Type,
 	})
-}
-
-// WrappedPanic represents a panic plus extra contextual info, which is stripped
-// if/when the panic is handled by crash reporting (e.g. if that info contains a
-// raw query, which we do not want to include in collected crash reports.
-type WrappedPanic struct {
-	ExtraInfo string
-	Err       interface{}
 }
 
 var crdbPaths = []string{"github.com/cockroachdb/cockroach"}
