@@ -345,7 +345,7 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
-// CreateEngines creates Engines based on the specs in ctx.Stores.
+// CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines() (Engines, error) {
 	engines := Engines(nil)
 	defer engines.Close()
