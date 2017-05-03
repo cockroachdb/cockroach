@@ -231,7 +231,8 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 			return nil, err
 		}
 	}
-	return newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+	proc, err := newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+	return proc, err
 }
 
 func (f *Flow) setupFlow(ctx context.Context, spec *FlowSpec) error {

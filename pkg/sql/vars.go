@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
@@ -215,7 +216,13 @@ var varGen = map[string]sessionVar{
 		},
 	},
 	`time zone`: {
-		Get: func(p *planner) string { return p.session.Location.String() },
+		Get: func(p *planner) string {
+			_, origRepr, parsed := sqlbase.ParseFixedOffsetTimeZone(p.session.Location.String())
+			if parsed {
+				return origRepr
+			}
+			return p.session.Location.String()
+		},
 	},
 	`transaction isolation level`: {
 		Get: func(p *planner) string { return p.txn.Isolation().String() },

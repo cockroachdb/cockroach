@@ -98,7 +98,11 @@ func (dsp *distSQLPlanner) initRunners() {
 // Note that errors that happen while actually running the flow are reported to
 // recv, not returned by this function.
 func (dsp *distSQLPlanner) Run(
-	planCtx *planningCtx, txn *client.Txn, plan *physicalPlan, recv *distSQLReceiver,
+	planCtx *planningCtx,
+	txn *client.Txn,
+	plan *physicalPlan,
+	recv *distSQLReceiver,
+	evalCtx parser.EvalContext,
 ) error {
 	ctx := planCtx.ctx
 
@@ -126,6 +130,17 @@ func (dsp *distSQLPlanner) Run(
 	// which normally does this init).
 	txn.EnsureProto()
 
+	evalCtxProto := distsqlrun.EvalContext{
+		StmtTimestampNanos: evalCtx.GetStmtTimestamp().UnixNano(),
+		TxnTimestampNanos:  evalCtx.GetTxnTimestampRaw().UnixNano(),
+		ClusterTimestamp:   evalCtx.GetClusterTimestampRaw(),
+		Location:           evalCtx.GetLocation().String(),
+		Database:           evalCtx.Database,
+	}
+	for _, s := range evalCtx.SearchPath {
+		evalCtxProto.SearchPath = append(evalCtxProto.SearchPath, s)
+	}
+
 	// Start all the flows except the flow on this node (there is always a flow on
 	// this node).
 	var resultChan chan runnerResult
@@ -138,9 +153,10 @@ func (dsp *distSQLPlanner) Run(
 			continue
 		}
 		req := &distsqlrun.SetupFlowRequest{
-			Version: distsqlrun.Version,
-			Txn:     *txn.Proto(),
-			Flow:    flowSpec,
+			Version:     distsqlrun.Version,
+			Txn:         *txn.Proto(),
+			Flow:        flowSpec,
+			EvalContext: evalCtxProto,
 		}
 		if err := distsqlrun.SetFlowRequestTrace(ctx, req); err != nil {
 			return err
@@ -179,9 +195,10 @@ func (dsp *distSQLPlanner) Run(
 
 	// Set up the flow on this node.
 	localReq := distsqlrun.SetupFlowRequest{
-		Version: distsqlrun.Version,
-		Txn:     *txn.Proto(),
-		Flow:    flows[thisNodeID],
+		Version:     distsqlrun.Version,
+		Txn:         *txn.Proto(),
+		Flow:        flows[thisNodeID],
+		EvalContext: evalCtxProto,
 	}
 	if err := distsqlrun.SetFlowRequestTrace(ctx, &localReq); err != nil {
 		return err
@@ -378,7 +395,11 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 // Note that errors that happen while actually running the flow are reported to
 // recv, not returned by this function.
 func (dsp *distSQLPlanner) PlanAndRun(
-	ctx context.Context, txn *client.Txn, tree planNode, recv *distSQLReceiver,
+	ctx context.Context,
+	txn *client.Txn,
+	tree planNode,
+	recv *distSQLReceiver,
+	evalCtx parser.EvalContext,
 ) error {
 	planCtx := dsp.NewPlanningCtx(ctx, txn)
 
@@ -389,5 +410,5 @@ func (dsp *distSQLPlanner) PlanAndRun(
 		return err
 	}
 	dsp.FinalizePlan(&planCtx, &plan)
-	return dsp.Run(&planCtx, txn, &plan, recv)
+	return dsp.Run(&planCtx, txn, &plan, recv, evalCtx)
 }

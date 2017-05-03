@@ -800,7 +800,8 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
 		sc.distSQLPlanner = e.distSQLPlanner
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			if err := sc.exec(ctx); err != nil {
+			evalCtx := createSchemaChangeEvalCtx(e.cfg.Clock.Now())
+			if err := sc.exec(ctx, evalCtx); err != nil {
 				if err != errExistingSchemaChangeLease {
 					log.Warningf(ctx, "Error executing schema change: %s", err)
 				}

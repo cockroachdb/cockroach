@@ -128,7 +128,7 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 		return false, expr
 
 	case *parser.FuncExpr:
-		if t.IsContextDependent() {
+		if t.IsDistSQLBlacklist() {
 			v.err = errors.Errorf("context-dependent function %s not supported", t)
 			return false, expr
 		}
