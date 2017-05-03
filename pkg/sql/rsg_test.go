@@ -114,6 +114,9 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				switch strings.ToLower(name) {
 				case "crdb_internal.force_panic", "crdb_internal.force_log_fatal":
 					continue
+				case "repeat":
+					// TODO(mjibson): wait for fix of #10545
+					continue
 				}
 				for _, builtin := range variations {
 					select {
