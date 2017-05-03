@@ -145,6 +145,7 @@ func TestSplitAt(t *testing.T) {
 
 func TestScatter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#14955")
 
 	const numHosts = 4
 	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{
