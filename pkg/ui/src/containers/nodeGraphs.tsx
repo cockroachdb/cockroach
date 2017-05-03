@@ -149,7 +149,14 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           </LineGraph>
 
           <LineGraph title="Service Latency: SQL, 99th percentile"
-                       tooltip={`The latency of SQL statements serviced over 10 second periods ${specifier}.`}>
+                       tooltip={(
+                    <div>
+                      Over the last minute, this node executed 99% of queries within this time.&nbsp;
+                      <em>
+                      This time does not include network latency between the node and client.
+                      </em>
+                    </div>)}
+          >
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
@@ -164,7 +171,14 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           </LineGraph>
 
           <LineGraph title="Replicas per Node"
-                    tooltip={`The number of replicas on each node.`}>
+                    tooltip={(
+                    <div>
+                      The number of range replicas stored on this node.&nbsp;
+                      <em>
+                      Ranges are subsets of your data, which are replicated to ensure survivability.
+                      </em>
+                    </div>)}
+          >
             <Axis>
               {
                 _.map(nodeIDs, (nid) =>
@@ -176,7 +190,17 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
               }
             </Axis>
           </LineGraph>
-          <LineGraph title="Capacity" sources={storeSources} tooltip={`Summary of total and available capacity ${specifier}.`}>
+          <LineGraph title="Capacity" sources={storeSources} tooltip={(
+              <div>
+                <dl>
+                  <dt>Capacity</dt>
+                  <dd>Total disk space available {specifier} to CockroachDB. <em>Control this value per node with the <code><a href="https://www.cockroachlabs.com/docs/start-a-node.html#flags" target="_blank">--store</a></code> flag.</em></dd>
+                  <dt>Available</dt>
+                  <dd>Free disk space available {specifier} to CockroachDB.</dd>
+                </dl>
+              </div>
+            )}
+          >
             <Axis units={AxisUnits.Bytes}>
               <Metric name="cr.store.capacity" title="Capacity" />
               {
@@ -284,7 +308,14 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           </LineGraph>
 
           <LineGraph title="Service Latency: SQL, 99th percentile"
-                       tooltip={`The latency of SQL statements serviced over 10 second periods ${specifier}.`}>
+                       tooltip={(
+                    <div>
+                      Over the last minute, this node executed 99% of queries within this time.&nbsp;
+                      <em>
+                      This time does not include network latency between the node and client.
+                      </em>
+                    </div>)}
+            >
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
@@ -299,7 +330,14 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           </LineGraph>
 
           <LineGraph title="Service Latency: SQL, 90th percentile"
-                       tooltip={`The latency of SQL statements serviced over 10 second periods ${specifier}.`}>
+                       tooltip={(
+                    <div>
+                      Over the last minute, this node executed 90% of queries within this time.&nbsp;
+                      <em>
+                      This time does not include network latency between the node and client.
+                      </em>
+                    </div>)}
+          >
             <Axis units={ AxisUnits.Duration }>
               {
                 _.map(nodeIDs, (node) =>
