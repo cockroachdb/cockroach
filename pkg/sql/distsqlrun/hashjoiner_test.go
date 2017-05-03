@@ -486,6 +486,7 @@ func TestHashJoiner(t *testing.T) {
 	}
 
 	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
+	defer monitor.Stop(context.Background())
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			hs := c.spec
@@ -599,6 +600,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		nil /* types */, nil, /* rows */
 		RowBufferArgs{AccumulateRowsWhileDraining: true})
 	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
+	defer monitor.Stop(context.Background())
 	flowCtx := FlowCtx{evalCtx: parser.EvalContext{Mon: &monitor}}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
@@ -707,6 +709,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		nil /* types */, nil, /* rows */
 		RowBufferArgs{})
 	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
+	defer monitor.Stop(context.Background())
 	flowCtx := FlowCtx{evalCtx: parser.EvalContext{Mon: &monitor}}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
