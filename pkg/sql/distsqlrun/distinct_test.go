@@ -17,8 +17,10 @@
 package distsqlrun
 
 import (
+	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -132,13 +134,15 @@ func TestDistinct(t *testing.T) {
 		},
 	}
 
+	monitor := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
+	defer monitor.Stop(context.Background())
 	for _, c := range testCases {
 		ds := c.spec
 
 		in := NewRowBuffer(nil /* types */, c.input, RowBufferArgs{})
 		out := &RowBuffer{}
 
-		flowCtx := FlowCtx{}
+		flowCtx := FlowCtx{evalCtx: parser.EvalContext{Mon: &monitor}}
 
 		d, err := newDistinct(&flowCtx, &ds, in, &PostProcessSpec{}, out)
 		if err != nil {
