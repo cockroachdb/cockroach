@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -2208,7 +2209,7 @@ func Example_rebalancing() {
 		g,
 		clock,
 		newMockNodeLiveness(nodeStatusLive).nodeLivenessFunc,
-		TestTimeUntilStoreDeadOff,
+		settings.TestingDuration(TestTimeUntilStoreDeadOff),
 		/* deterministic */ true,
 	)
 	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {

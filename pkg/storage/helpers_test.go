@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -217,7 +218,7 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		func(roachpb.NodeID, time.Time, time.Duration) nodeStatus {
 			return nodeStatusLive
 		},
-		TestTimeUntilStoreDeadOff,
+		settings.TestingDuration(TestTimeUntilStoreDeadOff),
 		/* deterministic */ false,
 	)
 }
