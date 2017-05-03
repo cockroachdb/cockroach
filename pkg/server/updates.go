@@ -218,7 +218,7 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 var diagnosticsMetricsEnabled = settings.RegisterBoolSetting(
 	"diagnostics.reporting.report_metrics",
 	"enable collection and reporting diagnostic metrics to cockroach labs",
-	false,
+	true,
 )
 
 func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Duration) time.Time {
