@@ -73,21 +73,6 @@ variable "key_name" {
   default = "azure"
 }
 
-# SHA of the cockroach binary to pull down. If none, the latest is fetched.
-variable "cockroach_sha" {
-  default = ""
-}
-
-# SHA of the block_writer binary to pull down. If none, the latest is fetched.
-variable "block_writer_sha" {
-  default = ""
-}
-
-# SHA of the photos binary to pull down. If none, the latest is fetched.
-variable "photos_sha" {
-  default = ""
-}
-
 # Prefix to prepend to all GC resource names.
 variable "prefix" {
   default = "alloctest"
