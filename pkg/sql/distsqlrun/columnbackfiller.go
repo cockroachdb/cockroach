@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -96,11 +95,6 @@ func (cb *columnBackfiller) init() error {
 			}
 		}
 	}
-	// Set the eval context timestamps.
-	pTime := timeutil.Now()
-	cb.flowCtx.evalCtx = parser.EvalContext{}
-	cb.flowCtx.evalCtx.SetTxnTimestamp(pTime)
-	cb.flowCtx.evalCtx.SetStmtTimestamp(pTime)
 	defaultExprs, err := sqlbase.MakeDefaultExprs(cb.added, &parser.Parser{}, &cb.flowCtx.evalCtx)
 	if err != nil {
 		return err

@@ -1686,6 +1686,10 @@ type contextHolder func() context.Context
 
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
+//
+// ATTENTION: Fields from this struct are also represented in
+// distsqlrun.EvalContext. Make sure to keep the two in sync.
+// TODO(andrei): remove or limit the duplication.
 type EvalContext struct {
 	NodeID roachpb.NodeID
 	// The statement timestamp. May be different for every statement.
@@ -1750,13 +1754,20 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly {
-		if ctx.clusterTimestamp == (hlc.Timestamp{}) {
-			panic("zero cluster timestamp in EvalContext")
-		}
+	if !ctx.PrepareOnly && ctx.clusterTimestamp == (hlc.Timestamp{}) {
+		panic("zero cluster timestamp in EvalContext")
 	}
 
 	return TimestampToDecimal(ctx.clusterTimestamp)
+}
+
+// GetClusterTimestampRaw exposes the clusterTimestamp field. Also see
+// GetClusterTimestamp().
+func (ctx *EvalContext) GetClusterTimestampRaw() hlc.Timestamp {
+	if !ctx.PrepareOnly && ctx.clusterTimestamp == (hlc.Timestamp{}) {
+		panic("zero cluster timestamp in EvalContext")
+	}
+	return ctx.clusterTimestamp
 }
 
 // TimestampToDecimal converts the logical timestamp into a decimal
@@ -1798,6 +1809,15 @@ func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimesta
 		panic("zero transaction timestamp in EvalContext")
 	}
 	return MakeDTimestamp(ctx.txnTimestamp, precision)
+}
+
+// GetTxnTimestampRaw exposes the txnTimestamp field. Also see GetTxnTimestamp()
+// and GetTxnTimestampNoZone().
+func (ctx *EvalContext) GetTxnTimestampRaw() time.Time {
+	if !ctx.PrepareOnly && ctx.txnTimestamp.IsZero() {
+		panic("zero transaction timestamp in EvalContext")
+	}
+	return ctx.txnTimestamp
 }
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.

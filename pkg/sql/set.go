@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -299,7 +300,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 		return nil, fmt.Errorf("bad time zone value: %v", n.Value)
 	}
 	if loc == nil {
-		loc = time.FixedZone(d.String(), int(offset))
+		loc = sqlbase.FixedOffsetTimeZoneToLocation(int(offset), d.String())
 	}
 	p.session.Location = loc
 	return &emptyNode{}, nil

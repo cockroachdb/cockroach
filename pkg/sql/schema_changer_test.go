@@ -2067,3 +2067,84 @@ CREATE TABLE d.t (
 		}
 	}
 }
+
+// Test that a backfill is executed with an EvalContext generated on the
+// gateway. We assert that by checking that the same timestamp is used by all
+// the backfilled columns.
+func TestSchemaChangeEvalContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numNodes = 3
+	const chunkSize = 200
+	const maxValue = 5000
+	params, _ := createTestServerParams()
+	// Disable asynchronous schema change execution.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
+		},
+	}
+
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop(context.TODO())
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	sqlDB := tc.ServerConn(0)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Split the table into multiple ranges.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// SplitTable moves the right range, so we split things back to front
+	// in order to move less data.
+	for i := numNodes - 1; i > 0; i-- {
+		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	}
+
+	testCases := []struct {
+		sql    string
+		column string
+	}{
+		{"ALTER TABLE t.test ADD COLUMN x TIMESTAMP DEFAULT current_timestamp;", "x"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.sql, func(t *testing.T) {
+
+			if _, err := sqlDB.Exec(testCase.sql); err != nil {
+				t.Fatal(err)
+			}
+
+			rows, err := sqlDB.Query(fmt.Sprintf(`SELECT DISTINCT %s from t.test`, testCase.column))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rows.Close()
+
+			count := 0
+			for rows.Next() {
+				count++
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			if count != 1 {
+				t.Fatalf("read the wrong number of rows: e = %d, v = %d", 1, count)
+			}
+
+		})
+	}
+}

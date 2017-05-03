@@ -935,10 +935,9 @@ func (node *FuncExpr) IsImpure() bool {
 	return node.fn.impure
 }
 
-// IsContextDependent returns whether the function depends on data stored in the
-// EvalContext.
-func (node *FuncExpr) IsContextDependent() bool {
-	return node.fn.ContextDependent()
+// IsDistSQLBlacklist returns whether the function is not supported by DistSQL.
+func (node *FuncExpr) IsDistSQLBlacklist() bool {
+	return node.fn.DistSQLBlacklist()
 }
 
 type funcType int
