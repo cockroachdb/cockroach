@@ -98,7 +98,6 @@ func (cb *columnBackfiller) init() error {
 	}
 	// Set the eval context timestamps.
 	pTime := timeutil.Now()
-	cb.flowCtx.evalCtx = parser.EvalContext{}
 	cb.flowCtx.evalCtx.SetTxnTimestamp(pTime)
 	cb.flowCtx.evalCtx.SetStmtTimestamp(pTime)
 	defaultExprs, err := sqlbase.MakeDefaultExprs(cb.added, &parser.Parser{}, &cb.flowCtx.evalCtx)

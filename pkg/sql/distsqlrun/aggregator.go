@@ -202,6 +202,11 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 	cleanupRequired := true
 	defer func() {
+		for _, f := range ag.funcs {
+			for _, aggFunc := range f.buckets {
+				aggFunc.Close(ctx)
+			}
+		}
 		if err != nil {
 			log.Infof(ctx, "accumulate error %s", err)
 			if cleanupRequired {
