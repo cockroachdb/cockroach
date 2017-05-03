@@ -1424,7 +1424,7 @@ func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) 
 	if err != nil {
 		return err
 	}
-	err = e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv)
+	err = e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv, planner.evalCtx)
 	if err != nil {
 		return err
 	}

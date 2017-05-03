@@ -128,16 +128,8 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 		return false, expr
 
 	case *parser.FuncExpr:
-		if t.IsContextDependent() {
-			v.err = errors.Errorf("context-dependent function %s not supported", t)
-			return false, expr
-		}
-
-	case *parser.CastExpr:
-		switch t.Type.(type) {
-		case *parser.DateColType, *parser.TimestampTZColType:
-			// Casting to a Date or TimestampTZ involves the current timezone.
-			v.err = errors.Errorf("context-dependent cast to %s not supported", t.Type)
+		if t.IsDistSQLBlacklist() {
+			v.err = errors.Errorf("function %s cannot be executed with distsql", t)
 			return false, expr
 		}
 	}

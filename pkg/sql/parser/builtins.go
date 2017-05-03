@@ -105,10 +105,14 @@ type Builtin struct {
 	// in separate statements, and should not be marked as impure.
 	impure bool
 
-	// Set to true when a function depends on data stored in the EvalContext, e.g.
-	// statement_timestamp. Currently used for DistSQL to determine if expressions
-	// can be evaluated on a different node without sending over the EvalContext.
-	ctxDependent bool
+	// Set to true when a function depends on members of the EvalContext that are
+	// not marshalled by DistSQL (e.g. planner). Currently used for DistSQL to
+	// determine if expressions can be evaluated on a different node without
+	// sending over the EvalContext.
+	//
+	// TODO(andrei): Get rid of the planner from the EvalContext and then we can
+	// get rid of this blacklist.
+	distsqlBlacklist bool
 
 	// Set to true when a function may change at every row whether or
 	// not it is applied to an expression that contains row-dependent
@@ -188,10 +192,10 @@ func (b Builtin) Impure() bool {
 	return b.impure
 }
 
-// ContextDependent returns true if this builtin depends on data stored in the
-// EvalContext.
-func (b Builtin) ContextDependent() bool {
-	return b.ctxDependent
+// DistSQLBlacklist returns true if the builtin is not supported by DistSQL.
+// See distsqlBlacklist.
+func (b Builtin) DistSQLBlacklist() bool {
+	return b.distsqlBlacklist
 }
 
 // FixedReturnType returns a fixed type that the function returns, returning Any
@@ -883,9 +887,8 @@ var Builtins = map[string][]Builtin{
 
 	"age": {
 		Builtin{
-			Types:        ArgTypes{{"val", TypeTimestampTZ}},
-			ReturnType:   fixedReturnType(TypeInterval),
-			ctxDependent: true,
+			Types:      ArgTypes{{"val", TypeTimestampTZ}},
+			ReturnType: fixedReturnType(TypeInterval),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return timestampMinusBinOp.fn(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
 			},
@@ -903,9 +906,8 @@ var Builtins = map[string][]Builtin{
 
 	"current_date": {
 		Builtin{
-			Types:        ArgTypes{},
-			ReturnType:   fixedReturnType(TypeDate),
-			ctxDependent: true,
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeDate),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				t := ctx.GetTxnTimestamp(time.Microsecond).Time
 				return NewDDateFromTime(t, ctx.GetLocation()), nil
@@ -924,17 +926,15 @@ var Builtins = map[string][]Builtin{
 			ReturnType:        fixedReturnType(TypeTimestampTZ),
 			preferredOverload: true,
 			impure:            true,
-			ctxDependent:      true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
 			Info: "Returns the current statement's timestamp.",
 		},
 		Builtin{
-			Types:        ArgTypes{},
-			ReturnType:   fixedReturnType(TypeTimestamp),
-			impure:       true,
-			ctxDependent: true,
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeTimestamp),
+			impure:     true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
@@ -944,11 +944,10 @@ var Builtins = map[string][]Builtin{
 
 	"cluster_logical_timestamp": {
 		Builtin{
-			Types:        ArgTypes{},
-			ReturnType:   fixedReturnType(TypeDecimal),
-			category:     categorySystemInfo,
-			impure:       true,
-			ctxDependent: true,
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeDecimal),
+			category:   categorySystemInfo,
+			impure:     true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return ctx.GetClusterTimestamp(), nil
 			},
@@ -1501,10 +1500,9 @@ var Builtins = map[string][]Builtin{
 	// and the session's database search path.
 	"current_schemas": {
 		Builtin{
-			Types:        ArgTypes{{"include_pg_catalog", TypeBool}},
-			ReturnType:   fixedReturnType(TypeStringArray),
-			category:     categorySystemInfo,
-			ctxDependent: true,
+			Types:      ArgTypes{{"include_pg_catalog", TypeBool}},
+			ReturnType: fixedReturnType(TypeStringArray),
+			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				includePgCatalog := *(args[0].(*DBool))
 				schemas := NewDArray(TypeString)
@@ -1741,17 +1739,15 @@ var txnTSImpl = []Builtin{
 		ReturnType:        fixedReturnType(TypeTimestampTZ),
 		preferredOverload: true,
 		impure:            true,
-		ctxDependent:      true,
 		fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 			return ctx.GetTxnTimestamp(time.Microsecond), nil
 		},
 		Info: "Returns the current transaction's timestamp.",
 	},
 	{
-		Types:        ArgTypes{},
-		ReturnType:   fixedReturnType(TypeTimestamp),
-		impure:       true,
-		ctxDependent: true,
+		Types:      ArgTypes{},
+		ReturnType: fixedReturnType(TypeTimestamp),
+		impure:     true,
 		fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 			return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
 		},
