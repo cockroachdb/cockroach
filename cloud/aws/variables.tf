@@ -43,12 +43,12 @@ variable "key_name" {
   default = "cockroach"
 }
 
-# Sha of the cockroach binary to pull down. If none, the latest is fetched.
+# Sha of the cockroach binary to pull down. If default, the latest is fetched.
 variable "cockroach_sha" {
-  default = ""
+  default = "LATEST"
 }
 
-# Sha of the block_writer binary to pull down. If none, the latest is fetched.
+# Sha of the block_writer binary to pull down. If default, the latest is fetched.
 variable "block_writer_sha" {
-  default = ""
+  default = "LATEST"
 }
