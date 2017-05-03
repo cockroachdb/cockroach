@@ -28,7 +28,7 @@ import (
 func TestClientSSLSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const clientCertNotFound = "no client certificate found for user .*"
+	const clientCertNotFound = "problem with client cert for user .*: not found"
 	const certDirNotFound = "problem loading certs directory"
 
 	testCases := []struct {
