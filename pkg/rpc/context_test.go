@@ -160,7 +160,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Wait for the connection.
 	testutils.SucceedsSoon(t, func() error {
 		err := clientCtx.ConnHealth(remoteAddr)
-		if err != nil && err != errNotHeartbeated {
+		if err != nil && err != ErrNotHeartbeated {
 			t.Fatal(err)
 		}
 		return err
@@ -196,7 +196,7 @@ func TestHeartbeatHealth(t *testing.T) {
 		return clientCtx.ConnHealth(remoteAddr)
 	})
 
-	if err := clientCtx.ConnHealth("non-existent connection"); err != errNotConnected {
+	if err := clientCtx.ConnHealth("non-existent connection"); err != ErrNotConnected {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
