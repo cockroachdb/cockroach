@@ -117,13 +117,13 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	}
 	info := build.GetInfo()
 	raven.SetRelease(info.Tag)
+	raven.SetEnvironment(info.Type)
 	raven.SetTagsContext(map[string]string{
 		"cmd":          cmd,
 		"platform":     info.Platform,
 		"distribution": info.Distribution,
 		"rev":          info.Revision,
 		"goversion":    info.GoVersion,
-		"buildtype":    info.Type,
 	})
 }
 
