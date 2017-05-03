@@ -45,11 +45,6 @@ resource "google_compute_instance" "example_block_writer" {
     scopes = ["https://www.googleapis.com/auth/compute.readonly"]
   }
 
-  provisioner "file" {
-    source = "download_binary.sh"
-    destination = "/home/ubuntu/download_binary.sh"
-  }
-
   # This writes the filled-in supervisor template. It would be nice if we could
   # use rendered templates in the file provisioner.
   provisioner "remote-exec" {
@@ -63,7 +58,8 @@ FILE
       "sudo apt-get -y update",
       "sudo apt-get -y install supervisor",
       "sudo service supervisor stop",
-      "bash download_binary.sh examples-go/block_writer ${var.block_writer_sha}",
+      "curl -sfSL https://edge-binaries.cockroachdb.com/examples-go/block_writer.${var.block_writer_sha} -o block_writer",
+      "chmod +x block_writer",
       "mkdir -p logs",
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
       "supervisorctl -c supervisor.conf start block_writer",
