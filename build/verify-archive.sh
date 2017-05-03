@@ -10,8 +10,9 @@ set -euo pipefail
 apt-get update
 apt-get install -y cmake xz-utils
 
-tar xzf cockroach.src.tgz
-(cd cockroach-* && make install)
+workdir=$(mktemp -d)
+tar xzf cockroach.src.tgz -C "$workdir"
+(cd "$workdir"/cockroach-* && make install)
 
 cockroach start --insecure --store type=mem,size=1GiB --background
 cockroach sql --insecure <<EOF | diff <(echo $'1 row\nid	balance\n1	1000.50') -
