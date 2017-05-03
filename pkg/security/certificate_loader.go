@@ -107,6 +107,7 @@ func (p pemUsage) String() string {
 // To obtain the full path, Filename and KeyFilename must be joined
 // with the certs directory.
 // The key may not be present if this is a CA certificate.
+// If Err != nil, the CertInfo must NOT be used.
 type CertInfo struct {
 	// FileUsage describes the use of this certificate.
 	FileUsage pemUsage
@@ -123,6 +124,10 @@ type CertInfo struct {
 
 	// Name is the blob in the middle of the filename. eg: username for client certs.
 	Name string
+
+	// Error is any error encountered when loading the certificate/key pair.
+	// For example: bad permissions on the key will be stored here.
+	Error error
 }
 
 func exceedsPermissions(objectMode, allowedMode os.FileMode) bool {
@@ -230,12 +235,11 @@ func (cl *CertificateLoader) Load() error {
 		}
 
 		// Look for the associated key.
+		// Any errors are kept for better visibility later.
 		if err := cl.findKey(ci); err != nil {
 			log.Warningf(context.Background(), "error finding key for %s: %v", fullPath, err)
-			continue
-		}
-
-		if log.V(3) {
+			ci.Error = err
+		} else if log.V(3) {
 			log.Infof(context.Background(), "found certificate %s", ci.Filename)
 		}
 		cl.certificates = append(cl.certificates, ci)

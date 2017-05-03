@@ -17,6 +17,7 @@
 package security_test
 
 import (
+	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -130,7 +132,7 @@ func TestNamingScheme(t *testing.T) {
 			certs: []security.CertInfo{},
 		},
 		{
-			// Test proper names, but no key files, only the CA cert should be loaded.
+			// Test proper names, but no key files, only the CA cert should be loaded without error.
 			files: []testFile{
 				{"ca.crt", 0777},
 				{"node.crt", 0777},
@@ -138,6 +140,10 @@ func TestNamingScheme(t *testing.T) {
 			},
 			certs: []security.CertInfo{
 				{FileUsage: security.CAPem, Filename: "ca.crt"},
+				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
+					Error: errors.New(".* no such file or directory")},
+				{FileUsage: security.NodePem, Filename: "node.crt",
+					Error: errors.New(".* no such file or directory")},
 			},
 		},
 		{
@@ -153,6 +159,10 @@ func TestNamingScheme(t *testing.T) {
 			},
 			certs: []security.CertInfo{
 				{FileUsage: security.CAPem, Filename: "ca.crt"},
+				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
+					Error: errors.New(".* exceeds -rwx------")},
+				{FileUsage: security.NodePem, Filename: "node.crt",
+					Error: errors.New(".* exceeds -rwx------")},
 			},
 			skipWindows: true,
 		},
@@ -221,6 +231,14 @@ func TestNamingScheme(t *testing.T) {
 		// Check individual certificates.
 		for i, actual := range cl.Certificates() {
 			expected := data.certs[i]
+
+			if expected.Error == nil {
+				if actual.Error != nil {
+					t.Errorf("#%d: expected success, got error: %+v", testNum, actual.Error)
+				}
+			} else if !testutils.IsError(actual.Error, expected.Error.Error()) {
+				t.Errorf("#%d: mismatched error, expected: %+v, got %+v", testNum, expected, actual)
+			}
 
 			// Compare some fields.
 			if actual.FileUsage != expected.FileUsage ||
