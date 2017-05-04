@@ -3502,7 +3502,7 @@ func (r *Replica) processRaftCommand(
 	var requestedLease roachpb.Lease
 	var ts hlc.Timestamp
 	var rSpan roachpb.RSpan
-	if raftCmd.ReplicatedEvalResult != nil {
+	if idKey != "" {
 		isLeaseRequest = raftCmd.ReplicatedEvalResult.IsLeaseRequest
 		if isLeaseRequest {
 			if raftCmd.ReplicatedEvalResult.State.Lease == nil {
@@ -3514,24 +3514,6 @@ func (r *Replica) processRaftCommand(
 		rSpan = roachpb.RSpan{
 			Key:    raftCmd.ReplicatedEvalResult.StartKey,
 			EndKey: raftCmd.ReplicatedEvalResult.EndKey,
-		}
-	} else if idKey != "" {
-		isLeaseRequest = raftCmd.BatchRequest.IsLeaseRequest()
-		if isLeaseRequest {
-			rl, ok := raftCmd.BatchRequest.GetArg(roachpb.RequestLease)
-			if !ok {
-				log.Fatalf(ctx, "isLeaseRequest but no lease: %s", raftCmd.BatchRequest)
-			}
-			requestedLease = rl.(*roachpb.RequestLeaseRequest).Lease
-		}
-		ts = raftCmd.BatchRequest.Timestamp
-		var err error
-		rSpan, err = keys.Range(*raftCmd.BatchRequest)
-		if err != nil {
-			// TODO(bdarnell): This should really use forcedErr but I don't
-			// want to do that much refactoring for this code path that will
-			// be deleted soon.
-			log.Fatalf(ctx, "failed to compute range for BatchRequest: %s", err)
 		}
 	}
 
