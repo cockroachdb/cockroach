@@ -1,18 +1,5 @@
-From dac6fd30a508cb64ca3d21853b54f5e812461d65 Mon Sep 17 00:00:00 2001
-From: Tamir Duberstein <tamird@gmail.com>
-Date: Thu, 6 Apr 2017 19:59:13 -0400
-Subject: [PATCH 8/8] Downcase includes for case-sensitive filesystems (MinGW)
-
----
- db/c_test.c            | 2 +-
- port/win/env_win.cc    | 4 ++--
- port/win/io_win.h      | 4 ++--
- port/win/win_logger.h  | 2 +-
- port/win/xpress_win.cc | 2 +-
- 5 files changed, 7 insertions(+), 7 deletions(-)
-
 diff --git a/db/c_test.c b/db/c_test.c
-index e0bf9e11..c002adb2 100644
+index f30b5275..6b727d7e 100644
 --- a/db/c_test.c
 +++ b/db/c_test.c
 @@ -20,7 +20,7 @@
@@ -25,30 +12,38 @@ index e0bf9e11..c002adb2 100644
  #define snprintf _snprintf
  
 diff --git a/port/win/env_win.cc b/port/win/env_win.cc
-index 65116726..df4a57c8 100644
+index ced56f7f..5f079c4b 100644
 --- a/port/win/env_win.cc
 +++ b/port/win/env_win.cc
-@@ -32,8 +32,8 @@
+@@ -33,8 +33,8 @@
  #include "util/thread_status_updater.h"
  #include "util/thread_status_util.h"
  
 -#include <Rpc.h>  // For UUID generation
 -#include <Windows.h>
-+#include <rpc.h>  // for uuid generation
++#include <rpc.h>  // For UUID generation
 +#include <windows.h>
  
  namespace rocksdb {
  
+diff --git a/port/win/env_win.h b/port/win/env_win.h
+index e0e283af..75164c23 100644
+--- a/port/win/env_win.h
++++ b/port/win/env_win.h
+@@ -21,7 +21,7 @@
+ #include "util/threadpool_imp.h"
+ 
+ #include <stdint.h>
+-#include <Windows.h>
++#include <windows.h>
+ 
+ #include <mutex>
+ #include <vector>
 diff --git a/port/win/io_win.h b/port/win/io_win.h
-index e1fde818..8059e9df 100644
+index a434ab77..f50c237a 100644
 --- a/port/win/io_win.h
 +++ b/port/win/io_win.h
-@@ -12,11 +12,11 @@
- #include <mutex>
- #include <string>
- 
--#include "rocksdb/Status.h"
-+#include "rocksdb/status.h"
+@@ -16,7 +16,7 @@
  #include "rocksdb/env.h"
  #include "util/aligned_buffer.h"
  
@@ -58,7 +53,7 @@ index e1fde818..8059e9df 100644
  
  namespace rocksdb {
 diff --git a/port/win/win_logger.h b/port/win/win_logger.h
-index 9e423d43..c875f58e 100644
+index 84971363..52913b97 100644
 --- a/port/win/win_logger.h
 +++ b/port/win/win_logger.h
 @@ -17,7 +17,7 @@
@@ -70,6 +65,19 @@ index 9e423d43..c875f58e 100644
  
  namespace rocksdb {
  
+diff --git a/port/win/win_thread.cc b/port/win/win_thread.cc
+index 987950a6..cda0f2e8 100644
+--- a/port/win/win_thread.cc
++++ b/port/win/win_thread.cc
+@@ -11,7 +11,7 @@
+ 
+ #include <assert.h>
+ #include <process.h> // __beginthreadex
+-#include <Windows.h>
++#include <windows.h>
+ 
+ #include <stdexcept>
+ #include <system_error>
 diff --git a/port/win/xpress_win.cc b/port/win/xpress_win.cc
 index a0206b57..f36a4522 100644
 --- a/port/win/xpress_win.cc
@@ -83,6 +91,3 @@ index a0206b57..f36a4522 100644
  
  #include <cassert>
  #include <memory>
--- 
-2.12.1
-
