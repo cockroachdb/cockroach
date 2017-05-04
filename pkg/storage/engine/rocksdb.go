@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -290,14 +291,15 @@ func (c RocksDBCache) Release() {
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb          *C.DBEngine
-	attrs        roachpb.Attributes // Attributes for this engine
-	dir          string             // The data directory
-	tempDir      string             // A path for storing temp files (ideally under dir).
-	cache        RocksDBCache       // Shared cache.
-	maxSize      int64              // Used for calculating rebalancing and free space.
-	maxOpenFiles int                // The maximum number of open files this instance will use.
-	deallocated  chan struct{}      // Closed when the underlying handle is deallocated.
+	rdb                *C.DBEngine
+	attrs              roachpb.Attributes // Attributes for this engine
+	dir                string             // The data directory
+	tempDir            string             // A path for storing temp files (ideally under dir).
+	cache              RocksDBCache       // Shared cache.
+	maxSize            int64              // Used for calculating rebalancing and free space.
+	maxOpenFiles       int                // The maximum number of open files this instance will use.
+	deallocated        chan struct{}      // Closed when the underlying handle is deallocated.
+	commitLatencyNanos *metric.Histogram  // Histogram of rocksdb commit latency
 
 	commit struct {
 		syncutil.Mutex
@@ -687,6 +689,12 @@ func (r *RocksDB) getUserProperties() (enginepb.SSTUserPropertiesCollection, err
 		return enginepb.SSTUserPropertiesCollection{}, errors.New(ssts.Error)
 	}
 	return ssts, nil
+}
+
+// SetLatencyMetric initializes the latency metric used by the RocksDB instance.
+// Must be called before the engine starts doing real work.
+func (r *RocksDB) SetLatencyMetric(commitLatencyNanos *metric.Histogram) {
+	r.commitLatencyNanos = commitLatencyNanos
 }
 
 // GetStats retrieves stats from this engine's RocksDB instance and
@@ -1214,8 +1222,12 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 		r.batch = nil
 	}
 
+	elapsed := timeutil.Since(start)
+	if r.parent.commitLatencyNanos != nil {
+		r.parent.commitLatencyNanos.RecordValue(elapsed.Nanoseconds())
+	}
 	const batchCommitWarnThreshold = 500 * time.Millisecond
-	if elapsed := timeutil.Since(start); elapsed >= batchCommitWarnThreshold {
+	if elapsed >= batchCommitWarnThreshold {
 		log.Warningf(context.TODO(), "batch [%d/%d/%d] commit took %s (>%s):\n%s",
 			count, size, r.flushes, elapsed, batchCommitWarnThreshold, debug.Stack())
 	}

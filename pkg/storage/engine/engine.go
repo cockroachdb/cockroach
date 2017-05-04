@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -180,6 +181,8 @@ type Engine interface {
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
+	// SetLatencyMetric initializes the latency metric written to by the Engine.
+	SetLatencyMetric(*metric.Histogram)
 	// GetStats retrieves stats from the engine.
 	GetStats() (*Stats, error)
 	// GetTempDir returns a path under which tempdirs or tempfiles can be created.
