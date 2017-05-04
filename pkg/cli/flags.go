@@ -42,7 +42,7 @@ import (
 var maxResults int64
 
 var sqlConnURL, sqlConnUser, sqlConnDBName string
-var serverConnHost, serverConnPort, serverAdvertiseHost string
+var serverConnHost, serverConnPort, serverAdvertiseHost, serverAdvertisePort string
 var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
 var zoneConfig string
@@ -232,6 +232,7 @@ func init() {
 		stringFlag(f, &serverConnHost, cliflags.ServerHost, "")
 		stringFlag(f, &serverConnPort, cliflags.ServerPort, base.DefaultPort)
 		stringFlag(f, &serverAdvertiseHost, cliflags.AdvertiseHost, "")
+		stringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, "")
 		stringFlag(f, &serverHTTPHost, cliflags.ServerHTTPHost, "")
 		stringFlag(f, &serverHTTPPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
 		stringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)
@@ -382,7 +383,10 @@ func extraServerFlagInit() {
 	if serverAdvertiseHost == "" {
 		serverAdvertiseHost = serverConnHost
 	}
-	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseHost, serverConnPort)
+	if serverAdvertisePort == "" {
+		serverAdvertisePort = serverConnPort
+	}
+	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseHost, serverAdvertisePort)
 	if serverHTTPHost == "" {
 		serverHTTPHost = serverConnHost
 	}
