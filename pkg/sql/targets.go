@@ -139,7 +139,7 @@ func (s *renderNode) addOrReuseRenders(
 // symbolic notation. Because the symbolic notation disambiguate columns, this
 // string can be used to determine if two expressions are equivalent.
 func symbolicExprStr(expr parser.Expr) string {
-	return parser.AsStringWithFlags(expr, parser.FmtSymbolicVars)
+	return parser.AsStringWithFlags(expr, parser.FmtCheckEquivalence)
 }
 
 // checkRenderStar handles the case where the target specification contains a
