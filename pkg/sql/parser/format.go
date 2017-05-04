@@ -57,11 +57,6 @@ var FmtSimple FmtFlags = &fmtFlags{}
 // annotate expressions with their resolved types.
 var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
 
-// FmtSymbolicVars instructs the pretty-printer to
-// print indexedVars using symbolic notation, to
-// disambiguate columns.
-var FmtSymbolicVars FmtFlags = &fmtFlags{symbolicVars: true}
-
 // FmtBareStrings instructs the pretty-printer to print strings without
 // wrapping quotes, if possible.
 var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
@@ -70,6 +65,10 @@ var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
 // can be parsed into an equivalent expression (useful for serialization of
 // expressions).
 var FmtParsable FmtFlags = &fmtFlags{disambiguateDatumTypes: true}
+
+// FmtSymbolicVars is like FmtParsable except it instructs the pretty-printer to
+// print indexedVars using symbolic notation (to disambiguate columns).
+var FmtSymbolicVars FmtFlags = &fmtFlags{symbolicVars: true, disambiguateDatumTypes: true}
 
 // FmtHideConstants instructs the pretty-printer to produce a
 // representation that does not disclose query-specific data.
