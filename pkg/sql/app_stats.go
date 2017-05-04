@@ -21,16 +21,13 @@ import (
 	"fmt"
 	"hash/fnv"
 	"strconv"
-	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
@@ -244,31 +241,6 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 		fmt.Fprintf(&buf, "%q: %s\n", key.String(), json)
 	}
 	log.Info(ctx, buf.String())
-}
-
-// StmtStatsResetFrequency is the frequency at which per-app and
-// per-statement statistics are cleared from memory, to avoid
-// unlimited memory growth.
-var StmtStatsResetFrequency = envutil.EnvOrDefaultDuration(
-	"COCKROACH_SQL_STMT_STATS_RESET_INTERVAL", 1*time.Hour,
-)
-
-// startResetWorker ensures that the data is removed from memory
-// periodically, so as to avoid memory blow-ups.
-func (s *sqlStats) startResetWorker(stopper *stop.Stopper) {
-	ctx := log.WithLogTag(context.Background(), "sql-stats", nil)
-	stopper.RunWorker(ctx, func(ctx context.Context) {
-		ticker := time.NewTicker(StmtStatsResetFrequency)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				s.resetStats(ctx)
-			case <-stopper.ShouldStop():
-				return
-			}
-		}
-	})
 }
 
 func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
