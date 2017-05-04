@@ -642,7 +642,7 @@ message RequestLeaseRequest {
   optional Lease lease = 2 [(gogoproto.nullable) = false];
   // The previous lease is specified by the caller to verify
   // it has not changed when executing this command.
-  optional Lease prev_lease = 3;
+  optional Lease prev_lease = 3 [(gogoproto.nullable) = false];
 }
 
 // A TransferLeaseRequest represents the arguments to the TransferLease()
@@ -662,7 +662,7 @@ message TransferLeaseRequest {
   optional Lease lease = 2 [(gogoproto.nullable) = false];
   // The previous lease is specified by the caller to verify
   // it has not changed when executing this command.
-  optional Lease prev_lease = 3;
+  optional Lease prev_lease = 3 [(gogoproto.nullable) = false];
 }
 
 // LeaseInfoRequest is the argument to the LeaseInfo() method, for getting
@@ -676,9 +676,8 @@ message LeaseInfoRequest{
 message LeaseInfoResponse{
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The last lease known by the replica serving the request. It can also be the
-  // tentative future lease, if a lease transfer is in progress. It will be
-  // missing if the replica wasn't aware of any lease.
-  optional Lease lease = 2 [(gogoproto.nullable) = true];
+  // tentative future lease, if a lease transfer is in progress.
+  optional Lease lease = 2 [(gogoproto.nullable) = false];
 }
 
 // A RequestLeaseResponse is the response to a RequestLease() or TransferLease()
