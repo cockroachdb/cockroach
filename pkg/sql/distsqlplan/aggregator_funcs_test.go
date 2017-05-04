@@ -278,7 +278,7 @@ func TestDistAggregationTable(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",
-		"k INT PRIMARY KEY, int1 INT, int2 INT, bool1 BOOL, bool2 BOOL, dec1 DECIMAL, dec2 DECIMAL",
+		"k INT PRIMARY KEY, int1 INT, int2 INT, bool1 BOOL, bool2 BOOL, dec1 DECIMAL, dec2 DECIMAL, b BYTES",
 		numRows,
 		func(row int) []parser.Datum {
 			return []parser.Datum{
@@ -289,6 +289,7 @@ func TestDistAggregationTable(t *testing.T) {
 				parser.MakeDBool(parser.DBool(rng.Intn(10) != 0)),
 				sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL}, false),
 				sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL}, true),
+				parser.NewDBytes(parser.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},
 	)
