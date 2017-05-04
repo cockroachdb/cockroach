@@ -378,7 +378,7 @@ $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild $(SNAPPY_SRC_DIR)/.extracte
 	mkdir -p $(SNAPPY_DIR)
 	@# NOTE: If you change the configure flags below, bump the version in
 	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
-	cd $(SNAPPY_DIR) && $(SNAPPY_SRC_DIR)/configure $(CONFIGURE_FLAGS) --disable-shared
+	cd $(SNAPPY_DIR) && $(SNAPPY_SRC_DIR)/configure $(CONFIGURE_FLAGS) --disable-shared --disable-gtest
 
 # We mark C and C++ dependencies as .PHONY (or .ALWAYS_REBUILD) to avoid
 # having to name the artifact (for .PHONY), which can vary by platform, and so
