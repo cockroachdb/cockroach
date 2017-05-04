@@ -310,6 +310,7 @@ message AggregatorSpec {
     SUM = 10;
     SUM_INT = 11;
     VARIANCE = 12;
+    XOR_AGG = 13;
   }
 
   message Aggregation {

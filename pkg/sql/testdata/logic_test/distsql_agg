@@ -454,3 +454,9 @@ SELECT AVG(a+b), c FROM data GROUP BY c, d HAVING c = d
 11  8
 11  9
 11  10
+
+# Verify the XOR execution plan
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT XOR_AGG(TO_HEX(a)::bytes) FROM data]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElF9LwzAUxd_9FHKeFPKwdt2cedoEGXtxUvegSBmxudTC1pQkhcnod5e2iK5IOqjSx_w553dPe2-OyJSkB7EnA_4KDww-GMZgCMAwQcSQaxWTMUpXVxrBSh7ARwxplhe22o4YYqUJ_Aib2h2BYyPedhSSkKTBIMmKdFdDcp3uhf6YS2EFGELKJGl-adX2nQ5Xc--a87uXzf0TopJBFfYLUbLz4Ysk0ZQIq1rs53W4XSyXFeVs-2_XIlNakiZ5YhqV_1CAN-TH7YD3zeYPma0D3jfbeMhsHfC-2YIhs3XA_3Lgf7EPyeQqM9Qa_FO_iIFkQs2bYVShY3rUKq7Nm-W6vl1vSDK2OfWaxSprjqqyfoo9p9g_EXttse8md6DHTnXgFgd96p44xVM3edqHfOMUz9zkWR_yrftfjTraxN1kbXZUXnwGAAD__5HGpNE=
