@@ -166,14 +166,12 @@ message RaftCommand {
   // well as that uproots whatever ordering was originally envisioned.
   optional uint64 max_lease_index = 4 [(gogoproto.nullable) = false];
 
-  // Legacy mode (post-raft evaluation):
-
-  // batch_request is the KV command to apply.
+  // testing_batch_request is the KV request that generated this Raft command.
   //
-  // TODO(bdarnell): This is currently populated even in
-  // proposer-evaluated mode in certain tests (only those that use
-  // TestingEvalFilter). See #10493
-  optional roachpb.BatchRequest batch_request = 3;
+  // TODO(bdarnell): This used to be a pre-proposer-evaluated-kv field; we're
+  // now exclusively proposer-evaluated, but it is still needed by certain tests
+  // that use TestingEvalFilter. See #10493.
+  optional roachpb.BatchRequest testing_batch_request = 3;
 
   // Proposer-evaluated KV mode.
 
