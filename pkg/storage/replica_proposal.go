@@ -775,14 +775,16 @@ func (r *Replica) handleLocalEvalResult(
 	return shouldAssert
 }
 
+// rResult cannot be nil; it's passed by pointer to save a copy.
 func (r *Replica) handleEvalResult(
 	ctx context.Context, lResult *LocalEvalResult, rResult *storagebase.ReplicatedEvalResult,
 ) {
 	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
 	shouldAssert := false
-	if rResult != nil {
-		shouldAssert = r.handleReplicatedEvalResult(ctx, *rResult) || shouldAssert
+	if rResult == nil {
+		log.Fatalf(ctx, "nil ReplicatedEvalResult. lResult: %v", lResult)
 	}
+	shouldAssert = r.handleReplicatedEvalResult(ctx, *rResult) || shouldAssert
 	if lResult != nil {
 		shouldAssert = r.handleLocalEvalResult(ctx, *lResult) || shouldAssert
 	}

@@ -24,6 +24,7 @@ import "gogoproto/gogo.proto";
 message Timestamp {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
+  option (gogoproto.equal) = true;
 
   // Holds a wall time, typically a unix epoch time
   // expressed in nanoseconds.

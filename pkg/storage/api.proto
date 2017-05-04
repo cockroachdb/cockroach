@@ -24,6 +24,8 @@ import "gogoproto/gogo.proto";
 
 // StoreRequestHeader locates a Store on a Node.
 message StoreRequestHeader {
+  option (gogoproto.equal) = true;
+
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   int32 store_id = 2 [(gogoproto.customname) = "StoreID",
@@ -33,6 +35,8 @@ message StoreRequestHeader {
 // A CollectChecksumRequest asks the addressed replica for the result of a
 // roachpb.ComputeChecksumRequest.
 message CollectChecksumRequest {
+  option (gogoproto.equal) = true;
+
   StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   int64 range_id = 2 [(gogoproto.customname) = "RangeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];

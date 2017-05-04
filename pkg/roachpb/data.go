@@ -1116,11 +1116,6 @@ func AsIntents(spans []Span, txn *Transaction) []Intent {
 	return ret
 }
 
-// Equal compares for equality.
-func (s Span) Equal(o Span) bool {
-	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
-}
-
 // Overlaps returns whether the two spans overlap.
 func (s Span) Overlaps(o Span) bool {
 	if len(s.EndKey) == 0 && len(o.EndKey) == 0 {

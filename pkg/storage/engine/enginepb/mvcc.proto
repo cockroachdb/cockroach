@@ -112,6 +112,7 @@ message MVCCMetadata {
 // kv-pairs.
 message MVCCStats {
   option (gogoproto.populate) = true;
+  option (gogoproto.equal) = true;
 
   // contains_estimates indicates that the MVCCStats object contains values
   // which have been estimated. This means that the stats should not be used

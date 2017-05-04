@@ -30,6 +30,8 @@ import "gogoproto/gogo.proto";
 // sides of the split, and that the left hand side Replica should be updated as
 // well as the right hand side created.
 message Split {
+  option (gogoproto.equal) = true;
+
   optional roachpb.SplitTrigger trigger = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // RHSDelta holds the statistics for what was written to what is now the
   // right-hand side of the split during the batch which executed it.
@@ -42,6 +44,8 @@ message Split {
 // Merge is emitted by a Replica which commits a transaction with
 // a MergeTrigger (i.e. absorbs its right neighbor).
 message Merge {
+  option (gogoproto.equal) = true;
+
   optional roachpb.MergeTrigger trigger = 1 [(gogoproto.nullable) = false,
     (gogoproto.embed) = true];
 }
@@ -49,6 +53,8 @@ message Merge {
 // ChangeReplicas is emitted by a Replica which commits a transaction with
 // a ChangeReplicasTrigger.
 message ChangeReplicas {
+  option (gogoproto.equal) = true;
+
   optional roachpb.ChangeReplicasTrigger trigger = 1 [(gogoproto.nullable) = false,
     (gogoproto.embed) = true];
 }
@@ -60,6 +66,8 @@ message ChangeReplicas {
 // leases, log truncation, ...) of the Replica or certain special commands must
 // sideline information here based on which all Replicas must take action.
 message ReplicatedEvalResult {
+  option (gogoproto.equal) = true;
+
   optional bytes start_key = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
   optional bytes end_key = 15 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
   // Whether to block concurrent readers while processing the proposal data.
@@ -172,7 +180,7 @@ message RaftCommand {
 
   // Proposer-evaluated KV mode.
 
-  optional ReplicatedEvalResult replicated_eval_result = 13;
+  optional ReplicatedEvalResult replicated_eval_result = 13 [(gogoproto.nullable) = false];
   optional WriteBatch write_batch = 14;
 
   reserved 1, 10001 to 10014;
