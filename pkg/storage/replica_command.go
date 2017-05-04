@@ -1996,8 +1996,8 @@ func evalTransferLease(
 // active lease, might be an extension or a lease transfer.
 //
 // isExtension should be set if the lease holder does not change with this
-// lease. If it doesn't change, we don't need a PostCommitTrigger that
-// synchronizes with reads.
+// lease. If it doesn't change, we don't need the application of this lease to
+// block reads.
 //
 // TODO(tschottdorf): refactoring what's returned from the trigger here makes
 // sense to minimize the amount of code intolerant of rolling updates.
