@@ -212,7 +212,7 @@ func (p *planner) groupBy(
 			return nil, err
 		}
 		s.isStar = s.isStar || hasStar
-		colIdxs := s.addOrMergeRenders(cols, exprs, true /* reuseExistingRender */)
+		colIdxs := s.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
 		group.groupByIdx = append(group.groupByIdx, colIdxs...)
 	}
 
@@ -238,7 +238,7 @@ func (p *planner) groupBy(
 		if hasStar {
 			panic("star found in filter; this should not have passed type checking")
 		}
-		colIdxs := s.addOrMergeRenders(cols, exprs, true /* reuseExistingRender */)
+		colIdxs := s.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
 		if len(colIdxs) != 1 {
 			panic("multiple columns rendered for filter")
 		}

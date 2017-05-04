@@ -213,7 +213,7 @@ func (p *planner) orderBy(
 				continue
 			}
 
-			colIdxs := s.addOrMergeRenders(cols, exprs, true)
+			colIdxs := s.addOrReuseRenders(cols, exprs, true)
 			for i := 0; i < len(colIdxs)-1; i++ {
 				// If more than 1 column were expanded, turn them into sort columns too.
 				// Except the last one, which will be added below.
