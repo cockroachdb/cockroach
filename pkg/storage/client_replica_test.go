@@ -925,10 +925,11 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 // Test that a lease extension (a RequestLeaseRequest that doesn't change the
 // lease holder) is not blocked by ongoing reads.
 // The test relies on two things:
-// 1) Lease extensions, unlike lease transfers, are not blocked by reads through their
-// PostCommitTrigger.noConcurrentReads.
-// 2) Requests with the non-KV flag, such as RequestLeaseRequest, do not
-// go through the command queue.
+// 1) Lease extensions, unlike lease transfers, are not blocked by reads through
+// their ReplicatedEvanResult.BlockReads.
+// 2) Requests such as RequestLeaseRequest are not considered to touch a
+// too-wide of a key span, and thus don't conflict through the command queue
+// with other reads.
 func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	readBlocked := make(chan struct{})
