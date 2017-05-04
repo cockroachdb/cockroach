@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+# Arguments to this script are passed through to ./pkg/cmd/release-upload.
+
 set -euxo pipefail
 
 export BUILDER_HIDE_GOPATH_SRC=1
@@ -19,7 +22,7 @@ build/builder.sh env \
 	AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
 	AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
 	TC_BUILD_BRANCH="$TC_BUILD_BRANCH" \
-	release-upload
+	release-upload "$@"
 
 echo 'built and uploaded artifacts'
 cat .buildinfo/tag || true
