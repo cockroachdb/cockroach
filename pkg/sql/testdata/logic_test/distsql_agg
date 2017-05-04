@@ -120,7 +120,7 @@ SELECT SUM(a), MIN(b), MAX(c), COUNT(d), AVG(a+b+c+d) FROM data
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM(a), round(STDDEV(b), 1) FROM data]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkjFr8zAQhvfvV5h3cuCGyE6-wZMKyZChaUnSLsWDah3GkEhGkqEl-L8X25TWIQ2UQDqe7p57XsQdYazmtTqwR_YCAUICQgrCDIQ5ckLtbMHeW9eNDMBKvyGbEipTN6F7zgmFdYzsiFCFPSPDTr3uecNKswNBc1DVvpfUrjoo9y61CgqEDRvNLoukiGQSCeQtwTbhc3FLPyi_TI2xTrNjPfLk7ZlQd2XpuFTBnmTaPt3HUkxA2O4Wi-VzLJOuWC2W610s08k4p7ON0bFMKOpalwKL2_9Rcntlenvl7G-P74xyw762xvPJEY735QTWJQ_3623jCn50tuiXD-VDP90_aPZh6IqhWJm-JbpY32FxEf4_gqencHKNOb0Gnl0Dz38F5-2_jwAAAP__E4Saug==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkkFr8kAQhu_fr5D3pDAHN-p32FMK9uChWtT2UnLYZocQ0N0wu4EWyX8vSSitYoUi2OPszDPPyzIHOG95afYcoF-gQEhAmIAwBWGGjFCJzzkEL-1IDyzsG_SYULqqju1zRsi9MPQBsYw7hsbWvO54zcaygGA5mnLXSSop90beU2uiAWFVRz1IFaUJsobg6_i5s6EfbF-S2nmxLGyPFFlzJs9dUQgXJvqTOJunh2GqRiBstvP5_fMwTdpizc6ytMkG4mtnh2lCA6W1Xiy3o4tJ1U3_JbmpbXJT2_TPLuyMbc2h8i7wyaUd78sIbAvujzT4WnJ-FJ93y_ty1U13D5ZD7LuqLxaua6k21ndYXYT_H8HjUzi5xjy5Bp5eA89-BWfNv48AAAD__2Tbkkg=
 
 query RR
 SELECT SUM(a), round(STDDEV(b), 1) FROM data
@@ -130,7 +130,7 @@ SELECT SUM(a), round(STDDEV(b), 1) FROM data
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM(a), round(VARIANCE(b), 1) FROM data]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkjFr8zAQhvfvV5h3cuCGyE6-wZNDm8FD0-KmXYoH1TqMIZGMJENL8H8vtimtQxoogXQ83T33vIg7QBvFG7lnh-QFAoQIhBiEBQhLFITGmpKdM7YfGYFMvSGZE2rdtL5_LgilsYzkAF_7HSPBVr7uOGep2IKg2Mt6N0gaW--lfU-V9BKEnLVimwSpCNIoECg6gmn95-KOflB-mVptrGLLauIpuhOhVlVluZLeHGV6fLoLUzED4XmVZ6vNzTpMo77MbtebbZjGs2lSa1qtwjSioG-diyyu_0vR9ZXx9ZWLvz2_E8qcXWO046MznO4rCKwqHi_YmdaW_GBNOSwfy_thenhQ7PzYFWOR6aEl-ljfYXEW_j-B58dwdIk5vgReXAIvfwUX3b-PAAAA__-rZJs5
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEksFKw0AQhu8-RflPLcyhm7Ye9pQiHnKwlVi9SA5rdgiBNhtmN6CUvLskQbSlFqRQj7Mz33w_y-xROcsrs2MP_QoFQgTCDIQ5CAtkhFpczt476UYGILHv0FNCWdVN6J4zQu6EofcIZdgyNDbmbcspG8sCguVgym0vqaXcGfmIrQkGhHUT9ChWFEfIWoJrwtfOln6xfUuayollYXugyNoTeZZFIVyY4I7iPD0_jGM1AeFlmSbL1d39OI66MuXKsnTZRuKayo7jiEZKa52sNpOzWdVVfya6qm12Vdv8327shC1lX7vK89GtHe7LCGwLHs7Uu0ZyfhSX98uHct1P9w-WfRi6aiiSqm-pLtZPWJ2Fbw_g6TEcXWKeXQLPL4EXf4Kz9uYzAAD__-x8ksc=
 
 query RR
 SELECT SUM(a), round(VARIANCE(b), 1) FROM data
