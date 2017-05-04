@@ -671,7 +671,12 @@ func (node *CreateUser) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("CREATE USER ")
 	FormatNode(buf, f, node.Name)
 	if node.HasPassword() {
-		buf.WriteString(" WITH PASSWORD *****")
+		buf.WriteString(" WITH PASSWORD ")
+		if f.showPasswords {
+			encodeSQLString(buf, *node.Password)
+		} else {
+			buf.WriteString("*****")
+		}
 	}
 }
 
