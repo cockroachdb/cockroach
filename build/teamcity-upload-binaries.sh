@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Arguments to this script are passed through to ./pkg/cmd/release-upload.
+# Arguments to this script are passed through to ./pkg/cmd/upload-binaries.
 
 set -euxo pipefail
 
@@ -11,7 +11,7 @@ cat .buildinfo/tag || true
 cat .buildinfo/rev || true
 build/builder.sh git status
 
-build/builder.sh go install ./pkg/cmd/release-upload
+build/builder.sh go install ./pkg/cmd/upload-binaries
 
 echo 'installed release builder'
 cat .buildinfo/tag || true
@@ -22,7 +22,7 @@ build/builder.sh env \
 	AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
 	AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
 	TC_BUILD_BRANCH="$TC_BUILD_BRANCH" \
-	release-upload "$@"
+	upload-binaries "$@"
 
 echo 'built and uploaded artifacts'
 cat .buildinfo/tag || true
