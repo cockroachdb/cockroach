@@ -197,6 +197,9 @@ func (p *planner) groupBy(
 			Typ:  f.arg.ResolvedType(),
 		}
 	}
+	// TODO(radu): we should not add duplicate renders; add a mapping between
+	// group.funcs and s.renders (instead of requiring 1-to-1 correspondence) and
+	// use addOrMergeRender
 	s.resetRenderColumns(newRenders, newColumns)
 
 	// Add the group-by expressions so they are available for bucketing.
@@ -519,8 +522,7 @@ type extractAggregatesVisitor struct {
 	groupStrs map[string]struct{}
 
 	// groupedCopy is nil when visitor is in an Expr subtree that appears in the GROUP BY clause.
-	groupedCopy   *extractAggregatesVisitor
-	subAggVisitor parser.IsAggregateVisitor
+	groupedCopy *extractAggregatesVisitor
 }
 
 var _ parser.Visitor = &extractAggregatesVisitor{}
@@ -566,18 +568,6 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 		return false, f
 	}
 
-	if t, ok := expr.(parser.TypedExpr); ok {
-		defer v.subAggVisitor.Reset()
-		parser.WalkExprConst(&v.subAggVisitor, expr)
-
-		if !v.subAggVisitor.Aggregated {
-			// If there's no aggregation function calls in t, then t must by one of
-			// the GROUP BY clauses.
-			f := v.n.newAggregateFuncHolder(t, t, nil /* filter */, parser.NewIdentAggregate)
-			v.n.funcs = append(v.n.funcs, f)
-			return false, f
-		}
-	}
 	return true, expr
 }
 
