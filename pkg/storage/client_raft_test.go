@@ -1098,7 +1098,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		for _, s := range mtc.stores {
 			r := s.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
 			if r == nil {
-				return errors.Errorf("expected replica for keys \"a\" - \"b\"")
+				return errors.New("expected replica for keys \"a\" - \"b\"")
 			}
 			if n := s.ReservationCount(); n != 0 {
 				return errors.Errorf("expected 0 reservations, but found %d", n)
@@ -1107,25 +1107,33 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		return nil
 	})
 
-	var generated int64
-	var normalApplied int64
-	var preemptiveApplied int64
-	for _, s := range mtc.stores {
-		m := s.Metrics()
-		generated += m.RangeSnapshotsGenerated.Count()
-		normalApplied += m.RangeSnapshotsNormalApplied.Count()
-		preemptiveApplied += m.RangeSnapshotsPreemptiveApplied.Count()
-	}
-	if generated == 0 {
-		t.Fatalf("expected at least 1 snapshot, but found 0")
-	}
+	// All metrics should soon be as expected, but it is possible for the
+	// generated metric to be one less than the preemptiveApplied metric
+	// on the initial reading due to the fact that it's incremented after the
+	// operation has completed (in a separate goroutine from the SucceedsSoon
+	// call above).
+	testutils.SucceedsSoon(t, func() error {
+		var generated int64
+		var normalApplied int64
+		var preemptiveApplied int64
+		for _, s := range mtc.stores {
+			m := s.Metrics()
+			generated += m.RangeSnapshotsGenerated.Count()
+			normalApplied += m.RangeSnapshotsNormalApplied.Count()
+			preemptiveApplied += m.RangeSnapshotsPreemptiveApplied.Count()
+		}
+		if generated == 0 {
+			return errors.New("expected at least 1 snapshot, but found 0")
+		}
 
-	if normalApplied != 0 {
-		t.Fatalf("expected 0 normal snapshots, but found %d", normalApplied)
-	}
-	if generated != preemptiveApplied {
-		t.Fatalf("expected %d preemptive snapshots, but found %d", generated, preemptiveApplied)
-	}
+		if normalApplied != 0 {
+			return errors.Errorf("expected 0 normal snapshots, but found %d", normalApplied)
+		}
+		if generated != preemptiveApplied {
+			return errors.Errorf("expected %d preemptive snapshots, but found %d", generated, preemptiveApplied)
+		}
+		return nil
+	})
 }
 
 // TestStoreRangeCorruptionChangeReplicas verifies that the replication queue
