@@ -26,16 +26,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// importRequestLimit is the number of Import requests that can run at once.
-// Each downloads a file from cloud storage to a temp file, iterates it, and
-// sends WriteBatch requests to batch insert it. After accounting for write
-// amplification, a single ImportRequest and the resulting WriteBatch
-// requests is enough to keep an SSD busy. Any more and we risk contending
-// RocksDB, which slows down heartbeats, which can cause mass lease
-// transfers.
-const importRequestLimit = 1
+const (
+	// importRequestLimit is the number of Import requests that can run at once.
+	// Each downloads a file from cloud storage to a temp file, iterates it, and
+	// sends WriteBatch requests to batch insert it. After accounting for write
+	// amplification, a single ImportRequest and the resulting WriteBatch
+	// requests is enough to keep an SSD busy. Any more and we risk contending
+	// RocksDB, which slows down heartbeats, which can cause mass lease
+	// transfers.
+	importRequestLimit = 1
+
+	// writeBatchRequestLimit is the number of WriteBatch requests that Import
+	// will send at once. Because Import usually runs on the leaseholder and
+	// WriteBatch always does, this means that *usually* no more than this many
+	// WriteBatch commands will be executing at once, but it's not guaranteed.
+	//
+	// Set to 2 so there's as little contention as possible, while still
+	// pipelining the construction of the WriteBatch requests.
+	writeBatchRequestLimit = 2
+)
 
 var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
+var writeBatchRequestLimiter = makeConcurrentRequestLimiter(writeBatchRequestLimit)
 
 func init() {
 	storage.SetImportCmd(evalImport)
@@ -90,6 +102,11 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 
 		repr := b.batch.Finish()
 		g.Go(func() error {
+			if err := writeBatchRequestLimiter.beginLimitedRequest(ctx); err != nil {
+				return err
+			}
+			defer writeBatchRequestLimiter.endLimitedRequest()
+
 			if log.V(1) {
 				log.Infof(gCtx, "writebatch [%s,%s)", start, end)
 			}
