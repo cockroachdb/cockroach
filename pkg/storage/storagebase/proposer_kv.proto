@@ -172,7 +172,7 @@ message RaftCommand {
 
   // Proposer-evaluated KV mode.
 
-  optional ReplicatedEvalResult replicated_eval_result = 13;
+  optional ReplicatedEvalResult replicated_eval_result = 13 [(gogoproto.nullable) = false];
   optional WriteBatch write_batch = 14;
 
   reserved 1, 10001 to 10014;
