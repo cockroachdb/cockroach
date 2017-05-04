@@ -215,7 +215,7 @@ func main() {
 			}
 
 			if strings.Contains(target.buildType, "linux") {
-				binaryName := fmt.Sprintf("./cockroach%s-linux-2.6.32-gnu-amd64", extraArgs.suffix)
+				binaryName := fmt.Sprintf("./cockroach%s-%s", extraArgs.suffix, target.baseSuffix)
 
 				cmd := exec.Command(binaryName, "version")
 				cmd.Dir = pkg.Dir
