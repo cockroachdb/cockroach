@@ -872,7 +872,7 @@ const debugRangeTemplate = `
             {{- $data := index $.Results $headerName}}
             {{- $datum := index $data $.HeaderFakeStoreID}}
             <DIV CLASS="row">
-              <DIV CLASS="header cell {{$datum.Class}}" TITLE="{{html $datum.Title}}">{{$datum.Value}}</DIV>
+              <DIV CLASS="header cell {{$datum.Class}}" TITLE="{{$datum.Title}}">{{$datum.Value}}</DIV>
               {{- range $_, $storeID := $.StoreIDs}}
                 {{- $datum := index $data $storeID}}
                 <DIV CLASS="cell {{$datum.Class}}" TITLE="{{$datum.Title}}">{{$datum.Value}}</DIV>
