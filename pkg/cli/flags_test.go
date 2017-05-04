@@ -120,6 +120,7 @@ func TestServerConnSettings(t *testing.T) {
 		// an empty port.
 		serverConnHost = ""
 		serverAdvertiseHost = ""
+		serverAdvertisePort = ""
 		serverConnPort = ""
 	}
 	defer resetGlobals()
@@ -136,9 +137,14 @@ func TestServerConnSettings(t *testing.T) {
 		{[]string{"start", "--port", "12345"}, ":12345", ":12345"},
 		{[]string{"start", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345", "127.0.0.1:12345"},
 		{[]string{"start", "--advertise-host", "192.168.0.111"}, ":", "192.168.0.111:"},
+		{[]string{"start", "--advertise-host", "192.168.0.111", "--advertise-port", "12345"}, ":", "192.168.0.111:12345"},
 		{[]string{"start", "--host", "127.0.0.1", "--advertise-host", "192.168.0.111"}, "127.0.0.1:", "192.168.0.111:"},
 		{[]string{"start", "--host", "127.0.0.1", "--advertise-host", "192.168.0.111", "--port", "12345"}, "127.0.0.1:12345", "192.168.0.111:12345"},
+		{[]string{"start", "--host", "127.0.0.1", "--advertise-host", "192.168.0.111", "--advertise-port", "12345"}, "127.0.0.1:", "192.168.0.111:12345"},
+		{[]string{"start", "--host", "127.0.0.1", "--advertise-host", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"}, "127.0.0.1:54321", "192.168.0.111:12345"},
 		{[]string{"start", "--advertise-host", "192.168.0.111", "--port", "12345"}, ":12345", "192.168.0.111:12345"},
+		{[]string{"start", "--advertise-host", "192.168.0.111", "--advertise-port", "12345"}, ":", "192.168.0.111:12345"},
+		{[]string{"start", "--advertise-host", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"}, ":54321", "192.168.0.111:12345"},
 		// confirm hostnames will work
 		{[]string{"start", "--host", "my.host.name"}, "my.host.name:", "my.host.name:"},
 		{[]string{"start", "--host", "myhostname"}, "myhostname:", "myhostname:"},

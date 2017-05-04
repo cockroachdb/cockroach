@@ -199,9 +199,11 @@ hostname if advertise-host is not specified.`,
 	}
 
 	ServerPort = FlagInfo{
-		Name:        "port",
-		Shorthand:   "p",
-		Description: `The port to bind to.`,
+		Name:      "port",
+		Shorthand: "p",
+		Description: `
+The port to bind to. The node will also advertise itself
+using this port if advertise-port is not specified.`,
 	}
 
 	AdvertiseHost = FlagInfo{
@@ -209,6 +211,13 @@ hostname if advertise-host is not specified.`,
 		Description: `
 The hostname to advertise to other CockroachDB nodes for intra-cluster
 communication; it must resolve from other nodes in the cluster.`,
+	}
+
+	AdvertisePort = FlagInfo{
+		Name: "advertise-port",
+		Description: `
+The port to advertise to other CockroachDB nodes for intra-cluster
+communication.`,
 	}
 
 	ServerHTTPHost = FlagInfo{
