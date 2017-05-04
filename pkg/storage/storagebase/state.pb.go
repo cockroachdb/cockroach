@@ -43,7 +43,7 @@ type ReplicaState struct {
 	// Changes of the descriptor should always go through one of the
 	// (*Replica).setDesc* methods.
 	Desc *cockroach_roachpb.RangeDescriptor `protobuf:"bytes,3,opt,name=desc" json:"desc,omitempty"`
-	// The latest range lease, if any.
+	// The latest range lease. This field is always populated.
 	Lease *cockroach_roachpb1.Lease `protobuf:"bytes,4,opt,name=lease" json:"lease,omitempty"`
 	// The truncation state of the Raft log.
 	TruncatedState *cockroach_roachpb4.RaftTruncatedState `protobuf:"bytes,5,opt,name=truncated_state,json=truncatedState" json:"truncated_state,omitempty"`
