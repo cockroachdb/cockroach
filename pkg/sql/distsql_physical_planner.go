@@ -364,6 +364,16 @@ func makePlanToStreamColMap(numCols int) []int {
 	return m
 }
 
+// indetityMap returns the slice {0, 1, 2, ..., numCols-1}.
+// buf can be optionally provided as a buffer.
+func identityMap(buf []int, numCols int) []int {
+	buf = buf[:0]
+	for i := 0; i < numCols; i++ {
+		buf = append(buf, i)
+	}
+	return buf
+}
+
 // spanPartition is the intersection between a set of spans for a certain
 // operation (e.g table scan) and the set of ranges owned by a given node.
 type spanPartition struct {
@@ -717,10 +727,7 @@ func (dsp *distSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the evaluator has been
 	// programmed to produce the columns in renderNode.render order.
-	p.planToStreamColMap = p.planToStreamColMap[:0]
-	for i := range n.render {
-		p.planToStreamColMap = append(p.planToStreamColMap, i)
-	}
+	p.planToStreamColMap = identityMap(p.planToStreamColMap, len(n.render))
 }
 
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
@@ -793,8 +800,13 @@ func (dsp *distSQLPlanner) addAggregators(
 	if err != nil {
 		return err
 	}
+	if len(aggregations) != len(n.funcs) {
+		return errors.Errorf(
+			"extracted aggregates %v don't match groupNode funcs %v", aggregations, n.funcs,
+		)
+	}
 	for i := range aggregations {
-		aggregations[i].ColIdx = uint32(p.planToStreamColMap[i])
+		aggregations[i].ColIdx = uint32(p.planToStreamColMap[n.funcArgIdx[i]])
 	}
 
 	inputTypes := p.ResultTypes
@@ -1093,15 +1105,30 @@ func (dsp *distSQLPlanner) addAggregators(
 	}
 
 	evalExprs := dsp.extractPostAggrExprs(n.render)
-	p.AddRendering(evalExprs, p.planToStreamColMap, getTypesForPlanResult(n, nil))
+	if len(evalExprs) != len(n.Columns()) {
+		return errors.Errorf(
+			"post-aggregate expressions %v don't match groupNode renders %v", evalExprs, n.render,
+		)
+	}
+
+	fmt.Printf("MEH funcs %v\n", n.funcs)
+	fmt.Printf("MEH post-renders %v\n", n.render)
+	fmt.Printf("MEH indexes %v\n", n.funcArgIdx)
+
+	fmt.Printf("MEH aggregations %v\n", aggregations)
+	fmt.Printf("MEH evalExprs %v\n", evalExprs)
+
+	// Add post-aggregation rendering.
+	p.AddRendering(
+		evalExprs,
+		identityMap(p.planToStreamColMap, len(aggregations)),
+		getTypesForPlanResult(n, nil),
+	)
 
 	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the aggregator (and possibly
 	// evaluator) have been programmed to produce the columns in order.
-	p.planToStreamColMap = p.planToStreamColMap[:0]
-	for i := range n.Columns() {
-		p.planToStreamColMap = append(p.planToStreamColMap, i)
-	}
+	p.planToStreamColMap = identityMap(p.planToStreamColMap, len(evalExprs))
 	return nil
 }
 

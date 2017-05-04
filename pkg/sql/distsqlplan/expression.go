@@ -60,6 +60,7 @@ func MakeExpression(expr parser.TypedExpr, indexVarMap []int) distsqlrun.Express
 	if expr == nil {
 		return distsqlrun.Expression{}
 	}
+	fmt.Printf("MAKE EXPR %s\n", expr)
 
 	// We format the expression using the IndexedVar and StarDatum formatting interceptors.
 	var f parser.FmtFlags
@@ -69,6 +70,9 @@ func MakeExpression(expr parser.TypedExpr, indexVarMap []int) distsqlrun.Express
 		f = parser.FmtIndexedVarFormat(
 			exprFmtFlagsBase,
 			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+				if idx >= len(indexVarMap) {
+					fmt.Printf("IDX %d  MAP: %v\n", idx, indexVarMap)
+				}
 				remappedIdx := indexVarMap[idx]
 				if remappedIdx < 0 {
 					panic(fmt.Sprintf("unmapped index %d", idx))
