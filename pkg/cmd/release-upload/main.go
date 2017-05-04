@@ -192,7 +192,6 @@ func main() {
 				continue
 			}
 
-			base := fmt.Sprintf("cockroach%s-%s", extraArgs.suffix, target.baseSuffix)
 			{
 				recipe := "build"
 				// TODO(tamird, #14673): make CCL compile on Windows.
@@ -252,23 +251,33 @@ func main() {
 				}
 			}
 
+			base := fmt.Sprintf("cockroach%s-%s", extraArgs.suffix, target.baseSuffix)
+
 			absolutePath := filepath.Join(pkg.Dir, base)
 			binary, err := os.Open(absolutePath)
 			if err != nil {
 				log.Fatalf("os.Open(%s): %s", absolutePath, err)
 			}
+
+			const dotExe = ".exe"
+			hasExe := strings.HasSuffix(base, dotExe)
+
 			if isHead {
 				const repoName = "cockroach"
 
+				remoteName := strings.TrimSuffix(base, dotExe)
 				// Replace cockroach{suffix}-{target suffix} with
 				// cockroach{suffix}.{target suffix}.
-				remoteName := strings.Replace(base, "-", ".", 1)
+				remoteName = strings.Replace(remoteName, "-", ".", 1)
 				// TODO(tamird): do we want to keep doing this? No longer
 				// doing so requires updating cockroachlabs/production, and
 				// possibly cockroachdb/cockroach-go.
 				remoteName = osVersionRe.ReplaceAllLiteralString(remoteName, "")
 
 				fileName := fmt.Sprintf("%s.%s", remoteName, versionStr)
+				if hasExe {
+					fileName += dotExe
+				}
 				disposition := mime.FormatMediaType("attachment", map[string]string{"filename": fileName})
 
 				// NB: The leading slash is required to make redirects work
@@ -292,7 +301,7 @@ func main() {
 					log.Fatalf("s3 redirect to %s: %s", versionKey, err)
 				}
 			} else {
-				targetSuffix := strings.TrimSuffix(target.baseSuffix, ".exe")
+				targetSuffix := strings.TrimSuffix(target.baseSuffix, dotExe)
 				// TODO(tamird): remove this weirdness. Requires updating
 				// "users" e.g. docs, cockroachdb/cockroach-go, maybe others.
 				if strings.Contains(target.buildType, "linux") {
@@ -305,7 +314,7 @@ func main() {
 					targetArchiveBase := fmt.Sprintf("%s.%s", archiveBase, targetSuffix)
 					var targetArchive string
 					var body bytes.Buffer
-					if strings.HasSuffix(base, ".exe") {
+					if hasExe {
 						targetArchive = targetArchiveBase + ".zip"
 						zw := zip.NewWriter(&body)
 						zfw, err := zw.Create(filepath.Join(targetArchiveBase, "cockroach.exe"))
