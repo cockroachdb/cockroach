@@ -5003,19 +5003,19 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
 	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
 	for _, kv := range kvs {
-		var liveness, exLiveness Liveness
-		if err := kv.Value.GetProto(&liveness); err != nil {
+		var kvLiveness, gossipLiveness Liveness
+		if err := kv.Value.GetProto(&kvLiveness); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal liveness value %s", kv.Key)
 		}
-		key := gossip.MakeNodeLivenessKey(liveness.NodeID)
+		key := gossip.MakeNodeLivenessKey(kvLiveness.NodeID)
 		// Look up liveness from gossip; skip gossiping anew if unchanged.
-		if err := r.store.Gossip().GetInfoProto(key, &exLiveness); err == nil {
-			if exLiveness == liveness {
+		if err := r.store.Gossip().GetInfoProto(key, &gossipLiveness); err == nil {
+			if gossipLiveness == kvLiveness {
 				continue
 			}
 		}
-		if err := r.store.Gossip().AddInfoProto(key, &liveness, 0); err != nil {
-			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", liveness)
+		if err := r.store.Gossip().AddInfoProto(key, &kvLiveness, 0); err != nil {
+			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", kvLiveness)
 		}
 	}
 	return nil
