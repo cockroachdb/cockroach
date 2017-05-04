@@ -9,10 +9,10 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRBB
-SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false) FROM kv
+query IIIIRRRRBBT
+SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Aggregate functions return NULL if there are no rows.
 query T
@@ -20,10 +20,10 @@ SELECT ARRAY_AGG(1) FROM kv
 ----
 NULL
 
-query IIIIRRRRBB
-SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1) FROM kv
+query IIIIRRRRBBT
+SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
 
 query T
 SELECT ARRAY_AGG(v) FROM kv
@@ -31,10 +31,10 @@ SELECT ARRAY_AGG(v) FROM kv
 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIIIRRRRBB
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true)
+query IIIIRRRRBBT
+SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
-1 1 1 1 1 1 NULL NULL true true
+1 1 1 1 1 1 NULL NULL true true 01
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query T
@@ -79,10 +79,11 @@ INSERT INTO kv VALUES
 (8, 4, 2, 'A')
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
-query IIIIRRRRBB
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true) FROM kv
+# NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
+query IIIIRRRRBBT
+SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01')) FROM kv
 ----
-1 6 1 6 1 6 0 0 true true
+1 6 1 6 1 6 0 0 true true 00
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 query T
@@ -1266,3 +1267,28 @@ NULL
 NULL
 5
 10
+
+statement ok
+CREATE TABLE xor_bytes (a bytes, b int)
+
+statement ok
+INSERT INTO xor_bytes VALUES
+  (b'\x01\x01', 1),
+  (b'\x02\x01', 1),
+  (b'\x04\x01', 2),
+  (b'\x08\x01', 2),
+  (b'\x10\x01', 2)
+
+query T
+SELECT TO_HEX(XOR_AGG(a)) FROM xor_bytes
+----
+1f01
+
+query TI
+SELECT TO_HEX(XOR_AGG(a)), b FROM xor_bytes GROUP BY b ORDER BY b
+----
+0300  1
+1c01  2
+
+statement error arguments to xor must all be the same length
+SELECT XOR_AGG(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
