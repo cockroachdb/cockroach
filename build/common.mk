@@ -206,6 +206,10 @@ HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
 CONFIGURE_FLAGS :=
 CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
 
+# override so that no one is tempted to make USE_STDMALLOC=1 instead of make
+# TAGS=stdmalloc; without TAGS=stdmalloc, Go will still try to link jemalloc.
+override USE_STDMALLOC := $(findstring stdmalloc,$(TAGS))
+
 ifdef XHOST_TRIPLE
 
 # Darwin wants clang, so special treatment is in order.
@@ -254,13 +258,13 @@ endif
 
 JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
 PROTOBUF_DIR := $(BUILD_DIR)/protobuf
-ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb
+ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(if $(USE_STDMALLOC),_stdmalloc)
 SNAPPY_DIR   := $(BUILD_DIR)/snappy
 # Can't share with protobuf because protoc is always built for the host.
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 PROTOC 		 := $(PROTOC_DIR)/protoc
 
-C_LIBS := libjemalloc libprotobuf libsnappy librocksdb
+C_LIBS := $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb
 
 # Go does not permit dashes in build tags. This is undocumented. Fun!
 TARGET_TRIPLE_TAG := $(subst -,_,$(TARGET_TRIPLE))
@@ -367,7 +371,7 @@ $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(PROTOBUF_SRC_DIR)/.extr
 	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 endif
 
-$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(ROCKSDB_SRC_DIR)/.extracted | libsnappy libjemalloc
+$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(ROCKSDB_SRC_DIR)/.extracted | libsnappy $(if $(USE_STDMALLOC),,libjemalloc)
 	rm -rf $(ROCKSDB_DIR)
 	mkdir -p $(ROCKSDB_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -375,7 +379,7 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(ROCKSDB_SRC_DIR)/.extra
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
 	  $(if $(findstring release,$(TYPE)),,-DWITH_$(if $(findstring mingw,$(TARGET_TRIPLE)),AVX2,SSE42)=OFF) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
-	  -DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON
+	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON)
 
 $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild $(SNAPPY_SRC_DIR)/.extracted
 	mkdir -p $(SNAPPY_DIR)
