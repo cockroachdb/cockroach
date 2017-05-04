@@ -55,8 +55,6 @@ start_test "Check a password is requested by the client."
 send "$argv sql --certs-dir=$certs_dir --user=carl\r"
 eexpect "Enter password:"
 send "woof\r"
-eexpect "Confirm password:"
-send "woof\r"
 eexpect "carl@"
 end_test
 
