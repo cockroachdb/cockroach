@@ -2315,10 +2315,10 @@ func (r *Replica) requestToProposal(
 	// (i.e. pass nil instead of `spans` here) once we're confident our coverage
 	// is good.
 	result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
-	// Fill out the local results even if pErr != nil; we'll return the error below.
+	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal.Local = &result.Local
 	proposal.command = storagebase.RaftCommand{
-		ReplicatedEvalResult: &result.Replicated,
+		ReplicatedEvalResult: result.Replicated,
 		WriteBatch:           result.WriteBatch,
 	}
 	if r.store.TestingKnobs().TestingEvalFilter != nil {
@@ -2487,12 +2487,12 @@ func (r *Replica) propose(
 	// An error here corresponds to a failfast-proposal: The command resulted
 	// in an error and did not need to commit a batch (the common error case).
 	if pErr != nil {
-		if proposal.Local == nil || proposal.command.ReplicatedEvalResult == nil {
+		if proposal.Local == nil {
 			return nil, nil, errors.Errorf(
 				"requestToProposal returned error %s without eval results", pErr)
 		}
 		intents := proposal.Local.detachIntents()
-		r.handleEvalResult(ctx, proposal.Local, proposal.command.ReplicatedEvalResult)
+		r.handleEvalResult(ctx, proposal.Local, &proposal.command.ReplicatedEvalResult)
 		if endCmds != nil {
 			endCmds.done(nil, pErr, proposalNoRetry)
 		}
@@ -2578,21 +2578,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	}
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
 
-	var changeReplicas *storagebase.ChangeReplicas
-	if p.command.ReplicatedEvalResult != nil {
-		changeReplicas = p.command.ReplicatedEvalResult.ChangeReplicas
-	} else {
-		if union, ok := p.Request.GetArg(roachpb.EndTransaction); ok {
-			ict := union.(*roachpb.EndTransactionRequest).InternalCommitTrigger
-			if tr := ict.GetChangeReplicasTrigger(); tr != nil {
-				changeReplicas = &storagebase.ChangeReplicas{
-					ChangeReplicasTrigger: *tr,
-				}
-			}
-		}
-	}
-
-	if crt := changeReplicas; crt != nil {
+	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTransactionRequest with a ChangeReplicasTrigger is special
 		// because raft needs to understand it; it cannot simply be an
 		// opaque command.
@@ -3653,7 +3639,7 @@ func (r *Replica) processRaftCommand(
 			// Close over raftCmd to capture its value at execution time; we clear
 			// ReplicatedEvalResult on certain errors.
 			defer func() {
-				splitMergeUnlock(*raftCmd.ReplicatedEvalResult)
+				splitMergeUnlock(raftCmd.ReplicatedEvalResult)
 			}()
 		}
 	}
@@ -3661,14 +3647,14 @@ func (r *Replica) processRaftCommand(
 	var response proposalResult
 	var writeBatch *storagebase.WriteBatch
 	{
-		if raftCmd.ReplicatedEvalResult == nil && forcedErr == nil {
+		if reflect.DeepEqual(raftCmd.ReplicatedEvalResult, storagebase.ReplicatedEvalResult{}) && forcedErr == nil {
 			panic("non-proposer-evaluated command found in raft log. Cannot upgrade directly from versions older than beta-20170413 to beta-20170420 or newer.")
 		}
 
-		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; forcedErr == nil && filter != nil && raftCmd.ReplicatedEvalResult != nil {
+		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; forcedErr == nil && filter != nil {
 			forcedErr = filter(storagebase.ApplyFilterArgs{
 				CmdID:                idKey,
-				ReplicatedEvalResult: *raftCmd.ReplicatedEvalResult,
+				ReplicatedEvalResult: raftCmd.ReplicatedEvalResult,
 				StoreID:              r.store.StoreID(),
 				RangeID:              r.RangeID,
 			})
@@ -3676,7 +3662,7 @@ func (r *Replica) processRaftCommand(
 
 		if forcedErr != nil {
 			// Apply an empty entry.
-			raftCmd.ReplicatedEvalResult = &storagebase.ReplicatedEvalResult{}
+			raftCmd.ReplicatedEvalResult = storagebase.ReplicatedEvalResult{}
 			raftCmd.WriteBatch = nil
 		}
 		raftCmd.ReplicatedEvalResult.State.RaftAppliedIndex = index
@@ -3693,12 +3679,12 @@ func (r *Replica) processRaftCommand(
 			writeBatch = raftCmd.WriteBatch
 		}
 		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
-			ctx, idKey, *raftCmd.ReplicatedEvalResult, writeBatch)
+			ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch)
 
 		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
 				CmdID:                idKey,
-				ReplicatedEvalResult: *raftCmd.ReplicatedEvalResult,
+				ReplicatedEvalResult: raftCmd.ReplicatedEvalResult,
 				StoreID:              r.store.StoreID(),
 				RangeID:              r.RangeID,
 			})
@@ -3734,7 +3720,7 @@ func (r *Replica) processRaftCommand(
 		//
 		// Note that this must happen after committing (the engine.Batch), but
 		// before notifying a potentially waiting client.
-		r.handleEvalResult(ctx, lResult, raftCmd.ReplicatedEvalResult)
+		r.handleEvalResult(ctx, lResult, &raftCmd.ReplicatedEvalResult)
 	}
 
 	if proposedLocally {
@@ -3756,25 +3742,8 @@ func (r *Replica) maybeAcquireSplitMergeLock(
 ) func(storagebase.ReplicatedEvalResult) {
 	var split *storagebase.Split
 	var merge *storagebase.Merge
-	if raftCmd.ReplicatedEvalResult != nil {
-		split = raftCmd.ReplicatedEvalResult.Split
-		merge = raftCmd.ReplicatedEvalResult.Merge
-	} else {
-		if union, ok := raftCmd.BatchRequest.GetArg(roachpb.EndTransaction); ok {
-			ict := union.(*roachpb.EndTransactionRequest).InternalCommitTrigger
-			if tr := ict.GetSplitTrigger(); tr != nil {
-				split = &storagebase.Split{
-					SplitTrigger: *tr,
-				}
-			}
-			if tr := ict.GetMergeTrigger(); tr != nil {
-				merge = &storagebase.Merge{
-					MergeTrigger: *tr,
-				}
-			}
-
-		}
-	}
+	split = raftCmd.ReplicatedEvalResult.Split
+	merge = raftCmd.ReplicatedEvalResult.Merge
 
 	if split != nil {
 		return r.acquireSplitLock(&split.SplitTrigger)
