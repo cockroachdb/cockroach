@@ -27,6 +27,7 @@ import "gogoproto/gogo.proto";
 // rest of the entry has been discarded.
 message RaftTruncatedState {
   option (gogoproto.populate) = true;
+  option (gogoproto.equal) = true;
 
   // The highest index that has been removed from the log.
   optional uint64 index = 1 [(gogoproto.nullable) = false];

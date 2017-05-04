@@ -28,6 +28,7 @@ import "gogoproto/gogo.proto";
 message Span {
   option (gogoproto.populate) = true;
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
 
   // The key for request. If the request operates on a range, this
   // represents the starting key for the range.
@@ -114,6 +115,8 @@ message StoreIdent {
 // allows the final bookkeeping for the split to be completed and the
 // new range put into operation.
 message SplitTrigger {
+  option (gogoproto.equal) = true;
+
   optional RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   optional RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
   reserved 3;
@@ -127,6 +130,8 @@ message SplitTrigger {
 // (right_desc). This information allows the final bookkeeping for the
 // merge to be completed and put into operation.
 message MergeTrigger {
+  option (gogoproto.equal) = true;
+
   optional RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   optional RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
 }
@@ -140,6 +145,8 @@ enum ReplicaChangeType {
 }
 
 message ChangeReplicasTrigger {
+  option (gogoproto.equal) = true;
+
   optional ReplicaChangeType change_type = 1 [(gogoproto.nullable) = false];
   // The replica being modified.
   optional ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
@@ -309,6 +316,7 @@ message Intent {
 message Lease {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
+  option (gogoproto.equal) = true;
 
   // The start is a timestamp at which the lease begins. This value
   // must be greater than the last lease expiration or the lease request

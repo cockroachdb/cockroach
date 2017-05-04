@@ -692,6 +692,8 @@ message RequestLeaseResponse{
 // request command. A response is returned without the checksum. The computed
 // checksum is retrieved via a storage.CollectChecksumRequest.
 message ComputeChecksumRequest {
+  option (gogoproto.equal) = true;
+
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The version used to pick the checksum method. It allows us to use a
   // consistent checksumming method across replicas.
