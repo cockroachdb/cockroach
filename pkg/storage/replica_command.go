@@ -3006,11 +3006,11 @@ func splitTrigger(
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load hard state")
 		}
 		// Initialize the right-hand lease to be the same as the left-hand lease.
-		// This looks like an innocuous performance improvement, but it's more than
-		// that - it ensures that we properly initialize the timestamp cache, which
-		// is only populated on the lease holder, from that of the original Range.
-		// We found out about a regression here the hard way in #7899. Prior to
-		// this block, the following could happen:
+		// Various pieces of code rely on a replica's lease never being unitialized,
+		// but it's more than that - it ensures that we properly initialize the
+		// timestamp cache, which is only populated on the lease holder, from that
+		// of the original Range.  We found out about a regression here the hard way
+		// in #7899. Prior to this block, the following could happen:
 		// - a client reads key 'd', leaving an entry in the timestamp cache on the
 		//   lease holder of [a,e) at the time, node one.
 		// - the range [a,e) splits at key 'c'. [c,e) starts out without a lease.
@@ -3745,12 +3745,15 @@ func evalLeaseInfo(
 	if err != nil {
 		return EvalResult{}, err
 	}
+	if lease == nil {
+		return EvalResult{}, errors.Errorf("missing lease: %s", cArgs.Args)
+	}
 	if nextLease != nil {
 		// If there's a lease request in progress, speculatively return that future
 		// lease.
-		reply.Lease = nextLease
-	} else if lease != nil {
-		reply.Lease = lease
+		reply.Lease = *nextLease
+	} else {
+		reply.Lease = *lease
 	}
 	return EvalResult{}, nil
 }
