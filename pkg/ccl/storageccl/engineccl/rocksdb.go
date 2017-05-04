@@ -22,10 +22,9 @@ import (
 // #cgo CPPFLAGS: -I../../../../c-deps/rocksdb.src/include
 // #cgo LDFLAGS: -lprotobuf
 // #cgo LDFLAGS: -lrocksdb
-// #cgo LDFLAGS: -ljemalloc
 // #cgo LDFLAGS: -lsnappy
 // #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
-// #cgo linux LDFLAGS: -lrt -lm -lpthread
+// #cgo linux LDFLAGS: -lrt -lpthread
 // #cgo windows LDFLAGS: -lrpcrt4
 //
 // // Building this package will trigger "unresolved symbol" errors
