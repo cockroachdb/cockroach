@@ -212,7 +212,7 @@ func addOrMergeExpr(
 		return -1, err
 	}
 
-	return render.addOrMergeRender(col, expr, true), nil
+	return render.addOrReuseRender(col, expr, true), nil
 }
 
 // Update updates columns for a selection of rows from a table.
@@ -332,7 +332,7 @@ func (p *planner) Update(
 					return nil, err
 				}
 
-				colIdx := render.addOrMergeRender(col, expr, false)
+				colIdx := render.addOrReuseRender(col, expr, false)
 
 				sourceSlots = append(sourceSlots, tupleSlot{
 					columns:     updateCols[currentUpdateIdx : currentUpdateIdx+len(setExpr.Names)],

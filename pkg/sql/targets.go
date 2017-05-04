@@ -95,11 +95,11 @@ func (s *renderNode) isRenderEquivalent(exprStr string, j int) bool {
 	return symbolicExprStr(s.render[j]) == exprStr
 }
 
-// addOrMergeRenders adds the given result columns to the select
-// render list and returns their column indices. If an expression is
-// already rendered, and the reuse flag is true, no new render is
-// added and the index of the existing column is returned instead.
-func (s *renderNode) addOrMergeRender(
+// addOrReuseRender adds the given result column to the select render list and
+// returns its column index. If the expression is already rendered and the reuse
+// flag is true, no new render is added and the index of the existing column is
+// returned instead.
+func (s *renderNode) addOrReuseRender(
 	col sqlbase.ResultColumn, expr parser.TypedExpr, reuseExistingRender bool,
 ) (colIdx int) {
 	if reuseExistingRender {
@@ -121,12 +121,16 @@ func (s *renderNode) addOrMergeRender(
 	return len(s.render) - 1
 }
 
-func (s *renderNode) addOrMergeRenders(
+// addOrReuseRenders adds the given result columns to the select render list and
+// returns their column indices. If an expression is already rendered, and the
+// reuse flag is true, no new render is added and the index of the existing
+// column is returned instead.
+func (s *renderNode) addOrReuseRenders(
 	cols sqlbase.ResultColumns, exprs []parser.TypedExpr, reuseExistingRender bool,
 ) (colIdxs []int) {
 	colIdxs = make([]int, len(cols))
 	for i := range cols {
-		colIdxs[i] = s.addOrMergeRender(cols[i], exprs[i], reuseExistingRender)
+		colIdxs[i] = s.addOrReuseRender(cols[i], exprs[i], reuseExistingRender)
 	}
 	return colIdxs
 }
