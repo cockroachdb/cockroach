@@ -141,13 +141,13 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		leaseReq = &roachpb.TransferLeaseRequest{
 			Span:      reqSpan,
 			Lease:     reqLease,
-			PrevLease: status.lease,
+			PrevLease: *status.lease,
 		}
 	} else {
 		leaseReq = &roachpb.RequestLeaseRequest{
 			Span:      reqSpan,
 			Lease:     reqLease,
-			PrevLease: status.lease,
+			PrevLease: *status.lease,
 		}
 	}
 
@@ -292,7 +292,7 @@ const (
 type LeaseStatus struct {
 	state     leaseState     // state of the lease @timestamp
 	timestamp hlc.Timestamp  // timestamp the lease was evaluated at
-	lease     *roachpb.Lease // lease which status describes
+	lease     *roachpb.Lease // lease which status describes. Never nil.
 	liveness  *Liveness      // liveness if epoch-based lease
 }
 
@@ -332,13 +332,14 @@ type LeaseStatus struct {
 // * the read is served by the old lease holder (which has not
 //   processed the change in lease holdership).
 // * the client fails to read their own write.
+//
+// lease cannot be nil.
 func (r *Replica) leaseStatus(
 	lease *roachpb.Lease, timestamp, minProposedTS hlc.Timestamp,
 ) LeaseStatus {
 	status := LeaseStatus{timestamp: timestamp, lease: lease}
 	if lease == nil {
-		status.state = leaseExpired
-		return status
+		log.Fatalf(context.TODO(), "nil lease passed to leaseStatus")
 	}
 	var expiration hlc.Timestamp
 	if lease.Type() == roachpb.LeaseExpiration {
