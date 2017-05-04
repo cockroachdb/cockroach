@@ -40,10 +40,15 @@ index e0e283af..75164c23 100644
  #include <mutex>
  #include <vector>
 diff --git a/port/win/io_win.h b/port/win/io_win.h
-index a434ab77..f50c237a 100644
+index a434ab77..e60ed8a7 100644
 --- a/port/win/io_win.h
 +++ b/port/win/io_win.h
-@@ -16,7 +16,7 @@
+@@ -12,11 +12,11 @@
+ #include <mutex>
+ #include <string>
+ 
+-#include "rocksdb/Status.h"
++#include "rocksdb/status.h"
  #include "rocksdb/env.h"
  #include "util/aligned_buffer.h"
  
