@@ -47,17 +47,11 @@ var strVal = settings.RegisterValidatedStringSetting(
 		return nil
 	})
 var dVal = settings.RegisterNonNegativeDurationSetting("dVal", "", time.Second)
+var fVal = settings.RegisterNonNegativeFloatSetting("fVal", "", 5.4)
 var byteSizeVal = settings.RegisterValidatedByteSizeSetting(
 	"byteSize.Val", "", mb, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("bytesize cannot be negative")
-		}
-		return nil
-	})
-var fVal = settings.RegisterValidatedFloatSetting(
-	"fVal", "", 5.4, func(v float64) error {
-		if v < 0 {
-			return errors.Errorf("float cannot be negative")
 		}
 		return nil
 	})
@@ -360,7 +354,7 @@ func TestCache(t *testing.T) {
 		{
 			u := settings.MakeUpdater()
 			if err := u.Set("fVal", settings.EncodeFloat(-1.1), "f"); !testutils.IsError(err,
-				"float cannot be negative",
+				"cannot set fVal to a negative value: -1.1",
 			) {
 				t.Fatal(err)
 			}
