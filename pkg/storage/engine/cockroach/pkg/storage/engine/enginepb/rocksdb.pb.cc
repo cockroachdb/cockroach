@@ -25,6 +25,21 @@ class SSTUserPropertiesCollectionDefaultTypeInternal : public ::google::protobuf
 
 namespace protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto {
 
+PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTableField
+    const TableStruct::entries[] = {
+  {0, 0, 0, ::google::protobuf::internal::kInvalidMask, 0, 0},
+};
+
+PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::AuxillaryParseTableField
+    const TableStruct::aux[] = {
+  ::google::protobuf::internal::AuxillaryParseTableField(),
+};
+PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTable const
+    TableStruct::schema[] = {
+  { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
+};
+
 
 void TableStruct::Shutdown() {
   _SSTUserProperties_default_instance_.Shutdown();
@@ -173,7 +188,8 @@ bool SSTUserProperties::MergePartialFromCodedStream(
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       // string path = 1;
       case 1: {
-        if (tag == 10u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
                 input, this->mutable_path()));
           DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
@@ -188,7 +204,8 @@ bool SSTUserProperties::MergePartialFromCodedStream(
 
       // .cockroach.util.hlc.Timestamp ts_min = 2;
       case 2: {
-        if (tag == 18u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_ts_min()));
         } else {
@@ -199,7 +216,8 @@ bool SSTUserProperties::MergePartialFromCodedStream(
 
       // .cockroach.util.hlc.Timestamp ts_max = 3;
       case 3: {
-        if (tag == 26u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_ts_max()));
         } else {
@@ -232,6 +250,9 @@ failure:
 void SSTUserProperties::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.storage.engine.enginepb.SSTUserProperties)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
   // string path = 1;
   if (this->path().size() > 0) {
     ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
@@ -298,6 +319,9 @@ void SSTUserProperties::MergeFrom(const SSTUserProperties& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.SSTUserProperties)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
   if (from.path().size() > 0) {
 
     path_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.path_);
@@ -356,11 +380,12 @@ void SSTUserProperties::set_path(const ::std::string& value) {
 void SSTUserProperties::set_path(::std::string&& value) {
   
   path_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), std::move(value));
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.SSTUserProperties.path)
 }
 #endif
 void SSTUserProperties::set_path(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
   
   path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.SSTUserProperties.path)
@@ -548,20 +573,20 @@ bool SSTUserPropertiesCollection::MergePartialFromCodedStream(
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
-        if (tag == 10u) {
-          DO_(input->IncrementRecursionDepth());
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtualNoRecursionDepth(
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                 input, add_sst()));
         } else {
           goto handle_unusual;
         }
-        input->UnsafeDecrementRecursionDepth();
         break;
       }
 
       // string error = 2;
       case 2: {
-        if (tag == 18u) {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
                 input, this->mutable_error()));
           DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
@@ -598,6 +623,9 @@ failure:
 void SSTUserPropertiesCollection::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
   for (unsigned int i = 0, n = this->sst_size(); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       1, this->sst(i), output);
@@ -653,6 +681,9 @@ void SSTUserPropertiesCollection::MergeFrom(const SSTUserPropertiesCollection& f
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
   sst_.MergeFrom(from.sst_);
   if (from.error().size() > 0) {
 
@@ -676,7 +707,7 @@ void SSTUserPropertiesCollection::Swap(SSTUserPropertiesCollection* other) {
   InternalSwap(other);
 }
 void SSTUserPropertiesCollection::InternalSwap(SSTUserPropertiesCollection* other) {
-  sst_.UnsafeArenaSwap(&other->sst_);
+  sst_.InternalSwap(&other->sst_);
   error_.Swap(&other->error_);
   std::swap(_cached_size_, other->_cached_size_);
 }
@@ -734,11 +765,12 @@ void SSTUserPropertiesCollection::set_error(const ::std::string& value) {
 void SSTUserPropertiesCollection::set_error(::std::string&& value) {
   
   error_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), std::move(value));
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error)
 }
 #endif
 void SSTUserPropertiesCollection::set_error(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
   
   error_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error)

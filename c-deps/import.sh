@@ -23,10 +23,7 @@ shopt -s nullglob
 declare -A deps
 deps=(
     [jemalloc]=https://github.com/jemalloc/jemalloc/releases/download/4.5.0/jemalloc-4.5.0.tar.bz2
-    # v3.2.1 accidentally uses C++11 features that are removed on head.
-    # v3.2.2 should be safe.
-    # See: https://github.com/google/protobuf/issues/2769.
-    [protobuf]=https://github.com/google/protobuf/archive/v3.2.0.tar.gz
+    [protobuf]=https://github.com/google/protobuf/archive/v3.3.0.tar.gz
     [rocksdb]=https://github.com/facebook/rocksdb/archive/v5.1.4.tar.gz
     [snappy]=https://github.com/google/snappy/releases/download/1.1.3/snappy-1.1.3.tar.gz
 )
@@ -43,6 +40,8 @@ for dep in "${goals[@]}"; do
     exit 1
   }
 done
+
+cd "$(dirname "${0}")"
 
 for dep in "${goals[@]}"; do
   echo "> updating $dep"
