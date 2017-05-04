@@ -22,6 +22,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"flag"
 	"fmt"
 	"go/build"
 	"io"
@@ -59,7 +60,11 @@ var libsRe = func() *regexp.Regexp {
 
 var osVersionRe = regexp.MustCompile(`\d+(\.\d+)*-`)
 
+var isRelease = flag.Bool("release", false, "build in release mode instead of bleeding-edge mode")
+
 func main() {
+	flag.Parse()
+
 	if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
 		log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
 	}
@@ -71,14 +76,17 @@ func main() {
 	if !ok {
 		log.Fatalf("VCS branch environment variable %s is not set", teamcityBuildBranchKey)
 	}
-	isHead := branch == "master"
 	pkg, err := build.Import("github.com/cockroachdb/cockroach", "", build.FindOnly)
 	if err != nil {
 		log.Fatalf("unable to locate CRDB directory: %s", err)
 	}
 	var versionStr string
-	switch {
-	case isHead:
+	if *isRelease {
+		if _, err := version.NewVersion(branch); err != nil {
+			log.Fatalf("refusing to build release with invalid version name '%s' (err: %s)", branch, err)
+		}
+		versionStr = branch
+	} else {
 		cmd := exec.Command("git", "rev-parse", "HEAD")
 		cmd.Dir = pkg.Dir
 		log.Printf("%s %s", cmd.Env, cmd.Args)
@@ -87,13 +95,6 @@ func main() {
 			log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
 		}
 		versionStr = string(bytes.TrimSpace(out))
-	case strings.HasPrefix(branch, "beta-"):
-		versionStr = branch
-	default:
-		if _, err := version.NewVersion(branch); err != nil {
-			log.Fatal(err)
-		}
-		versionStr = branch
 	}
 
 	sess, err := session.NewSession(&aws.Config{
@@ -104,9 +105,9 @@ func main() {
 	}
 	svc := s3.New(sess)
 
-	bucketName := "binaries.cockroachdb.com"
-	if isHead {
-		bucketName = "cockroach"
+	bucketName := "cockroach"
+	if *isRelease {
+		bucketName = "binaries.cockroachdb.com"
 	}
 
 	// TODO(tamird,benesch,bdarnell): make "latest" a website-redirect
@@ -117,7 +118,7 @@ func main() {
 
 	noCache := "no-cache"
 
-	if !isHead {
+	if *isRelease {
 		for _, releaseVersionStr := range releaseVersionStrs {
 			archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
 			srcArchive := fmt.Sprintf("%s.%s", archiveBase, "src.tgz")
@@ -183,7 +184,7 @@ func main() {
 			{suffix: ".race", goflags: "-race"},
 		} {
 			// TODO(tamird): build deadlock,race binaries for all targets?
-			if i > 0 && !(isHead && strings.HasSuffix(target.buildType, "linux-gnu")) {
+			if i > 0 && (*isRelease || !strings.HasSuffix(target.buildType, "linux-gnu")) {
 				continue
 			}
 			// race doesn't work without glibc on Linux. See
@@ -262,7 +263,7 @@ func main() {
 			const dotExe = ".exe"
 			hasExe := strings.HasSuffix(base, dotExe)
 
-			if isHead {
+			if !*isRelease {
 				const repoName = "cockroach"
 
 				remoteName := strings.TrimSuffix(base, dotExe)
@@ -291,7 +292,11 @@ func main() {
 				}); err != nil {
 					log.Fatalf("s3 upload %s: %s", absolutePath, err)
 				}
-				latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, "LATEST")
+				latestSuffix := branch
+				if latestSuffix == "master" {
+					latestSuffix = "LATEST"
+				}
+				latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, latestSuffix)
 				if _, err := svc.PutObject(&s3.PutObjectInput{
 					Bucket:       &bucketName,
 					CacheControl: &noCache,
