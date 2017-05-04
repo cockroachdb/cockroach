@@ -62,7 +62,7 @@ const (
 	productionSettingsWebpage = "please see https://www.cockroachlabs.com/docs/recommended-production-settings.html for more details"
 )
 
-var timeUntilStoreDead = settings.RegisterPositiveDurationSetting(
+var timeUntilStoreDead = settings.RegisterNonNegativeDurationSetting(
 	"server.time_until_store_dead",
 	"the time after which if there is no new gossiped information about a store, it is considered dead",
 	5*time.Minute)

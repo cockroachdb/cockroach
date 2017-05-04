@@ -75,8 +75,8 @@ func RegisterDurationSetting(key, desc string, defaultValue time.Duration) *Dura
 	return RegisterValidatedDurationSetting(key, desc, defaultValue, nil)
 }
 
-// RegisterPositiveDurationSetting defines a new setting with type duration.
-func RegisterPositiveDurationSetting(
+// RegisterNonNegativeDurationSetting defines a new setting with type duration.
+func RegisterNonNegativeDurationSetting(
 	key, desc string, defaultValue time.Duration,
 ) *DurationSetting {
 	return RegisterValidatedDurationSetting(key, desc, defaultValue, func(v time.Duration) error {

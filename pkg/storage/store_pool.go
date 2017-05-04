@@ -44,13 +44,13 @@ const (
 	TestTimeUntilStoreDeadOff = 24 * time.Hour
 )
 
-var declinedReservationsTimeout = settings.RegisterPositiveDurationSetting(
+var declinedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
 	"server.declined_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a reservation was declined",
 	5*time.Second,
 )
 
-var failedReservationsTimeout = settings.RegisterPositiveDurationSetting(
+var failedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
 	"server.failed_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
 	0,
