@@ -2326,7 +2326,7 @@ func (r *Replica) requestToProposal(
 	if r.store.TestingKnobs().TestingEvalFilter != nil {
 		// For backwards compatibility, tests that use TestingEvalFilter
 		// need the original request to be preserved. See #10493
-		proposal.command.BatchRequest = &ba
+		proposal.command.TestingBatchRequest = &ba
 	}
 	return proposal, pErr
 }
@@ -3544,8 +3544,8 @@ func (r *Replica) processRaftCommand(
 	} else if err := verifyLease(); err != nil {
 		log.VEventf(
 			ctx, 1,
-			"command %s proposed from replica %+v: %s",
-			raftCmd.BatchRequest, raftCmd.ProposerReplica, err,
+			"command proposed from replica %+v: %s",
+			raftCmd.ProposerReplica, err,
 		)
 		if !isLeaseRequest {
 			// We return a NotLeaseHolderError so that the DistSender retries.
@@ -3718,7 +3718,7 @@ func (r *Replica) processRaftCommand(
 	if proposedLocally {
 		proposal.finish(response)
 	} else if response.Err != nil {
-		log.VEventf(ctx, 1, "error executing raft command %s: %s", raftCmd.BatchRequest, response.Err)
+		log.VEventf(ctx, 1, "error executing raft command resulted in err: %s", response.Err)
 	}
 
 	return raftCmd.ReplicatedEvalResult.ChangeReplicas != nil
