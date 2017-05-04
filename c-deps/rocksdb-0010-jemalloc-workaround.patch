@@ -1,4 +1,4 @@
-commit 40fd3a049ed4482313619d2307f792430e862431
+commit 235a20a7f40cf20c94c36d080f84240c69591d07
 Author: Tamir Duberstein <tamird@gmail.com>
 Date:   Thu Apr 20 10:26:37 2017 -0400
 
@@ -30,19 +30,19 @@ Date:   Thu Apr 20 10:26:37 2017 -0400
     https://github.com/jemalloc/jemalloc/issues/778.
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 460d13a3..4ce0979a 100644
+index 1290d4a6..1fd23a46 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -275,6 +275,7 @@ set(SOURCES
+@@ -322,6 +322,7 @@ set(SOURCES
          db/internal_stats.cc
          db/log_reader.cc
          db/log_writer.cc
 +        db/malloc_stats.cc
          db/managed_iterator.cc
          db/memtable.cc
-         db/memtable_allocator.cc
+         db/memtable_list.cc
 diff --git a/db/db_impl.cc b/db/db_impl.cc
-index 578fe7cb..26fe2f28 100644
+index fd934bc3..bd7f6f0d 100644
 --- a/db/db_impl.cc
 +++ b/db/db_impl.cc
 @@ -16,9 +16,6 @@
@@ -55,7 +55,7 @@ index 578fe7cb..26fe2f28 100644
  
  #include <algorithm>
  #include <climits>
-@@ -46,6 +43,7 @@
+@@ -44,6 +41,7 @@
  #include "db/job_context.h"
  #include "db/log_reader.h"
  #include "db/log_writer.h"
@@ -63,7 +63,7 @@ index 578fe7cb..26fe2f28 100644
  #include "db/managed_iterator.h"
  #include "db/memtable.h"
  #include "db/memtable_list.h"
-@@ -578,39 +576,6 @@ void DBImpl::PrintStatistics() {
+@@ -371,39 +369,6 @@ void DBImpl::PrintStatistics() {
    }
  }
  
@@ -91,7 +91,7 @@ index 578fe7cb..26fe2f28 100644
 -#ifdef ROCKSDB_JEMALLOC
 -  MallocStatus mstat;
 -  const unsigned int kMallocStatusLen = 1000000;
--  std::unique_ptr<char> buf{new char[kMallocStatusLen + 1]};
+-  std::unique_ptr<char[]> buf{new char[kMallocStatusLen + 1]};
 -  mstat.cur = buf.get();
 -  mstat.end = buf.get() + kMallocStatusLen;
 -  je_malloc_stats_print(GetJemallocStatus, &mstat, "");
@@ -101,11 +101,11 @@ index 578fe7cb..26fe2f28 100644
 -#endif  // !ROCKSDB_LITE
 -
  void DBImpl::MaybeDumpStats() {
-   if (immutable_db_options_.stats_dump_period_sec == 0) return;
- 
+   mutex_.Lock();
+   unsigned int stats_dump_period_sec =
 diff --git a/db/malloc_stats.cc b/db/malloc_stats.cc
 new file mode 100644
-index 00000000..539a7b33
+index 00000000..dbd2ddb7
 --- /dev/null
 +++ b/db/malloc_stats.cc
 @@ -0,0 +1,52 @@
@@ -151,7 +151,7 @@ index 00000000..539a7b33
 +#ifdef ROCKSDB_JEMALLOC
 +  MallocStatus mstat;
 +  const unsigned int kMallocStatusLen = 1000000;
-+  std::unique_ptr<char> buf{new char[kMallocStatusLen + 1]};
++  std::unique_ptr<char[]> buf{new char[kMallocStatusLen + 1]};
 +  mstat.cur = buf.get();
 +  mstat.end = buf.get() + kMallocStatusLen;
 +  je_malloc_stats_print(GetJemallocStatus, &mstat, "");
@@ -190,14 +190,14 @@ index 00000000..212d447e
 +
 +#endif  // !ROCKSDB_LITE
 diff --git a/src.mk b/src.mk
-index 2a4d48b8..629ca141 100644
+index 6f4303cc..b9700854 100644
 --- a/src.mk
 +++ b/src.mk
-@@ -30,6 +30,7 @@ LIB_SOURCES =                                                   \
+@@ -35,6 +35,7 @@ LIB_SOURCES =                                                   \
    db/internal_stats.cc                                          \
    db/log_reader.cc                                              \
    db/log_writer.cc                                              \
 +  db/malloc_stats.cc                                            \
    db/managed_iterator.cc                                        \
-   db/memtable_allocator.cc                                      \
    db/memtable.cc                                                \
+   db/memtable_list.cc                                           \
