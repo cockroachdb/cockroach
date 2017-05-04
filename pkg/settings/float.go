@@ -92,6 +92,16 @@ func RegisterValidatedFloatSetting(
 	return setting
 }
 
+// RegisterNonNegativeFloatSetting defines a new setting with type float.
+func RegisterNonNegativeFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
+	return RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
+		if v < 0 {
+			return errors.Errorf("cannot set %s to a negative value: %f", key, v)
+		}
+		return nil
+	})
+}
+
 // TestingSetFloat returns a mock, unregistered float setting for testing. See
 // TestingSetBool for more details.
 func TestingSetFloat(s **FloatSetting, v float64) func() {
