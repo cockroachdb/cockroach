@@ -56,6 +56,44 @@ send "$argv sql --certs-dir=$certs_dir --user=carl\r"
 eexpect "Enter password:"
 send "woof\r"
 eexpect "carl@"
+send "\\q\r"
+eexpect $prompt
+end_test
+
+start_test "Check that CREATE USER WITH PASSWORD can be used from transactions."
+# Create a user from a transaction.
+send "$argv sql --certs-dir=$certs_dir\r"
+eexpect "root@"
+send "BEGIN TRANSACTION;\r"
+eexpect "Now adding input for a multi-line SQL transaction client-side."
+eexpect "Press Enter two times to send the SQL text collected so far to the server, or Ctrl+C to cancel."
+eexpect " ->"
+send "CREATE USER eisen WITH PASSWORD 'hunter2';\r"
+eexpect " ->"
+send "COMMIT TRANSACTION;\r"
+eexpect "root@"
+send "\\q\r"
+# Log in with the correct password.
+eexpect $prompt
+send "$argv sql --certs-dir=$certs_dir --user=eisen\r"
+eexpect "Enter password:"
+send "hunter2\r"
+eexpect "eisen@"
+send "\\q\r"
+# Try to log in with an incorrect password.
+eexpect $prompt
+send "$argv sql --certs-dir=$certs_dir --user=eisen\r"
+eexpect "Enter password:"
+send "*****\r"
+eexpect "Error: pq: invalid password"
+eexpect "Failed running \"sql\""
+# Check that history is scrubbed.
+send "$argv sql --certs-dir=$certs_dir\r"
+eexpect "root@"
+# Ctrl+R eisen
+send "\022eisen"
+eexpect "CREATE USER eisen WITH PASSWORD \\*\\*\\*\\*\\*;"
+interrupt
 end_test
 
 # Terminate with Ctrl+C.
