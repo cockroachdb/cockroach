@@ -4596,7 +4596,7 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 				continue
 			}
 		}
-		if err := r.store.Gossip().AddInfoProto(key, &liveness, 0); err != nil {
+		if err := r.store.Gossip().AddInfoProto(key, &liveness, 50*r.store.cfg.NodeLiveness.heartbeatInterval); err != nil {
 			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", liveness)
 		}
 	}
