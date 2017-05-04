@@ -610,21 +610,17 @@ EXPLAIN (TYPES) SELECT max(k), max(k) + stddev(d) OVER (PARTITION BY v, 'a') FRO
 2          aggregate 1  (d)[decimal]
 2          aggregate 2  (d)[decimal]
 2          aggregate 3  (v)[int]
-2          aggregate 4  ('a')[string]
-2          aggregate 5  (100)[int]
 2          render 0     (max((k)[int]))[int]
 2          render 1     (d)[decimal]
 2          render 2     (d)[decimal]
 2          render 3     (v)[int]
 2          render 4     ('a')[string]
 2          render 5     (100)[int]
-3  render                                                                                                                              (k int, d decimal, d decimal, v int, "'a'" string, "100" int)
+3  render                                                                                                                              (k int, d decimal, d decimal, v int)
 3          render 0     (k)[int]
 3          render 1     (d)[decimal]
 3          render 2     (d)[decimal]
 3          render 3     (v)[int]
-3          render 4     ('a')[string]
-3          render 5     (100)[int]
 4  scan                                                                                                                                (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
 4          table        kv@primary
 4          spans        ALL
@@ -641,16 +637,14 @@ EXPLAIN (TYPES) SELECT MAX(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROU
 2          aggregate 0  (max((k)[int]))[int]
 2          aggregate 1  (d)[decimal]
 2          aggregate 2  (v)[int]
-2          aggregate 3  ('a')[string]
 2          render 0     (max((k)[int]))[int]
 2          render 1     (d)[decimal]
 2          render 2     (v)[int]
 2          render 3     ('a')[string]
-3  render                                                                                            (k int, d decimal, v int, "'a'" string)
+3  render                                                                                            (k int, d decimal, v int)
 3          render 0     (k)[int]
 3          render 1     (d)[decimal]
 3          render 2     (v)[int]
-3          render 3     ('a')[string]
 4  scan                                                                                              (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
 4          table        kv@primary
 4          spans        ALL
