@@ -25,6 +25,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -51,21 +52,20 @@ func TestDebugRemote(t *testing.T) {
 	testCases := []struct {
 		remoteDebug string
 		status      int
+		expectedErr string
 	}{
-		{"any", http.StatusOK},
-		{"TRUE", http.StatusOK},
-		{"t", http.StatusOK},
-		{"1", http.StatusOK},
-		{"local", http.StatusForbidden},
-		{"false", http.StatusForbidden},
-		{"unrecognized", http.StatusForbidden},
+		{"any", http.StatusOK, ""},
+		{"ANY", http.StatusOK, ""},
+		{"local", http.StatusForbidden, ""},
+		{"off", http.StatusForbidden, ""},
+		{"unrecognized", http.StatusForbidden, "invalid mode: 'unrecognized'"},
 	}
 	for _, c := range testCases {
 		t.Run(c.remoteDebug, func(t *testing.T) {
 			setStmt := fmt.Sprintf("SET CLUSTER SETTING server.remote_debugging.mode = '%s'",
 				c.remoteDebug)
-			if _, err := db.Exec(setStmt); err != nil {
-				t.Fatal(err)
+			if _, err := db.Exec(setStmt); !testutils.IsError(err, c.expectedErr) {
+				t.Fatalf("expected \"%s\", but found %v", c.expectedErr, err)
 			}
 
 			resp, err := cluster.HTTPClient.Get(l.URL(ctx, 0) + "/debug/")
