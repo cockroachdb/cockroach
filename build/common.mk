@@ -346,7 +346,10 @@ $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/.ex
 	mkdir -p $(JEMALLOC_DIR)
 	@# NOTE: If you change the configure flags below, bump the version in
 	@# $(C_DEPS_DIR)/jemalloc-rebuild. See above for rationale.
-	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(CONFIGURE_FLAGS) --enable-prof
+	@#
+	@# jemalloc profiling deadlocks when built against musl. See
+	@# https://github.com/jemalloc/jemalloc/issues/585.
+	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(CONFIGURE_FLAGS) $(if $(findstring musl,$(TARGET_TRIPLE)),,--enable-prof)
 
 $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(PROTOBUF_SRC_DIR)/.extracted
 	rm -rf $(PROTOBUF_DIR)
