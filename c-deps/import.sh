@@ -24,7 +24,7 @@ declare -A deps
 deps=(
     [jemalloc]=https://github.com/jemalloc/jemalloc/releases/download/4.5.0/jemalloc-4.5.0.tar.bz2
     [protobuf]=https://github.com/google/protobuf/archive/v3.3.0.tar.gz
-    [rocksdb]=https://github.com/facebook/rocksdb/archive/v5.1.4.tar.gz
+    [rocksdb]=https://github.com/facebook/rocksdb/archive/v5.3.4.tar.gz
     [snappy]=https://github.com/google/snappy/releases/download/1.1.3/snappy-1.1.3.tar.gz
 )
 
