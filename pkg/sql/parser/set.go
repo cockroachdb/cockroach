@@ -54,14 +54,18 @@ func (node *Set) Format(buf *bytes.Buffer, f FmtFlags) {
 		if node.SetMode == SetModeClusterSetting {
 			buf.WriteString("CLUSTER SETTING ")
 		}
-		if node.Name != nil {
+		if node.Name == nil {
+			buf.WriteString("ROW (")
+			FormatNode(buf, f, node.Values)
+			buf.WriteString(")")
+		} else {
 			FormatNode(buf, f, node.Name)
 			buf.WriteString(" = ")
-		}
-		if node.Values == nil {
-			buf.WriteString("DEFAULT")
-		} else {
-			FormatNode(buf, f, node.Values)
+			if node.Values == nil {
+				buf.WriteString("DEFAULT")
+			} else {
+				FormatNode(buf, f, node.Values)
+			}
 		}
 	case SetModeReset:
 		buf.WriteString("RESET ")
