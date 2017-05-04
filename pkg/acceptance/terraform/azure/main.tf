@@ -201,11 +201,6 @@ resource "null_resource" "cockroach-runner" {
   }
 
   provisioner "file" {
-    source = "../common/download_binary.sh"
-    destination = "/home/ubuntu/download_binary.sh"
-  }
-
-  provisioner "file" {
     source = "../common/nodectl"
     destination = "/home/ubuntu/nodectl"
   }
@@ -255,12 +250,15 @@ FILE
       "mkdir /mnt/data0/logs",
       "ln -sf /mnt/data0/logs logs",
       "chmod 755 cockroach nodectl",
-      "[ $(stat --format=%s cockroach) -ne 0 ] || bash download_binary.sh cockroach/cockroach.linux-gnu-amd64 ${var.cockroach_sha} cockroach",
+      "[ $(stat --format=%s cockroach) -ne 0 ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha} -o cockroach",
+      "chmod +x cockroach",
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
       "supervisorctl -c supervisor.conf start cockroach",
       # Install load generators.
-      "bash download_binary.sh examples-go/block_writer ${var.block_writer_sha}",
-      "bash download_binary.sh examples-go/photos ${var.photos_sha}",
+      "curl -sfSL https://edge-binaries.cockroachdb.com/examples-go/block_writer.${var.block_writer_sha} -o block_writer",
+      "chmod +x block_writer",
+      "curl -sfSL https://edge-binaries.cockroachdb.com/examples-go/photos.${var.photos_sha} -o photos",
+      "chmod +x photos",
     ]
   }
 }
