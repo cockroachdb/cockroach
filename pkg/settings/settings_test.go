@@ -46,7 +46,7 @@ var strVal = settings.RegisterValidatedStringSetting(
 		}
 		return nil
 	})
-var dVal = settings.RegisterPositiveDurationSetting("dVal", "", time.Second)
+var dVal = settings.RegisterNonNegativeDurationSetting("dVal", "", time.Second)
 var byteSizeVal = settings.RegisterValidatedByteSizeSetting(
 	"byteSize.Val", "", mb, func(v int64) error {
 		if v < 0 {
