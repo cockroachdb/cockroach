@@ -981,6 +981,12 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		curLease, _, err := s.GetRangeLease(context.TODO(), key)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		leaseReq := roachpb.RequestLeaseRequest{
 			Span: roachpb.Span{
 				Key: key,
@@ -990,6 +996,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0),
 				Replica:    repDesc,
 			},
+			PrevLease: curLease,
 		}
 		if _, pErr := client.SendWrapped(context.Background(), s.DistSender(), &leaseReq); pErr != nil {
 			t.Fatal(pErr)

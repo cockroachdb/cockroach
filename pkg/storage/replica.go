@@ -845,6 +845,8 @@ func (r *Replica) IsDestroyed() error {
 
 // getLease returns the current lease, and the tentative next one, if a lease
 // request initiated by this replica is in progress.
+//
+// The current lease is never nil.
 func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -2393,6 +2395,8 @@ func (r *Replica) evaluateProposal(
 
 // insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
 // it to the pending map.
+//
+// lease cannot be nil.
 func (r *Replica) insertProposalLocked(
 	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease *roachpb.Lease,
 ) {
@@ -2408,7 +2412,7 @@ func (r *Replica) insertProposalLocked(
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	proposal.command.ProposerReplica = proposerReplica
-	proposal.command.ProposerLease = proposerLease
+	proposal.command.ProposerLease = *proposerLease
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
 			proposal.idKey, proposal.command.MaxLeaseIndex)
@@ -2439,6 +2443,8 @@ func makeIDKey() storagebase.CmdIDKey {
 //   waiting for successful execution.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
+//
+// lease cannot be nil.
 func (r *Replica) propose(
 	ctx context.Context,
 	lease *roachpb.Lease,
@@ -3513,22 +3519,8 @@ func (r *Replica) processRaftCommand(
 	// due to Raft delays / reorderings.
 	// To understand why this lease verification is necessary, see comments on the
 	// proposer_lease field in the proto.
-	//
-	// TODO(spencer): remove the special-casing for the pre-epoch range
-	// leases.
 	verifyLease := func() error {
 		// Handle the case of pre-epoch-based-leases command.
-		if raftCmd.ProposerLease == nil {
-			// Skip verification for lease commands for legacy case.
-			if raftCmd.BatchRequest.IsSingleSkipLeaseCheckRequest() {
-				return nil
-			}
-			l, proposer := r.mu.state.Lease, raftCmd.ProposerReplica
-			if l.OwnedBy(proposer.StoreID) && ts.Less(l.DeprecatedStartStasis) {
-				return nil
-			}
-			return errors.Errorf("lease %s not held", l)
-		}
 		return raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease)
 	}
 

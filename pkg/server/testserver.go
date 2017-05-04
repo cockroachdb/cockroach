@@ -580,6 +580,36 @@ func (ts *TestServer) SplitRange(
 	return leftRangeDesc, rightRangeDesc, nil
 }
 
+// GetRangeLease returns the current lease for the range containing key, and a
+// timestamp taken from the node.
+//
+// The lease is returned regardless of its status.
+func (ts *TestServer) GetRangeLease(
+	ctx context.Context, key roachpb.Key,
+) (_ roachpb.Lease, now hlc.Timestamp, _ error) {
+	leaseReq := roachpb.LeaseInfoRequest{
+		Span: roachpb.Span{
+			Key: key,
+		},
+	}
+	leaseResp, pErr := client.SendWrappedWith(
+		ctx,
+		ts.DB().GetSender(),
+		roachpb.Header{
+			// INCONSISTENT read, since we want to make sure that the node used to
+			// send this is the one that processes the command, for the hint to
+			// matter.
+			ReadConsistency: roachpb.INCONSISTENT,
+		},
+		&leaseReq,
+	)
+	if pErr != nil {
+		return roachpb.Lease{}, hlc.Timestamp{}, pErr.GoError()
+	}
+	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, ts.Clock().Now(), nil
+
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory

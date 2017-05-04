@@ -112,9 +112,6 @@ message RaftCommand {
 
   // proposer_lease is provided to verify at raft command apply-time that
   // the lease under which the command was proposed remains in effect.
-  // If the command was proposed prior to the introduction of epoch leases,
-  // proposer_lease will be nil, but the combination of proposer_replica and
-  // the request timestamp are used to verify an expiration-based lease.
   //
   // To see why lease verification downstream of Raft is required, consider the
   // following example:
@@ -125,7 +122,7 @@ message RaftCommand {
   // - the command applies on replica 1
   // - replica 2 serves anomalous reads which don't see the write
   // - the command applies on replica 2
-  optional roachpb.Lease proposer_lease = 5;
+  optional roachpb.Lease proposer_lease = 5 [(gogoproto.nullable) = false];
 
   // When the command is applied, its result is an error if the lease log
   // counter has already reached (or exceeded) max_lease_index.

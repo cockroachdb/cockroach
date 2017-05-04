@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -340,11 +339,11 @@ func (tc *TestCluster) TransferRangeLease(
 // stamp taken off the queried node's clock.
 func (tc *TestCluster) FindRangeLease(
 	rangeDesc roachpb.RangeDescriptor, hint *roachpb.ReplicationTarget,
-) (_ *roachpb.Lease, now hlc.Timestamp, _ error) {
+) (_ roachpb.Lease, now hlc.Timestamp, _ error) {
 	if hint != nil {
 		var ok bool
 		if _, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
-			return nil, hlc.Timestamp{}, errors.Errorf(
+			return roachpb.Lease{}, hlc.Timestamp{}, errors.Errorf(
 				"bad hint: %+v; store doesn't have a replica of the range", hint)
 		}
 	} else {
@@ -363,27 +362,10 @@ func (tc *TestCluster) FindRangeLease(
 		}
 	}
 	if hintServer == nil {
-		return nil, hlc.Timestamp{}, errors.Errorf("bad hint: %+v; no such node", hint)
+		return roachpb.Lease{}, hlc.Timestamp{}, errors.Errorf("bad hint: %+v; no such node", hint)
 	}
-	leaseReq := roachpb.LeaseInfoRequest{
-		Span: roachpb.Span{
-			Key: rangeDesc.StartKey.AsRawKey(),
-		},
-	}
-	leaseResp, pErr := client.SendWrappedWith(
-		context.TODO(),
-		hintServer.DB().GetSender(),
-		roachpb.Header{
-			// INCONSISTENT read, since we want to make sure that the node used to
-			// send this is the one that processes the command, for the hint to
-			// matter.
-			ReadConsistency: roachpb.INCONSISTENT,
-		},
-		&leaseReq)
-	if pErr != nil {
-		return nil, hlc.Timestamp{}, pErr.GoError()
-	}
-	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, hintServer.Clock().Now(), nil
+
+	return hintServer.GetRangeLease(context.TODO(), rangeDesc.StartKey.AsRawKey())
 }
 
 // FindRangeLeaseHolder is part of TestClusterInterface.
@@ -394,9 +376,6 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 	if err != nil {
 		return roachpb.ReplicationTarget{}, err
 	}
-	if lease == nil {
-		return roachpb.ReplicationTarget{}, errors.New("no active lease")
-	}
 	// Find lease replica in order to examine the lease state.
 	store, err := tc.findMemberStore(lease.Replica.StoreID)
 	if err != nil {
@@ -406,7 +385,7 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 	if err != nil {
 		return roachpb.ReplicationTarget{}, err
 	}
-	if !replica.IsLeaseValid(lease, now) {
+	if !replica.IsLeaseValid(&lease, now) {
 		return roachpb.ReplicationTarget{}, errors.New("no valid lease")
 	}
 	replicaDesc := lease.Replica

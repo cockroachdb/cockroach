@@ -146,19 +146,20 @@ type Request interface {
 // Implementors return the previous lease at the time the request
 // was proposed.
 type leaseRequestor interface {
+	// The returned Lease is never nil; returned by pointer to save a copy.
 	prevLease() *Lease
 }
 
 var _ leaseRequestor = &RequestLeaseRequest{}
 
 func (rlr *RequestLeaseRequest) prevLease() *Lease {
-	return rlr.PrevLease
+	return &rlr.PrevLease
 }
 
 var _ leaseRequestor = &TransferLeaseRequest{}
 
 func (tlr *TransferLeaseRequest) prevLease() *Lease {
-	return tlr.PrevLease
+	return &tlr.PrevLease
 }
 
 // Response is an interface for RPC responses.
