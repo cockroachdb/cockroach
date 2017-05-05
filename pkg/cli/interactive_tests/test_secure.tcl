@@ -5,6 +5,21 @@ source [file join [file dirname $argv0] common.tcl]
 set certs_dir "/certs"
 set ::env(COCKROACH_INSECURE) "false"
 
+spawn /bin/bash
+send "PS1=':''/# '\r"
+
+set prompt ":/# "
+eexpect $prompt
+
+start_test "Check that --insecure reports that the server is really insecure"
+send "$argv start --insecure\r"
+eexpect "WARNING: RUNNING IN INSECURE MODE"
+eexpect "node starting"
+interrupt
+eexpect $prompt
+end_test
+
+
 proc start_secure_server {argv certs_dir} {
     report "BEGIN START SECURE SERVER"
     system "mkfifo pid_fifo || true; $argv start --certs-dir=$certs_dir --pid-file=pid_fifo -s=path=logs/db >>expect-cmd.log 2>&1 & cat pid_fifo > server_pid"
@@ -18,12 +33,6 @@ proc stop_secure_server {argv certs_dir} {
 }
 
 start_secure_server $argv $certs_dir
-
-spawn /bin/bash
-send "PS1=':''/# '\r"
-
-set prompt ":/# "
-eexpect $prompt
 
 start_test "Check 'node ls' works with certificates."
 send "$argv node ls --certs-dir=$certs_dir\r"
