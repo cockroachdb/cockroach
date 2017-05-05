@@ -466,6 +466,13 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		if typ, ok := t.(TCollatedString); ok {
 			return &CollatedStringColType{Name: "STRING", Locale: typ.Locale}, nil
 		}
+		if typ, ok := t.(TArray); ok {
+			elemTyp, err := DatumTypeToColumnType(typ.Typ)
+			if err != nil {
+				return nil, err
+			}
+			return arrayOf(elemTyp, Exprs(nil))
+		}
 	}
 	return nil, errors.Errorf("value type %s cannot be used for table columns", t)
 }
