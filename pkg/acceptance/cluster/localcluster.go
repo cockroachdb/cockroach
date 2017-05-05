@@ -57,10 +57,8 @@ import (
 )
 
 const (
-	builderImage     = "docker.io/cockroachdb/builder"
-	builderTag       = "20170422-212842"
-	builderImageFull = builderImage + ":" + builderTag
-	networkPrefix    = "cockroachdb_acceptance"
+	defaultImage  = "docker.io/ubuntu:xenial-20170214"
+	networkPrefix = "cockroachdb_acceptance"
 )
 
 // DefaultTCP is the default SQL/RPC port specification.
@@ -71,8 +69,8 @@ const defaultHTTP nat.Port = base.DefaultHTTPPort + "/tcp"
 // binary.
 const CockroachBinaryInContainer = "/cockroach/cockroach"
 
-var cockroachImage = flag.String("i", builderImageFull, "the docker image to run")
-var cockroachBinary = flag.String("b", defaultBinary(), "the host-side binary to run (if image == "+builderImage+")")
+var cockroachImage = flag.String("i", defaultImage, "the docker image to run")
+var cockroachBinary = flag.String("b", defaultBinary(), "the host-side binary to run (if image == "+defaultImage+")")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
 var maxRangeBytes = config.DefaultZoneConfig().RangeMaxBytes
@@ -173,7 +171,7 @@ func CreateLocal(
 	default:
 	}
 
-	if *cockroachImage == builderImageFull && !exists(*cockroachBinary) {
+	if *cockroachImage == defaultImage && !exists(*cockroachBinary) {
 		log.Fatalf(ctx, "\"%s\": does not exist", *cockroachBinary)
 	}
 
@@ -361,7 +359,7 @@ func (l *LocalCluster) initCluster(ctx context.Context) {
 	if l.logDir != "" {
 		binds = append(binds, l.logDir+":/logs")
 	}
-	if *cockroachImage == builderImageFull {
+	if *cockroachImage == defaultImage {
 		path, err := filepath.Abs(*cockroachBinary)
 		maybePanic(err)
 		binds = append(binds, path+":"+CockroachBinaryInContainer)
@@ -396,8 +394,8 @@ func (l *LocalCluster) initCluster(ctx context.Context) {
 		}
 	}
 
-	if *cockroachImage == builderImageFull {
-		maybePanic(pullImage(ctx, l, builderImageFull, types.ImagePullOptions{}))
+	if *cockroachImage == defaultImage {
+		maybePanic(pullImage(ctx, l, defaultImage, types.ImagePullOptions{}))
 	}
 	c, err := createContainer(
 		ctx,
@@ -444,7 +442,7 @@ func (l *LocalCluster) createRoach(
 	}
 	log.Infof(ctx, "creating docker container with name: %s", hostname)
 	var entrypoint []string
-	if *cockroachImage == builderImageFull {
+	if *cockroachImage == defaultImage {
 		entrypoint = append(entrypoint, CockroachBinaryInContainer)
 	} else if *cockroachEntry != "" {
 		entrypoint = append(entrypoint, *cockroachEntry)
