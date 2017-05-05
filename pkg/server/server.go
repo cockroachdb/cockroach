@@ -37,6 +37,7 @@ import (
 
 	"github.com/elazarl/go-bindata-assetfs"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/mattn/go-isatty"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -74,6 +75,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+var isInteractive = isatty.IsTerminal(os.Stdout.Fd()) &&
+	isatty.IsTerminal(os.Stdin.Fd())
 
 var (
 	// Allocation pool for gzip writers.
@@ -159,7 +163,23 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		// Use a non-annotated context here since the annotation just looks funny,
 		// particularly to new users (made worse by it always printing as [n?]).
 		log.Shout(context.Background(), log.Severity_WARNING,
-			"running in insecure mode, this is strongly discouraged. See --insecure.")
+			"RUNNING IN INSECURE MODE!")
+		host, port, _ := net.SplitHostPort(s.cfg.Addr)
+		if host == "" {
+			host = "<your IP address>"
+		}
+		addr := net.JoinHostPort(host, port)
+		log.Shout(context.Background(), log.Severity_WARNING,
+			"'INSECURE' IS REALLY INSECURE:\n"+
+				"- your cluster is OPEN for any client that can access "+addr+"!\n"+
+				"- any user even 'root' can log in WITHOUT PROVIDING A PASSWORD!\n"+
+				"- any user can READ or WRITE ANY DATA in your cluster!\n"+
+				"- there is NO NETWORK ENCRYPTION, NO TLS, NO CONFIDENTIALITY!")
+		if isInteractive {
+			log.Shout(context.Background(), log.Severity_INFO,
+				"Waiting 10 seconds. Press Ctrl+C now to abort!")
+			time.Sleep(10 * time.Second)
+		}
 	}
 
 	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper)
