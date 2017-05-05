@@ -1,0 +1,131 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
+//
+// The code below is a simplified version of a similar structure found in
+// grpc-go (github.com/grpc/grpc-go/blob/b2fae0c/transport/control.go).
+
+/*
+ *
+ * Copyright 2014, Google Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following disclaimer
+ * in the documentation and/or other materials provided with the
+ * distribution.
+ *     * Neither the name of Google Inc. nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
+package storage
+
+import (
+	"errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"golang.org/x/net/context"
+)
+
+const (
+	// TODO(peter): This setting needs additional thought. Should it be adjusted
+	// dynamically?
+	defaultProposalQuota = 1000
+)
+
+type quotaPool struct {
+	syncutil.Mutex
+
+	// We use a channel to 'park' our quota value for easier composition with
+	// context cancellation and leadership changes (see quotaPool.acquire).
+	// NB: A value of '0' is never allowed to be parked in the
+	// channel, the lack of quota is represented by an empty channel. Quota
+	// additions push a value into the channel whereas acquisitions wait on the
+	// channel itself.
+	quota chan int64
+	done  chan struct{}
+}
+
+// newQuotaPool returns a new quota pool initialized with a given quota,
+// newQuotaPool(0) disallowed.
+func newQuotaPool(q int64) *quotaPool {
+	qp := &quotaPool{
+		quota: make(chan int64, 1),
+	}
+	qp.quota <- q
+	return qp
+}
+
+// add adds the specified quota back to the pool. Safe for concurrent use.
+func (qp *quotaPool) add(v int64) {
+	if v == 0 {
+		return
+	}
+
+	qp.Lock()
+	select {
+	case q := <-qp.quota:
+		v += q
+	default:
+	}
+	qp.quota <- v
+	qp.Unlock()
+}
+
+// acquire acquires a single unit of quota from the pool. On success, nil is
+// returned and the caller must call add(1) or otherwise arrange for the quota
+// to be returned to the pool. Safe for concurrent use.
+func (qp *quotaPool) acquire(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case q := <-qp.quota:
+		if q > 1 {
+			qp.add(q - 1)
+		}
+		return nil
+	case <-qp.done:
+		return errors.New("raft leadership changed, quota pool no longer in use")
+	}
+}
+
+func (qp *quotaPool) close() {
+	qp.Lock()
+	if qp.done != nil {
+		close(qp.done)
+	}
+	qp.done = nil
+	qp.Unlock()
+}
