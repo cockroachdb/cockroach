@@ -263,8 +263,11 @@ production usage.`,
 	ServerInsecure = FlagInfo{
 		Name: "insecure",
 		Description: `
-Start an insecure node, using unencrypted (non-TLS) connections. This is strongly discouraged for
-production usage.`,
+Start an insecure node, using unencrypted (non-TLS) connections,
+listening on all IP addresses (unless --host is provided) and
+disabling password authentication for all database users. This is
+strongly discouraged for production usage and should never be used on
+a public network without combining it with --host.`,
 	}
 
 	// KeySize, CertificateLifetime, AllowKeyReuse, and OverwriteFiles are used for
