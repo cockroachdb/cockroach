@@ -1678,6 +1678,93 @@ func TestReplicateRemoveAndAdd(t *testing.T) {
 	testReplicaAddRemove(t, false)
 }
 
+// TestQuotaPool verifies that writes get throttled in the case where we have
+// two fast moving replicas with sufficiently fast growing raft logs and a
+// slower replica catching up. By throttling write throughput we avoid having
+// to constantly catch up the slower node via snapshots. See #8659.
+func TestQuotaPool(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mtc := &multiTestContext{}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+
+	const rangeID = 1
+	const quota = 100
+	mtc.replicateRange(rangeID, 1, 2)
+
+	mtc.stores[0].SetRaftLogQueueActive(false)
+	mtc.stores[1].SetRaftLogQueueActive(false)
+	mtc.stores[2].SetRaftLogQueueActive(false)
+
+	// Heartbeats through the system go through the same code paths where we
+	// acquire quota for writes, to not have to account for this we pause
+	// heartbeats altogether.
+	for _, nl := range mtc.nodeLivenesses {
+		nl.PauseHeartbeat(true)
+	}
+
+	repl1, err := mtc.stores[0].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repl1.SetQuotaPool(quota)
+
+	repl3, err := mtc.stores[2].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// NB: See TestRaftBlockedReplica/#9914 for why we use a separate goroutine.
+	// We block the third replica.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		repl3.RaftLock()
+		wg.Done()
+	}()
+	wg.Wait()
+
+	// We can write up to 'quota' number of keys before writes get throttled.
+	// We verify this by writing this many keys and ensuring the next write is
+	// blocked.
+	incArgs := incrementArgs([]byte("k"), 1)
+	for i := 0; i < quota; i++ {
+		if _, err := client.SendWrapped(context.Background(), repl1, incArgs); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ch := make(chan struct{}, 1)
+	go func() {
+		defer close(ch)
+		if _, err := client.SendWrapped(context.Background(), repl1, incArgs); err != nil {
+			t.Fatal(err)
+		}
+		ch <- struct{}{}
+	}()
+
+	ticker := time.After(15 * time.Millisecond)
+	select {
+	case <-ch:
+		t.Fatal(errors.New("write not throttled by the quota pool"))
+	case <-ticker:
+	}
+
+	mtc.waitForValues(roachpb.Key("k"), []int64{quota, quota, 0})
+
+	repl3.RaftUnlock()
+
+	mtc.waitForValues(roachpb.Key("k"), []int64{quota + 1, quota + 1, quota + 1})
+
+	select {
+	case <-ch:
+	default:
+		t.Fatal(errors.New("throttled write not unblocked"))
+	}
+}
+
 // TestRaftHeartbeats verifies that coalesced heartbeats are correctly
 // suppressing elections in an idle cluster.
 func TestRaftHeartbeats(t *testing.T) {
