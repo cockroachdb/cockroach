@@ -286,6 +286,9 @@ type Replica struct {
 		// of the raft log. This will be correct when all log entries predating this
 		// process have been truncated.
 		raftLogSize int64
+		// raftLogLastCheckSize is the value of raftLogSize the last time the Raft
+		// log was checked for truncation.
+		raftLogLastCheckSize int64
 		// pendingLeaseRequest is used to coalesce RequestLease requests.
 		pendingLeaseRequest pendingLeaseRequest
 		// minLeaseProposedTS is the minimum acceptable lease.ProposedTS; only
