@@ -254,6 +254,19 @@ func (r *Replica) GetLease() (roachpb.Lease, *roachpb.Lease) {
 	return r.getLease()
 }
 
+// SetQuotaPool allows the caller to set a replica's quota pool initialized to
+// a given quota. Only safe to call on the leader replica.
+func (r *Replica) SetQuotaPool(quota int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
+	if r.mu.proposalQuota != nil {
+		r.mu.proposalQuota.close()
+	}
+	r.mu.proposalQuota = newQuotaPool(quota)
+}
+
 // GetTimestampCacheLowWater returns the timestamp cache low water mark.
 func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	r.store.tsCacheMu.Lock()
