@@ -83,6 +83,10 @@ const (
 	mergeTxnName         = "merge"
 
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
+
+	// TODO(peter): This setting needs additional thought. Should it be adjusted
+	// dynamically?
+	defaultProposalQuota = 1000
 )
 
 // This flag controls whether Transaction entries are automatically gc'ed
@@ -378,6 +382,9 @@ type Replica struct {
 		submitProposalFn func(*ProposalData) error
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]replicaChecksum
+
+		proposalQuota          *quotaPool
+		proposalQuotaBaseIndex uint64
 
 		// Counts calls to Replica.tick()
 		ticks int
@@ -785,6 +792,122 @@ func (r *Replica) setEstimatedCommitIndexLocked(commit uint64) {
 	// arriving out of order.
 	if r.mu.estimatedCommitIndex < commit {
 		r.mu.estimatedCommitIndex = commit
+	}
+}
+
+// maybeAcquireProposalQuota returns a callback to undo the
+// acquisition if appropriate, see tryExecuteWriteBatch where we use the
+// callback to return the acquired during error conditions
+func (r *Replica) maybeAcquireProposalQuota(ctx context.Context) (func(), error) {
+	r.mu.RLock()
+	quotaPool := r.mu.proposalQuota
+	r.mu.RUnlock()
+
+	// Quota acquisition only takes place on the leader replica,
+	// r.mu.proposalQuota is set to nil if a node is a follower (see
+	// updateProposalQuotaRaftMuLocked).
+	//
+	// NB: For the very first time we acquire quota (think the first write
+	// through the system), r.mu.proposalQuota can still be nil despite the
+	// replica being the leader. This will occur when the replica goes through
+	// this codepath prior to handleRaftReadyRaftMuLocked ->
+	// updateProposalQuotaRaftMuLocked where the quota pool is first initialized. We
+	// let the first write
+	// proceed despite not having any quota to acquire from.
+	if quotaPool == nil {
+		return func() {}, nil
+	}
+
+	return func() { quotaPool.add(1) }, quotaPool.acquire(ctx)
+}
+
+func (r *Replica) updateProposalQuotaRaftMuLocked(
+	ctx context.Context, newLeaderID roachpb.ReplicaID,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.mu.leaderID != newLeaderID {
+		if r.mu.replicaID == newLeaderID {
+			// We're becoming the leader.
+			r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
+
+			// Raft may propose commands itself (specifically the empty
+			// commands when leadership changes), and these commands don't go
+			// through the code paths where we acquire quota from the pool. To
+			// offset this we reset the quota pool whenever leadership changes
+			// hands.
+			if r.mu.proposalQuota != nil {
+				log.Fatal(ctx, "proposalQuota was not nil before becoming the leader")
+			}
+			r.mu.proposalQuota = newQuotaPool(defaultProposalQuota)
+		} else if r.mu.proposalQuota != nil {
+			// We're either becoming a follower or simply observing a
+			// leadership change.
+			r.mu.proposalQuota.close()
+			r.mu.proposalQuota = nil
+		}
+		return
+	} else if r.mu.proposalQuota == nil {
+		if r.mu.replicaID != newLeaderID {
+			// We're a follower.
+			return
+		}
+
+		// We're an uninitialized leader.
+		r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
+
+		// Raft may propose commands itself (specifically the empty
+		// commands when leadership changes), and these commands don't go
+		// through the code paths where we acquire quota from the pool. To
+		// offset this we reset the quota pool whenever leadership changes
+		// hands.
+		r.mu.proposalQuota = newQuotaPool(defaultProposalQuota)
+	}
+	// We're still the leader.
+
+	// TODO(peter): Can we avoid retrieving the Raft status on every invocation
+	// in order to avoid the associated allocation? Tracking the progress
+	// ourselves via looking at MsgAppResp messages would be overkill. Perhaps
+	// another accessor on RawNode.
+	status := r.raftStatusRLocked()
+	// Find the minimum index that active followers have acknowledged.
+	minIndex := status.Commit
+
+	for _, rep := range r.mu.state.Desc.Replicas {
+		// Only consider followers that have "healthy" RPC connections. We
+		// don't use node liveness here as doing so could lead to deadlock
+		// unless we avoided enforcing proposal quota for node liveness ranges.
+		if r.store.cfg.Transport.resolver != nil {
+			addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
+			if err != nil {
+				continue
+			}
+			if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
+				continue
+			}
+		}
+		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; ok {
+			// Only consider followers who are in advance of the quota base
+			// index. This prevents a follower from coming back online and
+			// preventing throughput to the range until it has caught up.
+			if progress.Match < r.mu.proposalQuotaBaseIndex {
+				continue
+			}
+			if progress.Match > 0 && progress.Match < minIndex {
+				minIndex = progress.Match
+			}
+		}
+	}
+
+	if r.mu.proposalQuotaBaseIndex < minIndex {
+		// We've persisted minIndex - r.mu.proposalQuotaBaseIndex entries to
+		// the raft log on all replicas with "healthy" RPC connections since
+		// last we checked, the difference can be released back to the quota
+		// pool.
+		delta := int64(minIndex - r.mu.proposalQuotaBaseIndex)
+		r.mu.proposalQuotaBaseIndex = minIndex
+		r.mu.proposalQuota.add(delta)
 	}
 }
 
@@ -2227,6 +2350,18 @@ func (r *Replica) tryExecuteWriteBatch(
 
 	log.Event(ctx, "raft")
 
+	returnQuota, err := r.maybeAcquireProposalQuota(ctx)
+	if err != nil {
+		return nil, roachpb.NewError(err), proposalNoRetry
+	}
+	defer func() {
+		// If Replica.propose fails after acquiring quota, we return it back to
+		// the quota pool.
+		if pErr != nil {
+			returnQuota()
+		}
+	}()
+
 	ch, tryAbandon, err := r.propose(ctx, lease, ba, endCmds, spans)
 	if err != nil {
 		return nil, roachpb.NewError(err), proposalNoRetry
@@ -2506,7 +2641,7 @@ func (r *Replica) propose(
 
 	if proposal.command.Size() > int(maxCommandSize.Get()) {
 		// Once a command is written to the raft log, it must be loaded
-		// into memory and repliayed on all replicas. If a command is
+		// into memory and replayed on all replicas. If a command is
 		// too big, stop it here.
 		return nil, nil, errors.Errorf("command is too large: %d bytes (max: %d)",
 			proposal.command.Size(), maxCommandSize.Get())
@@ -2536,7 +2671,7 @@ func (r *Replica) propose(
 	// Must not use `proposal` in the closure below as a proposal which is not
 	// present in r.mu.proposals is no longer protected by the mutex. Abandoning
 	// a command only abandons the associated context. As soon as we propose a
-	// command to Raft ownership passes to the "below Raft" machinery. In
+	// command to Raft, ownership passes to the "below Raft" machinery. In
 	// particular, endCmds will be invoked when the command is applied. There are
 	// a handful of cases where the command may not be applied (or even
 	// processed): the process crashes or the local replica is removed from the
@@ -2711,6 +2846,30 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
+
+	// We defer the check to Replica.updateProposalQuotaRaftMuLocked because we need
+	// to check it in both cases, if hasReady is false and otherwise.
+	// If hasReady == false:
+	//     Consider the case when our quota is of size 1 and two out of three
+	//     replicas have committed one log entry while the third is lagging
+	//     behind. When the third replica finally does catch up and sends
+	//     along a MsgAppResp, since the entry is already committed on the
+	//     leader replica, no Ready is emitted. But given that the third
+	//     replica has caught up, we can release
+	//     some quota back to the pool.
+	// Otherwise:
+	//     Consider the case where there are two replicas and we have a quota
+	//     of size 1. We acquire the quota when the write gets proposed on the
+	//     leader and expect it to be released when the follower commits it
+	//     locally. In order to do so we need to have the entry 'come out of
+	//     raft' and in the case of a two node raft group, this only happens if
+	//     hasReady == true.
+	//     If we don't release quota back at the end of
+	//     handleRaftReadyRaftMuLocked, the next write will get blocked.
+	defer func() {
+		r.updateProposalQuotaRaftMuLocked(ctx, leaderID)
+	}()
+
 	err := r.withRaftGroupLocked(false, func(raftGroup *raft.RawNode) (bool, error) {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
