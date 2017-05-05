@@ -365,7 +365,7 @@ func (s *renderNode) initTargets(
 		}
 
 		s.isStar = s.isStar || hasStar
-		_ = s.addOrMergeRenders(cols, exprs, false)
+		_ = s.addOrReuseRenders(cols, exprs, false)
 	}
 	// `groupBy` or `orderBy` may internally add additional columns which we
 	// do not want to include in validation of e.g. `GROUP BY 2`. We record the
