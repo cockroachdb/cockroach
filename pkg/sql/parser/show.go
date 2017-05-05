@@ -39,6 +39,17 @@ func (node *Show) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
+// ShowBackup represents a SHOW BACKUP statement.
+type ShowBackup struct {
+	Path Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowBackup) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW BACKUP ")
+	FormatNode(buf, f, node.Path)
+}
+
 // ShowColumns represents a SHOW COLUMNS statement.
 type ShowColumns struct {
 	Table NormalizableTableName
