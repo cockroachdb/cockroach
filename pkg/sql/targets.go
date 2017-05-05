@@ -102,7 +102,7 @@ func (s *renderNode) isRenderEquivalent(exprStr string, j int) bool {
 func (s *renderNode) addOrReuseRender(
 	col sqlbase.ResultColumn, expr parser.TypedExpr, reuseExistingRender bool,
 ) (colIdx int) {
-	if reuseExistingRender {
+	if reuseExistingRender && len(s.render) > 0 {
 		// Now, try to find an equivalent render. We use the syntax
 		// representation as approximation of equivalence.  At this
 		// point the expressions must have underwent name resolution
