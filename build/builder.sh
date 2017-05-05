@@ -2,17 +2,8 @@
 
 set -euo pipefail
 
-image="cockroachdb/builder"
-
-# Grab the builder tag from the acceptance tests. We're looking for a
-# variable named builderTag, splitting the line on double quotes (")
-# and taking the second component.
-version=$(awk -F\" '/builderTag *=/ {print $2}' \
-            "$(dirname "${0}")"/../pkg/acceptance/cluster/localcluster.go)
-if [ -z "${version}" ]; then
-  echo "unable to determine builder tag"
-  exit 1
-fi
+image=cockroachdb/builder
+version=20170422-212842
 
 function init() {
   docker build --tag="${image}" "$(dirname "${0}")"
@@ -30,7 +21,7 @@ fi
 
 if [ "${1-}" = "push" ]; then
   init
-  tag="$(date +%Y%m%d-%H%M%S)"
+  tag=$(date +%Y%m%d-%H%M%S)
   docker tag "${image}" "${image}:${tag}"
   docker push "${image}:${tag}"
   exit 0
@@ -41,15 +32,15 @@ if [ "${1-}" = "version" ]; then
   exit 0
 fi
 
-gopath0="${GOPATH%%:*}"
+gopath0=${GOPATH%%:*}
 gocache=${GOCACHEPATH-$gopath0}
 
 if [ -t 0 ]; then
-  tty="--tty"
+  tty=--tty
 fi
 
 # Absolute path to the toplevel cockroach directory.
-cockroach_toplevel="$(dirname "$(cd "$(dirname "${0}")"; pwd)")"
+cockroach_toplevel=$(dirname "$(cd "$(dirname "${0}")"; pwd)")
 
 # Ensure the artifact sub-directory always exists and redirect
 # temporary file creation to it, so that CI always picks up temp files
@@ -65,11 +56,11 @@ export TMPDIR=$cockroach_toplevel/artifacts
 # container because the container needs a $HOME (without one the default is /)
 # and because various utilities (e.g. bash writing to .bash_history) need to be
 # able to write to there.
-container_home="/root"
-host_home="${cockroach_toplevel}/build/builder_home"
-passwd_file="${host_home}/passwd"
+container_home=/root
+host_home=${cockroach_toplevel}/build/builder_home
+passwd_file=${host_home}/passwd
 username=$(id -un)
-uid_gid="$(id -u):$(id -g)"
+uid_gid=$(id -u):$(id -g)
 mkdir -p "${host_home}"
 echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 
@@ -112,7 +103,7 @@ mkdir -p "${host_home}"/.yarn-cache
 # mounting, but that would deny write access to the invoking user since docker
 # runs as root.
 
-vols=""
+vols=
 # It would be cool to interact with Docker from inside the builder, but the
 # socket is owned by root, and our unpriviledged user can't access it. If we
 # could make this work, we could run our acceptance tests from inside the
@@ -128,13 +119,13 @@ vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
 
 # If we're running in an environment that's using git alternates, like TeamCity,
 # we must mount the path to the real git objects for git to work in the container.
-alternates_file="${cockroach_toplevel}/.git/objects/info/alternates"
+alternates_file=${cockroach_toplevel}/.git/objects/info/alternates
 if test -e "${alternates_file}"; then
   alternates_path=$(cat "${alternates_file}")
   vols="${vols} --volume=${alternates_path}:${alternates_path}"
 fi
 
-backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
+backtrace_dir=${cockroach_toplevel}/../../cockroachlabs/backtrace
 if test -d "${backtrace_dir}"; then
   vols="${vols} --volume=${backtrace_dir}:/opt/backtrace"
   vols="${vols} --volume=${backtrace_dir}/cockroach.cf:${container_home}/.coroner.cf"
