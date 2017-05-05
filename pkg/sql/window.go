@@ -184,7 +184,7 @@ func (n *windowNode) constructWindowDefinitions(
 			if err != nil {
 				return err
 			}
-			windowFn.partitionIdxs = s.addOrMergeRenders(cols, exprs, true)
+			windowFn.partitionIdxs = s.addOrReuseRenders(cols, exprs, true)
 		}
 
 		// Validate ORDER BY clause.
@@ -201,7 +201,7 @@ func (n *windowNode) constructWindowDefinitions(
 				direction = encoding.Descending
 			}
 
-			colIdxs := s.addOrMergeRenders(cols, exprs, true)
+			colIdxs := s.addOrReuseRenders(cols, exprs, true)
 			for _, idx := range colIdxs {
 				ordering := sqlbase.ColumnOrderInfo{
 					ColIdx:    idx,
@@ -354,7 +354,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 				// We add a new render to the source renderNode for each new IndexedVar we
 				// see. We also register this mapping in the idxMap.
 				col := sqlbase.ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
-				colIdx := s.addOrMergeRender(col, t, true)
+				colIdx := s.addOrReuseRender(col, t, true)
 				n.colContainer.idxMap[t.Idx] = colIdx
 				return nil, false, ivarHelper.IndexedVar(t.Idx)
 			case *parser.FuncExpr:
@@ -365,7 +365,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 					// We add a new render to the source renderNode for each new aggregate
 					// function we see.
 					col := sqlbase.ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
-					colIdx := s.addOrMergeRender(col, t, true)
+					colIdx := s.addOrReuseRender(col, t, true)
 
 					if iVar, ok := aggIVars[colIdx]; ok {
 						// If we have already created an IndexedVar for this aggregate

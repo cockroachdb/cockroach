@@ -185,22 +185,25 @@ func (p *planner) groupBy(
 
 	// Replace the render expressions in the scanNode with expressions that
 	// compute only the arguments to the aggregate expressions.
-	newRenders := make([]parser.TypedExpr, len(group.funcs))
-	newColumns := make(sqlbase.ResultColumns, len(group.funcs))
+	s.resetRenderColumns(
+		make([]parser.TypedExpr, 0, len(group.funcs)),
+		make(sqlbase.ResultColumns, 0, len(group.funcs)),
+	)
+
+	group.funcArgIdx = make([]int, len(group.funcs))
 	for i, f := range group.funcs {
 		// Note: we do not need to normalize the expressions again because
 		// they were normalized by renderNode's initFrom() before we
 		// extracted aggregation functions above.
-		newRenders[i] = f.arg
-		newColumns[i] = sqlbase.ResultColumn{
-			Name: f.arg.String(),
-			Typ:  f.arg.ResolvedType(),
-		}
+		group.funcArgIdx[i] = s.addOrReuseRender(
+			sqlbase.ResultColumn{
+				Name: f.arg.String(),
+				Typ:  f.arg.ResolvedType(),
+			},
+			f.arg,
+			true, /* reuse*/
+		)
 	}
-	// TODO(radu): we should not add duplicate renders; add a mapping between
-	// group.funcs and s.renders (instead of requiring 1-to-1 correspondence) and
-	// use addOrMergeRender
-	s.resetRenderColumns(newRenders, newColumns)
 
 	// Add the group-by expressions so they are available for bucketing.
 	group.groupByIdx = make([]int, 0, len(groupByExprs))
@@ -212,7 +215,7 @@ func (p *planner) groupBy(
 			return nil, err
 		}
 		s.isStar = s.isStar || hasStar
-		colIdxs := s.addOrMergeRenders(cols, exprs, true /* reuseExistingRender */)
+		colIdxs := s.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
 		group.groupByIdx = append(group.groupByIdx, colIdxs...)
 	}
 
@@ -238,7 +241,7 @@ func (p *planner) groupBy(
 		if hasStar {
 			panic("star found in filter; this should not have passed type checking")
 		}
-		colIdxs := s.addOrMergeRenders(cols, exprs, true /* reuseExistingRender */)
+		colIdxs := s.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
 		if len(colIdxs) != 1 {
 			panic("multiple columns rendered for filter")
 		}
@@ -266,6 +269,8 @@ type groupNode struct {
 
 	// funcs are the aggregation functions that the renders use.
 	funcs []*aggregateFuncHolder
+	// Indices (in the wrapped plan's columns) for the funcs.
+	funcArgIdx []int
 	// Indices (in the wrapped plan's columns) for the group by columns.
 	groupByIdx []int
 	// Map of index of aggregation function (from funcs) to the render for the
@@ -364,7 +369,6 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 		// Add row to bucket.
 
 		values := n.plan.Values()
-		valuesToAccumulate := values[:len(n.funcs)]
 
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
@@ -380,15 +384,16 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 		n.buckets[string(bucket)] = struct{}{}
 
 		// Feed the aggregateFuncHolders for this bucket the non-grouped values.
-		for i, value := range valuesToAccumulate {
+		for i := range n.funcs {
 			var filterVal parser.Datum = parser.DBoolTrue
-			if renderIdx, ok := n.filterToRenderIdxs[i]; ok {
-				filterVal = values[renderIdx]
+			if filterRenderIdx, ok := n.filterToRenderIdxs[i]; ok {
+				filterVal = values[filterRenderIdx]
 			}
 			if filterVal != parser.DBoolTrue {
 				continue
 			}
 
+			value := values[n.funcArgIdx[i]]
 			if err := n.funcs[i].add(ctx, n.planner.session, bucket, value); err != nil {
 				return false, err
 			}
