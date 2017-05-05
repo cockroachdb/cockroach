@@ -137,6 +137,7 @@ stored in [RocksDB][0].
 
 A single logical mutation may affect multiple key/value pairs. Logical
 mutations have ACID transactional semantics. If all keys affected by a
+
 logical mutation fall within the same range, atomicity and consistency
 are guaranteed by [Raft][2]; this is the fast commit path. Otherwise, a
 non-locking distributed commit protocol is employed between affected
