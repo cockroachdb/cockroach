@@ -526,8 +526,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Leaseholders per Store"
-                    tooltip={`The number of replicas on each store.`}>
+          <LineGraph title="Lease Holders per Store"
+                    tooltip={`The number of lease holders on each store.`}>
             <Axis>
               {
                 _.map(nodeIDs, (nid) =>
