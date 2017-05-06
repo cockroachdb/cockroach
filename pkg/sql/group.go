@@ -245,7 +245,7 @@ func (p *planner) groupBy(
 		group.filterToRenderIdxs[i] = colIdxs[0]
 	}
 
-	group.desiredOrdering = desiredAggregateOrdering(group.funcs, &p.evalCtx)
+	group.desiredOrdering = group.desiredAggregateOrdering()
 	return group, nil
 }
 
@@ -456,13 +456,20 @@ func (n *groupNode) Close(ctx context.Context) {
 	n.buckets = nil
 }
 
+// requiresIsNotNullFilter returns whether a "col IS NOT NULL" constraint must
+// be added. This is the case when we have a single MIN/MAX aggregation
+// function.
+func (n *groupNode) requiresIsNotNullFilter() bool {
+	return len(n.desiredOrdering) == 1
+}
+
 // isNotNullFilter adds as a "col IS NOT NULL" constraint to the expression if
 // the groupNode has a desired ordering on col (see
 // desiredAggregateOrdering). A desired ordering will only be present if there
 // is a single MIN/MAX aggregation function.
 func (n *groupNode) isNotNullFilter(expr parser.TypedExpr) parser.TypedExpr {
-	if len(n.desiredOrdering) != 1 {
-		return expr
+	if !n.requiresIsNotNullFilter() {
+		panic("IS NOT NULL filter not required")
 	}
 	i := n.desiredOrdering[0].ColIdx
 	f := n.funcs[i]
@@ -481,40 +488,35 @@ func (n *groupNode) isNotNullFilter(expr parser.TypedExpr) parser.TypedExpr {
 }
 
 // desiredAggregateOrdering computes the desired output ordering from the
-// scan. It looks for an output column index containing a simple MIN/MAX
-// aggregation. If zero or multiple MIN/MAX aggregations are requested then no
-// ordering will be requested. A negative index indicates a MAX aggregation was
-// requested for the output column.
-func desiredAggregateOrdering(
-	funcs []*aggregateFuncHolder, evalCtx *parser.EvalContext,
-) sqlbase.ColumnOrdering {
-	limit := -1
-	direction := encoding.Ascending
-	for i, f := range funcs {
-		impl := f.create(evalCtx)
-		switch impl.(type) {
-		case *parser.MaxAggregate, *parser.MinAggregate:
-			if limit != -1 || f.arg == nil {
-				return nil
-			}
-			switch f.arg.(type) {
-			case *parser.IndexedVar:
-				limit = i
-				if _, ok := impl.(*parser.MaxAggregate); ok {
-					direction = encoding.Descending
-				}
-			default:
-				return nil
-			}
-
-		default:
-			return nil
-		}
-	}
-	if limit == -1 {
+// scan.
+//
+// We only have a desired ordering if we have a single MIN or MAX aggregation
+// with a simple column argument and there is no GROUP BY.
+func (n *groupNode) desiredAggregateOrdering() sqlbase.ColumnOrdering {
+	if len(n.groupByIdx) > 0 {
 		return nil
 	}
-	return sqlbase.ColumnOrdering{{ColIdx: limit, Direction: direction}}
+
+	if len(n.funcs) != 1 {
+		return nil
+	}
+	f := n.funcs[0]
+	impl := f.create(&n.planner.evalCtx)
+	switch impl.(type) {
+	case *parser.MaxAggregate, *parser.MinAggregate:
+		if f.arg == nil {
+			return nil
+		}
+		direction := encoding.Ascending
+		switch f.arg.(type) {
+		case *parser.IndexedVar:
+			if _, ok := impl.(*parser.MaxAggregate); ok {
+				direction = encoding.Descending
+			}
+			return sqlbase.ColumnOrdering{{ColIdx: 0, Direction: direction}}
+		}
+	}
+	return nil
 }
 
 type extractAggregatesVisitor struct {

@@ -521,14 +521,14 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 ----
 0  group
-0                 aggregate 0  min(a)
-0                 render 0     min(a)
+0          aggregate 0  min(a)
+0          render 0     min(a)
 1  render
-1                 render 0     a
+1          render 0     a
 2  scan
-2                 table        abc@primary
-2                 spans        ALL
-2                 limit        1
+2          table        abc@primary
+2          spans        /#-
+2          limit        1
 
 query TRBR
 SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
@@ -602,14 +602,14 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz
 ----
 0  group
-0                 aggregate 0  min(x)
-0                 render 0     min(x)
+0          aggregate 0  min(x)
+0          render 0     min(x)
 1  render
-1                 render 0     x
+1          render 0     x
 2  scan
-2                 table        xyz@xy
-2                 spans        ALL
-2                 limit        1
+2          table        xyz@xy
+2          spans        /#-
+2          limit        1
 
 query I
 SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
@@ -638,14 +638,14 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz
 ----
 0  group
-0                 aggregate 0  max(x)
-0                 render 0     max(x)
+0           aggregate 0  max(x)
+0           render 0     max(x)
 1  render
-1                 render 0     x
+1           render 0     x
 2  revscan
-2                 table        xyz@xy
-2                 spans        ALL
-2                 limit        1
+2           table        xyz@xy
+2           spans        /#-
+2           limit        1
 
 query I
 SELECT MIN(y) FROM xyz WHERE x = 1
@@ -907,14 +907,14 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 ----
 0  group
-0                 aggregate 0  min(a)
-0                 render 0     min(a)
+0          aggregate 0  min(a)
+0          render 0     min(a)
 1  render
-1                 render 0     a
+1          render 0     a
 2  scan
-2                 table        abc@primary
-2                 spans        ALL
-2                 limit        1
+2          table        abc@primary
+2          spans        /#-
+2          limit        1
 
 # Verify we only buffer one row.
 query ITTT
@@ -928,14 +928,14 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
 ----
 0  group
-0                 aggregate 0  max(a)
-0                 render 0     max(a)
+0           aggregate 0  max(a)
+0           render 0     max(a)
 1  render
-1                 render 0     a
+1           render 0     a
 2  revscan
-2                 table        abc@primary
-2                 spans        ALL
-2                 limit        1
+2           table        abc@primary
+2           spans        /#-
+2           limit        1
 
 # Verify we only buffer one row.
 query ITTT
@@ -1131,8 +1131,7 @@ CREATE TABLE opt_test (k INT PRIMARY KEY, v INT, INDEX v(v))
 statement ok
 INSERT INTO opt_test VALUES (1, NULL), (2, 10), (3, NULL), (4, 5)
 
-# Verify that we correctly add the v IS NOT NULL constraint.
-# TODO(#15725): this is an incorrect result
+# Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
 ----
@@ -1143,15 +1142,14 @@ EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
 1          render 0     test.opt_test.v
 2  scan                                       (k[omitted], v)  +v
 2          table        opt_test@v
-2          spans        ALL
+2          spans        /#-
 2          limit        1
 
-# WWithout the v IS NOT NULL constraint, this result would incorrectly be NULL.
-# TODO(#15725): this is an incorrect result
+# Without the "v IS NOT NULL" constraint, this result would incorrectly be NULL.
 query I
 SELECT MIN(v) FROM opt_test
 ----
-NULL
+5
 
 # Cross-check against a query without this optimization.
 query I
@@ -1179,30 +1177,32 @@ SELECT MIN(v) FROM opt_test WHERE k <> 4
 10
 
 # Verify that we don't use the optimization if there is a GROUP BY.
-# TODO(#15725): this is an incorrect result
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
 ----
 0  group                                      ("min(v)")
 0          aggregate 0  min(test.opt_test.v)
 0          render 0     min(test.opt_test.v)
-1  render                                     (v, k)      +v
+1  render                                     (v, k)
 1          render 0     test.opt_test.v
 1          render 1     test.opt_test.k
-2  scan                                       (k, v)      +v
-2          table        opt_test@v
+2  scan                                       (k, v)
+2          table        opt_test@primary
 2          spans        ALL
-2          limit        1
 
 
-# TODO(#15725): this is an incorrect result
 query I rowsort
 SELECT MIN(v) FROM opt_test GROUP BY k
 ----
 NULL
+NULL
+5
+10
 
-# TODO(#15725): this is an incorrect result
 query I rowsort
 SELECT MAX(v) FROM opt_test GROUP BY k
 ----
+NULL
+NULL
+5
 10
