@@ -118,4 +118,3 @@ query I
 SELECT COUNT(DISTINCT(1)) FROM pg_tables
 ----
 1
-
