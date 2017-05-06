@@ -196,25 +196,45 @@ var (
 
 	// Input selection
 	logictestdata = flag.String("d", "testdata/logic_test/[^.]*", "test data glob")
-	bigtest       = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
-
-	defaultConfig = flag.String("config", "default",
-		"customizes the default test cluster configuration for files that lack LogicTest directives")
+	bigtest       = flag.Bool(
+		"bigtest", false, "use the big set of logic test files (overrides testdata)",
+	)
+	defaultConfig = flag.String(
+		"config", "default",
+		"customizes the default test cluster configuration for files that lack LogicTest directives",
+	)
 
 	// Testing mode
-	maxErrs = flag.Int("max-errors", 1,
-		"stop processing input files after this number of errors (set to 0 for no limit)")
-	allowPrepareFail = flag.Bool("allow-prepare-fail", false, "tolerate unexpected errors when preparing a query")
-	flexTypes        = flag.Bool("flex-types", false,
-		"do not fail when a test expects a column of a numeric type but the query provides another type")
+	maxErrs = flag.Int(
+		"max-errors", 1,
+		"stop processing input files after this number of errors (set to 0 for no limit)",
+	)
+	allowPrepareFail = flag.Bool(
+		"allow-prepare-fail", false, "tolerate unexpected errors when preparing a query",
+	)
+	flexTypes = flag.Bool(
+		"flex-types", false,
+		"do not fail when a test expects a column of a numeric type but the query provides another type",
+	)
 
 	// Output parameters
 	showSQL = flag.Bool("show-sql", false,
-		"print the individual SQL statement/queries before processing")
+		"print the individual SQL statement/queries before processing",
+	)
 	printErrorSummary = flag.Bool("error-summary", false,
-		"print a per-error summary of failing queries at the end of testing, when -allow-prepare-fail is set")
+		"print a per-error summary of failing queries at the end of testing, "+
+			"when -allow-prepare-fail is set",
+	)
 	fullMessages = flag.Bool("full-messages", false,
-		"do not shorten the error or SQL strings when printing the summary for -allow-prepare-fail or -flex-types.")
+		"do not shorten the error or SQL strings when printing the summary for -allow-prepare-fail "+
+			"or -flex-types.",
+	)
+	generateTestfiles = flag.Bool(
+		"generate-testfiles", false,
+		"ignore the expected results and rewrite the test files with the actual results from this "+
+			"run. Used to update tests when a change affects many cases; please verify the testfile "+
+			"diffs carefully!",
+	)
 )
 
 type testClusterConfig struct {
@@ -525,6 +545,16 @@ type logicTest struct {
 	// been marked using a result label in the input. See the
 	// explanation for labels in processInputFiles().
 	labelMap map[string]string
+
+	generateTestBuf bytes.Buffer
+}
+
+// emit is used for the --generate-testfiles mode; it emits a line of testfile.
+func (t *logicTest) emit(line string) {
+	if *generateTestfiles {
+		t.generateTestBuf.WriteString(line)
+		t.generateTestBuf.WriteString("\n")
+	}
 }
 
 func (t *logicTest) close() {
@@ -737,8 +767,9 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 			t.Fatalf("%s:%d: too many errors encountered, skipping the rest of the input",
 				path, s.line)
 		}
-
-		fields := strings.Fields(s.Text())
+		line := s.Text()
+		t.emit(line)
+		fields := strings.Fields(line)
 		if len(fields) == 0 {
 			continue
 		}
@@ -789,6 +820,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 			var buf bytes.Buffer
 			for s.Scan() {
 				line := s.Text()
+				t.emit(line)
 				if line == "" {
 					break
 				}
@@ -906,6 +938,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 			separator := false
 			for s.Scan() {
 				line := s.Text()
+				t.emit(line)
 				if line == "----" {
 					separator = true
 					if query.expectErr != "" {
@@ -1043,7 +1076,28 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		}
 	}
 
-	return s.Err()
+	if err := s.Err(); err != nil {
+		return err
+	}
+
+	if *generateTestfiles && !t.t.Failed() {
+		// Rewrite the test file.
+		file.Close()
+		file, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		// Remove any trailing blank line.
+		data := t.generateTestBuf.String()
+		if l := len(data); l > 2 && data[l-1] == '\n' && data[l-2] == '\n' {
+			data = data[:l-1]
+		}
+
+		fmt.Fprint(file, data)
+	}
+
+	return nil
 }
 
 // verifyError checks that either no error was found where none was
@@ -1269,6 +1323,65 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			return fmt.Errorf("%s: expected %s, but found %s", query.pos, query.expectedHash, hash)
 		}
 	}
+
+	if *generateTestfiles {
+		if query.expectedHash != "" {
+			if query.expectedValues == 1 {
+				t.emit(fmt.Sprintf("1 value hashing to %s", query.expectedHash))
+			} else {
+				t.emit(fmt.Sprintf("%d values hashing to %s", query.expectedValues, query.expectedHash))
+			}
+		}
+
+		if query.checkResults {
+			// If the results match, emit them the way they were originally
+			// formatted/ordered in the testfile. Otherwise, emit the actual results.
+			if reflect.DeepEqual(query.expectedResults, results) {
+				for _, l := range query.expectedResultsRaw {
+					t.emit(l)
+				}
+			} else {
+				// Emit the actual results.
+
+				// Calculate the length of each column so we can nicely align things.
+				var colLengths []int
+				for _, resultLine := range resultLines {
+					for c, value := range resultLine {
+						l := len(value)
+						if len(colLengths) == c {
+							colLengths = append(colLengths, l)
+						} else if colLengths[c] < l {
+							colLengths[c] = l
+						}
+					}
+				}
+
+				for _, resultLine := range resultLines {
+					var line bytes.Buffer
+					for c, value := range resultLine {
+						line.WriteString(value)
+						// Pad for alignment, unless there is nothing left to print out.
+						align := false
+						for i := c + 1; i < len(resultLine); i++ {
+							if resultLine[i] != "" {
+								align = true
+								break
+							}
+						}
+						if align {
+							for i := len(value); i < colLengths[c]+2; i++ {
+								line.WriteByte(' ')
+							}
+						}
+					}
+					t.emit(line.String())
+				}
+				t.emit("")
+			}
+		}
+		return nil
+	}
+
 	if query.checkResults && !reflect.DeepEqual(query.expectedResults, results) {
 		var buf bytes.Buffer
 		tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
@@ -1439,9 +1552,9 @@ func TestLogic(t *testing.T) {
 				path := path // Rebind range variable.
 				// Inner test: one per file path.
 				t.Run(filepath.Base(path), func(t *testing.T) {
-					if !*showSQL {
-						// If we're not printing out all of the SQL interactions, run the
-						// tests in parallel.
+					if !*showSQL && !*generateTestfiles {
+						// If we're not printing out all of the SQL interactions and we're
+						// not generating testfiles, run the tests in parallel.
 						// Skip parallelizing tests that use the kv-batch-size directive since
 						// the batch size is a global variable.
 						// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.
