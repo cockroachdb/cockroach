@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -32,9 +33,9 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		expr     string
 		ordering sqlbase.ColumnOrdering
 	}{
-		{`a`, nil},
 		{`MIN(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
 		{`MAX(a)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Descending}}},
+		{`MIN(a+1)`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
 		{`(MIN(a), MAX(a))`, nil},
 		{`(MIN(a), AVG(a))`, nil},
 		{`(MIN(a), COUNT(a))`, nil},
@@ -44,20 +45,28 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		{`(MIN(a), MIN(a))`, nil},
 		{`(MIN(a+1), MIN(a))`, nil},
 		{`(COUNT(a), MIN(a))`, nil},
-		{`(MIN(a+1))`, nil},
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {
 		sel := makeSelectNode(t)
 		expr := parseAndNormalizeExpr(t, &p.evalCtx, d.expr, sel)
 		group := &groupNode{planner: p}
-		(extractAggregatesVisitor{n: group}).extract(expr)
+		render := &renderNode{}
+		v := extractAggregatesVisitor{
+			ctx:        context.TODO(),
+			groupNode:  group,
+			renderNode: render,
+			planner:    p,
+		}
+		if _, err := v.extract(expr); err != nil {
+			t.Fatal(err)
+		}
 		ordering := group.desiredAggregateOrdering()
 		if !reflect.DeepEqual(d.ordering, ordering) {
 			t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
 		}
 		// Verify we never have a desired ordering if there is a GROUP BY.
-		group.groupByIdx = []int{0}
+		group.numGroupCols = 1
 		ordering = group.desiredAggregateOrdering()
 		if len(ordering) > 0 {
 			t.Fatalf("%s: expected no ordering when there is a GROUP BY, found %v", d.expr, ordering)

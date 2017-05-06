@@ -30,6 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// groupByStrMap maps each GROUP BY expression string to the index of the column
+// in the underlying renderNode that renders this expression.
+// For stars (GROUP BY k.*) the special value -1 is used.
+type groupByStrMap map[string]int
+
 // groupBy constructs a groupNode according to grouping functions or clauses. This may adjust the
 // render targets in the renderNode as necessary.
 func (p *planner) groupBy(
@@ -112,49 +117,50 @@ func (p *planner) groupBy(
 	}
 
 	group := &groupNode{
-		planner:            p,
-		values:             valuesNode{columns: s.columns},
-		render:             s.render,
-		filterToRenderIdxs: make(map[int]int),
+		planner: p,
+		values:  valuesNode{columns: s.columns},
+		render:  s.render,
 	}
 
+	// We replaces the columns in the underlying renderNode with what the
+	// groupNode needs as input:
+	//  - group by expressions
+	//  - arguments to the aggregate expressions
+	//  - having expressions
+	s.resetRenderColumns(nil, nil)
+
+	// Add the group-by expressions.
+
+	// groupStrs maps a GROUP BY expression string to the index of the column in
+	// the underlying renderNode.
+	groupStrs := make(groupByStrMap, len(groupByExprs))
+	for _, g := range groupByExprs {
+		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(
+			ctx, parser.SelectExpr{Expr: g}, parser.TypeAny, s.sourceInfo, s.ivarHelper,
+			autoGenerateRenderOutputName)
+		if err != nil {
+			return nil, err
+		}
+		s.isStar = s.isStar || hasStar
+		colIdxs := s.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
+		if len(colIdxs) == 1 {
+			groupStrs[symbolicExprStr(g)] = colIdxs[0]
+		} else {
+			// We use a special value to indicate a star (e.g. GROUP BY t.*).
+			groupStrs[symbolicExprStr(g)] = -1
+		}
+	}
+	group.numGroupCols = len(s.render)
+
+	// The extractAggregatesVisitor extracts arguments of aggregate functions and
+	// replaces them with aggregateFuncHolders. It also adds the appropriate
+	// renders for these arguments to the renderNode.
 	aggVisitor := extractAggregatesVisitor{
-		n:           group,
-		groupStrs:   make(map[string]struct{}, len(groupByExprs)),
-		groupedCopy: new(extractAggregatesVisitor),
-	}
-
-	checkVisitor := checkQueryVisitor{
-		groupStrs:   make(map[string]struct{}, len(groupByExprs)),
-		groupedCopy: new(checkQueryVisitor),
-	}
-
-	for _, e := range groupByExprs {
-		aggVisitor.groupStrs[e.String()] = struct{}{}
-		checkVisitor.groupStrs[e.String()] = struct{}{}
-	}
-
-	// A copy of the visitor that is used when a subtree appears in the GROUP BY.
-	// One copy is allocated up-front, rather than potentially several on-the-fly,
-	// to reduce allocations.
-	*aggVisitor.groupedCopy = aggVisitor
-	aggVisitor.groupedCopy.groupedCopy = nil
-
-	*checkVisitor.groupedCopy = checkVisitor
-	checkVisitor.groupedCopy.groupedCopy = nil
-
-	// Loop over the render expressions and check for any malformed queries.
-	for _, r := range group.render {
-		if err := checkVisitor.check(r); err != nil {
-			return nil, err
-		}
-	}
-
-	if typedHaving != nil {
-		if err := checkVisitor.check(typedHaving); err != nil {
-			return nil, err
-		}
-		group.having = typedHaving
+		ctx:        ctx,
+		planner:    p,
+		groupNode:  group,
+		renderNode: s,
+		groupStrs:  groupStrs,
 	}
 
 	// Loop over the render expressions and extract any aggregate functions --
@@ -163,11 +169,19 @@ func (p *planner) groupBy(
 	// After extraction, group.render will be entirely rendered from aggregateFuncHolders,
 	// and group.funcs will contain all the functions which need to be fed values.
 	for i, r := range group.render {
-		group.render[i] = aggVisitor.extract(r)
+		var err error
+		group.render[i], err = aggVisitor.extract(r)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if typedHaving != nil {
-		group.having = aggVisitor.extract(typedHaving)
+		var err error
+		group.having, err = aggVisitor.extract(typedHaving)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
@@ -181,71 +195,6 @@ func (p *planner) groupBy(
 			strs = append(strs, f.String())
 		}
 		log.Infof(ctx, "Group: %s", strings.Join(strs, ", "))
-	}
-
-	// Replace the render expressions in the scanNode with expressions that
-	// compute only the arguments to the aggregate expressions.
-	s.resetRenderColumns(
-		make([]parser.TypedExpr, 0, len(group.funcs)),
-		make(sqlbase.ResultColumns, 0, len(group.funcs)),
-	)
-
-	group.funcArgIdx = make([]int, len(group.funcs))
-	for i, f := range group.funcs {
-		// Note: we do not need to normalize the expressions again because
-		// they were normalized by renderNode's initFrom() before we
-		// extracted aggregation functions above.
-		group.funcArgIdx[i] = s.addOrReuseRender(
-			sqlbase.ResultColumn{
-				Name: f.arg.String(),
-				Typ:  f.arg.ResolvedType(),
-			},
-			f.arg,
-			true, /* reuse*/
-		)
-	}
-
-	// Add the group-by expressions so they are available for bucketing.
-	group.groupByIdx = make([]int, 0, len(groupByExprs))
-	for _, g := range groupByExprs {
-		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(
-			ctx, parser.SelectExpr{Expr: g}, parser.TypeAny, s.sourceInfo, s.ivarHelper,
-			autoGenerateRenderOutputName)
-		if err != nil {
-			return nil, err
-		}
-		s.isStar = s.isStar || hasStar
-		colIdxs := s.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
-		group.groupByIdx = append(group.groupByIdx, colIdxs...)
-	}
-
-	// Add the filter expressions, so they are available when deciding what rows
-	// to feed to the aggregation functions.
-	for i, f := range group.funcs {
-		if f.filter == nil {
-			continue
-		}
-
-		if err := p.parser.AssertNoAggregationOrWindowing(
-			f.filter, "FILTER", p.session.SearchPath,
-		); err != nil {
-			return nil, err
-		}
-
-		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(
-			ctx, parser.SelectExpr{Expr: f.filter}, parser.TypeAny,
-			s.sourceInfo, s.ivarHelper, autoGenerateRenderOutputName)
-		if err != nil {
-			return nil, err
-		}
-		if hasStar {
-			panic("star found in filter; this should not have passed type checking")
-		}
-		colIdxs := s.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
-		if len(colIdxs) != 1 {
-			panic("multiple columns rendered for filter")
-		}
-		group.filterToRenderIdxs[i] = colIdxs[0]
 	}
 
 	group.desiredOrdering = group.desiredAggregateOrdering()
@@ -267,16 +216,12 @@ type groupNode struct {
 	render []parser.TypedExpr
 	having parser.TypedExpr
 
+	// The group-by columns are the first numGroupCols columns of
+	// the wrapped plan.
+	numGroupCols int
+
 	// funcs are the aggregation functions that the renders use.
 	funcs []*aggregateFuncHolder
-	// Indices (in the wrapped plan's columns) for the funcs.
-	funcArgIdx []int
-	// Indices (in the wrapped plan's columns) for the group by columns.
-	groupByIdx []int
-	// Map of index of aggregation function (from funcs) to the render for the
-	// corresponding filtering expression in the wrapped plan.
-	// The map is only populated for functions that have a filter.
-	filterToRenderIdxs map[int]int
 	// The set of bucket keys.
 	buckets map[string]struct{}
 
@@ -373,7 +318,7 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
 		bucket := scratch
-		for _, idx := range n.groupByIdx {
+		for idx := 0; idx < n.numGroupCols; idx++ {
 			var err error
 			bucket, err = sqlbase.EncodeDatum(bucket, values[idx])
 			if err != nil {
@@ -384,17 +329,13 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 		n.buckets[string(bucket)] = struct{}{}
 
 		// Feed the aggregateFuncHolders for this bucket the non-grouped values.
-		for i := range n.funcs {
-			var filterVal parser.Datum = parser.DBoolTrue
-			if filterRenderIdx, ok := n.filterToRenderIdxs[i]; ok {
-				filterVal = values[filterRenderIdx]
-			}
-			if filterVal != parser.DBoolTrue {
+		for _, f := range n.funcs {
+			if f.hasFilter && values[f.filterRenderIdx] != parser.DBoolTrue {
 				continue
 			}
 
-			value := values[n.funcArgIdx[i]]
-			if err := n.funcs[i].add(ctx, n.planner.session, bucket, value); err != nil {
+			value := values[f.argRenderIdx]
+			if err := f.add(ctx, n.planner.session, bucket, value); err != nil {
 				return false, err
 			}
 		}
@@ -468,28 +409,26 @@ func (n *groupNode) requiresIsNotNullFilter() bool {
 	return len(n.desiredOrdering) == 1
 }
 
-// isNotNullFilter adds as a "col IS NOT NULL" constraint to the expression if
-// the groupNode has a desired ordering on col (see
-// desiredAggregateOrdering). A desired ordering will only be present if there
-// is a single MIN/MAX aggregation function.
-func (n *groupNode) isNotNullFilter(expr parser.TypedExpr) parser.TypedExpr {
+// isNotNullFilter adds as a "col IS NOT NULL" constraint to the filterNode
+// (which is under the renderNode).
+func (n *groupNode) addIsNotNullFilter(where *filterNode, render *renderNode) {
 	if !n.requiresIsNotNullFilter() {
 		panic("IS NOT NULL filter not required")
 	}
-	i := n.desiredOrdering[0].ColIdx
-	f := n.funcs[i]
 	isNotNull := parser.NewTypedComparisonExpr(
 		parser.IsNot,
-		f.arg,
+		where.ivarHelper.Rebind(
+			render.render[n.desiredOrdering[0].ColIdx],
+			false, // alsoReset
+			false, // normalizeToNonNil
+		),
 		parser.DNull,
 	)
-	if expr == nil {
-		return isNotNull
+	if where.filter == nil {
+		where.filter = isNotNull
+	} else {
+		where.filter = parser.NewTypedAndExpr(where.filter, isNotNull)
 	}
-	return parser.NewTypedAndExpr(
-		expr,
-		isNotNull,
-	)
 }
 
 // desiredAggregateOrdering computes the desired output ordering from the
@@ -498,7 +437,7 @@ func (n *groupNode) isNotNullFilter(expr parser.TypedExpr) parser.TypedExpr {
 // We only have a desired ordering if we have a single MIN or MAX aggregation
 // with a simple column argument and there is no GROUP BY.
 func (n *groupNode) desiredAggregateOrdering() sqlbase.ColumnOrdering {
-	if len(n.groupByIdx) > 0 {
+	if n.numGroupCols > 0 {
 		return nil
 	}
 
@@ -508,38 +447,43 @@ func (n *groupNode) desiredAggregateOrdering() sqlbase.ColumnOrdering {
 	f := n.funcs[0]
 	impl := f.create(&n.planner.evalCtx)
 	switch impl.(type) {
-	case *parser.MaxAggregate, *parser.MinAggregate:
-		if f.arg == nil {
-			return nil
-		}
-		direction := encoding.Ascending
-		switch f.arg.(type) {
-		case *parser.IndexedVar:
-			if _, ok := impl.(*parser.MaxAggregate); ok {
-				direction = encoding.Descending
-			}
-			return sqlbase.ColumnOrdering{{ColIdx: 0, Direction: direction}}
-		}
+	case *parser.MinAggregate:
+		return sqlbase.ColumnOrdering{{ColIdx: f.argRenderIdx, Direction: encoding.Ascending}}
+	case *parser.MaxAggregate:
+		return sqlbase.ColumnOrdering{{ColIdx: f.argRenderIdx, Direction: encoding.Descending}}
 	}
 	return nil
 }
 
 type extractAggregatesVisitor struct {
-	n         *groupNode
-	groupStrs map[string]struct{}
-
-	// groupedCopy is nil when visitor is in an Expr subtree that appears in the GROUP BY clause.
-	groupedCopy *extractAggregatesVisitor
+	ctx        context.Context
+	planner    *planner
+	groupNode  *groupNode
+	renderNode *renderNode
+	groupStrs  groupByStrMap
+	err        error
 }
 
 var _ parser.Visitor = &extractAggregatesVisitor{}
 
 func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	// This expression is in the GROUP BY - switch to the visitor that will accept
-	// IndexedVars for this and any subtrees.
-	if _, ok := v.groupStrs[expr.String()]; ok && v.groupedCopy != nil && v != v.groupedCopy {
-		expr, _ = parser.WalkExpr(v.groupedCopy, expr)
+	if v.err != nil {
 		return false, expr
+	}
+
+	if groupIdx, ok := v.groupStrs[symbolicExprStr(expr)]; ok {
+		// This expression is in the GROUP BY; it is already being rendered by the
+		// renderNode.
+		if groupIdx == -1 {
+			// We use this special value to indicate a star group by. This cannot be
+			// part of a valid expression
+			panic(fmt.Sprintf("star render in expression %s", expr))
+		}
+		f := v.groupNode.newAggregateFuncHolder(
+			v.renderNode.render[groupIdx], groupIdx, parser.NewIdentAggregate,
+		)
+		v.groupNode.funcs = append(v.groupNode.funcs, f)
+		return false, f
 	}
 
 	switch t := expr.(type) {
@@ -553,26 +497,66 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				// panicked there.
 				panic("query checker did not detect multiple arguments for aggregator")
 			}
-			argExpr := t.Exprs[0]
+			argExpr := t.Exprs[0].(parser.TypedExpr)
 
-			var filterExpr parser.TypedExpr
-			if t.Filter != nil {
-				filterExpr = t.Filter.(parser.TypedExpr)
+			if err := v.planner.parser.AssertNoAggregationOrWindowing(
+				argExpr,
+				fmt.Sprintf("the argument of %s()", t.Func),
+				v.planner.session.SearchPath,
+			); err != nil {
+				v.err = err
+				return false, expr
 			}
-			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), filterExpr, agg)
+
+			// Add a render for the argument.
+			col := sqlbase.ResultColumn{
+				Name: argExpr.String(),
+				Typ:  argExpr.ResolvedType(),
+			}
+
+			argRenderIdx := v.renderNode.addOrReuseRender(col, argExpr, true /* reuse */)
+
+			f := v.groupNode.newAggregateFuncHolder(t, argRenderIdx, agg)
 			if t.Type == parser.DistinctFuncType {
-				f.seen = make(map[string]struct{})
+				f.setDistinct()
 			}
-			v.n.funcs = append(v.n.funcs, f)
+
+			if t.Filter != nil {
+				filterExpr := t.Filter.(parser.TypedExpr)
+
+				if err := v.planner.parser.AssertNoAggregationOrWindowing(
+					filterExpr, "FILTER", v.planner.session.SearchPath,
+				); err != nil {
+					v.err = err
+					return false, expr
+				}
+
+				col, renderExpr, err := v.planner.computeRender(
+					v.ctx,
+					parser.SelectExpr{Expr: filterExpr},
+					parser.TypeBool,
+					v.renderNode.sourceInfo,
+					v.renderNode.ivarHelper,
+					autoGenerateRenderOutputName,
+				)
+				if err != nil {
+					v.err = err
+					return false, expr
+				}
+
+				filterRenderIdx := v.renderNode.addOrReuseRender(col, renderExpr, true /* reuse */)
+				f.setFilter(filterRenderIdx)
+			}
+
+			v.groupNode.funcs = append(v.groupNode.funcs, f)
 			return false, f
 		}
+
 	case *parser.IndexedVar:
-		if v.groupedCopy != nil {
-			panic("query checker did not detect column not appearing in GROUP BY clauses or aggregation function")
-		}
-		f := v.n.newAggregateFuncHolder(t, t, nil /* filter */, parser.NewIdentAggregate)
-		v.n.funcs = append(v.n.funcs, f)
-		return false, f
+		v.err = fmt.Errorf(
+			"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", t,
+		)
+		return false, expr
 	}
 
 	return true, expr
@@ -582,87 +566,10 @@ func (*extractAggregatesVisitor) VisitPost(expr parser.Expr) parser.Expr { retur
 
 // extract aggregateFuncHolders from exprs that use aggregation and add them to
 // the groupNode.
-func (v extractAggregatesVisitor) extract(typedExpr parser.TypedExpr) parser.TypedExpr {
+func (v extractAggregatesVisitor) extract(typedExpr parser.TypedExpr) (parser.TypedExpr, error) {
+	v.err = nil
 	expr, _ := parser.WalkExpr(&v, typedExpr)
-	return expr.(parser.TypedExpr)
-}
-
-type checkQueryVisitor struct {
-	groupStrs map[string]struct{}
-
-	// groupedCopy is nil when visitor is in an Expr subtree that appears in the GROUP BY clause.
-	groupedCopy   *checkQueryVisitor
-	subAggVisitor parser.IsAggregateVisitor
-	err           error
-}
-
-var _ parser.Visitor = &checkQueryVisitor{}
-
-func (v *checkQueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	if v.err != nil {
-		return false, expr
-	}
-
-	// This expression is in the GROUP BY - switch to the visitor that will accept
-	// IndexedVars for this and any subtrees.
-	if _, ok := v.groupStrs[expr.String()]; ok && v.groupedCopy != nil && v != v.groupedCopy {
-		expr, _ = parser.WalkExpr(v.groupedCopy, expr)
-		return false, expr
-	}
-
-	switch t := expr.(type) {
-	case *parser.FuncExpr:
-		if agg := t.GetAggregateConstructor(); agg != nil {
-			if len(t.Exprs) != 1 {
-				// Type checking has already run on these expressions thus
-				// if an aggregate function of the wrong arity gets here,
-				// something has gone really wrong.
-				panic(fmt.Sprintf("%q has %d arguments (expected 1)", t.Func, len(t.Exprs)))
-			}
-
-			argExpr := t.Exprs[0]
-
-			defer v.subAggVisitor.Reset()
-			if parser.WalkExprConst(&v.subAggVisitor, argExpr); v.subAggVisitor.Aggregated {
-				v.err = fmt.Errorf("aggregate function calls cannot be nested under %s()", t.Func)
-			}
-			return false, expr
-		}
-	case *parser.IndexedVar:
-		if v.groupedCopy != nil {
-			v.err = fmt.Errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
-				t.String())
-			return true, expr
-		}
-		return false, expr
-	}
-	return true, expr
-}
-
-func (*checkQueryVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
-
-// Check if expr provided is valid.
-// An expression is valid if:
-// - it is an aggregate expression, or
-// - it appears verbatim in groupBy, or
-// - it is not an IndexedVar, and all of its subexpressions (as defined by
-// its Walk implementation) are valid
-// NB: "verbatim" above is defined using a string-equality comparison
-// as an approximation of a recursive tree-equality comparison.
-//
-// For example:
-// Invalid: `SELECT k, SUM(v) FROM kv`
-// - `k` is unaggregated and does not appear in the (missing) GROUP BY.
-// Valid:      `SELECT k, SUM(v) FROM kv GROUP BY k`
-// Also valid: `SELECT UPPER(k), SUM(v) FROM kv GROUP BY UPPER(k)`
-// - `UPPER(k)` appears in GROUP BY.
-// Also valid: `SELECT UPPER(k), SUM(v) FROM kv GROUP BY k`
-// - `k` appears in GROUP BY, so `UPPER(k)` is OK, but...
-// Invalid:    `SELECT k, SUM(v) FROM kv GROUP BY UPPER(k)`
-// - `k` does not appear in GROUP BY; UPPER(k) does nothing to help here.
-func (v checkQueryVisitor) check(typedExpr parser.TypedExpr) error {
-	parser.WalkExpr(&v, typedExpr)
-	return v.err
+	return expr.(parser.TypedExpr), v.err
 }
 
 var _ parser.TypedExpr = &aggregateFuncHolder{}
@@ -672,9 +579,16 @@ type aggregateFuncHolder struct {
 	// expr must either contain an aggregation function (SUM, COUNT, etc.) or an
 	// expression that also appears as one of the GROUP BY expressions (v+w in
 	// SELECT v+w FROM kvw GROUP BY v+w).
-	expr          parser.TypedExpr
-	arg           parser.TypedExpr
-	filter        parser.TypedExpr
+	expr parser.TypedExpr
+
+	// The argument of the function is a single value produced by the renderNode
+	// underneath.
+	argRenderIdx int
+	hasFilter    bool
+	// If there is a filter, the result is a single value produced by the
+	// renderNode underneath.
+	filterRenderIdx int
+
 	create        func(*parser.EvalContext) parser.AggregateFunc
 	group         *groupNode
 	buckets       map[string]parser.AggregateFunc
@@ -683,18 +597,27 @@ type aggregateFuncHolder struct {
 }
 
 func (n *groupNode) newAggregateFuncHolder(
-	expr, arg, filter parser.TypedExpr, create func(*parser.EvalContext) parser.AggregateFunc,
+	expr parser.TypedExpr, argRenderIdx int, create func(*parser.EvalContext) parser.AggregateFunc,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
 		expr:          expr,
-		arg:           arg,
-		filter:        filter,
+		argRenderIdx:  argRenderIdx,
 		create:        create,
 		group:         n,
 		buckets:       make(map[string]parser.AggregateFunc),
 		bucketsMemAcc: n.planner.session.TxnState.OpenAccount(),
 	}
 	return res
+}
+
+func (a *aggregateFuncHolder) setFilter(filterRenderIdx int) {
+	a.hasFilter = true
+	a.filterRenderIdx = filterRenderIdx
+}
+
+// setDistinct causes a to ignore duplicate values of the argument.
+func (a *aggregateFuncHolder) setDistinct() {
+	a.seen = make(map[string]struct{})
 }
 
 func (a *aggregateFuncHolder) close(ctx context.Context, s *Session) {
@@ -768,11 +691,6 @@ func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error
 	}
 
 	if result == nil {
-		if parser.IsIdentAggregate(found) {
-			// Identity functions return their argument, even if no
-			// aggregation inputs were seen.
-			return a.arg.Eval(ctx)
-		}
 		// Otherwise, we can't be here: all aggregation functions
 		// should return a valid value or DNull if there are no rows.
 		panic("aggregation function returned nil")
