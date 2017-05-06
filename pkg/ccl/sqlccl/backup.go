@@ -475,11 +475,11 @@ func backupPlanHook(
 		return nil, nil, err
 	}
 
-	toFn, err := p.TypeAsString(&backup.To)
+	toFn, err := p.TypeAsString(backup.To, "BACKUP")
 	if err != nil {
 		return nil, nil, err
 	}
-	incrementalFromFn, err := p.TypeAsStringArray(&backup.IncrementalFrom)
+	incrementalFromFn, err := p.TypeAsStringArray(backup.IncrementalFrom, "BACKUP")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -495,8 +495,14 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		to := toFn()
-		incrementalFrom := incrementalFromFn()
+		to, err := toFn()
+		if err != nil {
+			return nil, err
+		}
+		incrementalFrom, err := incrementalFromFn()
+		if err != nil {
+			return nil, err
+		}
 
 		var startTime hlc.Timestamp
 		if backup.IncrementalFrom != nil {
