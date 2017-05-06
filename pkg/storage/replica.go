@@ -3505,18 +3505,6 @@ func (r *Replica) processRaftCommand(
 	r.mu.Lock()
 	proposal, proposedLocally := r.mu.proposals[idKey]
 
-	// Verify the lease matches the proposer's expectation. We rely on
-	// the proposer's determination of whether the existing lease is
-	// held, and can be used, or is expired, and can be replaced.
-	// Verify checks that the lease has not been modified since proposal
-	// due to Raft delays / reorderings.
-	// To understand why this lease verification is necessary, see comments on the
-	// proposer_lease field in the proto.
-	verifyLease := func() error {
-		// Handle the case of pre-epoch-based-leases command.
-		return raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease)
-	}
-
 	// TODO(tschottdorf): consider the Trace situation here.
 	if proposedLocally {
 		// We initiated this command, so use the caller-supplied context.
@@ -3534,11 +3522,19 @@ func (r *Replica) processRaftCommand(
 		// (which is bogus) doesn't get executed (for it is empty and so
 		// properties like key range are undefined).
 		forcedErr = roachpb.NewErrorf("no-op on empty Raft entry")
-	} else if err := verifyLease(); err != nil {
+	} else if !raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease) {
+		// Verify the lease matches the proposer's expectation. We rely on
+		// the proposer's determination of whether the existing lease is
+		// held, and can be used, or is expired, and can be replaced.
+		// Verify checks that the lease has not been modified since proposal
+		// due to Raft delays / reorderings.
+		// To understand why this lease verification is necessary, see comments on the
+		// proposer_lease field in the proto.
+
 		log.VEventf(
 			ctx, 1,
-			"command proposed from replica %+v: %s",
-			raftCmd.ProposerReplica, err,
+			"command proposed from replica %+v with %v incompatible to %v",
+			raftCmd.ProposerReplica, raftCmd.ProposerLease, *r.mu.state.Lease,
 		)
 		if !isLeaseRequest {
 			// We return a NotLeaseHolderError so that the DistSender retries.
