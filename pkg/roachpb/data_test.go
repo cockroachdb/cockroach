@@ -629,8 +629,8 @@ func TestLeaseEquivalence(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		if err := tc.l.Equivalent(tc.ol); tc.expSuccess != (err == nil) {
-			t.Errorf("%d: expected success? %t; got %s", i, tc.expSuccess, err)
+		if ok := tc.l.Equivalent(tc.ol); tc.expSuccess != ok {
+			t.Errorf("%d: expected success? %t; got %t", i, tc.expSuccess, ok)
 		}
 	}
 }

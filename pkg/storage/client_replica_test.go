@@ -588,8 +588,8 @@ func TestRangeTransferLease(t *testing.T) {
 				t.Fatal(err)
 			}
 			newLease, _ := replica0.GetLease()
-			if err := origLease.Equivalent(*newLease); err != nil {
-				t.Fatal(err)
+			if !origLease.Equivalent(*newLease) {
+				t.Fatalf("original lease %v and new lease %v not equivalent", origLease, newLease)
 			}
 		}
 
