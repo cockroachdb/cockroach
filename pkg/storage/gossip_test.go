@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -180,13 +179,6 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	newServerArgs.Addr = tc.Servers[oldNodeIdx].ServingAddr()
 	newServerArgs.PartOfCluster = true
 	newServerArgs.JoinAddr = tc.Servers[1].ServingAddr()
-	// We have to manually disable these because the testcluster only handles
-	// translating the ReplicationManual setting into store knobs for its
-	// initial nodes.
-	newServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
-		DisableSplitQueue:     true,
-		DisableReplicateQueue: true,
-	}
 	tc.StopServer(oldNodeIdx)
 	tc.AddServer(t, newServerArgs)
 	tc.WaitForStores(t, tc.Server(1).Gossip())
