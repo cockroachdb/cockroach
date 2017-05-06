@@ -44,6 +44,8 @@ type fmtFlags struct {
 	// :::interval) as necessary to disambiguate between possible type
 	// resolutions.
 	disambiguateDatumTypes bool
+	// If false, passwords are replaced by *****.
+	showPasswords bool
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -52,6 +54,10 @@ type FmtFlags *fmtFlags
 // FmtSimple instructs the pretty-printer to produce
 // a straightforward representation.
 var FmtSimple FmtFlags = &fmtFlags{}
+
+// FmtSimpleWithPasswords instructs the pretty-printer to produce a
+// straightforward representation that does not suppress passwords.
+var FmtSimpleWithPasswords FmtFlags = &fmtFlags{showPasswords: true}
 
 // FmtShowTypes instructs the pretty-printer to
 // annotate expressions with their resolved types.
