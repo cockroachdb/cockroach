@@ -347,9 +347,6 @@ func main() {
 						}); err != nil {
 							log.Fatal(err)
 						}
-						if _, err := binary.Seek(0, 0); err != nil {
-							log.Fatal(err)
-						}
 						if _, err := io.Copy(tw, binary); err != nil {
 							log.Fatal(err)
 						}
@@ -359,6 +356,9 @@ func main() {
 						if err := gzw.Close(); err != nil {
 							log.Fatal(err)
 						}
+					}
+					if _, err := binary.Seek(0, 0); err != nil {
+						log.Fatal(err)
 					}
 					putObjectInput := s3.PutObjectInput{
 						Bucket: &bucketName,
