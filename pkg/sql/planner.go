@@ -291,8 +291,8 @@ func (p *planner) isDatabaseVisible(dbName string) bool {
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.
-func (p *planner) TypeAsString(e *parser.Expr) (func() string, error) {
-	typedE, err := (*e).TypeCheck(&p.semaCtx, parser.TypeString)
+func (p *planner) TypeAsString(e *parser.Expr, op string) (func() string, error) {
+	typedE, err := parser.TypeCheckAndRequire(*e, &p.semaCtx, parser.TypeString, op)
 	if err != nil {
 		return nil, err
 	}
@@ -309,9 +309,9 @@ func (p *planner) TypeAsString(e *parser.Expr) (func() string, error) {
 // TypeAsString enforces (not hints) that the given expressions all typecheck as
 // a string and returns a function that can be called to get the string values
 // during (planNode).Start.
-func (p *planner) TypeAsStringArray(exprs *parser.Exprs) (func() []string, error) {
+func (p *planner) TypeAsStringArray(exprs *parser.Exprs, op string) (func() []string, error) {
 	for i := range *exprs {
-		typedE, err := (*exprs)[i].TypeCheck(&p.semaCtx, parser.TypeString)
+		typedE, err := parser.TypeCheckAndRequire((*exprs)[i], &p.semaCtx, parser.TypeString, op)
 		if err != nil {
 			return nil, err
 		}

@@ -831,7 +831,7 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
-	fromFn, err := p.TypeAsStringArray(&restore.From)
+	fromFn, err := p.TypeAsStringArray(&restore.From, "RESTORE")
 	if err != nil {
 		return nil, nil, err
 	}

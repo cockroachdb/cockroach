@@ -475,11 +475,11 @@ func backupPlanHook(
 		return nil, nil, err
 	}
 
-	toFn, err := p.TypeAsString(&backup.To)
+	toFn, err := p.TypeAsString(&backup.To, "BACKUP")
 	if err != nil {
 		return nil, nil, err
 	}
-	incrementalFromFn, err := p.TypeAsStringArray(&backup.IncrementalFrom)
+	incrementalFromFn, err := p.TypeAsStringArray(&backup.IncrementalFrom, "BACKUP")
 	if err != nil {
 		return nil, nil, err
 	}
