@@ -291,9 +291,7 @@ func (p *planner) SelectClause(
 				return nil, err
 			}
 		}
-		// Add an implicit "IS NOT NULL" filter, necessary for cases like `SELECT
-		// MIN(x)` when we have an index on x and we process only the first row.
-		where.filter = where.ivarHelper.Rebind(group.isNotNullFilter(where.filter), false, false)
+		group.addIsNotNullFilter(where, s)
 	}
 
 	limitPlan, err := p.Limit(ctx, limit)
