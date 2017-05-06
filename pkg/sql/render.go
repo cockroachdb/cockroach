@@ -253,9 +253,13 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	where, err := s.initWhere(ctx, parsed.Where)
-	if err != nil {
-		return nil, err
+	var where *filterNode
+	if parsed.Where != nil {
+		var err error
+		where, err = s.initWhere(ctx, parsed.Where.Expr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	s.ivarHelper = parser.MakeIndexedVarHelper(s, len(s.sourceInfo[0].sourceColumns))
@@ -279,8 +283,16 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	if where != nil && where.filter != nil && group != nil {
-		// Allow the group-by to add an implicit "IS NOT NULL" filter.
+	if group != nil && group.requiresIsNotNullFilter() {
+		if where == nil {
+			var err error
+			where, err = s.initWhere(ctx, nil)
+			if err != nil {
+				return nil, err
+			}
+		}
+		// Add an implicit "IS NOT NULL" filter, necessary for cases like `SELECT
+		// MIN(x)` when we have an index on x and we process only the first row.
 		where.filter = where.ivarHelper.Rebind(group.isNotNullFilter(where.filter), false, false)
 	}
 
@@ -464,27 +476,25 @@ func (s *renderNode) rewriteSRFs(
 	return parser.SelectExpr{Expr: expr}, nil
 }
 
-func (s *renderNode) initWhere(ctx context.Context, where *parser.Where) (*filterNode, error) {
-	if where == nil {
-		return nil, nil
-	}
-
+func (s *renderNode) initWhere(ctx context.Context, whereExpr parser.Expr) (*filterNode, error) {
 	f := &filterNode{p: s.planner, source: s.source}
 	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(s.sourceInfo[0].sourceColumns))
 
-	var err error
-	f.filter, err = s.planner.analyzeExpr(ctx, where.Expr, s.sourceInfo, f.ivarHelper,
-		parser.TypeBool, true, "WHERE")
-	if err != nil {
-		return nil, err
-	}
+	if whereExpr != nil {
+		var err error
+		f.filter, err = s.planner.analyzeExpr(ctx, whereExpr, s.sourceInfo, f.ivarHelper,
+			parser.TypeBool, true, "WHERE")
+		if err != nil {
+			return nil, err
+		}
 
-	// Make sure there are no aggregation/window functions in the filter
-	// (after subqueries have been expanded).
-	if err := s.planner.parser.AssertNoAggregationOrWindowing(
-		f.filter, "WHERE", s.planner.session.SearchPath,
-	); err != nil {
-		return nil, err
+		// Make sure there are no aggregation/window functions in the filter
+		// (after subqueries have been expanded).
+		if err := s.planner.parser.AssertNoAggregationOrWindowing(
+			f.filter, "WHERE", s.planner.session.SearchPath,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	// Insert the newly created filterNode between the renderNode and
