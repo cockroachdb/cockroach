@@ -192,5 +192,3 @@ CREATE TABLE t6 (x INT CHECK (x = $1))
 
 statement error CHECK expression .* may not contain variable sub-expressions
 CREATE TABLE t6 (x INT CHECK (x = (SELECT 1)))
-
-
