@@ -23,7 +23,7 @@ import (
 )
 
 func TestShouldPrint(t *testing.T) {
-	const duration = 10 * time.Millisecond
+	const duration = 100 * time.Millisecond
 
 	formatRe, err := regexp.Compile("^foo")
 	if err != nil {
