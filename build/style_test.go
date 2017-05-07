@@ -19,10 +19,13 @@ package build_test
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"go/build"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -206,6 +209,120 @@ func TestStyle(t *testing.T) {
 				t.Fatalf("err=%s, stderr=%s", err, out)
 			}
 		}
+	})
+
+	t.Run("TestURL", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
+
+		t.Parallel()
+		const urlRE = `https?://[^ \t\n/$.?#].[^ \t\n)]*(\)\.aspx)?`
+		re := regexp.MustCompile(urlRE)
+
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", urlRE)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		uniqueURLs := map[string][]string{}
+
+		if err := stream.ForEach(filter, func(s string) {
+			for _, match := range re.FindAllString(s, -1) {
+				match = strings.TrimRight(match, ".,;\\\">`")
+				n := strings.LastIndex(match, "#")
+				if n != -1 {
+					match = match[:n]
+				}
+				l, _ := uniqueURLs[match]
+				l = append(l, s)
+				uniqueURLs[match] = l
+			}
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+
+		ignored := []string{
+			"http://%s",
+			"http://127.0.0.1",
+			"http://HOST:PORT/",
+			"http://\"",
+			"http://ignored:ignored@errors.cockroachdb.com/",
+			"http://instance-data/latest/meta-data/public-ipv4",
+			"http://localhost",
+			"http://metadata/",
+			"http://www.bohemiancoding.com/sketch/ns",
+			"http://www.w3.org/",
+			"https://127.0.0.1",
+			"https://\"",
+			"https://cockroachdb.github.io/distsqlplan/",
+			"https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha}",
+			"https://edge-binaries.cockroachdb.com/examples-go/block_writer.${var.block_writer_sha}",
+			"https://edge-binaries.cockroachdb.com/examples-go/photos.${var.photos_sha}",
+			"https://github.com/cockroachdb/cockroach/commits/%s",
+			"https://github.com/cockroachdb/cockroach/issues/%d",
+			"https://ignored:ignored@errors.cockroachdb.com/",
+			"https://localhost",
+			"https://myroach:8080",
+			"https://register.cockroachdb.com/",
+			"https://registry.yarnpkg.com/",
+			"https://www.googleapis.com/auth",
+			"https://www.w3.org/",
+			// Regexp not too smart about HTML...
+			`http://www.cockroachlabs.com">http://www.cockroachlabs.com</a></span`,
+		}
+
+		for url, locs := range uniqueURLs {
+			ignore := false
+			for _, i := range ignored {
+				if strings.HasPrefix(url, i) {
+					ignore = true
+					break
+				}
+			}
+			if ignore {
+				continue
+			}
+
+			fmt.Fprintf(os.Stderr, "Checking %s...\n", url)
+			var buf bytes.Buffer
+			fmt.Fprintln(&buf, "Found in:")
+			for _, loc := range locs {
+				fmt.Fprintln(&buf, loc)
+			}
+
+			resp, err := http.Head(url)
+			if err != nil {
+				t.Errorf("while accessing %s: %v\n%s", url, err, buf.String())
+				continue
+			}
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				if resp.StatusCode == 405 {
+					// The server doesn't like HEAD. Try GET.
+					resp, err = http.Get(url)
+					if err != nil {
+						t.Errorf("while accessing %s: %v\n%s", url, err, buf.String())
+						continue
+					}
+					if resp.StatusCode >= 200 || resp.StatusCode < 300 {
+						continue
+					}
+				}
+
+				t.Errorf("while accessing %s: %s\n%s", url, resp.Status, buf.String())
+			}
+		}
+
 	})
 
 	t.Run("TestTimeutil", func(t *testing.T) {
