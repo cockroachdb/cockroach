@@ -115,6 +115,7 @@ statistics
 table_constraints
 table_privileges
 tables
+user_privileges
 views
 
 query TT colnames
@@ -224,6 +225,7 @@ statistics
 table_constraints
 table_privileges
 tables
+user_privileges
 views
 abc
 xyz
@@ -269,6 +271,7 @@ zones
 xyz
 views
 users
+user_privileges
 ui
 tables
 tables
@@ -326,6 +329,7 @@ def            information_schema  statistics                 SYSTEM VIEW  1
 def            information_schema  table_constraints          SYSTEM VIEW  1
 def            information_schema  table_privileges           SYSTEM VIEW  1
 def            information_schema  tables                     SYSTEM VIEW  1
+def            information_schema  user_privileges            SYSTEM VIEW  1
 def            information_schema  views                      SYSTEM VIEW  1
 def            other_db            abc                        VIEW         1
 def            other_db            xyz                        BASE TABLE   2
@@ -388,6 +392,7 @@ def            information_schema  statistics         SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
+def            information_schema  user_privileges    SYSTEM VIEW  1
 def            information_schema  views              SYSTEM VIEW  1
 def            pg_catalog          pg_am              SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
@@ -436,6 +441,7 @@ def            information_schema  statistics         SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
+def            information_schema  user_privileges    SYSTEM VIEW  1
 def            information_schema  views              SYSTEM VIEW  1
 def            other_db            xyz                BASE TABLE   6
 def            pg_catalog          pg_am              SYSTEM VIEW  1
@@ -869,3 +875,21 @@ NULL          NULL                NULL                  NULL                  NU
 
 statement ok
 DROP DATABASE other_db
+
+
+#Verify  information_schema.user_privileges
+
+query TTTT colnames
+SELECT * FROM information_schema.user_privileges ORDER BY privilege_type
+----
+grantee  table_catalog  privilege_type  is_grantable
+root     def            ALL             NULL
+root     def            CREATE          NULL
+root     def            DELETE          NULL
+root     def            DROP            NULL
+root     def            GRANT           NULL
+root     def            INSERT          NULL
+root     def            SELECT          NULL
+root     def            UPDATE          NULL
+
+
