@@ -38,7 +38,7 @@ type groupByStrMap map[string]int
 // groupBy constructs a groupNode according to grouping functions or clauses. This may adjust the
 // render targets in the renderNode as necessary.
 func (p *planner) groupBy(
-	ctx context.Context, n *parser.SelectClause, s *renderNode,
+	ctx context.Context, n *parser.SelectClause, r *renderNode,
 ) (*groupNode, error) {
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
@@ -75,19 +75,19 @@ func (p *planner) groupBy(
 		// Check whether the GROUP BY clause refers to a rendered column
 		// (specified in the original query) by index, e.g. `SELECT a, SUM(b)
 		// FROM y GROUP BY 1`.
-		col, err := p.colIndex(s.numOriginalCols, expr, "GROUP BY")
+		col, err := p.colIndex(r.numOriginalCols, expr, "GROUP BY")
 		if err != nil {
 			return nil, err
 		}
 
 		if col != -1 {
-			groupByExprs[i] = s.render[col]
+			groupByExprs[i] = r.render[col]
 			expr = n.Exprs[col].Expr
 		} else {
 			// We do not need to fully analyze the GROUP BY expression here
 			// (as per analyzeExpr) because this is taken care of by computeRender
 			// below.
-			resolvedExpr, _, err := p.resolveNames(expr, s.sourceInfo, s.ivarHelper)
+			resolvedExpr, _, err := p.resolveNames(expr, r.sourceInfo, r.ivarHelper)
 			if err != nil {
 				return nil, err
 			}
@@ -108,7 +108,7 @@ func (p *planner) groupBy(
 			return nil, sqlbase.NewWindowingError("HAVING")
 		}
 		var err error
-		typedHaving, err = p.analyzeExpr(ctx, n.Having.Expr, s.sourceInfo, s.ivarHelper,
+		typedHaving, err = p.analyzeExpr(ctx, n.Having.Expr, r.sourceInfo, r.ivarHelper,
 			parser.TypeBool, true, "HAVING")
 		if err != nil {
 			return nil, err
@@ -118,8 +118,8 @@ func (p *planner) groupBy(
 
 	group := &groupNode{
 		planner: p,
-		values:  valuesNode{columns: s.columns},
-		render:  s.render,
+		values:  valuesNode{columns: r.columns},
+		render:  r.render,
 	}
 
 	// We replaces the columns in the underlying renderNode with what the
@@ -127,7 +127,7 @@ func (p *planner) groupBy(
 	//  - group by expressions
 	//  - arguments to the aggregate expressions
 	//  - having expressions
-	s.resetRenderColumns(nil, nil)
+	r.resetRenderColumns(nil, nil)
 
 	// Add the group-by expressions.
 
@@ -135,14 +135,14 @@ func (p *planner) groupBy(
 	// the underlying renderNode.
 	groupStrs := make(groupByStrMap, len(groupByExprs))
 	for _, g := range groupByExprs {
-		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(
-			ctx, parser.SelectExpr{Expr: g}, parser.TypeAny, s.sourceInfo, s.ivarHelper,
+		cols, exprs, hasStar, err := p.computeRenderAllowingStars(
+			ctx, parser.SelectExpr{Expr: g}, parser.TypeAny, r.sourceInfo, r.ivarHelper,
 			autoGenerateRenderOutputName)
 		if err != nil {
 			return nil, err
 		}
-		s.isStar = s.isStar || hasStar
-		colIdxs := s.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
+		r.isStar = r.isStar || hasStar
+		colIdxs := r.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
 		if !hasStar {
 			groupStrs[symbolicExprStr(g)] = colIdxs[0]
 		} else {
@@ -150,7 +150,7 @@ func (p *planner) groupBy(
 			groupStrs[symbolicExprStr(g)] = -1
 		}
 	}
-	group.numGroupCols = len(s.render)
+	group.numGroupCols = len(r.render)
 
 	// The extractAggregatesVisitor extracts arguments of aggregate functions and
 	// replaces them with aggregateFuncHolders. It also adds the appropriate
@@ -159,7 +159,7 @@ func (p *planner) groupBy(
 		ctx:        ctx,
 		planner:    p,
 		groupNode:  group,
-		renderNode: s,
+		renderNode: r,
 		groupStrs:  groupStrs,
 	}
 
