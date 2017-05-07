@@ -44,6 +44,7 @@ var informationSchema = virtualSchema{
 		informationSchemaTablePrivileges,
 		informationSchemaTablesTable,
 		informationSchemaViewsTable,
+		informationSchemaUserPrivileges,
 	},
 }
 
@@ -413,6 +414,46 @@ CREATE TABLE information_schema.table_constraints (
 			}
 			return nil
 		})
+	},
+}
+
+var informationSchemaUserPrivileges = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.user_privileges (
+	GRANTEE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
+);`,
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		type Drow struct {
+			grantee   string
+			privilege string
+		}
+		m := make(map[Drow]struct{})
+		descs, err := getAllDescriptors(ctx, p.txn)
+		if err != nil {
+			return nil
+		}
+		for _, desc := range descs {
+			for _, u := range desc.GetPrivileges().Show() {
+				for _, p := range u.Privileges {
+					r := Drow{u.User, p}
+					m[r] = struct{}{}
+				}
+			}
+		}
+		for u := range m {
+			if err := addRow(
+				parser.NewDString(u.grantee),   // grantee
+				defString,                      // table_catalog
+				parser.NewDString(u.privilege), // privilege_type
+				parser.DNull,                   // is_grantable
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
