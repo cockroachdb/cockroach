@@ -907,15 +907,18 @@ func (*RequestLeaseRequest) flags() int {
 // effect of the `skipLeaseCheck` flag that lease write operations have.
 func (*LeaseInfoRequest) flags() int { return isRead | isAlone }
 func (*TransferLeaseRequest) flags() int {
-	// TODO(andrei): update this comment.
 	// TransferLeaseRequest requires the lease, which is checked in
-	// `AdminTransferLease()` at proposal time and in the usual way for write
-	// commands at apply time.
-	// But it can't be checked at propose time through the
-	// `redirectOnOrAcquireLease` call because, by the time that call is made, the
-	// replica has registered that a transfer is in progress and
-	// `redirectOnOrAcquireLease` already tentatively redirects to the
-	// future lease holder.
+	// `AdminTransferLease()` before the TransferLeaseRequest is created and sent
+	// for evaluation and in the usual way at application time (i.e.
+	// replica.processRaftCommand() checks that the lease hasn't changes since the
+	// command resulting from the evaluation of TransferLeaseRequest was
+	// proposed).
+	//
+	// But we're marking it with skipLeaseCheck because `redirectOnOrAcquireLease`
+	// can't be used before evaluation as, by the time that call would be made,
+	// the store has registered that a transfer is in progress and
+	// `redirectOnOrAcquireLease` would already tentatively redirect to the future
+	// lease holder.
 	return isWrite | isAlone | skipLeaseCheck
 }
 func (*ComputeChecksumRequest) flags() int          { return isWrite | isRange }
