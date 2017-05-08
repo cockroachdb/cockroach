@@ -527,33 +527,52 @@ func TestGC(t *testing.T) {
 
 	setFlags()
 
-	const maxTotalLogFileSize = 1500
-	const singleLineLogFileSize = 650 // This is an approximation.
-	// Since each log file is ~650 bytes in size. GC should always trim the
-	// total log files down to 2.
-	const expectedFilesAfterGC = maxTotalLogFileSize / singleLineLogFileSize
 	const newLogFiles = 20
 
 	// Prevent writes to stderr from being sent to log files which would screw up
 	// the expected number of log file calculation below.
 	logging.noStderrRedirect = true
 
-	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
-	LogFileMaxSize = 1 // ensure rotation on every log write
-	defer func(previous int64) {
-		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
-	}(LogFilesCombinedMaxSize)
-	atomic.StoreInt64(&LogFilesCombinedMaxSize, 1500)
+	// Create 1 log file to figure out its size.
+	Infof(context.Background(), "0")
 
 	allFilesOriginal, err := ListLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e, a := 0, len(allFilesOriginal); e != a {
+	if e, a := 1, len(allFilesOriginal); e != a {
 		t.Fatalf("expected %d files, but found %d", e, a)
 	}
+	dir, err := logDir.get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(filepath.Join(dir, allFilesOriginal[0].Name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stat, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// logFileSize is the size of the first log file we wrote to.
+	logFileSize := stat.Size()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	const expectedFilesAfterGC = 2
+	// Pick a max total size that's between 2 and 3 log files in size.
+	maxTotalLogFileSize := logFileSize*expectedFilesAfterGC + logFileSize // 2
+	fmt.Println(logFileSize, maxTotalLogFileSize)
 
-	for i := 0; i < newLogFiles; i++ {
+	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
+	LogFileMaxSize = 1 // ensure rotation on every log write
+	defer func(previous int64) {
+		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
+	}(LogFilesCombinedMaxSize)
+	atomic.StoreInt64(&LogFilesCombinedMaxSize, int64(maxTotalLogFileSize))
+
+	for i := 1; i < newLogFiles; i++ {
 		Infof(context.Background(), "%d", i)
 		Flush()
 	}
@@ -562,12 +581,10 @@ func TestGC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The +1 here is created from clog's createFile(). All subsequent files are
-	// created from clog's write(). Both of these are called from clog's
-	// outputLogEntry, but it's a quirk of this test due to setting MaxSize to
-	// such a low number that the first file is ignored and the 2nd file is
-	// created within the same call.
-	if e, a := newLogFiles+1, len(allFilesBefore); e != a {
+	for _, f := range allFilesBefore {
+		fmt.Println(f.Name)
+	}
+	if e, a := newLogFiles, len(allFilesBefore); e != a {
 		t.Fatalf("expected %d files, but found %d", e, a)
 	}
 
