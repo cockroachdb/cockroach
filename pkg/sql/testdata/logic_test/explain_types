@@ -297,4 +297,3 @@ EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 1  render                                                         (x int[])
 1           render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]
 2  nullrow                                                        ()
-
