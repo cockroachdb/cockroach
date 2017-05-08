@@ -61,6 +61,7 @@ var libsRe = func() *regexp.Regexp {
 var osVersionRe = regexp.MustCompile(`\d+(\.\d+)*-`)
 
 var isRelease = flag.Bool("release", false, "build in release mode instead of bleeding-edge mode")
+var destBucket = flag.String("bucket", "", "override default bucket")
 
 func main() {
 	flag.Parse()
@@ -105,9 +106,13 @@ func main() {
 	}
 	svc := s3.New(sess)
 
-	bucketName := "cockroach"
-	if *isRelease {
+	var bucketName string
+	if len(*destBucket) > 0 {
+		bucketName = *destBucket
+	} else if *isRelease {
 		bucketName = "binaries.cockroachdb.com"
+	} else {
+		bucketName = "cockroach"
 	}
 
 	// TODO(tamird,benesch,bdarnell): make "latest" a website-redirect
