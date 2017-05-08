@@ -211,7 +211,7 @@ func evaluateCommand(
 		header.RangeInfos = []roachpb.RangeInfo{
 			{
 				Desc:  *desc,
-				Lease: *lease,
+				Lease: lease,
 			},
 		}
 		reply.SetHeader(header)
@@ -1915,7 +1915,7 @@ func evalRequestLease(
 	}
 
 	rErr := &roachpb.LeaseRejectedError{
-		Existing:  *prevLease,
+		Existing:  prevLease,
 		Requested: args.Lease,
 	}
 
@@ -2007,7 +2007,7 @@ func evalNewLease(
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
-	prevLease *roachpb.Lease,
+	prevLease roachpb.Lease,
 	isExtension bool,
 	isTransfer bool,
 ) (EvalResult, error) {
@@ -2020,7 +2020,7 @@ func evalNewLease(
 		// This amounts to a bug.
 		return newFailedLeaseTrigger(isTransfer),
 			&roachpb.LeaseRejectedError{
-				Existing:  *prevLease,
+				Existing:  prevLease,
 				Requested: lease,
 				Message: fmt.Sprintf("illegal lease: epoch=%d, interval=[%s, %s)",
 					lease.Epoch, lease.Start, lease.Expiration),
@@ -2035,7 +2035,7 @@ func evalNewLease(
 	if _, ok := desc.GetReplicaDescriptor(lease.Replica.StoreID); !ok {
 		return newFailedLeaseTrigger(isTransfer),
 			&roachpb.LeaseRejectedError{
-				Existing:  *prevLease,
+				Existing:  prevLease,
 				Requested: lease,
 				Message:   "replica not found",
 			}
@@ -3745,15 +3745,12 @@ func evalLeaseInfo(
 	if err != nil {
 		return EvalResult{}, err
 	}
-	if lease == nil {
-		return EvalResult{}, errors.Errorf("missing lease: %s", cArgs.Args)
-	}
 	if nextLease != nil {
 		// If there's a lease request in progress, speculatively return that future
 		// lease.
 		reply.Lease = *nextLease
 	} else {
-		reply.Lease = *lease
+		reply.Lease = lease
 	}
 	return EvalResult{}, nil
 }

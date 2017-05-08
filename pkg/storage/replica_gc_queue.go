@@ -126,7 +126,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		WallTime: repl.store.startedAt,
 	}
 
-	if lease, _ := repl.getLease(); lease != nil && lease.ProposedTS != nil {
+	if lease, _ := repl.getLease(); lease.ProposedTS != nil {
 		lastActivity.Forward(*lease.ProposedTS)
 	}
 

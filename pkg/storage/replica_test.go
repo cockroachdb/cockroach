@@ -102,13 +102,11 @@ const (
 // Replica may hold is expired. It is more precise than LeaseExpiration
 // in that it returns the minimal duration necessary.
 func leaseExpiry(repl *Replica) int64 {
-	if l, _ := repl.getLease(); l != nil {
-		if l.Type() != roachpb.LeaseExpiration {
-			panic("leaseExpiry only valid for expiration-based leases")
-		}
-		return l.Expiration.WallTime + 1
+	l, _ := repl.getLease()
+	if l.Type() != roachpb.LeaseExpiration {
+		panic("leaseExpiry only valid for expiration-based leases")
 	}
-	return 0
+	return l.Expiration.WallTime + 1
 }
 
 // testContext contains all the objects necessary to test a Range.
@@ -712,7 +710,7 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 func hasLease(repl *Replica, timestamp hlc.Timestamp) (owned bool, expired bool) {
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
-	status := repl.leaseStatus(repl.mu.state.Lease, timestamp, repl.mu.minLeaseProposedTS)
+	status := repl.leaseStatus(*repl.mu.state.Lease, timestamp, repl.mu.minLeaseProposedTS)
 	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.state != leaseValid
 }
 
@@ -1839,7 +1837,7 @@ func TestLeaseConcurrent(t *testing.T) {
 			for i := 0; i < num; i++ {
 				if err := stopper.RunAsyncTask(context.Background(), func(ctx context.Context) {
 					tc.repl.mu.Lock()
-					status := tc.repl.leaseStatus(tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
+					status := tc.repl.leaseStatus(*tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
 					leaseCh := tc.repl.requestLeaseLocked(ctx, status)
 					tc.repl.mu.Unlock()
 					wg.Done()
@@ -6561,7 +6559,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	// Stop the command from being proposed to the raft group and being removed.
 	repl.mu.Lock()
 	repl.mu.submitProposalFn = func(p *ProposalData) error { return nil }
-	lease := repl.mu.state.Lease
+	lease := *repl.mu.state.Lease
 	repl.mu.Unlock()
 
 	// Add a command to the pending list.

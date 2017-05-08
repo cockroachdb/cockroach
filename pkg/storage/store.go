@@ -1002,7 +1002,7 @@ func (s *Store) SetDraining(drain bool) {
 		if err := s.stopper.RunLimitedAsyncTask(
 			r.AnnotateCtx(ctx), sem, true /* wait */, func(ctx context.Context) {
 				defer wg.Done()
-				var drainingLease *roachpb.Lease
+				var drainingLease roachpb.Lease
 				for {
 					var leaseCh <-chan *roachpb.Error
 					r.mu.Lock()
@@ -1827,7 +1827,7 @@ func splitPostApply(
 	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
 	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
-	rightLease := rightRng.mu.state.Lease
+	rightLease := *rightRng.mu.state.Lease
 	rightReplicaID := rightRng.mu.replicaID
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
@@ -1836,7 +1836,7 @@ func splitPostApply(
 	// Invoke the leasePostApply method to ensure we properly initialize
 	// the replica according to whether it holds the lease. This enables
 	// the PushTxnQueue. Note that we pass in an empty lease for prevLease.
-	rightRng.leasePostApply(ctx, rightLease, rightReplicaID, &roachpb.Lease{})
+	rightRng.leasePostApply(ctx, rightLease, rightReplicaID, roachpb.Lease{})
 
 	// Add the RHS replica to the store. This step atomically updates
 	// the EndKey of the LHS replica and also adds the RHS replica
@@ -2005,7 +2005,7 @@ func (s *Store) maybeMergeTimestampCaches(
 
 	subsumedRep.mu.Lock()
 	defer subsumedRep.mu.Unlock()
-	subsumedLease := subsumedRep.mu.state.Lease
+	subsumedLease := *subsumedRep.mu.state.Lease
 
 	// Merge support is currently incomplete and incorrect. In particular, the
 	// lease holders must be colocated and the subsumed range appropriately
@@ -3774,8 +3774,8 @@ func (s *Store) canApplySnapshotLocked(
 				}
 				lease, pendingLease := r.getLease()
 				now := s.Clock().Now()
-				return (lease == nil || !r.IsLeaseValid(lease, now)) &&
-					(pendingLease == nil || !r.IsLeaseValid(pendingLease, now))
+				return !r.IsLeaseValid(lease, now) &&
+					(pendingLease == nil || !r.IsLeaseValid(*pendingLease, now))
 			}
 
 			// If the existing range shows no signs of recent activity, give it a GC

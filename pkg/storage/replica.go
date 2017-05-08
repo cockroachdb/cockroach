@@ -845,20 +845,18 @@ func (r *Replica) IsDestroyed() error {
 
 // getLease returns the current lease, and the tentative next one, if a lease
 // request initiated by this replica is in progress.
-//
-// The current lease is never nil.
-func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
+func (r *Replica) getLease() (roachpb.Lease, *roachpb.Lease) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getLeaseRLocked()
 }
 
-func (r *Replica) getLeaseRLocked() (*roachpb.Lease, *roachpb.Lease) {
+func (r *Replica) getLeaseRLocked() (roachpb.Lease, *roachpb.Lease) {
 	lease := *r.mu.state.Lease
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
-		return &lease, &nextLease
+		return lease, &nextLease
 	}
-	return &lease, nil
+	return lease, nil
 }
 
 // ownsValidLease returns whether this replica is the current valid
@@ -869,18 +867,18 @@ func (r *Replica) ownsValidLease(ts hlc.Timestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.state.Lease.OwnedBy(r.store.StoreID()) &&
-		r.leaseStatus(r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
+		r.leaseStatus(*r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
 }
 
 // IsLeaseValid returns true if the replica's lease is owned by this
 // replica and is valid (not expired, not in stasis).
-func (r *Replica) IsLeaseValid(lease *roachpb.Lease, ts hlc.Timestamp) bool {
+func (r *Replica) IsLeaseValid(lease roachpb.Lease, ts hlc.Timestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.isLeaseValidRLocked(lease, ts)
 }
 
-func (r *Replica) isLeaseValidRLocked(lease *roachpb.Lease, ts hlc.Timestamp) bool {
+func (r *Replica) isLeaseValidRLocked(lease roachpb.Lease, ts hlc.Timestamp) bool {
 	return r.leaseStatus(lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
 }
 
@@ -925,7 +923,7 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (LeaseStatus, bool) {
 		return LeaseStatus{}, false
 	}
 
-	status := r.leaseStatus(r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+	status := r.leaseStatus(*r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
 	switch status.state {
 	case leaseValid:
 		if status.lease.OwnedBy(r.store.StoreID()) {
@@ -968,7 +966,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 			r.mu.Lock()
 			defer r.mu.Unlock()
 
-			status = r.leaseStatus(r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+			status = r.leaseStatus(*r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
 			switch status.state {
 			case leaseError:
 				// Lease state couldn't be determined.
@@ -986,7 +984,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
 					return nil, roachpb.NewError(
-						newNotLeaseHolderError(status.lease, r.store.StoreID(), r.mu.state.Desc))
+						newNotLeaseHolderError(&status.lease, r.store.StoreID(), r.mu.state.Desc))
 				}
 				// Check that we're not in the process of transferring the lease away.
 				// If we are transferring the lease away, we can't serve reads or
@@ -1044,7 +1042,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				}
 				// If lease is currently held by another, redirect to holder.
 				return nil, roachpb.NewError(
-					newNotLeaseHolderError(status.lease, r.store.StoreID(), r.mu.state.Desc))
+					newNotLeaseHolderError(&status.lease, r.store.StoreID(), r.mu.state.Desc))
 			}
 
 			// Return a nil chan to signal that we have a valid lease.
@@ -1094,7 +1092,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 							} else if lease, _ := r.getLease(); !r.IsLeaseValid(lease, r.store.Clock().Now()) {
 								err = newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc())
 							} else {
-								err = newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc())
+								err = newNotLeaseHolderError(&lease, r.store.StoreID(), r.Desc())
 							}
 							pErr = roachpb.NewError(err)
 						}
@@ -1380,7 +1378,7 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	// will only campaign if it's been idle for >= election timeout,
 	// so there's most likely been no traffic to the range.
 	shouldCampaignOnCreation := r.mu.state.Lease.OwnedBy(r.store.StoreID()) ||
-		r.leaseStatus(r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).state != leaseValid
+		r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).state != leaseValid
 	if err := r.withRaftGroupLocked(shouldCampaignOnCreation, func(raftGroup *raft.RawNode) (bool, error) {
 		return true, nil
 	}); err != nil {
@@ -2186,7 +2184,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		}
 	}()
 
-	var lease *roachpb.Lease
+	var lease roachpb.Lease
 	// For lease commands, use the provided previous lease for verification.
 	if ba.IsSingleSkipLeaseCheckRequest() {
 		lease = ba.GetPrevLeaseForLeaseRequest()
@@ -2395,10 +2393,8 @@ func (r *Replica) evaluateProposal(
 
 // insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
 // it to the pending map.
-//
-// lease cannot be nil.
 func (r *Replica) insertProposalLocked(
-	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease *roachpb.Lease,
+	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease roachpb.Lease,
 ) {
 	// Assign a lease index. Note that we do this as late as possible
 	// to make sure (to the extent that we can) that we don't assign
@@ -2412,7 +2408,7 @@ func (r *Replica) insertProposalLocked(
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	proposal.command.ProposerReplica = proposerReplica
-	proposal.command.ProposerLease = *proposerLease
+	proposal.command.ProposerLease = proposerLease
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
 			proposal.idKey, proposal.command.MaxLeaseIndex)
@@ -2443,11 +2439,9 @@ func makeIDKey() storagebase.CmdIDKey {
 //   waiting for successful execution.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
-//
-// lease cannot be nil.
 func (r *Replica) propose(
 	ctx context.Context,
-	lease *roachpb.Lease,
+	lease roachpb.Lease,
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *SpanSet,
@@ -3072,7 +3066,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 	// Only quiesce if this replica is the leaseholder as well;
 	// otherwise the replica which is the valid leaseholder may have
 	// pending commands which it's waiting on this leader to propose.
-	if l := r.mu.state.Lease; !l.OwnedBy(r.store.StoreID()) &&
+	if l := *r.mu.state.Lease; !l.OwnedBy(r.store.StoreID()) &&
 		r.isLeaseValidRLocked(l, r.store.Clock().Now()) {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
@@ -3728,14 +3722,9 @@ func (r *Replica) processRaftCommand(
 func (r *Replica) maybeAcquireSplitMergeLock(
 	raftCmd storagebase.RaftCommand,
 ) func(storagebase.ReplicatedEvalResult) {
-	var split *storagebase.Split
-	var merge *storagebase.Merge
-	split = raftCmd.ReplicatedEvalResult.Split
-	merge = raftCmd.ReplicatedEvalResult.Merge
-
-	if split != nil {
+	if split := raftCmd.ReplicatedEvalResult.Split; split != nil {
 		return r.acquireSplitLock(&split.SplitTrigger)
-	} else if merge != nil {
+	} else if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
 		return r.acquireMergeLock(&merge.MergeTrigger)
 	}
 	return nil
@@ -4686,7 +4675,7 @@ func (r *Replica) Metrics(
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
-	status := r.leaseStatus(r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
+	status := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
 	selfBehindCount := r.getEstimatedBehindCountRLocked(raftStatus)

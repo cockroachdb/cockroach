@@ -375,10 +375,7 @@ func (r *Replica) computeChecksumPostApply(
 // leasePostApply is called when a RequestLease or TransferLease
 // request is executed for a range.
 func (r *Replica) leasePostApply(
-	ctx context.Context,
-	newLease *roachpb.Lease,
-	replicaID roachpb.ReplicaID,
-	prevLease *roachpb.Lease,
+	ctx context.Context, newLease roachpb.Lease, replicaID roachpb.ReplicaID, prevLease roachpb.Lease,
 ) {
 	iAmTheLeaseHolder := newLease.Replica.ReplicaID == replicaID
 	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID
@@ -471,7 +468,7 @@ func (r *Replica) leasePostApply(
 
 	// Mark the new lease in the replica's lease history.
 	if r.leaseHistory != nil {
-		r.leaseHistory.add(*newLease)
+		r.leaseHistory.add(newLease)
 	}
 }
 
@@ -628,11 +625,11 @@ func (r *Replica) handleReplicatedEvalResult(
 
 		r.mu.Lock()
 		replicaID := r.mu.replicaID
-		prevLease := r.mu.state.Lease
+		prevLease := *r.mu.state.Lease
 		r.mu.state.Lease = newLease
 		r.mu.Unlock()
 
-		r.leasePostApply(ctx, newLease, replicaID, prevLease)
+		r.leasePostApply(ctx, *newLease, replicaID, prevLease)
 	}
 
 	if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
@@ -778,10 +775,9 @@ func (r *Replica) handleLocalEvalResult(
 func (r *Replica) handleEvalResult(
 	ctx context.Context, lResult *LocalEvalResult, rResult storagebase.ReplicatedEvalResult,
 ) {
-	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
-	shouldAssert := false
-	shouldAssert = r.handleReplicatedEvalResult(ctx, rResult) || shouldAssert
+	shouldAssert := r.handleReplicatedEvalResult(ctx, rResult)
 	if lResult != nil {
+		// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
 		shouldAssert = r.handleLocalEvalResult(ctx, *lResult) || shouldAssert
 	}
 	if shouldAssert {

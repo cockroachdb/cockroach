@@ -722,14 +722,12 @@ func (rec ReplicaEvalContext) GetLastReplicaGCTimestamp(
 }
 
 // GetLease returns the Replica's current and next lease (if any).
-//
-// The current lease is never nil.
-func (rec ReplicaEvalContext) GetLease() (*roachpb.Lease, *roachpb.Lease, error) {
+func (rec ReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease, error) {
 	if rec.ss != nil {
 		if err := rec.ss.checkAllowed(SpanReadOnly,
 			roachpb.Span{Key: keys.RangeLeaseKey(rec.RangeID())},
 		); err != nil {
-			return nil, nil, err
+			return roachpb.Lease{}, nil, err
 		}
 	}
 	lease, nextLease := rec.repl.getLease()
