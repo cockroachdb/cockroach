@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -278,6 +279,10 @@ func (s spanSetReader) Iterate(
 
 func (s spanSetReader) NewIterator(prefix bool) engine.Iterator {
 	return &SpanSetIterator{s.r.NewIterator(prefix), s.spans, nil, false}
+}
+
+func (s spanSetReader) NewTimeBoundIterator(start, end hlc.Timestamp) engine.Iterator {
+	panic("not implemented")
 }
 
 type spanSetWriter struct {

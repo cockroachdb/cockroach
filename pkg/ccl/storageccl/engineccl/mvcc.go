@@ -10,6 +10,7 @@ package engineccl
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,28 +48,47 @@ type MVCCIncrementalIterator struct {
 	meta enginepb.MVCCMetadata
 }
 
+// TimeBoundIteratorsEnabled controls whether to use experimental iterators that
+// can more efficiently perform incremental backups by skipping over old SSTs.
+var TimeBoundIteratorsEnabled = func() *settings.BoolSetting {
+	name := "enterprise.kv.timebound_iterator.enabled"
+	s := settings.RegisterBoolSetting(name, "speed up incremental backups by efficiently skipping over old SSTs", false)
+	settings.Hide(name)
+	return s
+}()
+
+func newEngineIter(e engine.Reader, startTime, endTime hlc.Timestamp) engine.Iterator {
+	if TimeBoundIteratorsEnabled.Get() {
+		return e.NewTimeBoundIterator(startTime, endTime)
+	}
+	return e.NewIterator(false)
+}
+
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
-// specified engine.
-func NewMVCCIncrementalIterator(e engine.Reader) *MVCCIncrementalIterator {
-	return &MVCCIncrementalIterator{iter: e.NewIterator(false)}
+// specified engine and time range.
+func NewMVCCIncrementalIterator(
+	e engine.Reader, startTime, endTime hlc.Timestamp,
+) *MVCCIncrementalIterator {
+	return &MVCCIncrementalIterator{
+		iter:      newEngineIter(e, startTime, endTime),
+		startTime: startTime,
+		endTime:   endTime,
+	}
+}
+
+// Reset begins a new iteration with the specified key range.
+func (i *MVCCIncrementalIterator) Reset(startKey, endKey roachpb.Key) {
+	i.iter.Seek(engine.MakeMVCCMetadataKey(startKey))
+	i.endKey = engine.MakeMVCCMetadataKey(endKey)
+	i.err = nil
+	i.valid = true
+	i.nextkey = false
+	i.Next()
 }
 
 // Close frees up resources held by the iterator.
 func (i *MVCCIncrementalIterator) Close() {
 	i.iter.Close()
-}
-
-// Reset begins a new iteration with the specified key and time ranges.
-func (i *MVCCIncrementalIterator) Reset(
-	startKey, endKey roachpb.Key, startTime, endTime hlc.Timestamp,
-) {
-	i.iter.Seek(engine.MakeMVCCMetadataKey(startKey))
-	i.endKey = engine.MakeMVCCMetadataKey(endKey)
-	i.startTime, i.endTime = startTime, endTime
-	i.err = nil
-	i.valid = true
-	i.nextkey = false
-	i.Next()
 }
 
 // Next advances the iterator to the next key/value in the iteration.
