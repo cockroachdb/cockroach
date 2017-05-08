@@ -392,6 +392,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "ResetDeadline"}:                   {},
 		{txnType, "Run"}:                             {},
 		{txnType, "SetDebugName"}:                    {},
+		{txnType, "SetFixedTimestamp"}:               {},
 		{txnType, "SetIsolation"}:                    {},
 		{txnType, "SetUserPriority"}:                 {},
 		{txnType, "SetSystemConfigTrigger"}:          {},

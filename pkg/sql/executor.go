@@ -459,7 +459,7 @@ func (e *Executor) Prepare(
 
 	if protoTS != nil {
 		planner.avoidCachedDescriptors = true
-		SetTxnTimestamps(txn, *protoTS)
+		txn.SetFixedTimestamp(*protoTS)
 	}
 
 	if filter := e.cfg.TestingKnobs.BeforePrepare; filter != nil {
@@ -682,7 +682,7 @@ func (e *Executor) execRequest(
 			txnState.txn = txn
 
 			if protoTS != nil {
-				SetTxnTimestamps(txnState.txn, *protoTS)
+				txnState.txn.SetFixedTimestamp(*protoTS)
 			}
 
 			var err error
@@ -1862,22 +1862,6 @@ func isAsOf(session *Session, stmt parser.Statement, max hlc.Timestamp) (*hlc.Ti
 	evalCtx := session.evalCtx()
 	ts, err := EvalAsOfTimestamp(&evalCtx, sc.From.AsOf, max)
 	return &ts, err
-}
-
-// SetTxnTimestamps sets the transaction's proto timestamps and deadline
-// to ts. This is for use with AS OF queries, and should be called in the
-// retry block (except in the case of prepare which doesn't use retry). The
-// deadline-checking code checks that the `Timestamp` field of the proto
-// hasn't exceeded the deadline. Since we set the Timestamp field each retry,
-// it won't ever exceed the deadline, and thus setting the deadline here is
-// not strictly needed. However, it doesn't do anything incorrect and it will
-// possibly find problems if things change in the future, so it is left in.
-func SetTxnTimestamps(txn *client.Txn, ts hlc.Timestamp) {
-	// TODO(andrei): These updates should be done with the txn locked.
-	txn.Proto().Timestamp = ts
-	txn.Proto().OrigTimestamp = ts
-	txn.Proto().MaxTimestamp = ts
-	txn.UpdateDeadlineMaybe(ts)
 }
 
 // convertToErrWithPGCode recognizes errs that should have SQL error codes to be
