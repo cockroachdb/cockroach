@@ -831,7 +831,7 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
-	fromFn, err := p.TypeAsStringArray(&restore.From)
+	fromFn, err := p.TypeAsStringArray(restore.From, "RESTORE")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -847,7 +847,10 @@ func restorePlanHook(
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		from := fromFn()
+		from, err := fromFn()
+		if err != nil {
+			return nil, err
+		}
 		description, err := restoreJobDescription(restore, from)
 		if err != nil {
 			return nil, err

@@ -45,8 +45,8 @@ var planHooks []planHookFn
 type PlanHookState interface {
 	ExecCfg() *ExecutorConfig
 	LeaseMgr() *LeaseManager
-	TypeAsString(e *parser.Expr) (func() string, error)
-	TypeAsStringArray(e *parser.Exprs) (func() []string, error)
+	TypeAsString(e parser.Expr, op string) (func() (string, error), error)
+	TypeAsStringArray(e parser.Exprs, op string) (func() ([]string, error), error)
 	User() string
 	AuthorizationAccessor
 }

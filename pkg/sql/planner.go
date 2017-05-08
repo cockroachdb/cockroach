@@ -19,8 +19,6 @@ package sql
 import (
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -30,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -291,41 +289,45 @@ func (p *planner) isDatabaseVisible(dbName string) bool {
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.
-func (p *planner) TypeAsString(e *parser.Expr) (func() string, error) {
-	typedE, err := (*e).TypeCheck(&p.semaCtx, parser.TypeString)
+func (p *planner) TypeAsString(e parser.Expr, op string) (func() (string, error), error) {
+	typedE, err := parser.TypeCheckAndRequire(e, &p.semaCtx, parser.TypeString, op)
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedE.ResolvedType(); typ != parser.TypeString {
-		return nil, errors.Errorf("expression '%s' did not type as a string: %s", *e, typ)
-	}
-	*e = typedE
-	fn := func() string {
-		return string(*(*e).(*parser.DString))
+	fn := func() (string, error) {
+		d, err := typedE.Eval(&p.evalCtx)
+		if err != nil {
+			return "", err
+		}
+		return parser.AsStringWithFlags(d, parser.FmtBareStrings), nil
 	}
 	return fn, nil
 }
 
-// TypeAsString enforces (not hints) that the given expressions all typecheck as
-// a string and returns a function that can be called to get the string values
+// TypeAsStringArray enforces (not hints) that the given expressions all typecheck as
+// strings and returns a function that can be called to get the string values
 // during (planNode).Start.
-func (p *planner) TypeAsStringArray(exprs *parser.Exprs) (func() []string, error) {
-	for i := range *exprs {
-		typedE, err := (*exprs)[i].TypeCheck(&p.semaCtx, parser.TypeString)
+func (p *planner) TypeAsStringArray(
+	exprs parser.Exprs, op string,
+) (func() ([]string, error), error) {
+	typedExprs := make([]parser.TypedExpr, len(exprs))
+	for i := range exprs {
+		typedE, err := parser.TypeCheckAndRequire(exprs[i], &p.semaCtx, parser.TypeString, op)
 		if err != nil {
 			return nil, err
 		}
-		if typ := typedE.ResolvedType(); typ != parser.TypeString {
-			return nil, errors.Errorf("expression '%s' did not type as a string: %s", (*exprs)[i], typ)
-		}
-		(*exprs)[i] = typedE
+		typedExprs[i] = typedE
 	}
-	fn := func() []string {
-		strs := make([]string, len(*exprs))
-		for i := range *exprs {
-			strs[i] = string(*(*exprs)[i].(*parser.DString))
+	fn := func() ([]string, error) {
+		strs := make([]string, len(exprs))
+		for i := range exprs {
+			d, err := typedExprs[i].Eval(&p.evalCtx)
+			if err != nil {
+				return nil, err
+			}
+			strs[i] = parser.AsStringWithFlags(d, parser.FmtBareStrings)
 		}
-		return strs
+		return strs, nil
 	}
 	return fn, nil
 }
