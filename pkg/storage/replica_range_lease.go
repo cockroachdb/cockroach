@@ -203,7 +203,8 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			}
 		}
 
-		// Propose a RequestLease command and wait for it to apply.
+		// Send the RequestLeaseRequest or TransferLeaseRequest and wait for the new
+		// lease to be applied.
 		if pErr == nil {
 			ba := roachpb.BatchRequest{}
 			ba.Timestamp = repl.store.Clock().Now()
