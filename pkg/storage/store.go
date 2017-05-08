@@ -63,9 +63,8 @@ import (
 
 const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
-	rangeIDAllocCount               = 10
-	defaultHeartbeatIntervalTicks   = 5
-	defaultRaftElectionTimeoutTicks = 15
+	rangeIDAllocCount             = 10
+	defaultHeartbeatIntervalTicks = 5
 	// ttlStoreGossip is time-to-live for store-related info.
 	ttlStoreGossip = 2 * time.Minute
 
@@ -118,6 +117,9 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 	roachpb.ADD_REPLICA:    raftpb.ConfChangeAddNode,
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
+
+var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
+	"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
 
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
