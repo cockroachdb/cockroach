@@ -114,6 +114,7 @@ func main() {
 	} else {
 		bucketName = "cockroach"
 	}
+	log.Printf("Using S3 bucket: %s", bucketName)
 
 	// TODO(tamird,benesch,bdarnell): make "latest" a website-redirect
 	// rather than a full key. This means that the actual artifact will no
