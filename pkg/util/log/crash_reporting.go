@@ -96,13 +96,20 @@ var crashReports = settings.RegisterBoolSetting(
 	true,
 )
 
+var crashReportURL = func() string {
+	var defaultURL string
+	if build.IsRelease() {
+		defaultURL = "https://ignored:ignored@errors.cockroachdb.com/sentry"
+	} else {
+		defaultURL = "https://ignored:ignored@errors.cockroachdb.com/sentrydev"
+	}
+	return envutil.EnvOrDefaultString("COCKROACH_CRASH_REPORTS", defaultURL)
+}()
+
 // SetupCrashReporter sets the crash reporter info.
 func SetupCrashReporter(ctx context.Context, cmd string) {
-	url := envutil.EnvOrDefaultString(
-		"COCKROACH_CRASH_REPORTS", "https://ignored:ignored@errors.cockroachdb.com/sentry",
-	)
-	if err := errors.Wrap(raven.SetDSN(url), "failed to setup crash reporting"); err != nil {
-		panic(err)
+	if err := raven.SetDSN(crashReportURL); err != nil {
+		panic(errors.Wrap(err, "failed to setup crash reporting"))
 	}
 
 	if cmd == "start" {
