@@ -102,13 +102,11 @@ const (
 // Replica may hold is expired. It is more precise than LeaseExpiration
 // in that it returns the minimal duration necessary.
 func leaseExpiry(repl *Replica) int64 {
-	if l, _ := repl.getLease(); l != nil {
-		if l.Type() != roachpb.LeaseExpiration {
-			panic("leaseExpiry only valid for expiration-based leases")
-		}
-		return l.Expiration.WallTime + 1
+	l, _ := repl.getLease()
+	if l.Type() != roachpb.LeaseExpiration {
+		panic("leaseExpiry only valid for expiration-based leases")
 	}
-	return 0
+	return l.Expiration.WallTime + 1
 }
 
 // testContext contains all the objects necessary to test a Range.
@@ -202,7 +200,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 				enginepb.MVCCStats{},
 				*testDesc,
 				raftpb.HardState{},
-				&roachpb.Lease{},
+				roachpb.Lease{},
 			); err != nil {
 				t.Fatal(err)
 			}

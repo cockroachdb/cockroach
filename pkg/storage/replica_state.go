@@ -65,7 +65,7 @@ func (rsl replicaStateLoader) load(
 	if err != nil {
 		return storagebase.ReplicaState{}, err
 	}
-	s.Lease = &lease
+	s.Lease = lease
 
 	if s.GCThreshold, err = rsl.loadGCThreshold(ctx, reader); err != nil {
 		return storagebase.ReplicaState{}, err
@@ -142,13 +142,10 @@ func (rsl replicaStateLoader) loadLease(
 }
 
 func (rsl replicaStateLoader) setLease(
-	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats, lease *roachpb.Lease,
+	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats, lease roachpb.Lease,
 ) error {
-	if lease == nil {
-		return errors.New("cannot persist nil Lease")
-	}
 	return engine.MVCCPutProto(ctx, eng, ms, rsl.RangeLeaseKey(),
-		hlc.Timestamp{}, nil, lease)
+		hlc.Timestamp{}, nil, &lease)
 }
 
 func loadAppliedIndex(
@@ -504,7 +501,7 @@ func writeInitialState(
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	oldHS raftpb.HardState,
-	lease *roachpb.Lease,
+	lease roachpb.Lease,
 ) (enginepb.MVCCStats, error) {
 	rsl := makeReplicaStateLoader(desc.RangeID)
 
@@ -722,14 +719,12 @@ func (rec ReplicaEvalContext) GetLastReplicaGCTimestamp(
 }
 
 // GetLease returns the Replica's current and next lease (if any).
-//
-// The current lease is never nil.
-func (rec ReplicaEvalContext) GetLease() (*roachpb.Lease, *roachpb.Lease, error) {
+func (rec ReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease, error) {
 	if rec.ss != nil {
 		if err := rec.ss.checkAllowed(SpanReadOnly,
 			roachpb.Span{Key: keys.RangeLeaseKey(rec.RangeID())},
 		); err != nil {
-			return nil, nil, err
+			return roachpb.Lease{}, nil, err
 		}
 	}
 	lease, nextLease := rec.repl.getLease()
