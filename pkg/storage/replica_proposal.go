@@ -208,12 +208,12 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Replicated.State.Desc = nil
 
-	if p.Replicated.State.Lease == nil {
+	if p.Replicated.State.Lease == (roachpb.Lease{}) {
 		p.Replicated.State.Lease = q.Replicated.State.Lease
-	} else if q.Replicated.State.Lease != nil {
+	} else if q.Replicated.State.Lease != (roachpb.Lease{}) {
 		return errors.New("conflicting Lease")
 	}
-	q.Replicated.State.Lease = nil
+	q.Replicated.State.Lease = roachpb.Lease{}
 
 	if p.Replicated.State.TruncatedState == nil {
 		p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
@@ -375,10 +375,7 @@ func (r *Replica) computeChecksumPostApply(
 // leasePostApply is called when a RequestLease or TransferLease
 // request is executed for a range.
 func (r *Replica) leasePostApply(
-	ctx context.Context,
-	newLease *roachpb.Lease,
-	replicaID roachpb.ReplicaID,
-	prevLease *roachpb.Lease,
+	ctx context.Context, newLease roachpb.Lease, replicaID roachpb.ReplicaID, prevLease roachpb.Lease,
 ) {
 	iAmTheLeaseHolder := newLease.Replica.ReplicaID == replicaID
 	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID
@@ -471,7 +468,7 @@ func (r *Replica) leasePostApply(
 
 	// Mark the new lease in the replica's lease history.
 	if r.leaseHistory != nil {
-		r.leaseHistory.add(*newLease)
+		r.leaseHistory.add(newLease)
 	}
 }
 
@@ -623,8 +620,8 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.ChangeReplicas = nil
 	}
 
-	if newLease := rResult.State.Lease; newLease != nil {
-		rResult.State.Lease = nil // for assertion
+	if newLease := rResult.State.Lease; newLease != (roachpb.Lease{}) {
+		rResult.State.Lease = roachpb.Lease{} // for assertion
 
 		r.mu.Lock()
 		replicaID := r.mu.replicaID
@@ -778,10 +775,9 @@ func (r *Replica) handleLocalEvalResult(
 func (r *Replica) handleEvalResult(
 	ctx context.Context, lResult *LocalEvalResult, rResult storagebase.ReplicatedEvalResult,
 ) {
-	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
-	shouldAssert := false
-	shouldAssert = r.handleReplicatedEvalResult(ctx, rResult) || shouldAssert
+	shouldAssert := r.handleReplicatedEvalResult(ctx, rResult)
 	if lResult != nil {
+		// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
 		shouldAssert = r.handleLocalEvalResult(ctx, *lResult) || shouldAssert
 	}
 	if shouldAssert {

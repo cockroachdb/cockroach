@@ -363,61 +363,54 @@ func (d *debugRangeData) postProcessing() {
 			Title: raftState,
 			Value: raftState,
 		}
-		if info.State.Lease != nil {
-			var leaseClass string
-			if info.State.Lease.Replica.ReplicaID == sourceReplicaID {
-				leaseClass = debugRangeClassLeaseHolder
-			} else {
-				leaseClass = debugRangeClassLeaseFollower
-			}
-			d.Results[debugRangeHeaderLeaseHolder][info.SourceStoreID] = &debugRangeOutput{
-				Class: leaseClass,
-				Title: info.State.Lease.Replica.ReplicaID.String(),
-				Value: info.State.Lease.Replica.ReplicaID.String(),
-			}
-			var leaseTypeValue string
-			switch info.State.Lease.Type() {
-			case roachpb.LeaseNone:
-				leaseTypeValue = debugRangeValueLeaseNone
-			case roachpb.LeaseEpoch:
-				leaseTypeValue = debugRangeValueLeaseEpoch
-			case roachpb.LeaseExpiration:
-				leaseTypeValue = debugRangeValueLeaseExpiration
-			}
-			d.Results[debugRangeHeaderLeaseType][info.SourceStoreID] = &debugRangeOutput{
-				Title: leaseTypeValue,
-				Value: leaseTypeValue,
-			}
-			var epoch string
-			if info.State.Lease.Epoch != nil {
-				epoch = strconv.FormatInt(*info.State.Lease.Epoch, 10)
-			} else {
-				epoch = debugRangeValueEmpty
-			}
-			d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID] = &debugRangeOutput{
-				Title: epoch,
-				Value: epoch,
-			}
-			start := convertTimestamp(info.State.Lease.Start)
-			d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID] = &debugRangeOutput{
-				Title: fmt.Sprintf("%s\n%s", start, info.State.Lease.Start),
-				Value: start,
-			}
-			var expiration string
-			if info.State.Lease.Expiration.WallTime == 0 {
-				expiration = debugRangeValueEmpty
-			} else {
-				expiration = convertTimestamp(info.State.Lease.Expiration)
-			}
-			d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID] = &debugRangeOutput{
-				Title: fmt.Sprintf("%s\n%s", expiration, info.State.Lease.Expiration),
-				Value: expiration,
-			}
+		var leaseClass string
+		if info.State.Lease.Replica.ReplicaID == sourceReplicaID {
+			leaseClass = debugRangeClassLeaseHolder
 		} else {
-			d.Results[debugRangeHeaderLeaseHolder][info.SourceStoreID] = &debugRangeOutput{Value: debugRangeValueEmpty}
-			d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID] = &debugRangeOutput{Value: debugRangeValueEmpty}
-			d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID] = &debugRangeOutput{Value: debugRangeValueEmpty}
-			d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID] = &debugRangeOutput{Value: debugRangeValueEmpty}
+			leaseClass = debugRangeClassLeaseFollower
+		}
+		d.Results[debugRangeHeaderLeaseHolder][info.SourceStoreID] = &debugRangeOutput{
+			Class: leaseClass,
+			Title: info.State.Lease.Replica.ReplicaID.String(),
+			Value: info.State.Lease.Replica.ReplicaID.String(),
+		}
+		var leaseTypeValue string
+		switch info.State.Lease.Type() {
+		case roachpb.LeaseNone:
+			leaseTypeValue = debugRangeValueLeaseNone
+		case roachpb.LeaseEpoch:
+			leaseTypeValue = debugRangeValueLeaseEpoch
+		case roachpb.LeaseExpiration:
+			leaseTypeValue = debugRangeValueLeaseExpiration
+		}
+		d.Results[debugRangeHeaderLeaseType][info.SourceStoreID] = &debugRangeOutput{
+			Title: leaseTypeValue,
+			Value: leaseTypeValue,
+		}
+		var epoch string
+		if info.State.Lease.Epoch != nil {
+			epoch = strconv.FormatInt(*info.State.Lease.Epoch, 10)
+		} else {
+			epoch = debugRangeValueEmpty
+		}
+		d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID] = &debugRangeOutput{
+			Title: epoch,
+			Value: epoch,
+		}
+		start := convertTimestamp(info.State.Lease.Start)
+		d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf("%s\n%s", start, info.State.Lease.Start),
+			Value: start,
+		}
+		var expiration string
+		if info.State.Lease.Expiration.WallTime == 0 {
+			expiration = debugRangeValueEmpty
+		} else {
+			expiration = convertTimestamp(info.State.Lease.Expiration)
+		}
+		d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf("%s\n%s", expiration, info.State.Lease.Expiration),
+			Value: expiration,
 		}
 		d.Results[debugRangeHeaderLeaseAppliedIndex][info.SourceStoreID] = &debugRangeOutput{
 			Title: strconv.FormatUint(info.State.LeaseAppliedIndex, 10),
@@ -528,28 +521,26 @@ func (d *debugRangeData) postProcessing() {
 				d.Results[debugRangeHeaderKeyRange][d.HeaderFakeStoreID].Class = debugRangeClassWarning
 				d.Results[debugRangeHeaderKeyRange][info.SourceStoreID].Class = debugRangeClassWarning
 			}
-			if leaderStoreInfo.State.Lease != nil && info.State.Lease != nil {
-				if leaderStoreInfo.State.Lease.Replica.ReplicaID != info.State.Lease.Replica.ReplicaID {
-					d.Results[debugRangeHeaderLeaseHolder][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-					d.Results[debugRangeHeaderLeaseHolder][info.SourceStoreID].Class = debugRangeClassWarning
-				}
-				if leaderStoreInfo.State.Lease.Type() != info.State.Lease.Type() {
-					d.Results[debugRangeHeaderLeaseType][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-					d.Results[debugRangeHeaderLeaseType][info.SourceStoreID].Class = debugRangeClassWarning
-				}
-				if d.Results[debugRangeHeaderLeaseEpoch][leaderStoreInfo.SourceStoreID].Value !=
-					d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID].Value {
-					d.Results[debugRangeHeaderLeaseEpoch][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-					d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID].Class = debugRangeClassWarning
-				}
-				if leaderStoreInfo.State.Lease.Start != info.State.Lease.Start {
-					d.Results[debugRangeHeaderLeaseStart][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-					d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID].Class = debugRangeClassWarning
-				}
-				if leaderStoreInfo.State.Lease.Expiration != info.State.Lease.Expiration {
-					d.Results[debugRangeHeaderLeaseExpiration][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-					d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID].Class = debugRangeClassWarning
-				}
+			if leaderStoreInfo.State.Lease.Replica.ReplicaID != info.State.Lease.Replica.ReplicaID {
+				d.Results[debugRangeHeaderLeaseHolder][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderLeaseHolder][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStoreInfo.State.Lease.Type() != info.State.Lease.Type() {
+				d.Results[debugRangeHeaderLeaseType][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderLeaseType][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if d.Results[debugRangeHeaderLeaseEpoch][leaderStoreInfo.SourceStoreID].Value !=
+				d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID].Value {
+				d.Results[debugRangeHeaderLeaseEpoch][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStoreInfo.State.Lease.Start != info.State.Lease.Start {
+				d.Results[debugRangeHeaderLeaseStart][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStoreInfo.State.Lease.Expiration != info.State.Lease.Expiration {
+				d.Results[debugRangeHeaderLeaseExpiration][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID].Class = debugRangeClassWarning
 			}
 			if leaderStoreInfo.State.LeaseAppliedIndex != info.State.LeaseAppliedIndex {
 				d.Results[debugRangeHeaderLeaseAppliedIndex][d.HeaderFakeStoreID].Class = debugRangeClassWarning
