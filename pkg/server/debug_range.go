@@ -55,6 +55,14 @@ const (
 	debugRangeHeaderDroppedCommands   = "Dropped Commands"
 	debugRangeHeaderTruncatedIndex    = "Truncated Index"
 	debugRangeHeaderTruncatedTerm     = "Truncated Term"
+	debugRangeHeaderMVCCLastUpdate    = "MVCC Last Update"
+	debugRangeHeaderMVCCIntentAge     = "MVCC Intent Age"
+	debugRangeHeaderMVCCGCBytesAge    = "MVCC GC Bytes Age"
+	debugRangeHeaderMVCCLive          = "MVCC Live Bytes/Count"
+	debugRangeHeaderMVCCKey           = "MVCC Key Bytes/Count"
+	debugRangeHeaderMVCCVal           = "MVCC Value Bytes/Count"
+	debugRangeHeaderMVCCIntent        = "MVCC Intent Bytes/Count"
+	debugRangeHeaderMVCCSys           = "MVCC System Bytes/Count"
 
 	debugRangeClassWarning       = "warning"
 	debugRangeClassMatch         = "match"
@@ -289,6 +297,14 @@ func (d *debugRangeData) postProcessing() {
 	addHeader(debugRangeHeaderDroppedCommands)
 	addHeader(debugRangeHeaderTruncatedIndex)
 	addHeader(debugRangeHeaderTruncatedTerm)
+	addHeader(debugRangeHeaderMVCCLastUpdate)
+	addHeader(debugRangeHeaderMVCCIntentAge)
+	addHeader(debugRangeHeaderMVCCGCBytesAge)
+	addHeader(debugRangeHeaderMVCCLive)
+	addHeader(debugRangeHeaderMVCCKey)
+	addHeader(debugRangeHeaderMVCCVal)
+	addHeader(debugRangeHeaderMVCCIntent)
+	addHeader(debugRangeHeaderMVCCSys)
 
 	// Add the replica headers.
 	sort.Sort(d.ReplicaIDs)
@@ -492,6 +508,93 @@ func (d *debugRangeData) postProcessing() {
 			Value: strconv.FormatUint(info.State.TruncatedState.Term, 10),
 		}
 
+		// MVCC stats.
+		if info.State.ReplicaState.Stats.LastUpdateNanos > 0 {
+			d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID] = &debugRangeOutput{
+				Title: fmt.Sprintf(
+					"%d\n%s",
+					info.State.ReplicaState.Stats.LastUpdateNanos,
+					time.Unix(0, info.State.ReplicaState.Stats.LastUpdateNanos),
+				),
+				Value: time.Unix(0, info.State.ReplicaState.Stats.LastUpdateNanos).String(),
+			}
+		} else {
+			d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID] = &debugRangeOutput{
+				Title: debugRangeValueEmpty,
+				Value: debugRangeValueEmpty,
+			}
+		}
+		intentAge := time.Duration(info.State.ReplicaState.Stats.IntentAge)
+		d.Results[debugRangeHeaderMVCCIntentAge][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf("%dns", info.State.ReplicaState.Stats.IntentAge),
+			Value: intentAge.String(),
+		}
+		gcBytesAge := time.Duration(info.State.ReplicaState.Stats.GCBytesAge)
+		d.Results[debugRangeHeaderMVCCGCBytesAge][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf("%dns", info.State.ReplicaState.Stats.GCBytesAge),
+			Value: gcBytesAge.String(),
+		}
+		d.Results[debugRangeHeaderMVCCLive][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf(
+				"%d bytes / %d",
+				info.State.ReplicaState.Stats.LiveBytes,
+				info.State.ReplicaState.Stats.LiveCount,
+			),
+			Value: fmt.Sprintf(
+				"%d bytes / %d",
+				info.State.ReplicaState.Stats.LiveBytes,
+				info.State.ReplicaState.Stats.LiveCount,
+			),
+		}
+		d.Results[debugRangeHeaderMVCCKey][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf(
+				"%d bytes / %d",
+				info.State.ReplicaState.Stats.KeyBytes,
+				info.State.ReplicaState.Stats.KeyCount,
+			),
+			Value: fmt.Sprintf(
+				"%d bytes / %d",
+				info.State.ReplicaState.Stats.KeyBytes,
+				info.State.ReplicaState.Stats.KeyCount,
+			),
+		}
+		d.Results[debugRangeHeaderMVCCVal][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf(
+				"%d bytes / %d",
+				info.State.ReplicaState.Stats.ValBytes,
+				info.State.ReplicaState.Stats.ValCount,
+			),
+			Value: fmt.Sprintf(
+				"%d bytes / %d",
+				info.State.ReplicaState.Stats.ValBytes,
+				info.State.ReplicaState.Stats.ValCount,
+			),
+		}
+		d.Results[debugRangeHeaderMVCCIntent][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf(
+				"%d bytes / %d",
+				info.State.ReplicaState.Stats.IntentBytes,
+				info.State.ReplicaState.Stats.IntentCount,
+			),
+			Value: fmt.Sprintf(
+				"%d bytes / %d",
+				info.State.ReplicaState.Stats.IntentBytes,
+				info.State.ReplicaState.Stats.IntentCount,
+			),
+		}
+		d.Results[debugRangeHeaderMVCCSys][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf(
+				"%d bytes / %d",
+				info.State.ReplicaState.Stats.SysBytes,
+				info.State.ReplicaState.Stats.SysCount,
+			),
+			Value: fmt.Sprintf(
+				"%d bytes / %d",
+				info.State.ReplicaState.Stats.SysBytes,
+				info.State.ReplicaState.Stats.SysCount,
+			),
+		}
+
 		// If the replica is dormant, set all classes in the store to dormant.
 		if info.RaftState.State == raftStateDormant {
 			for _, header := range d.HeaderKeys {
@@ -582,6 +685,45 @@ func (d *debugRangeData) postProcessing() {
 			if leaderStoreInfo.State.TruncatedState.Term != info.State.TruncatedState.Term {
 				d.Results[debugRangeHeaderTruncatedTerm][d.HeaderFakeStoreID].Class = debugRangeClassWarning
 				d.Results[debugRangeHeaderTruncatedTerm][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+
+			// MVCC Stats.
+			if leaderStoreInfo.State.ReplicaState.Stats.LastUpdateNanos != info.State.ReplicaState.Stats.LastUpdateNanos {
+				d.Results[debugRangeHeaderMVCCLastUpdate][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStoreInfo.State.ReplicaState.Stats.IntentAge != info.State.ReplicaState.Stats.IntentAge {
+				d.Results[debugRangeHeaderMVCCIntentAge][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCIntentAge][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStoreInfo.State.ReplicaState.Stats.GCBytesAge != info.State.ReplicaState.Stats.GCBytesAge {
+				d.Results[debugRangeHeaderMVCCGCBytesAge][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCGCBytesAge][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStoreInfo.State.ReplicaState.Stats.LiveBytes != info.State.ReplicaState.Stats.LiveBytes ||
+				leaderStoreInfo.State.ReplicaState.Stats.LiveCount != info.State.ReplicaState.Stats.LiveCount {
+				d.Results[debugRangeHeaderMVCCLive][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCLive][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStoreInfo.State.ReplicaState.Stats.KeyBytes != info.State.ReplicaState.Stats.KeyBytes ||
+				leaderStoreInfo.State.ReplicaState.Stats.KeyCount != info.State.ReplicaState.Stats.KeyCount {
+				d.Results[debugRangeHeaderMVCCKey][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCKey][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStoreInfo.State.ReplicaState.Stats.ValBytes != info.State.ReplicaState.Stats.ValBytes ||
+				leaderStoreInfo.State.ReplicaState.Stats.ValCount != info.State.ReplicaState.Stats.ValCount {
+				d.Results[debugRangeHeaderMVCCVal][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCVal][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStoreInfo.State.ReplicaState.Stats.IntentBytes != info.State.ReplicaState.Stats.IntentBytes ||
+				leaderStoreInfo.State.ReplicaState.Stats.IntentCount != info.State.ReplicaState.Stats.IntentCount {
+				d.Results[debugRangeHeaderMVCCIntent][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCIntent][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStoreInfo.State.ReplicaState.Stats.SysBytes != info.State.ReplicaState.Stats.SysBytes ||
+				leaderStoreInfo.State.ReplicaState.Stats.SysCount != info.State.ReplicaState.Stats.SysCount {
+				d.Results[debugRangeHeaderMVCCSys][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCSys][info.SourceStoreID].Class = debugRangeClassWarning
 			}
 
 			// Find all replicas that the leader doesn't know about and any
