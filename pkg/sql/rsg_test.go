@@ -18,7 +18,6 @@ package sql_test
 
 import (
 	gosql "database/sql"
-	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -29,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
@@ -44,12 +44,51 @@ var (
 	flagRSGGoRoutines = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
 )
 
+func parseStatementList(sql string) (parser.StatementList, error) {
+	var p parser.Parser
+	return p.Parse(sql)
+}
+
+func verifyFormat(sql string) error {
+	stmts, err := parseStatementList(sql)
+	if err != nil {
+		// Cannot serialize a statement list without parsing it.
+		return nil
+	}
+	formattedSQL := parser.AsStringWithFlags(stmts, parser.FmtSimpleWithPasswords)
+	formattedStmts, err := parseStatementList(formattedSQL)
+	if err != nil {
+		return errors.Wrapf(err, "cannot parse output of Format: sql=%q, formattedSQL=%q", sql, formattedSQL)
+	}
+	formattedFormattedSQL := parser.AsStringWithFlags(formattedStmts, parser.FmtSimpleWithPasswords)
+	if formattedSQL != formattedFormattedSQL {
+		return errors.Errorf("Parse followed by Format is not idempotent: %q != %q", formattedSQL, formattedFormattedSQL)
+	}
+	// TODO(eisen): ensure that the reconstituted SQL not only parses but also has
+	// the same meaning as the original.
+	return nil
+}
+
+type verifyFormatDB struct {
+	db              *gosql.DB
+	verifyFormatErr error
+}
+
+func (db *verifyFormatDB) exec(sql string) error {
+	if err := verifyFormat(sql); err != nil {
+		db.verifyFormatErr = err
+		return err
+	}
+	_, err := db.db.Exec(sql)
+	return err
+}
+
 func TestRandomSyntaxGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const rootStmt = "stmt"
 
-	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) error {
+	testRandomSyntax(t, nil, func(db *verifyFormatDB, r *rsg.RSG) error {
 		s := r.Generate(rootStmt, 20)
 		// Don't start transactions since closing them is tricky. Just issuing a
 		// ROLLBACK after all queries doesn't work due to the parellel uses of db,
@@ -64,12 +103,10 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		}
 		// Recreate the database on every run in case it was dropped or renamed in
 		// a previous run. Should always succeed.
-		_, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident`)
-		if err != nil {
+		if err := db.exec(`CREATE DATABASE IF NOT EXISTS ident`); err != nil {
 			panic(err)
 		}
-		_, err = db.Exec(s)
-		return err
+		return db.exec(s)
 	})
 }
 
@@ -78,10 +115,9 @@ func TestRandomSyntaxSelect(t *testing.T) {
 
 	const rootStmt = "target_list"
 
-	testRandomSyntax(t, func(db *gosql.DB) error {
-		_, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
-		return err
-	}, func(db *gosql.DB, r *rsg.RSG) error {
+	testRandomSyntax(t, func(db *verifyFormatDB) error {
+		return db.exec(`CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
+	}, func(db *verifyFormatDB, r *rsg.RSG) error {
 		targets := r.Generate(rootStmt, 30)
 		var where, from string
 		// Only generate complex clauses half the time.
@@ -92,8 +128,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 			from = "FROM ident"
 		}
 		s := fmt.Sprintf("SELECT %s %s %s", targets, from, where)
-		_, err := db.Exec(s)
-		return err
+		return db.exec(s)
 	})
 }
 
@@ -129,7 +164,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		}
 	}()
 
-	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) error {
+	testRandomSyntax(t, nil, func(db *verifyFormatDB, r *rsg.RSG) error {
 		nb := <-namedBuiltinChan
 		var args []string
 		switch ft := nb.builtin.Types.(type) {
@@ -162,8 +197,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		s := fmt.Sprintf("SELECT %s(%s)", nb.name, strings.Join(args, ", "))
 		funcdone := make(chan error, 1)
 		go func() {
-			_, err := db.Exec(s)
-			funcdone <- err
+			funcdone <- db.exec(s)
 		}()
 		select {
 		case err := <-funcdone:
@@ -179,11 +213,10 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 
 	const rootStmt = "func_expr_common_subexpr"
 
-	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) error {
+	testRandomSyntax(t, nil, func(db *verifyFormatDB, r *rsg.RSG) error {
 		expr := r.Generate(rootStmt, 30)
 		s := fmt.Sprintf("SELECT %s", expr)
-		_, err := db.Exec(s)
-		return err
+		return db.exec(s)
 	})
 }
 
@@ -193,7 +226,7 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 // if the statement executed successfully. This is used to verify that at
 // least 1 success occurs (otherwise it is likely a bad test).
 func testRandomSyntax(
-	t *testing.T, setup func(*gosql.DB) error, fn func(*gosql.DB, *rsg.RSG) error,
+	t *testing.T, setup func(*verifyFormatDB) error, fn func(*verifyFormatDB, *rsg.RSG) error,
 ) {
 	if *flagRSGTime == 0 {
 		t.Skip("enable with '-rsg <duration>'")
@@ -203,8 +236,9 @@ func testRandomSyntax(
 	params.UseDatabase = "ident"
 	// Use a low memory limit to quickly halt runaway functions.
 	params.SQLMemoryPoolSize = 3 * 1024 * 1024 // 3MB
-	s, db, _ := serverutils.StartServer(t, params)
+	s, rawDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
+	db := &verifyFormatDB{db: rawDB}
 
 	if setup != nil {
 		err := setup(db)
@@ -256,5 +290,7 @@ func testRandomSyntax(
 	t.Logf("%d executions, %d successful", countsMu.total, countsMu.success)
 	if countsMu.success == 0 {
 		t.Fatal("0 successful executions")
+	} else if db.verifyFormatErr != nil {
+		t.Fatal(db.verifyFormatErr)
 	}
 }
