@@ -128,7 +128,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		liveness, err := repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
 		if err != nil {
 			llChan <- roachpb.NewError(&roachpb.LeaseRejectedError{
-				Existing:  *status.lease,
+				Existing:  status.lease,
 				Requested: reqLease,
 				Message:   fmt.Sprintf("couldn't request lease for %+v: %v", nextLeaseHolder, err),
 			})
@@ -141,13 +141,13 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		leaseReq = &roachpb.TransferLeaseRequest{
 			Span:      reqSpan,
 			Lease:     reqLease,
-			PrevLease: *status.lease,
+			PrevLease: status.lease,
 		}
 	} else {
 		leaseReq = &roachpb.RequestLeaseRequest{
 			Span:      reqSpan,
 			Lease:     reqLease,
-			PrevLease: *status.lease,
+			PrevLease: status.lease,
 		}
 	}
 
@@ -199,7 +199,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			}
 			// Set error for propagation to all waiters below.
 			if err != nil {
-				pErr = roachpb.NewError(newNotLeaseHolderError(status.lease, repl.store.StoreID(), repl.Desc()))
+				pErr = roachpb.NewError(newNotLeaseHolderError(&status.lease, repl.store.StoreID(), repl.Desc()))
 			}
 		}
 
@@ -291,10 +291,10 @@ const (
 // is accurate, the lease and optionally the liveness if the lease is
 // epoch-based.
 type LeaseStatus struct {
-	state     leaseState     // state of the lease @timestamp
-	timestamp hlc.Timestamp  // timestamp the lease was evaluated at
-	lease     *roachpb.Lease // lease which status describes. Never nil.
-	liveness  *Liveness      // liveness if epoch-based lease
+	state     leaseState    // state of the lease @timestamp
+	timestamp hlc.Timestamp // timestamp the lease was evaluated at
+	lease     roachpb.Lease // lease which status describes.
+	liveness  *Liveness     // liveness if epoch-based lease
 }
 
 // leaseStatus returns lease status. If the lease is epoch-based,
@@ -333,15 +333,10 @@ type LeaseStatus struct {
 // * the read is served by the old lease holder (which has not
 //   processed the change in lease holdership).
 // * the client fails to read their own write.
-//
-// lease cannot be nil.
 func (r *Replica) leaseStatus(
-	lease *roachpb.Lease, timestamp, minProposedTS hlc.Timestamp,
+	lease roachpb.Lease, timestamp, minProposedTS hlc.Timestamp,
 ) LeaseStatus {
 	status := LeaseStatus{timestamp: timestamp, lease: lease}
-	if lease == nil {
-		log.Fatalf(context.TODO(), "nil lease passed to leaseStatus")
-	}
 	var expiration hlc.Timestamp
 	if lease.Type() == roachpb.LeaseExpiration {
 		expiration = lease.Expiration
@@ -458,7 +453,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		}
 		desc := r.mu.state.Desc
 		if !status.lease.OwnedBy(r.store.StoreID()) {
-			return nil, nil, newNotLeaseHolderError(status.lease, r.store.StoreID(), desc)
+			return nil, nil, newNotLeaseHolderError(&status.lease, r.store.StoreID(), desc)
 		}
 		// Verify the target is a replica of the range.
 		var ok bool

@@ -845,20 +845,17 @@ func (r *Replica) IsDestroyed() error {
 
 // getLease returns the current lease, and the tentative next one, if a lease
 // request initiated by this replica is in progress.
-//
-// The current lease is never nil.
-func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
+func (r *Replica) getLease() (roachpb.Lease, *roachpb.Lease) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getLeaseRLocked()
 }
 
-func (r *Replica) getLeaseRLocked() (*roachpb.Lease, *roachpb.Lease) {
-	lease := *r.mu.state.Lease
+func (r *Replica) getLeaseRLocked() (roachpb.Lease, *roachpb.Lease) {
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
-		return &lease, &nextLease
+		return r.mu.state.Lease, &nextLease
 	}
-	return &lease, nil
+	return r.mu.state.Lease, nil
 }
 
 // ownsValidLease returns whether this replica is the current valid
@@ -874,13 +871,13 @@ func (r *Replica) ownsValidLease(ts hlc.Timestamp) bool {
 
 // IsLeaseValid returns true if the replica's lease is owned by this
 // replica and is valid (not expired, not in stasis).
-func (r *Replica) IsLeaseValid(lease *roachpb.Lease, ts hlc.Timestamp) bool {
+func (r *Replica) IsLeaseValid(lease roachpb.Lease, ts hlc.Timestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.isLeaseValidRLocked(lease, ts)
 }
 
-func (r *Replica) isLeaseValidRLocked(lease *roachpb.Lease, ts hlc.Timestamp) bool {
+func (r *Replica) isLeaseValidRLocked(lease roachpb.Lease, ts hlc.Timestamp) bool {
 	return r.leaseStatus(lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
 }
 
@@ -986,7 +983,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
 					return nil, roachpb.NewError(
-						newNotLeaseHolderError(status.lease, r.store.StoreID(), r.mu.state.Desc))
+						newNotLeaseHolderError(&status.lease, r.store.StoreID(), r.mu.state.Desc))
 				}
 				// Check that we're not in the process of transferring the lease away.
 				// If we are transferring the lease away, we can't serve reads or
@@ -1044,7 +1041,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				}
 				// If lease is currently held by another, redirect to holder.
 				return nil, roachpb.NewError(
-					newNotLeaseHolderError(status.lease, r.store.StoreID(), r.mu.state.Desc))
+					newNotLeaseHolderError(&status.lease, r.store.StoreID(), r.mu.state.Desc))
 			}
 
 			// Return a nil chan to signal that we have a valid lease.
@@ -1094,7 +1091,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 							} else if lease, _ := r.getLease(); !r.IsLeaseValid(lease, r.store.Clock().Now()) {
 								err = newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc())
 							} else {
-								err = newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc())
+								err = newNotLeaseHolderError(&lease, r.store.StoreID(), r.Desc())
 							}
 							pErr = roachpb.NewError(err)
 						}
@@ -2186,7 +2183,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		}
 	}()
 
-	var lease *roachpb.Lease
+	var lease roachpb.Lease
 	// For lease commands, use the provided previous lease for verification.
 	if ba.IsSingleSkipLeaseCheckRequest() {
 		lease = ba.GetPrevLeaseForLeaseRequest()
@@ -2395,10 +2392,8 @@ func (r *Replica) evaluateProposal(
 
 // insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
 // it to the pending map.
-//
-// lease cannot be nil.
 func (r *Replica) insertProposalLocked(
-	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease *roachpb.Lease,
+	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease roachpb.Lease,
 ) {
 	// Assign a lease index. Note that we do this as late as possible
 	// to make sure (to the extent that we can) that we don't assign
@@ -2412,7 +2407,7 @@ func (r *Replica) insertProposalLocked(
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	proposal.command.ProposerReplica = proposerReplica
-	proposal.command.ProposerLease = *proposerLease
+	proposal.command.ProposerLease = proposerLease
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
 			proposal.idKey, proposal.command.MaxLeaseIndex)
@@ -2443,11 +2438,9 @@ func makeIDKey() storagebase.CmdIDKey {
 //   waiting for successful execution.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
-//
-// lease cannot be nil.
 func (r *Replica) propose(
 	ctx context.Context,
-	lease *roachpb.Lease,
+	lease roachpb.Lease,
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *SpanSet,
@@ -3497,10 +3490,7 @@ func (r *Replica) processRaftCommand(
 	if idKey != "" {
 		isLeaseRequest = raftCmd.ReplicatedEvalResult.IsLeaseRequest
 		if isLeaseRequest {
-			if raftCmd.ReplicatedEvalResult.State.Lease == nil {
-				log.Fatalf(ctx, "isLeaseRequest but no lease. eval state: %v", raftCmd.ReplicatedEvalResult.State)
-			}
-			requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
+			requestedLease = raftCmd.ReplicatedEvalResult.State.Lease
 		}
 		ts = raftCmd.ReplicatedEvalResult.Timestamp
 		rSpan = roachpb.RSpan{
@@ -3521,7 +3511,7 @@ func (r *Replica) processRaftCommand(
 	// proposer_lease field in the proto.
 	verifyLease := func() error {
 		// Handle the case of pre-epoch-based-leases command.
-		return raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease)
+		return raftCmd.ProposerLease.Equivalent(r.mu.state.Lease)
 	}
 
 	// TODO(tschottdorf): consider the Trace situation here.
@@ -3550,7 +3540,7 @@ func (r *Replica) processRaftCommand(
 		if !isLeaseRequest {
 			// We return a NotLeaseHolderError so that the DistSender retries.
 			nlhe := newNotLeaseHolderError(
-				r.mu.state.Lease, raftCmd.ProposerReplica.StoreID, r.mu.state.Desc)
+				&r.mu.state.Lease, raftCmd.ProposerReplica.StoreID, r.mu.state.Desc)
 			nlhe.CustomMsg = fmt.Sprintf(
 				"stale proposal: command was proposed under lease %s but is being applied "+
 					"under lease: %s", raftCmd.ProposerLease, r.mu.state.Lease)
@@ -3560,7 +3550,7 @@ func (r *Replica) processRaftCommand(
 			// replica.RedirectOnOrAcquireLease() understands. Note that these
 			// requests don't go through the DistSender.
 			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
-				Existing:  *r.mu.state.Lease,
+				Existing:  r.mu.state.Lease,
 				Requested: requestedLease,
 			})
 		}
@@ -3728,14 +3718,9 @@ func (r *Replica) processRaftCommand(
 func (r *Replica) maybeAcquireSplitMergeLock(
 	raftCmd storagebase.RaftCommand,
 ) func(storagebase.ReplicatedEvalResult) {
-	var split *storagebase.Split
-	var merge *storagebase.Merge
-	split = raftCmd.ReplicatedEvalResult.Split
-	merge = raftCmd.ReplicatedEvalResult.Merge
-
-	if split != nil {
+	if split := raftCmd.ReplicatedEvalResult.Split; split != nil {
 		return r.acquireSplitLock(&split.SplitTrigger)
-	} else if merge != nil {
+	} else if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
 		return r.acquireMergeLock(&merge.MergeTrigger)
 	}
 	return nil
