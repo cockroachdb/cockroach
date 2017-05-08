@@ -14,7 +14,8 @@ in the admin UI, along with their start timestamps  / durations
 
 Currently, there's no visibility into what queries/sessions are running on the cluster at any
 given point of time. Adding visibility into this has been a common customer request for
-a while, along with the ability to terminate long-running queries and specific sessions.
+a while. This functionality would also be useful for determining which queries and sessions
+to cancel or terminate; however, the cancellation mechanism is out of scope for this RFC.
 
 # Detailed design
 
@@ -26,8 +27,15 @@ node-local session registries exposed via a virtual table.
 
 Currently we don't have any unique identifiers for sessions or queries. Having UUID strings
 for this purpose should guarantee uniqueness. Later on, when cancellation is implemented,
-the user would only have to specify a node ID and session/query ID in the RPC call
+the user would only have to specify the gateway node ID, and the session/query ID in the RPC call
 for cancelling that query or session.
+
+These two IDs (gateway node ID, session/query ID) can be combined in one with a delimeter
+separating them, or they can be presented individually.
+
+Sessions are currently identified in logs with log tags that consist of remote IP address
+and port. Replacing these with session UUIDs can be considered, but since the remote IP/port
+combination has a more direct meaning to the DBA, it is best to leave it as-is for now.
 
 ## Node-local session and query registries
 
@@ -74,32 +82,54 @@ while the latter would return the contents of its local session registry.
 
 Similarly, `Queries` and `LocalQueries` would be the RPC endpoints for queries.
 
-## Updating existing log tags with new session IDs
-
-Currently, sessions are identified in logs with remote IP addresses and ports. Changing
-that to use the new session IDs in logs will allow for a uniform way to identify (and
-potentially, kill) sessions.
-
 # Drawbacks
 
-## Locking
+## Locking/synchronization
 
 Additions, accesses and deletions to session and query registries would require mutex locks.
 This has the potential to cause a slight decrease in performance when active sessions and queries
 are being requested, but since that action would be present in only a fraction of requests,
 the most common use-cases shouldn't see an impact in performance.
 
+To ensure that we don't unintentionally cause a performance regression, the included benchmarks
+in `pkg/sql/bench_test.go` will be run before and after the change, and the results posted in the PR
+for this feature.
+
 # Alternatives
 
-## Populate virtual table with info from every node in cluster
+## Generating identifiers from hashing object addresses
+
+One alternative to a UUID-based identification that was suggested, was hashing object pointers.
+For instance, a hash of the session object address could be its identifier. Since cluster IDs
+are currently UUIDs, it's better to continue the UUID convention than to introduce pointer
+hashes as another one.
+
+Furthermore, it's possible, though unlikely, for a new session/query object to be created at the same
+address as a previous one - violating our uniqueness constraint.
+
+Note that, with either approach, both a node ID and a session/query ID would be necessary to
+look up that object in the cluster.
+
+# Unresolved questions
+
+## Should we store ApplicationName in session shadow object?
+
+Currently, this proposed solution doesn't include the Session `ApplicationName`  in the
+shadow object and virtual table, however it might be useful information for the DBA to identify
+sessions.
+
+Adding this field to the registry would involve adding mutex locks on each session shadow object in
+that registry - which would be acquired every time that object is read, and every time the
+`ApplicationName` is updated in `resetApplicationName()`.
+
+## Populate virtual table with cluster-wide info or let RPC be the only interface for that
 
 Instead of having the virtual table serve only sessions/queries
 on that particular node, it could serve cluster-wide sessions and queries.
 This would allow the DBA to use SQL syntax for filtering/joining on the result
 set from the entire cluster, rather than be limited to the node where the query is being run.
 
-This approach would violate the convention of only serving node-local information through
-`crdb_internal`.
-
-# Unresolved questions
-
+There could be two different tables for each kind of entity (session and queries):
+one for local sessions/queries, and one for cluster ones. That way, queries for local
+sessions/queries could run faster since that vtable population wouldn't involve
+communicating with other nodes.
