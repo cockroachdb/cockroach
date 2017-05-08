@@ -296,7 +296,7 @@ func Backup(
 		opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
 		err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
-			sql.SetTxnTimestamps(txn, endTime)
+			txn.SetFixedTimestamp(endTime)
 			sqlDescs, err = allSQLDescriptors(ctx, txn)
 			return err
 		})
