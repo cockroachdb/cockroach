@@ -925,10 +925,11 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 // Test that a lease extension (a RequestLeaseRequest that doesn't change the
 // lease holder) is not blocked by ongoing reads.
 // The test relies on two things:
-// 1) Lease extensions, unlike lease transfers, are not blocked by reads through their
-// PostCommitTrigger.noConcurrentReads.
-// 2) Requests with the non-KV flag, such as RequestLeaseRequest, do not
-// go through the command queue.
+// 1) Lease extensions, unlike lease transfers, are not blocked by reads through
+// their ReplicatedEvalResult.BlockReads.
+// 2) Requests such as RequestLeaseRequest don't declare to touch the whole key
+// span of the range, and thus don't conflict through the command queue with
+// other reads.
 func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	readBlocked := make(chan struct{})
@@ -981,6 +982,12 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		curLease, _, err := s.GetRangeLease(context.TODO(), key)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		leaseReq := roachpb.RequestLeaseRequest{
 			Span: roachpb.Span{
 				Key: key,
@@ -990,6 +997,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0),
 				Replica:    repDesc,
 			},
+			PrevLease: curLease,
 		}
 		if _, pErr := client.SendWrapped(context.Background(), s.DistSender(), &leaseReq); pErr != nil {
 			t.Fatal(pErr)

@@ -845,6 +845,8 @@ func (r *Replica) IsDestroyed() error {
 
 // getLease returns the current lease, and the tentative next one, if a lease
 // request initiated by this replica is in progress.
+//
+// The current lease is never nil.
 func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -2315,16 +2317,16 @@ func (r *Replica) requestToProposal(
 	// (i.e. pass nil instead of `spans` here) once we're confident our coverage
 	// is good.
 	result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
-	// Fill out the local results even if pErr != nil; we'll return the error below.
+	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal.Local = &result.Local
 	proposal.command = storagebase.RaftCommand{
-		ReplicatedEvalResult: &result.Replicated,
+		ReplicatedEvalResult: result.Replicated,
 		WriteBatch:           result.WriteBatch,
 	}
 	if r.store.TestingKnobs().TestingEvalFilter != nil {
 		// For backwards compatibility, tests that use TestingEvalFilter
 		// need the original request to be preserved. See #10493
-		proposal.command.BatchRequest = &ba
+		proposal.command.TestingBatchRequest = &ba
 	}
 	return proposal, pErr
 }
@@ -2393,6 +2395,8 @@ func (r *Replica) evaluateProposal(
 
 // insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
 // it to the pending map.
+//
+// lease cannot be nil.
 func (r *Replica) insertProposalLocked(
 	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease *roachpb.Lease,
 ) {
@@ -2408,7 +2412,7 @@ func (r *Replica) insertProposalLocked(
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	proposal.command.ProposerReplica = proposerReplica
-	proposal.command.ProposerLease = proposerLease
+	proposal.command.ProposerLease = *proposerLease
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
 			proposal.idKey, proposal.command.MaxLeaseIndex)
@@ -2439,6 +2443,8 @@ func makeIDKey() storagebase.CmdIDKey {
 //   waiting for successful execution.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
+//
+// lease cannot be nil.
 func (r *Replica) propose(
 	ctx context.Context,
 	lease *roachpb.Lease,
@@ -2487,7 +2493,7 @@ func (r *Replica) propose(
 	// An error here corresponds to a failfast-proposal: The command resulted
 	// in an error and did not need to commit a batch (the common error case).
 	if pErr != nil {
-		if proposal.Local == nil || proposal.command.ReplicatedEvalResult == nil {
+		if proposal.Local == nil {
 			return nil, nil, errors.Errorf(
 				"requestToProposal returned error %s without eval results", pErr)
 		}
@@ -2578,21 +2584,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	}
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
 
-	var changeReplicas *storagebase.ChangeReplicas
-	if p.command.ReplicatedEvalResult != nil {
-		changeReplicas = p.command.ReplicatedEvalResult.ChangeReplicas
-	} else {
-		if union, ok := p.Request.GetArg(roachpb.EndTransaction); ok {
-			ict := union.(*roachpb.EndTransactionRequest).InternalCommitTrigger
-			if tr := ict.GetChangeReplicasTrigger(); tr != nil {
-				changeReplicas = &storagebase.ChangeReplicas{
-					ChangeReplicasTrigger: *tr,
-				}
-			}
-		}
-	}
-
-	if crt := changeReplicas; crt != nil {
+	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTransactionRequest with a ChangeReplicasTrigger is special
 		// because raft needs to understand it; it cannot simply be an
 		// opaque command.
@@ -3502,7 +3494,7 @@ func (r *Replica) processRaftCommand(
 	var requestedLease roachpb.Lease
 	var ts hlc.Timestamp
 	var rSpan roachpb.RSpan
-	if raftCmd.ReplicatedEvalResult != nil {
+	if idKey != "" {
 		isLeaseRequest = raftCmd.ReplicatedEvalResult.IsLeaseRequest
 		if isLeaseRequest {
 			if raftCmd.ReplicatedEvalResult.State.Lease == nil {
@@ -3514,24 +3506,6 @@ func (r *Replica) processRaftCommand(
 		rSpan = roachpb.RSpan{
 			Key:    raftCmd.ReplicatedEvalResult.StartKey,
 			EndKey: raftCmd.ReplicatedEvalResult.EndKey,
-		}
-	} else if idKey != "" {
-		isLeaseRequest = raftCmd.BatchRequest.IsLeaseRequest()
-		if isLeaseRequest {
-			rl, ok := raftCmd.BatchRequest.GetArg(roachpb.RequestLease)
-			if !ok {
-				log.Fatalf(ctx, "isLeaseRequest but no lease: %s", raftCmd.BatchRequest)
-			}
-			requestedLease = rl.(*roachpb.RequestLeaseRequest).Lease
-		}
-		ts = raftCmd.BatchRequest.Timestamp
-		var err error
-		rSpan, err = keys.Range(*raftCmd.BatchRequest)
-		if err != nil {
-			// TODO(bdarnell): This should really use forcedErr but I don't
-			// want to do that much refactoring for this code path that will
-			// be deleted soon.
-			log.Fatalf(ctx, "failed to compute range for BatchRequest: %s", err)
 		}
 	}
 
@@ -3545,22 +3519,8 @@ func (r *Replica) processRaftCommand(
 	// due to Raft delays / reorderings.
 	// To understand why this lease verification is necessary, see comments on the
 	// proposer_lease field in the proto.
-	//
-	// TODO(spencer): remove the special-casing for the pre-epoch range
-	// leases.
 	verifyLease := func() error {
 		// Handle the case of pre-epoch-based-leases command.
-		if raftCmd.ProposerLease == nil {
-			// Skip verification for lease commands for legacy case.
-			if raftCmd.BatchRequest.IsSingleSkipLeaseCheckRequest() {
-				return nil
-			}
-			l, proposer := r.mu.state.Lease, raftCmd.ProposerReplica
-			if l.OwnedBy(proposer.StoreID) && ts.Less(l.DeprecatedStartStasis) {
-				return nil
-			}
-			return errors.Errorf("lease %s not held", l)
-		}
 		return raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease)
 	}
 
@@ -3584,8 +3544,8 @@ func (r *Replica) processRaftCommand(
 	} else if err := verifyLease(); err != nil {
 		log.VEventf(
 			ctx, 1,
-			"command %s proposed from replica %+v: %s",
-			raftCmd.BatchRequest, raftCmd.ProposerReplica, err,
+			"command proposed from replica %+v: %s",
+			raftCmd.ProposerReplica, err,
 		)
 		if !isLeaseRequest {
 			// We return a NotLeaseHolderError so that the DistSender retries.
@@ -3671,7 +3631,7 @@ func (r *Replica) processRaftCommand(
 			// Close over raftCmd to capture its value at execution time; we clear
 			// ReplicatedEvalResult on certain errors.
 			defer func() {
-				splitMergeUnlock(*raftCmd.ReplicatedEvalResult)
+				splitMergeUnlock(raftCmd.ReplicatedEvalResult)
 			}()
 		}
 	}
@@ -3679,14 +3639,10 @@ func (r *Replica) processRaftCommand(
 	var response proposalResult
 	var writeBatch *storagebase.WriteBatch
 	{
-		if raftCmd.ReplicatedEvalResult == nil && forcedErr == nil {
-			panic("non-proposer-evaluated command found in raft log. Cannot upgrade directly from versions older than beta-20170413 to beta-20170420 or newer.")
-		}
-
-		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; forcedErr == nil && filter != nil && raftCmd.ReplicatedEvalResult != nil {
+		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; forcedErr == nil && filter != nil {
 			forcedErr = filter(storagebase.ApplyFilterArgs{
 				CmdID:                idKey,
-				ReplicatedEvalResult: *raftCmd.ReplicatedEvalResult,
+				ReplicatedEvalResult: raftCmd.ReplicatedEvalResult,
 				StoreID:              r.store.StoreID(),
 				RangeID:              r.RangeID,
 			})
@@ -3694,7 +3650,7 @@ func (r *Replica) processRaftCommand(
 
 		if forcedErr != nil {
 			// Apply an empty entry.
-			raftCmd.ReplicatedEvalResult = &storagebase.ReplicatedEvalResult{}
+			raftCmd.ReplicatedEvalResult = storagebase.ReplicatedEvalResult{}
 			raftCmd.WriteBatch = nil
 		}
 		raftCmd.ReplicatedEvalResult.State.RaftAppliedIndex = index
@@ -3711,12 +3667,12 @@ func (r *Replica) processRaftCommand(
 			writeBatch = raftCmd.WriteBatch
 		}
 		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
-			ctx, idKey, *raftCmd.ReplicatedEvalResult, writeBatch)
+			ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch)
 
 		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
 				CmdID:                idKey,
-				ReplicatedEvalResult: *raftCmd.ReplicatedEvalResult,
+				ReplicatedEvalResult: raftCmd.ReplicatedEvalResult,
 				StoreID:              r.store.StoreID(),
 				RangeID:              r.RangeID,
 			})
@@ -3758,7 +3714,7 @@ func (r *Replica) processRaftCommand(
 	if proposedLocally {
 		proposal.finish(response)
 	} else if response.Err != nil {
-		log.VEventf(ctx, 1, "error executing raft command %s: %s", raftCmd.BatchRequest, response.Err)
+		log.VEventf(ctx, 1, "error executing raft command resulted in err: %s", response.Err)
 	}
 
 	return raftCmd.ReplicatedEvalResult.ChangeReplicas != nil
@@ -3774,25 +3730,8 @@ func (r *Replica) maybeAcquireSplitMergeLock(
 ) func(storagebase.ReplicatedEvalResult) {
 	var split *storagebase.Split
 	var merge *storagebase.Merge
-	if raftCmd.ReplicatedEvalResult != nil {
-		split = raftCmd.ReplicatedEvalResult.Split
-		merge = raftCmd.ReplicatedEvalResult.Merge
-	} else {
-		if union, ok := raftCmd.BatchRequest.GetArg(roachpb.EndTransaction); ok {
-			ict := union.(*roachpb.EndTransactionRequest).InternalCommitTrigger
-			if tr := ict.GetSplitTrigger(); tr != nil {
-				split = &storagebase.Split{
-					SplitTrigger: *tr,
-				}
-			}
-			if tr := ict.GetMergeTrigger(); tr != nil {
-				merge = &storagebase.Merge{
-					MergeTrigger: *tr,
-				}
-			}
-
-		}
-	}
+	split = raftCmd.ReplicatedEvalResult.Split
+	merge = raftCmd.ReplicatedEvalResult.Merge
 
 	if split != nil {
 		return r.acquireSplitLock(&split.SplitTrigger)
