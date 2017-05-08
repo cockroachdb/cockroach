@@ -229,12 +229,6 @@ type identAggregate struct {
 	val Datum
 }
 
-// IsIdentAggregate returns true for identAggregate.
-func IsIdentAggregate(f AggregateFunc) bool {
-	_, ok := f.(*identAggregate)
-	return ok
-}
-
 // NewIdentAggregate returns an identAggregate (see comment on struct).
 func NewIdentAggregate(*EvalContext) AggregateFunc {
 	return &identAggregate{}
