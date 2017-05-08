@@ -92,9 +92,9 @@ EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v
 0          render 0     ((2)[int] * (count((k)[int]))[int])[int]
 0          render 1     (v)[int]
 0          having       ((v)[int] < (2)[int])[bool]
-1  render                                                         (k int, v int)
-1          render 0     (k)[int]
-1          render 1     (v)[int]
+1  render                                                         (v int, k int)
+1          render 0     (v)[int]
+1          render 1     (k)[int]
 2  scan                                                           (k int, v int)
 2          table        t@primary
 2          filter       ((v)[int] > (123)[int])[bool]
@@ -109,10 +109,13 @@ EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v
 0          render 0     ((2)[int] * (count((k)[int]))[int])[int]
 0          render 1     (v)[int]
 0          having       ((v)[int] < (2)[int])[bool]
-1  scan                                                           (k int, v int)
-1          table        t@primary
-1          spans        ALL
-1          filter       ((v)[int] > (123)[int])[bool]
+1  render                                                         (v int, k int)
+1          render 0     (v)[int]
+1          render 1     (k)[int]
+2  scan                                                           (k int, v int)
+2          table        t@primary
+2          spans        ALL
+2          filter       ((v)[int] > (123)[int])[bool]
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) DELETE FROM t WHERE v > 1

@@ -284,7 +284,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			return 0, errors.Errorf("group with having not supported yet")
 		}
 		for _, fholder := range n.funcs {
-			if fholder.filter != nil {
+			if fholder.hasFilter {
 				return 0, errors.Errorf("aggregation with FILTER not supported yet")
 			}
 			if f, ok := fholder.expr.(*parser.FuncExpr); ok {
@@ -806,14 +806,14 @@ func (dsp *distSQLPlanner) addAggregators(
 		)
 	}
 	for i := range aggregations {
-		aggregations[i].ColIdx = uint32(p.planToStreamColMap[n.funcArgIdx[i]])
+		aggregations[i].ColIdx = uint32(p.planToStreamColMap[n.funcs[i].argRenderIdx])
 	}
 
 	inputTypes := p.ResultTypes
 
-	groupCols := make([]uint32, len(n.groupByIdx))
-	for i, idx := range n.groupByIdx {
-		groupCols[i] = uint32(p.planToStreamColMap[idx])
+	groupCols := make([]uint32, n.numGroupCols)
+	for i := 0; i < n.numGroupCols; i++ {
+		groupCols[i] = uint32(p.planToStreamColMap[i])
 	}
 
 	// We either have a local stage on each stream followed by a final stage, or
