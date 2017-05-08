@@ -19,6 +19,7 @@ package build
 import (
 	"fmt"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -49,6 +50,11 @@ var (
 	Distribution = "OSS"
 	typ          string // Type of this build; <empty>, "release", or "musl"
 )
+
+// IsRelease returns true if the binary was produced by a "release" build.
+func IsRelease() bool {
+	return strings.HasPrefix(typ, "release")
+}
 
 // Short returns a pretty printed build and version summary.
 func (b Info) Short() string {
