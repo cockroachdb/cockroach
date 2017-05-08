@@ -256,11 +256,6 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, agg := range n.funcs {
 			subplans = v.expr(name, "aggregate", i, agg.expr, subplans)
 		}
-		for i, rexpr := range n.render {
-			subplans = v.expr(name, "render", i, rexpr, subplans)
-		}
-		subplans = v.expr(name, "having", -1, n.having, subplans)
-		v.subqueries(name, subplans)
 		v.visit(n.plan)
 
 	case *windowNode:
