@@ -50,7 +50,7 @@ message EvalContext {
   // parse timestamps. Used to init EvalContext.Location.
   optional string location = 4 [(gogoproto.nullable) = false];
   optional string database = 5 [(gogoproto.nullable) = false];
-  repeated string searchPath = 6 [(gogoproto.nullable) = false];
+  repeated string searchPath = 6;
 }
 
 message SimpleResponse {
