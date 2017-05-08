@@ -776,13 +776,11 @@ func (r *Replica) handleLocalEvalResult(
 }
 
 func (r *Replica) handleEvalResult(
-	ctx context.Context, lResult *LocalEvalResult, rResult *storagebase.ReplicatedEvalResult,
+	ctx context.Context, lResult *LocalEvalResult, rResult storagebase.ReplicatedEvalResult,
 ) {
 	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
 	shouldAssert := false
-	if rResult != nil {
-		shouldAssert = r.handleReplicatedEvalResult(ctx, *rResult) || shouldAssert
-	}
+	shouldAssert = r.handleReplicatedEvalResult(ctx, rResult) || shouldAssert
 	if lResult != nil {
 		shouldAssert = r.handleLocalEvalResult(ctx, *lResult) || shouldAssert
 	}

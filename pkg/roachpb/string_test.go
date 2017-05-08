@@ -17,7 +17,6 @@
 package roachpb_test
 
 import (
-	"strings"
 	"testing"
 
 	// Hook up the pretty printer.
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -60,14 +58,6 @@ func TestTransactionString(t *testing.T) {
 
 	var txnEmpty roachpb.Transaction
 	_ = txnEmpty.String() // prevent regression of NPE
-
-	cmd := storagebase.RaftCommand{
-		BatchRequest: &roachpb.BatchRequest{},
-	}
-	cmd.BatchRequest.Txn = &txn
-	if actStr, idStr := cmd.String(), txnID.String(); !strings.Contains(actStr, idStr) {
-		t.Fatalf("expected to find '%s' in '%s'", idStr, actStr)
-	}
 }
 
 func TestBatchRequestString(t *testing.T) {

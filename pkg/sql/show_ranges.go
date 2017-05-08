@@ -138,9 +138,7 @@ func (n *showRangesNode) Next(ctx context.Context) (bool, error) {
 		return false, errors.Wrap(err, "error getting lease info")
 	}
 	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
-	if resp.Lease != nil {
-		n.values[3] = parser.NewDInt(parser.DInt(resp.Lease.Replica.StoreID))
-	}
+	n.values[3] = parser.NewDInt(parser.DInt(resp.Lease.Replica.StoreID))
 
 	n.rowIdx++
 	return true, nil
