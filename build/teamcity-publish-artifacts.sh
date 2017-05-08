@@ -7,7 +7,7 @@ set -euxo pipefail
 
 export BUILDER_HIDE_GOPATH_SRC=1
 
-build/teamcity-publish-s3-binaries "$@"
+build/teamcity-publish-s3-binaries.sh "$@"
 
 if [ "$TC_BUILD_BRANCH" != master ]; then
 	image=docker.io/cockroachdb/cockroach
