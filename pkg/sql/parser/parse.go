@@ -117,15 +117,16 @@ func (p *Parser) NormalizeExpr(ctx *EvalContext, typedExpr TypedExpr) (TypedExpr
 	return expr.(TypedExpr), nil
 }
 
-// parse parses the sql and returns a list of statements.
-func parse(sql string) (StatementList, error) {
+// Parse parses a sql statement string and returns a list of Statements.
+func Parse(sql string) (StatementList, error) {
 	var p Parser
 	return p.Parse(sql)
 }
 
-// ParseOne parses a sql statement.
+// ParseOne parses a sql statement string, ensuring that it contains only a
+// single statement, and returns that Statement.
 func ParseOne(sql string) (Statement, error) {
-	stmts, err := parse(sql)
+	stmts, err := Parse(sql)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +149,7 @@ func ParseTableName(sql string) (*TableName, error) {
 	return rename.Name.Normalize()
 }
 
-// parseExprs parses one or more sql expression.
+// parseExprs parses one or more sql expressions.
 func parseExprs(exprs []string) (Exprs, error) {
 	stmt, err := ParseOne(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")))
 	if err != nil {

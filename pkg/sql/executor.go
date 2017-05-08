@@ -588,7 +588,6 @@ func (e *Executor) execRequest(
 	} else if copymsg != copyMsgNone {
 		err = fmt.Errorf("unexpected copy command")
 	} else {
-		var parser parser.Parser
 		stmts, err = parser.Parse(sql)
 	}
 	session.phaseTimes[sessionEndParse] = timeutil.Now()
