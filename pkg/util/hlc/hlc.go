@@ -107,7 +107,7 @@ func (m *ManualClock) Set(nanos int64) {
 
 // UnixNano returns the local machine's physical nanosecond
 // unix epoch timestamp as a convenience to create a HLC via
-// c := hlc.NewClock(hlc.UnixNano).
+// c := hlc.NewClock(hlc.UnixNano, ...).
 func UnixNano() int64 {
 	return timeutil.Now().UnixNano()
 }
