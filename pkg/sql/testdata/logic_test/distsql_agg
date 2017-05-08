@@ -416,3 +416,41 @@ SELECT COUNT(*) FROM one AS a, one AS b, two AS c
 
 statement error memory budget exceeded
 SELECT SUM(d1.a), MAX(d1.a), MIN(d1.a) FROM data as d1, data as d2 GROUP BY (d1.b, d1.c, d1.d, d2.a, d2.b, d2.c, d2.d)
+
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT SUM(a), SUM(b), SUM(c) FROM data GROUP BY d HAVING SUM(a+b) > 10]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzclktr20wUhvffrxBnFfNNwaOLm2g1oUnB0DjFTVetForn4AgcjRiNoCHovxdJOBeFnBN3FjbeJKPL43dmnuFFj1AajYv8HmtIf4EEASEIiEBADAISyARU1qywro3tXhmAuf4D6VRAUVaN625nAlbGIqSP4Aq3QUjhJr_d4BJzjRYEaHR5selDKlvc5_ZB6dzlIGCJpUabBioOlAz-D1TY_e_-RpC1AkzjtiGt-Hj8-XptcZ07M0pX3Rp__Lw6UeFkO4qeRvHTKOlG84vLxc2JkpPRTJ5jbh-Cu7y-G2UkkLXvz_aZbkpjNVrUr_is3WU9yXbGcsKu7Guxcf1ey-B3M51GGMhpmqYXl1_mV-ffQMB149JAhUJFQsUf3v5_WtDCfDLV6LX34-R-DxsTf2CHTR7bYQv3a5-JPzD74bHZj_Zrn4k_MPvRsdmP92ufiT8w-_Gx2We-8pZYV6askfyOyASgXuOwJ7Vp7Aq_W7Pqf3y4vO7f7m9orN3wVA4X83J41E3rJSzHsHwJh69guRs884HPfGDpNW-Z0HRI7ndEwxEta0bbikk6oeHERzUNM6ppmFFNw5xqhmZUz3xUfybhU1rWqY8sGmZk0TAji4Y5WQzNyDrzkSWZFuVq1K9H_YrUr0k9q9SvS6VXmUqmTWNG2ps63UkaTXPSaJqTRtOsNAbnpL0pVVJa1v73NwAA__-HCjmS
+
+query RRR
+SELECT SUM(a), SUM(b), SUM(c) FROM data GROUP BY d HAVING SUM(a+b) > 10
+----
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+5500  5500  5500
+
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT AVG(a+b), c FROM data GROUP BY c, d HAVING c = d]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzcll1r2z4Yxe__n8I8Vw1_jVWy05fAQGMvkIsmI22uhhluLNJAagXZgZWS7z5kbySOu-c0c0pC7hxFPx35OYeDnymzqRkkjyan3neSJEiRoJAERSSoS7GghbMTk-fW-S0V0E9_Uu9c0CxbLAu_HAuaWGeo90zFrJgb6tFdcj83I5OkxpGg1BTJbF6KLNzsMXFPOk2KhASNTJYa1wt0GOgo0DL4P9CK4pUguyz-HL8Srxf-OJ06M00Ku6WrpdD-5fqfvwzuzrTsrJ-Vf74d35zp0D99Go79atip7a5faa13_xQ8JPnDS2Lx6u83Xx-wzKxLjTNp7Yh49Sbvdju--dH369HGnm5n0wgZaOXteF8a0m3jxcC-s4v6Vb_O5sVvmQ9BeenhsvD2Cx29Wuqfhte8DCcnDxVvIHzE8ZYnF2_gxT7jrQ6VNyB8xHlTJ5c34MU-8xYeKm9A-IjzFp5c3oAX-8xbdKi8AeEjzlt0cnkDXrzV5-ILUiOTL2yWG_Z7MBZk0qmp5p_bpZuYb85OysOrn8Nyd7mQmryo_pXVj35W_eWvtQnLbVhuwqoGy93gyzawlK3obiv6mqcVO_CQH3jIwhGvHLGwAl53WfqChy_aBIWHQVB4GAUF0CAogAZBuWQHfsUP_KpNUK75TjgHpdColJ1agadRLfA07AWAo2IAODBcNoqlPncF5s43C_Bc8tUiIyDeKJedTOdpZDpPQ9MBjkwHODKd71UJilU2OmYn0_mOkaBkZKNldjKdp5HpPA1NBzgyHeDIdL5hFWhYxX-0bZser_77FQAA__99Qk5E
+
+query RI rowsort
+SELECT AVG(a+b), c FROM data GROUP BY c, d HAVING c = d
+----
+11  1
+11  2
+11  3
+11  4
+11  5
+11  6
+11  7
+11  8
+11  9
+11  10

@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -52,11 +53,14 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		sel := makeSelectNode(t)
 		expr := parseAndNormalizeExpr(t, &p.evalCtx, d.expr, sel)
 		group := &groupNode{planner: p}
-		render := &renderNode{}
+		render := &renderNode{planner: p}
+		postRender := &renderNode{planner: p}
+		postRender.ivarHelper = parser.MakeIndexedVarHelper(postRender, len(group.funcs))
 		v := extractAggregatesVisitor{
 			ctx:        context.TODO(),
 			groupNode:  group,
-			renderNode: render,
+			preRender:  render,
+			ivarHelper: &postRender.ivarHelper,
 			planner:    p,
 		}
 		if _, err := v.extract(expr); err != nil {
