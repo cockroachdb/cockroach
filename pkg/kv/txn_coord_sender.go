@@ -1005,16 +1005,6 @@ func (tc *TxnCoordSender) updateState(
 	return pErr
 }
 
-// GetTxnState is part of the SenderWithDistSQLBackdoor interface.
-func (tc *TxnCoordSender) GetTxnState(txnID uuid.UUID) (roachpb.Transaction, bool) {
-	tc.txnMu.Lock()
-	defer tc.txnMu.Unlock()
-	if txnMeta, ok := tc.txnMu.txns[txnID]; ok {
-		return txnMeta.txn, true
-	}
-	return roachpb.Transaction{}, false
-}
-
 // TODO(tschottdorf): this method is somewhat awkward but unless we want to
 // give this error back to the client, our options are limited. We'll have to
 // run the whole thing for them, or any restart will still end up at the client
