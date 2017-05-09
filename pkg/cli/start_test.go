@@ -52,11 +52,15 @@ func TestInitInsecure(t *testing.T) {
 		{[]string{"--insecure", "--host", "192.168.1.1"}, true, ""},
 		{[]string{"--host", "localhost", "--advertise-host", "192.168.1.1"}, false, ""},
 		{[]string{"--host", "127.0.0.1", "--advertise-host", "192.168.1.1"}, false, ""},
+		{[]string{"--host", "127.0.0.1", "--advertise-host", "192.168.1.1", "--advertise-port", "36259"}, false, ""},
 		{[]string{"--host", "::1", "--advertise-host", "192.168.1.1"}, false, ""},
+		{[]string{"--host", "::1", "--advertise-host", "192.168.1.1", "--advertise-port", "36259"}, false, ""},
 		{[]string{"--insecure", "--host", "192.168.1.1", "--advertise-host", "192.168.1.1"}, true, ""},
 		{[]string{"--insecure", "--host", "192.168.1.1", "--advertise-host", "192.168.2.2"}, true, ""},
+		{[]string{"--insecure", "--host", "192.168.1.1", "--advertise-host", "192.168.2.2", "--advertise-port", "36259"}, true, ""},
 		// Clear out the flags when done to avoid affecting other tests that rely on the flag state.
 		{[]string{"--host", "", "--advertise-host", ""}, false, ""},
+		{[]string{"--host", "", "--advertise-host", "", "--advertise-port", ""}, false, ""},
 	}
 	for i, c := range testCases {
 		// Reset the context and for every test case.
