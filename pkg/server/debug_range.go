@@ -80,6 +80,32 @@ const (
 	debugRangeValueLeaseEpoch      = "Epoch"
 )
 
+var debugRangeHeaderWarnings = []string{
+	debugRangeHeaderLeaseAppliedIndex,
+	debugRangeHeaderRaftLeader,
+	debugRangeHeaderTerm,
+	debugRangeHeaderApplied,
+	debugRangeHeaderCommit,
+	debugRangeHeaderLastIndex,
+	debugRangeHeaderTruncatedIndex,
+	debugRangeHeaderTruncatedTerm,
+	debugRangeHeaderMVCCLastUpdate,
+	debugRangeHeaderMVCCIntentAge,
+	debugRangeHeaderMVCCGCBytesAge,
+	debugRangeHeaderMVCCLive,
+	debugRangeHeaderMVCCKey,
+	debugRangeHeaderMVCCVal,
+	debugRangeHeaderMVCCIntent,
+	debugRangeHeaderMVCCSys,
+}
+var debugRangeHeaderLeaseWarnings = []string{
+	debugRangeHeaderLeaseHolder,
+	debugRangeHeaderLeaseType,
+	debugRangeHeaderLeaseEpoch,
+	debugRangeHeaderLeaseStart,
+	debugRangeHeaderLeaseExpiration,
+}
+
 // Returns an HTML page displaying information about all node's view of a
 // specific range.
 func (s *statusServer) handleDebugRange(w http.ResponseWriter, r *http.Request) {
@@ -278,6 +304,14 @@ func (d *debugRangeData) postProcessing() {
 		}
 	}
 
+	outputSameTitleValue := func(value string) *debugRangeOutput {
+		return &debugRangeOutput{Title: value, Value: value}
+	}
+
+	outputSameTitleValueWithClass := func(value, class string) *debugRangeOutput {
+		return &debugRangeOutput{Title: value, Value: value, Class: class}
+	}
+
 	// Prepare the replica output.
 	d.Results = make(map[string]map[roachpb.StoreID]*debugRangeOutput)
 
@@ -353,11 +387,10 @@ func (d *debugRangeData) postProcessing() {
 				replicaHeaderClass = debugRangeClassMatch
 				sourceReplicaHeader = repHeader
 			}
-			d.Results[repHeader][info.SourceStoreID] = &debugRangeOutput{
-				Class: replicaHeaderClass,
-				Title: fmt.Sprintf("n%d s%d", desc.NodeID, desc.StoreID),
-				Value: fmt.Sprintf("n%d s%d", desc.NodeID, desc.StoreID),
-			}
+			d.Results[repHeader][info.SourceStoreID] = outputSameTitleValueWithClass(
+				fmt.Sprintf("n%d s%d", desc.NodeID, desc.StoreID),
+				replicaHeaderClass,
+			)
 		}
 
 		raftLeader := sourceReplicaID != 0 && info.RaftState.Lead == uint64(sourceReplicaID)
@@ -368,24 +401,14 @@ func (d *debugRangeData) postProcessing() {
 			latestTermInfo = info
 		}
 
-		d.Results[debugRangeHeaderStore][info.SourceStoreID] = &debugRangeOutput{
-			Title: fmt.Sprintf("s%d", info.SourceStoreID),
-			Value: fmt.Sprintf("s%d", info.SourceStoreID),
-		}
-		d.Results[debugRangeHeaderNode][info.SourceStoreID] = &debugRangeOutput{
-			Title: fmt.Sprintf("n%d", info.SourceNodeID),
-			Value: fmt.Sprintf("n%d", info.SourceNodeID),
-		}
-		d.Results[debugRangeHeaderKeyRange][info.SourceStoreID] = &debugRangeOutput{
-			Title: fmt.Sprintf("%s %s", info.Span.StartKey, info.Span.EndKey),
-			Value: fmt.Sprintf("%s %s", info.Span.StartKey, info.Span.EndKey),
-		}
+		d.Results[debugRangeHeaderStore][info.SourceStoreID] = outputSameTitleValue(fmt.Sprintf("s%d", info.SourceStoreID))
+		d.Results[debugRangeHeaderNode][info.SourceStoreID] = outputSameTitleValue(fmt.Sprintf("n%d", info.SourceNodeID))
+		d.Results[debugRangeHeaderKeyRange][info.SourceStoreID] = outputSameTitleValue(fmt.Sprintf("%s %s", info.Span.StartKey, info.Span.EndKey))
 		raftState := strings.ToLower(strings.TrimPrefix(info.RaftState.State, "State"))
-		d.Results[debugRangeHeaderRaftState][info.SourceStoreID] = &debugRangeOutput{
-			Class: fmt.Sprintf("raftstate-%s", raftState),
-			Title: raftState,
-			Value: raftState,
-		}
+		d.Results[debugRangeHeaderRaftState][info.SourceStoreID] = outputSameTitleValueWithClass(
+			raftState,
+			fmt.Sprintf("raftstate-%s", raftState),
+		)
 		if info.State.Lease != nil {
 			var leaseClass string
 			if info.State.Lease.Replica.ReplicaID == sourceReplicaID {
@@ -393,11 +416,10 @@ func (d *debugRangeData) postProcessing() {
 			} else {
 				leaseClass = debugRangeClassLeaseFollower
 			}
-			d.Results[debugRangeHeaderLeaseHolder][info.SourceStoreID] = &debugRangeOutput{
-				Class: leaseClass,
-				Title: info.State.Lease.Replica.ReplicaID.String(),
-				Value: info.State.Lease.Replica.ReplicaID.String(),
-			}
+			d.Results[debugRangeHeaderLeaseHolder][info.SourceStoreID] = outputSameTitleValueWithClass(
+				info.State.Lease.Replica.ReplicaID.String(),
+				leaseClass,
+			)
 			var leaseTypeValue string
 			switch info.State.Lease.Type() {
 			case roachpb.LeaseNone:
@@ -407,20 +429,14 @@ func (d *debugRangeData) postProcessing() {
 			case roachpb.LeaseExpiration:
 				leaseTypeValue = debugRangeValueLeaseExpiration
 			}
-			d.Results[debugRangeHeaderLeaseType][info.SourceStoreID] = &debugRangeOutput{
-				Title: leaseTypeValue,
-				Value: leaseTypeValue,
-			}
+			d.Results[debugRangeHeaderLeaseType][info.SourceStoreID] = outputSameTitleValue(leaseTypeValue)
 			var epoch string
 			if info.State.Lease.Epoch != nil {
 				epoch = strconv.FormatInt(*info.State.Lease.Epoch, 10)
 			} else {
 				epoch = debugRangeValueEmpty
 			}
-			d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID] = &debugRangeOutput{
-				Title: epoch,
-				Value: epoch,
-			}
+			d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID] = outputSameTitleValue(epoch)
 			start := convertTimestamp(info.State.Lease.Start)
 			d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID] = &debugRangeOutput{
 				Title: fmt.Sprintf("%s\n%s", start, info.State.Lease.Start),
@@ -442,78 +458,50 @@ func (d *debugRangeData) postProcessing() {
 			d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID] = &debugRangeOutput{Value: debugRangeValueEmpty}
 			d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID] = &debugRangeOutput{Value: debugRangeValueEmpty}
 		}
-		d.Results[debugRangeHeaderLeaseAppliedIndex][info.SourceStoreID] = &debugRangeOutput{
-			Title: strconv.FormatUint(info.State.LeaseAppliedIndex, 10),
-			Value: strconv.FormatUint(info.State.LeaseAppliedIndex, 10),
-		}
+		d.Results[debugRangeHeaderLeaseAppliedIndex][info.SourceStoreID] = outputSameTitleValue(strconv.FormatUint(info.State.LeaseAppliedIndex, 10))
 		var raftleaderClass string
 		if raftLeader {
 			raftleaderClass = debugRangeClassRaftLeader
 		} else {
 			raftleaderClass = debugRangeClassRaftFollower
 		}
-		d.Results[debugRangeHeaderRaftLeader][info.SourceStoreID] = &debugRangeOutput{
-			Class: raftleaderClass,
-			Title: strconv.FormatUint(info.RaftState.Lead, 10),
-			Value: strconv.FormatUint(info.RaftState.Lead, 10),
-		}
+		d.Results[debugRangeHeaderRaftLeader][info.SourceStoreID] = outputSameTitleValueWithClass(
+			strconv.FormatUint(info.RaftState.Lead, 10),
+			raftleaderClass,
+		)
 		var voteClass string
 		if info.RaftState.HardState.Vote == uint64(sourceReplicaID) {
 			voteClass = debugRangeClassRaftLeader
 		} else {
 			voteClass = debugRangeClassRaftFollower
 		}
-		d.Results[debugRangeHeaderVote][info.SourceStoreID] = &debugRangeOutput{
-			Class: voteClass,
-			Title: strconv.FormatUint(info.RaftState.HardState.Vote, 10),
-			Value: strconv.FormatUint(info.RaftState.HardState.Vote, 10),
-		}
-		d.Results[debugRangeHeaderTerm][info.SourceStoreID] = &debugRangeOutput{
-			Title: strconv.FormatUint(info.RaftState.HardState.Term, 10),
-			Value: strconv.FormatUint(info.RaftState.HardState.Term, 10),
-		}
-		d.Results[debugRangeHeaderApplied][info.SourceStoreID] = &debugRangeOutput{
-			Title: strconv.FormatUint(info.RaftState.Applied, 10),
-			Value: strconv.FormatUint(info.RaftState.Applied, 10),
-		}
-		d.Results[debugRangeHeaderCommit][info.SourceStoreID] = &debugRangeOutput{
-			Title: strconv.FormatUint(info.RaftState.HardState.Commit, 10),
-			Value: strconv.FormatUint(info.RaftState.HardState.Commit, 10),
-		}
-		d.Results[debugRangeHeaderLastIndex][info.SourceStoreID] = &debugRangeOutput{
-			Title: strconv.FormatUint(info.State.LastIndex, 10),
-			Value: strconv.FormatUint(info.State.LastIndex, 10),
-		}
-		d.Results[debugRangeHeaderLogSize][info.SourceStoreID] = &debugRangeOutput{
-			Title: strconv.FormatInt(info.State.RaftLogSize, 10),
-			Value: strconv.FormatInt(info.State.RaftLogSize, 10),
-		}
+		d.Results[debugRangeHeaderVote][info.SourceStoreID] = outputSameTitleValueWithClass(
+			strconv.FormatUint(info.RaftState.HardState.Vote, 10),
+			voteClass,
+		)
+		d.Results[debugRangeHeaderTerm][info.SourceStoreID] = outputSameTitleValue(strconv.FormatUint(info.RaftState.HardState.Term, 10))
+		d.Results[debugRangeHeaderApplied][info.SourceStoreID] = outputSameTitleValue(strconv.FormatUint(info.RaftState.Applied, 10))
+		d.Results[debugRangeHeaderCommit][info.SourceStoreID] = outputSameTitleValue(strconv.FormatUint(info.RaftState.HardState.Commit, 10))
+		d.Results[debugRangeHeaderLastIndex][info.SourceStoreID] = outputSameTitleValue(strconv.FormatUint(info.State.LastIndex, 10))
+		d.Results[debugRangeHeaderLogSize][info.SourceStoreID] = outputSameTitleValue(strconv.FormatInt(info.State.RaftLogSize, 10))
 		var pendingCommandsClass string
 		if !raftLeader && info.State.NumPending > 0 {
 			pendingCommandsClass = debugRangeClassWarning
 		}
-		d.Results[debugRangeHeaderPendingCommands][info.SourceStoreID] = &debugRangeOutput{
-			Class: pendingCommandsClass,
-			Title: strconv.FormatUint(info.State.NumPending, 10),
-			Value: strconv.FormatUint(info.State.NumPending, 10),
-		}
+		d.Results[debugRangeHeaderPendingCommands][info.SourceStoreID] = outputSameTitleValueWithClass(
+			strconv.FormatUint(info.State.NumPending, 10),
+			pendingCommandsClass,
+		)
 		var droppedCommandsClass string
 		if !raftLeader && info.State.NumDropped > 0 {
 			droppedCommandsClass = debugRangeClassWarning
 		}
-		d.Results[debugRangeHeaderDroppedCommands][info.SourceStoreID] = &debugRangeOutput{
-			Class: droppedCommandsClass,
-			Title: strconv.FormatUint(info.State.NumDropped, 10),
-			Value: strconv.FormatUint(info.State.NumDropped, 10),
-		}
-		d.Results[debugRangeHeaderTruncatedIndex][info.SourceStoreID] = &debugRangeOutput{
-			Title: strconv.FormatUint(info.State.TruncatedState.Index, 10),
-			Value: strconv.FormatUint(info.State.TruncatedState.Index, 10),
-		}
-		d.Results[debugRangeHeaderTruncatedTerm][info.SourceStoreID] = &debugRangeOutput{
-			Title: strconv.FormatUint(info.State.TruncatedState.Term, 10),
-			Value: strconv.FormatUint(info.State.TruncatedState.Term, 10),
-		}
+		d.Results[debugRangeHeaderDroppedCommands][info.SourceStoreID] = outputSameTitleValueWithClass(
+			strconv.FormatUint(info.State.NumDropped, 10),
+			droppedCommandsClass,
+		)
+		d.Results[debugRangeHeaderTruncatedIndex][info.SourceStoreID] = outputSameTitleValue(strconv.FormatUint(info.State.TruncatedState.Index, 10))
+		d.Results[debugRangeHeaderTruncatedTerm][info.SourceStoreID] = outputSameTitleValue(strconv.FormatUint(info.State.TruncatedState.Term, 10))
 
 		// MVCC stats.
 		stats := info.State.ReplicaState.Stats
@@ -570,7 +558,6 @@ func (d *debugRangeData) postProcessing() {
 		for _, desc := range leaderStoreInfo.State.Desc.Replicas {
 			leaderReplicaMap[desc.ReplicaID] = desc
 		}
-		leaderStats := leaderStoreInfo.State.ReplicaState.Stats
 		for _, info := range d.rangeInfos {
 			if info.SourceStoreID == leaderStoreInfo.SourceStoreID ||
 				info.RaftState.State == raftStateDormant {
@@ -582,99 +569,20 @@ func (d *debugRangeData) postProcessing() {
 				d.Results[debugRangeHeaderKeyRange][info.SourceStoreID].Class = debugRangeClassWarning
 			}
 			if leaderStoreInfo.State.Lease != nil && info.State.Lease != nil {
-				if leaderStoreInfo.State.Lease.Replica.ReplicaID != info.State.Lease.Replica.ReplicaID {
-					d.Results[debugRangeHeaderLeaseHolder][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-					d.Results[debugRangeHeaderLeaseHolder][info.SourceStoreID].Class = debugRangeClassWarning
-				}
-				if leaderStoreInfo.State.Lease.Type() != info.State.Lease.Type() {
-					d.Results[debugRangeHeaderLeaseType][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-					d.Results[debugRangeHeaderLeaseType][info.SourceStoreID].Class = debugRangeClassWarning
-				}
-				if d.Results[debugRangeHeaderLeaseEpoch][leaderStoreInfo.SourceStoreID].Value !=
-					d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID].Value {
-					d.Results[debugRangeHeaderLeaseEpoch][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-					d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID].Class = debugRangeClassWarning
-				}
-				if leaderStoreInfo.State.Lease.Start != info.State.Lease.Start {
-					d.Results[debugRangeHeaderLeaseStart][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-					d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID].Class = debugRangeClassWarning
-				}
-				if leaderStoreInfo.State.Lease.Expiration != info.State.Lease.Expiration {
-					d.Results[debugRangeHeaderLeaseExpiration][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-					d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID].Class = debugRangeClassWarning
+				for _, header := range debugRangeHeaderLeaseWarnings {
+					if d.Results[header][leaderStoreInfo.SourceStoreID].Value != d.Results[header][info.SourceStoreID].Value &&
+						d.Results[header][leaderStoreInfo.SourceStoreID].Title != d.Results[header][info.SourceStoreID].Title {
+						d.Results[header][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+						d.Results[header][info.SourceStoreID].Class = debugRangeClassWarning
+					}
 				}
 			}
-			if leaderStoreInfo.State.LeaseAppliedIndex != info.State.LeaseAppliedIndex {
-				d.Results[debugRangeHeaderLeaseAppliedIndex][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderLeaseAppliedIndex][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStoreInfo.RaftState.Lead != info.RaftState.Lead {
-				d.Results[debugRangeHeaderRaftLeader][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderRaftLeader][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStoreInfo.RaftState.HardState.Term != info.RaftState.HardState.Term {
-				d.Results[debugRangeHeaderTerm][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderTerm][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStoreInfo.RaftState.Applied != info.RaftState.Applied {
-				d.Results[debugRangeHeaderApplied][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderApplied][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStoreInfo.RaftState.HardState.Commit != info.RaftState.HardState.Commit {
-				d.Results[debugRangeHeaderCommit][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderCommit][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStoreInfo.State.LastIndex != info.State.LastIndex {
-				d.Results[debugRangeHeaderLastIndex][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderLastIndex][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStoreInfo.State.TruncatedState.Index != info.State.TruncatedState.Index {
-				d.Results[debugRangeHeaderTruncatedIndex][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderTruncatedIndex][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStoreInfo.State.TruncatedState.Term != info.State.TruncatedState.Term {
-				d.Results[debugRangeHeaderTruncatedTerm][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderTruncatedTerm][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-
-			// MVCC Stats.
-			stats := info.State.ReplicaState.Stats
-			if leaderStats.LastUpdateNanos != stats.LastUpdateNanos {
-				d.Results[debugRangeHeaderMVCCLastUpdate][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStats.IntentAge != stats.IntentAge {
-				d.Results[debugRangeHeaderMVCCIntentAge][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderMVCCIntentAge][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStats.GCBytesAge != stats.GCBytesAge {
-				d.Results[debugRangeHeaderMVCCGCBytesAge][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderMVCCGCBytesAge][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStats.LiveBytes != stats.LiveBytes ||
-				leaderStats.LiveCount != stats.LiveCount {
-				d.Results[debugRangeHeaderMVCCLive][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderMVCCLive][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStats.KeyBytes != stats.KeyBytes ||
-				leaderStats.KeyCount != stats.KeyCount {
-				d.Results[debugRangeHeaderMVCCKey][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderMVCCKey][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStats.ValBytes != stats.ValBytes ||
-				leaderStats.ValCount != stats.ValCount {
-				d.Results[debugRangeHeaderMVCCVal][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderMVCCVal][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStats.IntentBytes != stats.IntentBytes ||
-				leaderStats.IntentCount != stats.IntentCount {
-				d.Results[debugRangeHeaderMVCCIntent][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderMVCCIntent][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStats.SysBytes != stats.SysBytes ||
-				leaderStats.SysCount != stats.SysCount {
-				d.Results[debugRangeHeaderMVCCSys][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderMVCCSys][info.SourceStoreID].Class = debugRangeClassWarning
+			for _, header := range debugRangeHeaderWarnings {
+				if d.Results[header][leaderStoreInfo.SourceStoreID].Value != d.Results[header][info.SourceStoreID].Value &&
+					d.Results[header][leaderStoreInfo.SourceStoreID].Title != d.Results[header][info.SourceStoreID].Title {
+					d.Results[header][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+					d.Results[header][info.SourceStoreID].Class = debugRangeClassWarning
+				}
 			}
 
 			// Find all replicas that the leader doesn't know about and any
