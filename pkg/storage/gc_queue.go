@@ -144,6 +144,9 @@ func (gcq *gcQueue) shouldQueue(
 		priority += intentScore
 	}
 	shouldQ = priority > 0
+	if shouldQ {
+		log.Infof(ctx, "gcScore = %f, intentScore = %f, ms=%+v", gcScore, intentScore, ms)
+	}
 	return
 }
 
@@ -348,9 +351,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 		return err
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "completed with stats %+v", info)
-	}
+	log.Eventf(ctx, "assembled GC keys, now proceeding to GC; stats %+v", info)
 
 	info.updateMetrics(gcq.store.metrics)
 
@@ -541,6 +542,7 @@ func RunGC(
 	}
 
 	// Iterate through the keys and values of this replica's range.
+	log.Event(ctx, "iterating through range")
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, GCInfo{}, err
@@ -587,6 +589,7 @@ func RunGC(
 	gcKeys = append(gcKeys, localRangeKeys...)
 
 	// Process push transactions in parallel.
+	log.Eventf(ctx, "pushing up to %d transactions (concurrency %d)", len(txnMap), gcTaskLimit)
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, gcTaskLimit)
 	for _, txn := range txnMap {
@@ -608,6 +611,7 @@ func RunGC(
 	wg.Wait()
 
 	// Resolve all intents.
+	log.Eventf(ctx, "resolving up to %d intents", len(txnMap))
 	var intents []roachpb.Intent
 	for txnID, txn := range txnMap {
 		if txn.Status != roachpb.PENDING {
@@ -622,6 +626,7 @@ func RunGC(
 	}
 
 	// Clean up the abort cache.
+	log.Event(ctx, "processing abort cache")
 	gcKeys = append(gcKeys, processAbortCache(
 		ctx, snap, desc.RangeID, abortSpanGCThreshold, &infoMu, pushTxnFn)...)
 	return gcKeys, infoMu.GCInfo, nil
