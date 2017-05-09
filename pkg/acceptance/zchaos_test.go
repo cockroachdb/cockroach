@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 const stall = 2 * time.Minute
@@ -134,6 +135,11 @@ func transferMoney(client *testClient, numAccounts, maxTransfer int) error {
 	client.RLock()
 	defer client.RUnlock()
 	_, err := client.db.Exec(update, from, to, amount)
+	if err == nil {
+		// Do all increments under the read lock so that grabbing a write lock in
+		// chaosMonkey below guarantees no more increments could be incoming.
+		atomic.AddUint64(&client.count, 1)
+	}
 	return err
 }
 
@@ -170,9 +176,6 @@ func transferMoneyLoop(
 				state.errChan <- err
 				break
 			}
-		} else {
-			// Only advance the counts on a successful update.
-			atomic.AddUint64(&client.count, 1)
 		}
 	}
 	log.Infof(ctx, "client %d shutting down", idx)
@@ -239,10 +242,13 @@ func chaosMonkey(
 
 		preCount := state.counts()
 
+		progressIdx := 0
 		madeProgress := func() bool {
 			newCounts := state.counts()
 			for i := range newCounts {
 				if newCounts[i] > preCount[i] {
+					log.Infof(ctx, "progress made by client %d", i)
+					progressIdx = i
 					return true
 				}
 			}
@@ -254,10 +260,20 @@ func chaosMonkey(
 		for !state.done() && !madeProgress() {
 			time.Sleep(time.Second)
 		}
+		if state.done() {
+			log.Infof(ctx, "round %d: not waiting for recovery due to signal that we're done", curRound)
+			return
+		}
 		c.Assert(ctx, state.t)
 
-		if err := cluster.Consistent(ctx, c, consistentIdx); err != nil {
-			state.t.Error(err)
+		// If a particular node index wasn't specified, use the index that informed
+		// us about progress having been made.
+		idx := consistentIdx
+		if idx < 0 {
+			idx = progressIdx
+		}
+		if err := cluster.Consistent(ctx, c, idx); err != nil {
+			state.t.Error(errors.Wrapf(err, "round %d: failed to do consistency check against node %d", curRound, idx))
 		}
 		log.Warningf(ctx, "round %d: cluster recovered", curRound)
 	}
@@ -319,8 +335,6 @@ func waitClientsStop(ctx context.Context, num int, state *testState, stallDurati
 // being killed and restarted continuously. The test doesn't measure write
 // performance, but cluster recovery.
 func TestClusterRecovery(t *testing.T) {
-	t.Skip("#15620")
-
 	s := log.Scope(t)
 	defer s.Close(t)
 
@@ -361,7 +375,7 @@ func testClusterRecoveryInner(
 	pickNodes := func() []int {
 		return rnd.Perm(num)[:rnd.Intn(num)+1]
 	}
-	go chaosMonkey(ctx, &state, c, true, pickNodes, 0)
+	go chaosMonkey(ctx, &state, c, true, pickNodes, -1)
 
 	waitClientsStop(ctx, num, &state, stall)
 
