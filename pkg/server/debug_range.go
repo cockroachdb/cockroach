@@ -55,6 +55,14 @@ const (
 	debugRangeHeaderDroppedCommands   = "Dropped Commands"
 	debugRangeHeaderTruncatedIndex    = "Truncated Index"
 	debugRangeHeaderTruncatedTerm     = "Truncated Term"
+	debugRangeHeaderMVCCLastUpdate    = "MVCC Last Update"
+	debugRangeHeaderMVCCIntentAge     = "MVCC Intent Age"
+	debugRangeHeaderMVCCGCBytesAge    = "MVCC GC Bytes Age"
+	debugRangeHeaderMVCCLive          = "MVCC Live Bytes/Count"
+	debugRangeHeaderMVCCKey           = "MVCC Key Bytes/Count"
+	debugRangeHeaderMVCCVal           = "MVCC Value Bytes/Count"
+	debugRangeHeaderMVCCIntent        = "MVCC Intent Bytes/Count"
+	debugRangeHeaderMVCCSys           = "MVCC System Bytes/Count"
 
 	debugRangeClassWarning       = "warning"
 	debugRangeClassMatch         = "match"
@@ -263,6 +271,13 @@ func (d *debugRangeData) postProcessing() {
 		return fmt.Sprintf("Replica %d", repID)
 	}
 
+	convertBytes := func(bytes, count int64) *debugRangeOutput {
+		return &debugRangeOutput{
+			Title: fmt.Sprintf("%d bytes / %d", bytes, count),
+			Value: fmt.Sprintf("%d bytes / %d", bytes, count),
+		}
+	}
+
 	// Prepare the replica output.
 	d.Results = make(map[string]map[roachpb.StoreID]*debugRangeOutput)
 
@@ -289,6 +304,14 @@ func (d *debugRangeData) postProcessing() {
 	addHeader(debugRangeHeaderDroppedCommands)
 	addHeader(debugRangeHeaderTruncatedIndex)
 	addHeader(debugRangeHeaderTruncatedTerm)
+	addHeader(debugRangeHeaderMVCCLastUpdate)
+	addHeader(debugRangeHeaderMVCCIntentAge)
+	addHeader(debugRangeHeaderMVCCGCBytesAge)
+	addHeader(debugRangeHeaderMVCCLive)
+	addHeader(debugRangeHeaderMVCCKey)
+	addHeader(debugRangeHeaderMVCCVal)
+	addHeader(debugRangeHeaderMVCCIntent)
+	addHeader(debugRangeHeaderMVCCSys)
 
 	// Add the replica headers.
 	sort.Sort(d.ReplicaIDs)
@@ -414,10 +437,14 @@ func (d *debugRangeData) postProcessing() {
 				Value: expiration,
 			}
 		} else {
-			d.Results[debugRangeHeaderLeaseHolder][info.SourceStoreID] = &debugRangeOutput{Value: debugRangeValueEmpty}
-			d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID] = &debugRangeOutput{Value: debugRangeValueEmpty}
-			d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID] = &debugRangeOutput{Value: debugRangeValueEmpty}
-			d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID] = &debugRangeOutput{Value: debugRangeValueEmpty}
+			d.Results[debugRangeHeaderLeaseHolder][info.SourceStoreID] =
+				&debugRangeOutput{Value: debugRangeValueEmpty}
+			d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID] =
+				&debugRangeOutput{Value: debugRangeValueEmpty}
+			d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID] =
+				&debugRangeOutput{Value: debugRangeValueEmpty}
+			d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID] =
+				&debugRangeOutput{Value: debugRangeValueEmpty}
 		}
 		d.Results[debugRangeHeaderLeaseAppliedIndex][info.SourceStoreID] = &debugRangeOutput{
 			Title: strconv.FormatUint(info.State.LeaseAppliedIndex, 10),
@@ -492,6 +519,40 @@ func (d *debugRangeData) postProcessing() {
 			Value: strconv.FormatUint(info.State.TruncatedState.Term, 10),
 		}
 
+		// MVCC stats.
+		stats := info.State.ReplicaState.Stats
+		if stats.LastUpdateNanos > 0 {
+			d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID] = &debugRangeOutput{
+				Title: fmt.Sprintf("%d\n%s", stats.LastUpdateNanos, time.Unix(0, stats.LastUpdateNanos)),
+				Value: time.Unix(0, stats.LastUpdateNanos).String(),
+			}
+		} else {
+			d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID] = &debugRangeOutput{
+				Title: debugRangeValueEmpty,
+				Value: debugRangeValueEmpty,
+			}
+		}
+		intentAge := time.Duration(stats.IntentAge)
+		d.Results[debugRangeHeaderMVCCIntentAge][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf("%dns", stats.IntentAge),
+			Value: intentAge.String(),
+		}
+		gcBytesAge := time.Duration(stats.GCBytesAge)
+		d.Results[debugRangeHeaderMVCCGCBytesAge][info.SourceStoreID] = &debugRangeOutput{
+			Title: fmt.Sprintf("%dns", stats.GCBytesAge),
+			Value: gcBytesAge.String(),
+		}
+		d.Results[debugRangeHeaderMVCCLive][info.SourceStoreID] =
+			convertBytes(stats.LiveBytes, stats.LiveCount)
+		d.Results[debugRangeHeaderMVCCKey][info.SourceStoreID] =
+			convertBytes(stats.KeyBytes, stats.KeyCount)
+		d.Results[debugRangeHeaderMVCCVal][info.SourceStoreID] =
+			convertBytes(stats.ValBytes, stats.ValCount)
+		d.Results[debugRangeHeaderMVCCIntent][info.SourceStoreID] =
+			convertBytes(stats.IntentBytes, stats.IntentCount)
+		d.Results[debugRangeHeaderMVCCSys][info.SourceStoreID] =
+			convertBytes(stats.SysBytes, stats.SysCount)
+
 		// If the replica is dormant, set all classes in the store to dormant.
 		if info.RaftState.State == raftStateDormant {
 			for _, header := range d.HeaderKeys {
@@ -518,6 +579,7 @@ func (d *debugRangeData) postProcessing() {
 		for _, desc := range leaderStoreInfo.State.Desc.Replicas {
 			leaderReplicaMap[desc.ReplicaID] = desc
 		}
+		leaderStats := leaderStoreInfo.State.ReplicaState.Stats
 		for _, info := range d.rangeInfos {
 			if info.SourceStoreID == leaderStoreInfo.SourceStoreID ||
 				info.RaftState.State == raftStateDormant {
@@ -584,6 +646,46 @@ func (d *debugRangeData) postProcessing() {
 				d.Results[debugRangeHeaderTruncatedTerm][info.SourceStoreID].Class = debugRangeClassWarning
 			}
 
+			// MVCC Stats.
+			stats := info.State.ReplicaState.Stats
+			if leaderStats.LastUpdateNanos != stats.LastUpdateNanos {
+				d.Results[debugRangeHeaderMVCCLastUpdate][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStats.IntentAge != stats.IntentAge {
+				d.Results[debugRangeHeaderMVCCIntentAge][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCIntentAge][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStats.GCBytesAge != stats.GCBytesAge {
+				d.Results[debugRangeHeaderMVCCGCBytesAge][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCGCBytesAge][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStats.LiveBytes != stats.LiveBytes ||
+				leaderStats.LiveCount != stats.LiveCount {
+				d.Results[debugRangeHeaderMVCCLive][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCLive][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStats.KeyBytes != stats.KeyBytes ||
+				leaderStats.KeyCount != stats.KeyCount {
+				d.Results[debugRangeHeaderMVCCKey][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCKey][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStats.ValBytes != stats.ValBytes ||
+				leaderStats.ValCount != stats.ValCount {
+				d.Results[debugRangeHeaderMVCCVal][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCVal][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStats.IntentBytes != stats.IntentBytes ||
+				leaderStats.IntentCount != stats.IntentCount {
+				d.Results[debugRangeHeaderMVCCIntent][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCIntent][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+			if leaderStats.SysBytes != stats.SysBytes ||
+				leaderStats.SysCount != stats.SysCount {
+				d.Results[debugRangeHeaderMVCCSys][d.HeaderFakeStoreID].Class = debugRangeClassWarning
+				d.Results[debugRangeHeaderMVCCSys][info.SourceStoreID].Class = debugRangeClassWarning
+			}
+
 			// Find all replicas that the leader doesn't know about and any
 			// replicas that differ from the leader's.
 			foundReplicaIDs := make(map[roachpb.ReplicaID]struct{})
@@ -639,15 +741,20 @@ func (d *debugRangeData) postProcessing() {
 			continue
 		}
 		var detail debugLeaseDetails
-		detail.Replica.Value = fmt.Sprintf("n%d s%d r%d/%d", lease.Replica.NodeID, lease.Replica.StoreID, d.RangeID, lease.Replica.ReplicaID)
+		detail.Replica.Value = fmt.Sprintf("n%d s%d r%d/%d",
+			lease.Replica.NodeID, lease.Replica.StoreID, d.RangeID, lease.Replica.ReplicaID,
+		)
 		detail.Replica.Title = detail.Replica.Value
 
 		if d.LeaseEpoch {
 			detail.Epoch.Value = fmt.Sprintf("n%d, %d", lease.Replica.NodeID, *lease.Epoch)
 			detail.Epoch.Title = detail.Epoch.Value
 		} else {
-			detail.Expiration.Title = fmt.Sprintf("%s\n%s", convertTimestamp(lease.Expiration), lease.Expiration)
-			detail.Expiration.Value = floorMilliseconds(lease.Expiration.GoTime().Sub(lease.ProposedTS.GoTime())).String()
+			detail.Expiration.Title = fmt.Sprintf("%s\n%s",
+				convertTimestamp(lease.Expiration), lease.Expiration,
+			)
+			detail.Expiration.Value =
+				floorMilliseconds(lease.Expiration.GoTime().Sub(lease.ProposedTS.GoTime())).String()
 		}
 
 		if lease.Start.WallTime != 0 {
@@ -671,14 +778,16 @@ func (d *debugRangeData) postProcessing() {
 		if i > 0 {
 			prevLease := latestTermInfo.LeaseHistory[i-1]
 			if prevLease.ProposedTS != nil && prevLease.ProposedTS.WallTime != 0 {
-				detail.ProposedTSDelta.Title = floorMilliseconds(lease.ProposedTS.GoTime().Sub(prevLease.ProposedTS.GoTime())).String()
+				detail.ProposedTSDelta.Title =
+					floorMilliseconds(lease.ProposedTS.GoTime().Sub(prevLease.ProposedTS.GoTime())).String()
 			} else {
 				detail.ProposedTSDelta.Title = debugRangeValueEmpty
 			}
 			detail.ProposedTSDelta.Value = detail.ProposedTSDelta.Title
 
 			if prevLease.Start.WallTime != 0 {
-				detail.StartDelta.Title = floorMilliseconds(lease.Start.GoTime().Sub(prevLease.Start.GoTime())).String()
+				detail.StartDelta.Title =
+					floorMilliseconds(lease.Start.GoTime().Sub(prevLease.Start.GoTime())).String()
 			} else {
 				detail.StartDelta.Title = debugRangeValueEmpty
 			}
