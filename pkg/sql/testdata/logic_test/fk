@@ -60,6 +60,42 @@ CREATE TABLE orders (
 )
 
 statement ok
+ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
+
+statement error unimplemented at or near "action"
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE NO ACTION
+
+statement error unimplemented at or near "action"
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE NO ACTION
+
+statement error unimplemented at or near "cascade"
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE CASCADE
+
+statement error unimplemented at or near "cascade"
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE CASCADE
+
+statement error unimplemented at or near "null"
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE SET NULL
+
+statement error unimplemented at or near "null"
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE SET NULL
+
+statement error unimplemented at or near "default"
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE SET DEFAULT
+
+statement error unimplemented at or near "default"
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE SET DEFAULT
+
+statement error unimplemented at or near "action"
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE RESTRICT ON UPDATE NO ACTION
+
+statement ok
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE RESTRICT ON UPDATE RESTRICT
+
+statement ok
+ALTER TABLE orders VALIDATE CONSTRAINT fk_product_ref_products
+
+statement ok
 CREATE DATABASE "user content"
 
 # "reviews" makes "products" have multiple inbound references, as well as making
