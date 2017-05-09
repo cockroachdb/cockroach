@@ -166,7 +166,9 @@ func (v *placeholdersVisitor) VisitPre(expr Expr) (recurse bool, newNode Expr) {
 	switch t := expr.(type) {
 	case *Placeholder:
 		if e, ok := v.placeholders.Value(t.Name); ok {
-			return true, e
+			// Placeholder expressions cannot contain other placeholders, so we do
+			// not need to recurse.
+			return false, e
 		}
 	}
 	return true, expr
@@ -175,15 +177,14 @@ func (v *placeholdersVisitor) VisitPre(expr Expr) (recurse bool, newNode Expr) {
 func (*placeholdersVisitor) VisitPost(expr Expr) Expr { return expr }
 
 // replacePlaceholders replaces all placeholders in the input expression with
-// their supplied values in the planner's Placeholders map.
+// their supplied values in the SemaContext's Placeholders map. If there is no
+// available value for a placeholder, it is left alone. A nil ctx makes
+// this a no-op and is supported for tests only.
 func replacePlaceholders(expr Expr, ctx *SemaContext) Expr {
 	if ctx == nil {
 		return expr
 	}
-	v := &placeholdersVisitor{}
-	*v = placeholdersVisitor{
-		placeholders: ctx.Placeholders,
-	}
+	v := &placeholdersVisitor{placeholders: ctx.Placeholders}
 
 	expr, _ = WalkExpr(v, expr)
 	return expr
