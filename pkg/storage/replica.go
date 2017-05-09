@@ -625,7 +625,7 @@ func (r *Replica) initLocked(
 	if err := r.setReplicaIDLocked(replicaID); err != nil {
 		return err
 	}
-	r.assertStateRLocked(r.store.Engine())
+	r.assertStateRLocked(ctx, r.store.Engine())
 	return nil
 }
 
@@ -1329,10 +1329,10 @@ func (r *Replica) State() storagebase.RangeInfo {
 	return ri
 }
 
-func (r *Replica) assertState(reader engine.Reader) {
+func (r *Replica) assertState(ctx context.Context, reader engine.Reader) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	r.assertStateRLocked(reader)
+	r.assertStateRLocked(ctx, reader)
 }
 
 // assertStateRLocked can be called from the Raft goroutine to check that the
@@ -1340,8 +1340,7 @@ func (r *Replica) assertState(reader engine.Reader) {
 // assertState if the replica mutex is not currently held.
 //
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
-func (r *Replica) assertStateRLocked(reader engine.Reader) {
-	ctx := r.AnnotateCtx(context.TODO())
+func (r *Replica) assertStateRLocked(ctx context.Context, reader engine.Reader) {
 	diskState, err := r.stateLoader.load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
 		log.Fatal(ctx, err)

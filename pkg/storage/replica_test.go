@@ -304,7 +304,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	}
 
 	tc.repl.setDescWithoutProcessUpdate(&newDesc)
-	tc.repl.assertState(tc.engine)
+	tc.repl.assertState(ctx, tc.engine)
 	return secondReplica, nil
 }
 
