@@ -42,13 +42,18 @@ combination has a more direct meaning to the DBA, it is best to leave it as-is f
 The session registry will be an in-memory data structure that stores a copy of a subset
 of fields of every session on that node; particularly, only those fields that
 need to be exposed through virtual tables/RPC. Addition and deletion of new
-sessions to this slice would require acquiring a mutex lock, but none of these
-fields should ever be updated during the lifetime of a session - so session-specific
-locks are unnecessary.
+sessions to this slice would require acquiring a mutex lock.
+
+Furthermore, the ApplicationName could change during the lifetime of a session, so 
+every shadow session object in the registry would have a mutex lock on it
+that would be acquired upon reads, as well as upon updates to ApplicationName (which only
+happens in `resetApplicationName()`).
 
 These fields would be stored in the shadow session object:
 - Session ID (defined earlier)
 - User
+- Remote address (IP, port)
+- Application Name
 - Start timestamp
 - Any contexts/object references useful for cancellation
 
@@ -65,7 +70,8 @@ fields about each query:
 - Any contexts/object references useful for cancellation 
 
 There would be one addition/deletion to this slice per query; handled in `execStmtInOpenTxn` in
-`pkg/sql/executor.go`. 
+`pkg/sql/executor.go`. None of the copied query fields would be updated during the lifetime of a
+query.
 
 ## Virtual tables in crdb_internal
 
@@ -80,16 +86,22 @@ Two new RPC endpoints would be created for sessions: `Sessions` and `LocalSessio
 The former would iterate over all known nodes and collect the responses together,
 while the latter would return the contents of its local session registry.
 
+`RaftDebug` in `pkg/server/status.go` is an example of a procedure that does
+a similar aggregation of results across all known nodes in the cluster. A similar
+technique could be employed to aggregate session info; with a timeout to ensure
+that the parent routine isn't waiting forever for responses from unresponsive nodes. 
+
 Similarly, `Queries` and `LocalQueries` would be the RPC endpoints for queries.
 
 # Drawbacks
 
 ## Locking/synchronization
 
-Additions, accesses and deletions to session and query registries would require mutex locks.
-This has the potential to cause a slight decrease in performance when active sessions and queries
-are being requested, but since that action would be present in only a fraction of requests,
-the most common use-cases shouldn't see an impact in performance.
+Additions, accesses and deletions to session and query registries (as well as updates to session
+ApplicationNames) would require acquiring mutex locks. This has the potential to cause a
+slight decrease in performance when active sessions and queries are being requested, but since that
+action would be present in only a fraction of requests, the most common use-cases shouldn't see an
+impact in performance.
 
 To ensure that we don't unintentionally cause a performance regression, the included benchmarks
 in `pkg/sql/bench_test.go` will be run before and after the change, and the results posted in the PR
@@ -112,16 +124,6 @@ look up that object in the cluster.
 
 # Unresolved questions
 
-## Should we store ApplicationName in session shadow object?
-
-Currently, this proposed solution doesn't include the Session `ApplicationName`  in the
-shadow object and virtual table, however it might be useful information for the DBA to identify
-sessions.
-
-Adding this field to the registry would involve adding mutex locks on each session shadow object in
-that registry - which would be acquired every time that object is read, and every time the
-`ApplicationName` is updated in `resetApplicationName()`.
-
 ## Populate virtual table with cluster-wide info or let RPC be the only interface for that
 
 Instead of having the virtual table serve only sessions/queries
@@ -133,3 +135,15 @@ There could be two different tables for each kind of entity (session and queries
 one for local sessions/queries, and one for cluster ones. That way, queries for local
 sessions/queries could run faster since that vtable population wouldn't involve
 communicating with other nodes.
+
+Distsql can be leveraged to aggregate vtable data across all nodes; this would eliminate
+the need to make more RPC endpoints.
+
+## Transaction tracking vs query tracking
+
+While cancellation is out of scope for this RFC, if we plan on cancelling entire SQL
+transactions instead of individual queries, it would be logical to track transactions
+and transaction execution duration rather than each query individually. It's also
+possible to implement transaction cancellation with query-specific tracking; every
+query would have a reference to the enclosing SQL transaction and its contexts which
+can be levereged for cancellation.
