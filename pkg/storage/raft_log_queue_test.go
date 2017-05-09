@@ -19,6 +19,7 @@ package storage
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/coreos/etcd/raft"
@@ -31,6 +32,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
+
+func TestShouldTruncate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		truncatableIndexes uint64
+		raftLogSize        int64
+		expected           bool
+	}{
+		{RaftLogQueueStaleThreshold - 1, 0, false},
+		{RaftLogQueueStaleThreshold, 0, true},
+		{0, RaftLogQueueStaleSize, false},
+		{1, RaftLogQueueStaleSize - 1, false},
+		{1, RaftLogQueueStaleSize, true},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			v := shouldTruncate(c.truncatableIndexes, c.raftLogSize)
+			if c.expected != v {
+				t.Fatalf("expected %v, but found %v", c.expected, v)
+			}
+		})
+	}
+}
 
 func TestGetQuorumIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -136,7 +161,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		if err != nil {
 			return 0, 0, 0, err
 		}
-		truncatableIndexes, oldestIndex, err := getTruncatableIndexes(context.Background(), r)
+		truncatableIndexes, oldestIndex, _, err := getTruncatableIndexes(context.Background(), r)
 		if err != nil {
 			return 0, 0, 0, err
 		}
@@ -233,47 +258,59 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store, _ := createTestStore(t, stopper)
 
-	// Note that turning off the replica scanner does not prevent the queues
-	// from processing entries (in this case specifically the raftLogQueue),
-	// just that the scanner will not try to push all replicas onto the queues.
-	store.SetReplicaScannerActive(false)
-
-	r, err := store.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
+	testCases := []struct {
+		count     int
+		valueSize int
+	}{
+		// Lots of small KVs.
+		{RaftLogQueueStaleThreshold * 2, 5},
+		// One big KV.
+		{1, RaftLogQueueStaleSize},
 	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			store, _ := createTestStore(t, stopper)
 
-	oldFirstIndex, err := r.GetFirstIndex()
-	if err != nil {
-		t.Fatal(err)
+			// Note that turning off the replica scanner does not prevent the queues
+			// from processing entries (in this case specifically the raftLogQueue),
+			// just that the scanner will not try to push all replicas onto the queues.
+			store.SetReplicaScannerActive(false)
+
+			r, err := store.GetReplica(1)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			oldFirstIndex, err := r.GetFirstIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for i := 0; i < c.count; i++ {
+				key := roachpb.Key(fmt.Sprintf("key%02d", i))
+				args := putArgs(key, []byte(fmt.Sprintf("%s%02d", strings.Repeat("v", c.valueSize), i)))
+				if _, err := client.SendWrapped(ctx, store.testSender(), &args); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Log truncation is an asynchronous process and while it will usually occur
+			// fairly quickly, there is a slight race between this check and the
+			// truncation, especially when under stress.
+			testutils.SucceedsSoon(t, func() error {
+				newFirstIndex, err := r.GetFirstIndex()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if newFirstIndex <= oldFirstIndex {
+					return errors.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
+						oldFirstIndex, newFirstIndex)
+				}
+				return nil
+			})
+		})
 	}
-
-	// Write a few keys to the range. While writing these keys, the raft log
-	// should be proactively truncated.
-	for i := 0; i < RaftLogQueueStaleThreshold+raftLogCheckFrequency; i++ {
-		key := roachpb.Key(fmt.Sprintf("key%02d", i))
-		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
-		if _, err := client.SendWrapped(ctx, store.testSender(), &args); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Log truncation is an asynchronous process and while it will usually occur
-	// fairly quickly, there is a slight race between this check and the
-	// truncation, especially when under stress.
-	testutils.SucceedsSoon(t, func() error {
-		newFirstIndex, err := r.GetFirstIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if newFirstIndex <= oldFirstIndex {
-			return errors.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
-				oldFirstIndex, newFirstIndex)
-		}
-		return nil
-	})
 }

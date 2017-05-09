@@ -45,8 +45,6 @@ const (
 	leaseTransferError
 )
 
-const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
-
 // ProposalData is data about a command which allows it to be
 // evaluated, proposed to raft, and for the result of the command to
 // be returned to the caller.
@@ -535,9 +533,6 @@ func (r *Replica) handleReplicatedEvalResult(
 	r.store.metrics.addMVCCStats(rResult.Delta)
 	rResult.Delta = enginepb.MVCCStats{}
 
-	if rResult.State.RaftAppliedIndex%raftLogCheckFrequency == 1 {
-		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
-	}
 	if needsSplitBySize {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
@@ -664,13 +659,34 @@ func (r *Replica) handleReplicatedEvalResult(
 	if rResult.RaftLogDelta != nil {
 		r.mu.Lock()
 		r.mu.raftLogSize += *rResult.RaftLogDelta
+		r.mu.raftLogLastCheckSize += *rResult.RaftLogDelta
+		// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
+		// between server restarts.
 		if r.mu.raftLogSize < 0 {
-			// Ensure raftLogSize is not negative since it isn't persisted between
-			// server restarts.
 			r.mu.raftLogSize = 0
+		}
+		if r.mu.raftLogLastCheckSize < 0 {
+			r.mu.raftLogLastCheckSize = 0
 		}
 		r.mu.Unlock()
 		rResult.RaftLogDelta = nil
+	} else {
+		// Check for whether to queue the range for Raft log truncation if this is
+		// not a Raft log truncation command itself. We don't want to check the
+		// Raft log for truncation on every write operation or even every operation
+		// which occurs after the Raft log exceeds RaftLogQueueStaleSize. The logic
+		// below queues the replica for possible Raft log truncation whenever an
+		// additional RaftLogQueueStaleSize bytes have been written to the Raft
+		// log.
+		r.mu.Lock()
+		checkRaftLog := r.mu.raftLogSize-r.mu.raftLogLastCheckSize >= RaftLogQueueStaleSize
+		if checkRaftLog {
+			r.mu.raftLogLastCheckSize = r.mu.raftLogSize
+		}
+		r.mu.Unlock()
+		if checkRaftLog {
+			r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
+		}
 	}
 
 	if !reflect.DeepEqual(rResult, storagebase.ReplicatedEvalResult{}) {
