@@ -75,7 +75,7 @@ case ${1-} in
     ssh)
     shift
     # shellcheck disable=SC2029
-    ssh -A "${USER}@${FQDN}" -- "$@"
+    ssh -A "${USER}@${FQDN}" "$@"
     ;;
     *)
     echo "$0: unknown command: ${1-}, use one of create, start, stop, delete, or ssh"

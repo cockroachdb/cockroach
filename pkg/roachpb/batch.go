@@ -134,7 +134,7 @@ func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
 // GetPrevLeaseForLeaseRequest returns the previous lease, at the time
 // of proposal, for a request lease or transfer lease request. If the
 // batch does not contain a single lease request, this method will panic.
-func (ba *BatchRequest) GetPrevLeaseForLeaseRequest() *Lease {
+func (ba *BatchRequest) GetPrevLeaseForLeaseRequest() Lease {
 	return ba.Requests[0].GetInner().(leaseRequestor).prevLease()
 }
 

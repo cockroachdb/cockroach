@@ -42,7 +42,7 @@ case ${1-} in
     ;;
     ssh)
     shift
-    gcloud compute ssh "${NAME}" --ssh-flag="-A" -- "$@"
+    gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     *)
     echo "$0: unknown command: ${1-}, use one of create, start, stop, delete, or ssh"

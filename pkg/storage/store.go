@@ -1002,7 +1002,7 @@ func (s *Store) SetDraining(drain bool) {
 		if err := s.stopper.RunLimitedAsyncTask(
 			r.AnnotateCtx(ctx), sem, true /* wait */, func(ctx context.Context) {
 				defer wg.Done()
-				var drainingLease *roachpb.Lease
+				var drainingLease roachpb.Lease
 				for {
 					var leaseCh <-chan *roachpb.Error
 					r.mu.Lock()
@@ -1738,7 +1738,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 
-	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc, raftpb.HardState{}, &roachpb.Lease{})
+	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc, raftpb.HardState{}, roachpb.Lease{})
 	if err != nil {
 		return err
 	}
@@ -1836,7 +1836,7 @@ func splitPostApply(
 	// Invoke the leasePostApply method to ensure we properly initialize
 	// the replica according to whether it holds the lease. This enables
 	// the PushTxnQueue. Note that we pass in an empty lease for prevLease.
-	rightRng.leasePostApply(ctx, rightLease, rightReplicaID, &roachpb.Lease{})
+	rightRng.leasePostApply(ctx, rightLease, rightReplicaID, roachpb.Lease{})
 
 	// Add the RHS replica to the store. This step atomically updates
 	// the EndKey of the LHS replica and also adds the RHS replica
@@ -3774,8 +3774,8 @@ func (s *Store) canApplySnapshotLocked(
 				}
 				lease, pendingLease := r.getLease()
 				now := s.Clock().Now()
-				return (lease == nil || !r.IsLeaseValid(lease, now)) &&
-					(pendingLease == nil || !r.IsLeaseValid(pendingLease, now))
+				return !r.IsLeaseValid(lease, now) &&
+					(pendingLease == nil || !r.IsLeaseValid(*pendingLease, now))
 			}
 
 			// If the existing range shows no signs of recent activity, give it a GC
