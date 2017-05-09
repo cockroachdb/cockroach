@@ -95,7 +95,6 @@ func (node *RenameColumn) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("ALTER TABLE ")
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
-
 	}
 	FormatNode(buf, f, node.Table)
 	buf.WriteString(" RENAME COLUMN ")
