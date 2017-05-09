@@ -2064,24 +2064,25 @@ key_match:
 
 // We combine the update and delete actions into one value temporarily for
 // simplicity of parsing, and then break them down again in the calling
-// production. update is in the left 8 bits, delete in the right. Note that
-// NOACTION is the default.
+// production.
 key_actions:
-  key_update { return unimplemented(sqllex) }
-| key_delete { return unimplemented(sqllex) }
-| key_update key_delete { return unimplemented(sqllex) }
-| key_delete key_update { return unimplemented(sqllex) }
+  key_update {}
+| key_delete {}
+| key_update key_delete {}
+| key_delete key_update {}
 | /* EMPTY */ {}
 
 key_update:
-  ON UPDATE key_action { return unimplemented(sqllex) }
+  ON UPDATE key_action {}
 
 key_delete:
-  ON DELETE key_action { return unimplemented(sqllex) }
+  ON DELETE key_action {}
 
 key_action:
   NO ACTION { return unimplemented(sqllex) }
-| RESTRICT { return unimplemented(sqllex) }
+// RESTRICT is currently the default and only supported ON DELETE/UPDATE
+// behavior and thus needs no special handling.
+| RESTRICT {}
 | CASCADE { return unimplemented(sqllex) }
 | SET NULL { return unimplemented(sqllex) }
 | SET DEFAULT { return unimplemented(sqllex) }
