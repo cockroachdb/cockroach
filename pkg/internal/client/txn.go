@@ -1072,3 +1072,25 @@ func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
 	}
 	txn.mu.previousIDs[*txn.mu.Proto.ID] = struct{}{}
 }
+
+// SetFixedTimestamp makes the transaction run in an unusual way, at a "fixed
+// timestamp": Timestamp and OrigTimestamp are set to ts, there's no clock
+// uncertainty, and the txn's deadline is set to ts such that the transaction
+// can't be pushed to a different timestamp.
+//
+// This is used to support historical queries (AS OF SYSTEM TIME queries and
+// backups). This method must be called on every transaction retry (but note
+// that retries should be rare for read-only queries with no clock uncertainty).
+func (txn *Txn) SetFixedTimestamp(ts hlc.Timestamp) {
+	txn.mu.Lock()
+	txn.mu.Proto.Timestamp = ts
+	txn.mu.Proto.OrigTimestamp = ts
+	txn.mu.Proto.MaxTimestamp = ts
+	txn.mu.Unlock()
+	// The deadline-checking code checks that the `Timestamp` field of the proto
+	// hasn't exceeded the deadline. Since we set the Timestamp field each retry,
+	// it won't ever exceed the deadline, and thus setting the deadline here is
+	// not strictly needed. However, it doesn't do anything incorrect and it will
+	// possibly find problems if things change in the future, so it is left in.
+	txn.UpdateDeadlineMaybe(ts)
+}
