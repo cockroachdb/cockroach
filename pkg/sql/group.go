@@ -474,7 +474,7 @@ func (n *groupNode) addIsNotNullFilter(where *filterNode, render *renderNode) {
 		where.ivarHelper.Rebind(
 			render.render[n.desiredOrdering[0].ColIdx],
 			false, // alsoReset
-			false, // normalizeToNonNil
+			true,  // normalizeToNonNil
 		),
 		parser.DNull,
 	)
