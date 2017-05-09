@@ -793,8 +793,7 @@ func (c *cliState) doPrepareStatementLine(
 
 func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnum) cliStateEnum {
 	// From here on, client-side syntax checking is enabled.
-	var p parser.Parser
-	parsedStmts, err := p.Parse(c.concatLines)
+	parsedStmts, err := parser.Parse(c.concatLines)
 	if err != nil {
 		_ = c.invalidSyntax(0, "statement ignored: %v", err)
 
