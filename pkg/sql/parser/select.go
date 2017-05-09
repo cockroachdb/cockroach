@@ -272,7 +272,14 @@ type AliasedTableExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AliasedTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+	_, exprIsJoin := node.Expr.(*JoinTableExpr)
+	if exprIsJoin {
+		buf.WriteByte('(')
+	}
 	FormatNode(buf, f, node.Expr)
+	if exprIsJoin {
+		buf.WriteByte(')')
+	}
 	if node.Hints != nil {
 		FormatNode(buf, f, node.Hints)
 	}
