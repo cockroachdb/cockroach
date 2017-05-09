@@ -137,7 +137,6 @@ func TestGossipFirstRange(t *testing.T) {
 // restarted after losing its data) without the cluster breaking.
 func TestGossipHandlesReplacedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#15585")
 	ctx := context.Background()
 
 	// Shorten the raft tick interval and election timeout to make range leases
@@ -179,6 +178,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	newServerArgs.Addr = tc.Servers[oldNodeIdx].ServingAddr()
 	newServerArgs.PartOfCluster = true
 	newServerArgs.JoinAddr = tc.Servers[1].ServingAddr()
+	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
 	if err := tc.AddServer(t, newServerArgs); err != nil {
 		t.Fatal(err)

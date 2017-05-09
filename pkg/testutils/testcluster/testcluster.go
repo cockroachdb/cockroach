@@ -361,8 +361,13 @@ func (tc *TestCluster) AddReplicas(
 				log.Errorf(context.TODO(), "unexpected error: %s", err)
 				return err
 			}
-			if store.LookupReplica(rKey, nil) == nil {
+			repl := store.LookupReplica(rKey, nil)
+			if repl == nil {
 				return errors.Errorf("range not found on store %d", target)
+			}
+			desc := repl.Desc()
+			if _, ok := desc.GetReplicaDescriptor(target.StoreID); !ok {
+				return errors.Errorf("target store %d not yet in range descriptor %v", target.StoreID, desc)
 			}
 		}
 		return nil
