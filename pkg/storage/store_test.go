@@ -470,7 +470,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 
 	repl1.mu.Lock()
 	expErr := repl1.mu.destroyed
-	lease := repl1.mu.state.Lease
+	lease := *repl1.mu.state.Lease
 	repl1.mu.Unlock()
 
 	if expErr == nil {
