@@ -79,6 +79,16 @@ func MakeColumnDefDescs(
 		Nullable: d.Nullable.Nullability != parser.NotNull && !d.PrimaryKey,
 	}
 
+	// Prevent unsupported array types from falling through.
+	// TODO(jordan): This is ugly and a workaround for incompatibility between
+	// CastTargetToDatumType and structured.go's DatumTypeToColumnType. See #15813
+	switch t := d.Type.(type) {
+	case *parser.ArrayColType:
+		if _, ok := t.ParamType.(*parser.IntColType); !ok {
+			return nil, nil, errors.Errorf("arrays of type %s are unsupported", t.ParamType)
+		}
+	}
+
 	// Set Type.Kind and Type.Locale.
 	colDatumType := parser.CastTargetToDatumType(d.Type)
 	col.Type = DatumTypeToColumnType(colDatumType)
