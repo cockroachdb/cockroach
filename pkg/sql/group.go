@@ -655,7 +655,7 @@ func (a *aggregateFuncHolder) add(
 func (*aggregateFuncHolder) Variable() {}
 
 func (a *aggregateFuncHolder) Format(buf *bytes.Buffer, f parser.FmtFlags) {
-	a.expr.Format(buf, f)
+	parser.FormatNode(buf, f, a.expr)
 }
 func (a *aggregateFuncHolder) String() string { return parser.AsString(a) }
 

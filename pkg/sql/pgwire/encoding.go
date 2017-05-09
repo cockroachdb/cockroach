@@ -217,7 +217,7 @@ func (b *writeBuffer) writeLengthPrefixedString(s string) {
 // writeLengthPrefixedDatum writes a length-prefixed Datum in its
 // string representation. The length is encoded as an int32.
 func (b *writeBuffer) writeLengthPrefixedDatum(d parser.Datum) {
-	d.Format(&b.variablePutbuf, parser.FmtSimple)
+	parser.FormatNode(&b.variablePutbuf, parser.FmtSimple, d)
 	b.writeLengthPrefixedVariablePutbuf()
 }
 

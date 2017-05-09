@@ -947,7 +947,7 @@ type windowFuncHolder struct {
 func (*windowFuncHolder) Variable() {}
 
 func (w *windowFuncHolder) Format(buf *bytes.Buffer, f parser.FmtFlags) {
-	w.expr.Format(buf, f)
+	parser.FormatNode(buf, f, w.expr)
 }
 
 func (w *windowFuncHolder) String() string { return parser.AsString(w) }
@@ -1038,5 +1038,5 @@ func (ac *windowNodeAggContainer) IndexedVarResolvedType(idx int) parser.Type {
 
 // IndexedVarString implements the parser.IndexedVarContainer interface.
 func (ac *windowNodeAggContainer) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	ac.aggFuncs[idx].Format(buf, f)
+	parser.FormatNode(buf, f, ac.aggFuncs[idx])
 }

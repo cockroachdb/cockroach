@@ -76,7 +76,7 @@ func (ord orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns)
 		if columns == nil || i >= len(columns) {
 			fmt.Fprintf(buf, "%d", i)
 		} else {
-			parser.Name(columns[i].Name).Format(buf, parser.FmtSimple)
+			parser.FormatNode(buf, parser.FmtSimple, parser.Name(columns[i].Name))
 		}
 	}
 
@@ -91,7 +91,7 @@ func (ord orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns)
 		}
 		buf.WriteByte(prefix)
 		if columns != nil && o.ColIdx < len(columns) {
-			parser.Name(columns[o.ColIdx].Name).Format(buf, parser.FmtSimple)
+			parser.FormatNode(buf, parser.FmtSimple, parser.Name(columns[o.ColIdx].Name))
 		} else {
 			fmt.Fprintf(buf, "@%d", o.ColIdx+1)
 		}

@@ -130,8 +130,8 @@ func FmtStarDatumFormat(base FmtFlags, fn func(buf *bytes.Buffer, f FmtFlags)) F
 
 // NodeFormatter is implemented by nodes that can be pretty-printed.
 type NodeFormatter interface {
-	// Format performs pretty-printing towards a bytes buffer. The
-	// flags argument influences the results.
+	// Format performs pretty-printing towards a bytes buffer. The flags argument
+	// influences the results. Most callers should use FormatNode instead.
 	Format(buf *bytes.Buffer, flags FmtFlags)
 }
 

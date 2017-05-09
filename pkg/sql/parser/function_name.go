@@ -39,7 +39,7 @@ type ResolvableFunctionReference struct {
 
 // Format implements the NodeFormatter interface.
 func (fn ResolvableFunctionReference) Format(buf *bytes.Buffer, f FmtFlags) {
-	fn.FunctionReference.Format(buf, f)
+	FormatNode(buf, f, fn.FunctionReference)
 }
 func (fn ResolvableFunctionReference) String() string { return AsString(fn) }
 
