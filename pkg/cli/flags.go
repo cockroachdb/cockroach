@@ -233,6 +233,8 @@ func init() {
 		stringFlag(f, &serverConnPort, cliflags.ServerPort, base.DefaultPort)
 		stringFlag(f, &serverAdvertiseHost, cliflags.AdvertiseHost, "")
 		stringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, "")
+		// The advertise port flag is used for testing purposes only and is kept hidden.
+		_ = f.MarkHidden(cliflags.AdvertisePort.Name)
 		stringFlag(f, &serverHTTPHost, cliflags.ServerHTTPHost, "")
 		stringFlag(f, &serverHTTPPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
 		stringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)

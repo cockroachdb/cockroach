@@ -202,8 +202,7 @@ hostname if advertise-host is not specified.`,
 		Name:      "port",
 		Shorthand: "p",
 		Description: `
-The port to bind to. The node will also advertise itself
-using this port if advertise-port is not specified.`,
+The port to bind to.`,
 	}
 
 	AdvertiseHost = FlagInfo{
