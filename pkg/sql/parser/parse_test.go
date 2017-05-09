@@ -124,7 +124,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT, UNIQUE (b) STORING (c))`},
 		{`CREATE TABLE a (b INT, INDEX (b))`},
 		{`CREATE TABLE a (b INT, c INT REFERENCES foo)`},
-		{`CREATE TABLE a (b INT, c INT CONSTRAINT ref REFERENCES foo)`},
+		{`CREATE TABLE a (b INT, c INT CONSTRAINT "ref" REFERENCES foo)`},
 		{`CREATE TABLE a (b INT, c INT REFERENCES foo (bar))`},
 		{`CREATE TABLE a (b INT, INDEX (b) STORING (c))`},
 		{`CREATE TABLE a (b INT, c TEXT, INDEX (b ASC, c DESC) STORING (c))`},
@@ -205,7 +205,6 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM [EXPLAIN SELECT 1]`},
 
 		{`HELP count`},
-		{`HELP varchar`},
 
 		{`SHOW barfoo`},
 		{`SHOW database`},
@@ -570,6 +569,7 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM t@{FORCE_INDEX=[123],NO_INDEX_JOIN}`},
 		{`SELECT * FROM [123]@[456] AS t`},
 		{`SELECT * FROM [123]@{FORCE_INDEX=[456],NO_INDEX_JOIN} AS t`},
+		{`SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'`},
 
 		// TODO(pmattis): Is this a postgres extension?
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a
@@ -919,6 +919,8 @@ func TestParse2(t *testing.T) {
 			`RESTORE DATABASE foo FROM 'bar'`},
 
 		{`SHOW ALL CLUSTER SETTINGS`, `SHOW CLUSTER SETTING all`},
+
+		{`HELP varchar`, `HELP "varchar"`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)

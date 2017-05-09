@@ -25,6 +25,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -116,9 +117,9 @@ func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 }
 
 func encodeSQLIdent(buf *bytes.Buffer, s string) {
-	// To round trip without quotes, the string must match the identifier format
-	// and be normalized.
-	if isIdent(s) && Name(s).Normalize() == s {
+	// If s would be interpreted unambiguously without double quotes, encode it
+	// that way.
+	if _, isKw := keywords[strings.ToUpper(s)]; !isKw && isIdent(s) && Name(s).Normalize() == s {
 		buf.WriteString(s)
 		return
 	}
