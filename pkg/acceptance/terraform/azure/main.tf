@@ -181,7 +181,8 @@ data "template_file" "supervisor" {
     # The value of the --join flag must be empty for the first node,
     # and a running node for all others. We build a list of addresses
     # shifted by one (first element is empty), then take the value at index "instance.index".
-    join_address = "${element(concat(split(",", ""), azurerm_public_ip.cockroach.*.fqdn), count.index == 0 ? 0 : 1)}"
+    # If join_all is true, --join is instead all nodes.
+    join_address = "${var.join_all == "true" ? join(",", azurerm_public_ip.cockroach.*.fqdn) : element(concat(split(",", ""), azurerm_public_ip.cockroach.*.fqdn), count.index == 0 ? 0 : 1)}"
     cockroach_flags = "${var.cockroach_flags}"
     # If the following changes, (*terrafarm.Farmer).Add() must change too.
     cockroach_env = "${var.cockroach_env}"
