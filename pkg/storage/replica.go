@@ -857,9 +857,9 @@ func (r *Replica) getLease() (roachpb.Lease, *roachpb.Lease) {
 
 func (r *Replica) getLeaseRLocked() (roachpb.Lease, *roachpb.Lease) {
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
-		return r.mu.state.Lease, &nextLease
+		return *r.mu.state.Lease, &nextLease
 	}
-	return r.mu.state.Lease, nil
+	return *r.mu.state.Lease, nil
 }
 
 // ownsValidLease returns whether this replica is the current valid
@@ -870,7 +870,7 @@ func (r *Replica) ownsValidLease(ts hlc.Timestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.state.Lease.OwnedBy(r.store.StoreID()) &&
-		r.leaseStatus(r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
+		r.leaseStatus(*r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
 }
 
 // IsLeaseValid returns true if the replica's lease is owned by this
@@ -926,7 +926,7 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (LeaseStatus, bool) {
 		return LeaseStatus{}, false
 	}
 
-	status := r.leaseStatus(r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+	status := r.leaseStatus(*r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
 	switch status.state {
 	case leaseValid:
 		if status.lease.OwnedBy(r.store.StoreID()) {
@@ -969,7 +969,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 			r.mu.Lock()
 			defer r.mu.Unlock()
 
-			status = r.leaseStatus(r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+			status = r.leaseStatus(*r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
 			switch status.state {
 			case leaseError:
 				// Lease state couldn't be determined.
@@ -1380,7 +1380,7 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	// will only campaign if it's been idle for >= election timeout,
 	// so there's most likely been no traffic to the range.
 	shouldCampaignOnCreation := r.mu.state.Lease.OwnedBy(r.store.StoreID()) ||
-		r.leaseStatus(r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).state != leaseValid
+		r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).state != leaseValid
 	if err := r.withRaftGroupLocked(shouldCampaignOnCreation, func(raftGroup *raft.RawNode) (bool, error) {
 		return true, nil
 	}); err != nil {
@@ -3068,7 +3068,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 	// Only quiesce if this replica is the leaseholder as well;
 	// otherwise the replica which is the valid leaseholder may have
 	// pending commands which it's waiting on this leader to propose.
-	if l := r.mu.state.Lease; !l.OwnedBy(r.store.StoreID()) &&
+	if l := *r.mu.state.Lease; !l.OwnedBy(r.store.StoreID()) &&
 		r.isLeaseValidRLocked(l, r.store.Clock().Now()) {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
@@ -3493,7 +3493,7 @@ func (r *Replica) processRaftCommand(
 	if idKey != "" {
 		isLeaseRequest = raftCmd.ReplicatedEvalResult.IsLeaseRequest
 		if isLeaseRequest {
-			requestedLease = raftCmd.ReplicatedEvalResult.State.Lease
+			requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
 		}
 		ts = raftCmd.ReplicatedEvalResult.Timestamp
 		rSpan = roachpb.RSpan{
@@ -3514,7 +3514,7 @@ func (r *Replica) processRaftCommand(
 	// proposer_lease field in the proto.
 	verifyLease := func() error {
 		// Handle the case of pre-epoch-based-leases command.
-		return raftCmd.ProposerLease.Equivalent(r.mu.state.Lease)
+		return raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease)
 	}
 
 	// TODO(tschottdorf): consider the Trace situation here.
@@ -3543,7 +3543,7 @@ func (r *Replica) processRaftCommand(
 		if !isLeaseRequest {
 			// We return a NotLeaseHolderError so that the DistSender retries.
 			nlhe := newNotLeaseHolderError(
-				&r.mu.state.Lease, raftCmd.ProposerReplica.StoreID, r.mu.state.Desc)
+				r.mu.state.Lease, raftCmd.ProposerReplica.StoreID, r.mu.state.Desc)
 			nlhe.CustomMsg = fmt.Sprintf(
 				"stale proposal: command was proposed under lease %s but is being applied "+
 					"under lease: %s", raftCmd.ProposerLease, r.mu.state.Lease)
@@ -3553,7 +3553,7 @@ func (r *Replica) processRaftCommand(
 			// replica.RedirectOnOrAcquireLease() understands. Note that these
 			// requests don't go through the DistSender.
 			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
-				Existing:  r.mu.state.Lease,
+				Existing:  *r.mu.state.Lease,
 				Requested: requestedLease,
 			})
 		}
@@ -4674,7 +4674,7 @@ func (r *Replica) Metrics(
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
-	status := r.leaseStatus(r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
+	status := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
 	selfBehindCount := r.getEstimatedBehindCountRLocked(raftStatus)
