@@ -178,6 +178,18 @@ func (s *Server) maybeCheckForUpdates(
 	return now.Add(updateCheckFrequency)
 }
 
+func addInfoToURL(url *url.URL, s *Server, runningTime time.Duration) {
+	q := url.Query()
+	b := build.GetInfo()
+	q.Set("version", b.Tag)
+	q.Set("platform", b.Platform)
+	q.Set("uuid", s.node.ClusterID.String())
+	q.Set("nodeid", s.NodeID().String())
+	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
+	q.Set("insecure", strconv.FormatBool(s.cfg.Insecure))
+	url.RawQuery = q.Encode()
+}
+
 // checkForUpdates calls home to check for new versions for the current platform
 // and logs messages if it finds them, as well as if it encounters any errors.
 // The returned boolean indicates if the check succeeded (and thus does not need
@@ -186,14 +198,7 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "checkForUpdates")
 	defer span.Finish()
 
-	q := updatesURL.Query()
-	b := build.GetInfo()
-	q.Set("version", b.Tag)
-	q.Set("platform", b.Platform)
-	q.Set("uuid", s.node.ClusterID.String())
-	q.Set("nodeid", s.NodeID().String())
-	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
-	updatesURL.RawQuery = q.Encode()
+	addInfoToURL(updatesURL, s, runningTime)
 
 	res, err := http.Get(updatesURL.String())
 	if err != nil {
@@ -294,12 +299,7 @@ func (s *Server) reportDiagnostics(runningTime time.Duration) {
 		return
 	}
 
-	q := reportingURL.Query()
-	q.Set("version", build.GetInfo().Tag)
-	q.Set("uuid", s.node.ClusterID.String())
-	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
-	reportingURL.RawQuery = q.Encode()
-
+	addInfoToURL(reportingURL, s, runningTime)
 	res, err := http.Post(reportingURL.String(), "application/json", b)
 
 	if err != nil {
