@@ -79,10 +79,6 @@ func MakeColumnDefDescs(
 		Nullable: d.Nullable.Nullability != parser.NotNull && !d.PrimaryKey,
 	}
 
-	// Set Type.Kind and Type.Locale.
-	colDatumType := parser.CastTargetToDatumType(d.Type)
-	col.Type = DatumTypeToColumnType(colDatumType)
-
 	// Set other attributes of col.Type and perform type-specific verification.
 	switch t := d.Type.(type) {
 	case *parser.BoolColType:
@@ -148,6 +144,10 @@ func MakeColumnDefDescs(
 	default:
 		return nil, nil, errors.Errorf("unexpected type %T", t)
 	}
+
+	// Set Type.Kind and Type.Locale.
+	colDatumType := parser.CastTargetToDatumType(d.Type)
+	col.Type = DatumTypeToColumnType(colDatumType)
 
 	if len(d.CheckExprs) > 0 {
 		// Should never happen since `hoistConstraints` moves these to table level
