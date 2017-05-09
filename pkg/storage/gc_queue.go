@@ -348,9 +348,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 		return err
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "completed with stats %+v", info)
-	}
+	log.Eventf(ctx, "assembled GC keys, now proceeding to GC; stats %+v", info)
 
 	info.updateMetrics(gcq.store.metrics)
 
@@ -504,6 +502,7 @@ func RunGC(
 	// values. Intents older than the intent age threshold are sent for
 	// resolution and values after the MVCC metadata, and possible
 	// intent, are sent for garbage collection.
+	log.Event(ctx, "iterating through range")
 	processKeysAndValues := func() {
 		// If there's more than a single value for the key, possibly send for GC.
 		if len(keys) > 1 {
@@ -586,6 +585,8 @@ func RunGC(
 	// we send directly to the Replica, though.
 	gcKeys = append(gcKeys, localRangeKeys...)
 
+	log.Eventf(ctx, "pushing up to %d transactions (concurrency %d)", len(txnMap), gcTaskLimit)
+
 	// Process push transactions in parallel.
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, gcTaskLimit)
@@ -608,6 +609,7 @@ func RunGC(
 	wg.Wait()
 
 	// Resolve all intents.
+	log.Eventf(ctx, "resolving up to %d intents", len(txnMap))
 	var intents []roachpb.Intent
 	for txnID, txn := range txnMap {
 		if txn.Status != roachpb.PENDING {
@@ -622,6 +624,7 @@ func RunGC(
 	}
 
 	// Clean up the abort cache.
+	log.Event(ctx, "processing abort cache")
 	gcKeys = append(gcKeys, processAbortCache(
 		ctx, snap, desc.RangeID, abortSpanGCThreshold, &infoMu, pushTxnFn)...)
 	return gcKeys, infoMu.GCInfo, nil
