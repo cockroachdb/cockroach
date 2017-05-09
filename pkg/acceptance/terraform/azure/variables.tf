@@ -117,3 +117,8 @@ variable "cockroach_env" {
 variable "benchmark_name" {
   default = "BenchmarkBlockWriter"
 }
+
+# join_all specifies the join behavior.
+variable "join_all" {
+  default = "false"
+}
