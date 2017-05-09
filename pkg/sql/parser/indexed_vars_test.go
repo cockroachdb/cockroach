@@ -73,7 +73,7 @@ func TestIndexedVars(t *testing.T) {
 
 	// Test formatting using the indexed var format interceptor.
 	var buf bytes.Buffer
-	typedExpr.Format(
+	FormatNode(
 		&buf,
 		FmtIndexedVarFormat(
 			FmtSimple,
@@ -81,6 +81,7 @@ func TestIndexedVars(t *testing.T) {
 				fmt.Fprintf(buf, "customVar%d", idx)
 			},
 		),
+		typedExpr,
 	)
 	str = buf.String()
 	expectedStr = "customVar0 + (customVar1 * customVar2)"

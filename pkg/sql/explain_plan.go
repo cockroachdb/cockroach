@@ -224,7 +224,7 @@ func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		parser.Name(rCol.Name).Format(&buf, parser.FmtSimple)
+		parser.FormatNode(&buf, parser.FmtSimple, parser.Name(rCol.Name))
 		// Output extra properties like [hidden,omitted].
 		hasProps := false
 		outputProp := func(prop string) {

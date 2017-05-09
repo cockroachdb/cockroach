@@ -197,9 +197,9 @@ func (v *planVisitor) visit(plan planNode) {
 			if len(n.pred.leftColNames) > 0 {
 				var buf bytes.Buffer
 				buf.WriteByte('(')
-				n.pred.leftColNames.Format(&buf, parser.FmtSimple)
+				parser.FormatNode(&buf, parser.FmtSimple, n.pred.leftColNames)
 				buf.WriteString(") = (")
-				n.pred.rightColNames.Format(&buf, parser.FmtSimple)
+				parser.FormatNode(&buf, parser.FmtSimple, n.pred.rightColNames)
 				buf.WriteByte(')')
 				v.observer.attr(name, "equality", buf.String())
 			}

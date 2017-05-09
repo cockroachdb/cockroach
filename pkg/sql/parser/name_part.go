@@ -179,7 +179,7 @@ func (l NameParts) Format(buf *bytes.Buffer, f FmtFlags) {
 type UnresolvedName NameParts
 
 // Format implements the NodeFormatter interface.
-func (u UnresolvedName) Format(buf *bytes.Buffer, f FmtFlags) { NameParts(u).Format(buf, f) }
+func (u UnresolvedName) Format(buf *bytes.Buffer, f FmtFlags) { FormatNode(buf, f, NameParts(u)) }
 func (u UnresolvedName) String() string                       { return AsString(u) }
 
 // UnresolvedNames corresponds to a comma-separate list of unresolved
