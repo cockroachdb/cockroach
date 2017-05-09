@@ -118,7 +118,7 @@ func (ac *AmbientContext) refreshCache() {
 
 // AnnotateCtx annotates a given context with the information in AmbientContext:
 //  - the EventLog is embedded in the context if the context doesn't already
-//    have en event log or an open trace.
+//    have an event log or an open trace.
 //  - the log tags in AmbientContext are added (if ctx doesn't already have
 //  them). If the tags already exist, the values from the AmbientContext
 //  overwrite the existing values, but the order of the tags might change.
