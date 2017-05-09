@@ -73,7 +73,6 @@ type SelectClause struct {
 	GroupBy     GroupBy
 	Having      *Where
 	Window      Window
-	Lock        string
 	tableSelect bool
 }
 
@@ -93,7 +92,6 @@ func (node *SelectClause) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.GroupBy)
 		FormatNode(buf, f, node.Having)
 		FormatNode(buf, f, node.Window)
-		buf.WriteString(node.Lock)
 	}
 }
 
