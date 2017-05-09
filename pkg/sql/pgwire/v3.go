@@ -548,7 +548,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		sqlTypeHints[strconv.Itoa(i+1)] = v
 	}
 	// Create the new PreparedStatement in the connection's Session.
-	stmt, err := c.session.PreparedStatements.New(c.executor, name, query, sqlTypeHints)
+	stmt, err := c.session.PreparedStatements.NewFromString(c.executor, name, query, sqlTypeHints)
 	if err != nil {
 		return c.sendError(err)
 	}
@@ -592,8 +592,8 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 
 // canSendNoData returns true if describing a result of the input statement
 // type should return NoData.
-func canSendNoData(statementType parser.StatementType) bool {
-	return statementType != parser.Rows
+func canSendNoData(stmt parser.Statement) bool {
+	return stmt == nil || stmt.StatementType() != parser.Rows
 }
 
 func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
@@ -622,7 +622,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 			return err
 		}
 
-		return c.sendRowDescription(ctx, stmt.Columns, nil, canSendNoData(stmt.Type))
+		return c.sendRowDescription(ctx, stmt.Columns, nil, canSendNoData(stmt.Statement))
 	case preparePortal:
 		portal, ok := c.session.PreparedPortals.Get(name)
 		if !ok {
@@ -630,7 +630,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 		}
 
 		portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
-		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, canSendNoData(portal.Stmt.Type))
+		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, canSendNoData(portal.Stmt.Statement))
 	default:
 		return errors.Errorf("unknown describe type: %s", typ)
 	}
@@ -790,7 +790,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 	}
 
 	if log.V(2) {
-		log.Infof(ctx, "portal: %q for %q, args %q, formats %q", portalName, stmt.Query, qargs, columnFormatCodes)
+		log.Infof(ctx, "portal: %q for %q, args %q, formats %q", portalName, stmt.Statement, qargs, columnFormatCodes)
 	}
 
 	// Attach pgwire-specific metadata to the PreparedPortal.
@@ -820,7 +820,21 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 		Values: portal.Qargs,
 	}
 
-	return c.executeStatements(stmt.Query, &pinfo, portalMeta.outFormats, false, int(limit))
+	return c.executeStatementParsed(stmt, &pinfo, portalMeta.outFormats, false, int(limit))
+}
+
+func (c *v3Conn) executeStatementParsed(
+	stmt *sql.PreparedStatement,
+	pinfo *parser.PlaceholderInfo,
+	formatCodes []formatCode,
+	sendDescription bool,
+	limit int,
+) error {
+	tracing.AnnotateTrace()
+	// Note: sql.Executor gets its Context from c.session.context, which
+	// has been bound by v3Conn.setupSession().
+	results := c.executor.ExecutePreparedStatement(c.session, stmt, pinfo)
+	return c.finishExecute(results, formatCodes, sendDescription, limit)
 }
 
 func (c *v3Conn) executeStatements(
@@ -834,6 +848,12 @@ func (c *v3Conn) executeStatements(
 	// Note: sql.Executor gets its Context from c.session.context, which
 	// has been bound by v3Conn.setupSession().
 	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
+	return c.finishExecute(results, formatCodes, sendDescription, limit)
+}
+
+func (c *v3Conn) finishExecute(
+	results sql.StatementResults, formatCodes []formatCode, sendDescription bool, limit int,
+) error {
 	// Delay evaluation of c.session.Ctx().
 	defer func() { results.Close(c.session.Ctx()) }()
 
