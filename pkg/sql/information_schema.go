@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -44,6 +45,7 @@ var informationSchema = virtualSchema{
 		informationSchemaTablePrivileges,
 		informationSchemaTablesTable,
 		informationSchemaViewsTable,
+		informationSchemaUserPrivileges,
 	},
 }
 
@@ -413,6 +415,30 @@ CREATE TABLE information_schema.table_constraints (
 			}
 			return nil
 		})
+	},
+}
+
+var informationSchemaUserPrivileges = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.user_privileges (
+	GRANTEE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
+);`,
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		grantee := parser.NewDString(security.RootUser)
+		for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
+			if err := addRow(
+				grantee,              // grantee
+				defString,            // table_catalog
+				parser.NewDString(p), // privilege_type
+				parser.DNull,         // is_grantable
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
