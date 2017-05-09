@@ -26,11 +26,12 @@ func TestStarDatum(t *testing.T) {
 	typedExpr := StarDatumInstance
 	// Test formatting using the indexed var format interceptor.
 	var buf bytes.Buffer
-	typedExpr.Format(
+	FormatNode(
 		&buf,
 		FmtStarDatumFormat(FmtSimple, func(buf *bytes.Buffer, _ FmtFlags) {
 			fmt.Fprintf(buf, "STAR")
 		}),
+		typedExpr,
 	)
 	str := buf.String()
 	expectedStr := "STAR"
