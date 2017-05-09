@@ -17,20 +17,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-// PrefixRewrite holds information for a single byte replacement of a prefix.
-type PrefixRewrite struct {
+// prefixRewrite holds information for a single []byte replacement of a prefix.
+type prefixRewrite struct {
 	OldPrefix []byte
 	NewPrefix []byte
 }
 
-// PrefixRewriter is a matcher for an ordered list of pairs of byte prefix
-// rewrite rules. For dependency reasons, the implementation of the matching
-// is here, but the interesting constructor is in sqlccl.
-type PrefixRewriter []PrefixRewrite
+// prefixRewriter is a matcher for an ordered list of pairs of byte prefix
+// rewrite rules.
+type prefixRewriter []prefixRewrite
 
 // RewriteKey modifies key using the first matching rule and returns
 // it. If no rules matched, returns false and the original input key.
-func (p PrefixRewriter) RewriteKey(key []byte) ([]byte, bool) {
+func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 	for _, rewrite := range p {
 		if bytes.HasPrefix(key, rewrite.OldPrefix) {
 			if len(rewrite.OldPrefix) == len(rewrite.NewPrefix) {
@@ -51,14 +50,15 @@ func (p PrefixRewriter) RewriteKey(key []byte) ([]byte, bool) {
 // into interleaved keys, and is able to function on partial keys for spans
 // and splits.
 type KeyRewriter struct {
-	prefixes PrefixRewriter
+	prefixes prefixRewriter
 	descs    map[sqlbase.ID]*sqlbase.TableDescriptor
 }
 
-// MakeKeyRewriter creates a KeyRewriter from the Rekeys field of an
-// ImportRequest.
+// MakeKeyRewriter creates a KeyRewriter. This includes a simple []byte
+// prefix rewriter to rewrite table IDs including prefix ends, and table
+// descriptor data to traverse interleaved keys to child tables.
 func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
-	var prefixes PrefixRewriter
+	var prefixes prefixRewriter
 	descs := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	for _, rekey := range rekeys {
 		var desc sqlbase.Descriptor
@@ -81,7 +81,7 @@ func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, e
 			newPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(desc.ID, index.ID))
 			if !seenPrefixes[string(oldPrefix)] {
 				seenPrefixes[string(oldPrefix)] = true
-				prefixes = append(prefixes, PrefixRewrite{
+				prefixes = append(prefixes, prefixRewrite{
 					OldPrefix: oldPrefix,
 					NewPrefix: newPrefix,
 				})
@@ -93,7 +93,7 @@ func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, e
 			newPrefix = newPrefix.PrefixEnd()
 			if !seenPrefixes[string(oldPrefix)] {
 				seenPrefixes[string(oldPrefix)] = true
-				prefixes = append(prefixes, PrefixRewrite{
+				prefixes = append(prefixes, prefixRewrite{
 					OldPrefix: oldPrefix,
 					NewPrefix: newPrefix,
 				})
@@ -117,23 +117,20 @@ func makeKeyRewriterPrefixIgnoringInterleaved(tableID sqlbase.ID, indexID sqlbas
 	return key
 }
 
-// RewriteKey modifies key similar to RewriteKey, but is also
-// able to account for interleaved tables. This function works by inspecting
-// the key for table and index IDs, then uses the corresponding table and
-// index descriptors to determine if interleaved data is present and if it
-// is, to find the next prefix of an interleaved child, then calls itself
-// recursively until all interleaved children have been rekeyed.
+// RewriteKey modifies key (possibly in place), changing all table IDs to
+// their new value, including any interleaved table children and prefix
+// ends. This function works by inspecting the key for table and index IDs,
+// then uses the corresponding table and index descriptors to determine if
+// interleaved data is present and if it is, to find the next prefix of an
+// interleaved child, then calls itself recursively until all interleaved
+// children have been rekeyed.
 func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
-	return kr.rewriteKey(0, key)
-}
-
-func (kr *KeyRewriter) rewriteKey(skipKeys int, key []byte) ([]byte, bool, error) {
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
 	_, tableID, _ := encoding.DecodeUvarintAscending(key)
 	// Rewrite the first table ID.
-	key, ok := kr.prefixes.RewriteKey(key)
+	key, ok := kr.prefixes.rewriteKey(key)
 	if !ok {
 		return key, false, nil
 	}
@@ -163,7 +160,11 @@ func (kr *KeyRewriter) rewriteKey(skipKeys int, key []byte) ([]byte, bool, error
 		return nil, false, errors.New("restoring interleaved secondary indexes not supported")
 	}
 	colIDs, _ := idx.FullColumnIDs()
-	for i := 0; i < len(colIDs)-skipKeys; i++ {
+	var skipCols int
+	for _, ancestor := range idx.Interleave.Ancestors {
+		skipCols += int(ancestor.SharedPrefixLen)
+	}
+	for i := 0; i < len(colIDs)-skipCols; i++ {
 		n, err := encoding.PeekLength(k)
 		if err != nil {
 			return nil, false, err
@@ -176,7 +177,7 @@ func (kr *KeyRewriter) rewriteKey(skipKeys int, key []byte) ([]byte, bool, error
 		return key, true, nil
 	}
 	prefix := key[:len(key)-len(k)]
-	k, ok, err = kr.rewriteKey(len(colIDs), k)
+	k, ok, err = kr.RewriteKey(k)
 	if err != nil {
 		return nil, false, err
 	}
