@@ -211,7 +211,7 @@ func evaluateCommand(
 		header.RangeInfos = []roachpb.RangeInfo{
 			{
 				Desc:  *desc,
-				Lease: *lease,
+				Lease: lease,
 			},
 		}
 		reply.SetHeader(header)
@@ -1915,7 +1915,7 @@ func evalRequestLease(
 	}
 
 	rErr := &roachpb.LeaseRejectedError{
-		Existing:  *prevLease,
+		Existing:  prevLease,
 		Requested: args.Lease,
 	}
 
@@ -2007,7 +2007,7 @@ func evalNewLease(
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
-	prevLease *roachpb.Lease,
+	prevLease roachpb.Lease,
 	isExtension bool,
 	isTransfer bool,
 ) (EvalResult, error) {
@@ -2020,7 +2020,7 @@ func evalNewLease(
 		// This amounts to a bug.
 		return newFailedLeaseTrigger(isTransfer),
 			&roachpb.LeaseRejectedError{
-				Existing:  *prevLease,
+				Existing:  prevLease,
 				Requested: lease,
 				Message: fmt.Sprintf("illegal lease: epoch=%d, interval=[%s, %s)",
 					lease.Epoch, lease.Start, lease.Expiration),
@@ -2035,14 +2035,14 @@ func evalNewLease(
 	if _, ok := desc.GetReplicaDescriptor(lease.Replica.StoreID); !ok {
 		return newFailedLeaseTrigger(isTransfer),
 			&roachpb.LeaseRejectedError{
-				Existing:  *prevLease,
+				Existing:  prevLease,
 				Requested: lease,
 				Message:   "replica not found",
 			}
 	}
 
 	// Store the lease to disk & in-memory.
-	if err := rec.stateLoader().setLease(ctx, batch, ms, &lease); err != nil {
+	if err := rec.stateLoader().setLease(ctx, batch, ms, lease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
 	}
 
@@ -2057,7 +2057,7 @@ func evalNewLease(
 	// TODO(tschottdorf): Maybe we shouldn't do this at all. Need to think
 	// through potential consequences.
 	pd.Replicated.BlockReads = !isExtension
-	pd.Replicated.State.Lease = &lease
+	pd.Replicated.State.Lease = lease
 	pd.Local.leaseMetricsResult = new(leaseMetricsType)
 	if isTransfer {
 		*pd.Local.leaseMetricsResult = leaseTransferSuccess
@@ -3043,7 +3043,7 @@ func splitTrigger(
 		rightLease.Replica = replica
 
 		rightMS, err = writeInitialState(
-			ctx, batch, rightMS, split.RightDesc, oldHS, &rightLease,
+			ctx, batch, rightMS, split.RightDesc, oldHS, rightLease,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial state")
@@ -3745,15 +3745,12 @@ func evalLeaseInfo(
 	if err != nil {
 		return EvalResult{}, err
 	}
-	if lease == nil {
-		return EvalResult{}, errors.Errorf("missing lease: %s", cArgs.Args)
-	}
 	if nextLease != nil {
 		// If there's a lease request in progress, speculatively return that future
 		// lease.
 		reply.Lease = *nextLease
 	} else {
-		reply.Lease = *lease
+		reply.Lease = lease
 	}
 	return EvalResult{}, nil
 }

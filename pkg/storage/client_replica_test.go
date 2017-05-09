@@ -575,7 +575,7 @@ func TestRangeTransferLease(t *testing.T) {
 		}
 	}
 
-	forceLeaseExtension := func(sender *storage.Stores, lease *roachpb.Lease) error {
+	forceLeaseExtension := func(sender *storage.Stores, lease roachpb.Lease) error {
 		shouldRenewTS := lease.Expiration.Add(-1, 0)
 		mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
 		return sendRead(sender).GoError()
@@ -588,7 +588,7 @@ func TestRangeTransferLease(t *testing.T) {
 				t.Fatal(err)
 			}
 			newLease, _ := replica0.GetLease()
-			if err := origLease.Equivalent(*newLease); err != nil {
+			if err := origLease.Equivalent(newLease); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1215,7 +1215,7 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos := []roachpb.RangeInfo{
 		{
 			Desc:  *rhsReplica0.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
@@ -1247,11 +1247,11 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *lhsReplica0.Desc(),
-			Lease: *lhsLease,
+			Lease: lhsLease,
 		},
 		{
 			Desc:  *rhsReplica0.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
@@ -1272,11 +1272,11 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *rhsReplica0.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 		{
 			Desc:  *lhsReplica0.Desc(),
-			Lease: *lhsLease,
+			Lease: lhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
@@ -1303,11 +1303,11 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *lhsReplica1.Desc(),
-			Lease: *lhsLease,
+			Lease: lhsLease,
 		},
 		{
 			Desc:  *rhsReplica1.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
