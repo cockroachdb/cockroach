@@ -20,6 +20,9 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -29,9 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/coreos/etcd/raft"
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 )
 
 // leaseMetricsType is used to distinguish between various lease
@@ -206,12 +206,12 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Replicated.State.Desc = nil
 
-	if p.Replicated.State.Lease == (roachpb.Lease{}) {
+	if p.Replicated.State.Lease == nil {
 		p.Replicated.State.Lease = q.Replicated.State.Lease
-	} else if q.Replicated.State.Lease != (roachpb.Lease{}) {
+	} else if q.Replicated.State.Lease != nil {
 		return errors.New("conflicting Lease")
 	}
-	q.Replicated.State.Lease = roachpb.Lease{}
+	q.Replicated.State.Lease = nil
 
 	if p.Replicated.State.TruncatedState == nil {
 		p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
@@ -615,16 +615,19 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.ChangeReplicas = nil
 	}
 
-	if newLease := rResult.State.Lease; newLease != (roachpb.Lease{}) {
-		rResult.State.Lease = roachpb.Lease{} // for assertion
+	// NB: we check for the trivial lease as well as the nil lease, to allow
+	// for a future change which makes storagebase.ReplicaState.Lease non-
+	// nullable able to upgrade without crashing old nodes (see #15819).
+	if newLease := rResult.State.Lease; newLease != nil && *newLease != (roachpb.Lease{}) {
+		rResult.State.Lease = nil // for assertion
 
 		r.mu.Lock()
 		replicaID := r.mu.replicaID
-		prevLease := r.mu.state.Lease
+		prevLease := *r.mu.state.Lease
 		r.mu.state.Lease = newLease
 		r.mu.Unlock()
 
-		r.leasePostApply(ctx, newLease, replicaID, prevLease)
+		r.leasePostApply(ctx, *newLease, replicaID, prevLease)
 	}
 
 	if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
