@@ -68,6 +68,7 @@ type distSQLPlanner struct {
 	stopper      *stop.Stopper
 	distSQLSrv   *distsqlrun.ServerImpl
 	spanResolver distsqlplan.SpanResolver
+	testingKnobs DistSQLPlannerTestingKnobs
 
 	// runnerChan is used to send out requests (for running SetupFlow RPCs) to a
 	// pool of workers.
@@ -92,6 +93,7 @@ func newDistSQLPlanner(
 	distSender *kv.DistSender,
 	gossip *gossip.Gossip,
 	stopper *stop.Stopper,
+	testingKnobs DistSQLPlannerTestingKnobs,
 ) *distSQLPlanner {
 	dsp := &distSQLPlanner{
 		nodeDesc:     nodeDesc,
@@ -99,6 +101,7 @@ func newDistSQLPlanner(
 		stopper:      stopper,
 		distSQLSrv:   distSQLSrv,
 		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
+		testingKnobs: testingKnobs,
 	}
 	dsp.initRunners()
 	return dsp
@@ -448,7 +451,12 @@ func (dsp *distSQLPlanner) partitionSpans(
 				addr, inAddrMap := planCtx.nodeAddresses[nodeID]
 				if !inAddrMap {
 					addr = replInfo.NodeDesc.Address.String()
-					err := dsp.rpcContext.ConnHealth(addr)
+					var err error
+					if dsp.testingKnobs.OverrideHealthCheck != nil {
+						err = dsp.testingKnobs.OverrideHealthCheck(replInfo.NodeDesc.NodeID, addr)
+					} else {
+						err = dsp.rpcContext.ConnHealth(addr)
+					}
 					if err != nil && err != rpc.ErrNotConnected && err != rpc.ErrNotHeartbeated {
 						// This host is known to be unhealthy. Don't use it (use the gateway
 						// instead). Note: this can never happen for our nodeID (which

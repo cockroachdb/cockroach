@@ -295,6 +295,17 @@ type ExecutorTestingKnobs struct {
 
 	// If OverrideDistSQLMode is set, it is used instead of the cluster setting.
 	OverrideDistSQLMode *settings.EnumSetting
+
+	// DistSQLPlannerKnobs are testing knobs for distSQLPlanner.
+	DistSQLPlannerKnobs DistSQLPlannerTestingKnobs
+}
+
+// DistSQLPlannerTestingKnobs is used to control internals of the distSQLPlanner
+// for testing purposes.
+type DistSQLPlannerTestingKnobs struct {
+	// If OverrideSQLHealthCheck is set, we use this callback to get the health of
+	// a node.
+	OverrideHealthCheck func(node roachpb.NodeID, addrString string) error
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -337,7 +348,13 @@ func (e *Executor) Start(
 	ctx = e.AnnotateCtx(ctx)
 	log.Infof(ctx, "creating distSQLPlanner with address %s", nodeDesc.Address)
 	e.distSQLPlanner = newDistSQLPlanner(
-		nodeDesc, e.cfg.RPCContext, e.cfg.DistSQLSrv, e.cfg.DistSender, e.cfg.Gossip, e.stopper,
+		nodeDesc,
+		e.cfg.RPCContext,
+		e.cfg.DistSQLSrv,
+		e.cfg.DistSender,
+		e.cfg.Gossip,
+		e.stopper,
+		e.cfg.TestingKnobs.DistSQLPlannerKnobs,
 	)
 
 	e.databaseCache = newDatabaseCache(e.systemConfig)
