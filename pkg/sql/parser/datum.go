@@ -1756,7 +1756,7 @@ func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DTuple) Format(buf *bytes.Buffer, f FmtFlags) {
-	d.D.Format(buf, f)
+	FormatNode(buf, f, d.D)
 }
 
 // SetSorted sets the sorted flag on the DTuple. This should be used when a
@@ -2175,9 +2175,9 @@ func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
 }
 
 // Format implements the Datum interface.
-func (d *DOid) Format(buf *bytes.Buffer, flags FmtFlags) {
+func (d *DOid) Format(buf *bytes.Buffer, f FmtFlags) {
 	if d.kind == oidColTypeOid || d.name == "" {
-		d.DInt.Format(buf, flags)
+		FormatNode(buf, f, &d.DInt)
 	} else {
 		encodeSQLStringWithFlags(buf, d.name, FmtBareStrings)
 	}
@@ -2338,7 +2338,7 @@ func (d *DOidWrapper) AmbiguousFormat() bool {
 // Format implements the NodeFormatter interface.
 func (d *DOidWrapper) Format(buf *bytes.Buffer, f FmtFlags) {
 	// Custom formatting based on d.OID could go here.
-	d.Wrapped.Format(buf, f)
+	FormatNode(buf, f, d.Wrapped)
 }
 
 // Size implements the Datum interface.

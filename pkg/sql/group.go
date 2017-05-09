@@ -655,6 +655,7 @@ func (a *aggregateFuncHolder) add(
 func (*aggregateFuncHolder) Variable() {}
 
 func (a *aggregateFuncHolder) Format(buf *bytes.Buffer, f parser.FmtFlags) {
+	// Avoid duplicating the type annotation by calling .Format directly.
 	a.expr.Format(buf, f)
 }
 func (a *aggregateFuncHolder) String() string { return parser.AsString(a) }
