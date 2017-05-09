@@ -629,14 +629,15 @@ func (s *statusServer) Ranges(
 	}
 
 	constructRangeInfo := func(
-		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID, leaseHistory []roachpb.Lease, metrics storage.ReplicaMetrics,
+		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID, leaseHistory []roachpb.Lease, metrics storage.ReplicaMetrics, raftStatus *raft.Status,
 	) serverpb.RangeInfo {
+		raftState := convertRaftStatus(raftStatus)
 		return serverpb.RangeInfo{
 			Span: serverpb.PrettySpan{
 				StartKey: desc.StartKey.String(),
 				EndKey:   desc.EndKey.String(),
 			},
-			RaftState:     convertRaftStatus(rep.RaftStatus()),
+			RaftState:     raftState,
 			State:         rep.State(),
 			SourceNodeID:  nodeID,
 			SourceStoreID: storeID,
@@ -644,6 +645,9 @@ func (s *statusServer) Ranges(
 			Problems: serverpb.RangeProblems{
 				Unavailable:          metrics.RangeCounter && metrics.Unavailable,
 				LeaderNotLeaseHolder: metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
+				NoRaftLeader:         !storage.HasRaftLeader(raftStatus) && raftState.State != raftStateDormant,
+				Underreplicated:      metrics.Leader && metrics.Underreplicated,
+				NoLease:              metrics.Leader && !metrics.LeaseValid,
 			},
 		}
 	}
@@ -674,6 +678,7 @@ func (s *statusServer) Ranges(
 							store.Ident.StoreID,
 							rep.GetLeaseHistory(),
 							rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+							rep.RaftStatus(),
 						))
 					return false, nil
 				})
@@ -695,6 +700,7 @@ func (s *statusServer) Ranges(
 					store.Ident.StoreID,
 					rep.GetLeaseHistory(),
 					rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+					rep.RaftStatus(),
 				))
 		}
 		return nil

@@ -66,6 +66,8 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	noRaftLeader := make(map[roachpb.RangeID]int)
+
 	numNodes := len(isLiveMap)
 	responses := make(chan nodeResponse)
 	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
@@ -125,6 +127,16 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 				if info.Problems.LeaderNotLeaseHolder {
 					data.LeaderNotLeaseholder = append(data.LeaderNotLeaseholder, info.State.Desc.RangeID)
 				}
+				if info.Problems.NoRaftLeader {
+					curCount := noRaftLeader[info.State.Desc.RangeID]
+					noRaftLeader[info.State.Desc.RangeID] = curCount + 1
+				}
+				if info.Problems.Underreplicated {
+					data.Underreplicated = append(data.Underreplicated, info.State.Desc.RangeID)
+				}
+				if info.Problems.NoLease {
+					data.NoLease = append(data.NoLease, info.State.Desc.RangeID)
+				}
 			}
 		case <-ctx.Done():
 			http.Error(w, ctx.Err().Error(), http.StatusRequestTimeout)
@@ -138,8 +150,17 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 		data.Title = "Problem Ranges for the Cluster"
 	}
 
+	for rangeID, count := range noRaftLeader {
+		if count == numNodes {
+			data.NoRaftLeader = append(data.NoRaftLeader, rangeID)
+		}
+	}
+
 	sort.Sort(data.Unavailable)
 	sort.Sort(data.LeaderNotLeaseholder)
+	sort.Sort(data.NoRaftLeader)
+	sort.Sort(data.Underreplicated)
+	sort.Sort(data.NoLease)
 
 	t, err := template.New("webpage").Parse(debugProblemRangesTemplate)
 	if err != nil {
@@ -157,6 +178,9 @@ type debugProblemRangeData struct {
 	Failures             rangeInfoSlice
 	Unavailable          roachpb.RangeIDSlice
 	LeaderNotLeaseholder roachpb.RangeIDSlice
+	NoRaftLeader         roachpb.RangeIDSlice
+	Underreplicated      roachpb.RangeIDSlice
+	NoLease              roachpb.RangeIDSlice
 }
 
 const debugProblemRangesTemplate = `
@@ -289,6 +313,42 @@ const debugProblemRangesTemplate = `
         <DIV CLASS="row">
           {{- if $.LeaderNotLeaseholder}}
             {{- range $_, $r := $.LeaderNotLeaseholder}}
+              <a href="/debug/range?id={{$r}}">{{$r}}</a>&nbsp;
+            {{- end}}
+          {{- else}}
+            None
+          {{- end}}
+        </DIV>
+      </DIV>
+      <H2>No Raft Leader</H2>
+      <DIV CLASS="table">
+        <DIV CLASS="row">
+          {{- if $.NoRaftLeader}}
+            {{- range $_, $r := $.NoRaftLeader}}
+              <a href="/debug/range?id={{$r}}">{{$r}}</a>&nbsp;
+            {{- end}}
+          {{- else}}
+            None
+          {{- end}}
+        </DIV>
+      </DIV>
+      <H2>Underreplicated</H2>
+      <DIV CLASS="table">
+        <DIV CLASS="row">
+          {{- if $.Underreplicated}}
+            {{- range $_, $r := $.Underreplicated}}
+              <a href="/debug/range?id={{$r}}">{{$r}}</a>&nbsp;
+            {{- end}}
+          {{- else}}
+            None
+          {{- end}}
+        </DIV>
+      </DIV>
+      <H2>Invalid or Missing Lease</H2>
+      <DIV CLASS="table">
+        <DIV CLASS="row">
+          {{- if $.NoLease}}
+            {{- range $_, $r := $.NoLease}}
               <a href="/debug/range?id={{$r}}">{{$r}}</a>&nbsp;
             {{- end}}
           {{- else}}
