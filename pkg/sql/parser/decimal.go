@@ -32,4 +32,11 @@ var (
 	ExactCtx = DecimalCtx.WithPrecision(0)
 	// HighPrecisionCtx is a decimal context with high precision.
 	HighPrecisionCtx = DecimalCtx.WithPrecision(2000)
+	// RoundCtx is a decimal context with high precision and RoundHalfEven
+	// rounding.
+	RoundCtx = func() *apd.Context {
+		ctx := *HighPrecisionCtx
+		ctx.Rounding = apd.RoundHalfEven
+		return &ctx
+	}()
 )
