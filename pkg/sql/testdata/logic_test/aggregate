@@ -250,8 +250,6 @@ EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 0  group                                       ("count(*)", "k + v")
 0          aggregate 0  count(*)
 0          aggregate 1  test.kv.k + test.kv.v
-0          render 0     count(*)
-0          render 1     test.kv.k + test.kv.v
 1  render                                      ("k + v", "*")
 1          render 0     test.kv.k + test.kv.v
 1          render 1     *
@@ -274,19 +272,20 @@ SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
-0  group                                       ("count(*)", "k + v")
-0          aggregate 0  count(*)
-0          aggregate 1  test.kv.k
-0          aggregate 2  test.kv.v
+0  render                           ("count(*)", "k + v")
 0          render 0     count(*)
-0          render 1     test.kv.k + test.kv.v
-1  render                                      (k, v, "*")
-1          render 0     test.kv.k
-1          render 1     test.kv.v
-1          render 2     *
-2  scan                                        (k, v, w[omitted], s[omitted])
-2          table        kv@primary
-2          spans        ALL
+0          render 1     k + v
+1  group                            ("count(*)", k, v)
+1          aggregate 0  count(*)
+1          aggregate 1  test.kv.k
+1          aggregate 2  test.kv.v
+2  render                           (k, v, "*")
+2          render 0     test.kv.k
+2          render 1     test.kv.v
+2          render 2     *
+3  scan                             (k, v, w[omitted], s[omitted])
+3          table        kv@primary
+3          spans        ALL
 
 query II rowsort
 SELECT COUNT(*), k+v FROM kv GROUP BY k, v
@@ -530,13 +529,12 @@ query ITTT
 EXPLAIN (EXPRS) SELECT COUNT(k) FROM kv
 ----
 0  group
-0                 aggregate 0  count(k)
-0                 render 0     count(k)
+0          aggregate 0  count(k)
 1  render
-1                 render 0     k
+1          render 0     k
 2  scan
-2                 table        kv@primary
-2                 spans        ALL
+2          table        kv@primary
+2          spans        ALL
 
 query ITTT
 EXPLAIN (EXPRS) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
@@ -545,9 +543,6 @@ EXPLAIN (EXPRS) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
 0          aggregate 0  count(k)
 0          aggregate 1  sum(k)
 0          aggregate 2  max(k)
-0          render 0     count(k)
-0          render 1     sum(k)
-0          render 2     max(k)
 1  render
 1          render 0     k
 2  scan
@@ -570,7 +565,6 @@ EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 ----
 0  group
 0          aggregate 0  min(a)
-0          render 0     min(a)
 1  render
 1          render 0     a
 2  scan
@@ -651,7 +645,6 @@ EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz
 ----
 0  group
 0          aggregate 0  min(x)
-0          render 0     min(x)
 1  render
 1          render 0     x
 2  scan
@@ -668,14 +661,13 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 0  group
-0                 aggregate 0  min(x)
-0                 render 0     min(x)
+0          aggregate 0  min(x)
 1  render
-1                 render 0     x
+1          render 0     x
 2  scan
-2                 table        xyz@xy
-2                 spans        /0-/1 /4-/5 /7-/8
-2                 limit        1
+2          table        xyz@xy
+2          spans        /0-/1 /4-/5 /7-/8
+2          limit        1
 
 query I
 SELECT MAX(x) FROM xyz
@@ -687,7 +679,6 @@ EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz
 ----
 0  group
 0           aggregate 0  max(x)
-0           render 0     max(x)
 1  render
 1           render 0     x
 2  revscan
@@ -704,14 +695,13 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 0  group
-0                 aggregate 0  min(y)
-0                 render 0     min(y)
+0          aggregate 0  min(y)
 1  render
-1                 render 0     y
+1          render 0     y
 2  scan
-2                 table        xyz@xy
-2                 spans        /1/#-/2
-2                 limit        1
+2          table        xyz@xy
+2          spans        /1/#-/2
+2          limit        1
 
 query I
 SELECT MAX(y) FROM xyz WHERE x = 1
@@ -722,14 +712,13 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 0  group
-0                 aggregate 0  max(y)
-0                 render 0     max(y)
+0           aggregate 0  max(y)
 1  render
-1                 render 0     y
+1           render 0     y
 2  revscan
-2                 table        xyz@xy
-2                 spans        /1/#-/2
-2                 limit        1
+2           table        xyz@xy
+2           spans        /1/#-/2
+2           limit        1
 
 query I
 SELECT MIN(y) FROM xyz WHERE x = 7
@@ -740,14 +729,13 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 0  group
-0                 aggregate 0  min(y)
-0                 render 0     min(y)
+0          aggregate 0  min(y)
 1  render
-1                 render 0     y
+1          render 0     y
 2  scan
-2                 table        xyz@xy
-2                 spans        /7/#-/8
-2                 limit        1
+2          table        xyz@xy
+2          spans        /7/#-/8
+2          limit        1
 
 query I
 SELECT MAX(y) FROM xyz WHERE x = 7
@@ -758,14 +746,13 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 0  group
-0                 aggregate 0  max(y)
-0                 render 0     max(y)
+0           aggregate 0  max(y)
 1  render
-1                 render 0     y
+1           render 0     y
 2  revscan
-2                 table        xyz@xy
-2                 spans        /7/#-/8
-2                 limit        1
+2           table        xyz@xy
+2           spans        /7/#-/8
+2           limit        1
 
 query I
 SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
@@ -776,20 +763,19 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 0  group
-0                 aggregate 0  min(x)
-0                 render 0     min(x)
+0          aggregate 0  min(x)
 1  render
-1                 render 0     x
+1          render 0     x
 2  scan
-2                 table        xyz@zyx
-2                 spans        /3/2/#-/3/3
-2                 limit        1
+2          table        xyz@zyx
+2          spans        /3/2/#-/3/3
+2          limit        1
 
 query ITTT
 EXPLAIN (DEBUG) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-0 /xyz/zyx/3.0/2/1 NULL BUFFERED
-0 0                (1)  ROW
+0  /xyz/zyx/3.0/2/1  NULL  BUFFERED
+0  NULL              (1)   ROW
 
 query I
 SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
@@ -800,14 +786,13 @@ query ITTT
 EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 0  group
-0                 aggregate 0  max(x)
-0                 render 0     max(x)
+0           aggregate 0  max(x)
 1  render
-1                 render 0     x
+1           render 0     x
 2  revscan
-2                 table        xyz@zyx
-2                 spans        /3/2/#-/3/3
-2                 limit        1
+2           table        xyz@zyx
+2           spans        /3/2/#-/3/3
+2           limit        1
 
 query RRR
 SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
@@ -817,15 +802,15 @@ SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
 query ITTT
 EXPLAIN (DEBUG) SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
 ----
-0  /xyz/primary/1    NULL                        PARTIAL
-0  /xyz/primary/1/y  2                           PARTIAL
-0  /xyz/primary/1/z  3.0                         BUFFERED
-1  /xyz/primary/4    NULL                        PARTIAL
-1  /xyz/primary/4/y  5                           PARTIAL
-1  /xyz/primary/4/z  6.0                         BUFFERED
-2  /xyz/primary/7    NULL                        PARTIAL
-2  /xyz/primary/7/z  8.0                         BUFFERED
-0  0                 (9, 4.5, 6.33333333333333)  ROW
+0  /xyz/primary/1    NULL                         PARTIAL
+0  /xyz/primary/1/y  2                            PARTIAL
+0  /xyz/primary/1/z  3.0                          BUFFERED
+1  /xyz/primary/4    NULL                         PARTIAL
+1  /xyz/primary/4/y  5                            PARTIAL
+1  /xyz/primary/4/z  6.0                          BUFFERED
+2  /xyz/primary/7    NULL                         PARTIAL
+2  /xyz/primary/7/z  8.0                          BUFFERED
+0  NULL              (9, 4.5, 6.333333333333333)  ROW
 
 query R
 SELECT VARIANCE(x) FROM xyz WHERE x = 10
@@ -841,13 +826,12 @@ query ITTT
 EXPLAIN (EXPRS) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 0  group
-0                 aggregate 0  variance(x)
-0                 render 0     variance(x)
+0          aggregate 0  variance(x)
 1  render
-1                 render 0     x
+1          render 0     x
 2  scan
-2                 table        xyz@xy
-2                 spans        /1-/2
+2          table        xyz@xy
+2          spans        /1-/2
 
 query RRR
 SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz
@@ -863,8 +847,8 @@ NULL
 query ITTT
 EXPLAIN (DEBUG) SELECT MIN(z) FROM xyz
 ----
-0 /xyz/zyx/3.0/2/1 NULL  BUFFERED
-0 0                (3.0) ROW
+0  /xyz/zyx/3.0/2/1  NULL   BUFFERED
+0  NULL              (3.0)  ROW
 
 query RRR
 SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
@@ -956,7 +940,6 @@ EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 ----
 0  group
 0          aggregate 0  min(a)
-0          render 0     min(a)
 1  render
 1          render 0     a
 2  scan
@@ -968,16 +951,15 @@ EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 query ITTT
 EXPLAIN (DEBUG) SELECT MIN(a) FROM ab
 ----
-0 /ab/primary/1   NULL PARTIAL
-0 /ab/primary/1/b 10   BUFFERED
-0 0               (1)  ROW
+0  /ab/primary/1    NULL  PARTIAL
+0  /ab/primary/1/b  10    BUFFERED
+0  NULL             (1)   ROW
 
 query ITTT
 EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
 ----
 0  group
 0           aggregate 0  max(a)
-0           render 0     max(a)
 1  render
 1           render 0     a
 2  revscan
@@ -989,9 +971,9 @@ EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
 query ITTT
 EXPLAIN (DEBUG) SELECT MAX(a) FROM ab
 ----
-0 /ab/primary/5/b 50   PARTIAL
-0 /ab/primary/5   NULL BUFFERED
-0 0               (5)  ROW
+0  /ab/primary/5/b  50    PARTIAL
+0  /ab/primary/5    NULL  BUFFERED
+0  NULL             (5)   ROW
 
 query ITTT
 EXPLAIN (EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
@@ -1001,8 +983,6 @@ EXPLAIN (EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 1  group
 1          aggregate 0  v
 1          aggregate 1  count(k)
-1          render 0     v
-1          render 1     count(k)
 2  render
 2          render 0     v
 2          render 1     k
@@ -1018,8 +998,6 @@ EXPLAIN (EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 1  group
 1          aggregate 0  v
 1          aggregate 1  count(*)
-1          render 0     v
-1          render 1     count(*)
 2  render
 2          render 0     v
 2          render 1     *
@@ -1035,8 +1013,6 @@ EXPLAIN (EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 1  group
 1          aggregate 0  v
 1          aggregate 1  count(1)
-1          render 0     v
-1          render 1     count(1)
 2  render
 2          render 0     v
 2          render 1     1
@@ -1097,8 +1073,6 @@ EXPLAIN (EXPRS) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) F
 0  group
 0          aggregate 0  count(*) FILTER (WHERE k > 5)
 0          aggregate 1  max(k > 5) FILTER (WHERE k > 5)
-0          render 0     count(*) FILTER (WHERE k > 5)
-0          render 1     max(k > 5) FILTER (WHERE k > 5)
 1  render
 1          render 0     v
 1          render 1     *
@@ -1112,7 +1086,6 @@ EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
 0  group                                                                                   ("count(*) FILTER (WHERE k > 5)" int)
 0          aggregate 0  (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
-0          render 0     (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
 1  render                                                                                  (v int, "*" int, "k > 5" bool)
 1          render 0     (v)[int]
 1          render 1     (*)[int]
@@ -1125,11 +1098,12 @@ EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 query ITTT
 EXPLAIN (EXPRS) SELECT 1 FROM kv GROUP BY kv.*;
 ----
-0  group
-0          render 0     1
-1  scan
-1          table        kv@primary
-1          spans        ALL
+0  render
+0          render 0  1
+1  group
+2  scan
+2          table     kv@primary
+2          spans     ALL
 
 query I
 SELECT 1 FROM kv GROUP BY kv.*;
@@ -1144,24 +1118,25 @@ SELECT 1 FROM kv GROUP BY kv.*;
 query ITTT
 EXPLAIN (EXPRS) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
-0  group
-0          aggregate 0  sum(d)
+0  render
 0          render 0     sum(d)
-1  render
-1          render 0     k
-1          render 1     v
-1          render 2     w
-1          render 3     s
-1          render 4     d
-2  join
-2          type         inner
-2          pred         test.kv.k >= test.abc.d
-3  scan
-3          table        kv@primary
-3          spans        ALL
-3  scan
-3          table        abc@primary
-3          spans        ALL
+1  group
+1          aggregate 0  sum(d)
+2  render
+2          render 0     k
+2          render 1     v
+2          render 2     w
+2          render 3     s
+2          render 4     d
+3  join
+3          type         inner
+3          pred         test.kv.k >= test.abc.d
+4  scan
+4          table        kv@primary
+4          spans        ALL
+4  scan
+4          table        abc@primary
+4          spans        ALL
 
 query R rowsort
 SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
@@ -1185,7 +1160,6 @@ EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
 ----
 0  group                                      ("min(v)")
 0          aggregate 0  min(test.opt_test.v)
-0          render 0     min(test.opt_test.v)
 1  render                                     (v)              +v
 1          render 0     test.opt_test.v
 2  scan                                       (k[omitted], v)  +v
@@ -1211,7 +1185,6 @@ EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
 ----
 0  group                                      ("min(v)")
 0          aggregate 0  min(test.opt_test.v)
-0          render 0     min(test.opt_test.v)
 1  render                                     (v)         +v
 1          render 0     test.opt_test.v
 2  scan                                       (k, v)      +v
@@ -1232,7 +1205,6 @@ EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
 ----
 0  group                                                    ("min(v + 1)")
 0          aggregate 0  min(test.opt_test.v + 1)
-0          render 0     min(test.opt_test.v + 1)
 1  render                                                   ("v + 1")
 1          render 0     test.opt_test.v + 1
 2  scan                                                     (k, v)
@@ -1246,7 +1218,6 @@ EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
 ----
 0  group                                     ("min(v)")
 0         aggregate 0  min(test.opt_test.v)
-0         render 0     min(test.opt_test.v)
 1  scan                                      (k, v)
 1         table        opt_test@primary
 1         spans        ALL

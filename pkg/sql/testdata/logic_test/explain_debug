@@ -173,9 +173,9 @@ EXPLAIN (DEBUG) SELECT SUM(b) FROM ab GROUP BY a
 3  /ab/primary/2/2  NULL  BUFFERED
 4  /ab/primary/2/6  NULL  BUFFERED
 5  /ab/primary/3/9  NULL  BUFFERED
-0  0                (9)   ROW
-1  1                (9)   ROW
-2  2                (9)   ROW
+0  NULL             (9)   ROW
+0  NULL             (9)   ROW
+0  NULL             (9)   ROW
 
 query ITTT
 EXPLAIN (DEBUG) VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)
