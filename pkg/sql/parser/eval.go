@@ -2156,55 +2156,57 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 
 	case *DecimalColType:
+		var dd DDecimal
+		var err error
+		unset := false
 		switch v := d.(type) {
 		case *DBool:
-			dd := &DDecimal{}
 			if *v {
 				dd.SetCoefficient(1)
 			}
-			return dd, nil
 		case *DInt:
-			dd := &DDecimal{}
 			dd.SetCoefficient(int64(*v))
-			return dd, nil
 		case *DDate:
-			dd := &DDecimal{}
 			dd.SetCoefficient(int64(*v))
-			return dd, nil
 		case *DFloat:
-			dd := &DDecimal{}
-			_, err := dd.SetFloat64(float64(*v))
-			return dd, err
+			_, err = dd.SetFloat64(float64(*v))
 		case *DDecimal:
-			return d, nil
+			// Small optimization to avoid copying into dd in normal case.
+			if typ.Prec == 0 {
+				return d, nil
+			}
+			dd = *v
 		case *DString:
-			return ParseDDecimal(string(*v))
+			err = dd.SetString(string(*v))
 		case *DCollatedString:
-			return ParseDDecimal(v.Contents)
+			err = dd.SetString(v.Contents)
 		case *DTimestamp:
-			var res DDecimal
-			val := &res.Coeff
+			val := &dd.Coeff
 			val.SetInt64(v.Unix())
 			val.Mul(val, big10E6)
 			micros := v.Nanosecond() / int(time.Microsecond)
 			val.Add(val, big.NewInt(int64(micros)))
-			res.Decimal.Exponent = -6
-			return &res, nil
+			dd.Exponent = -6
 		case *DTimestampTZ:
-			var res DDecimal
-			val := &res.Coeff
+			val := &dd.Coeff
 			val.SetInt64(v.Unix())
 			val.Mul(val, big10E6)
 			micros := v.Nanosecond() / int(time.Microsecond)
 			val.Add(val, big.NewInt(int64(micros)))
-			res.Decimal.Exponent = -6
-			return &res, nil
+			dd.Exponent = -6
 		case *DInterval:
-			var res DDecimal
-			val := &res.Coeff
+			val := &dd.Coeff
 			val.SetInt64(v.Nanos / 1000)
-			res.Decimal.Exponent = -6
-			return &res, nil
+			dd.Exponent = -6
+		default:
+			unset = true
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !unset {
+			err = LimitDecimalWidth(&dd.Decimal, typ.Prec, typ.Scale)
+			return &dd, err
 		}
 
 	case *StringColType, *CollatedStringColType, *NameColType:
