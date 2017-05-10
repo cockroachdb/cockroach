@@ -533,9 +533,9 @@ func (v Value) GetDuration() (duration.Duration, error) {
 
 // GetDecimal decodes a decimal value from the bytes of the receiver. If the
 // tag is not DECIMAL an error will be returned.
-func (v Value) GetDecimal() (*apd.Decimal, error) {
+func (v Value) GetDecimal() (apd.Decimal, error) {
 	if tag := v.GetTag(); tag != ValueType_DECIMAL {
-		return nil, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
+		return apd.Decimal{}, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
 	return encoding.DecodeNonsortingDecimal(v.dataBytes(), nil)
 }
@@ -643,7 +643,7 @@ func (v Value) PrettyPrint() string {
 		t, err = v.GetTime()
 		buf.WriteString(t.UTC().Format(time.RFC3339Nano))
 	case ValueType_DECIMAL:
-		var d *apd.Decimal
+		var d apd.Decimal
 		d, err = v.GetDecimal()
 		buf.WriteString(d.String())
 	case ValueType_DURATION:

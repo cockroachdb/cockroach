@@ -1552,7 +1552,7 @@ func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, i
 		return EncodeFloatValue(buf, colID, x), x, true
 	case Decimal:
 		x := rd.decimal()
-		return EncodeDecimalValue(buf, colID, x), x, true
+		return EncodeDecimalValue(buf, colID, x), *x, true
 	case Bytes:
 		x := randutil.RandBytes(rd.Rand, 100)
 		return EncodeBytesValue(buf, colID, x), x, true
@@ -1724,7 +1724,9 @@ func TestValueEncodingRand(t *testing.T) {
 				t.Fatalf("seed %d: %s got %x expected %x", seed, typ, decoded.([]byte), value.([]byte))
 			}
 		case Decimal:
-			if decoded.(*apd.Decimal).Cmp(value.(*apd.Decimal)) != 0 {
+			d := decoded.(apd.Decimal)
+			val := value.(apd.Decimal)
+			if d.Cmp(&val) != 0 {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
 		default:

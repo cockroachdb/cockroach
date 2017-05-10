@@ -290,7 +290,7 @@ func TestSetGetChecked(t *testing.T) {
 	}
 	if r, err := v.GetDecimal(); err != nil {
 		t.Fatal(err)
-	} else if dec.Cmp(r) != 0 {
+	} else if dec.Cmp(&r) != 0 {
 		t.Errorf("set %s on a value and extracted it, expected %s back, but got %s", dec, dec, r)
 	}
 
