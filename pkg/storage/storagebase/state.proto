@@ -50,7 +50,15 @@ message ReplicaState {
   // (*Replica).setDesc* methods.
   roachpb.RangeDescriptor desc = 3;
   // The latest range lease.
-  roachpb.Lease lease = 4 [(gogoproto.nullable) = false];
+  //
+  // Note that this message is both sent over the network and used to model
+  // replica state in memory. In memory (storage.Replica.mu.state), the lease
+  // is never nil (and never zero-valued), but it may be nil when sent over
+  // the network as part of ReplicatedEvalResult.
+  //
+  // TODO(tamird): consider changing the type of storage.Replica.mu.state to
+  // avoid the nullability there.
+  roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
   roachpb.RaftTruncatedState truncated_state = 5;
   // gcThreshold is the GC threshold of the Range, typically updated when keys
