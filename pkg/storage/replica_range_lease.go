@@ -211,6 +211,11 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			ba.RangeID = repl.RangeID
 			ba.Add(leaseReq)
 			_, pErr = repl.Send(ctx, ba)
+			// TODO(a-robinson): Remove this check after it's gotten some mileage in
+			// on test clusters or we gain an understanding of #10940.
+			if txn := pErr.GetTxn(); txn != nil {
+				log.Fatalf(ctx, "unexpected non-nil transaction %v in error from LeaseRequest %+v: %+v", txn, leaseReq, pErr)
+			}
 		}
 		// We reset our state below regardless of whether we've gotten an error or
 		// not, but note that an error is ambiguous - there's no guarantee that the
