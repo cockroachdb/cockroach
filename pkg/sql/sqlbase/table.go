@@ -1050,14 +1050,13 @@ func DecodeTableKey(
 		}
 		return a.NewDFloat(parser.DFloat(f)), rkey, err
 	case parser.TypeDecimal:
-		var d *apd.Decimal
+		var d apd.Decimal
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
 		} else {
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
-		dd := a.NewDDecimal(parser.DDecimal{})
-		dd.Set(d)
+		dd := a.NewDDecimal(parser.DDecimal{Decimal: d})
 		return dd, rkey, err
 	case parser.TypeString:
 		var r string
@@ -1161,10 +1160,9 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 		b, f, err = encoding.DecodeFloatValue(b)
 		return a.NewDFloat(parser.DFloat(f)), b, err
 	case parser.TypeDecimal:
-		var d *apd.Decimal
+		var d apd.Decimal
 		b, d, err = encoding.DecodeDecimalValue(b)
-		dd := a.NewDDecimal(parser.DDecimal{})
-		dd.Set(d)
+		dd := a.NewDDecimal(parser.DDecimal{Decimal: d})
 		return dd, b, err
 	case parser.TypeString:
 		var data []byte
@@ -1473,8 +1471,7 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		dd := a.NewDDecimal(parser.DDecimal{})
-		dd.Set(v)
+		dd := a.NewDDecimal(parser.DDecimal{Decimal: v})
 		return dd, nil
 	case ColumnType_STRING:
 		v, err := value.GetBytes()
