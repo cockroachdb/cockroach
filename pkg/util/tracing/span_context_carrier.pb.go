@@ -34,7 +34,7 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // A SpanContextCarrier message holds metadata of a (potentially ongoing) span
 // of a distributed trace as per the OpenTracing specification. See
-// http://opentracing.io/spec/ for details.
+// http://opentracing.io/documentation/pages/spec for details.
 type SpanContextCarrier struct {
 	TraceID uint64            `protobuf:"varint,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
 	SpanID  uint64            `protobuf:"varint,2,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
