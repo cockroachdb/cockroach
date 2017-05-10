@@ -130,10 +130,10 @@ XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $
 
 .DEFAULT_GOAL := all
 .PHONY: all
-all: build test check
+all: build test lint
 
 .PHONY: short
-short: build testshort checkshort
+short: build testshort lintshort
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 
@@ -257,15 +257,22 @@ generate: gotestdashi
 
 # The style checks depend on `go vet` and so must depend on gotestdashi per the
 # above comment. See https://github.com/golang/go/issues/16086 for details.
-.PHONY: check
-check: override TAGS += check
-check: gotestdashi
+.PHONY: lint
+lint: override TAGS += lint
+lint: gotestdashi
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
-.PHONY: checkshort
-checkshort: override TAGS += check
-checkshort: gotestdashi
+.PHONY: lintshort
+lintshort: override TAGS += lint
+lintshort: gotestdashi
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
+
+.PHONY: check checkshort
+check checkshort:
+	@# TODO(benesch): make this target an alias for the `test` target.
+	@echo 'To adhere to convention, `make check` will soon be an alias for `make test`.' >&2
+	@echo 'The linters have moved to `make lint` and `make lintshort`.' >&2
+	@false
 
 .PHONY: clean
 clean: clean-c-deps
