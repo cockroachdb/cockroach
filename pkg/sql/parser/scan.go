@@ -100,6 +100,7 @@ func (s *Scanner) Lex(lval *sqlSymType) int {
 	s.nextTok = &s.tokBuf
 	s.scan(s.nextTok)
 
+	// If you update these cases, update lookaheadKeywords below.
 	switch lval.id {
 	case AS:
 		switch s.nextTok.id {
@@ -723,7 +724,18 @@ func isHexDigit(ch int) bool {
 		(ch >= 'A' && ch <= 'F')
 }
 
-func isIdent(s string) bool {
+var lookaheadKeywords = map[string]struct{}{
+	"BETWEEN":    {},
+	"ILIKE":      {},
+	"IN":         {},
+	"LIKE":       {},
+	"OF":         {},
+	"ORDINALITY": {},
+	"SIMILAR":    {},
+	"TIME":       {},
+}
+
+func isNonKeywordBareIdentifier(s string) bool {
 	if len(s) == 0 || !isIdentStart(int(s[0])) {
 		return false
 	}
@@ -732,8 +744,14 @@ func isIdent(s string) bool {
 			return false
 		}
 	}
-	_, ok := reservedKeywords[strings.ToUpper(s)]
-	return !ok
+	upper := strings.ToUpper(s)
+	if _, ok := reservedKeywords[upper]; ok {
+		return false
+	}
+	if _, ok := lookaheadKeywords[upper]; ok {
+		return false
+	}
+	return Name(s).Normalize() == s
 }
 
 func isIdentStart(ch int) bool {
