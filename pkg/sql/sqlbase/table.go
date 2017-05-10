@@ -1578,23 +1578,8 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 		}
 	case ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
-			if v.Decimal.Form == apd.Finite && col.Type.Precision > 0 {
-				// http://www.postgresql.org/docs/9.5/static/datatype-numeric.html
-				// "If the scale of a value to be stored is greater than
-				// the declared scale of the column, the system will round the
-				// value to the specified number of fractional digits. Then,
-				// if the number of digits to the left of the decimal point
-				// exceeds the declared precision minus the declared scale, an
-				// error is raised."
-
-				c := parser.DecimalCtx.WithPrecision(uint32(col.Type.Precision))
-				c.Traps = apd.InvalidOperation
-
-				_, err := c.Quantize(&v.Decimal, &v.Decimal, -col.Type.Width)
-				if err != nil {
-					return errors.Errorf("too many digits for type %s (column %q), ",
-						col.Type.SQLString(), col.Name)
-				}
+			if err := parser.LimitDecimalWidth(&v.Decimal, int(col.Type.Precision), int(col.Type.Width)); err != nil {
+				return errors.Wrapf(err, "type %s (column %q)", col.Type.SQLString(), col.Name)
 			}
 		}
 	}
