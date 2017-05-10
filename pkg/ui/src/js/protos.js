@@ -9395,6 +9395,9 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {Object}
                  * @property {boolean} [unavailable] RangeProblems unavailable.
                  * @property {boolean} [leader_not_lease_holder] RangeProblems leader_not_lease_holder.
+                 * @property {boolean} [no_raft_leader] RangeProblems no_raft_leader.
+                 * @property {boolean} [underreplicated] RangeProblems underreplicated.
+                 * @property {boolean} [no_lease] RangeProblems no_lease.
                  */
 
                 /**
@@ -9423,6 +9426,24 @@ export const cockroach = $root.cockroach = (() => {
                 RangeProblems.prototype.leader_not_lease_holder = false;
 
                 /**
+                 * RangeProblems no_raft_leader.
+                 * @type {boolean}
+                 */
+                RangeProblems.prototype.no_raft_leader = false;
+
+                /**
+                 * RangeProblems underreplicated.
+                 * @type {boolean}
+                 */
+                RangeProblems.prototype.underreplicated = false;
+
+                /**
+                 * RangeProblems no_lease.
+                 * @type {boolean}
+                 */
+                RangeProblems.prototype.no_lease = false;
+
+                /**
                  * Creates a new RangeProblems instance using the specified properties.
                  * @param {cockroach.server.serverpb.RangeProblems$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.RangeProblems} RangeProblems instance
@@ -9444,6 +9465,12 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 1, wireType 0 =*/8).bool(message.unavailable);
                     if (message.leader_not_lease_holder != null && message.hasOwnProperty("leader_not_lease_holder"))
                         writer.uint32(/* id 2, wireType 0 =*/16).bool(message.leader_not_lease_holder);
+                    if (message.no_raft_leader != null && message.hasOwnProperty("no_raft_leader"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).bool(message.no_raft_leader);
+                    if (message.underreplicated != null && message.hasOwnProperty("underreplicated"))
+                        writer.uint32(/* id 4, wireType 0 =*/32).bool(message.underreplicated);
+                    if (message.no_lease != null && message.hasOwnProperty("no_lease"))
+                        writer.uint32(/* id 5, wireType 0 =*/40).bool(message.no_lease);
                     return writer;
                 };
 
@@ -9477,6 +9504,15 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 2:
                             message.leader_not_lease_holder = reader.bool();
+                            break;
+                        case 3:
+                            message.no_raft_leader = reader.bool();
+                            break;
+                        case 4:
+                            message.underreplicated = reader.bool();
+                            break;
+                        case 5:
+                            message.no_lease = reader.bool();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -9513,6 +9549,15 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.leader_not_lease_holder != null && message.hasOwnProperty("leader_not_lease_holder"))
                         if (typeof message.leader_not_lease_holder !== "boolean")
                             return "leader_not_lease_holder: boolean expected";
+                    if (message.no_raft_leader != null && message.hasOwnProperty("no_raft_leader"))
+                        if (typeof message.no_raft_leader !== "boolean")
+                            return "no_raft_leader: boolean expected";
+                    if (message.underreplicated != null && message.hasOwnProperty("underreplicated"))
+                        if (typeof message.underreplicated !== "boolean")
+                            return "underreplicated: boolean expected";
+                    if (message.no_lease != null && message.hasOwnProperty("no_lease"))
+                        if (typeof message.no_lease !== "boolean")
+                            return "no_lease: boolean expected";
                     return null;
                 };
 
@@ -9529,6 +9574,12 @@ export const cockroach = $root.cockroach = (() => {
                         message.unavailable = Boolean(object.unavailable);
                     if (object.leader_not_lease_holder != null)
                         message.leader_not_lease_holder = Boolean(object.leader_not_lease_holder);
+                    if (object.no_raft_leader != null)
+                        message.no_raft_leader = Boolean(object.no_raft_leader);
+                    if (object.underreplicated != null)
+                        message.underreplicated = Boolean(object.underreplicated);
+                    if (object.no_lease != null)
+                        message.no_lease = Boolean(object.no_lease);
                     return message;
                 };
 
@@ -9554,11 +9605,20 @@ export const cockroach = $root.cockroach = (() => {
                     if (options.defaults) {
                         object.unavailable = false;
                         object.leader_not_lease_holder = false;
+                        object.no_raft_leader = false;
+                        object.underreplicated = false;
+                        object.no_lease = false;
                     }
                     if (message.unavailable != null && message.hasOwnProperty("unavailable"))
                         object.unavailable = message.unavailable;
                     if (message.leader_not_lease_holder != null && message.hasOwnProperty("leader_not_lease_holder"))
                         object.leader_not_lease_holder = message.leader_not_lease_holder;
+                    if (message.no_raft_leader != null && message.hasOwnProperty("no_raft_leader"))
+                        object.no_raft_leader = message.no_raft_leader;
+                    if (message.underreplicated != null && message.hasOwnProperty("underreplicated"))
+                        object.underreplicated = message.underreplicated;
+                    if (message.no_lease != null && message.hasOwnProperty("no_lease"))
+                        object.no_lease = message.no_lease;
                     return object;
                 };
 

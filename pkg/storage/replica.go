@@ -799,7 +799,7 @@ func (r *Replica) getEstimatedBehindCountRLocked(raftStatus *raft.Status) int64 
 		// We're the leader, so we can't be behind.
 		return 0
 	}
-	if !hasRaftLeader(raftStatus) && r.store.canCampaignIdleReplica() {
+	if !HasRaftLeader(raftStatus) && r.store.canCampaignIdleReplica() {
 		// The Raft group is idle or there is no Raft leader. This can be a
 		// temporary situation due to an in progress election or because the group
 		// can't achieve quorum. In either case, assume we're up to date.
@@ -4688,7 +4688,8 @@ func isRaftLeader(raftStatus *raft.Status) bool {
 	return raftStatus != nil && raftStatus.SoftState.RaftState == raft.StateLeader
 }
 
-func hasRaftLeader(raftStatus *raft.Status) bool {
+// HasRaftLeader returns true if the raft group has a raft leader currently.
+func HasRaftLeader(raftStatus *raft.Status) bool {
 	return raftStatus != nil && raftStatus.SoftState.Lead != 0
 }
 
@@ -4729,7 +4730,7 @@ func calcReplicaMetrics(
 	// range it may not know the leader even though there is one. This scenario
 	// seems rare as it requires the partitioned node to be alive enough to be
 	// performing liveness heartbeats.
-	if !hasRaftLeader(raftStatus) {
+	if !HasRaftLeader(raftStatus) {
 		// The range doesn't have a leader or we don't know who the leader is.
 		for _, rd := range desc.Replicas {
 			if livenessMap[rd.NodeID] {
