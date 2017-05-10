@@ -1263,7 +1263,7 @@ var Builtins = map[string][]Builtin{
 
 	"round": {
 		floatBuiltin1(func(x float64) (Datum, error) {
-			return round(x, 0)
+			return NewDFloat(DFloat(round(x))), nil
 		}, "Rounds `val` to the nearest integer using half to even (banker's) rounding."),
 		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
 			return roundDecimal(x, 0)
@@ -1273,7 +1273,25 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{{"input", TypeFloat}, {"decimal_accuracy", TypeInt}},
 			ReturnType: fixedReturnType(TypeFloat),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				return round(float64(*args[0].(*DFloat)), int64(MustBeDInt(args[1])))
+				var x apd.Decimal
+				if _, err := x.SetFloat64(float64(*args[0].(*DFloat))); err != nil {
+					return nil, err
+				}
+
+				// TODO(mjibson): make sure this fits in an int32.
+				scale := int32(MustBeDInt(args[1]))
+
+				var d apd.Decimal
+				if _, err := RoundCtx.Quantize(&d, &x, -scale); err != nil {
+					return nil, err
+				}
+
+				f, err := d.Float64()
+				if err != nil {
+					return nil, err
+				}
+
+				return NewDFloat(DFloat(f)), nil
 			},
 			Info: "Keeps `decimal_accuracy` number of figures to the right of the zero position " +
 				" in `input` using half to even (banker's) rounding.",
@@ -2082,36 +2100,72 @@ func overlay(s, to string, pos, size int) (Datum, error) {
 	return NewDString(string(runes[:pos]) + to + string(runes[after:])), nil
 }
 
-func round(x float64, n int64) (Datum, error) {
-	pow := math.Pow(10, float64(n))
-
-	if pow == 0 {
-		// Rounding to so many digits on the left that we're underflowing.
-		// Avoid a NaN below.
-		return NewDFloat(DFloat(0)), nil
-	}
-	if math.Abs(x*pow) > 1e17 {
-		// Rounding touches decimals below float precision; the operation
-		// is a no-op.
-		return NewDFloat(DFloat(x)), nil
+// Transcribed from Postgres' src/port/rint.c, with c-style comments preserved
+// for ease of mapping.
+//
+// https://github.com/postgres/postgres/blob/REL9_6_3/src/port/rint.c
+func round(x float64) float64 {
+	/* Per POSIX, NaNs must be returned unchanged. */
+	if math.IsNaN(x) {
+		return x
 	}
 
-	v, frac := math.Modf(x * pow)
-	// The following computation implements unbiased rounding, also
-	// called bankers' rounding. It ensures that values that fall
-	// exactly between two integers get equal chance to be rounded up or
-	// down.
-	if x > 0.0 {
-		if frac > 0.5 || (frac == 0.5 && uint64(v)%2 != 0) {
-			v += 1.0
-		}
-	} else {
-		if frac < -0.5 || (frac == -0.5 && uint64(v)%2 != 0) {
-			v -= 1.0
-		}
+	/* Both positive and negative zero should be returned unchanged. */
+	if x == 0.0 {
+		return x
 	}
 
-	return NewDFloat(DFloat(v / pow)), nil
+	roundFn := math.Ceil
+	if math.Signbit(x) {
+		roundFn = math.Floor
+	}
+
+	/*
+	 * Subtracting 0.5 from a number very close to -0.5 can round to
+	 * exactly -1.0, producing incorrect results, so we take the opposite
+	 * approach: add 0.5 to the negative number, so that it goes closer to
+	 * zero (or at most to +0.5, which is dealt with next), avoiding the
+	 * precision issue.
+	 */
+	xOrig := x
+	x -= math.Copysign(0.5, x)
+
+	/*
+	 * Be careful to return minus zero when input+0.5 >= 0, as that's what
+	 * rint() should return with negative input.
+	 */
+	if x == 0 || math.Signbit(x) != math.Signbit(xOrig) {
+		return math.Copysign(0.0, xOrig)
+	}
+
+	/*
+	 * For very big numbers the input may have no decimals.  That case is
+	 * detected by testing x+0.5 == x+1.0; if that happens, the input is
+	 * returned unchanged.  This also covers the case of minus infinity.
+	 */
+	if x == xOrig-math.Copysign(1.0, x) {
+		return xOrig
+	}
+
+	/* Otherwise produce a rounded estimate. */
+	r := roundFn(x)
+
+	/*
+	 * If the rounding did not produce exactly input+0.5 then we're done.
+	 */
+	if r != x {
+		return r
+	}
+
+	/*
+	 * The original fractional part was exactly 0.5 (since
+	 * floor(input+0.5) == input+0.5).  We need to round to nearest even.
+	 * Dividing input+0.5 by 2, taking the floor and multiplying by 2
+	 * yields the closest even number.  This part assumes that division by
+	 * 2 is exact, which should be OK because underflow is impossible
+	 * here: x is an integer.
+	 */
+	return roundFn(x*0.5) * 2.0
 }
 
 func roundDecimal(x *apd.Decimal, n int32) (Datum, error) {
