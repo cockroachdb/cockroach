@@ -552,7 +552,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	batch := tc.engine.NewSnapshot()
 	defer batch.Close()
-	tc.repl.assertState(batch) // check that in-mem and on-disk state were updated
+	tc.repl.assertState(context.TODO(), batch) // check that in-mem and on-disk state were updated
 
 	tc.repl.mu.Lock()
 	txnSpanThreshold := tc.repl.mu.state.TxnSpanGCThreshold
