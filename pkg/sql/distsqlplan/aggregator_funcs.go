@@ -110,6 +110,11 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_SUM},
 	},
 
+	distsqlrun.AggregatorSpec_XOR_AGG: {
+		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_XOR_AGG},
+		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_XOR_AGG},
+	},
+
 	// AVG is more tricky than the ones above; we need two intermediate values in
 	// the local and final stages:
 	//  - the local stage accumulates the SUM and the COUNT;
