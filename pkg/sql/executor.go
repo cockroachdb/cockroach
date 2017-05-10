@@ -416,7 +416,8 @@ func (e *Executor) getDatabaseCache() *databaseCache {
 // Prepare returns the result types of the given statement. pinfo may
 // contain partial type information for placeholders. Prepare will
 // populate the missing types. The PreparedStatement is returned (or
-// nil if there are no results).
+// nil if there are no results). An error is returned if there is more than
+// one statement in the statement list.
 func (e *Executor) Prepare(
 	stmts parser.StatementList, session *Session, pinfo parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
@@ -496,6 +497,9 @@ func (e *Executor) Prepare(
 	return prepared, nil
 }
 
+// logIfPanicking intercepts a panic and adds extra logs to it before
+// repanicking. It must be deferred directly, not from within another deferred
+// function.
 func logIfPanicking(ctx context.Context, sql string) {
 	if r := recover(); r != nil {
 		log.Shout(ctx, log.Severity_ERROR, "a SQL panic has occurred!")
@@ -522,8 +526,6 @@ func (e *Executor) ExecuteStatements(
 func (e *Executor) ExecutePreparedStatement(
 	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
 ) StatementResults {
-	session.resetForBatch(e)
-	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
 	var stmts parser.StatementList
 	if stmt.Statement != nil {
