@@ -627,7 +627,7 @@ query ITTT
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
 ----
 0  sort
-0              order  -ordinality
+0              order  -"ordinality"
 1  ordinality
 2  values
 2              size   1 column, 3 rows
@@ -635,7 +635,7 @@ EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordi
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 ----
-0  ordinality                          (x, ordinality)  +ordinality,unique
+0  ordinality                          (x, "ordinality")  +"ordinality",unique
 1  render                              (x)
 2  values                              (column1)
 2              size  1 column, 3 rows
@@ -643,8 +643,8 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS 
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 ----
-0  ordinality                           (x, ordinality)  +x
-1  sort                                 (x)              +x
+0  ordinality                           (x, "ordinality")  +x
+1  sort                                 (x)                +x
 1              order  +x
 2  render                               (x)
 3  values                               (column1)
