@@ -1827,7 +1827,7 @@ func splitPostApply(
 	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
 	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
-	rightLease := rightRng.mu.state.Lease
+	rightLease := *rightRng.mu.state.Lease
 	rightReplicaID := rightRng.mu.replicaID
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
@@ -2005,7 +2005,7 @@ func (s *Store) maybeMergeTimestampCaches(
 
 	subsumedRep.mu.Lock()
 	defer subsumedRep.mu.Unlock()
-	subsumedLease := subsumedRep.mu.state.Lease
+	subsumedLease := *subsumedRep.mu.state.Lease
 
 	// Merge support is currently incomplete and incorrect. In particular, the
 	// lease holders must be colocated and the subsumed range appropriately

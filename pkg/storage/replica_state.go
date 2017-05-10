@@ -65,7 +65,7 @@ func (rsl replicaStateLoader) load(
 	if err != nil {
 		return storagebase.ReplicaState{}, err
 	}
-	s.Lease = lease
+	s.Lease = &lease
 
 	if s.GCThreshold, err = rsl.loadGCThreshold(ctx, reader); err != nil {
 		return storagebase.ReplicaState{}, err
@@ -109,7 +109,7 @@ func (rsl replicaStateLoader) save(
 	ctx context.Context, eng engine.ReadWriter, state storagebase.ReplicaState,
 ) (enginepb.MVCCStats, error) {
 	ms := &state.Stats
-	if err := rsl.setLease(ctx, eng, ms, state.Lease); err != nil {
+	if err := rsl.setLease(ctx, eng, ms, *state.Lease); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if err := rsl.setAppliedIndex(
@@ -515,7 +515,7 @@ func writeInitialState(
 		RangeID: desc.RangeID,
 	}
 	s.Stats = ms
-	s.Lease = lease
+	s.Lease = &lease
 
 	if existingLease, err := rsl.loadLease(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
