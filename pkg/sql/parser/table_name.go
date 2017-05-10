@@ -41,7 +41,7 @@ func (nt NormalizableTableName) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.tableNameFormatter != nil {
 		f.tableNameFormatter(&nt, buf, f)
 	} else {
-		nt.TableNameReference.Format(buf, f)
+		FormatNode(buf, f, nt.TableNameReference)
 	}
 }
 func (nt NormalizableTableName) String() string { return AsString(nt) }

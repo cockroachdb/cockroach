@@ -947,6 +947,7 @@ type windowFuncHolder struct {
 func (*windowFuncHolder) Variable() {}
 
 func (w *windowFuncHolder) Format(buf *bytes.Buffer, f parser.FmtFlags) {
+	// Avoid duplicating the type annotation by calling .Format directly.
 	w.expr.Format(buf, f)
 }
 
@@ -1038,5 +1039,6 @@ func (ac *windowNodeAggContainer) IndexedVarResolvedType(idx int) parser.Type {
 
 // IndexedVarString implements the parser.IndexedVarContainer interface.
 func (ac *windowNodeAggContainer) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	// Avoid duplicating the type annotation by calling .Format directly.
 	ac.aggFuncs[idx].Format(buf, f)
 }

@@ -209,7 +209,7 @@ func getMetadataForTable(
 		if colnames.Len() > 0 {
 			colnames.WriteString(", ")
 		}
-		parser.Name(name).Format(&colnames, parser.FmtSimple)
+		parser.FormatNode(&colnames, parser.FmtSimple, parser.Name(name))
 	}
 	if err := rows.Close(); err != nil {
 		return tableMetadata{}, err
@@ -264,7 +264,7 @@ func getMetadataForTable(
 		if idxColNames.Len() > 0 {
 			idxColNames.WriteString(", ")
 		}
-		parser.Name(name).Format(&idxColNames, parser.FmtSimple)
+		parser.FormatNode(&idxColNames, parser.FmtSimple, parser.Name(name))
 		numIndexCols++
 	}
 	if err := rows.Close(); err != nil {
