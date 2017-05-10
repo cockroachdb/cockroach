@@ -237,6 +237,12 @@ func GetTotalMemory() (int64, error) {
 			humanize.IBytes(mem.Total), humanize.Bytes(math.MaxInt64))
 	}
 	totalMem := int64(mem.Total)
+	checkTotal := func(x int64) (int64, error) {
+		if x <= 0 {
+			return 0, fmt.Errorf("inferred memory size %d is suspicious, considering invalid", x)
+		}
+		return x, nil
+	}
 	if runtime.GOOS == "linux" {
 		var err error
 		var buf []byte
@@ -245,7 +251,7 @@ func GetTotalMemory() (int64, error) {
 				log.Infof(context.TODO(), "can't read available memory from cgroups (%s), using system memory %s instead", err,
 					humanizeutil.IBytes(totalMem))
 			}
-			return totalMem, nil
+			return checkTotal(totalMem)
 		}
 		var cgAvlMem uint64
 		if cgAvlMem, err = strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64); err != nil {
@@ -253,7 +259,7 @@ func GetTotalMemory() (int64, error) {
 				log.Infof(context.TODO(), "can't parse available memory from cgroups (%s), using system memory %s instead", err,
 					humanizeutil.IBytes(totalMem))
 			}
-			return totalMem, nil
+			return checkTotal(totalMem)
 		}
 		if cgAvlMem > math.MaxInt64 {
 			if log.V(1) {
@@ -261,19 +267,18 @@ func GetTotalMemory() (int64, error) {
 					humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 
 			}
-			return totalMem, nil
+			return checkTotal(totalMem)
 		}
-		if cgAvlMem > mem.Total {
+		if mem.Total > 0 && cgAvlMem > mem.Total {
 			if log.V(1) {
 				log.Infof(context.TODO(), "available memory from cgroups %s exceeds system memory %s, using system memory",
 					humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 			}
-			return totalMem, nil
+			return checkTotal(totalMem)
 		}
-
-		return int64(cgAvlMem), nil
+		totalMem = int64(cgAvlMem)
 	}
-	return totalMem, nil
+	return checkTotal(totalMem)
 }
 
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard
