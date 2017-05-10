@@ -5254,6 +5254,9 @@ export namespace cockroach {
             type RangeProblems$Properties = {
                 unavailable?: boolean;
                 leader_not_lease_holder?: boolean;
+                no_raft_leader?: boolean;
+                underreplicated?: boolean;
+                no_lease?: boolean;
             };
 
             /**
@@ -5283,6 +5286,24 @@ export namespace cockroach {
                  * @type {boolean}
                  */
                 public leader_not_lease_holder: boolean;
+
+                /**
+                 * RangeProblems no_raft_leader.
+                 * @type {boolean}
+                 */
+                public no_raft_leader: boolean;
+
+                /**
+                 * RangeProblems underreplicated.
+                 * @type {boolean}
+                 */
+                public underreplicated: boolean;
+
+                /**
+                 * RangeProblems no_lease.
+                 * @type {boolean}
+                 */
+                public no_lease: boolean;
 
                 /**
                  * Creates a new RangeProblems instance using the specified properties.

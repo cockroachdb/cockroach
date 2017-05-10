@@ -91,6 +91,9 @@ message RaftState {
 message RangeProblems {
     bool unavailable = 1;
     bool leader_not_lease_holder = 2;
+    bool no_raft_leader = 3;
+    bool underreplicated = 4;
+    bool no_lease = 5;
 }
 
 message RangeInfo {

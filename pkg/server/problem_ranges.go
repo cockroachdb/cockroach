@@ -29,6 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 )
 
+const (
+	debugRangeProblemHeaderUnavailable          = "Unavailable"
+	debugRangeProblemHeaderLeaderNotLeaseholder = "Raft Leader but Not Lease Holder"
+	debugRangeProblemHeaderNoRaftLeader         = "No Raft Leader"
+	debugRangeProblemHeaderNoLease              = "No Lease"
+	debugRangeProblemHeaderUnderreplicated      = "Underreplicated"
+)
+
 // Returns an HTML page displaying information about all the problem ranges in
 // a node or the full cluster.
 func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +44,17 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 	w.Header().Add("Content-type", "text/html")
 	nodeIDString := r.URL.Query().Get("node_id")
 
-	data := debugProblemRangeData{}
+	data := debugProblemRangeData{
+		Problems: make(map[string]roachpb.RangeIDSlice),
+		ProblemHeaders: []string{
+			debugRangeProblemHeaderUnavailable,
+			debugRangeProblemHeaderNoRaftLeader,
+			debugRangeProblemHeaderNoLease,
+			debugRangeProblemHeaderLeaderNotLeaseholder,
+			debugRangeProblemHeaderUnderreplicated,
+		},
+	}
+
 	if len(nodeIDString) > 0 {
 		nodeIDInt, err := strconv.ParseInt(nodeIDString, 10, 0)
 		if err != nil {
@@ -66,6 +84,7 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	noRaftLeader := make(map[roachpb.RangeID]struct{})
 	numNodes := len(isLiveMap)
 	responses := make(chan nodeResponse)
 	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
@@ -120,10 +139,23 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 					continue
 				}
 				if info.Problems.Unavailable {
-					data.Unavailable = append(data.Unavailable, info.State.Desc.RangeID)
+					data.Problems[debugRangeProblemHeaderUnavailable] =
+						append(data.Problems[debugRangeProblemHeaderUnavailable], info.State.Desc.RangeID)
 				}
 				if info.Problems.LeaderNotLeaseHolder {
-					data.LeaderNotLeaseholder = append(data.LeaderNotLeaseholder, info.State.Desc.RangeID)
+					data.Problems[debugRangeProblemHeaderLeaderNotLeaseholder] =
+						append(data.Problems[debugRangeProblemHeaderLeaderNotLeaseholder], info.State.Desc.RangeID)
+				}
+				if info.Problems.NoRaftLeader {
+					noRaftLeader[info.State.Desc.RangeID] = struct{}{}
+				}
+				if info.Problems.Underreplicated {
+					data.Problems[debugRangeProblemHeaderUnderreplicated] =
+						append(data.Problems[debugRangeProblemHeaderUnderreplicated], info.State.Desc.RangeID)
+				}
+				if info.Problems.NoLease {
+					data.Problems[debugRangeProblemHeaderNoLease] =
+						append(data.Problems[debugRangeProblemHeaderNoLease], info.State.Desc.RangeID)
 				}
 			}
 		case <-ctx.Done():
@@ -138,8 +170,14 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 		data.Title = "Problem Ranges for the Cluster"
 	}
 
-	sort.Sort(data.Unavailable)
-	sort.Sort(data.LeaderNotLeaseholder)
+	for rangeID := range noRaftLeader {
+		data.Problems[debugRangeProblemHeaderNoRaftLeader] =
+			append(data.Problems[debugRangeProblemHeaderNoRaftLeader], rangeID)
+	}
+
+	for _, rangeIDs := range data.Problems {
+		sort.Sort(rangeIDs)
+	}
 
 	t, err := template.New("webpage").Parse(debugProblemRangesTemplate)
 	if err != nil {
@@ -152,11 +190,11 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 }
 
 type debugProblemRangeData struct {
-	NodeID               *roachpb.NodeID
-	Title                string
-	Failures             rangeInfoSlice
-	Unavailable          roachpb.RangeIDSlice
-	LeaderNotLeaseholder roachpb.RangeIDSlice
+	NodeID         *roachpb.NodeID
+	Title          string
+	Failures       rangeInfoSlice
+	ProblemHeaders []string
+	Problems       map[string]roachpb.RangeIDSlice
 }
 
 const debugProblemRangesTemplate = `
@@ -272,30 +310,20 @@ const debugProblemRangesTemplate = `
           {{- end}}
         </DIV>
       {{- end}}
-      <H2>Unavailable</H2>
-      <DIV CLASS="table">
-        <DIV CLASS="row">
-          {{- if $.Unavailable}}
-            {{- range $_, $r := $.Unavailable}}
-              <a href="/debug/range?id={{$r}}">{{$r}}</a>&nbsp;
+      {{- range $_, $header := $.ProblemHeaders}}
+        <H2>{{$header}}</H2>
+        <DIV CLASS="table">
+          <DIV CLASS="row">
+            {{- if index $.Problems $header}}
+              {{- range $_, $r := index $.Problems $header}}
+                <a href="/debug/range?id={{$r}}">{{$r}}</a>&nbsp;
+              {{- end}}
+            {{- else}}
+              None
             {{- end}}
-          {{- else}}
-            None
-          {{- end}}
+          </DIV>
         </DIV>
-      </DIV>
-      <H2>Raft Leader but Not Lease Holder</H2>
-      <DIV CLASS="table">
-        <DIV CLASS="row">
-          {{- if $.LeaderNotLeaseholder}}
-            {{- range $_, $r := $.LeaderNotLeaseholder}}
-              <a href="/debug/range?id={{$r}}">{{$r}}</a>&nbsp;
-            {{- end}}
-          {{- else}}
-            None
-          {{- end}}
-        </DIV>
-      </DIV>
+      {{- end}}
     </DIV>
   </BODY>
 </HTML>
