@@ -182,7 +182,7 @@ message JoinReaderSpec {
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
-// aggregator sorts elements in the input stream providing a certain output
+// processor sorts elements in the input stream providing a certain output
 // order guarantee regardless of the input ordering. The output ordering is
 // according to a configurable set of columns.
 //
@@ -323,6 +323,10 @@ message AggregatorSpec {
 
     // The column index specifies the argument to the aggregator function.
     optional uint32 col_idx = 3 [(gogoproto.nullable) = false];
+
+    // If set, this column index specifies a boolean argument; rows for which
+    // this value is not true don't contribute to this aggregation.
+    optional uint32 filter_col_idx = 4;
   }
 
   // The group key is a subset of the columns in the input stream schema on the
