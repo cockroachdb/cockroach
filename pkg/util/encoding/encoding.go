@@ -993,7 +993,7 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		}
 		return b, strconv.FormatFloat(f, 'g', -1, 64), nil
 	case Decimal:
-		var d *apd.Decimal
+		var d apd.Decimal
 		b, d, err = DecodeDecimalAscending(b, nil)
 		if err != nil {
 			return b, "", err
@@ -1345,15 +1345,15 @@ func DecodeTimeValue(b []byte) (remaining []byte, t time.Time, err error) {
 }
 
 // DecodeDecimalValue decodes a value encoded by EncodeDecimalValue.
-func DecodeDecimalValue(b []byte) (remaining []byte, d *apd.Decimal, err error) {
+func DecodeDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err error) {
 	b, err = decodeValueTypeAssert(b, Decimal)
 	if err != nil {
-		return b, nil, err
+		return b, apd.Decimal{}, err
 	}
 	var i uint64
 	b, _, i, err = DecodeNonsortingUvarint(b)
 	if err != nil {
-		return b, nil, err
+		return b, apd.Decimal{}, err
 	}
 	d, err = DecodeNonsortingDecimal(b[:int(i)], nil)
 	return b[int(i):], d, err
@@ -1503,7 +1503,7 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 		}
 		return b, strconv.FormatFloat(f, 'g', -1, 64), nil
 	case Decimal:
-		var d *apd.Decimal
+		var d apd.Decimal
 		b, d, err = DecodeDecimalValue(b)
 		if err != nil {
 			return b, "", err
