@@ -278,7 +278,7 @@ func (p *planner) SelectClause(
 	if err != nil {
 		return nil, err
 	}
-	group, err := p.groupBy(ctx, parsed, r)
+	groupComplex, group, err := p.groupBy(ctx, parsed, r)
 	if err != nil {
 		return nil, err
 	}
@@ -301,9 +301,9 @@ func (p *planner) SelectClause(
 	distinctPlan := p.Distinct(parsed)
 
 	result := planNode(r)
-	if group != nil {
-		group.plan = result
-		result = group
+	if groupComplex != nil {
+		// group.plan is already r.
+		result = groupComplex
 	}
 	if window != nil {
 		window.plan = result

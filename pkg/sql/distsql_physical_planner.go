@@ -283,9 +283,6 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return dsp.checkSupportForNode(n.index)
 
 	case *groupNode:
-		if n.having != nil {
-			return 0, errors.Errorf("group with having not supported yet")
-		}
 		for _, fholder := range n.funcs {
 			if fholder.hasFilter {
 				return 0, errors.Errorf("aggregation with FILTER not supported yet")
@@ -804,17 +801,25 @@ func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 func (dsp *distSQLPlanner) addAggregators(
 	planCtx *planningCtx, p *physicalPlan, n *groupNode,
 ) error {
-	aggregations, err := dsp.extractAggExprs(n.render)
-	if err != nil {
-		return err
-	}
-	if len(aggregations) != len(n.funcs) {
-		return errors.Errorf(
-			"extracted aggregates %v don't match groupNode funcs %v", aggregations, n.funcs,
-		)
-	}
-	for i := range aggregations {
-		aggregations[i].ColIdx = uint32(p.planToStreamColMap[n.funcs[i].argRenderIdx])
+	aggregations := make([]distsqlrun.AggregatorSpec_Aggregation, len(n.funcs))
+	for i, fholder := range n.funcs {
+		// An aggregateFuncHolder either contains an aggregation function or an
+		// expression that also appears as one of the GROUP BY expressions.
+		f, ok := fholder.expr.(*parser.FuncExpr)
+		if !ok || f.GetAggregateConstructor() == nil {
+			aggregations[i].Func = distsqlrun.AggregatorSpec_IDENT
+		} else {
+			// Convert the aggregate function to the enum value with the same string
+			// representation.
+			funcStr := strings.ToUpper(f.Func.FunctionReference.String())
+			funcIdx, ok := distsqlrun.AggregatorSpec_Func_value[funcStr]
+			if !ok {
+				return errors.Errorf("unknown aggregate %s", funcStr)
+			}
+			aggregations[i].Func = distsqlrun.AggregatorSpec_Func(funcIdx)
+			aggregations[i].Distinct = (f.Type == parser.DistinctFuncType)
+		}
+		aggregations[i].ColIdx = uint32(p.planToStreamColMap[fholder.argRenderIdx])
 	}
 
 	inputTypes := p.ResultTypes
@@ -1112,24 +1117,10 @@ func (dsp *distSQLPlanner) addAggregators(
 		p.SetMergeOrdering(orderingTerminated)
 	}
 
-	evalExprs := dsp.extractPostAggrExprs(n.render)
-	if len(evalExprs) != len(n.Columns()) {
-		return errors.Errorf(
-			"post-aggregate expressions %v don't match groupNode renders %v", evalExprs, n.render,
-		)
-	}
-
-	// Add post-aggregation rendering.
-	p.AddRendering(
-		evalExprs,
-		identityMap(p.planToStreamColMap, len(aggregations)),
-		getTypesForPlanResult(n, nil),
-	)
-
 	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the aggregator (and possibly
 	// evaluator) have been programmed to produce the columns in order.
-	p.planToStreamColMap = identityMap(p.planToStreamColMap, len(evalExprs))
+	p.planToStreamColMap = identityMap(p.planToStreamColMap, len(aggregations))
 	return nil
 }
 
