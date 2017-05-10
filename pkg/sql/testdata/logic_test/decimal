@@ -231,3 +231,17 @@ SELECT * FROM s@idx WHERE d = 10
 10.0000
 10.00000
 10.000000
+
+query R
+SELECT 1.00::decimal(6,4)
+----
+1.0000
+
+statement error value with precision 6, scale 4 must round to an absolute value less than 10\^2
+SELECT 101.00::decimal(6,4)
+
+statement error scale \(6\) must be between 0 and precision \(4\)
+SELECT 101.00::decimal(4,6)
+
+statement error value with precision 2, scale 2 must round to an absolute value less than 1
+SELECT 1::decimal(2, 2)
