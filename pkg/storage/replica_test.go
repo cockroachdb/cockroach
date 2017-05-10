@@ -3487,6 +3487,7 @@ func TestRaftRetryProtectionInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
 	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableOnePhaseCommits = true
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())

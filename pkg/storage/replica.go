@@ -3997,67 +3997,83 @@ func (r *Replica) evaluateTxnWriteBatch(
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
 	if !r.store.TestingKnobs().DisableOnePhaseCommits && isOnePhaseCommit(ba) {
-		arg, _ := ba.GetArg(roachpb.EndTransaction)
-		etArg := arg.(*roachpb.EndTransactionRequest)
+		for i := 0; i < 2; i++ {
+			arg, _ := ba.GetArg(roachpb.EndTransaction)
+			etArg := arg.(*roachpb.EndTransactionRequest)
 
-		// Try executing with transaction stripped. We use the transaction timestamp
-		// to write any values as it may have been advanced by the timestamp cache.
-		strippedBa := ba
-		strippedBa.Timestamp = strippedBa.Txn.Timestamp
-		strippedBa.Txn = nil
-		strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
+			// Try executing with transaction stripped. We use the transaction timestamp
+			// to write any values as it may have been advanced by the timestamp cache.
+			strippedBa := ba
+			strippedBa.Timestamp = strippedBa.Txn.Timestamp
+			strippedBa.Txn = nil
+			strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
 
-		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
-		batch := r.store.Engine().NewBatch()
-		if spans != nil {
-			batch = makeSpanSetBatch(batch, spans)
-		}
-		rec := ReplicaEvalContext{r, spans}
-		br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, strippedBa)
-		if pErr == nil && ba.Timestamp == br.Timestamp {
-			clonedTxn := ba.Txn.Clone()
-			clonedTxn.Writing = true
-			clonedTxn.Status = roachpb.COMMITTED
+			// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
+			batch := r.store.Engine().NewBatch()
+			if spans != nil {
+				batch = makeSpanSetBatch(batch, spans)
+			}
+			rec := ReplicaEvalContext{r, spans}
+			br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, strippedBa)
+			if pErr == nil && ba.Timestamp == br.Timestamp {
+				clonedTxn := ba.Txn.Clone()
+				clonedTxn.Writing = true
+				clonedTxn.Status = roachpb.COMMITTED
 
-			// If the end transaction is not committed, clear the batch and mark the status aborted.
-			if !etArg.Commit {
-				clonedTxn.Status = roachpb.ABORTED
-				batch.Close()
-				batch = r.store.Engine().NewBatch()
-				ms = enginepb.MVCCStats{}
-			} else {
-				// Run commit trigger manually.
-				innerResult, err := runCommitTrigger(ctx, rec, batch, &ms, *etArg, &clonedTxn)
-				if err != nil {
-					return batch, ms, br, result, roachpb.NewErrorf("failed to run commit trigger: %s", err)
+				// If the end transaction is not committed, clear the batch and mark the status aborted.
+				if !etArg.Commit {
+					clonedTxn.Status = roachpb.ABORTED
+					batch.Close()
+					batch = r.store.Engine().NewBatch()
+					ms = enginepb.MVCCStats{}
+				} else {
+					// Run commit trigger manually.
+					innerResult, err := runCommitTrigger(ctx, rec, batch, &ms, *etArg, &clonedTxn)
+					if err != nil {
+						return batch, ms, br, result, roachpb.NewErrorf("failed to run commit trigger: %s", err)
+					}
+					if err := result.MergeAndDestroy(innerResult); err != nil {
+						return batch, ms, br, result, roachpb.NewError(err)
+					}
 				}
-				if err := result.MergeAndDestroy(innerResult); err != nil {
-					return batch, ms, br, result, roachpb.NewError(err)
-				}
+
+				br.Txn = &clonedTxn
+				// Add placeholder responses for begin & end transaction requests.
+				br.Responses = append([]roachpb.ResponseUnion{{BeginTransaction: &roachpb.BeginTransactionResponse{}}}, br.Responses...)
+				br.Responses = append(br.Responses, roachpb.ResponseUnion{EndTransaction: &roachpb.EndTransactionResponse{OnePhaseCommit: true}})
+				return batch, ms, br, result, nil
 			}
 
-			br.Txn = &clonedTxn
-			// Add placeholder responses for begin & end transaction requests.
-			br.Responses = append([]roachpb.ResponseUnion{{BeginTransaction: &roachpb.BeginTransactionResponse{}}}, br.Responses...)
-			br.Responses = append(br.Responses, roachpb.ResponseUnion{EndTransaction: &roachpb.EndTransactionResponse{OnePhaseCommit: true}})
-			return batch, ms, br, result, nil
-		}
+			batch.Close()
+			ms = enginepb.MVCCStats{}
 
-		batch.Close()
-		ms = enginepb.MVCCStats{}
-
-		// Handle the case of a required one phase commit transaction.
-		if etArg.Require1PC {
-			if pErr != nil {
-				return nil, ms, nil, EvalResult{}, pErr
-			} else if ba.Timestamp != br.Timestamp {
-				err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
-				return nil, ms, nil, EvalResult{}, roachpb.NewError(err)
+			// TODO(peter): This causes flakiness in
+			// TestConcurrentUpsertWithSnapshotIsolation. Presumably because we're
+			// not obeying the timestamp cache properly. We should probably be
+			// returning an error here and going through the retry loop in
+			// executeWriteBatch.
+			switch tErr := pErr.GetDetail().(type) {
+			case *roachpb.WriteTooOldError:
+				ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
+				ba.Timestamp = ba.Txn.Timestamp
+				continue
 			}
-			panic("unreachable")
-		}
 
-		log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
+			// Handle the case of a required one phase commit transaction.
+			if etArg.Require1PC {
+				if pErr != nil {
+					return nil, ms, nil, EvalResult{}, pErr
+				} else if ba.Timestamp != br.Timestamp {
+					err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
+					return nil, ms, nil, EvalResult{}, roachpb.NewError(err)
+				}
+				panic("unreachable")
+			}
+
+			// log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
+			log.Infof(ctx, "1PC execution failed, reverting to regular execution for batch: %s", pErr)
+			break
+		}
 	}
 
 	batch := r.store.Engine().NewBatch()
