@@ -33,9 +33,8 @@ https://github.com/cockroachdb/cockroach#design).
 
 ## Status
 
-CockroachDB is currently in beta. See our
-[1.0 Roadmap](https://github.com/cockroachdb/cockroach/issues/12854) and
-[Issues](https://github.com/cockroachdb/cockroach/issues) for a list of features planned or in development.
+CockroachDB is production-ready. See our
+[1.1 milestone](https://github.com/cockroachdb/cockroach/milestone/10) for a list of features planned or in development.
 
 ## Docs
 
