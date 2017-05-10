@@ -231,6 +231,16 @@ SELECT sha256('abc')
 ----
 ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
 
+query IIII
+SELECT fnv32('abc'), fnv32a('abc'), fnv64('abc'), fnv64a('abc')
+----
+1134309195  440920331  -2820157060406071861  -1792535898324117685
+
+query II
+SELECT crc32ieee('abc'), crc32c('abc')
+----
+891568578  910901175
+
 query T
 SELECT to_hex(2147483647)
 ----
