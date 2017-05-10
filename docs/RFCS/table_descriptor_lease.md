@@ -123,7 +123,8 @@ CREATE TABLE system.lease (
 
 Entries in the lease table will be added and removed as leases are
 acquired and released. A background goroutine running on the lease holder
-for the system range will periodically delete expired leases.
+for the system range will periodically delete expired leases
+ (not yet implemented).
 
 Leases will be granted for a duration measured in minutes (we'll
 assume 5m for the rest of this doc, though experimentation may tune
@@ -170,9 +171,13 @@ transactionally:
 * Increment `desc.Version`.
 * `UPDATE system.descriptor WHERE id = <descID> SET descriptor = <desc>`
 
-The table descriptor `ModificationTime` would be fed to the
-`hlc.Clock.Update` whenever a lease is acquired to ensure that the node
-is not allowed to use a descriptor "from the future".
+A lease is valid only for transactions that start on or after the
+table descriptor write timestamp to prevent using a descriptor
+"from the future". The write timestamp from the table in the lease
+is fed into hlc.Clock.Update so that all new transactions can use
+the lease. A transaction that has started before the table
+descriptor write timestamp in a lease and wanting to use it
+will be restarted.
 
 Note that the updating of the table descriptor will cause the table
 version to be gossipped alerting nodes to the new version and causing
@@ -215,6 +220,34 @@ structure. When a node receives a SQL statement within a
 multi-statement transaction, it will gather leases for all the tables
 in the transaction proto. If any of the leases are at a version
 incompatible with the version provided, it will abort the transaction.
+
+A node acquires a lease on a table descriptor using its own
+transaction, and another transaction wanting to use a table lease
+must take further precautions to prevent hitting a deadlock with
+the node's lease acquiring transaction. A transaction that runs a
+CREATE TABLE followed by other operations on the table will hit
+a deadlock situation where the table descriptor hasn't
+yet been committed while the node is trying to acquire a lease
+on the table descriptor using a separate transaction. The commands
+following the CREATE TABLE trying to acquire a table lease
+will block on their own transaction that has written out a
+new uncommitted table.
+
+A similar situation happens when a table exists but a node
+has no lease on the table, and a transaction runs a schema change
+that modifies the table and subsequently runs other commands
+referencing the table. Care has to be taken to first acquire
+a table lease before running the transaction. While it is
+possible in this situation it is not possible to do the same
+in the CREATE TABLE case.
+
+Commands within a transaction would like to see the schema
+changes made within the transaction reducing the chance of
+user surprise. Both this requirement and the deadlock
+prevention requirement discussed above are solved through a
+solution where table descriptors modified within a transaction
+are cached specifically for the use of the transaction, with a
+transaction not needing a lease for the table.
 
 # Drawbacks
 
