@@ -384,7 +384,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 	}
 
 	if _, _, err := tableDesc.FindColumnByNormalizedName(normNewColName); err == nil {
-		return nil, fmt.Errorf("column name %q already exists", n.NewName)
+		return nil, fmt.Errorf("column name %q already exists", string(n.NewName))
 	}
 
 	preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
