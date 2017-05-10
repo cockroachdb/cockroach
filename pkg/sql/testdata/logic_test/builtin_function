@@ -655,6 +655,9 @@ SELECT radians(-45.0), radians(45.0)
 ----
 -0.7853981633974483 0.7853981633974483
 
+query error invalid operation
+SELECT round(123.456::float, -2438602134409251682)
+
 query RRR
 SELECT round(4.2::float, 0), round(4.2::float, 10), round(4.22222222::decimal, 3)
 ----
@@ -710,12 +713,12 @@ SELECT round(-1.7976931348623157e+308::float, 1), round(1.7976931348623157e+308:
 query RR
 SELECT round(-1.7976931348623157e+308::float, -303), round(1.7976931348623157e+308::float, -303)
 ----
--1.797690000000001e+308 1.797690000000001e+308
+-1.79769e+308 1.79769e+308
 
 query RR
 SELECT round(-1.23456789e+308::float, -308), round(1.23456789e+308::float, -308)
 ----
--1.0000000000000006e+308 1.0000000000000006e+308
+-1e+308 1e+308
 
 query RR
 SELECT round(-1.7976931348623157e-308::float, 1), round(1.7976931348623157e-308::float, 1)
@@ -727,10 +730,10 @@ SELECT 1.234567890123456789::float,  round(1.234567890123456789::float,15), roun
 ----
 1.2345678901234567 1.234567890123457 1.2345678901234567 1.2345678901234567
 
-query RRRR
-SELECT round(123.456::float, -1), round(123.456::float, -2), round(123.456::float, -3), round(123.456::float, -2438602134409251682)
+query RRR
+SELECT round(123.456::float, -1), round(123.456::float, -2), round(123.456::float, -3)
 ----
-120 100 0 0
+120 100 0
 
 query RRRR
 SELECT round(123.456::decimal, -1), round(123.456::decimal, -2), round(123.456::decimal, -3), round(123.456::decimal, -200)
