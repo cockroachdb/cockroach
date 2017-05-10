@@ -501,7 +501,9 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 		return err
 	}
 
-	return c.executeStatements(query, nil, nil, true, 0)
+	tracing.AnnotateTrace()
+	results := c.executor.ExecuteStatements(c.session, query, nil)
+	return c.finishExecute(results, nil, true, 0)
 }
 
 func (c *v3Conn) handleParse(buf *readBuffer) error {
@@ -815,40 +817,15 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 
 	stmt := portal.Stmt
 	portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
-	pinfo := parser.PlaceholderInfo{
+	pinfo := &parser.PlaceholderInfo{
 		Types:  stmt.SQLTypes,
 		Values: portal.Qargs,
 	}
 
-	return c.executeStatementParsed(stmt, &pinfo, portalMeta.outFormats, false, int(limit))
-}
-
-func (c *v3Conn) executeStatementParsed(
-	stmt *sql.PreparedStatement,
-	pinfo *parser.PlaceholderInfo,
-	formatCodes []formatCode,
-	sendDescription bool,
-	limit int,
-) error {
 	tracing.AnnotateTrace()
-	// Note: sql.Executor gets its Context from c.session.context, which
-	// has been bound by v3Conn.setupSession().
+
 	results := c.executor.ExecutePreparedStatement(c.session, stmt, pinfo)
-	return c.finishExecute(results, formatCodes, sendDescription, limit)
-}
-
-func (c *v3Conn) executeStatements(
-	stmts string,
-	pinfo *parser.PlaceholderInfo,
-	formatCodes []formatCode,
-	sendDescription bool,
-	limit int,
-) error {
-	tracing.AnnotateTrace()
-	// Note: sql.Executor gets its Context from c.session.context, which
-	// has been bound by v3Conn.setupSession().
-	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
-	return c.finishExecute(results, formatCodes, sendDescription, limit)
+	return c.finishExecute(results, portalMeta.outFormats, false, int(limit))
 }
 
 func (c *v3Conn) finishExecute(

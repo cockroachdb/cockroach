@@ -733,8 +733,10 @@ func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, 
 
 // TypeCheck implements the Expr interface.
 func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	// Perform placeholder typing. This only happens during Prepare, when there
-	// are no available values for the placeholders yet.
+	// Perform placeholder typing. This function is only called during Prepare,
+	// when there are no available values for the placeholders yet, because
+	// during Execute all placeholders are replaced from the AST before type
+	// checking.
 	if typ, ok := ctx.Placeholders.Type(expr.Name); ok {
 		expr.typ = typ
 		return expr, nil
