@@ -228,15 +228,26 @@ func (cfg Config) HistogramWindowInterval() time.Duration {
 // GetTotalMemory returns either the total system memory or if possible the
 // cgroups available memory.
 func GetTotalMemory() (int64, error) {
-	mem := gosigar.Mem{}
-	if err := mem.Get(); err != nil {
+	totalMem, err := func() (int64, error) {
+		mem := gosigar.Mem{}
+		if err := mem.Get(); err != nil {
+			return 0, err
+		}
+		if mem.Total > math.MaxInt64 {
+			return 0, fmt.Errorf("inferred memory size %s exceeds maximum supported memory size %s",
+				humanize.IBytes(mem.Total), humanize.Bytes(math.MaxInt64))
+		}
+		return int64(mem.Total), nil
+	}()
+	if err != nil {
 		return 0, err
 	}
-	if mem.Total > math.MaxInt64 {
-		return 0, fmt.Errorf("inferred memory size %s exceeds maximum supported memory size %s",
-			humanize.IBytes(mem.Total), humanize.Bytes(math.MaxInt64))
+	checkTotal := func(x int64) (int64, error) {
+		if x <= 0 {
+			return 0, fmt.Errorf("inferred memory size %d is suspicious, considering invalid", x)
+		}
+		return x, nil
 	}
-	totalMem := int64(mem.Total)
 	if runtime.GOOS == "linux" {
 		var err error
 		var buf []byte
@@ -245,7 +256,7 @@ func GetTotalMemory() (int64, error) {
 				log.Infof(context.TODO(), "can't read available memory from cgroups (%s), using system memory %s instead", err,
 					humanizeutil.IBytes(totalMem))
 			}
-			return totalMem, nil
+			return checkTotal(totalMem)
 		}
 		var cgAvlMem uint64
 		if cgAvlMem, err = strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64); err != nil {
@@ -253,27 +264,26 @@ func GetTotalMemory() (int64, error) {
 				log.Infof(context.TODO(), "can't parse available memory from cgroups (%s), using system memory %s instead", err,
 					humanizeutil.IBytes(totalMem))
 			}
-			return totalMem, nil
+			return checkTotal(totalMem)
 		}
 		if cgAvlMem > math.MaxInt64 {
 			if log.V(1) {
-				log.Infof(context.TODO(), "available memory from cgroups is too large and unsupported %s using system memory %s instead",
+				log.Infof(context.TODO(), "available memory from cgroups (%s) is too large and unsupported, using system memory %s instead",
 					humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 
 			}
-			return totalMem, nil
+			return checkTotal(totalMem)
 		}
-		if cgAvlMem > mem.Total {
+		if totalMem > 0 && int64(cgAvlMem) > totalMem {
 			if log.V(1) {
-				log.Infof(context.TODO(), "available memory from cgroups %s exceeds system memory %s, using system memory",
+				log.Infof(context.TODO(), "available memory from cgroups (%s) exceeds system memory %s, using system memory",
 					humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 			}
-			return totalMem, nil
+			return checkTotal(totalMem)
 		}
-
-		return int64(cgAvlMem), nil
+		totalMem = int64(cgAvlMem)
 	}
-	return totalMem, nil
+	return checkTotal(totalMem)
 }
 
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard
