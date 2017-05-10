@@ -372,6 +372,7 @@ func TestParse(t *testing.T) {
 		{`SELECT 'a' FROM t@bar`},
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN}`},
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN}`},
+		{`SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'`},
 
 		{`SELECT '1':::INT`},
 

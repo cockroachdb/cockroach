@@ -66,10 +66,10 @@ EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s UNION ALL SELECT 2 AS s)
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s) WITH ORDINALITY
 ----
-0   render                             ("1")
-1   ordinality                         (s[omitted], ordinality)   +ordinality,unique
-2   render                             (s[omitted])
-3   nullrow                            ()
+0  render          ("1")
+1  ordinality      (s[omitted], "ordinality")  +"ordinality",unique
+2  render          (s[omitted])
+3  nullrow         ()
 
 # Propagation through sort, when the sorting column is in the results.
 query ITTTTT
