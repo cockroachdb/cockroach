@@ -33,7 +33,7 @@ import (
 )
 
 const strKey = "testing.str"
-const intKey = "testing.int"
+const intKey = `testing."int"`
 const durationKey = "testing.duration"
 const byteSizeKey = "testing.bytesize"
 const enumKey = "testing.enum"
@@ -246,7 +246,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 	})
 
 	if _, err := db.DB.Exec(fmt.Sprintf(setQ, intKey, "'a-str'")); !testutils.IsError(
-		err, `argument of testing.int must be type int, not type string`,
+		err, fmt.Sprintf(`argument of %s must be type int, not type string`, intKey),
 	) {
 		t.Fatal(err)
 	}
