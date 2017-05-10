@@ -78,7 +78,7 @@ func MakeExpression(expr parser.TypedExpr, indexVarMap []int) distsqlrun.Express
 		)
 	}
 	var buf bytes.Buffer
-	expr.Format(&buf, f)
+	parser.FormatNode(&buf, f, expr)
 	if log.V(1) {
 		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), parser.ExprDebugString(expr))
 	}

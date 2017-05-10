@@ -79,7 +79,7 @@ func (s *subquery) Format(buf *bytes.Buffer, f parser.FmtFlags) {
 		// replace the sub-expressions of a SelectClause node in-place.
 		f = parser.FmtSimple
 	}
-	s.subquery.Format(buf, f)
+	parser.FormatNode(buf, f, s.subquery)
 }
 
 func (s *subquery) String() string { return parser.AsString(s) }

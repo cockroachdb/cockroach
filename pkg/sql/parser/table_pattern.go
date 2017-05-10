@@ -120,6 +120,6 @@ func (tt TablePatterns) Format(buf *bytes.Buffer, f FmtFlags) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(t.String())
+		FormatNode(buf, f, t)
 	}
 }

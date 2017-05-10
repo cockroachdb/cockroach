@@ -412,7 +412,7 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 
 	var queryBuf bytes.Buffer
 	var fmtErr error
-	n.AsSource.Format(
+	parser.FormatNode(
 		&queryBuf,
 		parser.FmtReformatTableNames(
 			parser.FmtParsable,
@@ -426,6 +426,7 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 				tn.Format(buf, f)
 			},
 		),
+		n.AsSource,
 	)
 	if fmtErr != nil {
 		return nil, fmtErr
