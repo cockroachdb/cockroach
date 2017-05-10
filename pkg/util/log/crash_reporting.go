@@ -100,8 +100,6 @@ var crashReportURL = func() string {
 	var defaultURL string
 	if build.IsRelease() {
 		defaultURL = "https://ignored:ignored@errors.cockroachdb.com/sentry"
-	} else {
-		defaultURL = "https://ignored:ignored@errors.cockroachdb.com/sentrydev"
 	}
 	return envutil.EnvOrDefaultString("COCKROACH_CRASH_REPORTS", defaultURL)
 }()
