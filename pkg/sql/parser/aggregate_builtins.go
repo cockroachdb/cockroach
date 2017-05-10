@@ -180,6 +180,11 @@ var Aggregates = map[string][]Builtin{
 		makeAggBuiltin(TypeFloat, TypeFloat, newFloatStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
 	},
+
+	"xor_agg": {
+		makeAggBuiltin(TypeBytes, TypeBytes, newBytesXorAggregate,
+			"Calculates the bitwise XOR of the selected values."),
+	},
 }
 
 func makeAggBuiltin(in, ret Type, f func([]Type, *EvalContext) AggregateFunc, info string) Builtin {
@@ -218,6 +223,7 @@ var _ AggregateFunc = &floatVarianceAggregate{}
 var _ AggregateFunc = &decimalVarianceAggregate{}
 var _ AggregateFunc = &identAggregate{}
 var _ AggregateFunc = &concatAggregate{}
+var _ AggregateFunc = &bytesXorAggregate{}
 
 // In order to render the unaggregated (i.e. grouped) fields, during aggregation,
 // the values for those fields have to be stored for each bucket.
@@ -936,6 +942,45 @@ func (a *stdDevAggregate) Result() (Datum, error) {
 func (a *stdDevAggregate) Close(context.Context) {}
 
 var _ Visitor = &IsAggregateVisitor{}
+
+type bytesXorAggregate struct {
+	sum        []byte
+	sawNonNull bool
+}
+
+func newBytesXorAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+	return &bytesXorAggregate{}
+}
+
+// Add inserts one value into the running xor.
+func (a *bytesXorAggregate) Add(_ context.Context, datum Datum) error {
+	if datum == DNull {
+		return nil
+	}
+	t := []byte(*datum.(*DBytes))
+	if !a.sawNonNull {
+		a.sum = append([]byte(nil), t...)
+	} else if len(a.sum) != len(t) {
+		return fmt.Errorf("arguments to xor must all be the same length %d vs %d", len(a.sum), len(t))
+	} else {
+		for i := range t {
+			a.sum[i] = a.sum[i] ^ t[i]
+		}
+	}
+	a.sawNonNull = true
+	return nil
+}
+
+// Result returns the xor.
+func (a *bytesXorAggregate) Result() (Datum, error) {
+	if !a.sawNonNull {
+		return DNull, nil
+	}
+	return NewDBytes(DBytes(a.sum)), nil
+}
+
+// Close is part of the AggregateFunc interface.
+func (a *bytesXorAggregate) Close(context.Context) {}
 
 // IsAggregateVisitor checks if walked expressions contain aggregate functions.
 type IsAggregateVisitor struct {

@@ -522,6 +522,15 @@ var Builtins = map[string][]Builtin{
 			},
 			Info: "Converts `val` to its hexadecimal representation.",
 		},
+		Builtin{
+			Types:      ArgTypes{{"val", TypeBytes}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				bytes := *(args[0].(*DBytes))
+				return NewDString(fmt.Sprintf("%x", []byte(bytes))), nil
+			},
+			Info: "Converts `val` to its hexadecimal representation.",
+		},
 	},
 
 	// The SQL parser coerces POSITION to STRPOS.
