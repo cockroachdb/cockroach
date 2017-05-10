@@ -101,10 +101,10 @@ func encodeDecimalWithDir(dir Direction, buf []byte, d *apd.Decimal) []byte {
 
 func decodeDecimalWithDir(
 	t *testing.T, dir Direction, buf []byte, tmp []byte,
-) ([]byte, *apd.Decimal) {
+) ([]byte, apd.Decimal) {
 	var err error
 	var resBuf []byte
-	var res *apd.Decimal
+	var res apd.Decimal
 	if dir == Ascending {
 		resBuf, res, err = DecodeDecimalAscending(buf, tmp)
 	} else {
@@ -257,7 +257,7 @@ func TestEncodeDecimalRand(t *testing.T) {
 				tmp = randBuf(rng, 100)
 			}
 			var enc []byte
-			var res *apd.Decimal
+			var res apd.Decimal
 			var err error
 			if dir == Ascending {
 				enc = EncodeDecimalAscending(appendTo, cur)
@@ -275,7 +275,7 @@ func TestEncodeDecimalRand(t *testing.T) {
 			testPeekLength(t, enc)
 
 			// Make sure we decode the same value we encoded.
-			if cur.Cmp(res) != 0 {
+			if cur.Cmp(&res) != 0 {
 				t.Fatalf("unexpected mismatch for %v, got %v", cur, res)
 			}
 
@@ -421,7 +421,7 @@ func TestNonsortingEncodeDecimalRand(t *testing.T) {
 		}
 
 		// Make sure we decode the same value we encoded.
-		if cur.Cmp(res) != 0 {
+		if cur.Cmp(&res) != 0 {
 			t.Fatalf("unexpected mismatch for %v, got %v", cur, res)
 		}
 
