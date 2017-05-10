@@ -205,7 +205,7 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM [EXPLAIN SELECT 1]`},
 
 		{`HELP count`},
-		{`HELP varchar`},
+		{`HELP "varchar"`},
 
 		{`SHOW barfoo`},
 		{`SHOW database`},
@@ -400,8 +400,9 @@ func TestParse(t *testing.T) {
 		{`SELECT e'a\\\\na' FROM t`},
 		{`SELECT e'\\\\n' FROM t`},
 		{`SELECT "a""a" FROM t`},
-		{`SELECT a FROM "t\n"`}, // no escaping in sql identifiers
-		{`SELECT a FROM "t"""`}, // no escaping in sql identifiers
+		{`SELECT a FROM "t\n"`},  // no escaping in sql identifiers
+		{`SELECT a FROM "t"""`},  // no escaping in sql identifiers
+		{`SELECT "full" FROM t`}, // must quote column name keyword
 
 		{`SELECT "FROM" FROM t`},
 		{`SELECT CAST(1 AS TEXT)`},

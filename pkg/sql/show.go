@@ -928,7 +928,7 @@ func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode,
 // Help returns usage information for the builtin functions
 // Privileges: None
 func (p *planner) Help(ctx context.Context, n *parser.Help) (planNode, error) {
-	name := strings.ToLower(n.Name.String())
+	name := strings.ToLower(string(n.Name))
 	columns := sqlbase.ResultColumns{
 		{Name: "Function", Typ: parser.TypeString},
 		{Name: "Signature", Typ: parser.TypeString},
