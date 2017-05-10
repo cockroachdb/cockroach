@@ -13,7 +13,7 @@ build/builder.sh env \
 	TARGET=checkdeps \
 	github-pull-request-make
 
-build/builder.sh make check 2>&1 | tee artifacts/check.log | go-test-teamcity
+build/builder.sh make lint 2>&1 | tee artifacts/lint.log | go-test-teamcity
 
 build/builder.sh make generate
 build/builder.sh /bin/bash -c '! git status --porcelain | read || (git status; git diff -a 1>&2; exit 1)'

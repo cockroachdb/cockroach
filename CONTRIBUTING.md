@@ -114,12 +114,12 @@ executable will be in your current directory and can be run as shown in the
 
 + Run the test suite locally:
 
-  `make generate check test testrace`
+  `make generate lint test testrace`
 
 + When you’re ready for review, groom your work: each commit should pass tests
   and contain a substantial (but not overwhelming) unit of work. You may also
   want to `git fetch origin` and run
-  `git rebase -i --exec "make check test" origin/master` to make sure you're
+  `git rebase -i --exec "make lint test" origin/master` to make sure you're
   submitting your changes on top of the newest version of our code. Next, push
   to your fork:
 

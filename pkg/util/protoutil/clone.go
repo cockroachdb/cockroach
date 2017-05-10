@@ -46,11 +46,12 @@ func init() {
 // recursively contains any instances of types which are known to be
 // unsupported by proto.Clone.
 //
-// This function and its associated lint (see `make check`) exist to ensure we
-// do not attempt to proto.Clone types which are not supported by proto.Clone.
-// This hackery is necessary because proto.Clone gives no direct indication
-// that it has incompletely cloned a type; it merely logs to standard output
-// (see https://github.com/golang/protobuf/blob/89238a3/proto/clone.go#L204).
+// This function and its associated lint (see build/style_test.go) exist to
+// ensure we do not attempt to proto.Clone types which are not supported by
+// proto.Clone. This hackery is necessary because proto.Clone gives no direct
+// indication that it has incompletely cloned a type; it merely logs to standard
+// output (see
+// https://github.com/golang/protobuf/blob/89238a3/proto/clone.go#L204).
 //
 // The concrete case against which this is currently guarding may be resolved
 // upstream, see https://github.com/gogo/protobuf/issues/147.
