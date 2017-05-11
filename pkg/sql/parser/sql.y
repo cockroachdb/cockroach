@@ -638,7 +638,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXECUTE EXPLAIN EXTRACT EXTRACT_DURATION
+%token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPLAIN EXTRACT EXTRACT_DURATION
 
 %token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOORDIV FOLLOWING FOR
 %token <str>   FORCE_INDEX FOREIGN FROM FULL
@@ -1696,6 +1696,11 @@ show_stmt:
   {
     /* SKIP DOC */
     $$.val = &ShowRanges{Index: $5.tableWithIdx()}
+  }
+| SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE qualified_name opt_as_of_clause
+  {
+    /* SKIP DOC */
+    $$.val = &ShowFingerprints{Table: $5.newNormalizableTableName(), AsOf: $6.asOfClause()}
   }
 
 help_stmt:
@@ -5204,6 +5209,7 @@ unreserved_keyword:
 | DROP
 | ENCODING
 | EXECUTE
+| EXPERIMENTAL_FINGERPRINTS
 | EXPLAIN
 | FILTER
 | FIRST

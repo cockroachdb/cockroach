@@ -1,0 +1,87 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX (b) STORING (d))
+
+# Empty data
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
+----
+primary  NULL
+t_b_idx  NULL
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12)
+
+# Add some initial data
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
+----
+primary  -6dae2a438c532a8a
+t_b_idx  -466a12aa1c6cf5a6
+
+statement ok
+UPDATE t SET b = 9
+
+# b is encoded in both indexes, so both should change
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
+----
+primary  33aa19f47fb6e750
+t_b_idx  -75e33b803f91a7de
+
+statement ok
+UPDATE t SET c = 10
+
+# c is encoded only in primary, so t_b_idx shouldn't change
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
+----
+primary  3f1b75948f594701
+t_b_idx  -75e33b803f91a7de
+
+statement ok
+UPDATE t SET d = 10
+
+# d is encoded in both indexes, so both should change
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
+----
+primary  6d56a5599185857
+t_b_idx  -75ed2f803fa59d2c
+
+statement ok
+ALTER TABLE t ADD COLUMN e string;
+
+# Table changed, but the new column is all NULLs so neither fingerprint should
+# change
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
+----
+primary  6d56a5599185857
+t_b_idx  -75ed2f803fa59d2c
+
+statement ok
+UPDATE t SET e = 'foo' WHERE a = 1;
+
+# Column e is not in index t_b_idx so its fingerprint shouldn't change
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
+----
+primary  10bbfc722928d7fd
+t_b_idx  -75ed2f803fa59d2c
+
+statement ok
+DROP INDEX t@t_b_idx
+
+# Double check that dropping an index doesn't affect the fingerprint of primary
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
+----
+primary  10bbfc722928d7fd
+
+# Make sure fully qualified table names work
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE test.t
+----
+primary  10bbfc722928d7fd
