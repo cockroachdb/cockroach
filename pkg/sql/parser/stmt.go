@@ -461,6 +461,14 @@ func (*ShowRanges) StatementTag() string { return "SHOW TESTING_RANGES" }
 func (*ShowRanges) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*ShowFingerprints) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowFingerprints) StatementTag() string { return "SHOW EXPERIMENTAL_FINGERPRINTS" }
+
+func (*ShowFingerprints) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
 func (*Help) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -577,6 +585,7 @@ func (n *ShowTables) String() string               { return AsString(n) }
 func (n *ShowTransactionStatus) String() string    { return AsString(n) }
 func (n *ShowUsers) String() string                { return AsString(n) }
 func (n *ShowRanges) String() string               { return AsString(n) }
+func (n *ShowFingerprints) String() string         { return AsString(n) }
 func (n *Split) String() string                    { return AsString(n) }
 func (l StatementList) String() string             { return AsString(l) }
 func (n *Truncate) String() string                 { return AsString(n) }

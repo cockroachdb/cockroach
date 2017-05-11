@@ -199,3 +199,19 @@ func (node *ShowSource) Format(buf *bytes.Buffer, f FmtFlags) {
 	node.Statement.Format(buf, f)
 	buf.WriteByte(']')
 }
+
+// ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
+type ShowFingerprints struct {
+	Table *NormalizableTableName
+	AsOf  AsOfClause
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowFingerprints) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ")
+	FormatNode(buf, f, node.Table)
+	if node.AsOf.Expr != nil {
+		buf.WriteString(" ")
+		FormatNode(buf, f, node.AsOf)
+	}
+}
