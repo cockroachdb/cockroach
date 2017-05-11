@@ -232,6 +232,8 @@ func TestParse(t *testing.T) {
 		{`SHOW TESTING_RANGES FROM INDEX t@i`},
 		{`SHOW TESTING_RANGES FROM INDEX d.i`},
 		{`SHOW TESTING_RANGES FROM INDEX i`},
+		{`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`},
+		{`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t AS OF SYSTEM TIME 'foo'`},
 
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
