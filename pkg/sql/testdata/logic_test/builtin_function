@@ -502,10 +502,13 @@ SELECT div(1.0::decimal, 0.0::decimal)
 query error div\(\): division by zero
 SELECT div(1::int, 0::int)
 
+# math.Exp(1.0) returns different results on amd64 vs arm64.
+# Round to make this test consistent across archs.
+# See https://github.com/golang/go/issues/20319.
 query RRR
-SELECT exp(-1.0::float), exp(1.0::float), exp(2.0::decimal)
+SELECT exp(-1.0::float), round(exp(1.0::float), 13), exp(2.0::decimal)
 ----
-0.36787944117144233 2.718281828459045 7.3890560989306502272
+0.36787944117144233 2.718281828459 7.3890560989306502272
 
 query error exp\(\): overflow
 SELECT exp(1e2000::decimal)
