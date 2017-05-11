@@ -979,7 +979,7 @@ opt_validate_behavior:
   }
 
 opt_collate_clause:
-  COLLATE any_name { return unimplementedWithIssue(sqllex, 2473) }
+  COLLATE unrestricted_name { return unimplementedWithIssue(sqllex, 2473) }
 | /* EMPTY */ {}
 
 alter_using:
@@ -1880,9 +1880,9 @@ col_qualification:
   {
     $$.val = NamedColumnQualification{Qualification: $1.colQualElem()}
   }
-| COLLATE any_name
+| COLLATE unrestricted_name
   {
-    $$.val = NamedColumnQualification{Qualification: ColumnCollation($2.unresolvedName().String())}
+    $$.val = NamedColumnQualification{Qualification: ColumnCollation($2)}
   }
 | FAMILY name
   {
@@ -2196,7 +2196,7 @@ index_elem:
 | '(' a_expr ')' opt_collate opt_asc_desc { return unimplemented(sqllex) }
 
 opt_collate:
-  COLLATE any_name { return unimplemented(sqllex) }
+  COLLATE unrestricted_name { return unimplementedWithIssue(sqllex, 2473) }
 | /* EMPTY */ {}
 
 opt_asc_desc:
@@ -3774,9 +3774,9 @@ a_expr:
   {
     $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: annotateShort}
   }
-| a_expr COLLATE any_name
+| a_expr COLLATE unrestricted_name
   {
-    $$.val = &CollateExpr{Expr: $1.expr(), Locale: $3.unresolvedName().String()}
+    $$.val = &CollateExpr{Expr: $1.expr(), Locale: $3}
   }
 | a_expr AT TIME ZONE a_expr %prec AT { return unimplemented(sqllex) }
   // These operators must be called out explicitly in order to make use of
