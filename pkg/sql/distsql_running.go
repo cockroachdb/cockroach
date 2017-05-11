@@ -288,7 +288,7 @@ func (r *distSQLReceiver) Push(
 	if !meta.Empty() {
 		if meta.Err != nil && r.err == nil {
 			if r.txn != nil {
-				if retryErr, ok := meta.Err.(*roachpb.DistSQLRetryableTxnError); ok {
+				if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
 					// Update the txn in response to remote errors. In the non-DistSQL
 					// world, the TxnCoordSender does this, and the client.Txn updates
 					// itself in non-error cases. Those updates are not necessary if we're

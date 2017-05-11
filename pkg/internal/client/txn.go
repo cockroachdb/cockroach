@@ -664,8 +664,10 @@ func (txn *Txn) Exec(
 			}
 		}
 
-		if _, ok := err.(*roachpb.DistSQLRetryableTxnError); ok {
-			log.Fatalf(ctx, "unexpected DistSQLRetryableTxnError at the txn.Exec level: %s", err)
+		if _, ok := err.(*roachpb.UnhandledRetryableError); ok {
+			// We sent transactional requests, so the TxnCoordSender was supposed to
+			// turn retryable errors into HandledRetryableTxnError.
+			log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.Exec level: %s", err)
 		}
 
 		retErr, retryable := err.(*roachpb.HandledRetryableTxnError)
