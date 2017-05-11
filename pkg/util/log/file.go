@@ -29,6 +29,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -234,8 +235,21 @@ func create(
 	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	if err == nil {
 		symlink := filepath.Join(dir, link)
-		_ = os.Remove(symlink) // ignore err
-		err = os.Symlink(filepath.Base(fname), symlink)
+
+		// Symlinks are best-effort.
+
+		if err := os.Remove(symlink); err != nil && !os.IsNotExist(err) {
+			fmt.Fprintf(OrigStderr, "log: failed to remove symlink %s: %s", symlink, err)
+		}
+		if err := os.Symlink(filepath.Base(fname), symlink); err != nil {
+			// On Windows, this will be the common case, as symlink creation
+			// requires special privileges. See https://docs.microsoft.com/en-
+			// us/windows/device-security/security-policy-settings/create-
+			// symbolic-links.
+			if runtime.GOOS != "windows" {
+				fmt.Fprintf(OrigStderr, "log: failed to create symlink %s: %s", symlink, err)
+			}
+		}
 	}
 	return f, updatedRotation, fname, errors.Wrapf(err, "log: cannot create log")
 }
