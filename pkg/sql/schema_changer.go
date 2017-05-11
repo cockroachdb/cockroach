@@ -99,6 +99,12 @@ func (sc *SchemaChanger) createSchemaChangeLease() sqlbase.TableDescriptor_Schem
 
 var errExistingSchemaChangeLease = errors.New(
 	"an outstanding schema change lease exists")
+var errSchemaChangeNotFirstInLine = errors.New(
+	"schema change not first in line")
+
+func shouldLogSchemaChangeError(err error) bool {
+	return err != errExistingSchemaChangeLease && err != errSchemaChangeNotFirstInLine
+}
 
 // AcquireLease acquires a schema change lease on the table if
 // an unexpired lease doesn't exist. It returns the lease.
@@ -306,6 +312,14 @@ func (sc *SchemaChanger) exec(ctx context.Context, evalCtx parser.EvalContext) e
 		}
 	}()
 
+	notFirst, err := sc.notFirstInLine(ctx)
+	if err != nil {
+		return err
+	}
+	if notFirst {
+		return errSchemaChangeNotFirstInLine
+	}
+
 	// Increment the version and unset tableDescriptor.UpVersion.
 	desc, err := sc.MaybeIncrementVersion(ctx)
 	if err != nil {
@@ -494,6 +508,27 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 			}{uint32(sc.mutationID)},
 		)
 	})
+}
+
+// notFirstInLine returns true whenever the schema change has been queued
+// up for execution after another schema change.
+func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (bool, error) {
+	var notFirst bool
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		notFirst = false
+		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+		for i, mutation := range desc.Mutations {
+			if mutation.MutationID == sc.mutationID {
+				notFirst = i != 0
+				break
+			}
+		}
+		return nil
+	})
+	return notFirst, err
 }
 
 // runStateMachineAndBackfill runs the schema change state machine followed by
@@ -863,10 +898,9 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
 						evalCtx := createSchemaChangeEvalCtx(s.clock.Now())
-
 						// TODO(andrei): create a proper ctx for executing schema changes.
 						if err := sc.exec(ctx, evalCtx); err != nil {
-							if err != errExistingSchemaChangeLease {
+							if shouldLogSchemaChangeError(err) {
 								log.Warningf(ctx, "Error executing schema change: %s", err)
 							}
 							if err == sqlbase.ErrDescriptorNotFound {
