@@ -24,11 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-func (e *DistSQLRetryableTxnError) Error() string {
+func (e *UnhandledRetryableError) Error() string {
 	return e.PErr.Message
 }
 
-var _ error = &DistSQLRetryableTxnError{}
+var _ error = &UnhandledRetryableError{}
 
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
 // a roachpb.BatchResponse) unexpectedly has Error set in its response header.
@@ -129,7 +129,7 @@ func (e *Error) GoError() error {
 	}
 
 	if e.TransactionRestart != TransactionRestart_NONE {
-		return &DistSQLRetryableTxnError{
+		return &UnhandledRetryableError{
 			PErr: *e,
 		}
 	}
