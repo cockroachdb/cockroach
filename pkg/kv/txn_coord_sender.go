@@ -855,6 +855,17 @@ func (tc *TxnCoordSender) updateState(
 	defer tc.txnMu.Unlock()
 
 	if ba.Txn == nil {
+		if pErr != nil {
+			if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+				// If we get a retryable error from a non-transactional request, we're
+				// going to transform it into a HandledRetryableTxnError, just like
+				// retryable transactional errors. Above the TxnCoordSender level, our
+				// code doesn't expect other retryable errors besides
+				// HandledRetryableError.
+				pErr = roachpb.NewError(
+					roachpb.NewHandledRetryableTxnError(pErr.Message, nil, roachpb.Transaction{}))
+			}
+		}
 		// Not a transactional request.
 		return pErr
 	}
