@@ -530,12 +530,7 @@ func (ds *DistSender) initAndVerifyBatch(
 				//
 				// We already have a clone of our txn (see above), so we can
 				// modify it freely.
-				//
-				// Zero the existing data. That makes sure that if we had
-				// something of size zero but with capacity, we don't re-use the
-				// existing space (which others may also use). This is just to
-				// satisfy paranoia/OCD and not expected to matter in practice.
-				ba.Txn.ResetObservedTimestamps()
+
 				// OrigTimestamp is the HLC timestamp at which the Txn started, so
 				// this effectively means no more uncertainty on this node.
 				ba.Txn.UpdateObservedTimestamp(nDesc.NodeID, ba.Txn.OrigTimestamp)
