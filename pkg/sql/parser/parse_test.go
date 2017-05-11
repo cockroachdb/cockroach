@@ -150,6 +150,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION SELECT * FROM c`},
 		{`CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
+		{`CREATE TABLE a (b STRING COLLATE "DE")`},
 
 		{`CREATE VIEW a AS SELECT * FROM b`},
 		{`CREATE VIEW a AS SELECT b.* FROM b LIMIT 5`},
@@ -347,6 +348,7 @@ func TestParse(t *testing.T) {
 		{`SELECT (ROW())`},
 		{`SELECT (TABLE a)`},
 		{`SELECT 0x1`},
+		{`SELECT 'Deutsch' COLLATE "DE"`},
 
 		{`SELECT 1 FROM t`},
 		{`SELECT 1, 2 FROM t`},
