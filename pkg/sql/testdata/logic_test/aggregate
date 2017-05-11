@@ -1240,26 +1240,26 @@ NULL
 10
 
 statement ok
-CREATE TABLE xor_bytes (a bytes, b int)
+CREATE TABLE xor_bytes (a bytes, b int, c int)
 
 statement ok
 INSERT INTO xor_bytes VALUES
-  (b'\x01\x01', 1),
-  (b'\x02\x01', 1),
-  (b'\x04\x01', 2),
-  (b'\x08\x01', 2),
-  (b'\x10\x01', 2)
-
-query T
-SELECT TO_HEX(XOR_AGG(a)) FROM xor_bytes
-----
-1f01
+  (b'\x01\x01', 1, 3),
+  (b'\x02\x01', 1, 1),
+  (b'\x04\x01', 2, -5),
+  (b'\x08\x01', 2, -1),
+  (b'\x10\x01', 2, 0)
 
 query TI
-SELECT TO_HEX(XOR_AGG(a)), b FROM xor_bytes GROUP BY b ORDER BY b
+SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM xor_bytes
 ----
-0300  1
-1c01  2
+1f01 6
+
+query TII
+SELECT TO_HEX(XOR_AGG(a)), b, XOR_AGG(c) FROM xor_bytes GROUP BY b ORDER BY b
+----
+0300  1   2
+1c01  2   4
 
 statement error arguments to xor must all be the same length
 SELECT XOR_AGG(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
