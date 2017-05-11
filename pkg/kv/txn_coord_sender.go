@@ -548,9 +548,8 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// educated guess based on the incoming transaction timestamp.
 		return roachpb.NewError(errNoState)
 	case txnMeta.txn.Status == roachpb.ABORTED:
-		txn := txnMeta.txn.Clone()
-		tc.cleanupTxnLocked(ctx, txn)
-		abortedErr := roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txn)
+		tc.cleanupTxnLocked(ctx, txnMeta.txn)
+		abortedErr := roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txnMeta.txn)
 		// TODO(andrei): figure out a UserPriority to use here.
 		newTxn := roachpb.PrepareTransactionForRetry(
 			ctx, abortedErr,
@@ -559,10 +558,9 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		return roachpb.NewError(roachpb.NewHandledRetryableTxnError(
 			abortedErr.Message, txn.ID, newTxn))
 	case txnMeta.txn.Status == roachpb.COMMITTED:
-		txn := txnMeta.txn.Clone()
-		tc.cleanupTxnLocked(ctx, txn)
+		tc.cleanupTxnLocked(ctx, txnMeta.txn)
 		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(
-			"transaction is already committed"), &txn)
+			"transaction is already committed"), &txnMeta.txn)
 	default:
 		return nil
 	}
@@ -613,8 +611,10 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Tran
 	}
 
 	// The supplied txn may be newer than the one in txnMeta, which is relevant
-	// for stats.
-	txnMeta.txn = txn
+	// for stats. We clone the txn before storing it, as the caller might not
+	// have provided a deep-copy, and we don't want to share Transactions in the
+	// TxnCoordSender's map with anyone.
+	txnMeta.txn = txn.Clone()
 	// Trigger heartbeat shutdown.
 	close(txnMeta.txnEnd)
 	txnMeta.txnEnd = nil
