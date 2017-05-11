@@ -8,14 +8,37 @@
 # Summary
 
 This feature would add a mechanism to list currently active sessions and currently executing queries
-in the admin UI, along with their start timestamps  / durations
+in the admin UI and sql shell, along with their start timestamps / durations. In this document,
+queries are defined as every executable statement; not just `SELECT`s. Everything that is converted
+into a `planNode` is a query.
+
+This RFC answers these use-cases:
+
+- Getting a list of node-local and cluster-wide active sessions through the CLI and the admin UI
+- Getting a list of node-local and cluster-wide executing queries through the CLI and the admin UI
+
+The following concerns are out of scope for this RFC:
+
+- Assigning unique identifiers to sessions and queries
+- Identifying and listing SQL transactions
+- Outlining a mechanism for cancelling sessions or queries 
+- The return values/errors returned by cancelled queries/sessions/closed connections.
+- Whether cancellation should be supported at SQL transaction level, or query/statement level.
 
 # Motivation
 
 Currently, there's no visibility into what queries/sessions are running on the cluster at any
 given point of time. Adding visibility into this has been a common customer request for
-a while. This functionality would also be useful for determining which queries and sessions
-to cancel or terminate; however, the cancellation mechanism is out of scope for this RFC.
+a while.
+
+Albeit cancellation is out of scope for this RFC, being able to view sessions and queries
+along with information like application names, duration, etc, would be important information
+for DBAs to have, in order to make an appropriate cancellation decision (when that is implemented).
+
+Since some DB deployments can be shared between multiple client applications, some level of
+functionality to filter sessions and queries by client application names, both in the admin
+UI and in the CLI, would also be useful. And since not all DBAs are familiar with SQL,
+a non-SQL interface to monitor queries and sessions would be an asset.
 
 # Detailed design
 
@@ -23,127 +46,174 @@ The inspiration behind some of the design comes from
 [this PR from Raphael](https://github.com/cockroachdb/cockroach/pull/10317) which implemented
 node-local session registries exposed via a virtual table.
 
-## New unique UUID identifiers for sessions and queries
+## Thread-safe session struct
 
-Currently we don't have any unique identifiers for sessions or queries. Having UUID strings
-for this purpose should guarantee uniqueness. Later on, when cancellation is implemented,
-the user would only have to specify the gateway node ID, and the session/query ID in the RPC call
-for cancelling that query or session.
+The session struct is currently not thread-safe; since all operations on it
+currently happen in one thread. Making it thread-safe involves making a nested struct
+inside it (called `mu`), similar to how the `Txn` struct is structured. There
+would be an `RWMutex` on this nested `mu` struct.
 
-These two IDs (gateway node ID, session/query ID) can be combined in one with a delimeter
-separating them, or they can be presented individually.
-
-Sessions are currently identified in logs with log tags that consist of remote IP address
-and port. Replacing these with session UUIDs can be considered, but since the remote IP/port
-combination has a more direct meaning to the DBA, it is best to leave it as-is for now.
-
-## Node-local session and query registries
-
-The session registry will be an in-memory data structure that stores a copy of a subset
-of fields of every session on that node; particularly, only those fields that
-need to be exposed through virtual tables/RPC. Addition and deletion of new
-sessions to this slice would require acquiring a mutex lock.
-
-Furthermore, the ApplicationName could change during the lifetime of a session, so 
-every shadow session object in the registry would have a mutex lock on it
-that would be acquired upon reads, as well as upon updates to ApplicationName (which only
-happens in `resetApplicationName()`).
-
-These fields would be stored in the shadow session object:
-- Session ID (defined earlier)
-- User
+These fields would be moved from the main `Session` struct, to the `mu` sub-struct:
+- User (name of user)
 - Remote address (IP, port)
 - Application Name
+- TxnState
+- Eventually: any contexts/object references useful for cancellation
+
+These two new fields will be added to `mu`:
 - Start timestamp
-- Any contexts/object references useful for cancellation
+- Active query (reference to Query object defined below, can be nil)
+
+The active query reference will contain a reference to a non-parallel query _if one is running_.
+If a set of parallelizable queries are running, they will all be in `parallelizeQueue`. Inspecting
+both the active query reference and the `parallelizeQueue` will be required to know all queries
+in flight.
+
+Write locks on this struct will be acquired when:
+- A new session is created (all fields are populated)
+- The application name is reset (in `resetApplicationName()`)
+- A query begins or ends execution (to updated the active query reference / parallelize queue)
+- txnState.txn is updated in `executor.execRequest`. 
+
+## Node-local session registry
+
+The session registry will be an in-memory slice that stores references to all
+session objects on that node. Addition and deletion of new
+sessions to this slice would require acquiring a mutex lock.
 
 This addition/deletion into the slice can be made in `NewSession(...)` and `Session.Finish(...)`
 in `pkg/sql/session.go`.
 
-Similarly, this in-memory slice of query objects will store a copy of these
-fields about each query:
+## New Query struct
 
-- Query ID (defined earlier)
+A new struct, `Query`, would be made that contains the below fields:
+
 - Query string (output of `planToString()`)
-- Session ID (for JOINs with session table)
 - Start timestamp
-- Any contexts/object references useful for cancellation 
+- Reference to root `planNode` (which it could effectively replace)
+- Eventually: any contexts/object references useful for cancellation 
 
-There would be one addition/deletion to this slice per query; handled in `execStmtInOpenTxn` in
-`pkg/sql/executor.go`. None of the copied query fields would be updated during the lifetime of a
-query.
+The parallelizeQueue will be updated to take Query objects instead of planNodes. Non-parallelized
+queries will be directly referenced via a pointer in `Session`.
 
-## Virtual tables in crdb_internal
+## RPC endpoint in status server to return local queries and sessions
 
-Two new tables, `crdb_internal.sessions` and `crdb_internal.queries`, would list active
-sessions and queries respectively. Only sessions and queries from the node where the query
-is being run, would be listed - this continues our convention of only exposing node-local
-data through virtual tables.
+Two new RPC endpoints would be made: `LocalSessions` and `LocalQueries`. These
+endpoints would return the node's local store of active sessions and queries respectively.
 
-## Fan-out gRPC call to get cluster-wide sessions/queries
+These would be added to the status RPC server.
 
-Two new RPC endpoints would be created for sessions: `Sessions` and `LocalSessions`.
-The former would iterate over all known nodes and collect the responses together,
-while the latter would return the contents of its local session registry.
+## SQL statements to retrieve cluster-wide queries and sessions
 
-`RaftDebug` in `pkg/server/status.go` is an example of a procedure that does
-a similar aggregation of results across all known nodes in the cluster. A similar
-technique could be employed to aggregate session info; with a timeout to ensure
-that the parent routine isn't waiting forever for responses from unresponsive nodes. 
+For sessions, a new SQL statement will be added to the grammar: `SHOW SESSIONS [GLOBAL|LOCAL]`.
+`SHOW SESSIONS LOCAL` will return the gateway node's local list of sessions only, while
+`SHOW SESSIONS GLOBAL` will return the entire cluster's list of sessions. Default is GLOBAL
+if unspecified.
+ 
+The `GLOBAL` call will involve looping through all nodes and issue RPC calls to `LocalSessions`
+with timeouts. The results of all the calls that do succeed, will be returned as a table.
+`RaftDebug` in `pkg/server/status.go` is an example of a procedure that does a similar aggregation
+of results across all known nodes in the cluster.
 
-Similarly, `Queries` and `LocalQueries` would be the RPC endpoints for queries.
+Example usage:
+
+```
+
+root@:26257/> SHOW SESSIONS
+
++---------+----------+------------------+------------------+------------------------------------------------------+---------------+--------------------+-----------+
+| node_id | username | client_address   | application_name | active_queries                                       | session_start | oldest_query_start | kv_txn_id |
++---------+----------+------------------+------------------+------------------------------------------------------+---------------+--------------------+-----------+
+| 1       |  root    | 192.168.1.5:8080 | test             | SELECT * FROM users; INSERT INTO test VALUES (...);  | 1234567890    | 1234567891         | 1e5f6bac  |
+| 2       |  bilal   | 192.168.1.7:8080 | pg.js            |                                                      | 1494524202    |                    |           |
++---------+----------+------------------+------------------+------------------------------------------------------+---------------+--------------------+-----------+
+(2 rows)
+
+```
+
+Note that the `active_queries` field is a delimeter-separated list of all queries currently
+executing under that session, with SQL parallelization taken into account.
+
+Additions to the SQL grammer will be made to support filtering using SELECT statements and
+nesting of SHOWs as tables:
+
+```
+
+root@:26257/> SELECT * FROM (SHOW SESSIONS) AS a WHERE a.username = 'bilal';
+
++---------+----------+------------------+------------------+------------------------------------------------------+---------------+--------------------+-----------+
+| node_id | username | client_address   | application_name | active_queries                                       | session_start | oldest_query_start | kv_txn_id |
++---------+----------+------------------+------------------+------------------------------------------------------+---------------+--------------------+-----------+
+| 2       |  bilal   | 192.168.1.7:8080 | pg.js            |                                                      | 1494524202    |                    |           |
++---------+----------+------------------+------------------+------------------------------------------------------+---------------+--------------------+-----------+
+(1 row)
+
+```
+
+Similarly, `SHOW REQUESTS [GLOBAL|LOCAL]` will return currently executing queries.
+
+Example usage:
+
+```
+
+root@:26257/> SHOW REQUESTS
+
++---------+----------+------------------+------------------+--------------------------------+-------------+
+| node_id | username | client_address   | application_name | query                          | start       |
++---------+----------+------------------+------------------+--------------------------------+-------------+
+| 1       |  root    | 192.168.1.5:8080 | test             | SELECT * FROM users;           | 1234567894  |
+| 1       |  root    | 192.168.1.5:8080 | test             | INSERT INTO test VALUES (...); | 1234567891  |
++---------+----------+------------------+------------------+--------------------------------+-------------+
+(1 row)
+
+```
+
+## A note on permissions
+
+Currently, we only let the root user run `SET CLUSTER SETTING`. Following that convention,
+`SHOW SESSIONS/REQUESTS` will only show the current user's sessions/queries if the user
+is not root, or all users if the user is root.
 
 # Drawbacks
 
 ## Locking/synchronization
 
-Additions, accesses and deletions to session and query registries (as well as updates to session
-ApplicationNames) would require acquiring mutex locks. This has the potential to cause a
-slight decrease in performance when active sessions and queries are being requested, but since that
-action would be present in only a fraction of requests, the most common use-cases shouldn't see an
-impact in performance.
+The RWMutex lock inside the Session object could see contention if a `SHOW SESSIONS` or `SHOW REQUESTS`
+is running in parallel to an operation within the session that updates any of the fields inside
+`session.mu`. However there should be little to no performance penalty in the common use-cases of
+queries and sessions running without being inspected by a SHOW command.
 
 To ensure that we don't unintentionally cause a performance regression, the included benchmarks
 in `pkg/sql/bench_test.go` will be run before and after the change, and the results posted in the PR
 for this feature.
 
+## Memory usage on gateway node
+
+In a production-scale cluster, running `SHOW SESSIONS`  will return a large number of rows - which
+will all be aggregated on the gateway node in memory before any filtering is done. This can be reduced
+by streaming responses to the client as each RPC call to a node returns.
+
+The memory cost of these SHOW commands will be assessed in a large cluster with generated load
+before this feature lands, to gauge the value of implementing streaming.
+
 # Alternatives
 
-## Generating identifiers from hashing object addresses
+## Virtual tables in crdb_internal instead of a SHOW statement
 
-One alternative to a UUID-based identification that was suggested, was hashing object pointers.
-For instance, a hash of the session object address could be its identifier. Since cluster IDs
-are currently UUIDs, it's better to continue the UUID convention than to introduce pointer
-hashes as another one.
+We considered using virtual tables in the `crdb_internal` database to expose sessions and queries,
+however that idea was dropped in favour of a SHOW statement for a couple reasons.
 
-Furthermore, it's possible, though unlikely, for a new session/query object to be created at the same
-address as a previous one - violating our uniqueness constraint.
+The generator functions for virtual tables (which are run every time a query to that table is made),
+are not aware of filtering expressions in the query being made; so even a query with a `WHERE nodeid=self`
+clause would necessitate aggregating info from the entire cluster. A full refactor of the vtable code was
+deemed to be out of scope for this project.
 
-Note that, with either approach, both a node ID and a session/query ID would be necessary to
-look up that object in the cluster.
+In addition, virtual tables give the user the intuition that the data is persistent and cached/stored
+locally, which it isn't. If a node in the cluster dies, the virtual table would have partial info.
+A SHOW statement sets a more accurate expectation; that the sessions/queries are fetched upon request.
 
 # Unresolved questions
 
-## Populate virtual table with cluster-wide info or let RPC be the only interface for that
+See the list of unanswered questions that are out of scope for this RFC, in the Summary section above.
 
-Instead of having the virtual table serve only sessions/queries
-on that particular node, it could serve cluster-wide sessions and queries.
-This would allow the DBA to use SQL syntax for filtering/joining on the result
-set from the entire cluster, rather than be limited to the node where the query is being run.
-
-There could be two different tables for each kind of entity (session and queries):
-one for local sessions/queries, and one for cluster ones. That way, queries for local
-sessions/queries could run faster since that vtable population wouldn't involve
-communicating with other nodes.
-
-Distsql can be leveraged to aggregate vtable data across all nodes; this would eliminate
-the need to make more RPC endpoints.
-
-## Transaction tracking vs query tracking
-
-While cancellation is out of scope for this RFC, if we plan on cancelling entire SQL
-transactions instead of individual queries, it would be logical to track transactions
-and transaction execution duration rather than each query individually. It's also
-possible to implement transaction cancellation with query-specific tracking; every
-query would have a reference to the enclosing SQL transaction and its contexts which
-can be levereged for cancellation.
+Any unanswered questions within this RFC's scope that pop up, will be added here.
