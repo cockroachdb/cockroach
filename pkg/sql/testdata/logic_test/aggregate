@@ -1263,3 +1263,9 @@ SELECT TO_HEX(XOR_AGG(a)), b, XOR_AGG(c) FROM xor_bytes GROUP BY b ORDER BY b
 
 statement error arguments to xor must all be the same length
 SELECT XOR_AGG(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
+
+query BB
+SELECT MAX(true), MIN(true)
+----
+true
+true
