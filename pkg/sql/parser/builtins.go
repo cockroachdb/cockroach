@@ -463,55 +463,55 @@ var Builtins = map[string][]Builtin{
 		return nil, errEmptyInputString
 	}, TypeInt, "Calculates the ASCII value for the first character in `val`.")},
 
-	"md5": {hashBuiltin(
+	"md5": hashBuiltin(
 		func() hash.Hash { return md5.New() },
 		"Calculates the MD5 hash value of a set of values.",
-	)},
+	),
 
-	"sha1": {hashBuiltin(
+	"sha1": hashBuiltin(
 		func() hash.Hash { return sha1.New() },
 		"Calculates the SHA1 hash value of a set of values.",
-	)},
+	),
 
-	"sha256": {hashBuiltin(
+	"sha256": hashBuiltin(
 		func() hash.Hash { return sha256.New() },
 		"Calculates the SHA256 hash value of a set of values.",
-	)},
+	),
 
-	"sha512": {hashBuiltin(
+	"sha512": hashBuiltin(
 		func() hash.Hash { return sha512.New() },
 		"Calculates the SHA512 hash value of a set of values.",
-	)},
+	),
 
-	"fnv32": {hash32Builtin(
+	"fnv32": hash32Builtin(
 		func() hash.Hash32 { return fnv.New32() },
 		"Calculates the 32-bit FNV-1 hash value of a set of values.",
-	)},
+	),
 
-	"fnv32a": {hash32Builtin(
+	"fnv32a": hash32Builtin(
 		func() hash.Hash32 { return fnv.New32a() },
 		"Calculates the 32-bit FNV-1a hash value of a set of values.",
-	)},
+	),
 
-	"fnv64": {hash64Builtin(
+	"fnv64": hash64Builtin(
 		func() hash.Hash64 { return fnv.New64() },
 		"Calculates the 64-bit FNV-1 hash value of a set of values.",
-	)},
+	),
 
-	"fnv64a": {hash64Builtin(
+	"fnv64a": hash64Builtin(
 		func() hash.Hash64 { return fnv.New64a() },
 		"Calculates the 64-bit FNV-1a hash value of a set of values.",
-	)},
+	),
 
-	"crc32ieee": {hash32Builtin(
+	"crc32ieee": hash32Builtin(
 		func() hash.Hash32 { return crc32.New(crc32.IEEETable) },
 		"Calculates the CRC-32 hash using the IEEE polynomial.",
-	)},
+	),
 
-	"crc32c": {hash32Builtin(
+	"crc32c": hash32Builtin(
 		func() hash.Hash32 { return crc32.New(crc32.MakeTable(crc32.Castagnoli)) },
 		"Calculates the CRC-32 hash using the Castagnoli polynomial.",
-	)},
+	),
 
 	"to_hex": {
 		Builtin{
@@ -1968,49 +1968,89 @@ func feedHash(h hash.Hash, args Datums) {
 		if datum == DNull {
 			continue
 		}
-		buf := []byte(MustBeDString(datum))
-		if _, err := h.Write(buf); err != nil {
+		var buf string
+		if d, ok := datum.(*DBytes); ok {
+			buf = string(*d)
+		} else {
+			buf = string(MustBeDString(datum))
+		}
+		if _, err := h.Write([]byte(buf)); err != nil {
 			panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
 		}
 	}
 }
 
-func hashBuiltin(newHash func() hash.Hash, info string) Builtin {
-	return Builtin{
-		Types:      VariadicType{TypeString},
-		ReturnType: fixedReturnType(TypeString),
-		fn: func(_ *EvalContext, args Datums) (Datum, error) {
-			h := newHash()
-			feedHash(h, args)
-			return NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
+func hashBuiltin(newHash func() hash.Hash, info string) []Builtin {
+	return []Builtin{
+		{
+			Types:      VariadicType{TypeString},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				h := newHash()
+				feedHash(h, args)
+				return NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
+			},
+			Info: info,
 		},
-		Info: info,
+		{
+			Types:      VariadicType{TypeBytes},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				h := newHash()
+				feedHash(h, args)
+				return NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
+			},
+			Info: info,
+		},
 	}
 }
 
-func hash32Builtin(newHash func() hash.Hash32, info string) Builtin {
-	return Builtin{
-		Types:      VariadicType{TypeString},
-		ReturnType: fixedReturnType(TypeInt),
-		fn: func(_ *EvalContext, args Datums) (Datum, error) {
-			h := newHash()
-			feedHash(h, args)
-			return NewDInt(DInt(h.Sum32())), nil
+func hash32Builtin(newHash func() hash.Hash32, info string) []Builtin {
+	return []Builtin{
+		{
+			Types:      VariadicType{TypeString},
+			ReturnType: fixedReturnType(TypeInt),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				h := newHash()
+				feedHash(h, args)
+				return NewDInt(DInt(h.Sum32())), nil
+			},
+			Info: info,
 		},
-		Info: info,
+		{
+			Types:      VariadicType{TypeBytes},
+			ReturnType: fixedReturnType(TypeInt),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				h := newHash()
+				feedHash(h, args)
+				return NewDInt(DInt(h.Sum32())), nil
+			},
+			Info: info,
+		},
 	}
 }
-
-func hash64Builtin(newHash func() hash.Hash64, info string) Builtin {
-	return Builtin{
-		Types:      VariadicType{TypeString},
-		ReturnType: fixedReturnType(TypeInt),
-		fn: func(_ *EvalContext, args Datums) (Datum, error) {
-			h := newHash()
-			feedHash(h, args)
-			return NewDInt(DInt(h.Sum64())), nil
+func hash64Builtin(newHash func() hash.Hash64, info string) []Builtin {
+	return []Builtin{
+		{
+			Types:      VariadicType{TypeString},
+			ReturnType: fixedReturnType(TypeInt),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				h := newHash()
+				feedHash(h, args)
+				return NewDInt(DInt(h.Sum64())), nil
+			},
+			Info: info,
 		},
-		Info: info,
+		{
+			Types:      VariadicType{TypeBytes},
+			ReturnType: fixedReturnType(TypeInt),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				h := newHash()
+				feedHash(h, args)
+				return NewDInt(DInt(h.Sum64())), nil
+			},
+			Info: info,
+		},
 	}
 }
 
