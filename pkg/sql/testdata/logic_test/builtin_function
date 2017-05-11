@@ -1537,22 +1537,25 @@ six-one-seven
 minus-two
 
 # Do some basic sanity checking of the variadic hash functions.
-query BBBBBB
+query BBBBBBBBB
 SELECT
   sha512('1') = sha512('1'),
   sha512('1') = sha512('2'),
   sha512('1', '2') = sha512('1', '2'),
   sha512('1', '2') = sha512('2', '1'),
   sha512('1', '2') = sha512('12'),
-  sha512('1', '2') = sha512('21')
+  sha512('1', '2') = sha512('21'),
+  sha512('bar') = sha512(b'bar':::bytes),
+  sha512(b'bar'::bytes) = sha512(b'bar':::bytes),
+  sha512(b'bar'::bytes) = sha512('bar')
 ----
-true false true false true false
+true false true false true false true true true
 
-# The hash functions should be stable, so verify that the  following hashes
+# The hash functions should be stable, so verify that the following hashes
 # don't change.
 query T
 SELECT i FROM (VALUES
-  (sha512(NULL)),
+  (sha512(NULL::string)),
   (sha512(true::string)),
   (sha512(false::string)),
   (sha512(1::int::string)),
@@ -1561,7 +1564,8 @@ SELECT i FROM (VALUES
   (sha512('3m'::interval::string)),
   (sha512('2016-11-12'::date::string)),
   (sha512('2015-08-24 23:45:45.53453'::timestamptz::string)),
-  (sha512(b'bar':::bytes::string))
+  (sha512(b'bar':::bytes::string)),
+  (sha512(b'bar'::bytes))
 ) AS a(i)
 ----
 cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
@@ -1573,4 +1577,5 @@ f7fbba6e0636f890e56fbbf3283e524c6fa3204ae298382d624741d0dc6638326e282c41be5e4254
 6ca65db2a861fa0ecd0c1e29ef9566425e952d2a205706a6e955a6b1bbd721fdc2d28efdba515f9d29f34aa84223382f6ca6d11bdef23984b8ff9339b59e80f5
 b2d173023893f71caadf7cb2f9557355462570de2c9c971b9cfa5494936e28df8e13d0db4d550aab66d5e7a002f678ddb02def092c069ce473cf5fb293953986
 960b0fed9378be1e9adefd91e1be6ac9c1de7208008dfec438ff845135727bebea0f7458a5181079f61288176e0168cfea501b900c3e495b3ab9bbe4d372486d
+d82c4eb5261cb9c8aa9855edd67d1bd10482f41529858d925094d173fa662aa91ff39bc5b188615273484021dfb16fd8284cf684ccf0fc795be3aa2fc1e6c181
 d82c4eb5261cb9c8aa9855edd67d1bd10482f41529858d925094d173fa662aa91ff39bc5b188615273484021dfb16fd8284cf684ccf0fc795be3aa2fc1e6c181
