@@ -184,6 +184,8 @@ var Aggregates = map[string][]Builtin{
 	"xor_agg": {
 		makeAggBuiltin(TypeBytes, TypeBytes, newBytesXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
+		makeAggBuiltin(TypeInt, TypeInt, newIntXorAggregate,
+			"Calculates the bitwise XOR of the selected values."),
 	},
 }
 
@@ -224,6 +226,7 @@ var _ AggregateFunc = &decimalVarianceAggregate{}
 var _ AggregateFunc = &identAggregate{}
 var _ AggregateFunc = &concatAggregate{}
 var _ AggregateFunc = &bytesXorAggregate{}
+var _ AggregateFunc = &intXorAggregate{}
 
 // In order to render the unaggregated (i.e. grouped) fields, during aggregation,
 // the values for those fields have to be stored for each bucket.
@@ -981,6 +984,37 @@ func (a *bytesXorAggregate) Result() (Datum, error) {
 
 // Close is part of the AggregateFunc interface.
 func (a *bytesXorAggregate) Close(context.Context) {}
+
+type intXorAggregate struct {
+	sum        int64
+	sawNonNull bool
+}
+
+func newIntXorAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+	return &intXorAggregate{}
+}
+
+// Add inserts one value into the running xor.
+func (a *intXorAggregate) Add(_ context.Context, datum Datum) error {
+	if datum == DNull {
+		return nil
+	}
+	x := int64(*datum.(*DInt))
+	a.sum = a.sum ^ x
+	a.sawNonNull = true
+	return nil
+}
+
+// Result returns the xor.
+func (a *intXorAggregate) Result() (Datum, error) {
+	if !a.sawNonNull {
+		return DNull, nil
+	}
+	return NewDInt(DInt(a.sum)), nil
+}
+
+// Close is part of the AggregateFunc interface.
+func (a *intXorAggregate) Close(context.Context) {}
 
 // IsAggregateVisitor checks if walked expressions contain aggregate functions.
 type IsAggregateVisitor struct {
