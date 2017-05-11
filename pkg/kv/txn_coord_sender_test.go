@@ -981,8 +981,8 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 
 	sender.txnMu.Lock()
 	// Clean up twice successively.
-	sender.cleanupTxnLocked(context.Background(), *txn.Proto())
-	sender.cleanupTxnLocked(context.Background(), *txn.Proto())
+	sender.cleanupTxnLocked(context.Background(), txn.Proto())
+	sender.cleanupTxnLocked(context.Background(), txn.Proto())
 	sender.txnMu.Unlock()
 
 	// For good measure, try to commit (which cleans up once more if it
