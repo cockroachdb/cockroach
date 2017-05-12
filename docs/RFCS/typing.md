@@ -1670,8 +1670,8 @@ The details:
    (numbers). This is performed for all expressions involving only
    untyped literals and functions applications applied only to such
    expressions.  For number literals, the imlementation type from the
-   [exact](<https://godoc.org/golang.org/x/tools/go/exact>)
-   arithmetic library can be used.
+   [go/constant](https://golang.org/pkg/go/constant/) arithmetic library
+   can be used.
 
    While the constant expressions are folded, the results must be typed
    using either the known type if any operands had one; or the unknown
@@ -2005,7 +2005,7 @@ quadratic time).
 
 To implement untyped numeric literals which will enable exact
 arithmetic, we will use
-https://godoc.org/golang.org/x/tools/go/exact. This will require a
+https://golang.org/pkg/go/constant/. This will require a
 change to our Yacc parser and lexical scanner, which will parser all
 numeric looking values (`ICONST` and `FCONST`) as `NumVal`.
 
@@ -2013,14 +2013,14 @@ We will then introduce a constant folding pass before type checking is
 initially performed (ideally using a folding visitor instead of the
 current interface approach).  While constant folding these untyped
 literals, we can use
-[BinaryOp](https://godoc.org/golang.org/x/tools/go/exact#BinaryOp) and
-[UnaryOp](https://godoc.org/golang.org/x/tools/go/exact#UnaryOp) to
+[BinaryOp](https://golang.org/pkg/go/constant/#BinaryOp) and
+[UnaryOp](https://golang.org/pkg/go/constant/#UnaryOp) to
 retain exact precision.
 
 Next, during type checking, ``NumVals`` will be evalutated as their
 logical `Datum` types. Here, they will be converted `int`, `float` or
 `decimal`, based on their `Value.Kind()` (e.g.  using
-[Int64Val](https://godoc.org/golang.org/x/tools/go/exact#Int64Val>) or
+[Int64Val](https://golang.org/pkg/go/constant/#Int64Val) or
 `decimal.SetString(Value.String())`.  Some Kinds will result in a
 panic because they should not be possible based on our
 parser. However, we could eventually introduce Complex literals using
