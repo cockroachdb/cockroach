@@ -17,8 +17,16 @@ package timeutil
 import (
 	"time"
 
+	"github.com/pkg/errors"
+
 	"golang.org/x/sys/windows"
 )
+
+func init() {
+	if err := windows.LoadGetSystemTimePreciseAsFileTime(); err != nil {
+		panic(errors.Wrap(err, "CockroachDB requires Windows 8 or higher"))
+	}
+}
 
 // This has a higher precision than time.Now in go1.8, but is much slower
 // (~2000x) and requires Windows 8+.
