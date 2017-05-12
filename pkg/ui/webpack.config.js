@@ -60,8 +60,9 @@ module.exports = {
   plugins: [
     new FaviconsWebpackPlugin({
       logo: './logo.png',
-      title: title,
+      persistentCache: false,
       inject: true,
+      title: title,
       icons: {
         // Must explicitly override defaults. Sigh.
         android: false,
