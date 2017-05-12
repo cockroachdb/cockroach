@@ -715,7 +715,7 @@ func (t Transaction) LastActive() hlc.Timestamp {
 // keys with the intent spans.
 func (t Transaction) Clone() Transaction {
 	mt := t.ObservedTimestamps
-	if len(mt) != 0 {
+	if mt != nil {
 		t.ObservedTimestamps = make([]ObservedTimestamp, len(mt))
 		copy(t.ObservedTimestamps, mt)
 	}

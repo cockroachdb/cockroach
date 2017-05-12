@@ -75,6 +75,8 @@ func NewError(err error) *Error {
 }
 
 // NewErrorWithTxn creates an Error from the given error and a transaction.
+//
+// txn is cloned before being stored in Error.
 func NewErrorWithTxn(err error, txn *Transaction) *Error {
 	e := NewError(err)
 	e.SetTxn(txn)
