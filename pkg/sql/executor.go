@@ -433,6 +433,8 @@ func (e *Executor) Prepare(
 	session.resetForBatch(e)
 	sessionEventf(session, "preparing: %s", stmts)
 
+	defer session.maybeRecover("preparing", stmts.String())
+
 	prepared := &PreparedStatement{
 		SQLTypes:    pinfo,
 		portalNames: make(map[string]struct{}),
@@ -507,17 +509,6 @@ func (e *Executor) Prepare(
 	return prepared, nil
 }
 
-// logIfPanicking intercepts a panic and adds extra logs to it before
-// repanicking. It must be deferred directly, not from within another deferred
-// function.
-func logIfPanicking(ctx context.Context, sql string) {
-	if r := recover(); r != nil {
-		log.Shout(ctx, log.Severity_ERROR, "a SQL panic has occurred!")
-		// On a panic, prepend the executed SQL.
-		panic(fmt.Errorf("%s: %v", sql, r))
-	}
-}
-
 // ExecuteStatements executes the given statement(s) and returns a response.
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
@@ -525,7 +516,7 @@ func (e *Executor) ExecuteStatements(
 	session.resetForBatch(e)
 	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
-	defer logIfPanicking(session.Ctx(), stmts)
+	defer session.maybeRecover("executing", stmts)
 
 	// If the Executor wants config updates to be blocked, then block them so
 	// that session.testingVerifyMetadataFn can later be run on a known version
@@ -562,7 +553,7 @@ func (e *Executor) ExecutePreparedStatement(
 		stmts = StatementList{{AST: stmt.Statement}}
 	}
 
-	defer logIfPanicking(session.Ctx(), stmts.String())
+	defer session.maybeRecover("executing", stmts.String())
 
 	// Block system config updates. For more details, see the comment in
 	// ExecuteStatements.
