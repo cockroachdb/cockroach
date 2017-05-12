@@ -866,3 +866,28 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	}
 	scc.schemaChangers = scc.schemaChangers[:0]
 }
+
+// maybeRecover catches SQL panics and does some log reporting before
+// propagating the panic further.
+// TODO(knz): this is where we can place code to recover from
+// recoverable panics.
+func (s *Session) maybeRecover(action, stmt string) {
+	if r := recover(); r != nil {
+		err := errors.Errorf("panic while %s %q: %s", action, stmt, r)
+
+		// A short warning header guaranteed to go to stderr.
+		log.Shout(s.Ctx(), log.Severity_ERROR,
+			"a SQL panic has occurred!")
+		// TODO(knz): log panic details to logs once panics
+		// are not propagated to the top-level and printed out by the Go runtime.
+
+		// Close the session with force shutdown of the monitors. This is
+		// guaranteed to succeed, or fail with a panic which we can't
+		// recover from: if there's a panic, that means the lease /
+		// tracing / kv subsystem is broken and we can't resume from that.
+		s.EmergencyClose()
+
+		// Propagate the panic further.
+		panic(err)
+	}
+}
