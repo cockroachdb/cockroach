@@ -133,7 +133,7 @@ FILE
       "cat /home/ubuntu/nodes | xargs -n1 ssh-keyscan -t rsa >> ~/.ssh/known_hosts",
       "curl https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein > /home/ubuntu/lein",
       "chmod +x /home/ubuntu/lein",
-      "cd /home/ubuntu && git clone https://github.com/jepsen-io/jepsen",
+      "cd /home/ubuntu && git clone https://github.com/cockroachdb/jepsen && cd jepsen && git checkout tc-nightly",
     ]
   }
 }
@@ -162,7 +162,7 @@ resource "null_resource" "cockroach-runner" {
       "sudo cp ~/.ssh/authorized_keys2 /root/.ssh/authorized_keys2",
       # Download latest cockroach binary, zip so that Jepsen understands it
       "mkdir -p /tmp/cockroach",
-      "curl http://s3.amazonaws.com/cockroach/cockroach/cockroach.$(curl http://s3.amazonaws.com/cockroach/cockroach/cockroach.LATEST) -o /tmp/cockroach/cockroach",
+      "curl -L https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.LATEST -o /tmp/cockroach/cockroach",
       "chmod +x /tmp/cockroach/cockroach",
       "tar -C /tmp -czf /home/ubuntu/cockroach.tgz cockroach",
     ]
