@@ -43,9 +43,6 @@ import (
 const (
 	// gcQueueTimerDuration is the duration between GCs of queued replicas.
 	gcQueueTimerDuration = 1 * time.Second
-	// gcByteCountNormalization is the count of GC'able bytes which
-	// amount to a score of "1" added to total replica priority.
-	gcByteCountNormalization = 1 << 20 // 1 MB
 	// intentAgeNormalization is the average age of outstanding intents
 	// which amount to a score of "1" added to total replica priority.
 	intentAgeNormalization = 24 * time.Hour // 1 day
@@ -67,9 +64,10 @@ const (
 	// aborted and whose abort cache entry is being deleted.
 	abortCacheAgeThreshold = 5 * base.DefaultHeartbeatInterval
 
-	// considerThreshold is used in shouldQueue. Only an a normalized GC bytes
-	// or intent byte age larger than the threshold queues the replica for GC.
-	considerThreshold = 10
+	// thresholds used by shouldQueue to decide whether to queue for GC based
+	// on keys and intents.
+	gcKeyScoreThreshold    = 10 // TODO(tschottdorf): 2
+	gcIntentScoreThreshold = 10 // TODO(tschottdorf): 10
 
 	// gcTaskLimit is the maximum number of concurrent goroutines
 	// that will be created by GC.
@@ -125,25 +123,40 @@ func (gcq *gcQueue) shouldQueue(
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		log.Errorf(ctx, "could not find zone config for range %s: %s", repl, err)
-		return
+		return false, 0
 	}
 
+	ttlSeconds := int64(zone.GC.TTLSeconds)
+
+	repl.mu.Lock()
+	considerGC := now.Less(repl.mu.state.GCThreshold.Add((ttlSeconds*1E9)/2, 0))
+	repl.mu.Unlock()
+
 	ms := repl.GetMVCCStats()
-	// GC score is the total GC'able bytes age normalized by 1 MB * the replica's TTL in seconds.
-	gcScore := float64(ms.GCByteAge(now.WallTime)) / float64(zone.GC.TTLSeconds) / float64(gcByteCountNormalization)
+	// GC score is the total GC'able bytes age normalized by (replica size * the replica's TTL in seconds).
+	// TODO(tschottdorf): ttlSeconds = 0 || ValBytes == 0?
+	denominator := float64(ttlSeconds * ms.ValBytes)
+	// TODO(tschottdorf): This lets the old tests pass while this is just being shown.
+	if true {
+		considerGC = true
+		denominator = float64(ttlSeconds * int64(1<<20))
+	}
+	gcScore := float64(ms.GCByteAge(now.WallTime)) / denominator
 
 	// Intent score. This computes the average age of outstanding intents
 	// and normalizes.
 	intentScore := ms.AvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
 
-	// Compute priority.
-	if gcScore >= considerThreshold {
+	// Compute priority. We don't consider the replica due to GCBytesAge until the last run took place
+	// on the order of TTLSeconds in the past. This is a precaution - although the age-based GC score
+	// should have the correct scaling, it captures some data we may not ever be able to GC.
+	if gcScore >= gcKeyScoreThreshold {
 		priority += gcScore
 	}
-	if intentScore >= considerThreshold {
+	if intentScore >= gcIntentScoreThreshold {
 		priority += intentScore
 	}
-	shouldQ = priority > 0
+	shouldQ = priority > 0 && considerGC
 	if shouldQ {
 		log.Infof(ctx, "gcScore = %f, intentScore = %f, ms=%+v", gcScore, intentScore, ms)
 	}

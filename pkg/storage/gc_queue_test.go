@@ -74,10 +74,10 @@ func TestGCQueueShouldQueue(t *testing.T) {
 
 	iaN := intentAgeNormalization.Nanoseconds()
 	ia := iaN / 1E9
-	bc := int64(gcByteCountNormalization)
+	bc := int64(1 << 20)
 	ttl := int64(policy.TTLSeconds)
 
-	now := makeTS(considerThreshold*iaN, 0) // at time of stats object
+	now := makeTS(gcKeyScoreThreshold*iaN, 0) // at time of stats object
 
 	testCases := []struct {
 		gcBytes     int64
@@ -119,7 +119,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		// a later timestamp.
 
 		// One normalized unit of unaged gc'able bytes at time zero.
-		{ttl * bc, 0, 0, 0, hlc.Timestamp{}, true, float64(now.WallTime) / (1E9 * considerThreshold)},
+		{ttl * bc, 0, 0, 0, hlc.Timestamp{}, true, float64(now.WallTime) / (1E9 * gcKeyScoreThreshold)},
 
 		// 2 intents aging from zero to now (which is exactly the intent age
 		// normalization).
@@ -136,8 +136,8 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		ms := enginepb.MVCCStats{
 			KeyBytes:        test.gcBytes,
 			IntentCount:     test.intentCount,
-			IntentAge:       test.intentAge * considerThreshold,
-			GCBytesAge:      test.gcBytesAge * considerThreshold,
+			IntentAge:       test.intentAge * gcIntentScoreThreshold,
+			GCBytesAge:      test.gcBytesAge * gcKeyScoreThreshold,
 			LastUpdateNanos: test.now.WallTime,
 		}
 		func() {
@@ -154,7 +154,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}
-		if scaledExpPri := test.priority * considerThreshold; math.Abs(priority-scaledExpPri) > 0.00001 {
+		if scaledExpPri := test.priority * gcKeyScoreThreshold; math.Abs(priority-scaledExpPri) > 0.00001 {
 			t.Errorf("%d: priority expected %f; got %f", i, scaledExpPri, priority)
 		}
 	}
