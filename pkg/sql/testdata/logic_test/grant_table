@@ -334,3 +334,19 @@ Table  User    Privileges
 t      millie  ALL
 t      root    ALL
 t2     root    ALL
+
+statement ok
+CREATE DATABASE empty
+
+query TTT colnames
+SHOW GRANTS ON empty.*
+----
+Table  User    Privileges
+
+query TTT colnames
+SHOW GRANTS ON empty.*, b.*
+----
+Table  User    Privileges
+t      millie  ALL
+t      root    ALL
+t2     root    ALL

@@ -715,6 +715,9 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 
 					}
 				}
+				if len(paramHolders) == 0 {
+					return v, nil
+				}
 				tableGrants := fmt.Sprintf(`SELECT TABLE_NAME, GRANTEE, PRIVILEGE_TYPE FROM information_schema.table_privileges
 									WHERE (TABLE_SCHEMA, TABLE_NAME) IN (%s)`, strings.Join(paramHolders, ","))
 				if n.Grantees != nil {
