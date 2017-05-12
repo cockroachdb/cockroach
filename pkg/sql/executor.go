@@ -425,34 +425,28 @@ func (e *Executor) getDatabaseCache() *databaseCache {
 // Prepare returns the result types of the given statement. pinfo may
 // contain partial type information for placeholders. Prepare will
 // populate the missing types. The PreparedStatement is returned (or
-// nil if there are no results). An error is returned if there is more than
-// one statement in the statement list.
+// nil if there are no results).
 func (e *Executor) Prepare(
-	stmts StatementList, session *Session, pinfo parser.PlaceholderTypes,
-) (*PreparedStatement, error) {
+	stmt Statement, stmtStr string, session *Session, pinfo parser.PlaceholderTypes,
+) (res *PreparedStatement, err error) {
 	session.resetForBatch(e)
-	sessionEventf(session, "preparing: %s", stmts)
+	sessionEventf(session, "preparing: %s", stmtStr)
 
-	defer session.maybeRecover("preparing", stmts.String())
+	defer session.maybeRecover("preparing", stmtStr)
 
 	prepared := &PreparedStatement{
 		SQLTypes:    pinfo,
 		portalNames: make(map[string]struct{}),
 	}
-	switch len(stmts) {
-	case 0:
+	if stmt.AST == nil {
 		return prepared, nil
-	case 1:
-		// ignore
-	default:
-		return nil, errWrongNumberOfPreparedStatements(len(stmts))
 	}
-	stmt := stmts[0].AST
-	prepared.Statement = stmt
-	if err := pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
+
+	prepared.Statement = stmt.AST
+	if err := pinfo.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
 		return nil, err
 	}
-	protoTS, err := isAsOf(session, stmt, e.cfg.Clock.Now())
+	protoTS, err := isAsOf(session, stmt.AST, e.cfg.Clock.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +465,7 @@ func (e *Executor) Prepare(
 		// is really needed.
 		txn = client.NewTxn(e.cfg.DB)
 		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
-			panic(err)
+			panic(fmt.Errorf("cannot set up txn for prepare %q: %v", stmtStr, err))
 		}
 		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
 	}
@@ -486,13 +480,13 @@ func (e *Executor) Prepare(
 	}
 
 	if filter := e.cfg.TestingKnobs.BeforePrepare; filter != nil {
-		res, err := filter(session.Ctx(), stmt.String(), planner)
+		res, err := filter(session.Ctx(), stmtStr, planner)
 		if res != nil || err != nil {
 			return res, err
 		}
 	}
 
-	plan, err := planner.prepare(session.Ctx(), stmt)
+	plan, err := planner.prepare(session.Ctx(), stmt.AST)
 	if err != nil {
 		return nil, err
 	}
@@ -547,13 +541,7 @@ func (e *Executor) ExecuteStatements(
 func (e *Executor) ExecutePreparedStatement(
 	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
 ) (StatementResults, error) {
-
-	var stmts StatementList
-	if stmt.Statement != nil {
-		stmts = StatementList{{AST: stmt.Statement}}
-	}
-
-	defer session.maybeRecover("executing", stmts.String())
+	defer session.maybeRecover("executing", stmt.Str)
 
 	// Block system config updates. For more details, see the comment in
 	// ExecuteStatements.
@@ -1341,7 +1329,9 @@ func (e *Executor) execStmtInOpenTxn(
 		for i, t := range s.Types {
 			typeHints[strconv.Itoa(i+1)] = parser.CastTargetToDatumType(t)
 		}
-		_, err := session.PreparedStatements.New(e, name, StatementList{{AST: s.Statement}}, len(s.Statement.String()), typeHints)
+		_, err := session.PreparedStatements.New(
+			e, name, Statement{AST: s.Statement}, s.Statement.String(), typeHints,
+		)
 		return Result{}, err
 	case *parser.Execute:
 		name := s.Name.String()
@@ -1368,8 +1358,9 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 			qArgs[idx] = typedExpr
 		}
-		results, err := e.execPrepared(session, prepared,
-			&parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
+		results, err := e.execPrepared(
+			session, prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes},
+		)
 		if err != nil {
 			return Result{}, err
 		}
