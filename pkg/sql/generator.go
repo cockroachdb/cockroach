@@ -95,8 +95,13 @@ func (n *valueGenerator) Start(context.Context) error {
 	if err != nil {
 		return err
 	}
+	var tb *parser.DTable
+	if expr == parser.DNull {
+		tb = parser.EmptyDTable()
+	} else {
+		tb = expr.(*parser.DTable)
+	}
 
-	tb := expr.(*parser.DTable)
 	gen := tb.ValueGenerator
 	if err := gen.Start(); err != nil {
 		return err
