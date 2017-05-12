@@ -279,6 +279,9 @@ type Session struct {
 	// statistics for result sets (which escape transactions).
 	mon        mon.MemoryMonitor
 	sessionMon mon.MemoryMonitor
+	// emergencyShutdown is set to true by EmergencyClose() to
+	// indicate to Finish() that the session is already closed.
+	emergencyShutdown bool
 
 	leases LeaseCollection
 
@@ -450,6 +453,11 @@ func NewSession(
 // operating in the background in the case of parallelized statements, which
 // is why we make sure to drain background statements.
 func (s *Session) Finish(e *Executor) {
+	if s.emergencyShutdown {
+		// closed by EmergencyClose() already.
+		return
+	}
+
 	if s.mon == (mon.MemoryMonitor{}) {
 		// This check won't catch the cases where Finish is never called, but it's
 		// proven to be easier to remember to call Finish than it is to call
@@ -504,6 +512,39 @@ func (s *Session) Finish(e *Executor) {
 	// in the TxnCoordSender should not be waiting on this channel any more.
 	// Consider getting rid of this cancel field all-together.
 	s.cancel()
+}
+
+// EmergencyClose is a simplified replacement for Finish() which is
+// less picky about the current state of the Session. In particular
+// this can be used to tidy up after a session even in the middle of a
+// transaction, where there may still be memory activity registered to
+// a monitor and not cleanly released.
+func (s *Session) EmergencyClose() {
+	// Ensure that all in-flight statements are done, so that monitor
+	// traffic is stopped.
+	_ = s.parallelizeQueue.Wait()
+
+	// Release the leases - to ensure other sessions don't get stuck.
+	s.leases.releaseLeases(s.context)
+
+	// The KV txn may be unusable - just leave it dead. Simply
+	// shut down its memory monitor.
+	s.TxnState.mon.EmergencyStop(s.context)
+	// Shut the remaining monitors down.
+	s.sessionMon.EmergencyStop(s.context)
+	s.mon.EmergencyStop(s.context)
+
+	// Finalize the event log.
+	if s.eventLog != nil {
+		s.eventLog.Finish()
+		s.eventLog = nil
+	}
+
+	// Stop the heartbeating.
+	s.cancel()
+
+	// Mark the session as already closed, so that Finish() doesn't get confused.
+	s.emergencyShutdown = true
 }
 
 // Ctx returns the current context for the session: if there is an active SQL
