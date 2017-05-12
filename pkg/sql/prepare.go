@@ -28,6 +28,11 @@ import (
 // PreparedStatement is a SQL statement that has been parsed and the types
 // of arguments and results have been determined.
 type PreparedStatement struct {
+	// Str is the statement string prior to parsing, used to generate
+	// error messages. This may be used in
+	// the future to present a contextual error message based on location
+	// information.
+	Str string
 	// Statement is the parsed, prepared SQL statement. It may be nil if the
 	// prepared statement is empty.
 	Statement   parser.Statement
@@ -80,7 +85,18 @@ func (ps PreparedStatements) NewFromString(
 	if err != nil {
 		return nil, err
 	}
-	return ps.New(e, name, stmts, len(query), placeholderHints)
+
+	var stmt parser.Statement
+	switch len(stmts) {
+	case 1:
+		stmt = stmts[0]
+	case 0:
+		// ignore: nil (empty) statement.
+	default:
+		return nil, errWrongNumberOfPreparedStatements(len(stmts))
+	}
+
+	return ps.New(e, name, stmt, query, placeholderHints)
 }
 
 // New creates a new PreparedStatement with the provided name and corresponding
@@ -91,12 +107,12 @@ func (ps PreparedStatements) NewFromString(
 func (ps PreparedStatements) New(
 	e *Executor,
 	name string,
-	stmts parser.StatementList,
-	queryLen int,
+	stmt parser.Statement,
+	stmtStr string,
 	placeholderHints parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	// Prepare the query. This completes the typing of placeholders.
-	stmt, err := e.Prepare(stmts, ps.session, placeholderHints)
+	pStmt, err := e.Prepare(stmt, stmtStr, ps.session, placeholderHints)
 	if err != nil {
 		return nil, err
 	}
@@ -104,8 +120,8 @@ func (ps PreparedStatements) New(
 	// For now we are just counting the size of the query string and
 	// statement name. When we start storing the prepared query plan
 	// during prepare, this should be tallied up to the monitor as well.
-	sz := int64(uintptr(len(name)+queryLen) + unsafe.Sizeof(*stmt))
-	if err := stmt.memAcc.Wsession(ps.session).OpenAndInit(ps.session.Ctx(), sz); err != nil {
+	sz := int64(uintptr(len(name)+len(stmtStr)) + unsafe.Sizeof(*pStmt))
+	if err := pStmt.memAcc.Wsession(ps.session).OpenAndInit(ps.session.Ctx(), sz); err != nil {
 		return nil, err
 	}
 
@@ -113,8 +129,9 @@ func (ps PreparedStatements) New(
 		prevStmt.memAcc.Wsession(ps.session).Close(ps.session.Ctx())
 	}
 
-	ps.stmts[name] = stmt
-	return stmt, nil
+	pStmt.Str = stmtStr
+	ps.stmts[name] = pStmt
+	return pStmt, nil
 }
 
 // Delete removes the PreparedStatement with the provided name from the PreparedStatements.
