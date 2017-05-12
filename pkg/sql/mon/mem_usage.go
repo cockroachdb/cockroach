@@ -354,7 +354,7 @@ func (mm *MemoryMonitor) Stop(ctx context.Context) {
 	mm.pool = nil
 
 	// Release the reserved budget to its original pool, if any.
-	mm.reserved.Close(ctx)
+	mm.reserved.Clear(ctx)
 }
 
 // MemoryAccount tracks the cumulated allocations for one client of
