@@ -243,9 +243,8 @@ func create(
 		}
 		if err := os.Symlink(filepath.Base(fname), symlink); err != nil {
 			// On Windows, this will be the common case, as symlink creation
-			// requires special privileges. See https://docs.microsoft.com/en-
-			// us/windows/device-security/security-policy-settings/create-
-			// symbolic-links.
+			// requires special privileges.
+			// See: https://docs.microsoft.com/en-us/windows/device-security/security-policy-settings/create-symbolic-links
 			if runtime.GOOS != "windows" {
 				fmt.Fprintf(OrigStderr, "log: failed to create symlink %s: %s", symlink, err)
 			}
