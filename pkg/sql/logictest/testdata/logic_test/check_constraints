@@ -5,7 +5,10 @@
 statement ok
 CREATE TABLE t1 (a INT CHECK (a > 0), to_delete INT, b INT CHECK (b < 0) CHECK (b > -100))
 
-statement error string value does not match CHECK expr type int
+statement error could not parse '3.3' as type int
+INSERT INTO t1 VALUES ('3.3', 0, -1)
+
+statement ok
 INSERT INTO t1 VALUES ('3', 0, -1)
 
 statement ok

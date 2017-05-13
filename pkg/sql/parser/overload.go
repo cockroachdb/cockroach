@@ -387,9 +387,10 @@ func typeCheckOverloadedExprs(
 
 	if len(s.constIdxs) > 0 {
 		if ok, fns, err := filterAttempt(ctx, &s, func() {
-			// The second heuristic is to prefer candidates where all numeric constants can become
-			// a homogeneous type, if all resolvable expressions became one. This is only possible
-			// resolvable expressions were resolved homogeneously up to this point.
+			// The second heuristic is to prefer candidates where all constants can
+			// become a homogeneous type, if all resolvable expressions became one.
+			// This is only possible resolvable expressions were resolved
+			// homogeneously up to this point.
 			if homogeneousTyp != nil {
 				all := true
 				for _, i := range s.constIdxs {
@@ -412,8 +413,8 @@ func typeCheckOverloadedExprs(
 		}
 
 		if ok, fns, err := filterAttempt(ctx, &s, func() {
-			// The third heuristic is to prefer candidates where all numeric constants can become
-			// their "natural"" types.
+			// The third heuristic is to prefer candidates where all constants can
+			// become their "natural" types.
 			for _, i := range s.constIdxs {
 				natural := naturalConstantType(exprs[i].(Constant))
 				if natural != nil {
@@ -427,8 +428,32 @@ func typeCheckOverloadedExprs(
 			return s.typedExprs, fns, err
 		}
 
-		// The fourth heuristic is to prefer candidates that accepts the "best" mutual
-		// type in the resolvable type set of all numeric constants.
+		// At this point, it's worth seeing if we have constants that can't actually
+		// parse as the type that canConstantBecome claims they can. For example,
+		// every string literal will report that it can become an interval, but most
+		// string literals do not encode valid intervals. This may uncover some
+		// overloads with invalid type signatures.
+		//
+		// This parsing is sufficiently expensive (see the comment on
+		// StrVal.AvailableTypes) that we wait until now, when we've eliminated most
+		// overloads from consideration, so that we only need to check each constant
+		// against a limited set of types. We can't hold off on this parsing any
+		// longer, though: the remaining heuristics are overly aggressive and will
+		// falsely reject the only valid overload in some cases.
+		for _, i := range s.constIdxs {
+			constExpr := exprs[i].(Constant)
+			s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
+				func(o overloadImpl) bool {
+					_, err := constExpr.ResolveAsType(&SemaContext{}, o.params().getAt(i))
+					return err == nil
+				})
+		}
+		if types, fn, ok, err := checkReturn(ctx, s); ok {
+			return types, fn, err
+		}
+
+		// The fourth heuristic is to prefer candidates that accepts the "best"
+		// mutual type in the resolvable type set of all constants.
 		if bestConstType, ok := commonConstantType(s.exprs, s.constIdxs); ok {
 			for _, i := range s.constIdxs {
 				s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
@@ -449,9 +474,10 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
-	// The fifth heuristic is to prefer candidates where all placeholders can be given the same type
-	// as all numeric constants and resolvable expressions. This is only possible if all numeric
-	// constants and resolvable expressions were resolved homogeneously up to this point.
+	// The fifth heuristic is to prefer candidates where all placeholders can be
+	// given the same type as all constants and resolvable expressions. This is
+	// only possible if all constants and resolvable expressions were resolved
+	// homogeneously up to this point.
 	if homogeneousTyp != nil && len(s.placeholderIdxs) > 0 {
 		for _, i := range s.placeholderIdxs {
 			s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
