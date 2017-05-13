@@ -206,8 +206,13 @@ SELECT * FROM xyzw LIMIT x
 query error name \"y\" is not defined
 SELECT * FROM xyzw OFFSET 1 + y
 
-query error argument of LIMIT must be type int, not type string
-SELECT * FROM xyzw LIMIT '1'
+query error argument of LIMIT must be type int, not type decimal
+SELECT * FROM xyzw LIMIT 3.3
+
+query IIII
+SELECT * FROM xyzw ORDER BY 1 LIMIT '1'
+----
+1 2 3 4
 
 query error argument of OFFSET must be type int, not type decimal
 SELECT * FROM xyzw OFFSET 1.5
