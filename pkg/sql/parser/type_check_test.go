@@ -92,7 +92,7 @@ func TestTypeCheck(t *testing.T) {
 		{`NULL = ALL CURRENT_SCHEMAS(true)`, `NULL = ALL current_schemas(true)`},
 
 		{`INTERVAL '1'`, `'1s':::INTERVAL`},
-		{`DECIMAL '1.0'`, `'1.0':::STRING::DECIMAL`},
+		{`DECIMAL '1.0'`, `1.0:::DECIMAL::DECIMAL`},
 
 		{`1 + 2`, `3:::INT`},
 		{`1:::decimal + 2`, `1:::DECIMAL + 2:::DECIMAL`},
@@ -104,10 +104,10 @@ func TestTypeCheck(t *testing.T) {
 		{`1:::DECIMAL + $1`, `1:::DECIMAL + $1:::DECIMAL`},
 		{`$1:::INT`, `$1:::INT`},
 
-		{`'NaN'::decimal`, `'NaN':::STRING::DECIMAL`},
-		{`'-NaN'::decimal`, `'-NaN':::STRING::DECIMAL`},
-		{`'Inf'::decimal`, `'Inf':::STRING::DECIMAL`},
-		{`'-Inf'::decimal`, `'-Inf':::STRING::DECIMAL`},
+		{`'NaN'::decimal`, `'NaN'::DECIMAL:::DECIMAL::DECIMAL`},
+		{`'-NaN'::decimal`, `'NaN'::DECIMAL:::DECIMAL::DECIMAL`},
+		{`'Inf'::decimal`, `'Infinity'::DECIMAL:::DECIMAL::DECIMAL`},
+		{`'-Inf'::decimal`, `'-Infinity'::DECIMAL:::DECIMAL::DECIMAL`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExpr(d.expr)
@@ -164,12 +164,10 @@ func TestTypeCheckError(t *testing.T) {
 		expected string
 	}{
 		{`'1' + '2'`, `unsupported binary operator:`},
-		// This strange error is a result of the <date> + <int> overload and because
-		// of the limitation described on StrVal.AvailableTypes.
-		{`'a' + 0`, `could not parse 'a' as type date`},
+		{`'a' + 0`, `unsupported binary operator:`},
 		{`1.1 # 3.1`, `unsupported binary operator:`},
 		{`~0.1`, `unsupported unary operator:`},
-		{`'10' > 2`, `unsupported comparison operator:`},
+		{`'a' > 2`, `unsupported comparison operator:`},
 		{`a`, `name "a" is not defined`},
 		{`COS(*)`, `cannot use "*" in this context`},
 		{`a.*`, `cannot use "a.*" in this context`},
@@ -187,21 +185,21 @@ func TestTypeCheckError(t *testing.T) {
 		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
 		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},
 		{`(1, 2, 3) = (1, 2)`, `expected tuple (1, 2) to have a length of 3`},
-		{`(1, 2) = (1, 'a')`, `tuples (1, 2), (1, 'a') are not comparable at index 2: unsupported comparison operator: <int> = <string>`},
-		{`1 IN ('a', 'b')`, `unsupported comparison operator: 1 IN ('a', 'b'): expected 'a' to be of type int, found type string`},
-		{`1 IN (1, 'a')`, `unsupported comparison operator: 1 IN (1, 'a'): expected 'a' to be of type int, found type string`},
+		{`(1, 2) = (1, 'a')`, `tuples (1, 2), (1, 'a') are not comparable at index 2: unsupported comparison operator:`},
+		{`1 IN ('a', 'b')`, `unsupported comparison operator: 1 IN ('a', 'b'): could not parse 'a' as type int`},
+		{`1 IN (1, 'a')`, `unsupported comparison operator: 1 IN (1, 'a'): could not parse 'a' as type int`},
 		{`1 = ANY 2`, `unsupported comparison operator: 1 = ANY 2: op ANY array requires array on right side`},
-		{`1 = ANY ARRAY[2, '3']`, `unsupported comparison operator: 1 ANY = ARRAY[2, '3']: expected '3' to be of type int, found type string`},
+		{`1 = ANY ARRAY[2, 'a']`, `unsupported comparison operator: 1 ANY = ARRAY[2, 'a']: could not parse 'a' as type int`},
 		{`1 = ALL CURRENT_SCHEMAS(true)`, `unsupported comparison operator: <int> = ALL <string[]>`},
-		{`1.0 BETWEEN 2 AND '5'`, `unsupported comparison operator: <decimal> < <string>`},
+		{`1.0 BETWEEN 2 AND 'a'`, `unsupported comparison operator: <decimal> < <string>`},
 		{`IF(1, 2, 3)`, `incompatible IF condition type: int`},
-		{`IF(true, '5', 2)`, `incompatible IF expressions: expected 2 to be of type string, found type int`},
-		{`IF(true, 2, '5')`, `incompatible IF expressions: expected '5' to be of type int, found type string`},
-		{`IFNULL(1, '5')`, `incompatible IFNULL expressions: expected '5' to be of type int, found type string`},
-		{`NULLIF(1, '5')`, `incompatible NULLIF expressions: expected '5' to be of type int, found type string`},
-		{`COALESCE(1, 2, 3, 4, '5')`, `incompatible COALESCE expressions: expected '5' to be of type int, found type string`},
+		{`IF(true, 'a', 2)`, `incompatible IF expressions: could not parse 'a' as type int`},
+		{`IF(true, 2, 'a')`, `incompatible IF expressions: could not parse 'a' as type int`},
+		{`IFNULL(1, 'a')`, `incompatible IFNULL expressions: could not parse 'a' as type int`},
+		{`NULLIF(1, 'a')`, `incompatible NULLIF expressions: could not parse 'a' as type int`},
+		{`COALESCE(1, 2, 3, 4, 'a')`, `incompatible COALESCE expressions: could not parse 'a' as type int`},
 		{`ARRAY[]`, `cannot determine type of empty array`},
-		{`ANNOTATE_TYPE('a', int)`, `incompatible type annotation for 'a' as int, found type: string`},
+		{`ANNOTATE_TYPE('a', int)`, `could not parse 'a' as type int`},
 		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
 		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
 	}

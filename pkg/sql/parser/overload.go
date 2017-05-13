@@ -481,6 +481,31 @@ func typeCheckOverloadedExprs(
 		// Restore the expressions if this did not work.
 		overloads = before
 
+		// At this point, it's worth seeing if we have constants that can't actually
+		// parse as the type that canConstantBecome claims they can. For example,
+		// every string literal will report that it can become an interval, but most
+		// string literals do not encode valid intervals. This may uncover some
+		// overloads with invalid type signatures.
+		//
+		// This parsing is sufficiently expensive (see the comment on
+		// StrVal.AvailableTypes) that we wait until now, when we've eliminated most
+		// overloads from consideration, so that we only need to check each constant
+		// against a limited set of types. We can't hold off on this parsing any
+		// longer, though: the remaining heuristics are overly aggressive and will
+		// falsely reject the only valid overload in some cases.
+		for _, expr := range constExprs {
+			constExpr := expr.e.(Constant)
+			filterOverloads(func(o overloadImpl) bool {
+				_, err := constExpr.ResolveAsType(&SemaContext{}, o.params().getAt(expr.i))
+				return err == nil
+			})
+		}
+		if len(overloads) == 1 {
+			if ok, fn, err := checkReturn(); ok {
+				return typedExprs, fn, err
+			}
+		}
+
 		// The fourth heuristic is to prefer candidates that accepts the "best" mutual
 		// type in the resolvable type set of all numeric constants.
 		if bestConstType, ok := commonConstantType(constExprs); ok {

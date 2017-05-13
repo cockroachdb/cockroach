@@ -114,7 +114,7 @@ SELECT ARRAY['a', 'b', 'c'][4][2]
 query error incompatible ARRAY subscript type: decimal
 SELECT ARRAY['a', 'b', 'c'][3.5]
 
-query error incompatible ARRAY subscript type: string
+query error could not parse 'abc' as type int
 SELECT ARRAY['a', 'b', 'c']['abc']
 
 query error cannot subscript type int because it is not an array

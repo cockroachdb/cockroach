@@ -544,8 +544,11 @@ func TestEval(t *testing.T) {
 		{`1::boolean`, `true`},
 		{`0::boolean`, `false`},
 		{`1::int`, `1`},
+		{`'1'::int`, `1`},
 		{`1::float`, `1.0`},
+		{`'1'::float`, `1.0`},
 		{`1::decimal`, `1`},
+		{`'1'::decimal`, `1`},
 		{`length(123::text)`, `3`},
 		{`1.1::boolean`, `true`},
 		{`0.0::boolean`, `false`},
@@ -567,6 +570,7 @@ func TestEval(t *testing.T) {
 		{`-1.5::int`, `-2`},
 		{`-2.5::int`, `-3`},
 		{`1.1::float`, `1.1`},
+		{`'1.1'::float`, `1.1`},
 		{`-1e+06::float`, `-1e+06`},
 		{`-9.99999e+05`, `-999999`},
 		{`999999.0`, `999999.0`},
@@ -574,6 +578,7 @@ func TestEval(t *testing.T) {
 		{`-1e+06`, `-1000000`},
 		{`-9.99999e+05::decimal`, `-999999`},
 		{`999999.0::decimal`, `999999.0`},
+		{`'999999.0'::decimal`, `999999.0`},
 		{`1000000.0::decimal`, `1000000.0`},
 		{`length(1.23::text)`, `4`},
 		{`'t'::boolean`, `true`},
@@ -1081,6 +1086,7 @@ func TestEvalError(t *testing.T) {
 		{`'NaN'::decimal::int`, `integer out of range`},
 		{`'Inf'::float::int`, `integer out of range`},
 		{`'NaN'::float::int`, `integer out of range`},
+		{`'1.1'::int`, `could not parse '1.1' as type int`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExpr(d.expr)

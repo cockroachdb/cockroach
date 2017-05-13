@@ -246,7 +246,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 	})
 
 	if _, err := db.DB.Exec(fmt.Sprintf(setQ, intKey, "'a-str'")); !testutils.IsError(
-		err, fmt.Sprintf(`argument of %s must be type int, not type string`, intKey),
+		err, "could not parse 'a-str' as type int",
 	) {
 		t.Fatal(err)
 	}

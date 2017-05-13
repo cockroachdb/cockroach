@@ -264,7 +264,7 @@ func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, 
 }
 
 func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
-	typedValue, err := parser.TypeCheck(n.Value, nil, parser.TypeInt)
+	typedValue, err := parser.TypeCheck(n.Value, nil, parser.TypeAny)
 	if err != nil {
 		return nil, err
 	}

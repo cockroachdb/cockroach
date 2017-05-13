@@ -1253,10 +1253,10 @@ SELECT k, lead(k, w) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 10  NULL
 11  NULL
 
-query error unknown signature: lag\(int, int, string\)
+query error could not parse 'FOO' as type int
 SELECT k, lag(k, 1, 'FOO') OVER () FROM kv ORDER BY 1
 
-query error unknown signature: lead\(int, int, string\)
+query error could not parse 'FOO' as type int
 SELECT k, lead(k, 1, 'FOO') OVER () FROM kv ORDER BY 1
 
 query error unknown signature: lag\(int, int, string\)
@@ -1486,7 +1486,7 @@ SELECT k, v, w, last_value(w) OVER (PARTITION BY v ORDER BY w DESC) FROM kv ORDE
 10  4     9  9
 11  NULL  9  9
 
-query error unknown signature: nth_value\(int, string\)
+query error could not parse 'FOO' as type int
 SELECT k, nth_value(v, 'FOO') OVER () FROM kv ORDER BY 1
 
 query error argument of nth_value\(\) must be greater than zero

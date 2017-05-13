@@ -35,6 +35,17 @@ type Constant interface {
 	// be resolved into. The order of the type slice provides a notion of precedence,
 	// with the first element in the ordering being the Constant's "natural type".
 	AvailableTypes() []Type
+	// DesirableTypes returns the ordered set of types that the constant would
+	// prefer to be resolved into. As in AvailableTypes, the order of the returned
+	// type slice provides a notion of precedence, with the first element in the
+	// ordering being the Constant's "natural type." The function is meant to be
+	// differentiated from AvailableTypes in that it will exclude certain types
+	// that are possible, but not desirable.
+	//
+	// An example of this is a floating point numeric constant without a value
+	// past the decimal point. It is possible to resolve this constant as a
+	// decimal, but it is not desirable.
+	DesirableTypes() []Type
 	// ResolveAsType resolves the Constant as the Datum type specified, or returns an
 	// error if the Constant could not be resolved as that type. The method should only
 	// be passed a type returned from AvailableTypes and should never be called more than
@@ -96,22 +107,6 @@ func canConstantBecome(c Constant, typ Type) bool {
 	return false
 }
 
-// shouldConstantBecome returns whether the provided Constant should or
-// should not become the provided type. The function is meant to be differentiated
-// from canConstantBecome in that it will exclude certain (Constant, Type) resolution
-// pairs that are possible, but not desirable.
-//
-// An example of this is resolving a floating point numeric constant without a value
-// past the decimal point as an DInt. This is possible, but it is not desirable.
-func shouldConstantBecome(c Constant, typ Type) bool {
-	if num, ok := c.(*NumVal); ok {
-		if UnwrapType(typ) == TypeInt && num.Kind() == constant.Float {
-			return false
-		}
-	}
-	return canConstantBecome(c, typ)
-}
-
 // NumVal represents a constant numeric value.
 type NumVal struct {
 	constant.Value
@@ -149,9 +144,6 @@ func (expr *NumVal) canBeInt64() bool {
 //  1.0 = no
 //  1.1 = no
 //  123...overflow...456 = no
-//
-// Currently unused so commented out, but useful even just for
-// its documentation value.
 func (expr *NumVal) ShouldBeInt64() bool {
 	return expr.Kind() == constant.Int && expr.canBeInt64()
 }
@@ -207,6 +199,14 @@ func (expr *NumVal) AvailableTypes() []Type {
 	default:
 		return numValAvailDecimalWithFraction
 	}
+}
+
+// DesirableTypes implements the Constant interface.
+func (expr *NumVal) DesirableTypes() []Type {
+	if expr.ShouldBeInt64() {
+		return numValAvailInteger
+	}
+	return numValAvailDecimalWithFraction
 }
 
 // ResolveAsType implements the Constant interface.
@@ -275,66 +275,39 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 	}
 }
 
+func intersectTypeSlices(xs, ys []Type) (out []Type) {
+	for _, x := range xs {
+		for _, y := range ys {
+			if x == y {
+				out = append(out, x)
+			}
+		}
+	}
+	return out
+}
+
 // commonConstantType returns the most constrained type which is mutually
-// resolvable between a set of provided constants. It returns false if constants
-// are not all of the same kind, and therefore share no common type.
+// resolvable between a set of provided constants.
 //
 // The function takes a slice of indexedExprs, but expects all indexedExprs
 // to wrap a Constant. The reason it does no take a slice of Constants instead
 // is to avoid forcing callers to allocate separate slices of Constant.
 func commonConstantType(vals []indexedExpr) (Type, bool) {
-	switch vals[0].e.(Constant).(type) {
-	case *NumVal:
-		for _, val := range vals[1:] {
-			if _, ok := val.e.(Constant).(*NumVal); !ok {
-				return nil, false
-			}
-		}
-		return commonNumericConstantType(vals), true
-	case *StrVal:
-		for _, val := range vals[1:] {
-			if _, ok := val.e.(Constant).(*StrVal); !ok {
-				return nil, false
-			}
-		}
-		return commonStringConstantType(vals), true
-	default:
-		panic(fmt.Sprintf("unexpected Constant type %T", vals[0].e))
-	}
-}
+	var candidates []Type
 
-// commonNumericConstantType returns the best type which is mutually
-// resolvable between a set of provided numeric constants. Here, "best"
-// is defined as the smallest numeric data type that all constants can
-// become without losing information.
-//
-// The function takes a slice of indexedExprs, but expects all indexedExprs
-// to wrap a *NumVal. The reason it does no take a slice of *NumVals instead
-// is to avoid forcing callers to allocate separate slices of *NumVals.
-func commonNumericConstantType(vals []indexedExpr) Type {
-	for _, c := range vals {
-		if !shouldConstantBecome(c.e.(*NumVal), TypeInt) {
-			return TypeDecimal
+	for _, val := range vals {
+		availableTypes := val.e.(Constant).DesirableTypes()
+		if candidates == nil {
+			candidates = availableTypes
+		} else {
+			candidates = intersectTypeSlices(candidates, availableTypes)
 		}
 	}
-	return TypeInt
-}
 
-// commonStringConstantType returns the best type which is shared
-// between a set of provided string constants. Here, "best" is defined as
-// the most specific string-like type that applies to all constants. This
-// suffers from the same limitation as StrVal.AvailableTypes.
-//
-// The function takes a slice of indexedExprs, but expects all indexedExprs
-// to wrap a *StrVal. The reason it does no take a slice of *StrVals instead
-// is to avoid forcing callers to allocate separate slices of *StrVals.
-func commonStringConstantType(vals []indexedExpr) Type {
-	for _, c := range vals {
-		if c.e.(*StrVal).bytesEsc {
-			return TypeBytes
-		}
+	if len(candidates) > 0 {
+		return candidates[0], true
 	}
-	return TypeString
+	return nil, false
 }
 
 // StrVal represents a constant string value.
@@ -364,6 +337,9 @@ var (
 		TypeString,
 		TypeBytes,
 		TypeBool,
+		TypeInt,
+		TypeFloat,
+		TypeDecimal,
 		TypeDate,
 		TypeTimestamp,
 		TypeTimestampTZ,
@@ -412,6 +388,11 @@ func (expr *StrVal) AvailableTypes() []Type {
 	return strValAvailBytes
 }
 
+// DesirableTypes implements the Constant interface.
+func (expr *StrVal) DesirableTypes() []Type {
+	return expr.AvailableTypes()
+}
+
 // ResolveAsType implements the Constant interface.
 func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 	switch typ {
@@ -426,6 +407,12 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 		return &expr.resBytes, nil
 	case TypeBool:
 		return ParseDBool(expr.s)
+	case TypeInt:
+		return ParseDInt(expr.s)
+	case TypeFloat:
+		return ParseDFloat(expr.s)
+	case TypeDecimal:
+		return ParseDDecimal(expr.s)
 	case TypeDate:
 		return ParseDDate(expr.s, ctx.getLocation())
 	case TypeTimestamp:

@@ -1078,11 +1078,15 @@ SELECT LEAST(NULL, NULL, NULL)
 ----
 NULL
 
-query error greatest\(\): expected '4' to be of type int, found type string
+query I
 SELECT GREATEST(2, '4')
+----
+4
 
-query error least\(\): expected '4' to be of type int, found type string
+query I
 SELECT LEAST(2, '4')
+----
+2
 
 query T
 SELECT GREATEST('foo', 'bar', 'foobar')

@@ -224,13 +224,13 @@ NULL           /1             {1}       1
 statement error too many columns in SPLIT AT data
 ALTER TABLE t SPLIT AT VALUES (1, 2, 3)
 
-statement error SPLIT AT data column 1 \(k1\) must be of type int, not type string
+statement error could not parse 'foo' as type int
 ALTER TABLE t SPLIT AT VALUES ('foo')
 
 statement error too many columns in TESTING_RELOCATE data
 ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[1], 1, 2, 3)
 
-statement error TESTING_RELOCATE data column 2 \(k1\) must be of type int, not type string
+statement error could not parse 'foo' as type int
 ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[4], 'foo')
 
 statement error TESTING_RELOCATE data column 1 \(relocation array\) must be of type int\[\], not type string

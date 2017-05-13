@@ -77,7 +77,7 @@ func TestSplitAt(t *testing.T) {
 		},
 		{
 			in:    "ALTER TABLE d.t SPLIT AT VALUES ('c', 3)",
-			error: "SPLIT AT data column 1 (i) must be of type int, not type string",
+			error: "could not parse 'c' as type int",
 		},
 		{
 			in:    "ALTER TABLE d.t SPLIT AT VALUES (i, s)",
