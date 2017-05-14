@@ -67,6 +67,11 @@ export const refreshLogs = logsReducerObj.refresh;
 const livenessReducerObj = new CachedDataReducer(api.getLiveness, "liveness", moment.duration(10, "s"));
 export const refreshLiveness = livenessReducerObj.refresh;
 
+export const queryToID = (req: api.QueryPlanRequestMessage): string => req.query;
+
+const queryPlanReducerObj = new CachedDataReducer(api.getQueryPlan, "queryPlan");
+export const refreshQueryPlan = queryPlanReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -80,6 +85,7 @@ export interface APIReducersState {
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
+  queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
 }
 
 export default combineReducers<APIReducersState>({
@@ -95,6 +101,7 @@ export default combineReducers<APIReducersState>({
   [tableStatsReducerObj.actionNamespace]: tableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
+  [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
 });
 
 export {CachedDataReducerState, KeyedCachedDataReducerState};
