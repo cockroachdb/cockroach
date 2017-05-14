@@ -905,6 +905,45 @@ func (s *adminServer) Liveness(
 	}, nil
 }
 
+// QueryPlan returns a JSON representation of a distsql physical query
+// plan.
+func (s *adminServer) QueryPlan(
+	ctx context.Context, req *serverpb.QueryPlanRequest,
+) (*serverpb.QueryPlanResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
+  // As long as there's only one query provided it's safe to construct the
+  // explain query.
+  stmts, err := parser.Parse(req.Query)
+  if err != nil {
+    return nil, s.serverError(err)
+  }
+  if len(stmts) > 1 {
+    return nil, s.serverErrorf("more than one query provided")
+  }
+
+	explain := fmt.Sprintf(
+		"SELECT JSON FROM [EXPLAIN (distsql) %s]",
+		strings.Trim(req.Query, ";"))
+	r := s.server.sqlExecutor.ExecuteStatements(session, explain, nil)
+	defer r.Close(ctx)
+	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		return nil, s.serverError(err)
+	}
+
+	row := r.ResultList[0].Rows.At(0)
+	dbDatum, ok := parser.AsDString(row[0])
+	if !ok {
+    return nil, s.serverErrorf("type assertion failed on json: %T", row[0])
+	}
+
+	return &serverpb.QueryPlanResponse{
+		DistSQLPhysicalQueryPlan: string(dbDatum),
+	}, nil
+}
+
 // Drain puts the node into the specified drain mode(s) and optionally
 // instructs the process to terminate.
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
