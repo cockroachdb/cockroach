@@ -362,6 +362,17 @@ message LivenessResponse {
   repeated cockroach.storage.Liveness livenesses = 1 [(gogoproto.nullable) = false];
 }
 
+// PhysicalQueryPlanRequest requests a JSON physical query plan for a SQL string.
+message PhysicalQueryPlanRequest {
+  // query is the SQL query string.
+  string query = 1;
+}
+
+// PhysicalQueryPlanResponse contains a JSON physical query plan.
+message PhysicalQueryPlanResponse {
+  string physical_query_plan = 1;
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -471,6 +482,13 @@ service Admin {
   rpc Liveness(LivenessRequest) returns (LivenessResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/liveness"
+    };
+  }
+
+  // PhysicalQuery returns a JSON physical query plan for a SQL string.
+  rpc PhysicalQueryPlan(PhysicalQueryPlanRequest) returns (PhysicalQueryPlanResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/physicalqueryplan"
     };
   }
 

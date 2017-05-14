@@ -90,6 +90,7 @@ import NodeOverview from "./containers/nodeOverview";
 import NodeGraphs from "./containers/nodeGraphs";
 import NodeLogs from "./containers/nodeLogs";
 import { EventPage } from "./containers/events";
+import QueryPlan from "./containers/queryPlan";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
 import ClusterViz from "./containers/clusterViz";
@@ -125,6 +126,7 @@ ReactDOM.render(
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />
         </Route>
+        <Route path="queryplan" component={ QueryPlan } />
         <Route path="clusterviz" component={ ClusterViz } />
       </Route>
     </Router>

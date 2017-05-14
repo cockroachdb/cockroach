@@ -7438,6 +7438,354 @@ export const cockroach = $root.cockroach = (() => {
                 return LivenessResponse;
             })();
 
+            serverpb.PhysicalQueryPlanRequest = (function() {
+
+                /**
+                 * Properties of a PhysicalQueryPlanRequest.
+                 * @typedef cockroach.server.serverpb.PhysicalQueryPlanRequest$Properties
+                 * @type {Object}
+                 * @property {string} [query] PhysicalQueryPlanRequest query.
+                 */
+
+                /**
+                 * Constructs a new PhysicalQueryPlanRequest.
+                 * @exports cockroach.server.serverpb.PhysicalQueryPlanRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanRequest$Properties=} [properties] Properties to set
+                 */
+                function PhysicalQueryPlanRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * PhysicalQueryPlanRequest query.
+                 * @type {string}
+                 */
+                PhysicalQueryPlanRequest.prototype.query = "";
+
+                /**
+                 * Creates a new PhysicalQueryPlanRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.PhysicalQueryPlanRequest} PhysicalQueryPlanRequest instance
+                 */
+                PhysicalQueryPlanRequest.create = function create(properties) {
+                    return new PhysicalQueryPlanRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified PhysicalQueryPlanRequest message. Does not implicitly {@link cockroach.server.serverpb.PhysicalQueryPlanRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanRequest$Properties} message PhysicalQueryPlanRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                PhysicalQueryPlanRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.query != null && message.hasOwnProperty("query"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.query);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified PhysicalQueryPlanRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.PhysicalQueryPlanRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanRequest$Properties} message PhysicalQueryPlanRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                PhysicalQueryPlanRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a PhysicalQueryPlanRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.PhysicalQueryPlanRequest} PhysicalQueryPlanRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                PhysicalQueryPlanRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.PhysicalQueryPlanRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.query = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a PhysicalQueryPlanRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.PhysicalQueryPlanRequest} PhysicalQueryPlanRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                PhysicalQueryPlanRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a PhysicalQueryPlanRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                PhysicalQueryPlanRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.query != null && message.hasOwnProperty("query"))
+                        if (!$util.isString(message.query))
+                            return "query: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a PhysicalQueryPlanRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.PhysicalQueryPlanRequest} PhysicalQueryPlanRequest
+                 */
+                PhysicalQueryPlanRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.PhysicalQueryPlanRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.PhysicalQueryPlanRequest();
+                    if (object.query != null)
+                        message.query = String(object.query);
+                    return message;
+                };
+
+                /**
+                 * Creates a PhysicalQueryPlanRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.PhysicalQueryPlanRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.PhysicalQueryPlanRequest} PhysicalQueryPlanRequest
+                 */
+                PhysicalQueryPlanRequest.from = PhysicalQueryPlanRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a PhysicalQueryPlanRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanRequest} message PhysicalQueryPlanRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                PhysicalQueryPlanRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults)
+                        object.query = "";
+                    if (message.query != null && message.hasOwnProperty("query"))
+                        object.query = message.query;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this PhysicalQueryPlanRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                PhysicalQueryPlanRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this PhysicalQueryPlanRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                PhysicalQueryPlanRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return PhysicalQueryPlanRequest;
+            })();
+
+            serverpb.PhysicalQueryPlanResponse = (function() {
+
+                /**
+                 * Properties of a PhysicalQueryPlanResponse.
+                 * @typedef cockroach.server.serverpb.PhysicalQueryPlanResponse$Properties
+                 * @type {Object}
+                 * @property {string} [physical_query_plan] PhysicalQueryPlanResponse physical_query_plan.
+                 */
+
+                /**
+                 * Constructs a new PhysicalQueryPlanResponse.
+                 * @exports cockroach.server.serverpb.PhysicalQueryPlanResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanResponse$Properties=} [properties] Properties to set
+                 */
+                function PhysicalQueryPlanResponse(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * PhysicalQueryPlanResponse physical_query_plan.
+                 * @type {string}
+                 */
+                PhysicalQueryPlanResponse.prototype.physical_query_plan = "";
+
+                /**
+                 * Creates a new PhysicalQueryPlanResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.PhysicalQueryPlanResponse} PhysicalQueryPlanResponse instance
+                 */
+                PhysicalQueryPlanResponse.create = function create(properties) {
+                    return new PhysicalQueryPlanResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified PhysicalQueryPlanResponse message. Does not implicitly {@link cockroach.server.serverpb.PhysicalQueryPlanResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanResponse$Properties} message PhysicalQueryPlanResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                PhysicalQueryPlanResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.physical_query_plan != null && message.hasOwnProperty("physical_query_plan"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.physical_query_plan);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified PhysicalQueryPlanResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.PhysicalQueryPlanResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanResponse$Properties} message PhysicalQueryPlanResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                PhysicalQueryPlanResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a PhysicalQueryPlanResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.PhysicalQueryPlanResponse} PhysicalQueryPlanResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                PhysicalQueryPlanResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.PhysicalQueryPlanResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.physical_query_plan = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a PhysicalQueryPlanResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.PhysicalQueryPlanResponse} PhysicalQueryPlanResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                PhysicalQueryPlanResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a PhysicalQueryPlanResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                PhysicalQueryPlanResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.physical_query_plan != null && message.hasOwnProperty("physical_query_plan"))
+                        if (!$util.isString(message.physical_query_plan))
+                            return "physical_query_plan: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a PhysicalQueryPlanResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.PhysicalQueryPlanResponse} PhysicalQueryPlanResponse
+                 */
+                PhysicalQueryPlanResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.PhysicalQueryPlanResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.PhysicalQueryPlanResponse();
+                    if (object.physical_query_plan != null)
+                        message.physical_query_plan = String(object.physical_query_plan);
+                    return message;
+                };
+
+                /**
+                 * Creates a PhysicalQueryPlanResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.PhysicalQueryPlanResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.PhysicalQueryPlanResponse} PhysicalQueryPlanResponse
+                 */
+                PhysicalQueryPlanResponse.from = PhysicalQueryPlanResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a PhysicalQueryPlanResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanResponse} message PhysicalQueryPlanResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                PhysicalQueryPlanResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults)
+                        object.physical_query_plan = "";
+                    if (message.physical_query_plan != null && message.hasOwnProperty("physical_query_plan"))
+                        object.physical_query_plan = message.physical_query_plan;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this PhysicalQueryPlanResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                PhysicalQueryPlanResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this PhysicalQueryPlanResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                PhysicalQueryPlanResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return PhysicalQueryPlanResponse;
+            })();
+
             serverpb.Admin = (function() {
 
                 /**
@@ -7787,6 +8135,33 @@ export const cockroach = $root.cockroach = (() => {
                  * @function
                  * @param {cockroach.server.serverpb.LivenessRequest|Object.<string,*>} request LivenessRequest message or plain object
                  * @returns {Promise<cockroach.server.serverpb.LivenessResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Admin#physicalQueryPlan}.
+                 * @typedef Admin_physicalQueryPlan_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanResponse} [response] PhysicalQueryPlanResponse
+                 */
+
+                /**
+                 * Calls PhysicalQueryPlan.
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanRequest|Object.<string,*>} request PhysicalQueryPlanRequest message or plain object
+                 * @param {Admin_physicalQueryPlan_Callback} callback Node-style callback called with the error, if any, and PhysicalQueryPlanResponse
+                 * @returns {undefined}
+                 */
+                Admin.prototype.physicalQueryPlan = function physicalQueryPlan(request, callback) {
+                    return this.rpcCall(physicalQueryPlan, $root.cockroach.server.serverpb.PhysicalQueryPlanRequest, $root.cockroach.server.serverpb.PhysicalQueryPlanResponse, request, callback);
+                };
+
+                /**
+                 * Calls PhysicalQueryPlan.
+                 * @name Admin#physicalQueryPlan
+                 * @function
+                 * @param {cockroach.server.serverpb.PhysicalQueryPlanRequest|Object.<string,*>} request PhysicalQueryPlanRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.PhysicalQueryPlanResponse>} Promise
                  * @variation 2
                  */
 

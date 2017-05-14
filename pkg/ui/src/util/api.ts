@@ -50,6 +50,9 @@ export type LogEntriesResponseMessage = protos.cockroach.server.serverpb.LogEntr
 export type LivenessRequestMessage = protos.cockroach.server.serverpb.LivenessRequest;
 export type LivenessResponseMessage = protos.cockroach.server.serverpb.LivenessResponse;
 
+export type PhysicalQueryPlanRequestMessage = protos.cockroach.server.serverpb.PhysicalQueryPlanRequest;
+export type PhysicalQueryPlanResponseMessage = protos.cockroach.server.serverpb.PhysicalQueryPlanResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -206,4 +209,9 @@ export function getLogs(req: LogsRequestMessage, timeout?: moment.Duration): Pro
 // getLiveness gets cluster liveness information from the current node.
 export function getLiveness(_: LivenessRequestMessage, timeout?: moment.Duration): Promise<LivenessResponseMessage> {
   return timeoutFetch(serverpb.LivenessResponse, `${API_PREFIX}/liveness`, null, timeout);
+}
+
+// getPhysicalQueryPlan gets physical query plan JSON for the provided query.
+export function getPhysicalQueryPlan(req: PhysicalQueryPlanRequestMessage, timeout?: moment.Duration): Promise<PhysicalQueryPlanResponseMessage> {
+  return timeoutFetch(serverpb.PhysicalQueryPlanResponse, `${API_PREFIX}/physicalqueryplan?query=${encodeURIComponent(req.query)}`, null, timeout);
 }

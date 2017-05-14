@@ -905,6 +905,32 @@ func (s *adminServer) Liveness(
 	}, nil
 }
 
+func (s *adminServer) PhysicalQueryPlan(
+	ctx context.Context, req *serverpb.PhysicalQueryPlanRequest,
+) (*serverpb.PhysicalQueryPlanResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+	explain := fmt.Sprintf(
+		"SELECT JSON FROM [EXPLAIN (distsql) %s]",
+		strings.Trim(req.Query, ";"))
+	r := s.server.sqlExecutor.ExecuteStatements(session, explain, nil)
+	defer r.Close(ctx)
+	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		return nil, s.serverError(err)
+	}
+
+	row := r.ResultList[0].Rows.At(0)
+	dbDatum, ok := parser.AsDString(row[0])
+	if !ok {
+		return nil, s.serverErrorf("Query failed", row[0])
+	}
+
+	return &serverpb.PhysicalQueryPlanResponse{
+		PhysicalQueryPlan: string(dbDatum),
+	}, nil
+}
+
 // Drain puts the node into the specified drain mode(s) and optionally
 // instructs the process to terminate.
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {

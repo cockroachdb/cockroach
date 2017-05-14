@@ -67,6 +67,11 @@ export const refreshLogs = logsReducerObj.refresh;
 const livenessReducerObj = new CachedDataReducer(api.getLiveness, "liveness", moment.duration(10, "s"));
 export const refreshLiveness = livenessReducerObj.refresh;
 
+export const queryToID = (req: api.PhysicalQueryPlanRequestMessage): string => req.query;
+
+const physicalQueryPlanReducerObj = new CachedDataReducer(api.getPhysicalQueryPlan, "physicalQueryPlan");
+export const refreshPhysicalQueryPlan = physicalQueryPlanReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -80,6 +85,7 @@ export interface APIReducersState {
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
+  physicalQueryPlan: KeyedCachedDataReducerState<api.PhysicalQueryPlanResponseMessage>;
 }
 
 export default combineReducers<APIReducersState>({
@@ -95,6 +101,7 @@ export default combineReducers<APIReducersState>({
   [tableStatsReducerObj.actionNamespace]: tableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
+  [physicalQueryPlanReducerObj.actionNamespace]: physicalQueryPlanReducerObj.reducer,
 });
 
 export {CachedDataReducerState, KeyedCachedDataReducerState};
