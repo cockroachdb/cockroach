@@ -552,7 +552,7 @@ Example dump:
   [column families RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_column_families.md
   [interleaving RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_interleaved_tables.md
   [pkg/sql/sqlbase/structured.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/structured.proto
-  [pkg/sql/rowwriter.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/rowwriter.go
+  [pkg/sql/rowwriter.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/rowwriter.go
   [pkg/sql/sqlbase/rowfetcher.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/rowfetcher.go
   [prefix-free]: https://en.wikipedia.org/wiki/Prefix_code
   [new `DECIMAL` encoding]: https://github.com/cockroachdb/cockroach/issues/13384#issuecomment-277120394

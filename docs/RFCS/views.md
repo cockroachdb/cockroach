@@ -91,15 +91,14 @@ not too many.
 
 ## Storing view descriptors
 
-We can reuse the
-[`TableDescriptor`](https://github.com/cockroachdb/cockroach/blob/develop/sql/sqlbase/structured.proto#L244)
-protocol buffer type to represent views. Only a small amount of
-modification will be needed to support the needs of views, and reusing
-the same descriptor will remove the need to duplicate most of the fields
-in the proto and much of the code that processes the proto. Tables and
-views are typically used in the same ways, so it isn't much of a stretch
-to share the underlying descriptor, which is also what we do to support
-the information_schema tables.
+We can reuse the `TableDescriptor` protocol buffer type to represent
+views. Only a small amount of modification will be needed to support
+the needs of views, and reusing the same descriptor will remove the
+need to duplicate most of the fields in the proto and much of the code
+that processes the proto. Tables and views are typically used in the
+same ways, so it isn't much of a stretch to share the underlying
+descriptor, which is also what we do to support the information_schema
+tables.
 
 ## Storing view queries
 

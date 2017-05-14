@@ -25,7 +25,7 @@ from accessing the table and yet never leave table or index data in an
 invalid state.
 
 Online schema change will be built on top of [table descriptor
-leases](https://github.com/cockroachdb/cockroach/docs/RFCS/table_descriptor_lease.md)
+leases](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/table_descriptor_lease.md)
 which describes the mechanism for asynchronously distributing
 modifications to table descriptors. This RFC is concerned with the
 actual steps of performing a schema change.

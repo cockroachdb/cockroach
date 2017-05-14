@@ -130,10 +130,10 @@ from `system.lease`. If sessions are still ongoing after this point, a log
 message would warn of this fact.
 
 ### Note on closing SQL connections
-The load balancing solutions for Postgres that seem to be the most popular are [PGPool](http://www.pgpool.net/docs/latest/pgpool-en.html) and
+The load balancing solutions for Postgres that seem to be the most popular are [PGPool](http://www.pgpool.net/docs/latest/en/html/) and
 [HAProxy](https://www.haproxy.com/). Both systems have health check mechanisms
 that try to establish a SQL
-connection[[1]](http://www.pgpool.net/docs/latest/pgpool-en.html#HEALTH_CHECK_USER)
+connection[[1]](http://www.pgpool.net/docs/latest/en/html/#HEALTH_CHECK_USER)
 [[2]](https://www.haproxy.com/doc/aloha/7.0/haproxy/healthchecks.html#checking-a-pgsql-service).
 HAProxy also supports doing only generic TCP checks. Because of how these health
 checks are performed, sending back a SQL error during the establishment of a
