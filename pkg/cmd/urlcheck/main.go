@@ -130,7 +130,7 @@ func checkURL(client *http.Client, url string) error {
 			return err
 		}
 
-		if retryResp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if retryResp.StatusCode >= 200 && retryResp.StatusCode < 300 {
 			return nil
 		}
 
