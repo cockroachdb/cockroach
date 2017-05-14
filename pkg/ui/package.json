@@ -72,6 +72,7 @@
     "redux": "^3.6.0",
     "redux-thunk": "^2.2.0",
     "reselect": "^3.0.0",
+    "rimraf": "^2.6.1",
     "sinon": "^2.1.0",
     "source-map-loader": "^0.2.0",
     "style-loader": "^0.16.0",
