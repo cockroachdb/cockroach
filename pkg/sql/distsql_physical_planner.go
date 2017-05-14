@@ -598,6 +598,7 @@ func (dsp *distSQLPlanner) createTableReaders(
 	}
 
 	var p physicalPlan
+	stageID := p.NewStageID()
 
 	for _, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
@@ -610,8 +611,9 @@ func (dsp *distSQLPlanner) createTableReaders(
 		proc := distsqlplan.Processor{
 			Node: sp.node,
 			Spec: distsqlrun.ProcessorSpec{
-				Core:   distsqlrun.ProcessorCoreUnion{TableReader: tr},
-				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				Core:    distsqlrun.ProcessorCoreUnion{TableReader: tr},
+				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				StageID: stageID,
 			},
 		}
 
@@ -1081,6 +1083,8 @@ func (dsp *distSQLPlanner) addAggregators(
 			}
 		}
 
+		stageID := p.NewStageID()
+
 		// We have one final stage processor for each result router. This is a
 		// somewhat arbitrary decision; we could have a different number of nodes
 		// working on the final stage.
@@ -1098,6 +1102,7 @@ func (dsp *distSQLPlanner) addAggregators(
 					Output: []distsqlrun.OutputRouterSpec{{
 						Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
 					}},
+					StageID: stageID,
 				},
 			}
 			p.AddProcessor(proc)
@@ -1374,6 +1379,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	}
 
 	pIdxStart := distsqlplan.ProcessorIdx(len(p.Processors))
+	stageID := p.NewStageID()
 
 	if len(nodes) == 1 {
 		proc := distsqlplan.Processor{
@@ -1383,9 +1389,10 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 					{ColumnTypes: leftTypes},
 					{ColumnTypes: rightTypes},
 				},
-				Core:   distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
-				Post:   post,
-				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				Core:    distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+				Post:    post,
+				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				StageID: stageID,
 			},
 		}
 		p.Processors = append(p.Processors, proc)
@@ -1402,9 +1409,10 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 						{ColumnTypes: leftTypes},
 						{ColumnTypes: rightTypes},
 					},
-					Core:   distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
-					Post:   post,
-					Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+					Core:    distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+					Post:    post,
+					Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+					StageID: stageID,
 				},
 			}
 			p.Processors = append(p.Processors, proc)
