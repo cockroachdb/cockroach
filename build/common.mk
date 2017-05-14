@@ -154,7 +154,6 @@ YARN_INSTALLED_TARGET := $(UI_ROOT)/yarn.installed
 
 $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 	cd $(UI_ROOT) && yarn install
-	rm -rf $(UI_ROOT)/node_modules/@types/node # https://github.com/yarnpkg/yarn/issues/2987
 	touch $@
 
 # We store the bootstrap marker file in the bin directory so that remapping bin,
