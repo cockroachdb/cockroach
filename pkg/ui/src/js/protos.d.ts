@@ -4629,6 +4629,232 @@ export namespace cockroach {
                 }
             }
 
+            type QueryPlanRequest$Properties = {
+                query?: string;
+            };
+
+            /**
+             * Constructs a new QueryPlanRequest.
+             * @exports cockroach.server.serverpb.QueryPlanRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.QueryPlanRequest$Properties=} [properties] Properties to set
+             */
+            class QueryPlanRequest {
+
+                /**
+                 * Constructs a new QueryPlanRequest.
+                 * @exports cockroach.server.serverpb.QueryPlanRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.QueryPlanRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.QueryPlanRequest$Properties);
+
+                /**
+                 * QueryPlanRequest query.
+                 * @type {string}
+                 */
+                public query: string;
+
+                /**
+                 * Creates a new QueryPlanRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.QueryPlanRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.QueryPlanRequest} QueryPlanRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.QueryPlanRequest$Properties): cockroach.server.serverpb.QueryPlanRequest;
+
+                /**
+                 * Encodes the specified QueryPlanRequest message. Does not implicitly {@link cockroach.server.serverpb.QueryPlanRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueryPlanRequest$Properties} message QueryPlanRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.QueryPlanRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified QueryPlanRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.QueryPlanRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueryPlanRequest$Properties} message QueryPlanRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.QueryPlanRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a QueryPlanRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.QueryPlanRequest} QueryPlanRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.QueryPlanRequest;
+
+                /**
+                 * Decodes a QueryPlanRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.QueryPlanRequest} QueryPlanRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.QueryPlanRequest;
+
+                /**
+                 * Verifies a QueryPlanRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a QueryPlanRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueryPlanRequest} QueryPlanRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.QueryPlanRequest;
+
+                /**
+                 * Creates a QueryPlanRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.QueryPlanRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueryPlanRequest} QueryPlanRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.QueryPlanRequest;
+
+                /**
+                 * Creates a plain object from a QueryPlanRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.QueryPlanRequest} message QueryPlanRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.QueryPlanRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this QueryPlanRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this QueryPlanRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type QueryPlanResponse$Properties = {
+                distsql_physical_query_plan?: string;
+            };
+
+            /**
+             * Constructs a new QueryPlanResponse.
+             * @exports cockroach.server.serverpb.QueryPlanResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.QueryPlanResponse$Properties=} [properties] Properties to set
+             */
+            class QueryPlanResponse {
+
+                /**
+                 * Constructs a new QueryPlanResponse.
+                 * @exports cockroach.server.serverpb.QueryPlanResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.QueryPlanResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.QueryPlanResponse$Properties);
+
+                /**
+                 * QueryPlanResponse distsql_physical_query_plan.
+                 * @type {string}
+                 */
+                public distsql_physical_query_plan: string;
+
+                /**
+                 * Creates a new QueryPlanResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.QueryPlanResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.QueryPlanResponse} QueryPlanResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.QueryPlanResponse$Properties): cockroach.server.serverpb.QueryPlanResponse;
+
+                /**
+                 * Encodes the specified QueryPlanResponse message. Does not implicitly {@link cockroach.server.serverpb.QueryPlanResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueryPlanResponse$Properties} message QueryPlanResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.QueryPlanResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified QueryPlanResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.QueryPlanResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueryPlanResponse$Properties} message QueryPlanResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.QueryPlanResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a QueryPlanResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.QueryPlanResponse} QueryPlanResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.QueryPlanResponse;
+
+                /**
+                 * Decodes a QueryPlanResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.QueryPlanResponse} QueryPlanResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.QueryPlanResponse;
+
+                /**
+                 * Verifies a QueryPlanResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a QueryPlanResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueryPlanResponse} QueryPlanResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.QueryPlanResponse;
+
+                /**
+                 * Creates a QueryPlanResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.QueryPlanResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueryPlanResponse} QueryPlanResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.QueryPlanResponse;
+
+                /**
+                 * Creates a plain object from a QueryPlanResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.QueryPlanResponse} message QueryPlanResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.QueryPlanResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this QueryPlanResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this QueryPlanResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             /**
              * Constructs a new Admin service.
              * @exports cockroach.server.serverpb.Admin
@@ -4755,6 +4981,14 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public liveness(request: (cockroach.server.serverpb.LivenessRequest|{ [k: string]: any }), callback: Admin_liveness_Callback): void;
+
+                /**
+                 * Calls QueryPlan.
+                 * @param {cockroach.server.serverpb.QueryPlanRequest|Object.<string,*>} request QueryPlanRequest message or plain object
+                 * @param {Admin_queryPlan_Callback} callback Node-style callback called with the error, if any, and QueryPlanResponse
+                 * @returns {undefined}
+                 */
+                public queryPlan(request: (cockroach.server.serverpb.QueryPlanRequest|{ [k: string]: any }), callback: Admin_queryPlan_Callback): void;
 
                 /**
                  * Calls Drain.
@@ -16491,6 +16725,8 @@ type Admin_settings_Callback = (error: Error, response?: cockroach.server.server
 type Admin_health_Callback = (error: Error, response?: cockroach.server.serverpb.HealthResponse) => void;
 
 type Admin_liveness_Callback = (error: Error, response?: cockroach.server.serverpb.LivenessResponse) => void;
+
+type Admin_queryPlan_Callback = (error: Error, response?: cockroach.server.serverpb.QueryPlanResponse) => void;
 
 type Admin_drain_Callback = (error: Error, response?: cockroach.server.serverpb.DrainResponse) => void;
 
