@@ -1,9 +1,23 @@
 'use strict;'
 
+const rimraf = require('rimraf');
+
 const FaviconsWebpackPlugin = require('favicons-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 const title = 'Cockroach Console';
+
+// Remove a broken dependency that yarn insists upon installing before every
+// Webpack compile. We used to do this in the Makefile, but it was common while
+// developing the UI to run e.g. `yarn add` manually, which would reinstall the
+// broken dependency, causing Webpack to fail with cryptic errors.
+//
+// See: https://github.com/yarnpkg/yarn/issues/2987
+class RemoveBrokenDependenciesPlugin {
+  apply(compiler) {
+    compiler.plugin("compile", () => rimraf.sync("./node_modules/@types/node"));
+  }
+}
 
 module.exports = {
   entry: './src/index.tsx',
@@ -58,6 +72,7 @@ module.exports = {
   },
 
   plugins: [
+    new RemoveBrokenDependenciesPlugin(),
     new FaviconsWebpackPlugin({
       logo: './logo.png',
       persistentCache: false,
