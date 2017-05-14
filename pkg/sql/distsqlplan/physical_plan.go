@@ -105,6 +105,15 @@ type PhysicalPlan struct {
 	// reason of correctly merging the streams later (see AddProjection); we don't
 	// want to pay this cost if we don't have multiple streams to merge.
 	MergeOrdering distsqlrun.Ordering
+
+	// Used internally for numbering stages.
+	stageCounter int32
+}
+
+// NewStageID creates a stage identifier that can be used in processor specs.
+func (p *PhysicalPlan) NewStageID() int32 {
+	p.stageCounter++
+	return p.stageCounter
 }
 
 // AddProcessor adds a processor to a PhysicalPlan and returns the index that
@@ -134,6 +143,7 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 	outputTypes []sqlbase.ColumnType,
 	newOrdering distsqlrun.Ordering,
 ) {
+	stageID := p.NewStageID()
 	for i, resultProc := range p.ResultRouters {
 		prevProc := &p.Processors[resultProc]
 
@@ -149,6 +159,7 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 				Output: []distsqlrun.OutputRouterSpec{{
 					Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
 				}},
+				StageID: stageID,
 			},
 		}
 
@@ -215,6 +226,7 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 			Output: []distsqlrun.OutputRouterSpec{{
 				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
 			}},
+			StageID: p.NewStageID(),
 		},
 	}
 
@@ -707,6 +719,15 @@ func MergePlans(
 		mergedPlan.Streams[i].SourceProcessor += rightProcStart
 		mergedPlan.Streams[i].DestProcessor += rightProcStart
 	}
+
+	// Renumber the stages from the right plan.
+	for i := rightProcStart; int(i) < len(mergedPlan.Processors); i++ {
+		s := &mergedPlan.Processors[i].Spec
+		if s.StageID != 0 {
+			s.StageID += left.stageCounter
+		}
+	}
+	mergedPlan.stageCounter = left.stageCounter + right.stageCounter
 
 	leftRouters = left.ResultRouters
 	rightRouters = append([]ProcessorIdx(nil), right.ResultRouters...)
