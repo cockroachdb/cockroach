@@ -76,7 +76,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
   }
 
   render() {
-    let { tableInfo, grantsSortSetting } = this.props;
+    const { tableInfo, grantsSortSetting } = this.props;
 
     if (tableInfo) {
       return <div>
@@ -138,15 +138,15 @@ class TableMain extends React.Component<TableMainProps, {}> {
  */
 
 function tableInfo(state: AdminUIState, props: RouterState): TableInfo {
-  let db = props.params[databaseNameAttr];
-  let table = props.params[tableNameAttr];
-  let details = state.cachedData.tableDetails[generateTableID(db, table)];
-  let stats = state.cachedData.tableStats[generateTableID(db, table)];
+  const db = props.params[databaseNameAttr];
+  const table = props.params[tableNameAttr];
+  const details = state.cachedData.tableDetails[generateTableID(db, table)];
+  const stats = state.cachedData.tableStats[generateTableID(db, table)];
   return new TableInfo(table, details && details.data, stats && stats.data);
 }
 
 // Connect the TableMain class with our redux store.
-let tableMainConnected = connect(
+const tableMainConnected = connect(
   (state: AdminUIState, ownProps: RouterState) => {
     return {
       tableInfo: tableInfo(state, ownProps),

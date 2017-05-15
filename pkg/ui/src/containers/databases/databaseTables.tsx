@@ -37,20 +37,20 @@ const DatabaseTableListSortedTable = SortedTable as new () => SortedTable<TableI
 // contained in a single database.
 class DatabaseSummaryTables extends DatabaseSummaryBase {
   totalSize() {
-    let tableInfos = this.props.tableInfos;
+    const tableInfos = this.props.tableInfos;
     return _.sumBy(tableInfos, (ti) => ti.size);
   }
 
   totalRangeCount() {
-    let tableInfos = this.props.tableInfos;
+    const tableInfos = this.props.tableInfos;
     return _.sumBy(tableInfos, (ti) => ti.rangeCount);
   }
 
   render() {
-    let { tableInfos, sortSetting } = this.props;
-    let dbID = this.props.name;
+    const { tableInfos, sortSetting } = this.props;
+    const dbID = this.props.name;
 
-    let numTables = tableInfos && tableInfos.length || 0;
+    const numTables = tableInfos && tableInfos.length || 0;
 
     return <div className="database-summary l-columns">
       <div className="database-summary-title">

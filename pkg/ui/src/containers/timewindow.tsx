@@ -57,15 +57,15 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
       return;
     }
 
-    let now = props.now ? props.now() : moment();
-    let currentEnd = props.timeWindow.currentWindow.end;
-    let expires = currentEnd.clone().add(props.timeWindow.scale.windowValid);
+    const now = props.now ? props.now() : moment();
+    const currentEnd = props.timeWindow.currentWindow.end;
+    const expires = currentEnd.clone().add(props.timeWindow.scale.windowValid);
     if (now.isAfter(expires))  {
       // Current time window is expired, reset it.
       this.setWindow(props);
     } else {
       // Set a timeout to reset the window when the current window expires.
-      let newTimeout = setTimeout(() => this.setWindow(props), expires.diff(now).valueOf());
+      const newTimeout = setTimeout(() => this.setWindow(props), expires.diff(now).valueOf());
       this.setState({
         timeout: newTimeout,
       });
@@ -78,13 +78,13 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
    */
   setWindow(props: TimeWindowManagerProps) {
     if (!props.timeWindow.scale.windowEnd) {
-      let now = props.now ? props.now() : moment();
+      const now = props.now ? props.now() : moment();
       props.setTimeWindow({
         start: now.clone().subtract(props.timeWindow.scale.windowSize),
         end: now,
       });
     } else {
-      let windowEnd = props.timeWindow.scale.windowEnd;
+      const windowEnd = props.timeWindow.scale.windowEnd;
       props.setTimeWindow({
         start: windowEnd.clone().subtract(props.timeWindow.scale.windowSize),
         end: windowEnd,
@@ -106,7 +106,7 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
   }
 }
 
-let timeWindowManagerConnected = connect(
+const timeWindowManagerConnected = connect(
   (state: AdminUIState) => {
     return {
       timeWindow: state.timewindow,

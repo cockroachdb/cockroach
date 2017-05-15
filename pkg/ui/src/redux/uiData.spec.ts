@@ -39,13 +39,13 @@ describe("UIData reducer", function() {
       state = { uiData: reducer(undefined, { type: "unknown" }) };
     });
 
-    let dispatch = (action: Action) => {
+    const dispatch = (action: Action) => {
       state = { uiData: reducer(state.uiData, action) };
     };
 
     it("isValid", function () {
-      let key1 = "key1";
-      let key2 = "key2";
+      const key1 = "key1";
+      const key2 = "key2";
 
       assert.isFalse(uidata.isValid(state, key1));
       assert.isFalse(uidata.isValid(state, key2));
@@ -62,10 +62,10 @@ describe("UIData reducer", function() {
     });
 
     it("getData", function() {
-      let key1 = "key1";
-      let key2 = "key2";
-      let value1 = "value1";
-      let value2 = "value2";
+      const key1 = "key1";
+      const key2 = "key2";
+      const value1 = "value1";
+      const value2 = "value2";
 
       assert.isUndefined(uidata.getData(state, key1));
       assert.isUndefined(uidata.getData(state, key2));
@@ -82,10 +82,10 @@ describe("UIData reducer", function() {
     });
 
     it("isSaving and isInFlight", function () {
-      let key1 = "key1";
-      let key2 = "key2";
-      let saving = (k: string) => uidata.isSaving(state, k);
-      let inFlight = (k: string) => uidata.isInFlight(state, k);
+      const key1 = "key1";
+      const key2 = "key2";
+      const saving = (k: string) => uidata.isSaving(state, k);
+      const inFlight = (k: string) => uidata.isInFlight(state, k);
 
       assert.isFalse(saving(key1));
       assert.isFalse(inFlight(key1));
@@ -122,10 +122,10 @@ describe("UIData reducer", function() {
     });
 
     it("getSaveError and getLoadError", function () {
-      let key1 = "key1";
-      let key2 = "key2";
-      let saveError = (k: string) => uidata.getSaveError(state, k);
-      let loadError = (k: string) => uidata.getLoadError(state, k);
+      const key1 = "key1";
+      const key2 = "key2";
+      const saveError = (k: string) => uidata.getSaveError(state, k);
+      const loadError = (k: string) => uidata.getLoadError(state, k);
 
       assert.isNull(saveError(key1));
       assert.isNull(saveError(key2));
@@ -201,22 +201,22 @@ describe("UIData reducer", function() {
       state = reducer(undefined, { type: "unknown" });
     });
 
-    let dispatch = (action: Action) => {
+    const dispatch = (action: Action) => {
       state = reducer(state, action);
     };
 
     it("should have the correct default value.", function() {
-      let expected = {};
+      const expected = {};
       assert.deepEqual(state, expected);
     });
 
     it("should correctly dispatch setUIDataKey.", function() {
-      let objKey = "obj";
-      let boolKey = "bool";
-      let numKey = "num";
-      let obj = { value: 1 };
-      let bool = true;
-      let num = 240;
+      const objKey = "obj";
+      const boolKey = "bool";
+      const numKey = "num";
+      const obj = { value: 1 };
+      const bool = true;
+      const num = 240;
 
       assert.isUndefined(state[objKey]);
       assert.isUndefined(state[boolKey]);
@@ -236,7 +236,7 @@ describe("UIData reducer", function() {
       assert.equal(state[numKey].state, uidata.UIDataState.VALID);
 
       // validate overwrite.
-      let obj2 = { value: 2 };
+      const obj2 = { value: 2 };
       dispatch(uidata.setUIDataKey(objKey, obj2));
       assert.lengthOf(_.keys(state), 3);
       assert.equal(state[objKey].data, obj2);
@@ -244,8 +244,8 @@ describe("UIData reducer", function() {
     });
 
     it("should correctly dispatch loadErrorUIData.", function () {
-      let key1 = "key1";
-      let err = new Error("an error.");
+      const key1 = "key1";
+      const err = new Error("an error.");
       assert.isUndefined(state[key1]);
       dispatch(uidata.loadErrorUIData(key1, err));
       assert.equal(state[key1].state, uidata.UIDataState.LOAD_ERROR);
@@ -257,8 +257,8 @@ describe("UIData reducer", function() {
     });
 
     it("should correctly dispatch saveErrorUIData.", function () {
-      let key1 = "key1";
-      let err = new Error("an error.");
+      const key1 = "key1";
+      const err = new Error("an error.");
       assert.isUndefined(state[key1]);
       dispatch(uidata.saveErrorUIData(key1, err));
       assert.equal(state[key1].state, uidata.UIDataState.SAVE_ERROR);
@@ -270,9 +270,9 @@ describe("UIData reducer", function() {
     });
 
     it("should correctly dispatch beginSaveUIData", function () {
-      let key1 = "key1";
-      let key2 = "key2";
-      let keys = [key1, key2];
+      const key1 = "key1";
+      const key2 = "key2";
+      const keys = [key1, key2];
       dispatch(uidata.beginSaveUIData(keys));
       assert.lengthOf(_.keys(state), 2);
       assert.equal(state[key1].state, uidata.UIDataState.SAVING);
@@ -284,9 +284,9 @@ describe("UIData reducer", function() {
     });
 
     it("should correctly dispatch beginLoadUIData", function () {
-      let key1 = "key1";
-      let key2 = "key2";
-      let keys = [key1, key2];
+      const key1 = "key1";
+      const key2 = "key2";
+      const keys = [key1, key2];
       dispatch(uidata.beginLoadUIData(keys));
       assert.lengthOf(_.keys(state), 2);
       assert.equal(state[key1].state, uidata.UIDataState.LOADING);
@@ -301,24 +301,24 @@ describe("UIData reducer", function() {
   describe("asynchronous actions", function() {
     let state: uidata.UIDataSet;
 
-    let dispatch = (action: Action) => {
+    const dispatch = (action: Action) => {
       state = reducer(state, action);
     };
 
-    let uiKey1 = "a_key";
-    let uiObj1 = {
+    const uiKey1 = "a_key";
+    const uiObj1 = {
       setting1: "value",
       setting2: true,
     };
 
-    let uiKey2 = "another_key";
-    let uiObj2 = 1234;
+    const uiKey2 = "another_key";
+    const uiObj2 = 1234;
 
-    let saveUIData = function(...values: uidata.KeyValue[]): Promise<void> {
+    const saveUIData = function(...values: uidata.KeyValue[]): Promise<void> {
       return uidata.saveUIData.apply(this, values)(dispatch, () => { return { uiData: state }; });
     };
 
-    let loadUIData = function(...keys: string[]): Promise<void> {
+    const loadUIData = function(...keys: string[]): Promise<void> {
       return uidata.loadUIData.apply(this, keys)(dispatch, () => { return { uiData: state }; });
     };
 
@@ -336,11 +336,11 @@ describe("UIData reducer", function() {
           assert.equal(state[uiKey1].state, uidata.UIDataState.SAVING);
           assert.equal(state[uiKey2].state, uidata.UIDataState.SAVING);
 
-          let kvs = protos.cockroach.server.serverpb.SetUIDataRequest.decode(new Uint8Array(requestObj.body as ArrayBuffer)).key_values;
+          const kvs = protos.cockroach.server.serverpb.SetUIDataRequest.decode(new Uint8Array(requestObj.body as ArrayBuffer)).key_values;
 
           assert.lengthOf(_.keys(kvs), 2);
 
-          let deserialize = function(buffer: Uint8Array): Object {
+          const deserialize = function(buffer: Uint8Array): Object {
             return JSON.parse(protobuf.util.utf8.read(buffer, 0, buffer.byteLength));
           };
 
@@ -354,13 +354,13 @@ describe("UIData reducer", function() {
         },
       });
 
-      let p = saveUIData(
+      const p = saveUIData(
         {key: uiKey1, value: uiObj1},
         {key: uiKey2, value: uiObj2},
       );
 
       // Second save should be ignored.
-      let p2 = saveUIData(
+      const p2 = saveUIData(
         {key: uiKey1, value: uiObj1},
         {key: uiKey2, value: uiObj2},
       );
@@ -387,7 +387,7 @@ describe("UIData reducer", function() {
         },
       });
 
-      let p = saveUIData(
+      const p = saveUIData(
         {key: uiKey1, value: uiObj1},
         {key: uiKey2, value: uiObj2},
       );
@@ -417,7 +417,7 @@ describe("UIData reducer", function() {
     });
 
     it("correctly loads UIData", function() {
-      let expectedURL = `${api.API_PREFIX}/uidata?keys=${uiKey1}&keys=${uiKey2}`;
+      const expectedURL = `${api.API_PREFIX}/uidata?keys=${uiKey1}&keys=${uiKey2}`;
 
       fetchMock.mock({
         matcher: expectedURL,
@@ -447,8 +447,8 @@ describe("UIData reducer", function() {
         },
       });
 
-      let p = loadUIData(uiKey1, uiKey2);
-      let p2 = loadUIData(uiKey1, uiKey2); // Second load should be ignored.
+      const p = loadUIData(uiKey1, uiKey2);
+      const p2 = loadUIData(uiKey1, uiKey2); // Second load should be ignored.
 
       return Promise.all([p, p2]).then(() => {
         assert.lengthOf(fetchMock.calls(expectedURL), 1);
@@ -474,7 +474,7 @@ describe("UIData reducer", function() {
         },
       });
 
-      let p = loadUIData(uiKey1, uiKey2);
+      const p = loadUIData(uiKey1, uiKey2);
 
       p.then(() => {
         assert.lengthOf(fetchMock.calls(uidataPrefixMatcher), 1);
@@ -501,9 +501,9 @@ describe("UIData reducer", function() {
     });
 
     it("handles missing keys", function () {
-      let missingKey = "missingKey";
+      const missingKey = "missingKey";
 
-      let expectedURL = `${api.API_PREFIX}/uidata?keys=${missingKey}`;
+      const expectedURL = `${api.API_PREFIX}/uidata?keys=${missingKey}`;
 
       fetchMock.mock({
         matcher: expectedURL,
@@ -517,7 +517,7 @@ describe("UIData reducer", function() {
         },
       });
 
-      let p = loadUIData(missingKey);
+      const p = loadUIData(missingKey);
 
       return p.then(() => {
         assert.lengthOf(fetchMock.calls(expectedURL), 1);

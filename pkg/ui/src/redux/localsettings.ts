@@ -38,7 +38,7 @@ export default function reducer(state: LocalSettingsDict = {}, action: Action): 
 
   switch (action.type) {
     case SET_UI_VALUE:
-      let { payload } = action as PayloadAction<LocalSettingData>;
+      const { payload } = action as PayloadAction<LocalSettingData>;
       state = _.clone(state);
       state[payload.key] = payload.value;
       return state;

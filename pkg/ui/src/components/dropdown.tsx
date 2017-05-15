@@ -31,7 +31,7 @@ interface DropdownOwnProps {
  */
 export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
   render() {
-    let {selected, options, onChange, onArrowClick, disabledArrows} = this.props;
+    const {selected, options, onChange, onArrowClick, disabledArrows} = this.props;
     let className = "dropdown";
     if (onArrowClick) {
       className += " dropdown--side-arrows";

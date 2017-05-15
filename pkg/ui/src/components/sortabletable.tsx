@@ -69,7 +69,7 @@ export class SortableTable extends React.Component<TableProps, {}> {
   };
 
   clickSort(clickedSortKey: any) {
-    let { sortSetting, onChangeSortSetting } = this.props;
+    const { sortSetting, onChangeSortSetting } = this.props;
 
     // If the sort key is different than the previous key, initial sort
     // descending. If the same sort key is clicked multiple times consecutively,
@@ -90,13 +90,13 @@ export class SortableTable extends React.Component<TableProps, {}> {
   }
 
   render() {
-    let { sortSetting, columns } = this.props;
+    const { sortSetting, columns } = this.props;
 
     return <table className="sort-table">
      <thead>
         <tr className="sort-table__row sort-table__row--header">
           {_.map(columns, (c: SortableColumn, colIndex: number) => {
-            let classes = ["sort-table__cell"];
+            const classes = ["sort-table__cell"];
             let onClick: (e: any) => void = undefined;
 
             if (!_.isUndefined(c.sortKey)) {

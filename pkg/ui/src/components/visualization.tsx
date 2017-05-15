@@ -27,8 +27,8 @@ interface VisualizationProps {
  */
 export default class extends React.Component<VisualizationProps, {}> {
   render() {
-    let { title, tooltip, stale } = this.props;
-    let vizClasses = classNames({
+    const { title, tooltip, stale } = this.props;
+    const vizClasses = classNames({
       "visualization": true,
       "visualization--faded": stale || false,
     });

@@ -108,13 +108,13 @@ export class TimeWindowState {
 export default function(state = new TimeWindowState(), action: Action): TimeWindowState {
   switch (action.type) {
     case SET_WINDOW:
-      let { payload: tw } = action as PayloadAction<TimeWindow>;
+      const { payload: tw } = action as PayloadAction<TimeWindow>;
       state = _.clone(state);
       state.currentWindow = tw;
       state.scaleChanged = false;
       return state;
     case SET_SCALE:
-      let { payload: scale } = action as PayloadAction<TimeScale>;
+      const { payload: scale } = action as PayloadAction<TimeScale>;
       state = _.clone(state);
       state.scale = scale;
       state.scaleChanged = true;

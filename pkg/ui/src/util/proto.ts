@@ -73,14 +73,14 @@ export namespace MetricConstants {
  * TotalCPU computes the total CPU usage accounted for in a NodeStatus.
  */
 export function TotalCpu(status: NodeStatus$Properties): number {
-  let metrics = status.metrics;
+  const metrics = status.metrics;
   return metrics[MetricConstants.sysCPUPercent] + metrics[MetricConstants.userCPUPercent];
 }
 
 /**
  * BytesUsed computes the total byte usage accounted for in a NodeStatus.
  */
-let aggregateByteKeys = [
+const aggregateByteKeys = [
   MetricConstants.liveBytes,
   MetricConstants.intentBytes,
   MetricConstants.sysBytes,

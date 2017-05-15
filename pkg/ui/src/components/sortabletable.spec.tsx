@@ -34,7 +34,7 @@ function makeTable(count: number, sortSetting?: SortSetting,
 describe("<SortableTable>", () => {
   describe("renders correctly.", () => {
     it("renders the expected table structure.", () => {
-      let wrapper = makeTable(1);
+      const wrapper = makeTable(1);
       assert.lengthOf(wrapper.find("table"), 1, "one table");
       assert.lengthOf(wrapper.find("thead").find("tr"), 1, "one header row");
       assert.lengthOf(wrapper.find("tr.sort-table__row--header"), 1, "column header row");
@@ -43,21 +43,21 @@ describe("<SortableTable>", () => {
 
     it("renders rows and columns correctly.", () => {
       const rowCount = 5;
-      let wrapper = makeTable(rowCount);
+      const wrapper = makeTable(rowCount);
 
       // Verify header structure.
       assert.equal(wrapper.find("tbody").find("tr").length, rowCount, "correct number of rows");
-      let headers = wrapper.find("tr.sort-table__row--header");
+      const headers = wrapper.find("tr.sort-table__row--header");
       _.each(columns, (c, index) => {
-        let header = headers.childAt(index);
+        const header = headers.childAt(index);
         assert.isTrue(header.is(".sort-table__cell"), "header is correct class.");
         assert.equal(header.text(), c.title, "header has correct title.");
       });
 
       // Verify column contents.
-      let rows = wrapper.find("tbody");
+      const rows = wrapper.find("tbody");
       _.times(rowCount, (rowIndex) => {
-        let row = rows.childAt(rowIndex);
+        const row = rows.childAt(rowIndex);
         assert.isTrue(row.is("tr"), "tbody contains rows");
         _.each(columns, (c, columnIndex) => {
           assert.equal(row.childAt(columnIndex).text(), c.cell(rowIndex), "table columns match");
@@ -92,8 +92,8 @@ describe("<SortableTable>", () => {
 
   describe("changes sort setting on clicks.", () => {
     it("sorts descending on initial click.", () => {
-      let spy = sinon.spy();
-      let wrapper = makeTable(1, undefined, spy);
+      const spy = sinon.spy();
+      const wrapper = makeTable(1, undefined, spy);
       wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
       assert.isTrue(spy.calledOnce);
       assert.isTrue(spy.calledWith({
@@ -104,8 +104,8 @@ describe("<SortableTable>", () => {
 
     // Click on sorted data, different column.
     it("sorts descending on new column.", () => {
-      let spy = sinon.spy();
-      let wrapper = makeTable(1, {sortKey: 2, ascending: true}, spy);
+      const spy = sinon.spy();
+      const wrapper = makeTable(1, {sortKey: 2, ascending: true}, spy);
 
       wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
       assert.isTrue(spy.calledOnce);
@@ -116,8 +116,8 @@ describe("<SortableTable>", () => {
     });
 
     it("sorts ascending if same column is clicked twice.", () => {
-      let spy = sinon.spy();
-      let wrapper = makeTable(1, {sortKey: 1, ascending: false}, spy);
+      const spy = sinon.spy();
+      const wrapper = makeTable(1, {sortKey: 1, ascending: false}, spy);
 
       wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
       assert.isTrue(spy.calledOnce);
@@ -128,8 +128,8 @@ describe("<SortableTable>", () => {
     });
 
     it("removes sorting if same column is clicked thrice.", () => {
-      let spy = sinon.spy();
-      let wrapper = makeTable(1, {sortKey: 1, ascending: true}, spy);
+      const spy = sinon.spy();
+      const wrapper = makeTable(1, {sortKey: 1, ascending: true}, spy);
 
       wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
       assert.isTrue(spy.calledOnce);
@@ -141,8 +141,8 @@ describe("<SortableTable>", () => {
 
     // Click on unsortable column does nothing.
     it("does nothing if unsortable column is clicked.", () => {
-      let spy = sinon.spy();
-      let wrapper = makeTable(1, {sortKey: 1, ascending: true}, spy);
+      const spy = sinon.spy();
+      const wrapper = makeTable(1, {sortKey: 1, ascending: true}, spy);
 
       wrapper.find("thead th.sort-table__cell").last().simulate("click");
       assert.isTrue(spy.notCalled);

@@ -35,7 +35,7 @@ describe("metrics reducer", function() {
   });
 
   describe("reducer", function() {
-    let componentID = "test-component";
+    const componentID = "test-component";
     let state: metrics.MetricQueryState;
 
     beforeEach(() => {
@@ -43,7 +43,7 @@ describe("metrics reducer", function() {
     });
 
     it("should have the correct default value.", function() {
-      let expected = {
+      const expected = {
         inFlight: 0,
         queries: metrics.metricQuerySetReducer(undefined, { type: "unknown" }),
       };
@@ -51,7 +51,7 @@ describe("metrics reducer", function() {
     });
 
     it("should correctly dispatch requestMetrics", function() {
-      let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
+      const request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: Long.fromNumber(0),
         end_nanos: Long.fromNumber(10),
         queries: [
@@ -73,14 +73,14 @@ describe("metrics reducer", function() {
     });
 
     it("should correctly dispatch receiveMetrics with an unmatching nextRequest", function() {
-      let response = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
+      const response = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
         results: [
           {
             datapoints: [],
           },
         ],
       });
-      let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
+      const request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: Long.fromNumber(0),
         end_nanos: Long.fromNumber(10),
         queries: [
@@ -100,14 +100,14 @@ describe("metrics reducer", function() {
     });
 
     it("should correctly dispatch receiveMetrics with a matching nextRequest", function() {
-      let response = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
+      const response = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
         results: [
           {
             datapoints: [],
           },
         ],
       });
-      let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
+      const request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: Long.fromNumber(0),
         end_nanos: Long.fromNumber(10),
         queries: [
@@ -128,7 +128,7 @@ describe("metrics reducer", function() {
     });
 
     it("should correctly dispatch errorMetrics", function() {
-      let error: Error = new Error("An error occurred");
+      const error: Error = new Error("An error occurred");
       state = reducer(state, metrics.errorMetrics(componentID, error));
       assert.isDefined(state.queries);
       assert.isDefined(state.queries[componentID]);
@@ -152,7 +152,7 @@ describe("metrics reducer", function() {
     type timespan = [Long, Long];
 
     // Helper function to generate metrics request.
-    let createRequest = function(ts: timespan, ...names: string[]): TSRequest {
+    const createRequest = function(ts: timespan, ...names: string[]): TSRequest {
       return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: ts[0],
         end_nanos: ts[1],
@@ -166,11 +166,11 @@ describe("metrics reducer", function() {
 
     // Mock of metrics state.
     let mockMetricsState: metrics.MetricQueryState;
-    let mockDispatch = <A extends Action>(action: A): A => {
+    const mockDispatch = <A extends Action>(action: A): A => {
       mockMetricsState = reducer(mockMetricsState, action);
       return undefined;
     };
-    let queryMetrics = function(id: string, request: TSRequest): Promise<void> {
+    const queryMetrics = function(id: string, request: TSRequest): Promise<void> {
       return metrics.queryMetrics(id, request)(mockDispatch);
     };
 
@@ -211,13 +211,13 @@ describe("metrics reducer", function() {
 
       // Dispatch several requests. Requests are divided among two timespans,
       // which should result in two batches.
-      let shortTimespan: timespan = [Long.fromNumber(400), Long.fromNumber(500)];
-      let longTimespan: timespan = [Long.fromNumber(0), Long.fromNumber(500)];
+      const shortTimespan: timespan = [Long.fromNumber(400), Long.fromNumber(500)];
+      const longTimespan: timespan = [Long.fromNumber(0), Long.fromNumber(500)];
       queryMetrics("id.1", createRequest(shortTimespan, "short.1", "short.2"));
       queryMetrics("id.2", createRequest(longTimespan, "long.1"));
       queryMetrics("id.3", createRequest(shortTimespan, "short.3"));
       queryMetrics("id.4", createRequest(shortTimespan, "short.4"));
-      let p1 = queryMetrics("id.5", createRequest(longTimespan, "long.2", "long.3"));
+      const p1 = queryMetrics("id.5", createRequest(longTimespan, "long.2", "long.3"));
 
       // Queries should already be present, but unfulfilled.
       assert.lengthOf(_.keys(mockMetricsState.queries), 5);
@@ -229,7 +229,7 @@ describe("metrics reducer", function() {
 
       // Dispatch an additional query for the short timespan, but in a
       // setTimeout - this should result in a separate batch.
-      let p2 = new Promise<void>((resolve, _reject) => {
+      const p2 = new Promise<void>((resolve, _reject) => {
         setTimeout(() => {
           resolve(queryMetrics("id.6", createRequest(shortTimespan, "short.6")));
         });
@@ -286,10 +286,10 @@ describe("metrics reducer", function() {
 
       // Dispatch several requests. Requests are divided among two timespans,
       // which should result in two batches.
-      let shortTimespan: timespan = [Long.fromNumber(400), Long.fromNumber(500)];
-      let longTimespan: timespan = [Long.fromNumber(0), Long.fromNumber(500)];
+      const shortTimespan: timespan = [Long.fromNumber(400), Long.fromNumber(500)];
+      const longTimespan: timespan = [Long.fromNumber(0), Long.fromNumber(500)];
       queryMetrics("id.1", createRequest(shortTimespan, "short.1", "short.2"));
-      let p = queryMetrics("id.2", createRequest(longTimespan, "long.1"));
+      const p = queryMetrics("id.2", createRequest(longTimespan, "long.1"));
 
       // Queries should already be present, but unfulfilled.
       assert.lengthOf(_.keys(mockMetricsState.queries), 2);
@@ -304,12 +304,12 @@ describe("metrics reducer", function() {
         // Assert that the mock metrics state has 2 queries.
         assert.lengthOf(_.keys(mockMetricsState.queries), 2);
         // Assert query with id.1 has results.
-        let q1 = mockMetricsState.queries["id.1"];
+        const q1 = mockMetricsState.queries["id.1"];
         assert.isDefined(q1);
         assert.isDefined(q1.data);
         assert.isUndefined(q1.error);
         // Assert query with id.2 has an error.
-        let q2 = mockMetricsState.queries["id.2"];
+        const q2 = mockMetricsState.queries["id.2"];
         assert.isDefined(q2);
         assert.isDefined(q2.error);
         assert.isUndefined(q2.data);

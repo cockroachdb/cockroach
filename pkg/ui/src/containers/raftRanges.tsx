@@ -88,8 +88,8 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
   }
 
   handlePageClick(data: any) {
-    let selected = data.selected;
-    let offset = Math.ceil(selected * RANGES_PER_PAGE);
+    const selected = data.selected;
+    const offset = Math.ceil(selected * RANGES_PER_PAGE);
     this.setState({ offset });
     window.scroll(0, 0);
   }
@@ -122,7 +122,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
   }
 
   render() {
-    let statuses = this.props.state.data;
+    const statuses = this.props.state.data;
     let content: React.ReactNode = null;
     let errors: string[] = [];
 
@@ -136,36 +136,36 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       errors = errors.concat(statuses.errors.map(err => err.message));
 
       // Build list of all nodes for static ordering.
-      let nodeIDs = _(statuses.ranges).flatMap((range: protos.cockroach.server.serverpb.RaftRangeStatus$Properties) => {
+      const nodeIDs = _(statuses.ranges).flatMap((range: protos.cockroach.server.serverpb.RaftRangeStatus$Properties) => {
         return range.nodes;
       }).map((node: protos.cockroach.server.serverpb.RaftRangeNode$Properties) => {
         return node.node_id;
       }).uniq().sort().value();
 
-      let nodeIDIndex: {[nodeID: number]: number} = {};
-      let columns = [<th key={-1}>Range</th>];
+      const nodeIDIndex: {[nodeID: number]: number} = {};
+      const columns = [<th key={-1}>Range</th>];
       nodeIDs.forEach((id, i) => {
         nodeIDIndex[id] = i + 1;
         columns.push(<th key={i}><Link to={"/nodes/" + id}>Node {id}</Link></th>);
       });
 
       // Filter ranges and paginate
-      let rangesPairs: [string, protos.cockroach.server.serverpb.RaftRangeStatus$Properties][] = _.toPairs(statuses.ranges);
-      let filteredRanges = _.filter(rangesPairs, ([, range]) => {
+      const rangesPairs: [string, protos.cockroach.server.serverpb.RaftRangeStatus$Properties][] = _.toPairs(statuses.ranges);
+      const filteredRanges = _.filter(rangesPairs, ([, range]) => {
         return !this.state.showOnlyErrors || range.errors.length > 0;
       });
       let offset = this.state.offset;
       if (this.state.offset > filteredRanges.length) {
         offset = 0;
       }
-      let ranges = filteredRanges.slice(offset, offset + RANGES_PER_PAGE);
-      let rows: React.ReactNode[][] = [];
+      const ranges = filteredRanges.slice(offset, offset + RANGES_PER_PAGE);
+      const rows: React.ReactNode[][] = [];
       ranges.forEach(([key, range], i) => {
-        let hasErrors = range.errors.length > 0;
-        let rangeErrors = <ul>{_.map(range.errors, (error, j) => {
+        const hasErrors = range.errors.length > 0;
+        const rangeErrors = <ul>{_.map(range.errors, (error, j) => {
           return <li key={j}>{error.message}</li>;
           })}</ul>;
-        let row = [<td key={-1}>
+        const row = [<td key={-1}>
             {key}
             {
               (hasErrors) ? (
@@ -183,21 +183,21 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
 
         // Render each replica into a cell
         range.nodes.forEach((node) => {
-          let nodeRange = node.range;
-          let replicaLocations = nodeRange.state.state.desc.replicas.map(
+          const nodeRange = node.range;
+          const replicaLocations = nodeRange.state.state.desc.replicas.map(
             (replica) => "(Node " + replica.node_id.toString() +
                          " Store " + replica.store_id.toString() +
                          " ReplicaID " + replica.replica_id.toString() + ")",
           );
-          let display = (l?: Long): string => {
+          const display = (l?: Long): string => {
             if (l) {
               return l.toString();
             }
             return "N/A";
           };
-          let index = nodeIDIndex[node.node_id];
-          let raftState = nodeRange.raft_state;
-          let cell = <td key={index}>
+          const index = nodeIDIndex[node.node_id];
+          const raftState = nodeRange.raft_state;
+          const cell = <td key={index}>
             {(this.state.showState) ? <div>
               State: {raftState.state}&nbsp;
                 ReplicaID={display(raftState.replica_id)}&nbsp;
@@ -268,7 +268,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
 const raftState = (state: AdminUIState): CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
 
 // Connect the RangesMain class with our redux store.
-let rangesMainConnected = connect(
+const rangesMainConnected = connect(
   (state: AdminUIState) => {
     return {
       state: raftState(state),

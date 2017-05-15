@@ -88,7 +88,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   nodeAddress(nid: string) {
-    let ns = this.props.nodesSummary.nodeStatusByID[nid];
+    const ns = this.props.nodesSummary.nodeStatusByID[nid];
     if (!ns) {
       // This should only happen immediately after loading a page, and
       // associated graphs should display no data.
@@ -98,7 +98,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   storeIDsForNode(nid: string): string[] {
-    let ns = this.props.nodesSummary.nodeStatusByID[nid];
+    const ns = this.props.nodesSummary.nodeStatusByID[nid];
     if (!ns) {
       return [];
     }
@@ -106,8 +106,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   render() {
-    let selectedNode = this.props.params[nodeIDAttr];
-    let nodeSources =  (_.isString(selectedNode) && selectedNode !== "") ? [selectedNode] : null;
+    const selectedNode = this.props.params[nodeIDAttr];
+    const nodeSources =  (_.isString(selectedNode) && selectedNode !== "") ? [selectedNode] : null;
     let storeSources: string[] = null;
 
     // When "all" is the selected source, some graphs display a line for every
@@ -127,13 +127,13 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       });
     }
 
-    let dashboard = this.props.params[dashboardNameAttr];
-    let specifier = (nodeSources && nodeSources.length === 1) ? `on node ${nodeSources[0]}` : "across all nodes";
+    const dashboard = this.props.params[dashboardNameAttr];
+    const specifier = (nodeSources && nodeSources.length === 1) ? `on node ${nodeSources[0]}` : "across all nodes";
 
     // Capacity math used in the summary status section.
-    let { capacityTotal, capacityAvailable } = this.props.nodesSummary.nodeSums;
-    let capacityUsed = capacityTotal - capacityAvailable;
-    let capacityPercent = capacityTotal !== 0 ? (capacityUsed / capacityTotal * 100) : 100;
+    const { capacityTotal, capacityAvailable } = this.props.nodesSummary.nodeSums;
+    const capacityUsed = capacityTotal - capacityAvailable;
+    const capacityPercent = capacityTotal !== 0 ? (capacityUsed / capacityTotal * 100) : 100;
 
     return <div className="section l-columns">
       <div className="chart-group l-columns__left">

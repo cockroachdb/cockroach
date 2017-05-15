@@ -44,7 +44,7 @@ function makeTable(
 
 describe("<SortedTable>", function() {
   it("renders the expected table structure.", function() {
-    let wrapper = makeTable([new TestRow("test", 1)]);
+    const wrapper = makeTable([new TestRow("test", 1)]);
     assert.lengthOf(wrapper.find("table"), 1, "one table");
     assert.lengthOf(wrapper.find("thead").find("tr"), 1, "one header row");
     assert.lengthOf(wrapper.find("tr.sort-table__row--header"), 1, "column header row");
@@ -52,8 +52,8 @@ describe("<SortedTable>", function() {
   });
 
   it("correctly uses onChangeSortSetting", function() {
-    let spy = sinon.spy();
-    let wrapper = makeTable([new TestRow("test", 1)], undefined, spy);
+    const spy = sinon.spy();
+    const wrapper = makeTable([new TestRow("test", 1)], undefined, spy);
     wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
     assert.isTrue(spy.calledOnce);
     assert.deepEqual(spy.getCall(0).args[0], {
@@ -63,17 +63,17 @@ describe("<SortedTable>", function() {
   });
 
   it("correctly sorts data based on sortSetting", function() {
-    let data = [
+    const data = [
       new TestRow("c", 3),
       new TestRow("d", 4),
       new TestRow("a", 1),
       new TestRow("b", 2),
     ];
     let wrapper = makeTable(data, undefined);
-    let assertMatches = (expected: TestRow[]) => {
-      let rows = wrapper.find("tbody");
+    const assertMatches = (expected: TestRow[]) => {
+      const rows = wrapper.find("tbody");
       _.each(expected, (rowData, dataIndex) => {
-        let row = rows.childAt(dataIndex);
+        const row = rows.childAt(dataIndex);
         assert.equal(row.childAt(0).text(), rowData.name, "first columns match");
         assert.equal(row.childAt(1).text(), rowData.value.toString(), "second columns match");
       });

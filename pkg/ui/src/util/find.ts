@@ -5,17 +5,17 @@ import * as React from "react";
  * returning all children which are ReactElements of the supplied type.
  */
 export function findChildrenOfType<P>(children: React.ReactNode, type: string | React.ComponentClass<P> | React.SFC<P>): React.ReactElement<P>[] {
-  let matchingChildren: React.ReactElement<P>[] = [];
-  let childrenToSearch = React.Children.toArray(children);
+  const matchingChildren: React.ReactElement<P>[] = [];
+  const childrenToSearch = React.Children.toArray(children);
   while (childrenToSearch.length > 0) {
-    let child = childrenToSearch.shift();
+    const child = childrenToSearch.shift();
     if (!isReactElement(child)) {
       continue;
     } else {
       if (child.type === type) {
         matchingChildren.push(child);
       }
-      let { props } = child;
+      const { props } = child;
       if (props.children) {
         // Children added to front of search array for DFS.
         childrenToSearch.unshift(...React.Children.toArray(props.children));

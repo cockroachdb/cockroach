@@ -13,13 +13,13 @@ describe("basic cachedDataReducer", function () {
     constructor(public response: string) { }
   }
 
-  let apiEndpointMock = (req = new Request(null)) => new Promise((resolve, _reject) => resolve(new Response(req.request)));
+  const apiEndpointMock = (req = new Request(null)) => new Promise((resolve, _reject) => resolve(new Response(req.request)));
 
   let expected: CachedDataReducerState<Response>;
 
   describe("reducerObj", function () {
-    let actionNamespace = "test";
-    let testReducerObj = new CachedDataReducer<Request, Response>(apiEndpointMock, actionNamespace);
+    const actionNamespace = "test";
+    const testReducerObj = new CachedDataReducer<Request, Response>(apiEndpointMock, actionNamespace);
 
     describe("actions", function () {
       it("requestData() creates the correct action type.", function () {
@@ -39,8 +39,8 @@ describe("basic cachedDataReducer", function () {
       });
     });
 
-    let reducer = testReducerObj.reducer;
-    let testMoment = moment();
+    const reducer = testReducerObj.reducer;
+    const testMoment = moment();
     testReducerObj.setTimeSource(() => testMoment);
 
     describe("reducer", function () {
@@ -62,7 +62,7 @@ describe("basic cachedDataReducer", function () {
       });
 
       it("should correctly dispatch receiveData", function () {
-        let expectedResponse = new Response(null);
+        const expectedResponse = new Response(null);
         state = reducer(state, testReducerObj.receiveData(expectedResponse, null));
         expected = new CachedDataReducerState<Response>();
         expected.valid = true;
@@ -73,7 +73,7 @@ describe("basic cachedDataReducer", function () {
       });
 
       it("should correctly dispatch errorData", function () {
-        let e = new Error();
+        const e = new Error();
 
         state = reducer(state, testReducerObj.errorData(e, null));
         expected = new CachedDataReducerState<Response>();
@@ -95,7 +95,7 @@ describe("basic cachedDataReducer", function () {
         };
       };
 
-      let mockDispatch = <A extends Action>(action: A): A => {
+      const mockDispatch = <A extends Action>(action: A): A => {
         state.cachedData.test = testReducerObj.reducer(state.cachedData.test, action);
         return undefined;
       };
@@ -107,7 +107,7 @@ describe("basic cachedDataReducer", function () {
           },
         };
 
-        let testString = "refresh test string";
+        const testString = "refresh test string";
 
         return testReducerObj.refresh(new Request(testString))(mockDispatch, () => state).then(() => {
           expected = new CachedDataReducerState<Response>();
@@ -146,50 +146,50 @@ describe("keyed cachedDataReducer", function () {
     constructor(public response: string) { }
   }
 
-  let apiEndpointMock = (req = new Request(null)) => new Promise((resolve, _reject) => resolve(new Response(req.request)));
+  const apiEndpointMock = (req = new Request(null)) => new Promise((resolve, _reject) => resolve(new Response(req.request)));
 
-  let requestToID = (req: Request) => req.request;
+  const requestToID = (req: Request) => req.request;
 
   let expected: KeyedCachedDataReducerState<Response>;
 
   describe("reducerObj", function () {
-    let actionNamespace = "keyedTest";
-    let testReducerObj = new KeyedCachedDataReducer<Request, Response>(apiEndpointMock, actionNamespace, requestToID);
+    const actionNamespace = "keyedTest";
+    const testReducerObj = new KeyedCachedDataReducer<Request, Response>(apiEndpointMock, actionNamespace, requestToID);
 
     describe("actions", function () {
       it("requestData() creates the correct action type.", function () {
-        let request = new Request("testRequestRequest");
-        let requestAction = testReducerObj.cachedDataReducer.requestData(request);
+        const request = new Request("testRequestRequest");
+        const requestAction = testReducerObj.cachedDataReducer.requestData(request);
         assert.equal(requestAction.type, testReducerObj.cachedDataReducer.REQUEST);
         assert.deepEqual(requestAction.payload, {request});
       });
 
       it("receiveData() creates the correct action type.", function () {
-        let response = new Response("testResponse");
-        let request = new Request("testResponseRequest");
-        let receiveAction = testReducerObj.cachedDataReducer.receiveData(response, request);
+        const response = new Response("testResponse");
+        const request = new Request("testResponseRequest");
+        const receiveAction = testReducerObj.cachedDataReducer.receiveData(response, request);
         assert.equal(receiveAction.type, testReducerObj.cachedDataReducer.RECEIVE);
         assert.deepEqual(receiveAction.payload, {request, data: response});
       });
 
       it("errorData() creates the correct action type.", function () {
-        let error = new Error();
-        let request = new Request("testErrorRequest");
-        let errorAction = testReducerObj.cachedDataReducer.errorData(error, request);
+        const error = new Error();
+        const request = new Request("testErrorRequest");
+        const errorAction = testReducerObj.cachedDataReducer.errorData(error, request);
         assert.equal(errorAction.type, testReducerObj.cachedDataReducer.ERROR);
         assert.deepEqual(errorAction.payload, {request, data: error});
       });
 
       it("invalidateData() creates the correct action type.", function () {
-        let request = new Request("testInvalidateRequest");
-        let invalidateAction = testReducerObj.cachedDataReducer.invalidateData(request);
+        const request = new Request("testInvalidateRequest");
+        const invalidateAction = testReducerObj.cachedDataReducer.invalidateData(request);
         assert.equal(invalidateAction.type, testReducerObj.cachedDataReducer.INVALIDATE);
         assert.deepEqual(invalidateAction.payload, {request});
       });
     });
 
-    let reducer = testReducerObj.reducer;
-    let testMoment = moment();
+    const reducer = testReducerObj.reducer;
+    const testMoment = moment();
     testReducerObj.setTimeSource(() => testMoment);
 
     describe("keyed reducer", function () {
@@ -216,7 +216,7 @@ describe("keyed cachedDataReducer", function () {
       });
 
       it("should correctly dispatch receiveData", function () {
-        let expectedResponse = new Response(null);
+        const expectedResponse = new Response(null);
 
         state = reducer(state, testReducerObj.cachedDataReducer.receiveData(expectedResponse, request));
         expected = new KeyedCachedDataReducerState<Response>();
@@ -229,7 +229,7 @@ describe("keyed cachedDataReducer", function () {
       });
 
       it("should correctly dispatch errorData", function() {
-        let e = new Error();
+        const e = new Error();
 
         state = reducer(state, testReducerObj.cachedDataReducer.errorData(e, request));
         expected = new KeyedCachedDataReducerState<Response>();
