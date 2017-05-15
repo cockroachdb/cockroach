@@ -51,10 +51,10 @@ var _ raft.Storage = (*Replica)(nil)
 // to Replica.store.Engine().
 
 // InitialState implements the raft.Storage interface.
-// InitialState requires that the replica lock be held.
+// InitialState requires that r.mu is held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.stateLoader.loadHardState(ctx, r.store.Engine())
+	hs, err := r.mu.stateLoader.loadHardState(ctx, r.store.Engine())
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -240,7 +240,7 @@ func (r *Replica) raftTruncatedStateLocked(
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
-	ts, err := r.stateLoader.loadTruncatedState(ctx, r.store.Engine())
+	ts, err := r.mu.stateLoader.loadTruncatedState(ctx, r.store.Engine())
 	if err != nil {
 		return ts, err
 	}
@@ -447,7 +447,7 @@ func (r *Replica) append(
 	var value roachpb.Value
 	for i := range entries {
 		ent := &entries[i]
-		key := r.stateLoader.RaftLogKey(ent.Index)
+		key := r.raftMu.stateLoader.RaftLogKey(ent.Index)
 		if err := value.SetProto(ent); err != nil {
 			return 0, 0, err
 		}
@@ -466,14 +466,14 @@ func (r *Replica) append(
 	// Delete any previously appended log entries which never committed.
 	lastIndex := entries[len(entries)-1].Index
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
-		err := engine.MVCCDelete(ctx, batch, &diff, r.stateLoader.RaftLogKey(i),
+		err := engine.MVCCDelete(ctx, batch, &diff, r.raftMu.stateLoader.RaftLogKey(i),
 			hlc.Timestamp{}, nil /* txn */)
 		if err != nil {
 			return 0, 0, err
 		}
 	}
 
-	if err := r.stateLoader.setLastIndex(ctx, batch, lastIndex); err != nil {
+	if err := r.raftMu.stateLoader.setLastIndex(ctx, batch, lastIndex); err != nil {
 		return 0, 0, err
 	}
 
@@ -648,7 +648,7 @@ func (r *Replica) applySnapshot(
 	// say it isn't going to accept a snapshot which is identical to the current
 	// state?
 	if !raft.IsEmptyHardState(hs) {
-		if err := r.stateLoader.setHardState(ctx, distinctBatch, hs); err != nil {
+		if err := r.raftMu.stateLoader.setHardState(ctx, distinctBatch, hs); err != nil {
 			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 		}
 	}
@@ -684,7 +684,7 @@ func (r *Replica) applySnapshot(
 	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(s.Stats)
 	r.mu.state = s
-	r.assertStateRLocked(ctx, r.store.Engine())
+	r.assertStateLocked(ctx, r.store.Engine())
 	r.mu.Unlock()
 
 	// As the last deferred action after committing the batch, update other

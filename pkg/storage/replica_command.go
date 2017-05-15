@@ -1435,11 +1435,12 @@ func evalGC(
 	pd.Replicated.State.GCThreshold = newThreshold
 	pd.Replicated.State.TxnSpanGCThreshold = newTxnSpanGCThreshold
 
-	if err := cArgs.EvalCtx.stateLoader().setGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
+	stateLoader := makeReplicaStateLoader(cArgs.EvalCtx.RangeID())
+	if err := stateLoader.setGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
 		return EvalResult{}, err
 	}
 
-	if err := cArgs.EvalCtx.stateLoader().setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
+	if err := stateLoader.setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
 		return EvalResult{}, err
 	}
 
@@ -1874,7 +1875,7 @@ func evalTruncateLog(
 	pd.Replicated.State.TruncatedState = tState
 	pd.Replicated.RaftLogDelta = &diff.SysBytes
 
-	return pd, cArgs.EvalCtx.stateLoader().setTruncatedState(ctx, batch, cArgs.Stats, tState)
+	return pd, makeReplicaStateLoader(cArgs.EvalCtx.RangeID()).setTruncatedState(ctx, batch, cArgs.Stats, tState)
 }
 
 func newFailedLeaseTrigger(isTransfer bool) EvalResult {
@@ -2042,7 +2043,7 @@ func evalNewLease(
 	}
 
 	// Store the lease to disk & in-memory.
-	if err := rec.stateLoader().setLease(ctx, batch, ms, lease); err != nil {
+	if err := makeReplicaStateLoader(rec.RangeID()).setLease(ctx, batch, ms, lease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
 	}
 
@@ -3024,7 +3025,7 @@ func splitTrigger(
 		//
 		// TODO(tschottdorf): why would this use r.store.Engine() and not the
 		// batch?
-		leftLease, err := rec.stateLoader().loadLease(ctx, rec.Engine())
+		leftLease, err := makeReplicaStateLoader(rec.RangeID()).loadLease(ctx, rec.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load lease")
 		}
@@ -3265,7 +3266,7 @@ func mergeTrigger(
 	mergedMS.Add(msRange)
 
 	// Set stats for updated range.
-	if err := rec.stateLoader().setMVCCStats(ctx, batch, &mergedMS); err != nil {
+	if err := makeReplicaStateLoader(rec.RangeID()).setMVCCStats(ctx, batch, &mergedMS); err != nil {
 		return EvalResult{}, errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 
