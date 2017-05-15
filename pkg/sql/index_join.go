@@ -18,6 +18,7 @@ package sql
 
 import (
 	"fmt"
+	"math"
 
 	"golang.org/x/net/context"
 
@@ -107,6 +108,11 @@ type indexJoinNode struct {
 	// may produce more values than this, e.g. when its filter expression
 	// uses more columns than the PK.
 	primaryKeyColumns []bool
+
+	// maxRows is the maximum number of rows fetched from the index
+	// source.
+	maxRows int64
+	numRows int64
 
 	explain   explainMode
 	debugVals debugValues
@@ -206,6 +212,7 @@ func (p *planner) makeIndexJoin(
 		primaryKeyPrefix:  primaryKeyPrefix,
 		colIDtoRowIndex:   colIDtoRowIndex,
 		primaryKeyColumns: primaryKeyColumns,
+		maxRows:           math.MaxInt64,
 	}
 
 	return node, indexScan
@@ -288,7 +295,7 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 		n.table.scanInitialized = false
 		n.table.spans = n.table.spans[:0]
 
-		for len(n.table.spans) < indexJoinBatchSize {
+		for n.numRows < n.maxRows && len(n.table.spans) < indexJoinBatchSize {
 			if next, err := n.index.Next(ctx); !next {
 				// The index is out of rows or an error occurred.
 				if err != nil {
@@ -300,6 +307,7 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 				}
 				break
 			}
+			n.numRows++
 
 			if n.explain == explainDebug {
 				n.debugVals = n.index.DebugValues()
