@@ -129,11 +129,7 @@ endif
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
 
 .DEFAULT_GOAL := all
-.PHONY: all
-all: build test lint
-
-.PHONY: short
-short: build testshort lintshort
+all: build
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 
