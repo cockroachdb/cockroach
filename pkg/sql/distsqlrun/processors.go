@@ -269,7 +269,7 @@ func (h *procOutputHelper) emitRow(
 		copy(outRow, row)
 	}
 	if log.V(3) {
-		log.Infof(ctx, "pushing row %s", outRow)
+		log.InfofDepth(ctx, 1, "pushing row %s", outRow)
 	}
 	if r := h.output.Push(outRow, ProducerMetadata{}); r != NeedMoreRows {
 		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
