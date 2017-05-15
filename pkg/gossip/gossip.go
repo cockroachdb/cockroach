@@ -596,7 +596,7 @@ func maxPeers(nodeCount int) int {
 }
 
 // updateNodeAddress is a gossip callback which fires with each
-// update to the node address. This allows us to compute the
+// update to a node descriptor. This allows us to compute the
 // total size of the gossip network (for determining max peers
 // each gossip node is allowed to have), as well as to create
 // new resolvers for each encountered host and to write the
@@ -608,6 +608,9 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	if err := content.GetProto(&desc); err != nil {
 		log.Error(ctx, err)
 		return
+	}
+	if log.V(1) {
+		log.Infof(ctx, "updateNodeAddress called on %q with desc %+v", key, desc)
 	}
 
 	g.mu.Lock()
@@ -629,11 +632,15 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 		return
 	}
 
-	// Skip if the node has already been seen.
-	if _, ok := g.nodeDescs[desc.NodeID]; ok {
+	existingDesc, ok := g.nodeDescs[desc.NodeID]
+	if !ok || !proto.Equal(existingDesc, &desc) {
+		g.nodeDescs[desc.NodeID] = &desc
+	}
+	// Skip all remaining logic if the address hasn't changed, since that's all
+	// the logic cares about.
+	if ok && existingDesc.Address == desc.Address {
 		return
 	}
-	g.nodeDescs[desc.NodeID] = &desc
 	g.recomputeMaxPeersLocked()
 
 	// Skip if it's our own address.
@@ -665,7 +672,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 		// Deleting the local copy isn't enough to remove the node from the gossip
 		// network. We also have to clear it out in the infoStore by overwriting
 		// it with an empty descriptor, which can be represented as just an empty
-		// byte array due to how protocol buffers are serialied.
+		// byte array due to how protocol buffers are serialized.
 		// Calling addInfoLocked here is somewhat recursive since
 		// updateNodeAddress is typically called in response to the infoStore
 		// being updated but won't lead to deadlock because it's called
