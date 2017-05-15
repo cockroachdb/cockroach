@@ -210,6 +210,9 @@ CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
 override USE_STDMALLOC := $(findstring stdmalloc,$(TAGS))
 STDMALLOC_SUFFIX := $(if $(USE_STDMALLOC),_stdmalloc)
 
+ENABLE_ROCKSDB_ASSERTIONS := $(findstring race,$(TAGS))
+ENABLE_ROCKSDB_ASSERTIONS := $(if $(ENABLE_ROCKSDB_ASSERTIONS),_assert)
+
 ifdef XHOST_TRIPLE
 
 # Darwin wants clang, so special treatment is in order.
@@ -259,7 +262,7 @@ endif
 
 JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
 PROTOBUF_DIR := $(BUILD_DIR)/protobuf
-ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(STDMALLOC_SUFFIX)
+ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(STDMALLOC_SUFFIX)$(ENABLE_ROCKSDB_ASSERTIONS)
 SNAPPY_DIR   := $(BUILD_DIR)/snappy
 # Can't share with protobuf because protoc is always built for the host.
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
@@ -380,7 +383,10 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(ROCKSDB_SRC_DIR)/.extra
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
 	  $(if $(findstring release,$(TYPE)),,-DWITH_$(if $(findstring mingw,$(TARGET_TRIPLE)),AVX2,SSE42)=OFF) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
-	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON)
+	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
+	  $(if $(ENABLE_ROCKSDB_ASSERTIONS),,-DCMAKE_CXX_FLAGS=-DNDEBUG)
+	@# TODO(benesch): Tweak how we pass -DNDEBUG above when we upgrade to a
+	@# RocksDB release that includes https://github.com/facebook/rocksdb/pull/2300.
 
 $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild $(SNAPPY_SRC_DIR)/.extracted
 	mkdir -p $(SNAPPY_DIR)
