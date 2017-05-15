@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -327,37 +328,100 @@ const (
 	indexBackfill
 )
 
-// getSpansToBackfill returns the spans that still have to be backfilled
-// for the first mutation enqueued on the table descriptor that passes the
-// input mutationFilter.
+func getJobRecord(
+	backfillType backfillType,
+	tableDesc *sqlbase.TableDescriptor,
+	mutation *sqlbase.DescriptorMutation,
+) JobRecord {
+	var description string
+	var details interface{}
+	switch backfillType {
+	case columnBackfill:
+		details = AlterTableJobDetails{}
+		var directionStr, columnStr string
+		switch mutation.Direction {
+		case sqlbase.DescriptorMutation_ADD:
+			directionStr = "ADD"
+			columnStr = mutation.GetColumn().SQLString()
+		case sqlbase.DescriptorMutation_DROP:
+			directionStr = "DROP"
+			columnStr = mutation.GetColumn().Name
+		}
+		description = fmt.Sprintf("ALTER TABLE %s %s COLUMN %s", tableDesc.Name, directionStr, columnStr)
+	case indexBackfill:
+		details = CreateIndexJobDetails{}
+		description = "CREATE " + mutation.GetIndex().SQLString(tableDesc.Name)
+	default:
+		panic(fmt.Sprintf("no such backfillType %+v", backfillType))
+	}
+
+	return JobRecord{
+		Description:   description,
+		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
+		Details:       details,
+	}
+}
+
+// getMutationToBackfill returns the the first mutation enqueued on the table
+// descriptor that passes the input mutationFilter.
 //
-// Returns nil if the backfill is complete (mutation no longer exists or there
-// are no "ResumeSpans").
-func (sc *SchemaChanger) getSpansToBackfill(
-	ctx context.Context, filter distsqlrun.MutationFilter,
-) ([]roachpb.Span, error) {
-	var spans []roachpb.Span
+// Returns nil if the backfill is complete.
+func (sc *SchemaChanger) getMutationToBackfill(
+	ctx context.Context,
+	version sqlbase.DescriptorVersion,
+	backfillType backfillType,
+	filter distsqlrun.MutationFilter,
+	jobLogger *JobLogger,
+) (*sqlbase.DescriptorMutation, error) {
+	var mutation *sqlbase.DescriptorMutation
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		spans = nil
+		mutation = nil
 		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		if err != nil {
 			return err
 		}
+		if tableDesc.Version != version {
+			return errors.Errorf("table version mismatch: %d, expected: %d", tableDesc.Version, version)
+		}
 		if len(tableDesc.Mutations) > 0 {
 			mutationID := tableDesc.Mutations[0].MutationID
-			for _, m := range tableDesc.Mutations {
-				if m.MutationID != mutationID {
+			for i := range tableDesc.Mutations {
+				if tableDesc.Mutations[i].MutationID != mutationID {
 					break
 				}
-				if filter(m) {
-					spans = m.ResumeSpans
+				if filter(tableDesc.Mutations[i]) {
+					mutation = &tableDesc.Mutations[i]
 					break
+				}
+			}
+			if mutation != nil {
+				if mutation.JobID != nil {
+					jobLogger.jobID = mutation.JobID
+					return nil
+				}
+				// Create and persist job id.
+				if err := txn.SetSystemConfigTrigger(); err != nil {
+					return err
+				}
+				jobLogger.Job = getJobRecord(backfillType, tableDesc, mutation)
+				if err := jobLogger.Created(ctx); err != nil {
+					return err
+				}
+				mutation.JobID = jobLogger.jobID
+				fmt.Println(mutation)
+				fmt.Println(tableDesc)
+				if err := txn.Put(
+					ctx,
+					sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
+					sqlbase.WrapDescriptor(tableDesc),
+				); err != nil {
+					return err
 				}
 			}
 		}
 		return nil
 	})
-	return spans, err
+	return mutation, err
 }
 
 // distBackfill runs (or continues) a backfill for the first mutation
@@ -378,13 +442,18 @@ func (sc *SchemaChanger) distBackfill(
 	}
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
+	jobLogger := NewJobLogger(&sc.db, sc.leaseMgr, JobRecord{})
 	for {
-		// Repeat until getSpansToBackfill returns no spans, indicating that the
-		// backfill is complete.
-		spans, err := sc.getSpansToBackfill(ctx, filter)
+		// Repeat until getMutationToBackfill returns a mutation with no remaining
+		// ResumeSpans, indicating that the backfill is complete.
+		mutation, err := sc.getMutationToBackfill(ctx, version, backfillType, filter, &jobLogger)
 		if err != nil {
 			return err
 		}
+		if mutation == nil {
+			break
+		}
+		spans := mutation.ResumeSpans
 		if len(spans) <= 0 {
 			break
 		}
@@ -443,6 +512,13 @@ func (sc *SchemaChanger) distBackfill(
 			return recv.err
 		}); err != nil {
 			return err
+		}
+	}
+	if jobLogger.jobID != nil {
+		// We either started a new job or resumed an old one. Mark it as finished.
+		if err := jobLogger.Succeeded(ctx); err != nil {
+			log.Errorf(ctx, "schema change ignoring error while marking job %d as successful: %+v",
+				jobLogger.JobID(), err)
 		}
 	}
 	return nil

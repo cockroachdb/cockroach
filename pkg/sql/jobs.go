@@ -97,6 +97,10 @@ func (jl *JobLogger) Created(ctx context.Context) error {
 		payload.Details = &JobPayload_Backup{Backup: &d}
 	case RestoreJobDetails:
 		payload.Details = &JobPayload_Restore{Restore: &d}
+	case AlterTableJobDetails:
+		payload.Details = &JobPayload_AlterTable{AlterTable: &d}
+	case CreateIndexJobDetails:
+		payload.Details = &JobPayload_CreateIndex{CreateIndex: &d}
 	default:
 		return errors.Errorf("JobLogger: unsupported job details type %T", d)
 	}
@@ -247,8 +251,10 @@ func (jl *JobLogger) updateJobRecord(
 
 // Job types are named for the SQL query that creates them.
 const (
-	JobTypeBackup  string = "BACKUP"
-	JobTypeRestore string = "RESTORE"
+	JobTypeBackup     string = "BACKUP"
+	JobTypeRestore    string = "RESTORE"
+	JobTypeAlterTable string = "ALTER TABLE"
+	JobTypeCreateIndex string = "CREATE INDEX"
 )
 
 func (jp *JobPayload) typ() string {
@@ -257,6 +263,10 @@ func (jp *JobPayload) typ() string {
 		return JobTypeBackup
 	case *JobPayload_Restore:
 		return JobTypeRestore
+	case *JobPayload_AlterTable:
+		return JobTypeAlterTable
+	case *JobPayload_CreateIndex:
+		return JobTypeCreateIndex
 	default:
 		panic("JobPayload.typ called on a payload with an unknown details type")
 	}

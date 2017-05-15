@@ -28,6 +28,14 @@ message RestoreJobDetails {
   // Intentionally empty.
 }
 
+message AlterTableJobDetails {
+  // Intentionally empty.
+}
+
+message CreateIndexJobDetails {
+  // Intentionally empty.
+}
+
 message JobPayload {
     string description = 1;
     string username = 2;
@@ -48,5 +56,7 @@ message JobPayload {
     oneof details {
         BackupJobDetails backup = 10;
         RestoreJobDetails restore = 11;
+        AlterTableJobDetails alterTable = 12;
+        CreateIndexJobDetails createIndex = 13;
     }
 }

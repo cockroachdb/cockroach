@@ -11,6 +11,8 @@
 	It has these top-level messages:
 		BackupJobDetails
 		RestoreJobDetails
+		AlterTableJobDetails
+		CreateIndexJobDetails
 		JobPayload
 */
 package sql
@@ -50,6 +52,22 @@ func (m *RestoreJobDetails) String() string            { return proto.CompactTex
 func (*RestoreJobDetails) ProtoMessage()               {}
 func (*RestoreJobDetails) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{1} }
 
+type AlterTableJobDetails struct {
+}
+
+func (m *AlterTableJobDetails) Reset()                    { *m = AlterTableJobDetails{} }
+func (m *AlterTableJobDetails) String() string            { return proto.CompactTextString(m) }
+func (*AlterTableJobDetails) ProtoMessage()               {}
+func (*AlterTableJobDetails) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{2} }
+
+type CreateIndexJobDetails struct {
+}
+
+func (m *CreateIndexJobDetails) Reset()                    { *m = CreateIndexJobDetails{} }
+func (m *CreateIndexJobDetails) String() string            { return proto.CompactTextString(m) }
+func (*CreateIndexJobDetails) ProtoMessage()               {}
+func (*CreateIndexJobDetails) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{3} }
+
 type JobPayload struct {
 	Description string `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
 	Username    string `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
@@ -65,13 +83,15 @@ type JobPayload struct {
 	// Types that are valid to be assigned to Details:
 	//	*JobPayload_Backup
 	//	*JobPayload_Restore
+	//	*JobPayload_AlterTable
+	//	*JobPayload_CreateIndex
 	Details isJobPayload_Details `protobuf_oneof:"details"`
 }
 
 func (m *JobPayload) Reset()                    { *m = JobPayload{} }
 func (m *JobPayload) String() string            { return proto.CompactTextString(m) }
 func (*JobPayload) ProtoMessage()               {}
-func (*JobPayload) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{2} }
+func (*JobPayload) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{4} }
 
 type isJobPayload_Details interface {
 	isJobPayload_Details()
@@ -85,9 +105,17 @@ type JobPayload_Backup struct {
 type JobPayload_Restore struct {
 	Restore *RestoreJobDetails `protobuf:"bytes,11,opt,name=restore,oneof"`
 }
+type JobPayload_AlterTable struct {
+	AlterTable *AlterTableJobDetails `protobuf:"bytes,12,opt,name=alterTable,oneof"`
+}
+type JobPayload_CreateIndex struct {
+	CreateIndex *CreateIndexJobDetails `protobuf:"bytes,13,opt,name=createIndex,oneof"`
+}
 
-func (*JobPayload_Backup) isJobPayload_Details()  {}
-func (*JobPayload_Restore) isJobPayload_Details() {}
+func (*JobPayload_Backup) isJobPayload_Details()      {}
+func (*JobPayload_Restore) isJobPayload_Details()     {}
+func (*JobPayload_AlterTable) isJobPayload_Details()  {}
+func (*JobPayload_CreateIndex) isJobPayload_Details() {}
 
 func (m *JobPayload) GetDetails() isJobPayload_Details {
 	if m != nil {
@@ -110,11 +138,27 @@ func (m *JobPayload) GetRestore() *RestoreJobDetails {
 	return nil
 }
 
+func (m *JobPayload) GetAlterTable() *AlterTableJobDetails {
+	if x, ok := m.GetDetails().(*JobPayload_AlterTable); ok {
+		return x.AlterTable
+	}
+	return nil
+}
+
+func (m *JobPayload) GetCreateIndex() *CreateIndexJobDetails {
+	if x, ok := m.GetDetails().(*JobPayload_CreateIndex); ok {
+		return x.CreateIndex
+	}
+	return nil
+}
+
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*JobPayload) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
 	return _JobPayload_OneofMarshaler, _JobPayload_OneofUnmarshaler, _JobPayload_OneofSizer, []interface{}{
 		(*JobPayload_Backup)(nil),
 		(*JobPayload_Restore)(nil),
+		(*JobPayload_AlterTable)(nil),
+		(*JobPayload_CreateIndex)(nil),
 	}
 }
 
@@ -130,6 +174,16 @@ func _JobPayload_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	case *JobPayload_Restore:
 		_ = b.EncodeVarint(11<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.Restore); err != nil {
+			return err
+		}
+	case *JobPayload_AlterTable:
+		_ = b.EncodeVarint(12<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.AlterTable); err != nil {
+			return err
+		}
+	case *JobPayload_CreateIndex:
+		_ = b.EncodeVarint(13<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.CreateIndex); err != nil {
 			return err
 		}
 	case nil:
@@ -158,6 +212,22 @@ func _JobPayload_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buf
 		err := b.DecodeMessage(msg)
 		m.Details = &JobPayload_Restore{msg}
 		return true, err
+	case 12: // details.alterTable
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(AlterTableJobDetails)
+		err := b.DecodeMessage(msg)
+		m.Details = &JobPayload_AlterTable{msg}
+		return true, err
+	case 13: // details.createIndex
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(CreateIndexJobDetails)
+		err := b.DecodeMessage(msg)
+		m.Details = &JobPayload_CreateIndex{msg}
+		return true, err
 	default:
 		return false, nil
 	}
@@ -177,6 +247,16 @@ func _JobPayload_OneofSizer(msg proto.Message) (n int) {
 		n += proto.SizeVarint(11<<3 | proto.WireBytes)
 		n += proto.SizeVarint(uint64(s))
 		n += s
+	case *JobPayload_AlterTable:
+		s := proto.Size(x.AlterTable)
+		n += proto.SizeVarint(12<<3 | proto.WireBytes)
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *JobPayload_CreateIndex:
+		s := proto.Size(x.CreateIndex)
+		n += proto.SizeVarint(13<<3 | proto.WireBytes)
+		n += proto.SizeVarint(uint64(s))
+		n += s
 	case nil:
 	default:
 		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
@@ -187,6 +267,8 @@ func _JobPayload_OneofSizer(msg proto.Message) (n int) {
 func init() {
 	proto.RegisterType((*BackupJobDetails)(nil), "cockroach.sql.BackupJobDetails")
 	proto.RegisterType((*RestoreJobDetails)(nil), "cockroach.sql.RestoreJobDetails")
+	proto.RegisterType((*AlterTableJobDetails)(nil), "cockroach.sql.AlterTableJobDetails")
+	proto.RegisterType((*CreateIndexJobDetails)(nil), "cockroach.sql.CreateIndexJobDetails")
 	proto.RegisterType((*JobPayload)(nil), "cockroach.sql.JobPayload")
 }
 func (m *BackupJobDetails) Marshal() (dAtA []byte, err error) {
@@ -218,6 +300,42 @@ func (m *RestoreJobDetails) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *RestoreJobDetails) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *AlterTableJobDetails) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AlterTableJobDetails) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *CreateIndexJobDetails) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CreateIndexJobDetails) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -333,6 +451,34 @@ func (m *JobPayload_Restore) MarshalTo(dAtA []byte) (int, error) {
 	}
 	return i, nil
 }
+func (m *JobPayload_AlterTable) MarshalTo(dAtA []byte) (int, error) {
+	i := 0
+	if m.AlterTable != nil {
+		dAtA[i] = 0x62
+		i++
+		i = encodeVarintJobs(dAtA, i, uint64(m.AlterTable.Size()))
+		n6, err := m.AlterTable.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n6
+	}
+	return i, nil
+}
+func (m *JobPayload_CreateIndex) MarshalTo(dAtA []byte) (int, error) {
+	i := 0
+	if m.CreateIndex != nil {
+		dAtA[i] = 0x6a
+		i++
+		i = encodeVarintJobs(dAtA, i, uint64(m.CreateIndex.Size()))
+		n7, err := m.CreateIndex.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	return i, nil
+}
 func encodeFixed64Jobs(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	dAtA[offset+1] = uint8(v >> 8)
@@ -367,6 +513,18 @@ func (m *BackupJobDetails) Size() (n int) {
 }
 
 func (m *RestoreJobDetails) Size() (n int) {
+	var l int
+	_ = l
+	return n
+}
+
+func (m *AlterTableJobDetails) Size() (n int) {
+	var l int
+	_ = l
+	return n
+}
+
+func (m *CreateIndexJobDetails) Size() (n int) {
 	var l int
 	_ = l
 	return n
@@ -426,6 +584,24 @@ func (m *JobPayload_Restore) Size() (n int) {
 	_ = l
 	if m.Restore != nil {
 		l = m.Restore.Size()
+		n += 1 + l + sovJobs(uint64(l))
+	}
+	return n
+}
+func (m *JobPayload_AlterTable) Size() (n int) {
+	var l int
+	_ = l
+	if m.AlterTable != nil {
+		l = m.AlterTable.Size()
+		n += 1 + l + sovJobs(uint64(l))
+	}
+	return n
+}
+func (m *JobPayload_CreateIndex) Size() (n int) {
+	var l int
+	_ = l
+	if m.CreateIndex != nil {
+		l = m.CreateIndex.Size()
 		n += 1 + l + sovJobs(uint64(l))
 	}
 	return n
@@ -521,6 +697,106 @@ func (m *RestoreJobDetails) Unmarshal(dAtA []byte) error {
 		}
 		if fieldNum <= 0 {
 			return fmt.Errorf("proto: RestoreJobDetails: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipJobs(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthJobs
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AlterTableJobDetails) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowJobs
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AlterTableJobDetails: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AlterTableJobDetails: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipJobs(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthJobs
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CreateIndexJobDetails) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowJobs
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CreateIndexJobDetails: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CreateIndexJobDetails: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:
@@ -857,6 +1133,70 @@ func (m *JobPayload) Unmarshal(dAtA []byte) error {
 			}
 			m.Details = &JobPayload_Restore{v}
 			iNdEx = postIndex
+		case 12:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AlterTable", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowJobs
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthJobs
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &AlterTableJobDetails{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Details = &JobPayload_AlterTable{v}
+			iNdEx = postIndex
+		case 13:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CreateIndex", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowJobs
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthJobs
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &CreateIndexJobDetails{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Details = &JobPayload_CreateIndex{v}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipJobs(dAtA[iNdEx:])
@@ -986,32 +1326,36 @@ var (
 func init() { proto.RegisterFile("cockroach/pkg/sql/jobs.proto", fileDescriptorJobs) }
 
 var fileDescriptorJobs = []byte{
-	// 422 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x92, 0x3f, 0x6f, 0xd3, 0x40,
-	0x18, 0xc6, 0x73, 0x4d, 0x9a, 0x3f, 0x6f, 0xe4, 0xd0, 0x1e, 0x1d, 0xac, 0x0a, 0x1c, 0xab, 0x12,
-	0xc2, 0x0b, 0xb6, 0x44, 0x27, 0x24, 0xa6, 0x90, 0x21, 0x89, 0x84, 0x84, 0x3c, 0xb2, 0x44, 0xe7,
-	0xbb, 0x4b, 0x72, 0xc4, 0xce, 0xeb, 0xdc, 0x39, 0x03, 0x33, 0x5f, 0x80, 0x8f, 0xd5, 0x91, 0x91,
-	0xa9, 0x02, 0xf3, 0x2d, 0x98, 0x50, 0xce, 0x71, 0x52, 0xda, 0xcd, 0xef, 0xf3, 0xfc, 0x1e, 0xcb,
-	0x7a, 0x1e, 0xc3, 0x0b, 0x8e, 0x7c, 0xad, 0x91, 0xf1, 0x55, 0x94, 0xaf, 0x97, 0x91, 0xd9, 0xa6,
-	0xd1, 0x17, 0x4c, 0x4c, 0x98, 0x6b, 0x2c, 0x90, 0x3a, 0x47, 0x37, 0x34, 0xdb, 0xf4, 0xfa, 0x6a,
-	0x89, 0x4b, 0xb4, 0x4e, 0xb4, 0x7f, 0xaa, 0xa0, 0x1b, 0x0a, 0x17, 0x23, 0xc6, 0xd7, 0xbb, 0x7c,
-	0x86, 0xc9, 0x58, 0x16, 0x4c, 0xa5, 0xe6, 0xe6, 0x39, 0x5c, 0xc6, 0xd2, 0x14, 0xa8, 0xe5, 0x03,
-	0xf1, 0x5b, 0x0b, 0x60, 0x86, 0xc9, 0x27, 0xf6, 0x35, 0x45, 0x26, 0xa8, 0x0f, 0x7d, 0x21, 0x0d,
-	0xd7, 0x2a, 0x2f, 0x14, 0x6e, 0x5c, 0xe2, 0x93, 0xa0, 0x17, 0x3f, 0x94, 0xe8, 0x35, 0x74, 0x77,
-	0x46, 0xea, 0x0d, 0xcb, 0xa4, 0x7b, 0x66, 0xed, 0xe3, 0x4d, 0x5f, 0xc1, 0xc0, 0x14, 0x4c, 0x17,
-	0x52, 0xcc, 0x33, 0xc5, 0x35, 0x1a, 0xb7, 0xe9, 0x93, 0xa0, 0x19, 0x3b, 0x07, 0xf5, 0xa3, 0x15,
-	0xe9, 0x6b, 0x78, 0xb6, 0x50, 0x1b, 0x65, 0x56, 0x27, 0xae, 0x65, 0xb9, 0x41, 0x2d, 0x9f, 0xc0,
-	0x0c, 0x85, 0x5a, 0xa8, 0x13, 0x78, 0x5e, 0x81, 0xb5, 0x7c, 0x00, 0x11, 0x06, 0xf5, 0x37, 0xa2,
-	0x9e, 0x2b, 0x61, 0xdc, 0xb6, 0xdf, 0x0c, 0x9c, 0xd1, 0xa4, 0xbc, 0x1f, 0x3a, 0xe3, 0xa3, 0x33,
-	0x1d, 0x9b, 0xbf, 0xf7, 0xc3, 0xdb, 0xa5, 0x2a, 0x56, 0xbb, 0x24, 0xe4, 0x98, 0x45, 0xc7, 0x2e,
-	0x45, 0x12, 0x3d, 0x6d, 0xdd, 0x6c, 0xd3, 0x84, 0x19, 0x19, 0x4e, 0xc7, 0xb1, 0x73, 0x7a, 0xff,
-	0x54, 0x18, 0xfa, 0x06, 0xe8, 0x42, 0x33, 0xbe, 0x6f, 0x64, 0xce, 0x31, 0xcb, 0x53, 0x59, 0x48,
-	0xe1, 0x76, 0x7c, 0x12, 0x9c, 0xc5, 0x97, 0xb5, 0xf3, 0xa1, 0x36, 0xe8, 0x15, 0x9c, 0x4b, 0xad,
-	0x51, 0xbb, 0x5d, 0xdb, 0x58, 0x75, 0xd0, 0x77, 0xd0, 0x4e, 0xec, 0x48, 0x2e, 0xf8, 0x24, 0xe8,
-	0xbf, 0x1d, 0x86, 0xff, 0x4d, 0x1b, 0x3e, 0x5e, 0x70, 0xd2, 0x88, 0x0f, 0x01, 0xfa, 0x1e, 0x3a,
-	0xba, 0xda, 0xd2, 0xed, 0xdb, 0xac, 0xff, 0x28, 0xfb, 0x64, 0xe9, 0x49, 0x23, 0xae, 0x23, 0xa3,
-	0x1e, 0x74, 0x44, 0xa5, 0xce, 0x5a, 0xdd, 0xde, 0x05, 0x8c, 0x5e, 0xde, 0xfd, 0xf6, 0x1a, 0x77,
-	0xa5, 0x47, 0x7e, 0x94, 0x1e, 0xf9, 0x59, 0x7a, 0xe4, 0x57, 0xe9, 0x91, 0xef, 0x7f, 0xbc, 0xc6,
-	0xe7, 0xe6, 0xbe, 0x83, 0xb6, 0xfd, 0xa9, 0x6e, 0xff, 0x05, 0x00, 0x00, 0xff, 0xff, 0x73, 0xae,
-	0x45, 0x10, 0x99, 0x02, 0x00, 0x00,
+	// 486 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x53, 0x4d, 0x8f, 0xd2, 0x40,
+	0x18, 0x6e, 0x97, 0xe5, 0xeb, 0xc5, 0xe2, 0xee, 0x88, 0xda, 0x6c, 0xb4, 0x34, 0xab, 0x46, 0x2e,
+	0xb6, 0x89, 0x7b, 0x32, 0xf1, 0x22, 0x8b, 0x49, 0x21, 0x31, 0x31, 0x8d, 0x27, 0x2f, 0x64, 0x3a,
+	0x33, 0xc0, 0x48, 0x61, 0x60, 0x66, 0x48, 0xf4, 0x5f, 0x78, 0xf0, 0x47, 0xed, 0xd1, 0xa3, 0xa7,
+	0x8d, 0xe2, 0xbf, 0xf0, 0x64, 0x18, 0x28, 0xed, 0xb2, 0x7b, 0x63, 0x9e, 0xaf, 0x90, 0xf7, 0x79,
+	0x0a, 0x4f, 0x88, 0x20, 0x53, 0x29, 0x30, 0x99, 0x84, 0x8b, 0xe9, 0x38, 0x54, 0xcb, 0x34, 0xfc,
+	0x22, 0x12, 0x15, 0x2c, 0xa4, 0xd0, 0x02, 0x39, 0x7b, 0x36, 0x50, 0xcb, 0xf4, 0xac, 0x35, 0x16,
+	0x63, 0x61, 0x98, 0x70, 0xf3, 0x6b, 0x2b, 0x3a, 0x47, 0x70, 0xd2, 0xc5, 0x64, 0xba, 0x5a, 0x0c,
+	0x44, 0xd2, 0x63, 0x1a, 0xf3, 0x54, 0x9d, 0x3f, 0x80, 0xd3, 0x98, 0x29, 0x2d, 0x24, 0x2b, 0x80,
+	0x8f, 0xa0, 0xf5, 0x2e, 0xd5, 0x4c, 0x7e, 0xc2, 0x49, 0x5a, 0xc4, 0x1f, 0xc3, 0xc3, 0x4b, 0xc9,
+	0xb0, 0x66, 0xfd, 0x39, 0x65, 0x5f, 0x0b, 0xc4, 0x8f, 0x32, 0xc0, 0x40, 0x24, 0x1f, 0xf1, 0xb7,
+	0x54, 0x60, 0x8a, 0x7c, 0x68, 0x50, 0xa6, 0x88, 0xe4, 0x0b, 0xcd, 0xc5, 0xdc, 0xb5, 0x7d, 0xbb,
+	0x53, 0x8f, 0x8b, 0x10, 0x3a, 0x83, 0xda, 0x4a, 0x31, 0x39, 0xc7, 0x33, 0xe6, 0x1e, 0x19, 0x7a,
+	0xff, 0x46, 0x2f, 0xa0, 0xa9, 0x34, 0x96, 0x9a, 0xd1, 0xe1, 0x8c, 0x13, 0x29, 0x94, 0x5b, 0xf2,
+	0xed, 0x4e, 0x29, 0x76, 0x76, 0xe8, 0x07, 0x03, 0xa2, 0x97, 0x70, 0x7f, 0xc4, 0xe7, 0x5c, 0x4d,
+	0x72, 0xdd, 0xb1, 0xd1, 0x35, 0x33, 0x38, 0x17, 0xce, 0x04, 0xe5, 0x23, 0x9e, 0x0b, 0xcb, 0x5b,
+	0x61, 0x06, 0xef, 0x84, 0x02, 0x9a, 0xd9, 0x7f, 0x14, 0x72, 0xc8, 0xa9, 0x72, 0x2b, 0x7e, 0xa9,
+	0xe3, 0x74, 0xa3, 0xf5, 0x75, 0xdb, 0xe9, 0xed, 0x99, 0x7e, 0x4f, 0xfd, 0xbb, 0x6e, 0x5f, 0x8c,
+	0xb9, 0x9e, 0xac, 0x92, 0x80, 0x88, 0x59, 0xb8, 0x3f, 0x3e, 0x4d, 0xc2, 0xdb, 0x35, 0xa9, 0x65,
+	0x9a, 0x60, 0xc5, 0x82, 0x7e, 0x2f, 0x76, 0xf2, 0xfc, 0x3e, 0x55, 0xe8, 0x15, 0xa0, 0x91, 0xc4,
+	0x64, 0x73, 0x91, 0x21, 0x11, 0xb3, 0x45, 0xca, 0x34, 0xa3, 0x6e, 0xd5, 0xb7, 0x3b, 0x47, 0xf1,
+	0x69, 0xc6, 0x5c, 0x66, 0x04, 0x6a, 0x41, 0x99, 0x49, 0x29, 0xa4, 0x5b, 0x33, 0x17, 0xdb, 0x3e,
+	0xd0, 0x1b, 0xa8, 0x24, 0xa6, 0x55, 0x17, 0x7c, 0xbb, 0xd3, 0x78, 0xdd, 0x0e, 0x6e, 0x6c, 0x21,
+	0x38, 0xac, 0x3c, 0xb2, 0xe2, 0x9d, 0x01, 0xbd, 0x85, 0xaa, 0xdc, 0x96, 0xef, 0x36, 0x8c, 0xd7,
+	0x3f, 0xf0, 0xde, 0x9a, 0x46, 0x64, 0xc5, 0x99, 0x05, 0xbd, 0x07, 0xc0, 0xfb, 0x95, 0xb8, 0xf7,
+	0x4c, 0xc0, 0xb3, 0x83, 0x80, 0xbb, 0x66, 0x14, 0x59, 0x71, 0xc1, 0x88, 0x22, 0x68, 0x90, 0x7c,
+	0x54, 0xae, 0x63, 0x72, 0x9e, 0x1f, 0xe4, 0xdc, 0x39, 0xbb, 0xc8, 0x8a, 0x8b, 0xd6, 0x6e, 0x1d,
+	0xaa, 0x74, 0xcb, 0x0c, 0x8e, 0x6b, 0xf5, 0x13, 0xe8, 0x3e, 0xbd, 0xfa, 0xe3, 0x59, 0x57, 0x6b,
+	0xcf, 0xfe, 0xb9, 0xf6, 0xec, 0x5f, 0x6b, 0xcf, 0xfe, 0xbd, 0xf6, 0xec, 0xef, 0x7f, 0x3d, 0xeb,
+	0x73, 0x69, 0x53, 0x4a, 0xc5, 0x7c, 0x16, 0x17, 0xff, 0x03, 0x00, 0x00, 0xff, 0xff, 0xdd, 0xcc,
+	0xc5, 0xe9, 0x5b, 0x03, 0x00, 0x00,
 }

@@ -350,6 +350,10 @@ message DescriptorMutation {
   // non-overlapping contiguous areas of the KV space that still need to
   // be processed.
   repeated roachpb.Span resume_spans = 6 [(gogoproto.nullable) = false];
+
+  // The job id for a mutation, if present, is the id in the system.jobs table
+  // of the schema change job executing the mutation.
+  optional int64 job_id = 7 [(gogoproto.customname) = "JobID"];
 }
 
 // A TableDescriptor represents a table or view and is stored in a
