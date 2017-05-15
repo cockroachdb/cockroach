@@ -20,7 +20,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -49,14 +48,19 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {
-		evalCtx := &parser.EvalContext{}
 		sel := makeSelectNode(t)
-		expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+		expr := parseAndNormalizeExpr(t, &p.evalCtx, d.expr, sel)
 		group := &groupNode{planner: p}
 		(extractAggregatesVisitor{n: group}).extract(expr)
-		ordering := desiredAggregateOrdering(group.funcs, evalCtx)
+		ordering := group.desiredAggregateOrdering()
 		if !reflect.DeepEqual(d.ordering, ordering) {
 			t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
+		}
+		// Verify we never have a desired ordering if there is a GROUP BY.
+		group.groupByIdx = []int{0}
+		ordering = group.desiredAggregateOrdering()
+		if len(ordering) > 0 {
+			t.Fatalf("%s: expected no ordering when there is a GROUP BY, found %v", d.expr, ordering)
 		}
 	}
 }
