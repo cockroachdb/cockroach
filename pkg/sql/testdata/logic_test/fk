@@ -675,7 +675,46 @@ statement ok
 BEGIN TRANSACTION
 
 statement ok
-CREATE TABLE refers (a INT REFERENCES referee);
+CREATE TABLE refers (
+  a INT REFERENCES referee,
+  b INT,
+  INDEX b_idx (b)
+)
+
+# Add some schema changes within the same transaction to verify that a
+# table that isn't yet public can be modified.
+statement ok
+CREATE INDEX foo ON refers (a)
+
+statement ok
+ALTER INDEX refers@b_idx RENAME TO another_idx
+
+query TT
+SHOW CREATE TABLE refers
+----
+refers  CREATE TABLE refers (
+a INT NULL,
+b INT NULL,
+INDEX another_idx (b ASC),
+CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee (id),
+FAMILY "primary" (a, b, rowid)
+)
+
+statement ok
+DROP INDEX refers@another_idx
+
+statement ok
+COMMIT
+
+# CREATE AND DROP a table with a fk in the same transaction.
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+CREATE TABLE refers1 (a INT REFERENCES referee);
+
+statement ok
+DROP TABLE refers1
 
 statement ok
 COMMIT
