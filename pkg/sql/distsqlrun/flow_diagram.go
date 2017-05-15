@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/url"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	humanize "github.com/dustin/go-humanize"
@@ -199,10 +200,14 @@ func (post *PostProcessSpec) summary() []string {
 	}
 	if len(post.RenderExprs) > 0 {
 		var buf bytes.Buffer
-		buf.WriteString("Render:")
-		for _, expr := range post.RenderExprs {
-			buf.WriteByte(' ')
-			buf.WriteString(expr.Expr)
+		buf.WriteString("Render: ")
+		for i, expr := range post.RenderExprs {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			// Remove any spaces in the expression (makes things more compact
+			// and it's easier to visually separate expressions).
+			buf.WriteString(strings.Replace(expr.Expr, " ", "", -1))
 		}
 		res = append(res, buf.String())
 	}
