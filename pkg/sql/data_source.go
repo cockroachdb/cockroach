@@ -492,16 +492,18 @@ func (p *planner) getTableScanOrViewPlan(
 	hints *parser.IndexHints,
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
-	descFunc := p.session.leases.getTableLease
+	var desc *sqlbase.TableDescriptor
+	var err error
 	if p.avoidCachedDescriptors {
 		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
 		// specified time, and never lease anything. The proto transaction already
 		// has its timestamps set correctly so getTableOrViewDesc will fetch with
 		// the correct timestamp.
-		descFunc = mustGetTableOrViewDesc
+		desc, err = mustGetTableOrViewDesc(
+			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
+	} else {
+		desc, err = p.session.leases.getTableLease(ctx, p.txn, p.getVirtualTabler(), tn)
 	}
-
-	desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return planDataSource{}, err
 	}

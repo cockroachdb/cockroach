@@ -158,9 +158,10 @@ func getViewDesc(
 }
 
 // mustGetTableOrViewDesc returns a table descriptor for either a table or
-// view, or an error if the descriptor is not found.
+// view, or an error if the descriptor is not found. allowAdding when set allows
+// a table descriptor in the ADD state to also be returned.
 func mustGetTableOrViewDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName, allowAdding bool,
 ) (*sqlbase.TableDescriptor, error) {
 	desc, err := getTableOrViewDesc(ctx, txn, vt, tn)
 	if err != nil {
@@ -170,15 +171,18 @@ func mustGetTableOrViewDesc(
 		return nil, sqlbase.NewUndefinedTableError(tn.String())
 	}
 	if err := filterTableState(desc); err != nil {
-		return nil, err
+		if !allowAdding && err != errTableAdding {
+			return nil, err
+		}
 	}
 	return desc, nil
 }
 
 // mustGetTableDesc returns a table descriptor for a table, or an error if
-// the descriptor is not found.
+// the descriptor is not found. allowAdding when set allows a table descriptor
+// in the ADD state to also be returned.
 func mustGetTableDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName, allowAdding bool,
 ) (*sqlbase.TableDescriptor, error) {
 	desc, err := getTableDesc(ctx, txn, vt, tn)
 	if err != nil {
@@ -188,13 +192,15 @@ func mustGetTableDesc(
 		return nil, sqlbase.NewUndefinedTableError(tn.String())
 	}
 	if err := filterTableState(desc); err != nil {
-		return nil, err
+		if !allowAdding && err != errTableAdding {
+			return nil, err
+		}
 	}
 	return desc, nil
 }
 
 // mustGetViewDesc returns a table descriptor for a view, or an error if the
-// descriptor is not found.
+// descriptor is not found or descriptor.Dropped().
 func mustGetViewDesc(
 	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
@@ -246,11 +252,8 @@ func (lc *LeaseCollection) getTableLease(
 		//   so they cannot be leased. Instead, we simply return the static
 		//   descriptor and rely on the immutability privileges set on the
 		//   descriptors to cause upper layers to reject mutations statements.
-		tbl, err := mustGetTableDesc(ctx, txn, vt, tn)
+		tbl, err := mustGetTableDesc(ctx, txn, vt, tn, false /*allowAdding*/)
 		if err != nil {
-			return nil, err
-		}
-		if err := filterTableState(tbl); err != nil {
 			return nil, err
 		}
 		return tbl, nil
@@ -447,6 +450,12 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	if isVirtualDescriptor(tableDesc) {
 		panic(fmt.Sprintf("Virtual Descriptors cannot be stored, found: %v", tableDesc))
 	}
+	// Some statements setTestingVerifyMetadata to verify the descriptor they
+	// have written, but if they are followed by other statements that modify
+	// the descriptor the verification of the overwritten descriptor cannot be
+	// done.
+	p.session.setTestingVerifyMetadata(nil)
+
 	return p.txn.Put(
 		ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
 	)
@@ -572,7 +581,9 @@ func (p *planner) findTableContainingIndex(
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
-		tableDesc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+		tableDesc, err := mustGetTableDesc(
+			ctx, p.txn, p.getVirtualTabler(), tn, true, /*allowAdding*/
+		)
 		if err != nil {
 			return nil, err
 		}

@@ -268,7 +268,8 @@ func getDescriptorsFromTargetList(
 			return nil, err
 		}
 		for i := range tables {
-			descriptor, err := mustGetTableOrViewDesc(ctx, txn, vt, &tables[i])
+			descriptor, err := mustGetTableOrViewDesc(
+				ctx, txn, vt, &tables[i], true /*allowAdding*/)
 			if err != nil {
 				return nil, err
 			}
