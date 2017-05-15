@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -132,6 +133,14 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 		b.putInt32(int32(len(result)))
 		b.write(result)
+
+	case *parser.DUuid:
+		uv, err := uuid.FromBytes([]byte(*v))
+		if err != nil {
+			b.setError(err)
+			break
+		}
+		b.writeLengthPrefixedString(uv.String())
 
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
@@ -299,6 +308,10 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 		}
 
 	case *parser.DBytes:
+		b.putInt32(int32(len(*v)))
+		b.write([]byte(*v))
+
+	case *parser.DUuid:
 		b.putInt32(int32(len(*v)))
 		b.write([]byte(*v))
 

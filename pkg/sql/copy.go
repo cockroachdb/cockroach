@@ -238,6 +238,12 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 				break
 			}
 			d, err = parser.ParseDTimestampTZ(s, n.p.session.Location, time.Microsecond)
+		case parser.TypeUUID:
+			s, err = decodeCopy(s)
+			if err != nil {
+				break
+			}
+			d = parser.NewDUuid(parser.DUuid(s))
 		default:
 			return fmt.Errorf("unknown type %s", t)
 		}

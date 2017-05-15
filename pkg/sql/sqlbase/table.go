@@ -127,6 +127,7 @@ func MakeColumnDefDescs(
 	case *parser.TimestampColType:
 	case *parser.TimestampTZColType:
 	case *parser.IntervalColType:
+	case *parser.UUIDColType:
 	case *parser.StringColType:
 		col.Type.Width = int32(t.N)
 	case *parser.NameColType:
@@ -528,6 +529,11 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeDurationAscending(b, t.Duration)
 		}
 		return encoding.EncodeDurationDescending(b, t.Duration)
+	case *parser.DUuid:
+		if dir == encoding.Ascending {
+			return encoding.EncodeStringAscending(b, string(*t)), nil
+		}
+		return encoding.EncodeStringDescending(b, string(*t)), nil
 	case *parser.DTuple:
 		for _, datum := range t.D {
 			var err error
@@ -590,6 +596,8 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
 	case *parser.DInterval:
 		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
+	case *parser.DUuid:
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *parser.DCollatedString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
 	case *parser.DOid:
@@ -890,6 +898,7 @@ type DatumAlloc struct {
 	dtimestampAlloc   []parser.DTimestamp
 	dtimestampTzAlloc []parser.DTimestampTZ
 	dintervalAlloc    []parser.DInterval
+	duuidAlloc        []parser.DUuid
 	doidAlloc         []parser.DOid
 	env               parser.CollationEnvironment
 }
@@ -1000,6 +1009,18 @@ func (a *DatumAlloc) NewDInterval(v parser.DInterval) *parser.DInterval {
 	buf := &a.dintervalAlloc
 	if len(*buf) == 0 {
 		*buf = make([]parser.DInterval, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDUuid allocates a DUuid.
+func (a *DatumAlloc) NewDUuid(v parser.DUuid) *parser.DUuid {
+	buf := &a.duuidAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DUuid, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1124,6 +1145,14 @@ func DecodeTableKey(
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
 		return a.NewDInterval(parser.DInterval{Duration: d}), rkey, err
+	case parser.TypeUUID:
+		var r []byte
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
+		} else {
+			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
+		}
+		return a.NewDUuid(parser.DUuid(r)), rkey, err
 	case parser.TypeOid:
 		var i int64
 		if dir == encoding.Ascending {
@@ -1202,6 +1231,10 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 		var d duration.Duration
 		b, d, err = encoding.DecodeDurationValue(b)
 		return a.NewDInterval(parser.DInterval{Duration: d}), b, err
+	case parser.TypeUUID:
+		var data []byte
+		b, data, err = encoding.DecodeBytesValue(b)
+		return a.NewDUuid(parser.DUuid(data)), b, err
 	case parser.TypeOid:
 		var i int64
 		b, i, err = encoding.DecodeIntValue(b)
@@ -1423,6 +1456,11 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			err := r.SetDuration(v.Duration)
 			return r, err
 		}
+	case ColumnType_UUID:
+		if v, ok := val.(*parser.DUuid); ok {
+			r.SetString(string(*v))
+			return r, nil
+		}
 	case ColumnType_COLLATEDSTRING:
 		if col.Type.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
@@ -1525,6 +1563,12 @@ func UnmarshalColumnValue(
 			return nil, err
 		}
 		return parser.NewDCollatedString(string(v), *typ.Locale, &a.env), nil
+	case ColumnType_UUID:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDUuid(parser.DUuid(v)), nil
 	case ColumnType_NAME:
 		v, err := value.GetBytes()
 		if err != nil {

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // This file contains utility functions for tests (in other packages).
@@ -95,6 +96,8 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 			Days:   sign * rng.Int63n(1000),
 			Nanos:  sign * rng.Int63n(25*3600*int64(1000000000)),
 		}}
+	case ColumnType_UUID:
+		return parser.NewDUuid(parser.DUuid(uuid.MakeV4().GetBytes()))
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))

@@ -1,0 +1,61 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE u (token uuid primary key)
+
+statement ok
+INSERT INTO u VALUES ('63616665-6630-3064-6465-616462656562'),
+                     ('{63616665-6630-3064-6465-616462656563}'),
+                     ('urn:uuid:63616665-6630-3064-6465-616462656564'),
+                     ('63616665-6630-3064-6465-616462656565'::uuid),
+                     (b'cafef00ddeadbeef')
+
+statement error duplicate key value
+INSERT INTO u VALUES ('63616665-6630-3064-6465-616462656566')
+
+statement error UUID must be exactly 16 bytes long, got 15 bytes
+INSERT INTO u VALUES (b'cafef00ddeadbee')
+
+statement error UUID must be exactly 16 bytes long, got 17 bytes
+INSERT INTO u VALUES (b'cafef00ddeadbeefs')
+
+statement error uuid: UUID string too short
+INSERT INTO u VALUES ('63616665-6630-3064-6465-61646265656')
+
+statement error uuid: UUID string too long
+INSERT INTO u VALUES ('63616665-6630-3064-6465-6164626565620')
+
+query T
+SELECT token FROM u WHERE token='urn:uuid:63616665-6630-3064-6465-616462656563'
+----
+63616665-6630-3064-6465-616462656563
+
+query T
+SELECT token FROM u WHERE token=b'cafef00ddeadbeef'
+----
+63616665-6630-3064-6465-616462656566
+
+query T
+SELECT token::string FROM u WHERE token=b'cafef00ddeadbeef'
+----
+63616665-6630-3064-6465-616462656566
+
+query T
+SELECT token::bytes FROM u WHERE token=b'cafef00ddeadbeef'
+----
+cafef00ddeadbeef
+
+query T
+SELECT token FROM u ORDER BY token
+----
+63616665-6630-3064-6465-616462656562
+63616665-6630-3064-6465-616462656563
+63616665-6630-3064-6465-616462656564
+63616665-6630-3064-6465-616462656565
+63616665-6630-3064-6465-616462656566
+
+statement ok
+INSERT INTO u VALUES (uuid_v4()::uuid)
+
+statement error value type bytes doesn't match type UUID
+INSERT INTO u VALUES (uuid_v4())

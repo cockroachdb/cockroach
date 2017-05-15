@@ -509,6 +509,9 @@ func (expr *DInt) Walk(_ Visitor) Expr { return expr }
 func (expr *DInterval) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DUuid) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr dNull) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
