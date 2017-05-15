@@ -48,7 +48,7 @@ test-debug: $(YARN_INSTALLED_TARGET) | protos
 $(GOBINDATA_TARGET): $(YARN_INSTALLED_TARGET) $(shell git ls-files | grep -vF $(GOBINDATA_TARGET)) | protos
 	rm -rf dist
 	webpack -p
-	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist
+	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist/...
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' >> $@
 	gofmt -s -w $@
