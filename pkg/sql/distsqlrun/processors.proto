@@ -62,6 +62,13 @@ message ProcessorSpec {
 
   // In most cases, there is one output.
   repeated OutputRouterSpec output = 3 [(gogoproto.nullable) = false];
+
+  // An optional identifier that can be used to correlate processors that are
+  // part of the same stage (e.g. multiple joiners that are part of a
+  // distributed join). This has no consequence on the running of flows, but is
+  // useful for plan diagrams.
+  optional int32 stage_id = 5 [(gogoproto.nullable) = false,
+                               (gogoproto.customname) = "StageID"];
 }
 
 // PostProcessSpec describes the processing required to obtain the output
