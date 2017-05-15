@@ -87,6 +87,7 @@ type metricMarshaler interface {
 type statusServer struct {
 	log.AmbientContext
 
+	admin        *adminServer
 	db           *client.DB
 	gossip       *gossip.Gossip
 	metricSource metricMarshaler
@@ -99,6 +100,7 @@ type statusServer struct {
 // newStatusServer allocates and returns a statusServer.
 func newStatusServer(
 	ambient log.AmbientContext,
+	adminServer *adminServer,
 	db *client.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
@@ -110,6 +112,7 @@ func newStatusServer(
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
 		AmbientContext: ambient,
+		admin:          adminServer,
 		db:             db,
 		gossip:         gossip,
 		metricSource:   metricSource,
