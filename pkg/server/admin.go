@@ -735,6 +735,75 @@ func (s *adminServer) Events(
 	return &resp, nil
 }
 
+// RangeLog is an endpoint that returns the latest range log entries.
+func (s *adminServer) RangeLog(
+	ctx context.Context, req *serverpb.RangeLogRequest,
+) (*serverpb.RangeLogResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
+	// Execute the query.
+	q := makeSQLQuery()
+	q.Append("SELECT timestamp, rangeID, storeID, eventType, otherRangeID, info ")
+	q.Append("FROM system.rangelog ")
+	q.Append("WHERE rangeID = $ ", parser.NewDInt(parser.DInt(req.RangeId)))
+	q.Append("ORDER BY timestamp DESC ")
+	q.Append("LIMIT $", parser.NewDInt(parser.DInt(apiEventLimit)))
+	if len(q.Errors()) > 0 {
+		return nil, s.serverErrors(q.Errors())
+	}
+	r := s.server.sqlExecutor.ExecuteStatements(session, q.String(), q.QueryArguments())
+	defer r.Close(ctx)
+	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		return nil, s.serverError(err)
+	}
+
+	// Marshal response.
+	var resp serverpb.RangeLogResponse
+	scanner := makeResultScanner(r.ResultList[0].Columns)
+	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
+		row := r.ResultList[0].Rows.At(i)
+		if row.Len() != 6 {
+			return nil, errors.Errorf("incorrect number of columns in response, expected 6, got %d", row.Len())
+		}
+		var event serverpb.RangeLogResponse_Event
+		var ts time.Time
+		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("Timestamp didn't parse correctly: %s", row[0].String()))
+		}
+		event.Timestamp = ts
+		var rangeID int64
+		if err := scanner.ScanIndex(row, 1, &rangeID); err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("RangeID didn't parse correctly: %s", row[1].String()))
+		}
+		event.RangeID = roachpb.RangeID(rangeID)
+		var storeID int64
+		if err := scanner.ScanIndex(row, 2, &storeID); err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("StoreID didn't parse correctly: %s", row[2].String()))
+		}
+		event.StoreID = roachpb.StoreID(int32(storeID))
+		if err := scanner.ScanIndex(row, 3, &event.EventType); err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("EventType didn't parse correctly: %s", row[3].String()))
+		}
+		var otherRangeID int64
+		if row[4].String() != "NULL" {
+			if err := scanner.ScanIndex(row, 4, &otherRangeID); err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("OtherRangeID didn't parse correctly: %s", row[4].String()))
+			}
+			event.OtherRangeID = roachpb.RangeID(otherRangeID)
+		}
+		if row[5].String() != "NULL" {
+			if err := scanner.ScanIndex(row, 5, &event.Info); err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("info didn't parse correctly: %s", row[5].String()))
+			}
+		}
+
+		resp.Events = append(resp.Events, event)
+	}
+	return &resp, nil
+}
+
 // getUIData returns the values and timestamps for the given UI keys. Keys
 // that are not found will not be returned.
 func (s *adminServer) getUIData(
