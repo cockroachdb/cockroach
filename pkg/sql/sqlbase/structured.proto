@@ -532,6 +532,21 @@ message TableDescriptor {
   // they're still being referred to.
   repeated Reference dependedOnBy = 26 [(gogoproto.nullable) = false,
            (gogoproto.customname) = "DependedOnBy"];
+
+  message MutationJob {
+    // The mutation id of this mutation job.
+    optional uint32 mutation_id = 1 [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
+
+    // The job id for a mutation job is the id in the system.jobs table of the
+    // schema change job executing the mutation referenced by mutation_id.
+    optional int64 job_id = 2 [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "JobID"];
+  }
+
+  // Mutation jobs queued for execution in a FIFO order. Remains synchronized
+  // with the mutations list.
+  repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

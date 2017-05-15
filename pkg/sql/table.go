@@ -434,8 +434,37 @@ func (p *planner) getAliasedTableName(n parser.TableExpr) (*parser.TableName, er
 	return table.NormalizeWithDatabaseName(p.session.Database)
 }
 
+// createSchemaChangeJob finalizes the current mutations in the table
+// descriptor and creates a schema change job in the system.jobs table.
+// The identifiers of the mutations and newly-created job are written to a new
+// MutationJob in the table descriptor.
+func (p *planner) createSchemaChangeJob(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, stmt string,
+) (sqlbase.MutationID, error) {
+	mutationID, err := tableDesc.FinalizeMutation()
+	if err != nil {
+		return sqlbase.InvalidMutationID, err
+	}
+	jobRecord := JobRecord{
+		Description:   stmt,
+		Username:      p.User(),
+		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
+		Details:       SchemaChangeJobDetails{},
+	}
+	jobLogger := NewJobLogger(p.ExecCfg().DB, p.session.leases.leaseMgr, jobRecord)
+	// TODO(jordan): thread the client transaction into jobLogger.Created.
+	if err := jobLogger.Created(ctx); err != nil {
+		return sqlbase.InvalidMutationID, nil
+	}
+	tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+		MutationID: mutationID, JobID: *jobLogger.JobID()})
+	return mutationID, nil
+}
+
 // notifySchemaChange implements the SchemaAccessor interface.
-func (p *planner) notifySchemaChange(tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID) {
+func (p *planner) notifySchemaChange(
+	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
+) {
 	sc := SchemaChanger{
 		tableID:    tableDesc.GetID(),
 		mutationID: mutationID,

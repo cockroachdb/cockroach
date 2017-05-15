@@ -368,11 +368,11 @@ func (p *planner) dropIndexByName(
 			return nil
 		}
 	}
-	mutationID, err := tableDesc.FinalizeMutation()
-	if err != nil {
+	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}
-	if err := tableDesc.Validate(ctx, p.txn); err != nil {
+	mutationID, err := p.createSchemaChangeJob(ctx, tableDesc, stmt)
+	if err != nil {
 		return err
 	}
 	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
