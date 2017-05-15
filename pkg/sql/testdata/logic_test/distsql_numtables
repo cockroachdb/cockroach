@@ -58,7 +58,7 @@ SET DISTSQL = ON
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkEFLxDAQhe_-ijLXzWFT9JJTr72sUvcmOcRmWAptpsxMQVn636WJoC5UFAJh3sv75pErJIp4ChMKuBew4A3MTD2KEG9SedDGN3BHA0OaF91kb6AnRnBX0EFHBAfn8DpihyEig4GIGoYxQ2cepsDvTVomJdHN7TBFZFc9OOfa07mqP-9D1dh8avCrAVr0a59ouCA4u5q_d3om1ts6zf1hF17_B96hzJQEf-D3yMfVG8B4wfKpQgv3-MTU5zVlfMy5LEQULa4tQ5uKtRX8Hra_huubsF_vPgIAAP__mkCi9Q==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkDFrwzAQhff-CnNrNESmXTR59ZIWN1vRoFpHMNg6c3eGluD_XiwNbQMuzSDQvaf33UNXSBTxFCYUcG9gwRuYmXoUId6k8qCNH-COBoY0L7rJ3kBPjOCuoIOOCA7O4X3EDkNEBgMRNQxjhs48TIE_m7RMSqKb22GKyK56cs61p7Op6nI5NNZU-dTgVwO06PdC0XBBcHY1_y_1Sqy3fZrHwy68vgfeocyUBH_h98jH1RvAeMHyq0IL9_jC1Oc1ZXzOuSxEFC2uLUObirUV_Bm2f4brm7BfH74CAAD__ydlozk=
 
 query IIIT
 SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str
@@ -79,7 +79,7 @@ SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlEFr-kAQxe__TxEe_KHFLWSTaO1CIaeCF1ust5JDmh0kELNhdwMt4ncvSQSr6EZILwHB7M68-T1mltmhVJKW6ZYMxAc4GAIwhGCIwDBFwlBplZExSjcpnWAhvyB8hrysattcJwyZ0gSxg81tQRBYp58FrSiVpMEgyaZ50UIqnW9T_R2X9dYqY5voS15Y0sK7i7n33-O-7wshFsv1vffsHT7BsKJSNlnT7sYLDv8TL-btL0CyZ1C1PboyNt0QBN-z252_K23PTcfR5Grx4GrxY02lJWmSl4pecLBUD6o6yb3GDk_YfLQj6XE-bCTBaNvS43xYW8LRtqXH-bC2RKNtS4_zv9trF4qvyFSqNHTT1vKbpUdyQ92SNKrWGb1plbWY7vja6toLScZ2Ud4dFmUXagz-FnOnODgR83Nx4Cb3oEOnOnKLoyG-p07xzE2eDSE_OsVzN3k-hPzknpXf80zcj-ycnez__QQAAP__dRbobw==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlMFqwzAMhu97iiAYbNSD2Em7zjDIadBLN7reRg5ZLEogjYLtwEbpu4_Eg66ldQrZJYdAbOnX9yMZ7aAihctsiwbkB3BgIIBBBAxiYDCFlEGtKUdjSLcpTrBQXyBDBkVVN7a9ThnkpBHkDmxhSwQJ6-yzxBVmCjUwUGizouwgtS62mf5OqmZrydg2-lKUFrUM7hIe3AY8DEMp5WK5vg-eg99fYLDCSrVZU3fDAuF-JglnQfcJSPcMqLEHW8ZmGwTJ9-x66--k7anrJJ5cLC4uFj_UJK1QozpX9IyDJT1QfZR7iR0dsfl4Z9JjfdhMxHj70mN9WF-i8falx_qwvsTj7UuP9f_bbWeKr9DUVBm8anOF7eJDtUG3KA01Osc3TXmHccfXTtddKDTWRbk7LCoXag3-FXOvWByJ-alY-Mk96Mirjv3ieIjvqVc885NnQ8iPXvHcT54PIT_5ZxX2PBP_Iztlp_ubnwAAAP__UGjpww==
 
 query IIIT
 SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str
