@@ -278,6 +278,19 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) 
 	return columnIDs, dirs
 }
 
+// ColNamesString returns a string describing the column names and directions
+// in this index.
+func (desc *IndexDescriptor) ColNamesString() string {
+	var buf bytes.Buffer
+	for i, name := range desc.ColumnNames {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "%s %s", parser.Name(name), desc.ColumnDirections[i])
+	}
+	return buf.String()
+}
+
 // SetID implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id
