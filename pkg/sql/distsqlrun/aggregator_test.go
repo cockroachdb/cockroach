@@ -47,6 +47,13 @@ func TestAggregator(t *testing.T) {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 	}
 
+	columnTypeBool := sqlbase.ColumnType{Kind: sqlbase.ColumnType_BOOL}
+	boolTrue := sqlbase.DatumToEncDatum(columnTypeBool, parser.DBoolTrue)
+	boolFalse := sqlbase.DatumToEncDatum(columnTypeBool, parser.DBoolFalse)
+	boolNULL := sqlbase.DatumToEncDatum(columnTypeBool, parser.DNull)
+
+	colPtr := func(idx uint32) *uint32 { return &idx }
+
 	testCases := []struct {
 		spec     AggregatorSpec
 		input    sqlbase.EncDatumRows
@@ -269,6 +276,32 @@ func TestAggregator(t *testing.T) {
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[5], v[2], v[5], v[2]},
+			},
+		}, {
+			// SELECT MAX(@1) FILTER @2, COUNT(@3) FILTER @4
+			spec: AggregatorSpec{
+				Aggregations: []AggregatorSpec_Aggregation{
+					{
+						Func:         AggregatorSpec_MAX,
+						ColIdx:       0,
+						FilterColIdx: colPtr(1),
+					},
+					{
+						Func:         AggregatorSpec_COUNT,
+						ColIdx:       2,
+						FilterColIdx: colPtr(3),
+					},
+				},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[1], boolTrue, v[1], boolTrue},
+				{v[5], boolFalse, v[1], boolFalse},
+				{v[2], boolTrue, v[1], boolNULL},
+				{v[3], boolNULL, v[1], boolTrue},
+				{v[2], boolTrue, v[1], boolTrue},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
 			},
 		},
 	}

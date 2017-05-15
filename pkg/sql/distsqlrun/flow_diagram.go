@@ -87,7 +87,12 @@ func (a *AggregatorSpec) summary() (string, []string) {
 		if agg.Distinct {
 			distinct = "DISTINCT "
 		}
-		str := fmt.Sprintf("%s(%s@%d)", agg.Func, distinct, agg.ColIdx+1)
+		filter := ""
+		if agg.FilterColIdx != nil {
+			filter = fmt.Sprintf(" FILTER @%d", *agg.FilterColIdx+1)
+		}
+
+		str := fmt.Sprintf("%s(%s@%d)%s", agg.Func, distinct, agg.ColIdx+1, filter)
 		details = append(details, str)
 	}
 

@@ -77,9 +77,10 @@ type aggregator struct {
 
 	bucketsAcc mon.BoundAccount
 
-	groupCols columns
-	inputCols columns
-	buckets   map[string]struct{} // The set of bucket keys.
+	groupCols    columns
+	aggregations []AggregatorSpec_Aggregation
+
+	buckets map[string]struct{} // The set of bucket keys.
 
 	out procOutputHelper
 }
@@ -94,20 +95,15 @@ func newAggregator(
 	output RowReceiver,
 ) (*aggregator, error) {
 	ag := &aggregator{
-		flowCtx:     flowCtx,
-		input:       input,
-		buckets:     make(map[string]struct{}),
-		inputCols:   make(columns, len(spec.Aggregations)),
-		funcs:       make([]*aggregateFuncHolder, len(spec.Aggregations)),
-		outputTypes: make([]sqlbase.ColumnType, len(spec.Aggregations)),
-		groupCols:   make(columns, len(spec.GroupCols)),
-		bucketsAcc:  flowCtx.evalCtx.Mon.MakeBoundAccount(),
+		flowCtx:      flowCtx,
+		input:        input,
+		groupCols:    spec.GroupCols,
+		aggregations: spec.Aggregations,
+		buckets:      make(map[string]struct{}),
+		funcs:        make([]*aggregateFuncHolder, len(spec.Aggregations)),
+		outputTypes:  make([]sqlbase.ColumnType, len(spec.Aggregations)),
+		bucketsAcc:   flowCtx.evalCtx.Mon.MakeBoundAccount(),
 	}
-
-	for i, aggInfo := range spec.Aggregations {
-		ag.inputCols[i] = aggInfo.ColIdx
-	}
-	copy(ag.groupCols, spec.GroupCols)
 
 	// Loop over the select expressions and extract any aggregate functions --
 	// non-aggregation functions are replaced with parser.NewIdentAggregate,
@@ -116,6 +112,21 @@ func newAggregator(
 	// the functions which need to be fed values.
 	inputTypes := input.Types()
 	for i, aggInfo := range spec.Aggregations {
+		if aggInfo.ColIdx >= uint32(len(inputTypes)) {
+			return nil, errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)
+		}
+		if aggInfo.FilterColIdx != nil {
+			col := *aggInfo.FilterColIdx
+			if col >= uint32(len(inputTypes)) {
+				return nil, errors.Errorf("FilterColIdx out of range (%d)", col)
+			}
+			t := inputTypes[col].Kind
+			if t != sqlbase.ColumnType_BOOL && t != sqlbase.ColumnType_NULL {
+				return nil, errors.Errorf(
+					"filter column %d must be of boolean type, not %s", *aggInfo.FilterColIdx, t,
+				)
+			}
+		}
 		aggConstructor, retType, err := GetAggregateInfo(aggInfo.Func, inputTypes[aggInfo.ColIdx])
 		if err != nil {
 			return nil, err
@@ -253,11 +264,20 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 
 		ag.buckets[string(encoded)] = struct{}{}
 		// Feed the func holders for this bucket the non-grouping datums.
-		for i, colIdx := range ag.inputCols {
-			if err := row[colIdx].EnsureDecoded(&ag.datumAlloc); err != nil {
+		for i, a := range ag.aggregations {
+			if a.FilterColIdx != nil {
+				if err := row[*a.FilterColIdx].EnsureDecoded(&ag.datumAlloc); err != nil {
+					return err
+				}
+				if row[*a.FilterColIdx].Datum != parser.DBoolTrue {
+					// This row doesn't contribute to this aggregation.
+					continue
+				}
+			}
+			if err := row[a.ColIdx].EnsureDecoded(&ag.datumAlloc); err != nil {
 				return err
 			}
-			if err := ag.funcs[i].add(ctx, encoded, row[colIdx].Datum); err != nil {
+			if err := ag.funcs[i].add(ctx, encoded, row[a.ColIdx].Datum); err != nil {
 				return err
 			}
 		}

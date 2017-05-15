@@ -455,6 +455,45 @@ SELECT AVG(a+b), c FROM data GROUP BY c, d HAVING c = d
 11  9
 11  10
 
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT SUM(a+b), SUM(a+b) FILTER (WHERE a < d), SUM(a+b) FILTER (WHERE a = c) FROM data GROUP BY d]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUltGLm04Qx99_f4XM04XfFrJq0juhYKFXCLRpSdOn1oc9d_ACOVfWFXoc-d-L2uLFtDM5tg_mKXH1s_MdP8vgE5RG41o9YA3JN5AgIAQBEQiIQcACMgGVNTnWtbHtIz2w0j8gmQvYlVXj2uVMQG4sQvIEbuf2CAls1d0eN6g0WhCg0andvitS2d2Dso-pVk6BgA2WGm0SpHGQyuD_IA3b3-_NfB7lvxbfBGkE2UGAadxQsHaqQEjkQZwf6m1RWCyUM6NMadv5l68fr9JwNvwL3q8-bG83bfXTtfb9rN7drrdXqZyN0g0F7x6De1Xfj6rFkB2GDsK_djDs05TGarSoj3bqdjm7x_h3F3J22m007mHIF_3bfGvzylSjx_5cOD4qLKd43phQF3De5MTPWzhF7UyoC9AeTlx7NEXtTKgL0B5NXHs8Re1MqAvQHk9cO_PZtsG6MmWNZ301zNv8qAvsm61NY3P8bE3elekvP3Vct6Cxdv1d2V-syv5WG_A5LMewfA6HR7B8Gbz0gW98YOmVWy5oOiTfd0TDES1rSduKSXpBwwsf1TTMqKZhRjUNc6oZmlG99FH9moSvaVnXPrJomJFFw4wsGuZkMTQj68ZHlmSmKDdG_eao3yD1m6Seo9RvlkqvYSqZaRoz0k7G6Yuk0TQnjaY5aTTNSmNwTtrJUCWlZYf_fgYAAP__ebc-6w==
+
+query RRR rowsort
+SELECT SUM(a+b), SUM(a+b) FILTER (WHERE a < d), SUM(a+b) FILTER (WHERE a = c) FROM data GROUP BY d
+----
+11000  NULL  1100
+11000  650   1100
+11000  1400  1100
+11000  3200  1100
+11000  2250  1100
+11000  4250  1100
+11000  5400  1100
+11000  6650  1100
+11000  8000  1100
+11000  9450  1100
+
+# Same query but restricted to a single range; no local aggregation stage.
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT SUM(a+b), SUM(a+b) FILTER (WHERE a < d), SUM(a+b) FILTER (WHERE a = c) FROM data WHERE a = 1 GROUP BY d]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU9LxDAQxe9-ivJOihHadE8BIR4UFnSVup60h9gMpdBtSpKCsvS7Sxph_8hWPSXzZn4zj5ktOqNppTbkIF6RgYGjZOitqcg5Y4Mci5b6AyJlaLp-8EEuGSpjCWIL3_iWILAyV6YHgyavmnYqGhnM4HeI86omiHxke22z-bZr9d5SQUqTPWiO3jYbZT-lVl6BoaBOkxWJXCQySy4TycP7NqRpXn2L14nMccpU9h9TN3VtqVbeHHmSYYnPLw_nkl_sfsnd8n59W4TpP7XFSUf8wNEv2y_I9aZz9KcDpGPJQLqmeGFnBlvRkzXVNCaGjxM3CZqcj9k8BssupoLBfTibhfk8zGfh9Agux7OvAAAA___HF-An
+
+query RRR rowsort
+SELECT SUM(a+b), SUM(a+b) FILTER (WHERE a < d), SUM(a+b) FILTER (WHERE a = c) FROM data WHERE a = 1 GROUP BY d
+----
+650  NULL  65
+650  650   65
+650  650   65
+650  650   65
+650  650   65
+650  650   65
+650  650   65
+650  650   65
+650  650   65
+650  650   65
+
 # Verify the XOR execution plan
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT XOR_AGG(TO_HEX(a)::bytes) FROM data]
