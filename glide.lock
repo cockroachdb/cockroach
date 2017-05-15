@@ -432,7 +432,7 @@ imports:
   - errgroup
   - singleflight
 - name: golang.org/x/sys
-  version: f3918c30c5c2cb527c0b071a27c35120a6c0719a
+  version: 1e4778a9a153163315e71a39674fbe87fe8f30a5
   subpackages:
   - unix
   - windows
