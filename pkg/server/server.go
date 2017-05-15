@@ -155,12 +155,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.cfg.AmbientCtx.AddLogTag("n", &s.nodeIDContainer)
 
 	ctx := s.AnnotateCtx(context.Background())
-	if s.cfg.Insecure {
-		// Use a non-annotated context here since the annotation just looks funny,
-		// particularly to new users (made worse by it always printing as [n?]).
-		log.Shout(context.Background(), log.Severity_WARNING,
-			"running in insecure mode, this is strongly discouraged. See --insecure.")
-	}
 
 	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {
