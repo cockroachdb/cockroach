@@ -1935,3 +1935,18 @@ func (desc TableDescriptor) GetDescMetadataKey() roachpb.Key {
 func (desc TableDescriptor) GetNameMetadataKey() roachpb.Key {
 	return MakeNameMetadataKey(desc.ParentID, desc.Name)
 }
+
+// SQLString returns the SQL statement describing the column.
+func (desc *ColumnDescriptor) SQLString() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%s %s", parser.AsString(parser.Name(desc.Name)), desc.Type.SQLString())
+	if desc.Nullable {
+		buf.WriteString(" NULL")
+	} else {
+		buf.WriteString(" NOT NULL")
+	}
+	if desc.DefaultExpr != nil {
+		fmt.Fprintf(&buf, " DEFAULT %s", *desc.DefaultExpr)
+	}
+	return buf.String()
+}
