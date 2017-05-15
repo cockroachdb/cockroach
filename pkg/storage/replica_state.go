@@ -33,12 +33,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// replicaStateLoader contains the precomputed range-local replicated and
-// unreplicated prefixes. These prefixes are used to avoid an allocation on
-// every call to the commonly used range keys (e.g. RaftAppliedIndexKey).
+// replicaStateLoader contains accessor methods to read or write the
+// fields of storagebase.ReplicaState. It contains an internal buffer
+// which is reused to avoid an allocation on frequently-accessed code
+// paths.
 //
-// Note that this struct is not safe for concurrent use. It is usually
-// protected by Replica.raftMu or a goroutine local variable is used.
+// Because of this internal buffer, this struct is not safe for
+// concurrent use, and the return values of methods that return keys
+// are invalidated the next time any method is called.
+//
+// It is safe to have multiple replicaStateLoaders for the same
+// Replica. Reusable replicaStateLoaders are typically found in a
+// struct with a mutex, and temporary loaders may be created when
+// locking is less desirable than an allocation.
 type replicaStateLoader struct {
 	keys.RangeIDPrefixBuf
 }
@@ -605,13 +612,6 @@ func (rec ReplicaEvalContext) AbortCache() *AbortCache {
 	return rec.repl.abortCache
 }
 
-// stateLoader returns the Replica's replicaStateLoader.
-func (rec ReplicaEvalContext) stateLoader() replicaStateLoader {
-	// replicaStateLoader's methods take a Batch argument; SpanSet
-	// declarations are enforced there.
-	return rec.repl.stateLoader
-}
-
 // pushTxnQueue returns the Replica's pushTxnQueue.
 func (rec ReplicaEvalContext) pushTxnQueue() *pushTxnQueue {
 	return rec.repl.pushTxnQueue
@@ -619,7 +619,7 @@ func (rec ReplicaEvalContext) pushTxnQueue() *pushTxnQueue {
 
 // FirstIndex returns the oldest index in the raft log.
 func (rec ReplicaEvalContext) FirstIndex() (uint64, error) {
-	return rec.repl.FirstIndex()
+	return rec.repl.GetFirstIndex()
 }
 
 // Term returns the term of the given entry in the raft log.

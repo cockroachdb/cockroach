@@ -233,11 +233,13 @@ type Replica struct {
 	// Locking notes: Replica.raftMu < Replica.mu
 	//
 	// TODO(peter): evaluate runtime overhead of the timed mutex.
-	raftMu timedMutex
+	raftMu struct {
+		timedMutex
 
-	// stateLoader provides facilities for loading and saving on-disk replica
-	// state. Requires Replica.raftMu is held.
-	stateLoader replicaStateLoader
+		// Note that there are two replicaStateLoaders, in raftMu and mu,
+		// depending on which lock is being held.
+		stateLoader replicaStateLoader
+	}
 
 	// Contains the lease history when enabled.
 	leaseHistory *leaseHistory
@@ -384,6 +386,10 @@ type Replica struct {
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
+
+		// Note that there are two replicaStateLoaders, in raftMu and mu,
+		// depending on which lock is being held.
+		stateLoader replicaStateLoader
 	}
 
 	unreachablesMu struct {
@@ -516,11 +522,11 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        rangeID,
-		stateLoader:    makeReplicaStateLoader(rangeID),
 		store:          store,
 		abortCache:     NewAbortCache(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
 	}
+	r.mu.stateLoader = makeReplicaStateLoader(rangeID)
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
@@ -543,7 +549,8 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 			log.Warningf(ctx, "raftMu: "+msg, args...)
 		},
 	)
-	r.raftMu = makeTimedMutex(raftMuLogger)
+	r.raftMu.timedMutex = makeTimedMutex(raftMuLogger)
+	r.raftMu.stateLoader = makeReplicaStateLoader(rangeID)
 	return r
 }
 
@@ -598,17 +605,17 @@ func (r *Replica) initLocked(
 
 	var err error
 
-	if r.mu.state, err = r.stateLoader.load(ctx, r.store.Engine(), desc); err != nil {
+	if r.mu.state, err = r.mu.stateLoader.load(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
 	r.rangeStr.store(0, r.mu.state.Desc)
 
-	r.mu.lastIndex, err = r.stateLoader.loadLastIndex(ctx, r.store.Engine())
+	r.mu.lastIndex, err = r.mu.stateLoader.loadLastIndex(ctx, r.store.Engine())
 	if err != nil {
 		return err
 	}
 
-	pErr, err := r.stateLoader.loadReplicaDestroyedError(ctx, r.store.Engine())
+	pErr, err := r.mu.stateLoader.loadReplicaDestroyedError(ctx, r.store.Engine())
 	if err != nil {
 		return err
 	}
@@ -629,7 +636,7 @@ func (r *Replica) initLocked(
 	if err := r.setReplicaIDLocked(replicaID); err != nil {
 		return err
 	}
-	r.assertStateRLocked(ctx, r.store.Engine())
+	r.assertStateLocked(ctx, r.store.Engine())
 	return nil
 }
 
@@ -1334,18 +1341,18 @@ func (r *Replica) State() storagebase.RangeInfo {
 }
 
 func (r *Replica) assertState(ctx context.Context, reader engine.Reader) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	r.assertStateRLocked(ctx, reader)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.assertStateLocked(ctx, reader)
 }
 
-// assertStateRLocked can be called from the Raft goroutine to check that the
+// assertStateLocked can be called from the Raft goroutine to check that the
 // in-memory and on-disk states of the Replica are congruent. See also
 // assertState if the replica mutex is not currently held.
 //
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
-func (r *Replica) assertStateRLocked(ctx context.Context, reader engine.Reader) {
-	diskState, err := r.stateLoader.load(ctx, reader, r.mu.state.Desc)
+func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
+	diskState, err := r.mu.stateLoader.load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -2452,22 +2459,6 @@ func (r *Replica) propose(
 		return nil, nil, err
 	}
 
-	// submitProposalLocked calls withRaftGroupLocked which requires that
-	// raftMu is held. In order to maintain our lock ordering we need to lock
-	// Replica.raftMu here before locking Replica.mu.
-	//
-	// TODO(peter): It appears that we only need to hold Replica.raftMu when
-	// calling raft.NewRawNode. We could get fancier with the locking here to
-	// optimize for the common case where Replica.mu.internalRaftGroup is
-	// non-nil, but that doesn't currently seem worth it. Always locking raftMu
-	// has a tiny (~1%) performance hit for single-node block_writer testing.
-	//
-	// TODO(tschottdorf): holding raftMu during evaluation limits concurrency
-	// at the range level and is something we will eventually need to address.
-	// See #10084.
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-
 	rSpan, err := keys.Range(ba)
 	if err != nil {
 		return nil, nil, err
@@ -2512,6 +2503,17 @@ func (r *Replica) propose(
 			proposal.command.Size(), maxCommandSize.Get())
 	}
 
+	// submitProposalLocked calls withRaftGroupLocked which requires that
+	// raftMu is held. In order to maintain our lock ordering we need to lock
+	// Replica.raftMu here before locking Replica.mu.
+	//
+	// TODO(peter): It appears that we only need to hold Replica.raftMu when
+	// calling raft.NewRawNode. We could get fancier with the locking here to
+	// optimize for the common case where Replica.mu.internalRaftGroup is
+	// non-nil, but that doesn't currently seem worth it. Always locking raftMu
+	// has a tiny (~1%) performance hit for single-node block_writer testing.
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -2777,7 +2779,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 
-		if lastIndex, err = r.stateLoader.loadLastIndex(ctx, r.store.Engine()); err != nil {
+		if lastIndex, err = r.raftMu.stateLoader.loadLastIndex(ctx, r.store.Engine()); err != nil {
 			return stats, err
 		}
 		// We refresh pending commands after applying a snapshot because this
@@ -2809,7 +2811,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if err := r.stateLoader.setHardState(ctx, writer, rd.HardState); err != nil {
+		if err := r.raftMu.stateLoader.setHardState(ctx, writer, rd.HardState); err != nil {
 			return stats, err
 		}
 	}
@@ -3839,19 +3841,19 @@ func (r *Replica) applyRaftCommand(
 	// reading the previous applied index keys on every write operation. This
 	// requires a little additional work in order maintain the MVCC stats.
 	var appliedIndexNewMS enginepb.MVCCStats
-	if err := r.stateLoader.setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
+	if err := r.raftMu.stateLoader.setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
 		rResult.State.RaftAppliedIndex, rResult.State.LeaseAppliedIndex); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to set applied index")))
 	}
 	rResult.Delta.SysBytes += appliedIndexNewMS.SysBytes -
-		r.stateLoader.calcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
+		r.raftMu.stateLoader.calcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
 	ms.Add(rResult.Delta)
-	if err := r.stateLoader.setMVCCStats(ctx, writer, &ms); err != nil {
+	if err := r.raftMu.stateLoader.setMVCCStats(ctx, writer, &ms); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to update MVCCStats")))
 	}
@@ -4562,7 +4564,7 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 		// Try to persist the destroyed error message. If the underlying store is
 		// corrupted the error won't be processed and a panic will occur.
-		if err := r.stateLoader.setReplicaDestroyedError(ctx, r.store.Engine(), pErr); err != nil {
+		if err := r.mu.stateLoader.setReplicaDestroyedError(ctx, r.store.Engine(), pErr); err != nil {
 			cErr.Processed = false
 			return roachpb.NewError(cErr)
 		}
