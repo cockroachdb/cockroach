@@ -227,6 +227,7 @@ type diagramProcessor struct {
 	Inputs  []diagramCell `json:"inputs"`
 	Core    diagramCell   `json:"core"`
 	Outputs []diagramCell `json:"outputs"`
+	StageID int32         `json:"stage"`
 }
 
 type diagramEdge struct {
@@ -302,6 +303,7 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 			} else {
 				proc.Outputs = []diagramCell{}
 			}
+			proc.StageID = p.StageID
 			d.Processors = append(d.Processors, proc)
 			pIdx++
 		}

@@ -19,6 +19,7 @@ package distsqlrun
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -40,6 +41,8 @@ func compareDiagrams(t *testing.T, result string, expected string) {
 	if err := dec.Decode(&expData); err != nil {
 		t.Fatal(err)
 	}
+	fmt.Printf("res: %+v\n", resData)
+	fmt.Printf("exp: %+v\n", expData)
 	if !reflect.DeepEqual(resData, expData) {
 		t.Errorf("\ngot:\n%s\nwant:\n%s", result, expected)
 	}
@@ -72,6 +75,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 					{StreamID: 0},
 				},
 			}},
+			StageID: 1,
 		}},
 	}
 
@@ -88,6 +92,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 					{StreamID: 1},
 				},
 			}},
+			StageID: 1,
 		}},
 	}
 
@@ -105,6 +110,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 						{StreamID: 2},
 					},
 				}},
+				StageID: 1,
 			},
 			{
 				Input: []InputSyncSpec{{
@@ -125,7 +131,9 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 				Output: []OutputRouterSpec{{
 					Type:    OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
-				}}},
+				}},
+				StageID: 2,
+			},
 		},
 	}
 
@@ -138,10 +146,10 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		{
 		  "nodeNames":["1","2","3"],
 		  "processors":[
-		    {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[]},
-		    {"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[]},
-		    {"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[]},
-		    {"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader","details":["primary@Table","Filter: @1+@2\u003c@3","Out: @3"]},"outputs":[]},
+			  {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
+				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
+				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader","details":["primary@Table","Filter: @1+@2\u003c@3","Out: @3"]},"outputs":[],"stage":2},
 		    {"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
 		  ],
 		  "edges":[
@@ -155,7 +163,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 
 	compareDiagrams(t, json, expected)
 
-	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkk9L9DAQxu_vp3h5rptDm3jqKSehHlxZvWkOtRkk0CZlksLK0u8uTXHdyuKloMeZef78WnKCD5bum54iqmeUEJAQUDACA4eWYgw8nxZhbY-oCgHnhzHNayPQBiZUJySXOkKFp-a1owM1lhgCllLjuhz-GHqqvaWjzhII7MdU_del0BJmEghj-oydxEVh-duF8i8Lv3oCW2Ky6w4tdzDTFaq74Pw1qIFd3_D7GenWdYl4ptpp-TIWhWq1OqOqLT_mQHEIPtIK4HueESD7RsunxjBySw8c2vyulnGf1XlhKablqpah9vlUzliX5nKLWW4xqx_NNytzMZnp30cAAAD__-sRIow="
+	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html?eJzMkj9rwzAQxfd-ivLWaLClTpo0FdKhKWm31oNqHUHgSOYkQ0rwdy-WIX8gKZQM7ai7e-_97tAeITp6tltK0O-oISAhoNAI9BxbSiny1JoHl24HXQn40A95KjcCbWSC3iP73BE03uxnR2uyjhgCjrL1XTF_jVtaBkc7U0YgsBqyvje1MBLNKBCHfLRN2W4Iuh7FSXT9d9Hyf0QfEyM7YnLnaUYu0IwX-J6iD5fwevZby18HuEffZeKJb2Hkx1BVqjXqAK2uEsvfHGtNqY8h0RnKNedqWofchub1Uxy4pReObfmJ83NVdKXgKOW5q-bHMpRWOempuL5FLG8Rqx_FD2fiamzGu-8AAAD__1hrMTc="
 	if url.String() != expectedURL {
 		t.Errorf("expected `%s` got `%s`", expectedURL, &url)
 	}
