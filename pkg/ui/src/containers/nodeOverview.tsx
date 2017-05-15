@@ -68,7 +68,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                   <th className="table__cell">{`Node ${node.desc.node_id}`}</th>
                   {
                     _.map(node.store_statuses, (ss) => {
-                      let storeId = ss.desc.store_id;
+                      const storeId = ss.desc.store_id;
                       return <th key={storeId} className="table__cell">{`Store ${storeId}`}</th>;
                     })
                   }

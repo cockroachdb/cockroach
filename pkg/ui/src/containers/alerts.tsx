@@ -21,7 +21,7 @@ interface AlertSectionProps {
 
 class AlertSection extends React.Component<AlertSectionProps, {}> {
   render() {
-    let { alerts, dispatch } = this.props;
+    const { alerts, dispatch } = this.props;
     return <div>
       {
         _.map(alerts, (a, i) => {

@@ -5,8 +5,8 @@ import moment from "moment";
 describe("time window reducer", function() {
   describe("actions", function() {
     it("should create the correct action to set the current time window", function() {
-      let start = moment();
-      let end = start.add(10, "s");
+      const start = moment();
+      const end = start.add(10, "s");
       const expectedSetting = {
         type: timewindow.SET_WINDOW,
         payload: {
@@ -45,10 +45,10 @@ describe("time window reducer", function() {
     });
 
     describe("setTimeWindow", () => {
-      let start = moment();
-      let end = start.add(10, "s");
+      const start = moment();
+      const end = start.add(10, "s");
       it("should correctly overwrite previous value", () => {
-        let expected = new timewindow.TimeWindowState();
+        const expected = new timewindow.TimeWindowState();
         expected.currentWindow = {
           start,
           end,
@@ -62,11 +62,11 @@ describe("time window reducer", function() {
     });
 
     describe("setTimeWindowSettings", () => {
-      let newSize = moment.duration(1, "h");
-      let newValid = moment.duration(1, "m");
-      let newSample = moment.duration(1, "m");
+      const newSize = moment.duration(1, "h");
+      const newValid = moment.duration(1, "m");
+      const newSample = moment.duration(1, "m");
       it("should correctly overwrite previous value", () => {
-        let expected = new timewindow.TimeWindowState();
+        const expected = new timewindow.TimeWindowState();
         expected.scale = {
           windowSize: newSize,
           windowValid: newValid,

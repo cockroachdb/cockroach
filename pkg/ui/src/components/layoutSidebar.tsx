@@ -14,7 +14,7 @@ interface IconLinkProps extends LinkProps {
  */
 class IconLink extends React.Component<IconLinkProps, {}> {
   render() {
-    let passProps = {
+    const passProps = {
       to: this.props.to,
       className: this.props.className,
     };

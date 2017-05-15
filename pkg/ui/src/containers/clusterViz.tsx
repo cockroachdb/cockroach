@@ -18,7 +18,7 @@ export default class ClusterViz extends React.Component<{}, {}> {
     }
 
     render() {
-        let style = {
+        const style = {
             height: viewHeight,
             width: viewWidth,
         };

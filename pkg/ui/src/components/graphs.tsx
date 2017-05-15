@@ -178,16 +178,16 @@ function computeNormalizedIncrement(
     x++;
     rawIncrement = rawIncrement / 10;
   }
-  let normalizedIncrementIdx = _.sortedIndex(incrementTbl, rawIncrement);
+  const normalizedIncrementIdx = _.sortedIndex(incrementTbl, rawIncrement);
   return incrementTbl[normalizedIncrementIdx] * Math.pow(10, x);
 }
 
 function ComputeCountAxisDomain(
   min: number, max: number, tickCount: number,
 ): AxisDomain {
-  let range = max - min;
-  let increment = computeNormalizedIncrement(range, tickCount);
-  let axisDomain = new AxisDomain(min, max, increment);
+  const range = max - min;
+  const increment = computeNormalizedIncrement(range, tickCount);
+  const axisDomain = new AxisDomain(min, max, increment);
 
   // If the tick increment is fractional (e.g. 0.2), we display a decimal
   // point. For non-fractional increments, we display with no decimal points
@@ -221,14 +221,14 @@ function ComputeByteAxisDomain(
   min: number, max: number, tickCount: number,
 ): AxisDomain {
   // Compute an appropriate unit for the maximum value to be displayed.
-  let prefixExponent = ComputePrefixExponent(max, kibi, byteLabels);
-  let prefixFactor = Math.pow(kibi, prefixExponent);
+  const prefixExponent = ComputePrefixExponent(max, kibi, byteLabels);
+  const prefixFactor = Math.pow(kibi, prefixExponent);
 
   // Compute increment on min/max after conversion to the appropriate prefix unit.
-  let increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor, tickCount);
+  const increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor, tickCount);
 
   // Create axis domain by multiplying computed increment by prefix factor.
-  let axisDomain = new AxisDomain(min, max, increment * prefixFactor);
+  const axisDomain = new AxisDomain(min, max, increment * prefixFactor);
 
   // Apply the correct label to the axis.
   axisDomain.label = byteLabels[prefixExponent];
@@ -253,14 +253,14 @@ const durationLabels = ["nanoseconds", "microseconds", "milliseconds", "seconds"
 function ComputeDurationAxisDomain(
   min: number, max: number, tickCount: number,
 ): AxisDomain {
-  let prefixExponent = ComputePrefixExponent(max, 1000, durationLabels);
-  let prefixFactor = Math.pow(1000, prefixExponent);
+  const prefixExponent = ComputePrefixExponent(max, 1000, durationLabels);
+  const prefixFactor = Math.pow(1000, prefixExponent);
 
   // Compute increment on min/max after conversion to the appropriate prefix unit.
-  let increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor, tickCount);
+  const increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor, tickCount);
 
   // Create axis domain by multiplying computed increment by prefix factor.
-  let axisDomain = new AxisDomain(min, max, increment * prefixFactor);
+  const axisDomain = new AxisDomain(min, max, increment * prefixFactor);
 
   // Apply the correct label to the axis.
   axisDomain.label = durationLabels[prefixExponent];
@@ -285,16 +285,16 @@ const percentIncrementTable = [0.25, 0.5, 0.75, 1.0];
 function ComputePercentageAxisDomain(
   min: number, max: number, tickCount: number,
 ) {
-  let range = max - min;
-  let increment = computeNormalizedIncrement(range, tickCount, percentIncrementTable);
-  let axisDomain = new AxisDomain(min, max, increment);
+  const range = max - min;
+  const increment = computeNormalizedIncrement(range, tickCount, percentIncrementTable);
+  const axisDomain = new AxisDomain(min, max, increment);
   axisDomain.label = "percentage";
   axisDomain.tickFormat = d3.format(".0%");
   axisDomain.guideFormat = d3.format(".2%");
   return axisDomain;
 }
 
-let timeIncrementDurations = [
+const timeIncrementDurations = [
   moment.duration(1, "m"),
   moment.duration(5, "m"),
   moment.duration(10, "m"),
@@ -308,7 +308,7 @@ let timeIncrementDurations = [
   moment.duration(24, "h"),
   moment.duration(1, "week"),
 ];
-let timeIncrements = _.map(timeIncrementDurations, (inc) => inc.asMilliseconds());
+const timeIncrements = _.map(timeIncrementDurations, (inc) => inc.asMilliseconds());
 
 function ComputeTimeAxisDomain(
   min: number, max: number, tickCount: number,
@@ -317,9 +317,9 @@ function ComputeTimeAxisDomain(
   // values.
   let increment = 0;
   {
-    let rawIncrement = (max - min) / (tickCount + 1);
+    const rawIncrement = (max - min) / (tickCount + 1);
     // Compute X such that 0 <= rawIncrement/10^x <= 1
-    let tbl = timeIncrements;
+    const tbl = timeIncrements;
     let normalizedIncrementIdx = _.sortedIndex(tbl, rawIncrement);
     if (normalizedIncrementIdx === tbl.length) {
       normalizedIncrementIdx--;
@@ -328,7 +328,7 @@ function ComputeTimeAxisDomain(
   }
 
   // Do not normalize min/max for time axis.
-  let axisDomain = new AxisDomain(min, max, increment, false);
+  const axisDomain = new AxisDomain(min, max, increment, false);
 
   axisDomain.label = "time";
 
@@ -390,16 +390,16 @@ function ProcessDataPoints(
   timeInfo: QueryTimeInfo,
   stacked = false,
 ) {
-  let yAxisRange = new AxisRange();
-  let xAxisRange = new AxisRange();
+  const yAxisRange = new AxisRange();
+  const xAxisRange = new AxisRange();
 
-  let formattedData: formattedDatum[] = [];
+  const formattedData: formattedDatum[] = [];
 
   // timestamps has a key for all the timestamps present across all datasets
-  let timestamps = getTimestamps(metrics, data);
+  const timestamps = getTimestamps(metrics, data);
 
   _.each(metrics, (s, idx) => {
-    let result = data.results[idx];
+    const result = data.results[idx];
     if (result) {
       if (!stacked) {
         yAxisRange.addPoints(_.map(result.datapoints, (dp) => dp.value));
@@ -412,13 +412,13 @@ function ProcessDataPoints(
       // than the explicitly queried domain. This works around a bug in NVD3
       // which causes the interactive guideline to highlight the wrong points.
       // https://github.com/novus/nvd3/issues/1913
-      let datapoints = _.dropWhile(result.datapoints, (dp) => {
+      const datapoints = _.dropWhile(result.datapoints, (dp) => {
         return NanoToMilli(dp.timestamp_nanos.toNumber()) < xAxisRange.min;
       });
 
       // Fill in null values for series where a value is missing. This
       // correction is needed for stackedAreaCharts to to display correctly.
-      let seenTimestamps: SeenTimestamps = _.clone(timestamps);
+      const seenTimestamps: SeenTimestamps = _.clone(timestamps);
       _.each(datapoints, (d) => seenTimestamps[d.timestamp_nanos.toNumber()] = true);
       _.each(seenTimestamps, (seen, ts) => {
         if (!seen) {
@@ -459,7 +459,7 @@ function ProcessDataPoints(
     default:
       yAxisDomain = ComputeCountAxisDomain(yAxisRange.min, yAxisRange.max, 3);
   }
-  let xAxisDomain = ComputeTimeAxisDomain(xAxisRange.min, xAxisRange.max, 10);
+  const xAxisDomain = ComputeTimeAxisDomain(xAxisRange.min, xAxisRange.max, 10);
 
   return {
     formattedData,
@@ -501,9 +501,9 @@ export function ConfigureLineChart(
   let formattedData: formattedDatum[];
 
   if (data) {
-    let processed = ProcessDataPoints(metrics, axis, data, timeInfo, stacked);
+    const processed = ProcessDataPoints(metrics, axis, data, timeInfo, stacked);
     formattedData = processed.formattedData;
-    let {yAxisDomain, xAxisDomain } = processed;
+    const {yAxisDomain, xAxisDomain } = processed;
 
     chart.yDomain(yAxisDomain.domain());
     if (!axis.props.label) {

@@ -33,7 +33,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   axis = createSelector(
     (props: {children?: React.ReactNode}) => props.children,
     (children) => {
-      let axes: React.ReactElement<AxisProps>[] = findChildrenOfType(children, Axis);
+      const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(children, Axis);
       if (axes.length === 0) {
         console.warn("LineGraph requires the specification of at least one axis.");
         return null;
@@ -51,7 +51,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     });
 
   initChart() {
-    let axis = this.axis(this.props);
+    const axis = this.axis(this.props);
     if (!axis) {
       // TODO: Figure out this error condition.
       return;
@@ -80,8 +80,8 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     // NOTE: This might not work on Android:
     // http://caniuse.com/#feat=pagevisibility
     if (!document.hidden) {
-      let metrics = this.metrics(this.props);
-      let axis = this.axis(this.props);
+      const metrics = this.metrics(this.props);
+      const axis = this.axis(this.props);
       if (!axis) {
         return;
       }
@@ -108,7 +108,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    let { title, subtitle, tooltip, data } = this.props;
+    const { title, subtitle, tooltip, data } = this.props;
 
     return <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
       <div className="linegraph">

@@ -247,7 +247,7 @@ export function getLoadError(state: AdminUIState, key: string): Error {
  */
 export function saveUIData(...values: KeyValue[]) {
   return (dispatch: Dispatch<AdminUIState>, getState: () => AdminUIState): Promise<void> => {
-    let state = getState();
+    const state = getState();
     values = _.filter(values, (kv) => !isInFlight(state, kv.key));
     if (values.length === 0) {
       return;
@@ -255,7 +255,7 @@ export function saveUIData(...values: KeyValue[]) {
     dispatch(beginSaveUIData(_.map(values, (kv) => kv.key)));
 
     // Encode data for each UIData key.
-    let request = new protos.cockroach.server.serverpb.SetUIDataRequest();
+    const request = new protos.cockroach.server.serverpb.SetUIDataRequest();
     _.each(values, (kv) => {
       const stringifiedValue = JSON.stringify(kv.value);
       const buffer = new Uint8Array(protobuf.util.utf8.length(stringifiedValue));
@@ -279,7 +279,7 @@ export function saveUIData(...values: KeyValue[]) {
  */
 export function loadUIData(...keys: string[]) {
   return (dispatch: Dispatch<AdminUIState>, getState: () => AdminUIState): Promise<void> => {
-    let state = getState();
+    const state = getState();
     keys = _.filter(keys, (k) => !isInFlight(state, k));
     if (keys.length === 0) {
       return;

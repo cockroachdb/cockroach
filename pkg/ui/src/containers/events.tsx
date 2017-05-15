@@ -43,10 +43,10 @@ export interface EventRowProps {
   event: Event$Properties;
 }
 
-let s = (v: {}) => JSON.stringify(v, undefined, 2);
+const s = (v: {}) => JSON.stringify(v, undefined, 2);
 
 export function getEventInfo(e: Event$Properties): SimplifiedEvent {
-  let info: {
+  const info: {
     DatabaseName: string,
     DroppedTables: string[],
     IndexName: string,
@@ -55,7 +55,7 @@ export function getEventInfo(e: Event$Properties): SimplifiedEvent {
     User: string,
     ViewName: string,
   } = protobuf.util.isset(e, "info") ? JSON.parse(e.info) : {};
-  let targetId: number = e.target_id ? e.target_id.toNumber() : null;
+  const targetId: number = e.target_id ? e.target_id.toNumber() : null;
   let content: React.ReactNode;
 
   switch (e.event_type) {
@@ -120,8 +120,8 @@ export function getEventInfo(e: Event$Properties): SimplifiedEvent {
 
 export class EventRow extends React.Component<EventRowProps, {}> {
   render() {
-    let { event } = this.props;
-    let e = getEventInfo(event);
+    const { event } = this.props;
+    const e = getEventInfo(event);
     return <tr>
       <td><div className="events__message">{e.content}</div></td>
       <td><div className="events__timestamp">{e.fromNowString}</div></td>
@@ -150,7 +150,7 @@ export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
   }
 
   render() {
-    let events = this.props.events;
+    const events = this.props.events;
     return <div className="events">
       <table>
         <tbody>
@@ -188,9 +188,9 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
   }
 
   render() {
-    let { events, sortSetting } = this.props;
+    const { events, sortSetting } = this.props;
 
-    let simplifiedEvents = _.map(events, getEventInfo);
+    const simplifiedEvents = _.map(events, getEventInfo);
 
     return <div>
       {
