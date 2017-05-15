@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -106,6 +107,58 @@ func TestGossipOverwriteNode(t *testing.T) {
 	if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
 		t.Errorf("expected error %q fetching node %d; got error %v and node %+v",
 			expectedErr, node1.NodeID, err, val)
+	}
+}
+
+// TestGossipMoveNode verifies that if a node is moved to a new address, it
+// gets properly updated in gossip (including that any other node that was
+// previously at that address gets removed from the cluster).
+func TestGossipMoveNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	rpcContext := newInsecureRPCContext(stopper)
+	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry())
+	var nodes []*roachpb.NodeDescriptor
+	for i := 1; i <= 3; i++ {
+		node := &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i),
+			Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("1.1.1.1:%d", i)),
+		}
+		if err := g.SetNodeDescriptor(node); err != nil {
+			t.Fatalf("failed setting node descriptor %+v: %s", node, err)
+		}
+		nodes = append(nodes, node)
+	}
+	for _, node := range nodes {
+		if val, err := g.GetNodeDescriptor(node.NodeID); err != nil {
+			t.Fatal(err)
+		} else if !proto.Equal(node, val) {
+			t.Fatalf("expected node %+v, got %+v", node, val)
+		}
+	}
+
+	// Move node 2 to the address of node 3, which should cause node 3 to be
+	// removed from the cluster.
+	movedNode := nodes[1]
+	replacedNode := nodes[2]
+	movedNode.Address = replacedNode.Address
+	if err := g.SetNodeDescriptor(movedNode); err != nil {
+		t.Fatal(err)
+	}
+
+	// Quiesce the stopper now to ensure that the update has propagated before
+	// checking on either node descriptor.
+	stopper.Quiesce(context.TODO())
+	if val, err := g.GetNodeDescriptor(movedNode.NodeID); err != nil {
+		t.Error(err)
+	} else if !proto.Equal(movedNode, val) {
+		t.Errorf("expected node %+v, got %+v", movedNode, val)
+	}
+	expectedErr := "unable to look up descriptor for node"
+	if val, err := g.GetNodeDescriptor(replacedNode.NodeID); !testutils.IsError(err, expectedErr) {
+		t.Errorf("expected error %q fetching node %d; got error %v and node %+v",
+			expectedErr, replacedNode.NodeID, err, val)
 	}
 }
 
