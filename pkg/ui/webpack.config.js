@@ -7,10 +7,11 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 const title = 'Cockroach Console';
 
-// Remove a broken dependency that yarn insists upon installing before every
-// Webpack compile. We used to do this in the Makefile, but it was common while
-// developing the UI to run e.g. `yarn add` manually, which would reinstall the
-// broken dependency, causing Webpack to fail with cryptic errors.
+// Remove a broken dependency that Yarn insists upon installing before every
+// Webpack compile. We also do this when installing dependencies via Make, but
+// it's common to run e.g. `yarn add` manually without re-running Make, which
+// will reinstall the broken dependency. The error this dependency causes is
+// horribly cryptic, so it's important to remove it aggressively.
 //
 // See: https://github.com/yarnpkg/yarn/issues/2987
 class RemoveBrokenDependenciesPlugin {
