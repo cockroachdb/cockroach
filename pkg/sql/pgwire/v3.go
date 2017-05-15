@@ -1057,7 +1057,16 @@ func (c *v3Conn) sendRowDescription(
 		c.writeBuf.putInt16(0) // Column attribute ID (optional).
 		c.writeBuf.putInt32(int32(typ.oid))
 		c.writeBuf.putInt16(int16(typ.size))
-		c.writeBuf.putInt32(0) // Type modifier (none of our supported types have modifiers).
+		// The type modifier (atttypmod) is used to include various extra information
+		// about the type being sent. -1 is used for values which don't make use of
+		// atttypmod and is generally an acceptable catch-all for those that do.
+		// See https://www.postgresql.org/docs/9.6/static/catalog-pg-attribute.html
+		// for information on atttypmod. In theory we differ from Postgres by never
+		// giving the scale/precision, and by not including the length of a VARCHAR,
+		// but it's not clear if any drivers/ORMs depend on this.
+		//
+		// TODO(justin): It would be good to include this information when possible.
+		c.writeBuf.putInt32(-1)
 		if formatCodes == nil {
 			c.writeBuf.putInt16(int16(formatText))
 		} else {
