@@ -440,18 +440,18 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 		return nil
 	}
 
+	if err := n.tableDesc.AllocateIDs(); err != nil {
+		return err
+	}
+
 	mutationID := sqlbase.InvalidMutationID
 	var err error
 	if addedMutations {
-		mutationID, err = n.tableDesc.FinalizeMutation()
+		mutationID, err = n.p.createSchemaChangeJob(ctx, n.tableDesc, parser.AsString(n.n))
 	} else {
 		err = n.tableDesc.SetUpVersion()
 	}
 	if err != nil {
-		return err
-	}
-
-	if err := n.tableDesc.AllocateIDs(); err != nil {
 		return err
 	}
 

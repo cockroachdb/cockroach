@@ -327,37 +327,41 @@ const (
 	indexBackfill
 )
 
-// getSpansToBackfill returns the spans that still have to be backfilled
-// for the first mutation enqueued on the table descriptor that passes the
-// input mutationFilter.
+// getMutationToBackfill returns the the first mutation enqueued on the table
+// descriptor that passes the input mutationFilter.
 //
-// Returns nil if the backfill is complete (mutation no longer exists or there
-// are no "ResumeSpans").
-func (sc *SchemaChanger) getSpansToBackfill(
-	ctx context.Context, filter distsqlrun.MutationFilter,
-) ([]roachpb.Span, error) {
-	var spans []roachpb.Span
+// Returns nil if the backfill is complete.
+func (sc *SchemaChanger) getMutationToBackfill(
+	ctx context.Context,
+	version sqlbase.DescriptorVersion,
+	backfillType backfillType,
+	filter distsqlrun.MutationFilter,
+) (*sqlbase.DescriptorMutation, error) {
+	var mutation *sqlbase.DescriptorMutation
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		spans = nil
+		mutation = nil
 		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		if err != nil {
 			return err
 		}
+		if tableDesc.Version != version {
+			return errors.Errorf("table version mismatch: %d, expected: %d", tableDesc.Version, version)
+		}
 		if len(tableDesc.Mutations) > 0 {
 			mutationID := tableDesc.Mutations[0].MutationID
-			for _, m := range tableDesc.Mutations {
-				if m.MutationID != mutationID {
+			for i := range tableDesc.Mutations {
+				if tableDesc.Mutations[i].MutationID != mutationID {
 					break
 				}
-				if filter(m) {
-					spans = m.ResumeSpans
+				if filter(tableDesc.Mutations[i]) {
+					mutation = &tableDesc.Mutations[i]
 					break
 				}
 			}
 		}
 		return nil
 	})
-	return spans, err
+	return mutation, err
 }
 
 // distBackfill runs (or continues) a backfill for the first mutation
@@ -379,12 +383,16 @@ func (sc *SchemaChanger) distBackfill(
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
 	for {
-		// Repeat until getSpansToBackfill returns no spans, indicating that the
-		// backfill is complete.
-		spans, err := sc.getSpansToBackfill(ctx, filter)
+		// Repeat until getMutationToBackfill returns a mutation with no remaining
+		// ResumeSpans, indicating that the backfill is complete.
+		mutation, err := sc.getMutationToBackfill(ctx, version, backfillType, filter)
 		if err != nil {
 			return err
 		}
+		if mutation == nil {
+			break
+		}
+		spans := mutation.ResumeSpans
 		if len(spans) <= 0 {
 			break
 		}

@@ -44,13 +44,16 @@ type JobLogger struct {
 	Job   JobRecord
 }
 
+// JobDetails is a marker interface for job details proto structs.
+type JobDetails interface{}
+
 // JobRecord stores the job fields that are not automatically managed by
 // JobLogger.
 type JobRecord struct {
 	Description   string
 	Username      string
 	DescriptorIDs sqlbase.IDs
-	Details       interface{}
+	Details       JobDetails
 }
 
 // JobStatus represents the status of a job in the system.jobs table.
@@ -77,6 +80,42 @@ func NewJobLogger(db *client.DB, leaseMgr *LeaseManager, job JobRecord) JobLogge
 	}
 }
 
+// GetJobLogger creates a new JobLogger initialized from a previously created
+// job id.
+func GetJobLogger(
+	ctx context.Context, db *client.DB, leaseMgr *LeaseManager, jobID int64,
+) (*JobLogger, error) {
+	jl := &JobLogger{
+		db:    db,
+		ex:    InternalExecutor{LeaseManager: leaseMgr},
+		jobID: &jobID,
+	}
+	if err := jl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		payload, err := jl.retrieveJobPayload(ctx, txn)
+		if err != nil {
+			return err
+		}
+		jl.Job.Description = payload.Description
+		jl.Job.Username = payload.Username
+		jl.Job.DescriptorIDs = payload.DescriptorIDs
+		jl.Job.Details = payload.Details
+		switch d := jl.Job.Details.(type) {
+		case *JobPayload_Backup:
+			jl.Job.Details = *d.Backup
+		case *JobPayload_Restore:
+			jl.Job.Details = *d.Restore
+		case *JobPayload_SchemaChange:
+			jl.Job.Details = *d.SchemaChange
+		default:
+			return errors.Errorf("JobLogger: unsupported job details type %T", d)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return jl, nil
+}
+
 // JobID returns the ID of the job that this JobLogger is currently tracking.
 // This will be nil if Created has not yet been called.
 func (jl *JobLogger) JobID() *int64 {
@@ -97,6 +136,8 @@ func (jl *JobLogger) Created(ctx context.Context) error {
 		payload.Details = &JobPayload_Backup{Backup: &d}
 	case RestoreJobDetails:
 		payload.Details = &JobPayload_Restore{Restore: &d}
+	case SchemaChangeJobDetails:
+		payload.Details = &JobPayload_SchemaChange{SchemaChange: &d}
 	default:
 		return errors.Errorf("JobLogger: unsupported job details type %T", d)
 	}
@@ -158,8 +199,8 @@ func (jl *JobLogger) Failed(ctx context.Context, err error) {
 		return true, nil
 	})
 	if internalErr != nil {
-		log.Errorf(ctx, "JobLogger: ignoring error while logging failure for job %d: %+v",
-			jl.jobID, internalErr)
+		log.Errorf(ctx, "JobLogger: ignoring error %v while logging failure for job %d: %+v",
+			err, jl.jobID, internalErr)
 	}
 }
 
@@ -200,6 +241,16 @@ func (jl *JobLogger) insertJobRecord(ctx context.Context, payload *JobPayload) e
 	return nil
 }
 
+func (jl *JobLogger) retrieveJobPayload(ctx context.Context, txn *client.Txn) (*JobPayload, error) {
+	const selectStmt = "SELECT payload FROM system.jobs WHERE id = $1"
+	row, err := jl.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *jl.jobID)
+	if err != nil {
+		return nil, err
+	}
+
+	return unmarshalJobPayload(row[0])
+}
+
 func (jl *JobLogger) updateJobRecord(
 	ctx context.Context, newStatus JobStatus, updateFn func(*JobPayload) (doUpdate bool, err error),
 ) error {
@@ -208,13 +259,7 @@ func (jl *JobLogger) updateJobRecord(
 	}
 
 	return jl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		const selectStmt = "SELECT payload FROM system.jobs WHERE id = $1"
-		row, err := jl.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *jl.jobID)
-		if err != nil {
-			return err
-		}
-
-		payload, err := unmarshalJobPayload(row[0])
+		payload, err := jl.retrieveJobPayload(ctx, txn)
 		if err != nil {
 			return err
 		}
@@ -247,8 +292,9 @@ func (jl *JobLogger) updateJobRecord(
 
 // Job types are named for the SQL query that creates them.
 const (
-	JobTypeBackup  string = "BACKUP"
-	JobTypeRestore string = "RESTORE"
+	JobTypeBackup       string = "BACKUP"
+	JobTypeRestore      string = "RESTORE"
+	JobTypeSchemaChange string = "SCHEMA CHANGE"
 )
 
 func (jp *JobPayload) typ() string {
@@ -257,6 +303,8 @@ func (jp *JobPayload) typ() string {
 		return JobTypeBackup
 	case *JobPayload_Restore:
 		return JobTypeRestore
+	case *JobPayload_SchemaChange:
+		return JobTypeSchemaChange
 	default:
 		panic("JobPayload.typ called on a payload with an unknown details type")
 	}
@@ -281,3 +329,7 @@ func unmarshalJobPayload(datum parser.Datum) (*JobPayload, error) {
 func jobTimestamp(ts time.Time) int64 {
 	return ts.Round(time.Microsecond).UnixNano() / time.Microsecond.Nanoseconds()
 }
+
+var _ JobDetails = BackupJobDetails{}
+var _ JobDetails = RestoreJobDetails{}
+var _ JobDetails = SchemaChangeJobDetails{}
