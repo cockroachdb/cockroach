@@ -417,7 +417,7 @@ func (p *planner) showCreateTable(
 			// Only set primary if the primary key is on a visible column (not rowid).
 			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
 				quoteNames(desc.PrimaryIndex.Name),
-				makeIndexColNames(desc.PrimaryIndex),
+				desc.PrimaryIndex.ColNamesString(),
 			)
 		}
 	}
@@ -450,7 +450,7 @@ func (p *planner) showCreateTable(
 			fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s%s",
 				isUnique[idx.Unique],
 				quoteNames(idx.Name),
-				makeIndexColNames(idx),
+				idx.ColNamesString(),
 				storing,
 				interleave,
 			)
@@ -486,17 +486,6 @@ func (p *planner) showCreateTable(
 	buf.WriteString(interleave)
 
 	return buf.String(), nil
-}
-
-func makeIndexColNames(d sqlbase.IndexDescriptor) string {
-	var buf bytes.Buffer
-	for i, name := range d.ColumnNames {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		fmt.Fprintf(&buf, "%s %s", parser.Name(name), d.ColumnDirections[i])
-	}
-	return buf.String()
 }
 
 var isUnique = map[bool]string{true: "UNIQUE "}
