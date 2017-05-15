@@ -569,6 +569,22 @@ func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stop
 			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
 	}
 
+	if serverInsecure {
+		// Use a non-annotated context here since the annotation just looks funny,
+		// particularly to new users (made worse by it always printing as [n?]).
+		addr := serverConnHost
+		if addr == "" {
+			addr = "<all your IP addresses>"
+		}
+		log.Shout(context.Background(), log.Severity_WARNING,
+			"RUNNING IN INSECURE MODE!\n\n"+
+				"- Your cluster is open for any client that can access "+addr+".\n"+
+				"- Any user, even root, can log in without providing a password.\n"+
+				"- Any user, connecting as root, can read or write any data in your cluster.\n"+
+				"- There is no network encryption nor authentication, and thus no confidentiality.\n\n"+
+				"Check out how to secure your cluster: https://www.cockroachlabs.com/docs/secure-a-cluster.html")
+	}
+
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
