@@ -412,15 +412,7 @@ func (p *planner) showCreateTable(
 			buf.WriteString(",")
 		}
 		buf.WriteString("\n\t")
-		fmt.Fprintf(&buf, "%s %s", quoteNames(col.Name), col.Type.SQLString())
-		if col.Nullable {
-			buf.WriteString(" NULL")
-		} else {
-			buf.WriteString(" NOT NULL")
-		}
-		if col.DefaultExpr != nil {
-			fmt.Fprintf(&buf, " DEFAULT %s", *col.DefaultExpr)
-		}
+		buf.WriteString(col.SQLString())
 		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
 			// Only set primary if the primary key is on a visible column (not rowid).
 			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
