@@ -2,8 +2,8 @@ prefix := /usr/local
 bindir := $(prefix)/bin
 INSTALL := install
 
-.PHONY: all build buildoss test
-all build buildoss test:
+.PHONY: build buildoss test
+build buildoss test:
 	$(MAKE) -C src/github.com/cockroachdb/cockroach $@
 
 .PHONY: install

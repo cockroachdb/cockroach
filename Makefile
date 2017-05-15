@@ -128,13 +128,6 @@ endif
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
 
-.DEFAULT_GOAL := all
-.PHONY: all
-all: build test lint
-
-.PHONY: short
-short: build testshort lintshort
-
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 
 build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)$$($(XGO) env GOEXE)
@@ -149,6 +142,7 @@ build buildoss install: override LINKFLAGS += \
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
+.DEFAULT_GOAL := build
 .PHONY: build buildoss install
 build buildoss install: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
