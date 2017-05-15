@@ -441,6 +441,9 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 	var err error
 	if addedMutations {
 		mutationID, err = n.tableDesc.FinalizeMutation()
+		if err := n.p.createSchemaChangeJob(ctx, n.tableDesc, mutationID, parser.AsString(n.n)); err != nil {
+			return err
+		}
 	} else {
 		err = n.tableDesc.SetUpVersion()
 	}

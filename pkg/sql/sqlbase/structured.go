@@ -1618,6 +1618,7 @@ func (desc *TableDescriptor) FinalizeMutation() (MutationID, error) {
 		return InvalidMutationID, err
 	}
 	mutationID := desc.NextMutationID
+	desc.MutationGroups = append(desc.MutationGroups, TableDescriptor_MutationGroup{MutationID: mutationID})
 	desc.NextMutationID++
 	return mutationID, nil
 }

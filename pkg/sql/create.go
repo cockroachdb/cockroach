@@ -201,12 +201,10 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 			return err
 		}
 	}
-
-	if err := n.p.txn.Put(
-		ctx,
-		sqlbase.MakeDescMetadataKey(n.tableDesc.GetID()),
-		sqlbase.WrapDescriptor(n.tableDesc),
-	); err != nil {
+	if err := n.p.createSchemaChangeJob(ctx, n.tableDesc, mutationID, parser.AsString(n.n)); err != nil {
+		return err
+	}
+	if err := n.p.writeTableDesc(ctx, n.tableDesc); err != nil {
 		return err
 	}
 

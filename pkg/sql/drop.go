@@ -375,6 +375,9 @@ func (p *planner) dropIndexByName(
 	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}
+	if err := p.createSchemaChangeJob(ctx, tableDesc, mutationID, stmt); err != nil {
+		return err
+	}
 	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
 		return err
 	}

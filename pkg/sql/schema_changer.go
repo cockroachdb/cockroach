@@ -62,6 +62,7 @@ type SchemaChanger struct {
 	execAfter      time.Time
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *distSQLPlanner
+	jobLogger      *JobLogger
 }
 
 func (sc *SchemaChanger) truncateAndDropTable(
@@ -326,7 +327,8 @@ func (sc *SchemaChanger) exec(ctx context.Context, evalCtx parser.EvalContext) e
 		return err
 	}
 
-	if drop, err := sc.maybeAddDropRename(ctx, &lease, desc.GetTable()); err != nil {
+	tableDesc := desc.GetTable()
+	if drop, err := sc.maybeAddDropRename(ctx, &lease, tableDesc); err != nil {
 		return err
 	} else if drop {
 		needRelease = false
@@ -347,6 +349,46 @@ func (sc *SchemaChanger) exec(ctx context.Context, evalCtx parser.EvalContext) e
 		return nil
 	}
 
+	// Find our job.
+	foundJobID := false
+	var mgIdx int
+	for _, g := range tableDesc.MutationGroups {
+		if g.MutationID == sc.mutationID && g.JobID != nil {
+			jl, err := GetJobLogger(ctx, &sc.db, sc.leaseMgr, g.JobID)
+			if err != nil {
+				// Can't find the job? make a new one.
+				break
+			}
+			sc.jobLogger = jl
+			foundJobID = true
+			break
+		}
+		mgIdx++
+	}
+	if !foundJobID {
+		// We are starting or resuming a schema change that never got a job for some
+		// reason. Create a job - we don't have a good description for it at this
+		// point, but that's okay as this should be a rare situation.
+		jl := NewJobLogger(&sc.db, sc.leaseMgr, JobRecord{
+			DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
+			Details:       SchemaChangeJobDetails{},
+		})
+		sc.jobLogger = &jl
+		if err := sc.jobLogger.Created(ctx); err != nil {
+			return err
+		}
+		if mgIdx < len(tableDesc.MutationGroups) {
+			tableDesc.MutationGroups[mgIdx].JobID = sc.jobLogger.JobID()
+		} else {
+			tableDesc.MutationGroups = append(tableDesc.MutationGroups,
+				sqlbase.TableDescriptor_MutationGroup{MutationID: sc.mutationID, JobID: sc.jobLogger.JobID()})
+		}
+	}
+
+	if err := sc.jobLogger.Started(ctx); err != nil {
+		log.Warningf(ctx, "Failed to mark job %v as started: %v", sc.jobLogger.JobID(), err)
+	}
+
 	// Another transaction might set the up_version bit again,
 	// but we're no longer responsible for taking care of that.
 
@@ -357,7 +399,8 @@ func (sc *SchemaChanger) exec(ctx context.Context, evalCtx parser.EvalContext) e
 	// a permanent error. All other errors are transient errors that are
 	// resolved by retrying the backfill.
 	if sqlbase.IsPermanentSchemaChangeError(err) {
-		log.Warningf(ctx, "reversing schema change due to irrecoverable error: %s", err)
+		log.Warningf(ctx, "reversing schema change %v due to irrecoverable error: %s", sc.jobLogger.JobID(), err)
+		sc.jobLogger.Failed(ctx, err)
 		if errReverse := sc.reverseMutations(ctx, err); errReverse != nil {
 			// Although the backfill did hit an integrity constraint violation
 			// and made a decision to reverse the mutations,
@@ -492,8 +535,22 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 		}
 		// Trim the executed mutations from the descriptor.
 		desc.Mutations = desc.Mutations[i:]
+
+		i = 0
+		for _, g := range desc.MutationGroups {
+			if g.MutationID == sc.mutationID {
+				break
+			}
+			i++
+		}
+		// Trim the executed mutation group from the descriptor.
+		desc.MutationGroups = append(desc.MutationGroups[:i], desc.MutationGroups[i+1:]...)
 		return nil
 	}, func(txn *client.Txn) error {
+		if err := sc.jobLogger.Succeeded(ctx); err != nil {
+			log.Warningf(ctx, "schema change ignoring error while marking job %d as successful: %+v",
+				sc.jobLogger.JobID(), err)
+		}
 		// Log "Finish Schema Change" event. Only the table ID and mutation ID
 		// are logged; this can be correlated with the DDL statement that
 		// initiated the change using the mutation id.
@@ -540,8 +597,12 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	if err := sc.RunStateMachineBeforeBackfill(ctx); err != nil {
 		return err
 	}
+	if err := sc.jobLogger.Progressed(ctx, .1); err != nil {
+		log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
+			sc.jobLogger.JobID(), err)
+	}
 
-	// Run backfill.
+	// Run backfill(s).
 	if err := sc.runBackfill(ctx, lease, evalCtx); err != nil {
 		return err
 	}
@@ -580,6 +641,25 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 
 			case sqlbase.DescriptorMutation_DROP:
 				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_ADD
+			}
+		}
+
+		for i := range desc.MutationGroups {
+			fmt.Printf("mg: %d, sc: %d\n", desc.MutationGroups[i].MutationID, sc.mutationID)
+			if desc.MutationGroups[i].MutationID == sc.mutationID {
+				// Create a roll back job.
+				job := sc.jobLogger.Job
+				job.Description = "ROLL BACK " + job.Description
+				jobLogger := NewJobLogger(&sc.db, sc.leaseMgr, job)
+				if err := jobLogger.Created(ctx); err != nil {
+					return err
+				}
+				if err := jobLogger.Started(ctx); err != nil {
+					return err
+				}
+				desc.MutationGroups[i].JobID = jobLogger.jobID
+				sc.jobLogger = &jobLogger
+				break
 			}
 		}
 
