@@ -291,6 +291,32 @@ func (desc *IndexDescriptor) ColNamesString() string {
 	return buf.String()
 }
 
+var isUnique = map[bool]string{true: "UNIQUE "}
+
+// SQLString returns the SQL string describing this index. If non-empty,
+// "ON tableName" is included in the output in the correct place.
+func (desc *IndexDescriptor) SQLString(tableName string) string {
+	var storing string
+	if len(desc.StoreColumnNames) > 0 {
+		colNames := make(parser.NameList, len(desc.StoreColumnNames))
+		for i, n := range desc.StoreColumnNames {
+			colNames[i] = parser.Name(n)
+		}
+		storing = fmt.Sprintf(" STORING (%s)", parser.AsString(colNames))
+	}
+	var onTable string
+	if tableName != "" {
+		onTable = fmt.Sprintf("ON %s ", tableName)
+	}
+	return fmt.Sprintf("%sINDEX %s%s (%s)%s",
+		isUnique[desc.Unique],
+		onTable,
+		parser.AsString(parser.Name(desc.Name)),
+		desc.ColNamesString(),
+		storing,
+	)
+}
+
 // SetID implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id

@@ -423,14 +423,6 @@ func (p *planner) showCreateTable(
 	}
 	buf.WriteString(primary)
 	for _, idx := range desc.Indexes {
-		var storing string
-		if len(idx.StoreColumnNames) > 0 {
-			storing = fmt.Sprintf(" STORING (%s)", quoteNames(idx.StoreColumnNames...))
-		}
-		interleave, err := p.showCreateInterleave(ctx, &idx)
-		if err != nil {
-			return "", err
-		}
 		if fk := idx.ForeignKey; fk.IsSet() {
 			fkTable, err := p.session.leases.getTableLeaseByID(ctx, p.txn, fk.Table)
 			if err != nil {
@@ -447,11 +439,12 @@ func (p *planner) showCreateTable(
 				quoteNames(fkIdx.ColumnNames...),
 			)
 		} else {
-			fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s%s",
-				isUnique[idx.Unique],
-				quoteNames(idx.Name),
-				idx.ColNamesString(),
-				storing,
+			interleave, err := p.showCreateInterleave(ctx, &idx)
+			if err != nil {
+				return "", err
+			}
+			fmt.Fprintf(&buf, ",\n\t%s%s",
+				idx.SQLString(""),
 				interleave,
 			)
 		}
@@ -487,8 +480,6 @@ func (p *planner) showCreateTable(
 
 	return buf.String(), nil
 }
-
-var isUnique = map[bool]string{true: "UNIQUE "}
 
 // quoteName quotes and adds commas between names.
 func quoteNames(names ...string) string {
