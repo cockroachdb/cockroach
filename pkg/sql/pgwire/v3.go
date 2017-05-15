@@ -1057,7 +1057,7 @@ func (c *v3Conn) sendRowDescription(
 		c.writeBuf.putInt16(0) // Column attribute ID (optional).
 		c.writeBuf.putInt32(int32(typ.oid))
 		c.writeBuf.putInt16(int16(typ.size))
-		c.writeBuf.putInt32(0) // Type modifier (none of our supported types have modifiers).
+		c.writeBuf.putInt32(-1) // Type modifier
 		if formatCodes == nil {
 			c.writeBuf.putInt16(int16(formatText))
 		} else {
