@@ -546,7 +546,7 @@ EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY 
 1          window 1  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
 1          render 1  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
 1          render 2  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
-2  render                                                                                         (k int, d decimal, d decimal, v int, "'a'" string, "100" int)
+2  render                                                                                         (k int, d decimal, d decimal, v int, "'a'" string, "100" int)                                              ="'a'",="100"
 2          render 0  (k)[int]
 2          render 1  (d)[decimal]
 2          render 2  (d)[decimal]
@@ -565,7 +565,7 @@ EXPLAIN (TYPES,NONORMALIZE) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM 
 1  window                                                                                         (k int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
 1          window 0  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
 1          render 1  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
-2  render                                                                                         (k int, d decimal, v int, "'a'" string)
+2  render                                                                                         (k int, d decimal, v int, "'a'" string)                                                          ="'a'"
 2          render 0  (k)[int]
 2          render 1  (d)[decimal]
 2          render 2  (v)[int]
@@ -584,7 +584,7 @@ EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER
 1          window 1  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
 1          render 1  ((k)[int] + (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal])[decimal]
 1          render 2  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
-2  render                                                                                                               (k int, d decimal, d decimal, v int, "'a'" string, "100" int)
+2  render                                                                                                               (k int, d decimal, d decimal, v int, "'a'" string, "100" int)                                                  ="'a'",="100"
 2          render 0  (k)[int]
 2          render 1  (d)[decimal]
 2          render 2  (d)[decimal]
@@ -605,7 +605,7 @@ EXPLAIN (TYPES) SELECT max(k), max(k) + stddev(d) OVER (PARTITION BY v, 'a') FRO
 1          window 1     (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
 1          render 1     ((max((k)[int]))[int] + (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal])[decimal]
 1          render 2     (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
-2  render                                                                                                                              ("max(k)" int, d decimal, d decimal, v int, "'a'" string, "100" int)
+2  render                                                                                                                              ("max(k)" int, d decimal, d decimal, v int, "'a'" string, "100" int)                                                       ="'a'",="100"
 2          render 0     (max(k))[int]
 2          render 1     (d)[decimal]
 2          render 2     (d)[decimal]
@@ -633,7 +633,7 @@ EXPLAIN (TYPES) SELECT MAX(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROU
 1  window                                                                                            ("max(k)" int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
 1          window 0     (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
 1          render 1     (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
-2  render                                                                                            ("max(k)" int, d decimal, v int, "'a'" string)
+2  render                                                                                            ("max(k)" int, d decimal, v int, "'a'" string)                                                   ="'a'"
 2          render 0     (max(k))[int]
 2          render 1     (d)[decimal]
 2          render 2     (v)[int]
