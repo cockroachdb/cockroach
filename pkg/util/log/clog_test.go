@@ -154,11 +154,13 @@ func TestEntryDecoder(t *testing.T) {
 	t2 := t1.Add(time.Microsecond)
 	t3 := t2.Add(time.Microsecond)
 	t4 := t3.Add(time.Microsecond)
+	t5 := t4.Add(time.Microsecond)
 
 	contents := formatEntry(Severity_INFO, t1, 0, "clog_test.go", 136, "info")
-	contents += formatEntry(Severity_WARNING, t2, 1, "clog_test.go", 137, "warning")
-	contents += formatEntry(Severity_ERROR, t3, 2, "clog_test.go", 138, "error")
-	contents += formatEntry(Severity_FATAL, t4, 3, "clog_test.go", 139, "fatal")
+	contents += formatEntry(Severity_INFO, t2, 1, "clog_test.go", 137, "multi-\nline")
+	contents += formatEntry(Severity_WARNING, t3, 2, "clog_test.go", 138, "warning")
+	contents += formatEntry(Severity_ERROR, t4, 3, "clog_test.go", 139, "error")
+	contents += formatEntry(Severity_FATAL, t5, 4, "clog_test.go", 140, "fatal\nstack\ntrace")
 
 	readAllEntries := func(contents string) []Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents))
@@ -187,28 +189,39 @@ func TestEntryDecoder(t *testing.T) {
 			Message:   `info`,
 		},
 		{
-			Severity:  Severity_WARNING,
+			Severity:  Severity_INFO,
 			Time:      t2.UnixNano(),
 			Goroutine: 1,
 			File:      `clog_test.go`,
 			Line:      137,
-			Message:   `warning`,
+			Message: `multi-
+line`,
 		},
 		{
-			Severity:  Severity_ERROR,
+			Severity:  Severity_WARNING,
 			Time:      t3.UnixNano(),
 			Goroutine: 2,
 			File:      `clog_test.go`,
 			Line:      138,
-			Message:   `error`,
+			Message:   `warning`,
 		},
 		{
-			Severity:  Severity_FATAL,
+			Severity:  Severity_ERROR,
 			Time:      t4.UnixNano(),
 			Goroutine: 3,
 			File:      `clog_test.go`,
 			Line:      139,
-			Message:   `fatal`,
+			Message:   `error`,
+		},
+		{
+			Severity:  Severity_FATAL,
+			Time:      t5.UnixNano(),
+			Goroutine: 4,
+			File:      `clog_test.go`,
+			Line:      140,
+			Message: `fatal
+stack
+trace`,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
