@@ -31,6 +31,7 @@ import "etcd/raft/raftpb/raft.proto";
 
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
 
 message CertificatesRequest {
   // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
@@ -255,6 +256,67 @@ message RaftDebugResponse {
   repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
 }
 
+// ActiveQuery represents a query in flight on some Session.
+message ActiveQuery {
+  // SQL query string specified by the user.
+  string sql = 1;
+  // Start timestamp of this query.
+  google.protobuf.Timestamp start = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  // True if this query is distributed.
+  bool is_distributed = 3;
+
+  // Enum for phase of execution.
+  enum Phase {
+    PREPARING = 0;
+    EXECUTING = 1;
+  }
+  // phase stores the current phase of execution for this query.
+  Phase phase = 4;
+}
+
+// Request object for ListSessions and ListLocalSessions.
+message ListSessionsRequest {
+  // Username of the user making this request.
+  string username = 1;
+}
+
+// Session represents one SQL session.
+message Session {
+  // ID of node where this session exists.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // Username of the user for this session.
+  string username = 2;
+  // Connected client's IP address and port.
+  string client_address = 3;
+  // Application name specified by the client.
+  string application_name = 4;
+  // Queries in progress on this session.
+  repeated ActiveQuery active_queries = 5 [(gogoproto.nullable) = false];
+  // Timestamp of session's start.
+  google.protobuf.Timestamp start = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  // ID of the current KV transaction for this session.
+  bytes kv_txn_id = 7 [(gogoproto.customname) = "KvTxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+}
+
+// An error wrapper object for ListSessionsResponse.
+message ListSessionsError {
+  // ID of node that was being contacted when this error occurred
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // Error message.
+  string message = 2;
+}
+
+// Response object for ListSessions and ListLocalSessions.
+message ListSessionsResponse {
+  // A list of sessions on this node or cluster.
+  repeated Session sessions = 1 [(gogoproto.nullable) = false];
+  // Any errors that occurred during fan-out calls to other nodes.
+  repeated ListSessionsError errors = 2 [(gogoproto.nullable) = false];
+}
+
 message SpanStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
   bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
@@ -304,6 +366,16 @@ service Status {
   rpc Gossip(GossipRequest) returns (gossip.InfoStatus) {
     option (google.api.http) = {
       get: "/_status/gossip/{node_id}"
+    };
+  }
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
+    option (google.api.http) = {
+      get: "/_status/sessions"
+    };
+  }
+  rpc ListLocalSessions(ListSessionsRequest) returns (ListSessionsResponse) {
+    option (google.api.http) = {
+      get: "/_status/local_sessions"
     };
   }
 
