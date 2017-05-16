@@ -255,6 +255,29 @@ message RaftDebugResponse {
   repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
 }
 
+message ActiveQuery {
+  string sql = 1;
+  int64 start = 2;
+}
+
+message ListSessionsRequest {
+  string username = 1;
+}
+
+message ActiveSession {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  string username = 2;
+  string client_address = 3;
+  string application_name = 4;
+  repeated ActiveQuery active_queries = 5 [(gogoproto.nullable) = false];
+  int64 start = 6;
+  string kv_txn_id = 7 [(gogoproto.customname) = "KvTxnID"];
+}
+
+message ListSessionsResponse {
+  repeated ActiveSession sessions = 1 [(gogoproto.nullable) = false];
+}
+
 message SpanStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
   bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
@@ -304,6 +327,16 @@ service Status {
   rpc Gossip(GossipRequest) returns (gossip.InfoStatus) {
     option (google.api.http) = {
       get: "/_status/gossip/{node_id}"
+    };
+  }
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
+    option (google.api.http) = {
+      get: "/_status/sessions"
+    };
+  }
+  rpc ListLocalSessions(ListSessionsRequest) returns (ListSessionsResponse) {
+    option (google.api.http) = {
+      get: "/_status/local_sessions"
     };
   }
 

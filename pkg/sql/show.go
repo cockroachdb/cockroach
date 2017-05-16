@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -881,6 +882,126 @@ func (p *planner) ShowConstraints(
 				},
 				columns: v.columns,
 			}, nil
+		},
+	}, nil
+}
+
+func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planNode, error) {
+	columns := sqlbase.ResultColumns{
+		{Name: "node_id", Typ: parser.TypeString},
+		{Name: "username", Typ: parser.TypeString},
+		{Name: "start", Typ: parser.TypeInt},
+		{Name: "query", Typ: parser.TypeString},
+		{Name: "client_address", Typ: parser.TypeString},
+		{Name: "application_name", Typ: parser.TypeString},
+	}
+
+	return &delayedNode{
+		name:    n.String(),
+		columns: columns,
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			statusServer := p.session.execCfg.StatusServer
+
+			var response *serverpb.ListSessionsResponse
+			var err error
+			sessionsRequest := &serverpb.ListSessionsRequest{Username: p.session.User}
+			if n.Cluster {
+				response, err = statusServer.ListSessions(ctx, sessionsRequest)
+			} else {
+				response, err = statusServer.ListLocalSessions(ctx, sessionsRequest)
+			}
+
+			if err != nil && response == nil {
+				return nil, err
+			}
+
+			v := p.newContainerValuesNode(columns, 0)
+			for _, session := range response.Sessions {
+				for _, query := range session.ActiveQueries {
+					row := parser.Datums{
+						parser.NewDString(session.NodeID),
+						parser.NewDString(session.Username),
+						parser.NewDInt(parser.DInt(query.Start)),
+						parser.NewDString(query.Sql),
+						parser.NewDString(session.ClientAddress),
+						parser.NewDString(session.ApplicationName),
+					}
+					if _, err := v.rows.AddRow(ctx, row); err != nil {
+						v.Close(ctx)
+						return nil, err
+					}
+				}
+			}
+
+			return v, err
+		},
+	}, nil
+
+}
+
+func (p *planner) ShowSessions(ctx context.Context, n *parser.ShowSessions) (planNode, error) {
+	columns := sqlbase.ResultColumns{
+		{Name: "node_id", Typ: parser.TypeString},
+		{Name: "username", Typ: parser.TypeString},
+		{Name: "client_address", Typ: parser.TypeString},
+		{Name: "application_name", Typ: parser.TypeString},
+		{Name: "active_queries", Typ: parser.TypeString},
+		{Name: "session_start", Typ: parser.TypeInt},
+		{Name: "oldest_query_start", Typ: parser.TypeInt},
+		{Name: "kv_txn", Typ: parser.TypeString},
+	}
+	return &delayedNode{
+		name:    n.String(),
+		columns: columns,
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			statusServer := p.session.execCfg.StatusServer
+
+			var response *serverpb.ListSessionsResponse
+			var err error
+			sessionsRequest := &serverpb.ListSessionsRequest{Username: p.session.User}
+			if n.Cluster {
+				response, err = statusServer.ListSessions(ctx, sessionsRequest)
+			} else {
+				response, err = statusServer.ListLocalSessions(ctx, sessionsRequest)
+			}
+
+			if err != nil {
+				return nil, err
+			}
+
+			v := p.newContainerValuesNode(columns, 0)
+			for _, session := range response.Sessions {
+
+				// Generate active_queries and oldest_query_start
+				var activeQueries bytes.Buffer
+				var oldestStart int64
+
+				for _, query := range session.ActiveQueries {
+					activeQueries.WriteString(query.Sql)
+					activeQueries.WriteString("; ")
+
+					if oldestStart == 0 || query.Start < oldestStart {
+						oldestStart = query.Start
+					}
+				}
+
+				row := parser.Datums{
+					parser.NewDString(session.NodeID),
+					parser.NewDString(session.Username),
+					parser.NewDString(session.ClientAddress),
+					parser.NewDString(session.ApplicationName),
+					parser.NewDString(activeQueries.String()),
+					parser.NewDInt(parser.DInt(session.Start)),
+					parser.NewDInt(parser.DInt(oldestStart)),
+					parser.NewDString(session.KvTxnID),
+				}
+				if _, err := v.rows.AddRow(ctx, row); err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+			}
+
+			return v, nil
 		},
 	}, nil
 }
