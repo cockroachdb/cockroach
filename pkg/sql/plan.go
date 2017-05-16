@@ -366,6 +366,8 @@ func (p *planner) newPlan(
 		return p.ShowIndex(ctx, n)
 	case *parser.ShowTables:
 		return p.ShowTables(ctx, n)
+	case *parser.ShowTransactionStatus:
+		return p.ShowTransactionStatus()
 	case *parser.ShowUsers:
 		return p.ShowUsers(ctx, n)
 	case *parser.ShowRanges:
@@ -427,6 +429,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.ShowTables(ctx, n)
 	case *parser.ShowUsers:
 		return p.ShowUsers(ctx, n)
+	case *parser.ShowTransactionStatus:
+		return p.ShowTransactionStatus()
 	case *parser.ShowRanges:
 		return p.ShowRanges(ctx, n)
 	case *parser.Split:
