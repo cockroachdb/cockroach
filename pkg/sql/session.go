@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -149,10 +151,6 @@ type Session struct {
 	// Session parameters, user-configurable.
 	//
 
-	// ApplicationName is the name of the application running the
-	// current session. This can be used for logging and per-application
-	// statistics. Change via resetApplicationName().
-	ApplicationName string
 	// Database indicates the "current" database for the purpose of
 	// resolving names. See searchAndQualifyDatabase() for details.
 	Database string
@@ -170,6 +168,8 @@ type Session struct {
 	SearchPath parser.SearchPath
 	// User is the name of the user logged into the session.
 	User string
+	// RemoteStr is the user's client IP address and port
+	RemoteStr string
 
 	// defaults is used to restore default configuration values into
 	// SET ... TO DEFAULT statements.
@@ -239,6 +239,28 @@ type Session struct {
 	// If set, contains the in progress COPY FROM columns.
 	copyFrom *copyNode
 
+	// mu contains of all elements of the struct that can be changed
+	// after initialization, and may be accessed from another thread.
+	mu struct {
+		syncutil.RWMutex
+
+		//
+		// Session parameters, user-configurable
+		//
+
+		// ApplicationName is the name of the application running the
+		// current session. This can be used for logging and per-application
+		// statistics. Change via resetApplicationName().
+		ApplicationName string
+
+		//
+		// State structures for the logical SQL session.
+		//
+
+		// ActiveQueries contains a set of all queries in flight
+		ActiveQueries map[planNode]queryMeta
+	}
+
 	//
 	// Testing state.
 	//
@@ -284,6 +306,31 @@ type SessionArgs struct {
 	ApplicationName string
 }
 
+// SessionRegistry stores a set of all sessions on this node
+// Use register() and deregister() to modify this registry
+type SessionRegistry struct {
+	syncutil.Mutex
+	Store map[*Session]struct{}
+}
+
+// MakeSessionRegistry creates a new SessionRegistry with an empty set
+// of sessions
+func MakeSessionRegistry() *SessionRegistry {
+	return &SessionRegistry{Store: make(map[*Session]struct{})}
+}
+
+func (r *SessionRegistry) register(s *Session) {
+	r.Lock()
+	r.Store[s] = struct{}{}
+	r.Unlock()
+}
+
+func (r *SessionRegistry) deregister(s *Session) {
+	r.Lock()
+	delete(r.Store, s)
+	r.Unlock()
+}
+
 // NewSession creates and initializes a new Session object.
 // remote can be nil.
 func NewSession(
@@ -319,15 +366,20 @@ func NewSession(
 	s.resetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
+	s.mu.ActiveQueries = make(map[planNode]queryMeta)
+
+	remoteStr := "<admin>"
+	if remote != nil {
+		remoteStr = remote.String()
+	}
+	s.RemoteStr = remoteStr
 
 	if traceSessionEventLogEnabled.Get() {
-		remoteStr := "<admin>"
-		if remote != nil {
-			remoteStr = remote.String()
-		}
 		s.eventLog = trace.NewEventLog(fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	}
 	s.context, s.cancel = context.WithCancel(ctx)
+
+	e.cfg.SessionRegistry.register(s)
 
 	return s
 }
@@ -382,6 +434,10 @@ func (s *Session) Finish(e *Executor) {
 		s.eventLog.Finish()
 		s.eventLog = nil
 	}
+
+	// Clear this session from the sessions registry. This takes it off
+	// of any SHOW SESSIONS queries
+	e.cfg.SessionRegistry.deregister(s)
 
 	// This will stop the heartbeating of the of the txn record.
 	// TODO(andrei): This shouldn't have any effect, since, if there was a
@@ -530,6 +586,48 @@ func (s *Session) checkTestingVerifyMetadataOrDie(e *Executor, stmts parser.Stat
 	s.testingVerifyMetadataFn = nil
 }
 
+// Adds a running query to the session's internal store of active queries
+// Called from executor's execStmt and execStmtInParallel
+func (s *Session) addActiveQuery(plan planNode, sql string) {
+	s.mu.Lock()
+	s.mu.ActiveQueries[plan] = queryMeta{
+		start: timeutil.Now(),
+		sql:   sql,
+	}
+	s.mu.Unlock()
+}
+
+// Removes a query from a session's internal store of active queries
+// Called when a query finishes execution
+func (s *Session) removeActiveQuery(plan planNode) {
+	s.mu.Lock()
+	delete(s.mu.ActiveQueries, plan)
+	s.mu.Unlock()
+}
+
+// SerializeToResponse serializes a Session into a serverpb.SessionResponse
+// that can be served over RPC
+func (s *Session) SerializeToResponse() serverpb.SessionResponse {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	s.TxnState.mu.RLock()
+	defer s.TxnState.mu.RUnlock()
+
+	kvTxnID := ""
+	txn := s.TxnState.mu.txn
+	if txn != nil {
+		kvTxnID = txn.DebugName()
+	}
+
+	return serverpb.SessionResponse{
+		Username:        s.User,
+		ClientAddress:   s.RemoteStr,
+		ApplicationName: s.mu.ApplicationName,
+		Start:           s.phaseTimes[sessionInit].Unix(),
+		KvTxnId:         kvTxnID,
+	}
+}
+
 // TxnStateEnum represents the state of a SQL txn.
 type TxnStateEnum int
 
@@ -560,8 +658,14 @@ func (s TxnStateEnum) kvTxnIsOpen() bool {
 // For interactive transactions (open across batches of SQL commands sent by a
 // user), txnState is intended to be stored as part of a user Session.
 type txnState struct {
-	txn   *client.Txn
 	State TxnStateEnum
+
+	// Fields that can be accessed from other threads belong here
+	mu struct {
+		syncutil.RWMutex
+
+		txn *client.Txn
+	}
 
 	// Ctx is the context for everything running in this SQL txn.
 	Ctx context.Context
@@ -652,8 +756,10 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
-	ts.txn = client.NewTxn(e.cfg.DB)
-	if err := ts.txn.SetIsolation(s.DefaultIsolationLevel); err != nil {
+	ts.mu.Lock()
+	ts.mu.txn = client.NewTxn(e.cfg.DB)
+	ts.mu.Unlock()
+	if err := ts.mu.txn.SetIsolation(s.DefaultIsolationLevel); err != nil {
 		panic(err)
 	}
 	ts.State = Open
@@ -674,13 +780,15 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 	if state != NoTxn && state != Aborted && state != CommitWait {
 		panic(fmt.Sprintf("resetStateAndTxn called with unsupported state: %v", state))
 	}
-	if ts.txn != nil && !ts.txn.IsFinalized() {
+	if ts.mu.txn != nil && !ts.mu.txn.IsFinalized() {
 		panic(fmt.Sprintf(
 			"attempting to move SQL txn to state %v inconsistent with KV txn state: %s "+
-				"(finalized: false)", state, ts.txn.Proto().Status))
+				"(finalized: false)", state, ts.mu.txn.Proto().Status))
 	}
 	ts.State = state
-	ts.txn = nil
+	ts.mu.Lock()
+	ts.mu.txn = nil
+	ts.mu.Unlock()
 }
 
 // finishSQLTxn closes the root span for the current SQL txn.
@@ -716,13 +824,13 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 	}
 	if retErr, ok := err.(*roachpb.HandledRetryableTxnError); !ok ||
 		!ts.willBeRetried() ||
-		!ts.txn.IsRetryableErrMeantForTxn(*retErr) {
+		!ts.mu.txn.IsRetryableErrMeantForTxn(*retErr) {
 
 		// We can't or don't want to retry this txn, so the txn is over.
 		e.TxnAbortCount.Inc(1)
 		// This call rolls back a PENDING transaction and cleans up all its
 		// intents.
-		ts.txn.CleanupOnError(ts.Ctx, err)
+		ts.mu.txn.CleanupOnError(ts.Ctx, err)
 		ts.resetStateAndTxn(Aborted)
 	} else {
 		// If we got a retriable error, move the SQL txn to the RestartWait state.

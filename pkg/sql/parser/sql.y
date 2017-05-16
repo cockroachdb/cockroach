@@ -672,6 +672,8 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   PARENT PARTIAL PARTITION PASSWORD PLACING POSITION
 %token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
+%token <str>   QUERIES
+
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
 %token <str>   REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
 %token <str>   RENAME REPEATABLE
@@ -679,8 +681,8 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   ROW ROWS RSHIFT
 
 %token <str>   SAVEPOINT SCATTER SEARCH SECOND SELECT
-%token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SETTING SETTINGS SHOW
-%token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
+%token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
+%token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str>   START STATUS STDIN STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
@@ -1646,6 +1648,30 @@ show_stmt:
 | SHOW KEYS FROM var_name
   {
     $$.val = &ShowIndex{Table: $4.normalizableTableName()}
+  }
+| SHOW QUERIES
+  {
+    $$.val = &ShowQueries{Cluster: true, ScopeSpecified: false}
+  }
+| SHOW CLUSTER QUERIES
+  {
+    $$.val = &ShowQueries{Cluster: true, ScopeSpecified: true}
+  }
+| SHOW LOCAL QUERIES
+  {
+    $$.val = &ShowQueries{Cluster: false, ScopeSpecified: true}
+  }
+| SHOW SESSIONS
+  {
+    $$.val = &ShowSessions{Cluster: true, ScopeSpecified: false}
+  }
+| SHOW CLUSTER SESSIONS
+  {
+    $$.val = &ShowSessions{Cluster: true, ScopeSpecified: true}
+  }
+| SHOW LOCAL SESSIONS
+  {
+    $$.val = &ShowSessions{Cluster: false, ScopeSpecified: true}
   }
 | SHOW TABLES FROM name
   {
@@ -5261,6 +5287,7 @@ unreserved_keyword:
 | PRECEDING
 | PREPARE
 | PRIORITY
+| QUERIES
 | RANGE
 | READ
 | RECURSIVE
@@ -5289,6 +5316,7 @@ unreserved_keyword:
 | SECOND
 | SERIALIZABLE
 | SESSION
+| SESSIONS
 | SET
 | SHOW
 | SIMPLE

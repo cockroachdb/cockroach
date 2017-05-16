@@ -14697,6 +14697,915 @@ export const cockroach = $root.cockroach = (() => {
                 return RaftDebugResponse;
             })();
 
+            serverpb.QueryResponse = (function() {
+
+                /**
+                 * Properties of a QueryResponse.
+                 * @typedef cockroach.server.serverpb.QueryResponse$Properties
+                 * @type {Object}
+                 * @property {string} [sql] QueryResponse sql.
+                 * @property {Long} [start] QueryResponse start.
+                 */
+
+                /**
+                 * Constructs a new QueryResponse.
+                 * @exports cockroach.server.serverpb.QueryResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.QueryResponse$Properties=} [properties] Properties to set
+                 */
+                function QueryResponse(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * QueryResponse sql.
+                 * @type {string}
+                 */
+                QueryResponse.prototype.sql = "";
+
+                /**
+                 * QueryResponse start.
+                 * @type {Long}
+                 */
+                QueryResponse.prototype.start = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * Creates a new QueryResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.QueryResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.QueryResponse} QueryResponse instance
+                 */
+                QueryResponse.create = function create(properties) {
+                    return new QueryResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified QueryResponse message. Does not implicitly {@link cockroach.server.serverpb.QueryResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueryResponse$Properties} message QueryResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                QueryResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.sql != null && message.hasOwnProperty("sql"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.sql);
+                    if (message.start != null && message.hasOwnProperty("start"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).int64(message.start);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified QueryResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.QueryResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueryResponse$Properties} message QueryResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                QueryResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a QueryResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.QueryResponse} QueryResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                QueryResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.QueryResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.sql = reader.string();
+                            break;
+                        case 2:
+                            message.start = reader.int64();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a QueryResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.QueryResponse} QueryResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                QueryResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a QueryResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                QueryResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.sql != null && message.hasOwnProperty("sql"))
+                        if (!$util.isString(message.sql))
+                            return "sql: string expected";
+                    if (message.start != null && message.hasOwnProperty("start"))
+                        if (!$util.isInteger(message.start) && !(message.start && $util.isInteger(message.start.low) && $util.isInteger(message.start.high)))
+                            return "start: integer|Long expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a QueryResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueryResponse} QueryResponse
+                 */
+                QueryResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.QueryResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.QueryResponse();
+                    if (object.sql != null)
+                        message.sql = String(object.sql);
+                    if (object.start != null)
+                        if ($util.Long)
+                            (message.start = $util.Long.fromValue(object.start)).unsigned = false;
+                        else if (typeof object.start === "string")
+                            message.start = parseInt(object.start, 10);
+                        else if (typeof object.start === "number")
+                            message.start = object.start;
+                        else if (typeof object.start === "object")
+                            message.start = new $util.LongBits(object.start.low >>> 0, object.start.high >>> 0).toNumber();
+                    return message;
+                };
+
+                /**
+                 * Creates a QueryResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.QueryResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueryResponse} QueryResponse
+                 */
+                QueryResponse.from = QueryResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a QueryResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.QueryResponse} message QueryResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                QueryResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.sql = "";
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.start = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.start = options.longs === String ? "0" : 0;
+                    }
+                    if (message.sql != null && message.hasOwnProperty("sql"))
+                        object.sql = message.sql;
+                    if (message.start != null && message.hasOwnProperty("start"))
+                        if (typeof message.start === "number")
+                            object.start = options.longs === String ? String(message.start) : message.start;
+                        else
+                            object.start = options.longs === String ? $util.Long.prototype.toString.call(message.start) : options.longs === Number ? new $util.LongBits(message.start.low >>> 0, message.start.high >>> 0).toNumber() : message.start;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this QueryResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                QueryResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this QueryResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                QueryResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return QueryResponse;
+            })();
+
+            serverpb.SessionsRequest = (function() {
+
+                /**
+                 * Properties of a SessionsRequest.
+                 * @typedef cockroach.server.serverpb.SessionsRequest$Properties
+                 * @type {Object}
+                 * @property {string} [username] SessionsRequest username.
+                 */
+
+                /**
+                 * Constructs a new SessionsRequest.
+                 * @exports cockroach.server.serverpb.SessionsRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.SessionsRequest$Properties=} [properties] Properties to set
+                 */
+                function SessionsRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * SessionsRequest username.
+                 * @type {string}
+                 */
+                SessionsRequest.prototype.username = "";
+
+                /**
+                 * Creates a new SessionsRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.SessionsRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.SessionsRequest} SessionsRequest instance
+                 */
+                SessionsRequest.create = function create(properties) {
+                    return new SessionsRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified SessionsRequest message. Does not implicitly {@link cockroach.server.serverpb.SessionsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SessionsRequest$Properties} message SessionsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SessionsRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.username);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified SessionsRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SessionsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SessionsRequest$Properties} message SessionsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SessionsRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a SessionsRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.SessionsRequest} SessionsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SessionsRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.SessionsRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.username = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a SessionsRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.SessionsRequest} SessionsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SessionsRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a SessionsRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                SessionsRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        if (!$util.isString(message.username))
+                            return "username: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a SessionsRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SessionsRequest} SessionsRequest
+                 */
+                SessionsRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.SessionsRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.SessionsRequest();
+                    if (object.username != null)
+                        message.username = String(object.username);
+                    return message;
+                };
+
+                /**
+                 * Creates a SessionsRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.SessionsRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SessionsRequest} SessionsRequest
+                 */
+                SessionsRequest.from = SessionsRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a SessionsRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.SessionsRequest} message SessionsRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SessionsRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults)
+                        object.username = "";
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        object.username = message.username;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this SessionsRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SessionsRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this SessionsRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                SessionsRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return SessionsRequest;
+            })();
+
+            serverpb.SessionResponse = (function() {
+
+                /**
+                 * Properties of a SessionResponse.
+                 * @typedef cockroach.server.serverpb.SessionResponse$Properties
+                 * @type {Object}
+                 * @property {string} [node_id] SessionResponse node_id.
+                 * @property {string} [username] SessionResponse username.
+                 * @property {string} [client_address] SessionResponse client_address.
+                 * @property {string} [application_name] SessionResponse application_name.
+                 * @property {Array.<cockroach.server.serverpb.QueryResponse$Properties>} [active_queries] SessionResponse active_queries.
+                 * @property {Long} [start] SessionResponse start.
+                 * @property {string} [kv_txn_id] SessionResponse kv_txn_id.
+                 */
+
+                /**
+                 * Constructs a new SessionResponse.
+                 * @exports cockroach.server.serverpb.SessionResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.SessionResponse$Properties=} [properties] Properties to set
+                 */
+                function SessionResponse(properties) {
+                    this.active_queries = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * SessionResponse node_id.
+                 * @type {string}
+                 */
+                SessionResponse.prototype.node_id = "";
+
+                /**
+                 * SessionResponse username.
+                 * @type {string}
+                 */
+                SessionResponse.prototype.username = "";
+
+                /**
+                 * SessionResponse client_address.
+                 * @type {string}
+                 */
+                SessionResponse.prototype.client_address = "";
+
+                /**
+                 * SessionResponse application_name.
+                 * @type {string}
+                 */
+                SessionResponse.prototype.application_name = "";
+
+                /**
+                 * SessionResponse active_queries.
+                 * @type {Array.<cockroach.server.serverpb.QueryResponse$Properties>}
+                 */
+                SessionResponse.prototype.active_queries = $util.emptyArray;
+
+                /**
+                 * SessionResponse start.
+                 * @type {Long}
+                 */
+                SessionResponse.prototype.start = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * SessionResponse kv_txn_id.
+                 * @type {string}
+                 */
+                SessionResponse.prototype.kv_txn_id = "";
+
+                /**
+                 * Creates a new SessionResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.SessionResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.SessionResponse} SessionResponse instance
+                 */
+                SessionResponse.create = function create(properties) {
+                    return new SessionResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified SessionResponse message. Does not implicitly {@link cockroach.server.serverpb.SessionResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SessionResponse$Properties} message SessionResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SessionResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.node_id);
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.username);
+                    if (message.client_address != null && message.hasOwnProperty("client_address"))
+                        writer.uint32(/* id 3, wireType 2 =*/26).string(message.client_address);
+                    if (message.application_name != null && message.hasOwnProperty("application_name"))
+                        writer.uint32(/* id 4, wireType 2 =*/34).string(message.application_name);
+                    if (message.active_queries != null && message.active_queries.length)
+                        for (let i = 0; i < message.active_queries.length; ++i)
+                            $root.cockroach.server.serverpb.QueryResponse.encode(message.active_queries[i], writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
+                    if (message.start != null && message.hasOwnProperty("start"))
+                        writer.uint32(/* id 6, wireType 0 =*/48).int64(message.start);
+                    if (message.kv_txn_id != null && message.hasOwnProperty("kv_txn_id"))
+                        writer.uint32(/* id 7, wireType 2 =*/58).string(message.kv_txn_id);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified SessionResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SessionResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SessionResponse$Properties} message SessionResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SessionResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a SessionResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.SessionResponse} SessionResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SessionResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.SessionResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.node_id = reader.string();
+                            break;
+                        case 2:
+                            message.username = reader.string();
+                            break;
+                        case 3:
+                            message.client_address = reader.string();
+                            break;
+                        case 4:
+                            message.application_name = reader.string();
+                            break;
+                        case 5:
+                            if (!(message.active_queries && message.active_queries.length))
+                                message.active_queries = [];
+                            message.active_queries.push($root.cockroach.server.serverpb.QueryResponse.decode(reader, reader.uint32()));
+                            break;
+                        case 6:
+                            message.start = reader.int64();
+                            break;
+                        case 7:
+                            message.kv_txn_id = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a SessionResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.SessionResponse} SessionResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SessionResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a SessionResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                SessionResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isString(message.node_id))
+                            return "node_id: string expected";
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        if (!$util.isString(message.username))
+                            return "username: string expected";
+                    if (message.client_address != null && message.hasOwnProperty("client_address"))
+                        if (!$util.isString(message.client_address))
+                            return "client_address: string expected";
+                    if (message.application_name != null && message.hasOwnProperty("application_name"))
+                        if (!$util.isString(message.application_name))
+                            return "application_name: string expected";
+                    if (message.active_queries != null && message.hasOwnProperty("active_queries")) {
+                        if (!Array.isArray(message.active_queries))
+                            return "active_queries: array expected";
+                        for (let i = 0; i < message.active_queries.length; ++i) {
+                            let error = $root.cockroach.server.serverpb.QueryResponse.verify(message.active_queries[i]);
+                            if (error)
+                                return "active_queries." + error;
+                        }
+                    }
+                    if (message.start != null && message.hasOwnProperty("start"))
+                        if (!$util.isInteger(message.start) && !(message.start && $util.isInteger(message.start.low) && $util.isInteger(message.start.high)))
+                            return "start: integer|Long expected";
+                    if (message.kv_txn_id != null && message.hasOwnProperty("kv_txn_id"))
+                        if (!$util.isString(message.kv_txn_id))
+                            return "kv_txn_id: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a SessionResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SessionResponse} SessionResponse
+                 */
+                SessionResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.SessionResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.SessionResponse();
+                    if (object.node_id != null)
+                        message.node_id = String(object.node_id);
+                    if (object.username != null)
+                        message.username = String(object.username);
+                    if (object.client_address != null)
+                        message.client_address = String(object.client_address);
+                    if (object.application_name != null)
+                        message.application_name = String(object.application_name);
+                    if (object.active_queries) {
+                        if (!Array.isArray(object.active_queries))
+                            throw TypeError(".cockroach.server.serverpb.SessionResponse.active_queries: array expected");
+                        message.active_queries = [];
+                        for (let i = 0; i < object.active_queries.length; ++i) {
+                            if (typeof object.active_queries[i] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.SessionResponse.active_queries: object expected");
+                            message.active_queries[i] = $root.cockroach.server.serverpb.QueryResponse.fromObject(object.active_queries[i]);
+                        }
+                    }
+                    if (object.start != null)
+                        if ($util.Long)
+                            (message.start = $util.Long.fromValue(object.start)).unsigned = false;
+                        else if (typeof object.start === "string")
+                            message.start = parseInt(object.start, 10);
+                        else if (typeof object.start === "number")
+                            message.start = object.start;
+                        else if (typeof object.start === "object")
+                            message.start = new $util.LongBits(object.start.low >>> 0, object.start.high >>> 0).toNumber();
+                    if (object.kv_txn_id != null)
+                        message.kv_txn_id = String(object.kv_txn_id);
+                    return message;
+                };
+
+                /**
+                 * Creates a SessionResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.SessionResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SessionResponse} SessionResponse
+                 */
+                SessionResponse.from = SessionResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a SessionResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.SessionResponse} message SessionResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SessionResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.active_queries = [];
+                    if (options.defaults) {
+                        object.node_id = "";
+                        object.username = "";
+                        object.client_address = "";
+                        object.application_name = "";
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.start = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.start = options.longs === String ? "0" : 0;
+                        object.kv_txn_id = "";
+                    }
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        object.node_id = message.node_id;
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        object.username = message.username;
+                    if (message.client_address != null && message.hasOwnProperty("client_address"))
+                        object.client_address = message.client_address;
+                    if (message.application_name != null && message.hasOwnProperty("application_name"))
+                        object.application_name = message.application_name;
+                    if (message.active_queries && message.active_queries.length) {
+                        object.active_queries = [];
+                        for (let j = 0; j < message.active_queries.length; ++j)
+                            object.active_queries[j] = $root.cockroach.server.serverpb.QueryResponse.toObject(message.active_queries[j], options);
+                    }
+                    if (message.start != null && message.hasOwnProperty("start"))
+                        if (typeof message.start === "number")
+                            object.start = options.longs === String ? String(message.start) : message.start;
+                        else
+                            object.start = options.longs === String ? $util.Long.prototype.toString.call(message.start) : options.longs === Number ? new $util.LongBits(message.start.low >>> 0, message.start.high >>> 0).toNumber() : message.start;
+                    if (message.kv_txn_id != null && message.hasOwnProperty("kv_txn_id"))
+                        object.kv_txn_id = message.kv_txn_id;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this SessionResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SessionResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this SessionResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                SessionResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return SessionResponse;
+            })();
+
+            serverpb.SessionsResponse = (function() {
+
+                /**
+                 * Properties of a SessionsResponse.
+                 * @typedef cockroach.server.serverpb.SessionsResponse$Properties
+                 * @type {Object}
+                 * @property {Array.<cockroach.server.serverpb.SessionResponse$Properties>} [sessions] SessionsResponse sessions.
+                 */
+
+                /**
+                 * Constructs a new SessionsResponse.
+                 * @exports cockroach.server.serverpb.SessionsResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.SessionsResponse$Properties=} [properties] Properties to set
+                 */
+                function SessionsResponse(properties) {
+                    this.sessions = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * SessionsResponse sessions.
+                 * @type {Array.<cockroach.server.serverpb.SessionResponse$Properties>}
+                 */
+                SessionsResponse.prototype.sessions = $util.emptyArray;
+
+                /**
+                 * Creates a new SessionsResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.SessionsResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.SessionsResponse} SessionsResponse instance
+                 */
+                SessionsResponse.create = function create(properties) {
+                    return new SessionsResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified SessionsResponse message. Does not implicitly {@link cockroach.server.serverpb.SessionsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SessionsResponse$Properties} message SessionsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SessionsResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.sessions != null && message.sessions.length)
+                        for (let i = 0; i < message.sessions.length; ++i)
+                            $root.cockroach.server.serverpb.SessionResponse.encode(message.sessions[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified SessionsResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SessionsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SessionsResponse$Properties} message SessionsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SessionsResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a SessionsResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.SessionsResponse} SessionsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SessionsResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.SessionsResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            if (!(message.sessions && message.sessions.length))
+                                message.sessions = [];
+                            message.sessions.push($root.cockroach.server.serverpb.SessionResponse.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a SessionsResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.SessionsResponse} SessionsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SessionsResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a SessionsResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                SessionsResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.sessions != null && message.hasOwnProperty("sessions")) {
+                        if (!Array.isArray(message.sessions))
+                            return "sessions: array expected";
+                        for (let i = 0; i < message.sessions.length; ++i) {
+                            let error = $root.cockroach.server.serverpb.SessionResponse.verify(message.sessions[i]);
+                            if (error)
+                                return "sessions." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a SessionsResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SessionsResponse} SessionsResponse
+                 */
+                SessionsResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.SessionsResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.SessionsResponse();
+                    if (object.sessions) {
+                        if (!Array.isArray(object.sessions))
+                            throw TypeError(".cockroach.server.serverpb.SessionsResponse.sessions: array expected");
+                        message.sessions = [];
+                        for (let i = 0; i < object.sessions.length; ++i) {
+                            if (typeof object.sessions[i] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.SessionsResponse.sessions: object expected");
+                            message.sessions[i] = $root.cockroach.server.serverpb.SessionResponse.fromObject(object.sessions[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a SessionsResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.SessionsResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SessionsResponse} SessionsResponse
+                 */
+                SessionsResponse.from = SessionsResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a SessionsResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.SessionsResponse} message SessionsResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SessionsResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.sessions = [];
+                    if (message.sessions && message.sessions.length) {
+                        object.sessions = [];
+                        for (let j = 0; j < message.sessions.length; ++j)
+                            object.sessions[j] = $root.cockroach.server.serverpb.SessionResponse.toObject(message.sessions[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this SessionsResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SessionsResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this SessionsResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                SessionsResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return SessionsResponse;
+            })();
+
             serverpb.SpanStatsRequest = (function() {
 
                 /**
@@ -15332,6 +16241,60 @@ export const cockroach = $root.cockroach = (() => {
                  * @function
                  * @param {cockroach.server.serverpb.GossipRequest|Object.<string,*>} request GossipRequest message or plain object
                  * @returns {Promise<cockroach.gossip.InfoStatus>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Status#sessions}.
+                 * @typedef Status_sessions_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.SessionsResponse} [response] SessionsResponse
+                 */
+
+                /**
+                 * Calls Sessions.
+                 * @param {cockroach.server.serverpb.SessionsRequest|Object.<string,*>} request SessionsRequest message or plain object
+                 * @param {Status_sessions_Callback} callback Node-style callback called with the error, if any, and SessionsResponse
+                 * @returns {undefined}
+                 */
+                Status.prototype.sessions = function sessions(request, callback) {
+                    return this.rpcCall(sessions, $root.cockroach.server.serverpb.SessionsRequest, $root.cockroach.server.serverpb.SessionsResponse, request, callback);
+                };
+
+                /**
+                 * Calls Sessions.
+                 * @name Status#sessions
+                 * @function
+                 * @param {cockroach.server.serverpb.SessionsRequest|Object.<string,*>} request SessionsRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.SessionsResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Status#localSessions}.
+                 * @typedef Status_localSessions_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.SessionsResponse} [response] SessionsResponse
+                 */
+
+                /**
+                 * Calls LocalSessions.
+                 * @param {cockroach.server.serverpb.SessionsRequest|Object.<string,*>} request SessionsRequest message or plain object
+                 * @param {Status_localSessions_Callback} callback Node-style callback called with the error, if any, and SessionsResponse
+                 * @returns {undefined}
+                 */
+                Status.prototype.localSessions = function localSessions(request, callback) {
+                    return this.rpcCall(localSessions, $root.cockroach.server.serverpb.SessionsRequest, $root.cockroach.server.serverpb.SessionsResponse, request, callback);
+                };
+
+                /**
+                 * Calls LocalSessions.
+                 * @name Status#localSessions
+                 * @function
+                 * @param {cockroach.server.serverpb.SessionsRequest|Object.<string,*>} request SessionsRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.SessionsResponse>} Promise
                  * @variation 2
                  */
 

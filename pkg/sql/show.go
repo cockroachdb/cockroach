@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -881,6 +882,134 @@ func (p *planner) ShowConstraints(
 				},
 				columns: v.columns,
 			}, nil
+		},
+	}, nil
+}
+
+func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planNode, error) {
+	argument := "LOCAL"
+	if n.Cluster {
+		argument = "CLUSTER"
+	}
+
+	columns := sqlbase.ResultColumns{
+		{Name: "node_id", Typ: parser.TypeString},
+		{Name: "username", Typ: parser.TypeString},
+		{Name: "start", Typ: parser.TypeInt},
+		{Name: "query", Typ: parser.TypeString},
+		{Name: "client_address", Typ: parser.TypeString},
+		{Name: "application_name", Typ: parser.TypeInt},
+	}
+
+	return &delayedNode{
+		name:    "SHOW " + argument + " QUERIES",
+		columns: columns,
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			statusServer := p.session.execCfg.StatusServer
+			v := p.newContainerValuesNode(columns, 0)
+
+			var response *serverpb.SessionsResponse
+			var err error
+			if n.Cluster {
+				response, err = statusServer.Sessions(ctx, &serverpb.SessionsRequest{})
+			} else {
+				response, err = statusServer.LocalSessions(ctx, &serverpb.SessionsRequest{})
+			}
+
+			if err != nil {
+				return nil, err
+			}
+
+			for _, session := range response.Sessions {
+				for _, query := range session.ActiveQueries {
+					row := parser.Datums{
+						parser.NewDString(session.NodeID),
+						parser.NewDString(session.Username),
+						parser.NewDInt(parser.DInt(query.Start)),
+						parser.NewDString(query.Sql),
+						parser.NewDString(session.ClientAddress),
+						parser.NewDString(session.ApplicationName),
+					}
+					if _, err := v.rows.AddRow(ctx, row); err != nil {
+						v.Close(ctx)
+						return nil, err
+					}
+				}
+			}
+
+			return v, nil
+		},
+	}, nil
+
+}
+
+func (p *planner) ShowSessions(ctx context.Context, n *parser.ShowSessions) (planNode, error) {
+	argument := "LOCAL"
+	if n.Cluster {
+		argument = "CLUSTER"
+	}
+
+	columns := sqlbase.ResultColumns{
+		{Name: "node_id", Typ: parser.TypeString},
+		{Name: "username", Typ: parser.TypeString},
+		{Name: "client_address", Typ: parser.TypeString},
+		{Name: "application_name", Typ: parser.TypeString},
+		{Name: "active_queries", Typ: parser.TypeString},
+		{Name: "session_start", Typ: parser.TypeInt},
+		{Name: "oldest_query_start", Typ: parser.TypeInt},
+		{Name: "kv_txn", Typ: parser.TypeString},
+	}
+	return &delayedNode{
+		name:    "SHOW " + argument + " SESSIONS",
+		columns: columns,
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			statusServer := p.session.execCfg.StatusServer
+			v := p.newContainerValuesNode(columns, 0)
+
+			var response *serverpb.SessionsResponse
+			var err error
+			if n.Cluster {
+				response, err = statusServer.Sessions(ctx, &serverpb.SessionsRequest{})
+			} else {
+				response, err = statusServer.LocalSessions(ctx, &serverpb.SessionsRequest{})
+			}
+
+			if err != nil {
+				return nil, err
+			}
+
+			for _, session := range response.Sessions {
+
+				// Generate active_queries and oldest_query_start
+				var activeQueries bytes.Buffer
+				var oldestStart int64
+
+				for _, query := range session.ActiveQueries {
+					activeQueries.WriteString(query.Sql)
+					activeQueries.WriteString("; ")
+
+					if oldestStart == 0 || query.Start < oldestStart {
+						oldestStart = query.Start
+					}
+				}
+
+				row := parser.Datums{
+					parser.NewDString(session.NodeID),
+					parser.NewDString(session.Username),
+					parser.NewDString(session.ClientAddress),
+					parser.NewDString(session.ApplicationName),
+					parser.NewDString(activeQueries.String()),
+					parser.NewDInt(parser.DInt(session.Start)),
+					parser.NewDInt(parser.DInt(oldestStart)),
+					parser.NewDString(session.KvTxnId),
+				}
+				if _, err := v.rows.AddRow(ctx, row); err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+			}
+
+			return v, nil
 		},
 	}, nil
 }

@@ -17,6 +17,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/coreos/etcd/raft"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -44,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -88,15 +91,16 @@ type metricMarshaler interface {
 type statusServer struct {
 	log.AmbientContext
 
-	cfg          *base.Config
-	admin        *adminServer
-	db           *client.DB
-	gossip       *gossip.Gossip
-	metricSource metricMarshaler
-	nodeLiveness *storage.NodeLiveness
-	rpcCtx       *rpc.Context
-	stores       *storage.Stores
-	stopper      *stop.Stopper
+	cfg             *base.Config
+	admin           *adminServer
+	db              *client.DB
+	gossip          *gossip.Gossip
+	metricSource    metricMarshaler
+	nodeLiveness    *storage.NodeLiveness
+	rpcCtx          *rpc.Context
+	stores          *storage.Stores
+	stopper         *stop.Stopper
+	sessionRegistry *sql.SessionRegistry
 }
 
 // newStatusServer allocates and returns a statusServer.
@@ -111,19 +115,21 @@ func newStatusServer(
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 	stopper *stop.Stopper,
+	sessionRegistry *sql.SessionRegistry,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
-		AmbientContext: ambient,
-		cfg:            cfg,
-		admin:          adminServer,
-		db:             db,
-		gossip:         gossip,
-		metricSource:   metricSource,
-		nodeLiveness:   nodeLiveness,
-		rpcCtx:         rpcCtx,
-		stores:         stores,
-		stopper:        stopper,
+		AmbientContext:  ambient,
+		cfg:             cfg,
+		admin:           adminServer,
+		db:              db,
+		gossip:          gossip,
+		metricSource:    metricSource,
+		nodeLiveness:    nodeLiveness,
+		rpcCtx:          rpcCtx,
+		stores:          stores,
+		stopper:         stopper,
+		sessionRegistry: sessionRegistry,
 	}
 
 	return server
@@ -774,6 +780,111 @@ func (s *statusServer) Ranges(
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	return &output, nil
+}
+
+func (s *statusServer) LocalSessions(
+	ctx context.Context, req *serverpb.SessionsRequest,
+) (*serverpb.SessionsResponse, error) {
+	registry := s.sessionRegistry
+
+	registry.Lock()
+	defer registry.Unlock()
+
+	sessions := make([]serverpb.SessionResponse, 0, len(registry.Store))
+
+	for session := range registry.Store {
+		serializedSession := session.SerializeToResponse()
+		serializedSession.NodeID = s.gossip.NodeID.String()
+
+		sessions = append(sessions, serializedSession)
+	}
+
+	return &serverpb.SessionsResponse{Sessions: sessions}, nil
+}
+
+func (s *statusServer) Sessions(
+	ctx context.Context, req *serverpb.SessionsRequest,
+) (*serverpb.SessionsResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodes, err := s.Nodes(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	mu := struct {
+		syncutil.Mutex
+		resp   serverpb.SessionsResponse
+		errors []error
+	}{
+		resp: serverpb.SessionsResponse{
+			Sessions: make([]serverpb.SessionResponse, 0),
+		},
+		errors: make([]error, 0),
+	}
+
+	// Issue LocalSessions requests in parallel
+	var wg sync.WaitGroup
+	wgDone := make(chan struct{})
+
+	for _, node := range nodes.Nodes {
+		wg.Add(1)
+		nodeID := node.Desc.NodeID
+		go func() {
+			defer wg.Done()
+			status, err := s.dialNode(nodeID)
+
+			if err != nil {
+				mu.Lock()
+				defer mu.Unlock()
+
+				err := errors.Wrapf(err, "failed to dial into node %d", nodeID)
+				mu.errors = append(mu.errors, err)
+				return
+			}
+
+			sessions, err := status.LocalSessions(ctx, req)
+
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				err := errors.Wrapf(err, "failed to get sessions from %d", nodeID)
+				mu.errors = append(mu.errors, err)
+				return
+			}
+
+			mu.resp.Sessions = append(mu.resp.Sessions, sessions.Sessions...)
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(wgDone)
+	}()
+
+	select {
+	case <-wgDone:
+		// Wait group finished before timeout
+	case <-time.After(3000 * time.Millisecond):
+		// 3 second timeout expired
+		return nil, errors.New("Timed out looking up sessions in cluster")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(mu.errors) > 0 {
+		// Concatenate all error messages
+		var errBuffer bytes.Buffer
+		errBuffer.WriteString(fmt.Sprintf("%d errors: ", len(mu.errors)))
+
+		for _, err := range mu.errors {
+			errBuffer.WriteString(err.Error())
+			errBuffer.WriteString("; ")
+		}
+
+		return nil, errors.New(errBuffer.String())
+	}
+	return &mu.resp, nil
 }
 
 // SpanStats requests the total statistics stored on a node for a given key
