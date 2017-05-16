@@ -345,6 +345,7 @@ func (p *planner) propagateFilters(
 	case *valueGenerator:
 	case *valuesNode:
 	case *showRangesNode:
+	case *showFingerprintsNode:
 	case *scatterNode:
 
 	default:

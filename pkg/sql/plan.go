@@ -199,6 +199,7 @@ var _ planNode = &renderNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &scatterNode{}
 var _ planNode = &showRangesNode{}
+var _ planNode = &showFingerprintsNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
 var _ planNode = &unionNode{}
@@ -372,6 +373,8 @@ func (p *planner) newPlan(
 		return p.ShowUsers(ctx, n)
 	case *parser.ShowRanges:
 		return p.ShowRanges(ctx, n)
+	case *parser.ShowFingerprints:
+		return p.ShowFingerprints(ctx, n)
 	case *parser.Split:
 		return p.Split(ctx, n)
 	case *parser.Truncate:
