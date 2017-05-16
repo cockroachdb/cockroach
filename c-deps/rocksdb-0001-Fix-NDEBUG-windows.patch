@@ -1,0 +1,90 @@
+diff --git a/port/win/env_win.cc b/port/win/env_win.cc
+index 8099f84..1e4a917 100644
+--- a/port/win/env_win.cc
++++ b/port/win/env_win.cc
+@@ -1077,13 +1077,19 @@ std::string Env::GenerateUniqueId() {
+   UuidCreateSequential(&uuid);
+ 
+   RPC_CSTR rpc_str;
+-  auto status = UuidToStringA(&uuid, &rpc_str);
+-  assert(status == RPC_S_OK);
++#ifndef NDEBUG
++  assert(UuidToStringA(&uuid, &rpc_str) == RPC_S_OK);
++#else
++  UuidToStringA(&uuid, &rpc_str);
++#endif
+ 
+   result = reinterpret_cast<char*>(rpc_str);
+ 
+-  status = RpcStringFreeA(&rpc_str);
+-  assert(status == RPC_S_OK);
++#ifndef NDEBUG
++  assert(RpcStringFreeA(&rpc_str) == RPC_S_OK);
++#else
++  RpcStringFreeA(&rpc_str);
++#endif
+ 
+   return result;
+ }
+diff --git a/port/win/io_win.cc b/port/win/io_win.cc
+index f5a3ff8..4f6564f 100644
+--- a/port/win/io_win.cc
++++ b/port/win/io_win.cc
+@@ -31,7 +31,7 @@ bool IsPowerOfTwo(const size_t alignment) {
+ }
+ 
+ inline
+-bool IsSectorAligned(const size_t off) { 
++bool IsSectorAligned(const size_t off) {
+   return (off & (kSectorSize - 1)) == 0;
+ }
+ 
+@@ -193,11 +193,13 @@ WinMmapReadableFile::WinMmapReadableFile(const std::string& fileName,
+       length_(length) {}
+ 
+ WinMmapReadableFile::~WinMmapReadableFile() {
+-  BOOL ret = ::UnmapViewOfFile(mapped_region_);
+-  assert(ret);
+-
+-  ret = ::CloseHandle(hMap_);
+-  assert(ret);
++#ifndef NDEBUG
++  assert(::UnmapViewOfFile(mapped_region_));
++  assert(::CloseHandle(hMap_));
++#else
++  ::UnmapViewOfFile(mapped_region_);
++  ::CloseHandle(hMap_);
++#endif
+ }
+ 
+ Status WinMmapReadableFile::Read(uint64_t offset, size_t n, Slice* result,
+@@ -914,7 +916,9 @@ Status WinWritableImpl::AppendImpl(const Slice& data) {
+ 
+   assert(data.size() < std::numeric_limits<DWORD>::max());
+ 
++#ifndef NDEBUG
+   uint64_t written = 0;
++#endif
+ 
+   if (file_data_->use_direct_io()) {
+ 
+@@ -934,7 +938,9 @@ Status WinWritableImpl::AppendImpl(const Slice& data) {
+         "Failed to pwrite for: " + file_data_->GetName(), lastError);
+     }
+     else {
++#ifndef NDEBUG
+       written = ret;
++#endif
+     }
+ 
+   } else {
+@@ -948,7 +954,9 @@ Status WinWritableImpl::AppendImpl(const Slice& data) {
+         lastError);
+     }
+     else {
++#ifndef NDEBUG
+       written = bytesWritten;
++#endif
+     }
+   }
+ 
