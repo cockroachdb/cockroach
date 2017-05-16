@@ -268,6 +268,7 @@ func doExpandPlan(
 	case *hookFnNode:
 	case *valueGenerator:
 	case *showRangesNode:
+	case *showFingerprintsNode:
 	case *scatterNode:
 	case nil:
 
@@ -552,6 +553,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 	case *hookFnNode:
 	case *valueGenerator:
 	case *showRangesNode:
+	case *showFingerprintsNode:
 	case *scatterNode:
 
 	default:
