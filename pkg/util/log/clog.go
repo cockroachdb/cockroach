@@ -325,7 +325,7 @@ func (t *traceLocation) Set(value string) error {
 }
 
 var entryRE = regexp.MustCompile(
-	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) (?:(\d+) )?([^:]+):(\d+)  (.*)`)
+	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) (?:(\d+) )?([^:]+):(\d+)  ((?s).*)`)
 
 // EntryDecoder reads successive encoded log entries from the input
 // buffer. Each entry is preceded by a single big-ending uint32
@@ -374,7 +374,7 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			return err
 		}
 		entry.Line = int64(line)
-		entry.Message = string(m[6])
+		entry.Message = strings.TrimSpace(string(m[6]))
 		return nil
 	}
 }
