@@ -72,6 +72,7 @@ const (
 	debugRangeClassRaftLeader    = "raftstate-leader"
 	debugRangeClassRaftFollower  = "raftstate-follower"
 	debugRangeClassRaftDormant   = "raftstate-dormant"
+	debugRangeClassOtherRange    = "other-range"
 
 	debugRangeValueEmpty = "-"
 
@@ -202,6 +203,15 @@ func (s *statusServer) handleDebugRange(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// Fetch the range history.
+	rangeLogReq := &serverpb.RangeLogRequest{RangeId: rangeID}
+	if data.rangeLogResp, err = s.admin.RangeLog(nodeCtx, rangeLogReq); err != nil {
+		data.Failures = append(data.Failures, serverpb.RangeInfo{
+			SourceNodeID: s.gossip.NodeID.Get(),
+			ErrorMessage: err.Error(),
+		})
+	}
+
 	data.postProcessing()
 	t, err := template.New("webpage").Parse(debugRangeTemplate)
 	if err != nil {
@@ -242,7 +252,7 @@ type debugRangeOutput struct {
 	Value string
 }
 
-type debugLeaseDetails struct {
+type debugLeaseDetail struct {
 	Replica         debugRangeOutput
 	Epoch           debugRangeOutput
 	ProposedTS      debugRangeOutput
@@ -252,11 +262,22 @@ type debugLeaseDetails struct {
 	StartDelta      debugRangeOutput
 }
 
+type debugRangeLogEvent struct {
+	RowClass     string
+	Timestamp    debugRangeOutput
+	StoreID      debugRangeOutput
+	EventType    debugRangeOutput
+	RangeID      debugRangeOutput
+	OtherRangeID debugRangeOutput
+	Info         debugRangeOutput
+}
+
 type debugRangeData struct {
-	RangeID    int64
-	Failures   rangeInfoSlice
-	rangeInfos rangeInfoSlice
-	replicas   map[roachpb.ReplicaID][]roachpb.ReplicaDescriptor
+	RangeID      int64
+	Failures     rangeInfoSlice
+	rangeInfos   rangeInfoSlice
+	replicas     map[roachpb.ReplicaID][]roachpb.ReplicaDescriptor
+	rangeLogResp *serverpb.RangeLogResponse
 
 	// The following are populated in post-processing.
 	ReplicaIDs        replicaIDSlice
@@ -264,8 +285,9 @@ type debugRangeData struct {
 	HeaderKeys        []string
 	Results           map[string]map[roachpb.StoreID]*debugRangeOutput
 	HeaderFakeStoreID roachpb.StoreID
-	LeaseHistory      []debugLeaseDetails
+	LeaseHistory      []debugLeaseDetail
 	LeaseEpoch        bool // true if epoch based, false if expiration based
+	RangeLog          []debugRangeLogEvent
 }
 
 func (d *debugRangeData) postProcessing() {
@@ -640,7 +662,7 @@ func (d *debugRangeData) postProcessing() {
 			d.Failures = append(d.Failures, failedInfo)
 			continue
 		}
-		var detail debugLeaseDetails
+		var detail debugLeaseDetail
 		detail.Replica.Value = fmt.Sprintf("n%d s%d r%d/%d",
 			lease.Replica.NodeID, lease.Replica.StoreID, d.RangeID, lease.Replica.ReplicaID,
 		)
@@ -695,6 +717,34 @@ func (d *debugRangeData) postProcessing() {
 		}
 
 		d.LeaseHistory = append(d.LeaseHistory, detail)
+	}
+
+	if d.rangeLogResp != nil {
+		for _, event := range d.rangeLogResp.Events {
+			var otherRangeID debugRangeOutput
+			if event.OtherRangeID != 0 {
+				otherRangeID = debugRangeOutput{
+					Value: event.OtherRangeID.String(),
+					Title: fmt.Sprintf("r%d", event.OtherRangeID),
+				}
+			}
+			var rowClass string
+			if int64(event.RangeID) != d.RangeID {
+				rowClass = debugRangeClassOtherRange
+			}
+			d.RangeLog = append(d.RangeLog, debugRangeLogEvent{
+				Timestamp: *outputSameTitleValue(event.Timestamp.String()),
+				EventType: *outputSameTitleValue(event.EventType),
+				RangeID: debugRangeOutput{
+					Value: event.RangeID.String(),
+					Title: fmt.Sprintf("r%d", event.RangeID),
+				},
+				OtherRangeID: otherRangeID,
+				StoreID:      *outputSameTitleValue(fmt.Sprintf("s%d", event.StoreID)),
+				Info:         *outputSameTitleValue(event.Info),
+				RowClass:     rowClass,
+			})
+		}
 	}
 
 	sort.Sort(d.StoreIDs)
@@ -849,6 +899,40 @@ const debugRangeTemplate = `
         background: #3d9970;
         border: none;
       }
+      .log-table {
+        margin: 0 0 40px 0;
+        display: table;
+        width: 100%;
+      }
+      .log-row {
+        display: table-row;
+        background: #f6f6f6;
+      }
+      .log-row:nth-of-type(odd) {
+        background: #e9e9e9;
+      }
+      .log-row.other-range {
+        background: #fffee7;
+      }
+      .log-cell {
+        padding: 6px 12px;
+        display: table-cell;
+        height: 20px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        border-width: 1px 1px 0 0;
+        border-color: rgba(0, 0, 0, 0.1);
+        border-style: solid;
+      }
+      .log-row:first-of-type .log-cell {
+        font-weight: 900;
+        color: #ffffff;
+        background: #FF7F00;
+        border: none;
+      }
+      .log-cell.small {
+        white-space: nowrap;
+      }
     </STYLE>
   </HEAD>
   <BODY>
@@ -921,6 +1005,35 @@ const debugRangeTemplate = `
               {{- end}}
               <DIV CLASS="lease-cell" TITLE="{{$lease.Start.Title}}">{{$lease.Start.Value}}</DIV>
               <DIV CLASS="lease-cell" TITLE="{{$lease.StartDelta.Title}}">{{$lease.StartDelta.Value}}</DIV>
+            </DIV>
+          {{- end}}
+        </DIV>
+      {{- end}}
+      {{- if $.RangeLog}}
+        <H2>Range Log</H2>
+        <DIV CLASS="log-table">
+          <DIV CLASS="log-row">
+            <DIV CLASS="log-cell small">Timestamp</DIV>
+            <DIV CLASS="log-cell small">Store</DIV>
+            <DIV CLASS="log-cell small">Event Type</DIV>
+            <DIV CLASS="log-cell small">Range</DIV>
+            <DIV CLASS="log-cell small">Other Range</DIV>
+            <DIV CLASS="log-cell">Info</DIV>
+          </DIV>
+          {{- range $_, $log := $.RangeLog}}
+            <DIV CLASS="log-row {{ $log.RowClass }}">
+              <DIV CLASS="log-cell small" TITLE="{{$log.Timestamp.Title}}">{{$log.Timestamp.Value}}</DIV>
+              <DIV CLASS="log-cell small" TITLE="{{$log.StoreID.Title}}">{{$log.StoreID.Value}}</DIV>
+              <DIV CLASS="log-cell small" TITLE="{{$log.EventType.Title}}">{{$log.EventType.Value}}</DIV>
+              <DIV CLASS="log-cell small" TITLE="{{$log.RangeID.Title}}">
+                <a href="/debug/range?id={{$log.RangeID.Value}}">{{$log.RangeID.Title}}</a>
+              </DIV>
+              <DIV CLASS="log-cell small" TITLE="{{$log.OtherRangeID.Title}}">
+                {{- if $log.OtherRangeID.Value}}
+                  <a href="/debug/range?id={{$log.OtherRangeID.Value}}">{{$log.OtherRangeID.Title}}</a>
+                {{- end}}
+              </DIV>
+              <DIV CLASS="log-cell" TITLE="{{$log.Info.Title}}">{{$log.Info.Value}}</DIV>
             </DIV>
           {{- end}}
         </DIV>

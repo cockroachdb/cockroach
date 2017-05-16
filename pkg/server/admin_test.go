@@ -36,6 +36,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1049,5 +1050,26 @@ func TestHealthAPI(t *testing.T) {
 	var resp serverpb.HealthResponse
 	if err := getAdminJSONProto(s, "health", &resp); !testutils.IsError(err, expected) {
 		t.Errorf("expected %q error, got %v", expected, err)
+	}
+}
+
+func TestAdminAPIRangeLog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	var resp serverpb.RangeLogResponse
+	if err := getAdminJSONProto(s, "rangelog/1", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(resp.Events) == 0 {
+		t.Fatalf("expected at least 1 event, got none")
+	}
+
+	for _, event := range resp.Events {
+		if e, a := roachpb.RangeID(1), event.RangeID; e != a {
+			t.Errorf("expected rangeID to be %d, got %d", e, a)
+		}
 	}
 }
