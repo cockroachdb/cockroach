@@ -33,15 +33,15 @@ const grantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
 // active on a single database.
 class DatabaseSummaryGrants extends DatabaseSummaryBase {
   totalUsers() {
-    let grants = this.props.grants;
+    const grants = this.props.grants;
     return grants && grants.length;
   }
 
   render() {
-    let { grants, sortSetting } = this.props;
-    let dbID = this.props.name;
+    const { grants, sortSetting } = this.props;
+    const dbID = this.props.name;
 
-    let numTables = tableInfos && tableInfos.length || 0;
+    const numTables = tableInfos && tableInfos.length || 0;
 
     return <div className="database-summary l-columns">
       <div className="database-summary-title">

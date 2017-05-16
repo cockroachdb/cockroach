@@ -101,7 +101,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
         return state;
       case this.ERROR:
         // A request failed.
-        let { payload: error } = action as PayloadAction<WithRequest<Error, TRequest>>;
+        const { payload: error } = action as PayloadAction<WithRequest<Error, TRequest>>;
         state = _.clone(state);
         state.inFlight = false;
         state.lastError = error.data;
@@ -164,7 +164,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    */
   refresh = <S>(req?: TRequest, stateAccessor = (state: any, _req: TRequest) => state.cachedData[this.actionNamespace]) => {
     return (dispatch: Dispatch<S>, getState: () => any) => {
-      let state: CachedDataReducerState<TResponseMessage> = stateAccessor(getState(), req);
+      const state: CachedDataReducerState<TResponseMessage> = stateAccessor(getState(), req);
 
       if (state && (state.inFlight || (this.invalidationPeriod && state.valid))) {
         return;
@@ -251,8 +251,8 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage> {
       case this.cachedDataReducer.RECEIVE:
       case this.cachedDataReducer.ERROR:
       case this.cachedDataReducer.INVALIDATE:
-        let { request } = (action as PayloadAction<WithRequest<TResponseMessage | Error | void, TRequest>>).payload;
-        let id = this.requestToID(request);
+        const { request } = (action as PayloadAction<WithRequest<TResponseMessage | Error | void, TRequest>>).payload;
+        const id = this.requestToID(request);
         state = _.clone(state);
         state[id] = this.cachedDataReducer.reducer(state[id], action);
         return state;

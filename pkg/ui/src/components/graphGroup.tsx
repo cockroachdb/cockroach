@@ -15,7 +15,7 @@ export default function (props: { groupId: string, hide: boolean, childClassName
   return <div>
   {
     React.Children.map(props.children, (child, idx) => {
-      let key = props.groupId + idx.toString();
+      const key = props.groupId + idx.toString();
       // Special case h2 tags which are used as the graph group title.
       if ((child as React.ReactElement<any>).type === "h2") {
         return <div>{ child }</div>;

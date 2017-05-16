@@ -90,23 +90,23 @@ export function databaseDetails(state: AdminUIState) {
 // TODO(mrtracy): look into using a component like reselect-map if this proves
 // to be expensive. My current intuition is that this will not be a bottleneck.
 export function tableInfos(state: AdminUIState, dbName: string) {
-  let dbDetails = databaseDetails(state);
-  let tableNames = dbDetails[dbName] && dbDetails[dbName].data && dbDetails[dbName].data.table_names;
+  const dbDetails = databaseDetails(state);
+  const tableNames = dbDetails[dbName] && dbDetails[dbName].data && dbDetails[dbName].data.table_names;
   if (!tableNames) {
     return null;
   }
-  let details = state.cachedData.tableDetails;
-  let stats =  state.cachedData.tableStats;
+  const details = state.cachedData.tableDetails;
+  const stats =  state.cachedData.tableStats;
   return _.map(tableNames, (tableName) => {
-    let tblId = generateTableID(dbName, tableName);
-    let tblDetails = details[tblId] && details[tblId].data;
-    let tblStats = stats[tblId] && stats[tblId].data;
+    const tblId = generateTableID(dbName, tableName);
+    const tblDetails = details[tblId] && details[tblId].data;
+    const tblStats = stats[tblId] && stats[tblId].data;
     return new TableInfo(tableName, tblDetails, tblStats);
   });
 }
 
 // Function which extracts the grants for a single database from redux state.
 export function grants(state: AdminUIState, dbName: string) {
-    let dbDetails = databaseDetails(state);
+    const dbDetails = databaseDetails(state);
     return dbDetails[dbName] && dbDetails[dbName].data && dbDetails[dbName].data.grants;
 }

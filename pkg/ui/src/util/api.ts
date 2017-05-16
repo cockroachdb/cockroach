@@ -152,7 +152,7 @@ export function getTableDetails(req: TableDetailsRequestMessage, timeout?: momen
 
 // getUIData gets UI data
 export function getUIData(req: GetUIDataRequestMessage, timeout?: moment.Duration): Promise<GetUIDataResponseMessage> {
-  let queryString = _.map(req.keys, (key) => "keys=" + encodeURIComponent(key)).join("&");
+  const queryString = _.map(req.keys, (key) => "keys=" + encodeURIComponent(key)).join("&");
   return timeoutFetch(serverpb.GetUIDataResponse, `${API_PREFIX}/uidata?${queryString}`, null, timeout);
 }
 
@@ -163,7 +163,7 @@ export function setUIData(req: SetUIDataRequestMessage, timeout?: moment.Duratio
 
 // getEvents gets event data
 export function getEvents(req: EventsRequestMessage, timeout?: moment.Duration): Promise<EventsResponseMessage> {
-  let queryString = propsToQueryString(_.pick(req, ["type", "target_id"]));
+  const queryString = propsToQueryString(_.pick(req, ["type", "target_id"]));
   return timeoutFetch(serverpb.EventsResponse, `${API_PREFIX}/events?${queryString}`, null, timeout);
 }
 

@@ -49,7 +49,7 @@ describe("Local Settings", function() {
         const expected: LocalSettingsDict = {
           [key]: value,
         };
-        let initial: LocalSettingsDict = {
+        const initial: LocalSettingsDict = {
           [key]: "oldvalue",
         };
         assert.deepEqual(

@@ -28,7 +28,7 @@ interface ClusterOverviewState {
   nodeOptions: { value: string, label: string }[];
 }
 
-let dashboards = [
+const dashboards = [
   { value: "overview", label: "Overview" },
   { value: "runtime", label: "Runtime" },
   { value: "sql", label: "SQL" },
@@ -63,7 +63,7 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
   }
 
   componentWillReceiveProps(props: ClusterOverviewProps) {
-    let base = [{ value: "", label: "Cluster"}];
+    const base = [{ value: "", label: "Cluster"}];
     if (props.nodes) {
       this.setState({
         nodeOptions: base.concat(_.map(props.nodes, (n) => {
@@ -94,11 +94,11 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
 
   render() {
     // Determine whether or not the time scale options should be displayed.
-    let child = React.Children.only(this.props.children);
-    let displayTimescale = (child as any).type.displayTimeScale === true;
+    const child = React.Children.only(this.props.children);
+    const displayTimescale = (child as any).type.displayTimeScale === true;
 
-    let dashboard = this.props.params[dashboardNameAttr];
-    let node = this.props.params[nodeIDAttr] || "";
+    const dashboard = this.props.params[dashboardNameAttr];
+    const node = this.props.params[nodeIDAttr] || "";
 
     return <div>
       <PageConfig>

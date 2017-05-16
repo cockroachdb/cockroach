@@ -78,10 +78,10 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
   }
 }
 
-let logs = (state: AdminUIState): LogEntriesResponseMessage => state.cachedData.logs.data;
+const logs = (state: AdminUIState): LogEntriesResponseMessage => state.cachedData.logs.data;
 
 // Connect the EventsList class with our redux store.
-let logsConnected = connect(
+const logsConnected = connect(
   (state: AdminUIState, ownProps: RouterState) => {
     return {
       logs: logs(state),

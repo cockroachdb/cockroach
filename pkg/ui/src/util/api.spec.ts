@@ -19,7 +19,7 @@ describe("rest api", function() {
       return _.reduce<string, PropBag>(
         qs.split("&"),
         (memo: PropBag, v: string) => {
-          let [key, value] = v.split("=");
+          const [key, value] = v.split("=");
           memo[decodeURIComponent(key)] = decodeURIComponent(value);
           return memo;
         },
@@ -28,12 +28,12 @@ describe("rest api", function() {
     }
 
     it("creates an appropriate querystring", function () {
-      let testValues: { [k: string]: any } = {
+      const testValues: { [k: string]: any } = {
         a: "testa",
         b: "testb",
       };
 
-      let querystring = api.propsToQueryString(testValues);
+      const querystring = api.propsToQueryString(testValues);
 
       assert((/a=testa/).test(querystring));
       assert((/b=testb/).test(querystring));
@@ -43,7 +43,7 @@ describe("rest api", function() {
     });
 
     it("handles falsy values correctly", function () {
-      let testValues: { [k: string]: any } = {
+      const testValues: { [k: string]: any } = {
         // null and undefined should be ignored
         undefined: undefined,
         null: null,
@@ -53,7 +53,7 @@ describe("rest api", function() {
         0: 0,
       };
 
-      let querystring = api.propsToQueryString(testValues);
+      const querystring = api.propsToQueryString(testValues);
 
       assert((/false=false/).test(querystring));
       assert((/0=0/).test(querystring));
@@ -66,20 +66,20 @@ describe("rest api", function() {
     });
 
     it("handles special characters", function () {
-      let key = "!@#$%^&*()=+-_\\|\"`'?/<>";
-      let value = key.split("").reverse().join(""); // key reversed
-      let testValues: { [k: string]: any } = {
+      const key = "!@#$%^&*()=+-_\\|\"`'?/<>";
+      const value = key.split("").reverse().join(""); // key reversed
+      const testValues: { [k: string]: any } = {
         [key] : value,
       };
 
-      let querystring = api.propsToQueryString(testValues);
+      const querystring = api.propsToQueryString(testValues);
 
       assert(querystring.match(/%/g).length > (key + value).match(/%/g).length);
       assert.deepEqual(testValues, decodeQueryString(querystring));
     });
 
     it("handles non-string values", function () {
-      let testValues: { [k: string]: any } = {
+      const testValues: { [k: string]: any } = {
         boolean: true,
         number: 1,
         emptyObject: {},
@@ -89,7 +89,7 @@ describe("rest api", function() {
         long: Long.fromNumber(1),
       };
 
-      let querystring = api.propsToQueryString(testValues);
+      const querystring = api.propsToQueryString(testValues);
       assert.deepEqual(_.mapValues(testValues, _.toString), decodeQueryString(querystring));
     });
   });
@@ -162,7 +162,7 @@ describe("rest api", function() {
   });
 
   describe("database details request", function () {
-    let dbName = "test";
+    const dbName = "test";
 
     afterEach(fetchMock.restore);
 
@@ -236,8 +236,8 @@ describe("rest api", function() {
   });
 
   describe("table details request", function () {
-    let dbName = "testDB";
-    let tableName = "testTable";
+    const dbName = "testDB";
+    const tableName = "testTable";
 
     afterEach(fetchMock.restore);
 
@@ -338,7 +338,7 @@ describe("rest api", function() {
     it("correctly requests filtered events", function () {
       this.timeout(1000);
 
-      let req = new protos.cockroach.server.serverpb.EventsRequest({
+      const req = new protos.cockroach.server.serverpb.EventsRequest({
         target_id: Long.fromNumber(1),
         type: "test type",
       });
@@ -348,7 +348,7 @@ describe("rest api", function() {
         matcher: eventsPrefixMatcher,
         method: "GET",
         response: (url: string, requestObj: RequestInit) => {
-          let params = url.split("?")[1].split("&");
+          const params = url.split("?")[1].split("&");
           assert.lengthOf(params, 2);
           _.each(params, (param) => {
             let [k, v] = param.split("=");
@@ -428,7 +428,7 @@ describe("rest api", function() {
   });
 
   describe("health request", function() {
-    let healthUrl = `${api.API_PREFIX}/health`;
+    const healthUrl = `${api.API_PREFIX}/health`;
 
     afterEach(fetchMock.restore);
 
@@ -496,8 +496,8 @@ describe("rest api", function() {
   });
 
   describe("cluster request", function() {
-    let clusterUrl = `${api.API_PREFIX}/cluster`;
-    let clusterID = "12345abcde";
+    const clusterUrl = `${api.API_PREFIX}/cluster`;
+    const clusterID = "12345abcde";
 
     afterEach(fetchMock.restore);
 

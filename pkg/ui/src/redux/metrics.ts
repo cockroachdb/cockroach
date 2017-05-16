@@ -71,14 +71,14 @@ function metricsQueryReducer(state: MetricsQuery, action: Action) {
   switch (action.type) {
     // This component has requested a new set of metrics from the server.
     case REQUEST:
-      let { payload: request } = action as PayloadAction<WithID<TSRequest>>;
+      const { payload: request } = action as PayloadAction<WithID<TSRequest>>;
       state = _.clone(state);
       state.nextRequest = request.data;
       return state;
 
     // Results for a previous request have been received from the server.
     case RECEIVE:
-      let { payload: response } = action as PayloadAction<WithID<RequestWithResponse>>;
+      const { payload: response } = action as PayloadAction<WithID<RequestWithResponse>>;
       if (response.data.request === state.nextRequest) {
         state = _.clone(state);
         state.data = response.data.response;
@@ -89,7 +89,7 @@ function metricsQueryReducer(state: MetricsQuery, action: Action) {
 
     // The previous query for metrics for this component encountered an error.
     case ERROR:
-      let { payload: error } = action as PayloadAction<WithID<Error>>;
+      const { payload: error } = action as PayloadAction<WithID<Error>>;
       state = _.clone(state);
       state.error = error.data;
       return state;
@@ -118,7 +118,7 @@ export function metricQuerySetReducer(state: MetricQuerySet = {}, action: Action
     case ERROR:
       // All of these requests should be dispatched to a MetricQuery in the
       // collection. If a MetricQuery with that ID does not yet exist, create it.
-      let { id } = (action as PayloadAction<WithID<any>>).payload;
+      const { id } = (action as PayloadAction<WithID<any>>).payload;
       state = _.clone(state);
       state[id] = metricsQueryReducer(state[id] || new MetricsQuery(id), action);
       return state;
@@ -282,18 +282,18 @@ export function queryMetrics<S>(id: string, query: TSRequest) {
 
         // Construct queryable batches from the set of queued queries. Queries can
         // be dispatched in a batch if they are querying over the same timespan.
-        let batches = _.groupBy(queuedRequests, (qr) => timespanKey(qr.data));
+        const batches = _.groupBy(queuedRequests, (qr) => timespanKey(qr.data));
         queuedRequests = [];
 
         // Fetch data from the server for each batch.
-        let promises = _.map(batches, (batch) => {
+        const promises = _.map(batches, (batch) => {
           // Flatten the individual queries from all requests in the batch into a
           // single request.
           // Lodash operations are split into two methods because the lodash
           // typescript definition loses type information when chaining into
           // flatten.
-          let unifiedRequest = _.clone(batch[0].data);
-          let toFlatten = _.map(batch, (req) => req.data.queries);
+          const unifiedRequest = _.clone(batch[0].data);
+          const toFlatten = _.map(batch, (req) => req.data.queries);
           unifiedRequest.queries = _.flatten(toFlatten);
 
           return queryTimeSeries(unifiedRequest).then((response) => {
@@ -303,12 +303,12 @@ export function queryMetrics<S>(id: string, query: TSRequest) {
               throw `mismatched count of results (${response.results.length}) and queries (${unifiedRequest.queries.length})`;
             }
 
-            let results = response.results;
+            const results = response.results;
 
             // Match each result in the response to its corresponding original
             // query. Each request may have sent multiple queries in the batch.
             _.each(batch, (request) => {
-              let numQueries = request.data.queries.length;
+              const numQueries = request.data.queries.length;
               dispatch(receiveMetrics(request.id, request.data, new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
                 results: results.splice(0, numQueries),
               })));
