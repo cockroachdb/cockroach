@@ -228,6 +228,10 @@ func TestParse(t *testing.T) {
 		{`SHOW CONSTRAINTS FROM a.b.c`},
 		{`SHOW TABLES FROM a; SHOW COLUMNS FROM b`},
 		{`SHOW USERS`},
+		{`SHOW CLUSTER QUERIES`},
+		{`SHOW LOCAL QUERIES`},
+		{`SHOW CLUSTER SESSIONS`},
+		{`SHOW LOCAL SESSIONS`},
 		{`SHOW TESTING_RANGES FROM TABLE d.t`},
 		{`SHOW TESTING_RANGES FROM TABLE t`},
 		{`SHOW TESTING_RANGES FROM INDEX d.t@i`},
@@ -943,6 +947,8 @@ func TestParse2(t *testing.T) {
 			`RESTORE DATABASE foo FROM 'bar'`},
 
 		{`SHOW ALL CLUSTER SETTINGS`, `SHOW CLUSTER SETTING all`},
+		{`SHOW SESSIONS`, `SHOW CLUSTER SESSIONS`},
+		{`SHOW QUERIES`, `SHOW CLUSTER QUERIES`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)

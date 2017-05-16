@@ -67,6 +67,10 @@
 		RaftRangeStatus
 		RaftDebugRequest
 		RaftDebugResponse
+		ActiveQuery
+		ListSessionsRequest
+		Session
+		ListSessionsResponse
 		SpanStatsRequest
 		SpanStatsResponse
 		PrettySpan

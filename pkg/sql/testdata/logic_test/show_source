@@ -131,6 +131,18 @@ ui
 users
 zones
 
+query ITTTT colnames
+SELECT node_id,username,application_name,active_queries,kv_txn FROM [SHOW SESSIONS]
+----
+node_id   username   application_name  active_queries                                                                                       kv_txn
+1         root                         SELECT node_id, username, application_name, active_queries, kv_txn FROM [SHOW CLUSTER SESSIONS];     NULL
+
+query ITT colnames
+SELECT node_id, username, query FROM [SHOW QUERIES]
+----
+node_id   username   query
+1         root       SELECT node_id, username, query FROM [SHOW CLUSTER QUERIES] 
+
 
 query T colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]

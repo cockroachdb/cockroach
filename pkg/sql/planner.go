@@ -70,6 +70,10 @@ type planner struct {
 	// See executor_statement_metrics.go for details.
 	phaseTimes phaseTimes
 
+	// queryMeta stores a reference to the corresponding metadata object
+	// for this planner's statement
+	queryMeta *queryMeta
+
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
 	subqueryVisitor       subqueryVisitor
