@@ -432,7 +432,8 @@ type Store struct {
 
 	// Semaphore to limit concurrent snapshot application and replica data
 	// destruction.
-	snapshotApplySem chan struct{}
+	snapshotApplySem      chan struct{}
+	emptySnapshotApplySem chan struct{}
 	// Are rebalances to this store allowed or prohibited. Rebalances are
 	// prohibited while a store is catching up replicas (i.e. recovering) after
 	// being restarted.
@@ -927,6 +928,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.tsCacheMu.Unlock()
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
+	s.emptySnapshotApplySem = make(chan struct{}, 1)
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
@@ -2636,12 +2638,16 @@ func (s *Store) Send(
 func (s *Store) reserveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header,
 ) (func(), error) {
+	sem := s.snapshotApplySem
+	if header.RangeSize == 0 {
+		sem = s.emptySnapshotApplySem
+	}
 	if header.CanDecline {
 		if atomic.LoadInt32(&s.rebalancesDisabled) == 1 {
 			return nil, nil
 		}
 		select {
-		case s.snapshotApplySem <- struct{}{}:
+		case sem <- struct{}{}:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-s.stopper.ShouldStop():
@@ -2651,7 +2657,7 @@ func (s *Store) reserveSnapshot(
 		}
 	} else {
 		select {
-		case s.snapshotApplySem <- struct{}{}:
+		case sem <- struct{}{}:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-s.stopper.ShouldStop():
@@ -2664,7 +2670,7 @@ func (s *Store) reserveSnapshot(
 	return func() {
 		s.metrics.ReservedReplicaCount.Dec(1)
 		s.metrics.Reserved.Dec(header.RangeSize)
-		<-s.snapshotApplySem
+		<-sem
 	}, nil
 }
 

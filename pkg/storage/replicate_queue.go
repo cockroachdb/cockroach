@@ -206,7 +206,12 @@ func (rq *replicateQueue) shouldQueue(
 			log.Infof(ctx, "no rebalance target found, not enqueuing")
 		}
 	}
-	return target != nil, 0
+	// Prioritize rebalancing empty ranges; they'll soon have data but are cheap
+	// to move around while they're empty.
+	if repl.GetMVCCStats().Total() == 0 {
+		return target != nil, 10
+	}
+	return target != nil, 1
 }
 
 func (rq *replicateQueue) process(
