@@ -70,6 +70,9 @@ type planner struct {
 	// See executor_statement_metrics.go for details.
 	phaseTimes phaseTimes
 
+	// queryHandle is used to identify a query to session methods.
+	queryHandle queryHandle
+
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
 	subqueryVisitor       subqueryVisitor
