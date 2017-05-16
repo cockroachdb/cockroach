@@ -8394,7 +8394,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:3072
 		{
-			sqlVAL.union.val = &AliasedTableExpr{Expr: sqlDollar[2].union.tblExpr(), Ordinality: sqlDollar[4].union.bool(), As: sqlDollar[5].union.aliasClause()}
+			sqlVAL.union.val = &AliasedTableExpr{Expr: &ParenTableExpr{sqlDollar[2].union.tblExpr()}, Ordinality: sqlDollar[4].union.bool(), As: sqlDollar[5].union.aliasClause()}
 		}
 	case 481:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
