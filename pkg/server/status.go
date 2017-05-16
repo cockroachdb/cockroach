@@ -17,6 +17,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/coreos/etcd/raft"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -44,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -77,6 +80,10 @@ const (
 
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
+
+	// maxConcurrentRequests is the maximum number of RPC fan-out requests
+	// that will be made at any point of time.
+	maxConcurrentRequests = 10
 )
 
 // Pattern for local used when determining the node ID.
@@ -91,15 +98,16 @@ type metricMarshaler interface {
 type statusServer struct {
 	log.AmbientContext
 
-	cfg          *base.Config
-	admin        *adminServer
-	db           *client.DB
-	gossip       *gossip.Gossip
-	metricSource metricMarshaler
-	nodeLiveness *storage.NodeLiveness
-	rpcCtx       *rpc.Context
-	stores       *storage.Stores
-	stopper      *stop.Stopper
+	cfg             *base.Config
+	admin           *adminServer
+	db              *client.DB
+	gossip          *gossip.Gossip
+	metricSource    metricMarshaler
+	nodeLiveness    *storage.NodeLiveness
+	rpcCtx          *rpc.Context
+	stores          *storage.Stores
+	stopper         *stop.Stopper
+	sessionRegistry *sql.SessionRegistry
 }
 
 // newStatusServer allocates and returns a statusServer.
@@ -114,19 +122,21 @@ func newStatusServer(
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 	stopper *stop.Stopper,
+	sessionRegistry *sql.SessionRegistry,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
-		AmbientContext: ambient,
-		cfg:            cfg,
-		admin:          adminServer,
-		db:             db,
-		gossip:         gossip,
-		metricSource:   metricSource,
-		nodeLiveness:   nodeLiveness,
-		rpcCtx:         rpcCtx,
-		stores:         stores,
-		stopper:        stopper,
+		AmbientContext:  ambient,
+		cfg:             cfg,
+		admin:           adminServer,
+		db:              db,
+		gossip:          gossip,
+		metricSource:    metricSource,
+		nodeLiveness:    nodeLiveness,
+		rpcCtx:          rpcCtx,
+		stores:          stores,
+		stopper:         stopper,
+		sessionRegistry: sessionRegistry,
 	}
 
 	return server
@@ -777,6 +787,108 @@ func (s *statusServer) Ranges(
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	return &output, nil
+}
+
+func (s *statusServer) ListLocalSessions(
+	ctx context.Context, req *serverpb.ListSessionsRequest,
+) (*serverpb.ListSessionsResponse, error) {
+	registry := s.sessionRegistry
+
+	registry.Lock()
+	defer registry.Unlock()
+
+	sessions := make([]serverpb.Session, 0, len(registry.Store))
+
+	for session := range registry.Store {
+		if !(req.Username == "root" || req.Username == session.User) {
+			continue
+		}
+
+		serializedSession := session.Serialize()
+		serializedSession.NodeID = s.gossip.NodeID.Get()
+
+		sessions = append(sessions, serializedSession)
+	}
+
+	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
+}
+
+func (s *statusServer) ListSessions(
+	ctx context.Context, req *serverpb.ListSessionsRequest,
+) (*serverpb.ListSessionsResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodes, err := s.Nodes(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := serverpb.ListSessionsResponse{
+		Sessions: make([]serverpb.Session, 0),
+	}
+	errorResponses := make([]error, 0)
+
+	// Issue LocalSessions requests in parallel.
+	// Semaphore that guarantees not more than 10 requests at once.
+	sem := make(chan struct{}, maxConcurrentRequests)
+	numNodes := len(nodes.Nodes)
+
+	// Channel for session responses and errors.
+	sessionsChan := make(chan *serverpb.ListSessionsResponse, numNodes)
+	errorsChan := make(chan error, numNodes)
+
+	for _, node := range nodes.Nodes {
+		nodeID := node.Desc.NodeID
+		getNodeSessions := func(ctx context.Context) {
+			status, err := s.dialNode(nodeID)
+
+			if err != nil {
+				err := errors.Wrapf(err, "failed to dial into node %d", nodeID)
+				errorsChan <- err
+				return
+			}
+
+			sessions, err := status.ListLocalSessions(ctx, req)
+
+			if err != nil {
+				err := errors.Wrapf(err, "failed to get sessions from node %d", nodeID)
+				errorsChan <- err
+				return
+			}
+
+			sessionsChan <- sessions
+		}
+		if err = s.stopper.RunLimitedAsyncTask(ctx, sem, true, getNodeSessions); err != nil {
+			return nil, err
+		}
+	}
+
+	for numNodes > 0 {
+		select {
+		case sessions := <-sessionsChan:
+			numNodes--
+			resp.Sessions = append(resp.Sessions, sessions.Sessions...)
+
+		case err := <-errorsChan:
+			numNodes--
+			errorResponses = append(errorResponses, err)
+		case <-time.After(base.NetworkTimeout):
+			return nil, errors.New("Timed out querying sessions from other nodes")
+		}
+	}
+
+	if len(errorResponses) > 0 {
+		// Concatenate all error messages
+		var errBuffer bytes.Buffer
+		errBuffer.WriteString(fmt.Sprintf("%d errors: ", len(errorResponses)))
+
+		for _, err := range errorResponses {
+			errBuffer.WriteString(err.Error())
+			errBuffer.WriteString("; ")
+		}
+
+		return nil, errors.New(errBuffer.String())
+	}
+	return &resp, nil
 }
 
 // SpanStats requests the total statistics stored on a node for a given key
