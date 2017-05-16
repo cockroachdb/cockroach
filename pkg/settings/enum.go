@@ -17,6 +17,7 @@ package settings
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -62,14 +63,18 @@ func (e *EnumSetting) set(k int64) error {
 
 func enumValuesToDesc(enumValues map[int64]string) string {
 	var buffer bytes.Buffer
+	values := make([]int64, 0, len(enumValues))
+	for k := range enumValues {
+		values = append(values, k)
+	}
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+
 	buffer.WriteString("[")
-	var notFirstElem bool
-	for k, v := range enumValues {
-		if notFirstElem {
+	for i, k := range values {
+		if i > 0 {
 			buffer.WriteString(", ")
 		}
-		fmt.Fprintf(&buffer, "%s = %d", strings.ToLower(v), k)
-		notFirstElem = true
+		fmt.Fprintf(&buffer, "%s = %d", strings.ToLower(enumValues[k]), k)
 	}
 	buffer.WriteString("]")
 	return buffer.String()
