@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"time"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -168,6 +170,16 @@ type planNodeFastPath interface {
 	// FastPathResults returns the affected row count and true if the
 	// node has no result set and has already executed when Start() completes.
 	FastPathResults() (int, bool)
+}
+
+// queryMeta stores metadata about a query that's not contained in the root planNode.
+// Stored in session.ActiveQueries.
+type queryMeta struct {
+	// The timestamp when this query began execution.
+	start time.Time
+
+	// Exact query string from client.
+	sql string
 }
 
 var _ planNode = &alterTableNode{}
@@ -368,6 +380,10 @@ func (p *planner) newPlan(
 		return p.ShowGrants(ctx, n)
 	case *parser.ShowIndex:
 		return p.ShowIndex(ctx, n)
+	case *parser.ShowQueries:
+		return p.ShowQueries(ctx, n)
+	case *parser.ShowSessions:
+		return p.ShowSessions(ctx, n)
 	case *parser.ShowTables:
 		return p.ShowTables(ctx, n)
 	case *parser.ShowTransactionStatus:
@@ -431,6 +447,10 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.ShowIndex(ctx, n)
 	case *parser.ShowConstraints:
 		return p.ShowConstraints(ctx, n)
+	case *parser.ShowQueries:
+		return p.ShowQueries(ctx, n)
+	case *parser.ShowSessions:
+		return p.ShowSessions(ctx, n)
 	case *parser.ShowTables:
 		return p.ShowTables(ctx, n)
 	case *parser.ShowUsers:

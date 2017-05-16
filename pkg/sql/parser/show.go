@@ -70,6 +70,36 @@ func (node *ShowIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Table)
 }
 
+// ShowQueries represents a SHOW QUERIES statement
+type ShowQueries struct {
+	Cluster bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowQueries) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW ")
+	if node.Cluster {
+		buf.WriteString("CLUSTER QUERIES")
+	} else {
+		buf.WriteString("LOCAL QUERIES")
+	}
+}
+
+// ShowSessions represents a SHOW SESSIONS statement
+type ShowSessions struct {
+	Cluster bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowSessions) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW ")
+	if node.Cluster {
+		buf.WriteString("CLUSTER SESSIONS")
+	} else {
+		buf.WriteString("LOCAL SESSIONS")
+	}
+}
+
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
 	Database Name

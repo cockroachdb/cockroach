@@ -131,6 +131,17 @@ ui
 users
 zones
 
+query TTTTT colnames
+SELECT node_id,username,application_name,active_queries,kv_txn FROM [SHOW SESSIONS]
+----
+node_id   username   application_name  active_queries  kv_txn
+1         root                                         NULL
+
+query TTTTTT colnames
+SELECT * FROM [SHOW QUERIES]
+----
+node_id   username   start    query   client_address   application_name
+
 
 query T colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]

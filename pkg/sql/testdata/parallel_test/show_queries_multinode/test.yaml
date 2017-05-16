@@ -1,0 +1,24 @@
+cluster_size: 5
+
+range_split_size: 32768
+
+run:
+   # First run setup
+   - - file: setup
+
+   # Run txn on all nodes except for the last one,
+   # where SHOW statements will be run instead
+   - - node: 0
+       file: txn
+
+     - node: 1
+       file: txn
+
+     - node: 2
+       file: txn
+
+     - node: 3
+       file: txn
+
+     - node: 4
+       file: show_queries
