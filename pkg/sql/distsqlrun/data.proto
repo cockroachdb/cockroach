@@ -36,7 +36,7 @@ message Error {
 
   oneof detail {
     pgerror.Error pg_error = 1 [(gogoproto.customname) = "PGError"];
-    roachpb.DistSQLRetryableTxnError retryableTxnError = 2;
+    roachpb.UnhandledRetryableError retryableTxnError = 2;
     // TODO(andrei): Add AmbiguousResultError here once DistSQL starts executing
     // writes.
   }

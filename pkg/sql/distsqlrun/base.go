@@ -626,7 +626,7 @@ func (e *Error) String() string {
 func NewError(err error) *Error {
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		return &Error{Detail: &Error_PGError{PGError: pgErr}}
-	} else if retryErr, ok := err.(*roachpb.DistSQLRetryableTxnError); ok {
+	} else if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
 		return &Error{
 			Detail: &Error_RetryableTxnError{
 				RetryableTxnError: retryErr,
