@@ -55,21 +55,25 @@ would be an `RWMutex` on this nested `mu` struct.
 
 These fields would be moved from the main `Session` struct, to the `mu` sub-struct:
 - Application Name
-- TxnState
 - Eventually: any contexts/object references useful for cancellation
 
 These two new fields will be added to `mu`:
-- Active query (reference to Query object defined below, can be nil)
+- Active queries (reference to QueryMeta objects defined below, can be nil)
 
-The active query reference will contain a reference to a non-parallel query _if one is running_.
-If a set of parallelizable queries are running, they will all be in `parallelizeQueue`. Inspecting
-both the active query reference and the `parallelizeQueue` will be required to know all queries
-in flight.
+This active query field will be a map of `QueryMeta` pointers (type `map[*queryMeta]struct{}`).
+We already have `parallelizeQueue` of a map type with `planNode` as a key, but because of the way
+parallelization code is currently written, adding non-parallel queries to `parallelizeQueue`
+would be non-trivial. So, a new map containing all queries in flight and their metadata would be
+a conceptually simpler solution.
 
 Write locks on this struct will be acquired when:
 - The application name is reset (in `resetApplicationName()`)
 - A query begins or ends execution (to updated the active query reference / parallelize queue)
-- txnState.txn is updated in `executor.execRequest`. 
+
+Furthermore, the `txnState` struct within `Session` will be updated to have a `mu`
+locked struct within it. `txnState.txn` will be moved into it, to become `txnState.mu.txn`,
+and updates to that variable in `Executor.execRequest` and reads from `SHOW SESSIONS` will require
+acquiring that mutex.
 
 ## Node-local session registry
 
@@ -80,17 +84,18 @@ sessions to this set would require acquiring a mutex lock.
 This addition/deletion into the set can be made in `NewSession(...)` and `Session.Finish(...)`
 in `pkg/sql/session.go`.
 
-## New Query struct
+## New QueryMeta struct
 
-A new struct, `Query`, would be made that contains the below fields:
+A new struct, `QueryMeta`, would be made that contains the below fields:
 
 - Query string (exact query string provided by the user)
 - Start timestamp
-- Reference to root `planNode` (which it could effectively replace)
+- A boolean denoting whether the query is distributed.
+- A two-state `phase` denoting whether the query is being prepared for execution, or is executing.
 - Eventually: any contexts/object references useful for cancellation 
 
-The parallelizeQueue will be updated to take Query objects instead of planNodes. Non-parallelized
-queries will be directly referenced via a pointer in `Session`.
+QueryMetas would be stored in a map in `Session.mu`, with the map having type `map[*queryMeta]struct{}`.
+The planner struct will also have a reference to the corresponding queryMeta.
 
 ## RPC endpoint in status server to return local queries and sessions
 
@@ -155,12 +160,12 @@ Example usage:
 
 root@:26257/> SHOW QUERIES
 
-+---------+----------+------------+--------------------------------+------------------+------------------+
-| node_id | username | start      | query                          | client_address   | application_name |
-+---------+----------+------------+--------------------------------+------------------+------------------+
-| 1       |  root    | 1234567894 | SELECT * FROM users;           | 192.168.1.5:8080 | test             |
-| 1       |  root    | 1234567891 | INSERT INTO test VALUES (...); | 192.168.1.5:8080 | test             |
-+---------+----------+------------+--------------------------------+------------------+------------------+
++---------+----------+------------+--------------------------------+------------------+------------------+------------------+------------+
+| node_id | username | start      | query                          | client_address   | application_name | distributed      | phase      |
++---------+----------+------------+--------------------------------+------------------+------------------+------------------+------------+
+| 1       |  root    | 1234567894 | SELECT * FROM users;           | 192.168.1.5:8080 | test             | NULL             | preparing  |
+| 1       |  root    | 1234567891 | INSERT INTO test VALUES (...); | 192.168.1.5:8080 | test             | true             | executing  |
++---------+----------+------------+--------------------------------+------------------+------------------+------------------+------------+
 (1 row)
 
 ```

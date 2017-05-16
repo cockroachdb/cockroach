@@ -17,12 +17,16 @@
 package sql_test
 
 import (
+	gosql "database/sql"
 	"fmt"
 	"testing"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -281,4 +285,67 @@ func TestShowCreateView(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+func TestShowQueries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var conn1 *gosql.DB
+	var conn2 *gosql.DB
+
+	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+				Knobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						StatementFilter: func(ctx context.Context, stmt string, res *sql.Result) {
+							if stmt == "INSERT INTO t VALUES (1)" {
+								rows, _ := conn1.Query("SELECT node_id FROM [SHOW CLUSTER QUERIES]")
+								defer rows.Close()
+
+								for rows.Next() {
+									var nodeID int
+									if err := rows.Scan(&nodeID); err != nil {
+										t.Fatal(err)
+									}
+
+									if nodeID < 1 || nodeID > 2 {
+										t.Fatalf("Invalid node ID: %d", nodeID)
+									}
+								}
+
+								countRow, _ := conn1.Query("SELECT COUNT(*) FROM [SHOW CLUSTER QUERIES]")
+								defer countRow.Close()
+
+								if !countRow.Next() {
+									t.Fatalf("Could not get countRow for SHOW CLUSTER QUERIES")
+								}
+
+								var count int
+								if err := countRow.Scan(&count); err != nil {
+									t.Fatal(err)
+								}
+
+								if count != 2 {
+									t.Fatalf("Unexpected number of running queries: %d. Expected 2", count)
+								}
+							}
+						},
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	conn1 = tc.ServerConn(0)
+	conn2 = tc.ServerConn(1)
+	sqlutils.CreateTable(t, conn1, "t",
+		"num INT",
+		0, nil)
+
+	if _, err := conn2.Exec("INSERT INTO t VALUES (1)"); err != nil {
+		t.Fatal(err)
+	}
+
 }
