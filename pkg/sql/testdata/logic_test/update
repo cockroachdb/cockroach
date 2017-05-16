@@ -329,7 +329,7 @@ EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (1, 2)
 0  update                      ()
 0          table  xyz
 0          set    x, y
-1  render                      (x, y, z, "1", "2")
+1  render                      (x, y, z, "1", "2")  ="1",="2"
 2  scan                        (x, y, z)
 2          table  xyz@primary
 2          spans  ALL
@@ -350,7 +350,7 @@ EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (2, 2)
 0  update                      ()
 0          table  xyz
 0          set    x, y
-1  render                      (x, y, z, "2")
+1  render                      (x, y, z, "2")  ="2"
 2  scan                        (x, y, z)
 2          table  xyz@primary
 2          spans  ALL

@@ -346,8 +346,7 @@ func expandRenderNode(
 		}
 	}
 
-	r.ordering = r.computeOrdering(r.source.plan.Ordering())
-
+	r.computeOrdering(r.source.plan.Ordering())
 	return r, nil
 }
 
@@ -527,7 +526,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		// TODO(radu): in some cases there may be multiple possible n.orderings for
 		// a given source plan ordering; we should pass usefulOrdering to help make
 		// that choice (#13709).
-		n.ordering = n.computeOrdering(n.source.plan.Ordering())
+		n.computeOrdering(n.source.plan.Ordering())
 
 	case *delayedNode:
 		n.plan = simplifyOrderings(n.plan, usefulOrdering)
