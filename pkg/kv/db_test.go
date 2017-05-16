@@ -367,3 +367,31 @@ func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 		}
 	}
 }
+
+// Test that, for non-transactional requests, low-level retryable errors get
+// transformed to an UnhandledRetryableError.
+func TestNonTransactionalRetryableError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	key := []byte("key-restart")
+	value := []byte("value")
+	params := base.TestServerArgs{}
+	testingKnobs := &storage.StoreTestingKnobs{
+		TestingEvalFilter: func(args storagebase.FilterArgs) *roachpb.Error {
+			if resArgs, ok := args.Req.(*roachpb.PutRequest); ok {
+				if resArgs.Key.Equal(key) {
+					return roachpb.NewError(&roachpb.WriteTooOldError{})
+				}
+			}
+			return nil
+		},
+	}
+	params.Knobs.Store = testingKnobs
+	s, _, db := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	err := db.Put(context.TODO(), key, value)
+	if _, ok := err.(*roachpb.UnhandledRetryableError); !ok {
+		t.Fatalf("expected UnhandledRetryableError, got: %T - %v", err, err)
+	}
+}

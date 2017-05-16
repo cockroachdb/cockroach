@@ -132,7 +132,7 @@
 		ErrorDetail
 		ErrPosition
 		Error
-		DistSQLRetryableTxnError
+		UnhandledRetryableError
 		HandledRetryableTxnError
 		InternalTimeSeriesData
 		InternalTimeSeriesSample
