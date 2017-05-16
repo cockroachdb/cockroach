@@ -918,6 +918,13 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 	}, nil
 }
 
+// ShowTransactionStatus implements the plan for SHOW TRANSACTION STATUS.
+// This statement is usually handled as a special case in Executor,
+// but for FROM [SHOW TRANSACTION STATUS] we will arrive here too.
+func (p *planner) ShowTransactionStatus() (planNode, error) {
+	return p.Show(&parser.Show{Name: "transaction status"})
+}
+
 // ShowUsers returns all the users.
 // Privileges: SELECT on system.users.
 func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode, error) {

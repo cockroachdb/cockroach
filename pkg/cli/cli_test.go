@@ -822,6 +822,7 @@ func Example_sql_table() {
 	c.RunWithArgs([]string{"sql", "--format=csv", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=sql", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=html", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=raw", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=records", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
 	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain(indent) select s from t.t union all select s from t.t"})
@@ -941,6 +942,56 @@ func Example_sql_table() {
 	// <tr><td>a	b	c<br/>12	123123213	12313</td><td>tabs</td></tr>
 	// </tbody>
 	// </table>
+	// sql --format=raw -e select * from t.t
+	// # 2 columns
+	// # row 1
+	// ## 3
+	// foo
+	// ## 15
+	// printable ASCII
+	// # row 2
+	// ## 4
+	// "foo
+	// ## 27
+	// printable ASCII with quotes
+	// # row 3
+	// ## 4
+	// \foo
+	// ## 30
+	// printable ASCII with backslash
+	// # row 4
+	// ## 7
+	// foo
+	// bar
+	// ## 19
+	// non-printable ASCII
+	// # row 5
+	// ## 11
+	// κόσμε
+	// ## 14
+	// printable UTF8
+	// # row 6
+	// ## 2
+	// ñ
+	// ## 28
+	// printable UTF8 using escapes
+	// # row 7
+	// ## 6
+	// "\x01"
+	// ## 25
+	// non-printable UTF8 string
+	// # row 8
+	// ## 4
+	// ܈85
+	// ## 25
+	// UTF8 string with RTL char
+	// # row 9
+	// ## 24
+	// a	b	c
+	// 12	123123213	12313
+	// ## 4
+	// tabs
+	// # 9 rows
 	// sql --format=records -e select * from t.t
 	// -[ RECORD 1 ]
 	// s | foo

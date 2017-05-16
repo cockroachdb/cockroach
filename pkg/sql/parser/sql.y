@@ -3092,7 +3092,9 @@ table_ref:
     $$.val = &AliasedTableExpr{Expr: $2.tblExpr(), Ordinality: $4.bool(), As: $5.aliasClause() }
   }
 
-// The following syntax is a CockroachDB extension: SELECT ... FROM [ EXPLAIN .... ] WHERE ...
+// The following syntax is a CockroachDB extension:
+//     SELECT ... FROM [ EXPLAIN .... ] WHERE ...
+//     SELECT ... FROM [ SHOW .... ] WHERE ...
 // EXPLAIN within square brackets can be used as a table expression (data source).
 // We use square brackets for two reasons:
 // - the grammar would be terribly ambiguous if we used simple
@@ -3113,6 +3115,10 @@ table_ref:
 | '[' EXPLAIN '(' explain_option_list ')' explainable_stmt ']' opt_ordinality opt_alias_clause
   {
     $$.val = &AliasedTableExpr{Expr: &Explain{ Options: $4.strs(), Statement: $6.stmt(), Enclosed: true }, Ordinality: $8.bool(), As: $9.aliasClause() }
+  }
+| '[' show_stmt ']' opt_ordinality opt_alias_clause
+  {
+    $$.val = &AliasedTableExpr{Expr: &ShowSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
   }
 
 opt_tableref_col_list:
