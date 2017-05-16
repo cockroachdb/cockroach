@@ -610,8 +610,21 @@ func (r *renderNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
 //         SELECT a, c FROM t@abc ORDER by a,b,c
 //      we internally add b as a render target. The same holds for any targets required for
 //      grouping.
-func (r *renderNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
-	var ordering orderingInfo
+func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
+	r.ordering = orderingInfo{}
+
+	// Detect constants.
+	for col, expr := range r.render {
+		_, hasRowDependentValues, err := r.resolveNames(expr)
+		if err != nil {
+			// If we get an error here, the expression must contain an unresolved name
+			// or invalid indexed var; ignore.
+			continue
+		}
+		if !hasRowDependentValues {
+			r.ordering.addExactMatchColumn(col)
+		}
+	}
 
 	// See if any of the "exact match" columns have render targets. We can ignore any columns that
 	// don't have render targets. For example, assume we are using an ascending index on (k, v) with
@@ -623,7 +636,7 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	// column the results are also ordered just by v.
 	for colIdx := range fromOrder.exactMatchCols {
 		if renderIdx, ok := r.findRenderIndexForCol(colIdx); ok {
-			ordering.addExactMatchColumn(renderIdx)
+			r.ordering.addExactMatchColumn(renderIdx)
 		}
 	}
 	// Find the longest prefix of columns that have render targets. Once we find a column that is
@@ -638,11 +651,10 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	for _, colOrder := range fromOrder.ordering {
 		renderIdx, ok := r.findRenderIndexForCol(colOrder.ColIdx)
 		if !ok {
-			return ordering
+			return
 		}
-		ordering.addColumn(renderIdx, colOrder.Direction)
+		r.ordering.addColumn(renderIdx, colOrder.Direction)
 	}
 	// We added all columns in fromOrder; we can copy the distinct flag.
-	ordering.unique = fromOrder.unique
-	return ordering
+	r.ordering.unique = fromOrder.unique
 }

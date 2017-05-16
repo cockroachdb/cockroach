@@ -10,15 +10,15 @@ Level  Type    Field Description
 query ITTTTT colnames
 EXPLAIN (PLAN,METADATA) SELECT 1
 ----
-Level  Type    Field Description    Columns Ordering
-0      render                       ("1")
+Level  Type     Field  Description  Columns  Ordering
+0      render                       ("1")    ="1"
 1      nullrow                      ()
 
 query ITTTTT colnames
 EXPLAIN (METADATA,PLAN) SELECT 1
 ----
-Level  Type      Field  Description Columns Ordering
-0      render                       ("1")
+Level  Type     Field  Description  Columns  Ordering
+0      render                       ("1")    ="1"
 1      nullrow                      ()
 
 query ITTT colnames
@@ -43,10 +43,10 @@ Cumulative Time  Duration  Span Pos   Operation         Event        RowIdx  Key
 query ITTTTT colnames
 EXPLAIN (TYPES) SELECT 1
 ----
-Level  Type           Field     Description  Columns    Ordering
-0      render                                ("1" int)
-0                     render 0  (1)[int]
-1      nullrow                               ()
+Level  Type     Field     Description  Columns    Ordering
+0      render                          ("1" int)  ="1"
+0               render 0  (1)[int]
+1      nullrow                         ()
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (TRACE,TRACE) SELECT 1
@@ -67,7 +67,7 @@ EXPLAIN (METADATA) EXPLAIN (TRACE) SELECT 1
 0  sort                                            ("Cumulative Time", "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition")
 0                 order  +"Timestamp",+"Span Pos"
 1  explain trace                                   ("Cumulative Time", "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition", "Timestamp")
-2  render                                          ("1")
+2  render                                          ("1")                                                                                                                    ="1"
 3  nullrow                                         ()
 
 # Ensure that all relevant statement types can be explained

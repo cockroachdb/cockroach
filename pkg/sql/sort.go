@@ -173,27 +173,6 @@ func (p *planner) orderBy(
 			}
 		}
 
-		if s != nil {
-			// Try to optimize constant sorts. For this we need to resolve
-			// names to IndexedVars then see if there were any row-dependent
-			// expressions found in the sort expression.
-			sortExpr := expr
-			if index != -1 {
-				// We found a render above, so fetch it. This is needed
-				// because if the sort expression is a reference to a render
-				// alias, resolveNames below would be incorrect.
-				sortExpr = s.render[index]
-			}
-			_, hasRowDependentValues, err := p.resolveNames(sortExpr, s.sourceInfo, s.ivarHelper)
-			if err != nil {
-				return nil, err
-			}
-			if !hasRowDependentValues {
-				// No sorting needed!
-				continue
-			}
-		}
-
 		// Finally, if we haven't found anything so far, we really
 		// need a new render.
 		// TODO(knz/dan): currently this is only possible for renderNode.
@@ -231,7 +210,7 @@ func (p *planner) orderBy(
 	}
 
 	if ordering == nil {
-		// All the sort expressions are constant. Simply drop the sort node.
+		// No ordering; simply drop the sort node.
 		return nil, nil
 	}
 	return &sortNode{p: p, columns: columns, ordering: ordering}, nil
