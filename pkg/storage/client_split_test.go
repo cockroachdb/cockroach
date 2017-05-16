@@ -599,6 +599,102 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 }
 
+// RaftMessageHandlerInterceptor wraps a storage.RaftMessageHandler. It
+// delegates all methods to the underlying storage.RaftMessageHandler, except
+// that HandleSnapshot calls receiveSnapshotFilter with the snapshot request
+// header before delegating to the underlying HandleSnapshot method.
+type RaftMessageHandlerInterceptor struct {
+	storage.RaftMessageHandler
+	handleSnapshotFilter func(header *storage.SnapshotRequest_Header)
+}
+
+func (mh RaftMessageHandlerInterceptor) HandleSnapshot(
+	header *storage.SnapshotRequest_Header, respStream storage.SnapshotResponseStream,
+) error {
+	mh.handleSnapshotFilter(header)
+	return mh.RaftMessageHandler.HandleSnapshot(header, respStream)
+}
+
+// TestStoreEmptyRangeSnapshotSize tests that the snapshot request header for a
+// range that contains no user data (an "empty" range) has RangeSize == 0. This
+// is arguably a bug, because system data like the range descriptor and raft log
+// should also count towards the size of the snapshot. Currently, though, this
+// property conveniently allows us to optimize the rebalancing of empty ranges
+// by throttling snapshots of empty ranges separately from non-empty snapshots.
+//
+// If you change the accounting of RangeSize such that this test breaks, please
+// preserve the optimization by introducing an alternative means of identifying
+// snapshot requests for empty or near-empty ranges, and then adjust this test
+// accordingly.
+func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	// Disable the replicate queue and the split queue, as we want to control both
+	// rebalancing and splits ourselves.
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
+	sc.TestingKnobs.DisableSplitQueue = true
+
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 2)
+
+	// Split the range after the last table data key to get a range that contains
+	// no user data.
+	splitKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	splitKey = keys.MakeRowSentinelKey(splitKey)
+	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+	if _, err := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for the split to occur.
+	leftRangeID := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil).RangeID
+	var rightRangeID roachpb.RangeID
+	testutils.SucceedsSoon(t, func() error {
+		rightRangeID = mtc.stores[0].LookupReplica(splitKey, nil).RangeID
+		if rightRangeID == leftRangeID {
+			return errors.Errorf("store 1 hasn't processed split yet")
+		}
+		return nil
+	})
+
+	// Wrap store 1's message handler so we can record all incoming snapshot
+	// request headers.
+	var snapshotHeadersMu syncutil.Mutex
+	var snapshotHeaders []*storage.SnapshotRequest_Header
+	messageHandler := RaftMessageHandlerInterceptor{
+		RaftMessageHandler: mtc.stores[1],
+		handleSnapshotFilter: func(header *storage.SnapshotRequest_Header) {
+			// Each snapshot request is handled in a new goroutine, so we need
+			// synchronization.
+			snapshotHeadersMu.Lock()
+			defer snapshotHeadersMu.Unlock()
+			snapshotHeaders = append(snapshotHeaders, header)
+		},
+	}
+	mtc.transport.Listen(mtc.stores[1].StoreID(), messageHandler)
+
+	// Replicate the range to trigger a snapshot request from store 0 to store 1.
+	mtc.replicateRange(rightRangeID, 1)
+
+	// We don't need to hold snapshotHeadersMu while reading snapshotHeaders as
+	// replicateRange will only return if the rebalancing snapshots have
+	// completed, and we're not triggering more snapshots.
+
+	if a := len(snapshotHeaders); a < 1 {
+		t.Fatalf("expected at least one snapshot header, but got %d", a)
+	}
+
+	for i, header := range snapshotHeaders {
+		if header.RangeSize != 0 {
+			t.Errorf("%d: expected RangeSize to be 0, but was %d", i, header.RangeSize)
+		}
+	}
+}
+
 // TestStoreRangeSplitStatsWithMerges starts by splitting the system keys from
 // user-space keys and verifying that the user space side of the split (which is empty),
 // has all zeros for stats. It then issues a number of Merge requests to the user
