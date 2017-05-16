@@ -1,0 +1,5 @@
+# This test just repeatedly runs a filler insert statement on most nodes
+
+repeat 20
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k) FROM T), 'meh')

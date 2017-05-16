@@ -1,0 +1,26 @@
+# This file runs SHOW QUERIES and SHOW SESSIONS statements and ensures
+# the sessions and queries running on the other 4 nodes are returned
+
+# First, wait a bit for the other node to catch up
+repeat 10
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k) FROM T), 'meh')
+
+query ITT colnames
+SELECT node_id, username, query FROM [SHOW CLUSTER QUERIES] ORDER BY node_id;
+----
+node_id   username   query
+1         root       INSERT INTO t VALUES ((SELECT max(k) FROM t), 'meh')
+2         root       INSERT INTO t VALUES ((SELECT max(k) FROM t), 'meh')
+3         root       INSERT INTO t VALUES ((SELECT max(k) FROM t), 'meh')
+4         root       INSERT INTO t VALUES ((SELECT max(k) FROM t), 'meh')
+
+query ITT colnames
+SELECT node_id, username, active_queries FROM [SHOW CLUSTER SESSIONS] ORDER BY node_id;
+----
+node_id   username   active_queries
+1         root       INSERT INTO t VALUES ((SELECT max(k) FROM t), 'meh');
+2         root       INSERT INTO t VALUES ((SELECT max(k) FROM t), 'meh');
+3         root       INSERT INTO t VALUES ((SELECT max(k) FROM t), 'meh');
+4         root       INSERT INTO t VALUES ((SELECT max(k) FROM t), 'meh');
+5         root

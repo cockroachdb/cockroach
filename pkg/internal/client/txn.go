@@ -190,6 +190,13 @@ func (txn *Txn) DebugName() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.Proto.Name, txn.mu.Proto.ID)
 }
 
+// ID returns the ID of the Proto associated with this transaction.
+func (txn *Txn) ID() *uuid.UUID {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.Proto.ID
+}
+
 // SetIsolation sets the transaction's isolation type. Transactions default to
 // serializable isolation. The isolation must be set before any operations are
 // performed on the transaction.
