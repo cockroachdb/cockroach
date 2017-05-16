@@ -44,8 +44,9 @@ type valuesNode struct {
 
 	desiredTypes []parser.Type // This can be removed when we only type check once.
 
-	nextRow       int  // The index of the next row.
-	invertSorting bool // Inverts the sorting predicate.
+	nextRow       int   // The index of the next row.
+	invertSorting bool  // Inverts the sorting predicate.
+	err           error // Error to return at the last Next(), useful for partial values.
 }
 
 func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
@@ -185,7 +186,7 @@ func (n *valuesNode) DebugValues() debugValues {
 
 func (n *valuesNode) Next(context.Context) (bool, error) {
 	if n.nextRow >= n.rows.Len() {
-		return false, nil
+		return false, n.err
 	}
 	n.nextRow++
 	return true, nil

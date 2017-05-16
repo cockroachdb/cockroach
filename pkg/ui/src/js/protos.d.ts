@@ -8290,6 +8290,634 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type ActiveQuery$Properties = {
+                sql?: string;
+                start?: google.protobuf.Timestamp$Properties;
+                is_distributed?: boolean;
+            };
+
+            /**
+             * Constructs a new ActiveQuery.
+             * @exports cockroach.server.serverpb.ActiveQuery
+             * @constructor
+             * @param {cockroach.server.serverpb.ActiveQuery$Properties=} [properties] Properties to set
+             */
+            class ActiveQuery {
+
+                /**
+                 * Constructs a new ActiveQuery.
+                 * @exports cockroach.server.serverpb.ActiveQuery
+                 * @constructor
+                 * @param {cockroach.server.serverpb.ActiveQuery$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.ActiveQuery$Properties);
+
+                /**
+                 * ActiveQuery sql.
+                 * @type {string}
+                 */
+                public sql: string;
+
+                /**
+                 * ActiveQuery start.
+                 * @type {(google.protobuf.Timestamp$Properties|null)}
+                 */
+                public start: (google.protobuf.Timestamp$Properties|null);
+
+                /**
+                 * ActiveQuery is_distributed.
+                 * @type {boolean}
+                 */
+                public is_distributed: boolean;
+
+                /**
+                 * Creates a new ActiveQuery instance using the specified properties.
+                 * @param {cockroach.server.serverpb.ActiveQuery$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.ActiveQuery} ActiveQuery instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.ActiveQuery$Properties): cockroach.server.serverpb.ActiveQuery;
+
+                /**
+                 * Encodes the specified ActiveQuery message. Does not implicitly {@link cockroach.server.serverpb.ActiveQuery.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ActiveQuery$Properties} message ActiveQuery message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.ActiveQuery$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ActiveQuery message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ActiveQuery.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ActiveQuery$Properties} message ActiveQuery message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.ActiveQuery$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes an ActiveQuery message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.ActiveQuery} ActiveQuery
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.ActiveQuery;
+
+                /**
+                 * Decodes an ActiveQuery message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.ActiveQuery} ActiveQuery
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.ActiveQuery;
+
+                /**
+                 * Verifies an ActiveQuery message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates an ActiveQuery message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ActiveQuery} ActiveQuery
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.ActiveQuery;
+
+                /**
+                 * Creates an ActiveQuery message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.ActiveQuery.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ActiveQuery} ActiveQuery
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.ActiveQuery;
+
+                /**
+                 * Creates a plain object from an ActiveQuery message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.ActiveQuery} message ActiveQuery
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.ActiveQuery, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ActiveQuery message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ActiveQuery to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type ListSessionsRequest$Properties = {
+                username?: string;
+            };
+
+            /**
+             * Constructs a new ListSessionsRequest.
+             * @exports cockroach.server.serverpb.ListSessionsRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.ListSessionsRequest$Properties=} [properties] Properties to set
+             */
+            class ListSessionsRequest {
+
+                /**
+                 * Constructs a new ListSessionsRequest.
+                 * @exports cockroach.server.serverpb.ListSessionsRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.ListSessionsRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.ListSessionsRequest$Properties);
+
+                /**
+                 * ListSessionsRequest username.
+                 * @type {string}
+                 */
+                public username: string;
+
+                /**
+                 * Creates a new ListSessionsRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.ListSessionsRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.ListSessionsRequest} ListSessionsRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.ListSessionsRequest$Properties): cockroach.server.serverpb.ListSessionsRequest;
+
+                /**
+                 * Encodes the specified ListSessionsRequest message. Does not implicitly {@link cockroach.server.serverpb.ListSessionsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ListSessionsRequest$Properties} message ListSessionsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.ListSessionsRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ListSessionsRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ListSessionsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ListSessionsRequest$Properties} message ListSessionsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.ListSessionsRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a ListSessionsRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.ListSessionsRequest} ListSessionsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.ListSessionsRequest;
+
+                /**
+                 * Decodes a ListSessionsRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.ListSessionsRequest} ListSessionsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.ListSessionsRequest;
+
+                /**
+                 * Verifies a ListSessionsRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a ListSessionsRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ListSessionsRequest} ListSessionsRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.ListSessionsRequest;
+
+                /**
+                 * Creates a ListSessionsRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.ListSessionsRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ListSessionsRequest} ListSessionsRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.ListSessionsRequest;
+
+                /**
+                 * Creates a plain object from a ListSessionsRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.ListSessionsRequest} message ListSessionsRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.ListSessionsRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ListSessionsRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ListSessionsRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type Session$Properties = {
+                node_id?: number;
+                username?: string;
+                client_address?: string;
+                application_name?: string;
+                active_queries?: cockroach.server.serverpb.ActiveQuery$Properties[];
+                start?: google.protobuf.Timestamp$Properties;
+                kv_txn_id?: Uint8Array;
+            };
+
+            /**
+             * Constructs a new Session.
+             * @exports cockroach.server.serverpb.Session
+             * @constructor
+             * @param {cockroach.server.serverpb.Session$Properties=} [properties] Properties to set
+             */
+            class Session {
+
+                /**
+                 * Constructs a new Session.
+                 * @exports cockroach.server.serverpb.Session
+                 * @constructor
+                 * @param {cockroach.server.serverpb.Session$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.Session$Properties);
+
+                /**
+                 * Session node_id.
+                 * @type {number}
+                 */
+                public node_id: number;
+
+                /**
+                 * Session username.
+                 * @type {string}
+                 */
+                public username: string;
+
+                /**
+                 * Session client_address.
+                 * @type {string}
+                 */
+                public client_address: string;
+
+                /**
+                 * Session application_name.
+                 * @type {string}
+                 */
+                public application_name: string;
+
+                /**
+                 * Session active_queries.
+                 * @type {Array.<cockroach.server.serverpb.ActiveQuery$Properties>}
+                 */
+                public active_queries: cockroach.server.serverpb.ActiveQuery$Properties[];
+
+                /**
+                 * Session start.
+                 * @type {(google.protobuf.Timestamp$Properties|null)}
+                 */
+                public start: (google.protobuf.Timestamp$Properties|null);
+
+                /**
+                 * Session kv_txn_id.
+                 * @type {Uint8Array}
+                 */
+                public kv_txn_id: Uint8Array;
+
+                /**
+                 * Creates a new Session instance using the specified properties.
+                 * @param {cockroach.server.serverpb.Session$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.Session} Session instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.Session$Properties): cockroach.server.serverpb.Session;
+
+                /**
+                 * Encodes the specified Session message. Does not implicitly {@link cockroach.server.serverpb.Session.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.Session$Properties} message Session message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.Session$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified Session message, length delimited. Does not implicitly {@link cockroach.server.serverpb.Session.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.Session$Properties} message Session message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.Session$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a Session message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.Session} Session
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.Session;
+
+                /**
+                 * Decodes a Session message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.Session} Session
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.Session;
+
+                /**
+                 * Verifies a Session message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a Session message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.Session} Session
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.Session;
+
+                /**
+                 * Creates a Session message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.Session.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.Session} Session
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.Session;
+
+                /**
+                 * Creates a plain object from a Session message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.Session} message Session
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.Session, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this Session message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this Session to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type ListSessionsError$Properties = {
+                message?: string;
+            };
+
+            /**
+             * Constructs a new ListSessionsError.
+             * @exports cockroach.server.serverpb.ListSessionsError
+             * @constructor
+             * @param {cockroach.server.serverpb.ListSessionsError$Properties=} [properties] Properties to set
+             */
+            class ListSessionsError {
+
+                /**
+                 * Constructs a new ListSessionsError.
+                 * @exports cockroach.server.serverpb.ListSessionsError
+                 * @constructor
+                 * @param {cockroach.server.serverpb.ListSessionsError$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.ListSessionsError$Properties);
+
+                /**
+                 * ListSessionsError message.
+                 * @type {string}
+                 */
+                public message: string;
+
+                /**
+                 * Creates a new ListSessionsError instance using the specified properties.
+                 * @param {cockroach.server.serverpb.ListSessionsError$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.ListSessionsError} ListSessionsError instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.ListSessionsError$Properties): cockroach.server.serverpb.ListSessionsError;
+
+                /**
+                 * Encodes the specified ListSessionsError message. Does not implicitly {@link cockroach.server.serverpb.ListSessionsError.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ListSessionsError$Properties} message ListSessionsError message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.ListSessionsError$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ListSessionsError message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ListSessionsError.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ListSessionsError$Properties} message ListSessionsError message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.ListSessionsError$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a ListSessionsError message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.ListSessionsError} ListSessionsError
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.ListSessionsError;
+
+                /**
+                 * Decodes a ListSessionsError message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.ListSessionsError} ListSessionsError
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.ListSessionsError;
+
+                /**
+                 * Verifies a ListSessionsError message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a ListSessionsError message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ListSessionsError} ListSessionsError
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.ListSessionsError;
+
+                /**
+                 * Creates a ListSessionsError message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.ListSessionsError.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ListSessionsError} ListSessionsError
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.ListSessionsError;
+
+                /**
+                 * Creates a plain object from a ListSessionsError message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.ListSessionsError} message ListSessionsError
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.ListSessionsError, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ListSessionsError message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ListSessionsError to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type ListSessionsResponse$Properties = {
+                sessions?: cockroach.server.serverpb.Session$Properties[];
+                errors?: cockroach.server.serverpb.ListSessionsError$Properties[];
+            };
+
+            /**
+             * Constructs a new ListSessionsResponse.
+             * @exports cockroach.server.serverpb.ListSessionsResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.ListSessionsResponse$Properties=} [properties] Properties to set
+             */
+            class ListSessionsResponse {
+
+                /**
+                 * Constructs a new ListSessionsResponse.
+                 * @exports cockroach.server.serverpb.ListSessionsResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.ListSessionsResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.ListSessionsResponse$Properties);
+
+                /**
+                 * ListSessionsResponse sessions.
+                 * @type {Array.<cockroach.server.serverpb.Session$Properties>}
+                 */
+                public sessions: cockroach.server.serverpb.Session$Properties[];
+
+                /**
+                 * ListSessionsResponse errors.
+                 * @type {Array.<cockroach.server.serverpb.ListSessionsError$Properties>}
+                 */
+                public errors: cockroach.server.serverpb.ListSessionsError$Properties[];
+
+                /**
+                 * Creates a new ListSessionsResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.ListSessionsResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.ListSessionsResponse} ListSessionsResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.ListSessionsResponse$Properties): cockroach.server.serverpb.ListSessionsResponse;
+
+                /**
+                 * Encodes the specified ListSessionsResponse message. Does not implicitly {@link cockroach.server.serverpb.ListSessionsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ListSessionsResponse$Properties} message ListSessionsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.ListSessionsResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ListSessionsResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ListSessionsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ListSessionsResponse$Properties} message ListSessionsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.ListSessionsResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a ListSessionsResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.ListSessionsResponse} ListSessionsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.ListSessionsResponse;
+
+                /**
+                 * Decodes a ListSessionsResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.ListSessionsResponse} ListSessionsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.ListSessionsResponse;
+
+                /**
+                 * Verifies a ListSessionsResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a ListSessionsResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ListSessionsResponse} ListSessionsResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.ListSessionsResponse;
+
+                /**
+                 * Creates a ListSessionsResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.ListSessionsResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ListSessionsResponse} ListSessionsResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.ListSessionsResponse;
+
+                /**
+                 * Creates a plain object from a ListSessionsResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.ListSessionsResponse} message ListSessionsResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.ListSessionsResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ListSessionsResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ListSessionsResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type SpanStatsRequest$Properties = {
                 node_id?: string;
                 start_key?: Uint8Array;
@@ -8623,6 +9251,22 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public gossip(request: (cockroach.server.serverpb.GossipRequest|{ [k: string]: any }), callback: Status_gossip_Callback): void;
+
+                /**
+                 * Calls ListSessions.
+                 * @param {cockroach.server.serverpb.ListSessionsRequest|Object.<string,*>} request ListSessionsRequest message or plain object
+                 * @param {Status_listSessions_Callback} callback Node-style callback called with the error, if any, and ListSessionsResponse
+                 * @returns {undefined}
+                 */
+                public listSessions(request: (cockroach.server.serverpb.ListSessionsRequest|{ [k: string]: any }), callback: Status_listSessions_Callback): void;
+
+                /**
+                 * Calls ListLocalSessions.
+                 * @param {cockroach.server.serverpb.ListSessionsRequest|Object.<string,*>} request ListSessionsRequest message or plain object
+                 * @param {Status_listLocalSessions_Callback} callback Node-style callback called with the error, if any, and ListSessionsResponse
+                 * @returns {undefined}
+                 */
+                public listLocalSessions(request: (cockroach.server.serverpb.ListSessionsRequest|{ [k: string]: any }), callback: Status_listLocalSessions_Callback): void;
 
                 /**
                  * Calls SpanStats.
@@ -17299,6 +17943,10 @@ type Status_raftDebug_Callback = (error: Error, response?: cockroach.server.serv
 type Status_ranges_Callback = (error: Error, response?: cockroach.server.serverpb.RangesResponse) => void;
 
 type Status_gossip_Callback = (error: Error, response?: cockroach.gossip.InfoStatus) => void;
+
+type Status_listSessions_Callback = (error: Error, response?: cockroach.server.serverpb.ListSessionsResponse) => void;
+
+type Status_listLocalSessions_Callback = (error: Error, response?: cockroach.server.serverpb.ListSessionsResponse) => void;
 
 type Status_spanStats_Callback = (error: Error, response?: cockroach.server.serverpb.SpanStatsResponse) => void;
 

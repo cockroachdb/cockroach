@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -42,8 +43,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // traceTxnThreshold can be used to log SQL transactions that take
@@ -142,6 +145,25 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	},
 )
 
+// queryMeta stores metadata about a query. Stored as reference in
+// session.mu.ActiveQueries and planner.queryMeta.
+type queryMeta struct {
+	// The timestamp when this query began execution.
+	start time.Time
+
+	// The raw SQL query string.
+	sql string
+
+	// States whether this query is distributed. Note that all queries,
+	// including those that are distributed, have this field set to false until
+	// start of execution; only at that point can we can actually determine whether
+	// this query will be distributed.
+	isDistributed bool
+}
+
+// queryHandle is a type for uniquely identifying queries in a session.
+type queryHandle *queryMeta
+
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
 type Session struct {
@@ -149,10 +171,6 @@ type Session struct {
 	// Session parameters, user-configurable.
 	//
 
-	// ApplicationName is the name of the application running the
-	// current session. This can be used for logging and per-application
-	// statistics. Change via resetApplicationName().
-	ApplicationName string
 	// Database indicates the "current" database for the purpose of
 	// resolving names. See searchAndQualifyDatabase() for details.
 	Database string
@@ -171,9 +189,16 @@ type Session struct {
 	// User is the name of the user logged into the session.
 	User string
 
+	//
+	// Session parameters, non-user-configurable.
+	//
+
 	// defaults is used to restore default configuration values into
 	// SET ... TO DEFAULT statements.
 	defaults sessionDefaults
+
+	// ClientAddr is the client's IP address and port.
+	ClientAddr string
 
 	//
 	// State structures for the logical SQL session.
@@ -245,6 +270,28 @@ type Session struct {
 	// If set, contains the in progress COPY FROM columns.
 	copyFrom *copyNode
 
+	// mu contains of all elements of the struct that can be changed
+	// after initialization, and may be accessed from another thread.
+	mu struct {
+		syncutil.RWMutex
+
+		//
+		// Session parameters, user-configurable.
+		//
+
+		// ApplicationName is the name of the application running the
+		// current session. This can be used for logging and per-application
+		// statistics. Change via resetApplicationName().
+		ApplicationName string
+
+		//
+		// State structures for the logical SQL session.
+		//
+
+		// ActiveQueries contains all queries in flight.
+		ActiveQueries map[queryHandle]struct{}
+	}
+
 	//
 	// Testing state.
 	//
@@ -290,6 +337,45 @@ type SessionArgs struct {
 	ApplicationName string
 }
 
+// SessionRegistry stores a set of all sessions on this node.
+// Use register() and deregister() to modify this registry.
+type SessionRegistry struct {
+	syncutil.Mutex
+	store map[*Session]struct{}
+}
+
+// MakeSessionRegistry creates a new SessionRegistry with an empty set
+// of sessions.
+func MakeSessionRegistry() *SessionRegistry {
+	return &SessionRegistry{store: make(map[*Session]struct{})}
+}
+
+func (r *SessionRegistry) register(s *Session) {
+	r.Lock()
+	r.store[s] = struct{}{}
+	r.Unlock()
+}
+
+func (r *SessionRegistry) deregister(s *Session) {
+	r.Lock()
+	delete(r.store, s)
+	r.Unlock()
+}
+
+// SerializeAll returns a slice of all sessions in the registry, converted to serverpb.Sessions.
+func (r *SessionRegistry) SerializeAll() []serverpb.Session {
+	r.Lock()
+	defer r.Unlock()
+
+	response := make([]serverpb.Session, 0, len(r.store))
+
+	for s := range r.store {
+		response = append(response, s.serialize())
+	}
+
+	return response
+}
+
 // NewSession creates and initializes a new Session object.
 // remote can be nil.
 func NewSession(
@@ -325,15 +411,20 @@ func NewSession(
 	s.resetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
+	s.mu.ActiveQueries = make(map[queryHandle]struct{})
+
+	remoteStr := "<admin>"
+	if remote != nil {
+		remoteStr = remote.String()
+	}
+	s.ClientAddr = remoteStr
 
 	if traceSessionEventLogEnabled.Get() {
-		remoteStr := "<admin>"
-		if remote != nil {
-			remoteStr = remote.String()
-		}
 		s.eventLog = trace.NewEventLog(fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	}
 	s.context, s.cancel = context.WithCancel(ctx)
+
+	e.cfg.SessionRegistry.register(s)
 
 	return s
 }
@@ -388,6 +479,9 @@ func (s *Session) Finish(e *Executor) {
 		s.eventLog.Finish()
 		s.eventLog = nil
 	}
+
+	// Clear this session from the sessions registry.
+	e.cfg.SessionRegistry.deregister(s)
 
 	// This will stop the heartbeating of the of the txn record.
 	// TODO(andrei): This shouldn't have any effect, since, if there was a
@@ -506,6 +600,74 @@ func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 	s.verifyFnCheckedOnce = false
 }
 
+// addActiveQuery adds a running query to the session's internal store of active
+// queries. Called from executor's execStmt and execStmtInParallel.
+func (s *Session) addActiveQuery(stmt Statement) queryHandle {
+	sql := stmt.String()
+	if len(sql) > 1000 {
+		sql = sql[:997] + "..."
+	}
+
+	s.mu.Lock()
+	query := &queryMeta{
+		start: timeutil.Now(),
+		sql:   sql,
+	}
+	s.mu.ActiveQueries[query] = struct{}{}
+	s.mu.Unlock()
+	return query
+}
+
+// removeActiveQuery removes a query from a session's internal store of active
+// queries. Called when a query finishes execution.
+func (s *Session) removeActiveQuery(query queryHandle) {
+	s.mu.Lock()
+	delete(s.mu.ActiveQueries, query)
+	s.mu.Unlock()
+}
+
+// setQueryExecutionMode is called upon start of execution of a query, and sets
+// the query's metadata to indicate whether it's distributed or not.
+func (s *Session) setQueryExecutionMode(query queryHandle, isDistributed bool) {
+	s.mu.Lock()
+	(*queryMeta)(query).isDistributed = isDistributed
+	s.mu.Unlock()
+}
+
+// serialize serializes a Session into a serverpb.Session
+// that can be served over RPC.
+func (s *Session) serialize() serverpb.Session {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	s.TxnState.mu.RLock()
+	defer s.TxnState.mu.RUnlock()
+
+	var kvTxnID *uuid.UUID
+	txn := s.TxnState.mu.txn
+	if txn != nil {
+		kvTxnID = txn.ID()
+	}
+
+	activeQueries := make([]serverpb.ActiveQuery, 0, len(s.mu.ActiveQueries))
+
+	for query := range s.mu.ActiveQueries {
+		activeQueries = append(activeQueries, serverpb.ActiveQuery{
+			Start:         query.start,
+			Sql:           query.sql,
+			IsDistributed: query.isDistributed,
+		})
+	}
+
+	return serverpb.Session{
+		Username:        s.User,
+		ClientAddress:   s.ClientAddr,
+		ApplicationName: s.mu.ApplicationName,
+		Start:           s.phaseTimes[sessionInit],
+		ActiveQueries:   activeQueries,
+		KvTxnID:         kvTxnID,
+	}
+}
+
 // TxnStateEnum represents the state of a SQL txn.
 type TxnStateEnum int
 
@@ -536,8 +698,18 @@ func (s TxnStateEnum) kvTxnIsOpen() bool {
 // For interactive transactions (open across batches of SQL commands sent by a
 // user), txnState is intended to be stored as part of a user Session.
 type txnState struct {
-	txn   *client.Txn
 	State TxnStateEnum
+
+	// Mutable fields accessed from goroutines not synchronized by this txn's session,
+	// such as when a SHOW SESSIONS statement is executed on another session.
+	// Note that reads of mu.txn from the session's main goroutine
+	// do not require acquiring a read lock - since only that
+	// goroutine will ever write to mu.txn.
+	mu struct {
+		syncutil.RWMutex
+
+		txn *client.Txn
+	}
 
 	// Ctx is the context for everything running in this SQL txn.
 	Ctx context.Context
@@ -621,8 +793,10 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
-	ts.txn = client.NewTxn(e.cfg.DB)
-	if err := ts.txn.SetIsolation(s.DefaultIsolationLevel); err != nil {
+	ts.mu.Lock()
+	ts.mu.txn = client.NewTxn(e.cfg.DB)
+	ts.mu.Unlock()
+	if err := ts.mu.txn.SetIsolation(s.DefaultIsolationLevel); err != nil {
 		panic(err)
 	}
 	ts.State = Open
@@ -643,13 +817,15 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 	if state != NoTxn && state != Aborted && state != CommitWait {
 		panic(fmt.Sprintf("resetStateAndTxn called with unsupported state: %v", state))
 	}
-	if ts.txn != nil && !ts.txn.IsFinalized() {
+	if ts.mu.txn != nil && !ts.mu.txn.IsFinalized() {
 		panic(fmt.Sprintf(
 			"attempting to move SQL txn to state %v inconsistent with KV txn state: %s "+
-				"(finalized: false)", state, ts.txn.Proto().Status))
+				"(finalized: false)", state, ts.mu.txn.Proto().Status))
 	}
 	ts.State = state
-	ts.txn = nil
+	ts.mu.Lock()
+	ts.mu.txn = nil
+	ts.mu.Unlock()
 }
 
 // finishSQLTxn closes the root span for the current SQL txn.
@@ -685,13 +861,13 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 	}
 	if retErr, ok := err.(*roachpb.HandledRetryableTxnError); !ok ||
 		!ts.willBeRetried() ||
-		!ts.txn.IsRetryableErrMeantForTxn(*retErr) {
+		!ts.mu.txn.IsRetryableErrMeantForTxn(*retErr) {
 
 		// We can't or don't want to retry this txn, so the txn is over.
 		e.TxnAbortCount.Inc(1)
 		// This call rolls back a PENDING transaction and cleans up all its
 		// intents.
-		ts.txn.CleanupOnError(ts.Ctx, err)
+		ts.mu.txn.CleanupOnError(ts.Ctx, err)
 		ts.resetStateAndTxn(Aborted)
 	} else {
 		// If we got a retriable error, move the SQL txn to the RestartWait state.

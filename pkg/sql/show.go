@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -518,6 +519,20 @@ func quoteNames(names ...string) string {
 	return parser.AsString(nameList)
 }
 
+// mergeErrors takes a slice of ListSessionsErrors and makes a combined errors.Error.
+func mergeErrors(respErrors []serverpb.ListSessionsError) error {
+	if len(respErrors) > 0 {
+		var buffer bytes.Buffer
+		buffer.WriteString(fmt.Sprintf("%d errors: ", len(respErrors)))
+		for _, err := range respErrors {
+			buffer.WriteString(err.Message)
+			buffer.WriteString(", ")
+		}
+		return errors.New(buffer.String())
+	}
+	return nil
+}
+
 // ShowCreateView returns a CREATE VIEW statement for the specified view.
 // Privileges: Any privilege on view.
 func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) (planNode, error) {
@@ -881,6 +896,148 @@ func (p *planner) ShowConstraints(
 				},
 				columns: v.columns,
 			}, nil
+		},
+	}, nil
+}
+
+func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planNode, error) {
+	columns := sqlbase.ResultColumns{
+		{Name: "node_id", Typ: parser.TypeInt},
+		{Name: "username", Typ: parser.TypeString},
+		{Name: "start", Typ: parser.TypeInt},
+		{Name: "query", Typ: parser.TypeString},
+		{Name: "client_address", Typ: parser.TypeString},
+		{Name: "application_name", Typ: parser.TypeString},
+		{Name: "distributed", Typ: parser.TypeBool},
+	}
+
+	return &delayedNode{
+		name:    n.String(),
+		columns: columns,
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			statusServer := p.session.execCfg.StatusServer
+
+			var response *serverpb.ListSessionsResponse
+			var err error
+			sessionsRequest := &serverpb.ListSessionsRequest{Username: p.session.User}
+			if n.Cluster {
+				response, err = statusServer.ListSessions(ctx, sessionsRequest)
+			} else {
+				response, err = statusServer.ListLocalSessions(ctx, sessionsRequest)
+			}
+
+			if err != nil {
+				return nil, err
+			}
+
+			v := p.newContainerValuesNode(columns, 0)
+			for _, session := range response.Sessions {
+				for _, query := range session.ActiveQueries {
+					isDistributedDatum := parser.DBoolFalse
+					if query.IsDistributed {
+						isDistributedDatum = parser.DBoolTrue
+					}
+					row := parser.Datums{
+						parser.NewDInt(parser.DInt(session.NodeID)),
+						parser.NewDString(session.Username),
+						parser.NewDInt(parser.DInt(query.Start.Unix())),
+						parser.NewDString(query.Sql),
+						parser.NewDString(session.ClientAddress),
+						parser.NewDString(session.ApplicationName),
+						isDistributedDatum,
+					}
+					if _, err := v.rows.AddRow(ctx, row); err != nil {
+						v.Close(ctx)
+						return nil, err
+					}
+				}
+			}
+
+			v.err = mergeErrors(response.Errors)
+
+			return v, nil
+		},
+	}, nil
+
+}
+
+func (p *planner) ShowSessions(ctx context.Context, n *parser.ShowSessions) (planNode, error) {
+	columns := sqlbase.ResultColumns{
+		{Name: "node_id", Typ: parser.TypeInt},
+		{Name: "username", Typ: parser.TypeString},
+		{Name: "client_address", Typ: parser.TypeString},
+		{Name: "application_name", Typ: parser.TypeString},
+		{Name: "active_queries", Typ: parser.TypeString},
+		{Name: "session_start", Typ: parser.TypeInt},
+		{Name: "oldest_query_start", Typ: parser.TypeInt},
+		{Name: "kv_txn", Typ: parser.TypeString},
+	}
+	return &delayedNode{
+		name:    n.String(),
+		columns: columns,
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			statusServer := p.session.execCfg.StatusServer
+
+			var response *serverpb.ListSessionsResponse
+			var err error
+			sessionsRequest := &serverpb.ListSessionsRequest{Username: p.session.User}
+			if n.Cluster {
+				response, err = statusServer.ListSessions(ctx, sessionsRequest)
+			} else {
+				response, err = statusServer.ListLocalSessions(ctx, sessionsRequest)
+			}
+
+			if err != nil {
+				return nil, err
+			}
+
+			v := p.newContainerValuesNode(columns, len(response.Sessions))
+			for _, session := range response.Sessions {
+
+				// Generate active_queries and oldest_query_start
+				var activeQueries bytes.Buffer
+				var oldestStartSeconds int64
+				var oldestStartSecondsDatum parser.Datum
+
+				for _, query := range session.ActiveQueries {
+					activeQueries.WriteString(query.Sql)
+					activeQueries.WriteString("; ")
+
+					if oldestStartSeconds == 0 || query.Start.Unix() < oldestStartSeconds {
+						oldestStartSeconds = query.Start.Unix()
+					}
+				}
+
+				if oldestStartSeconds == 0 {
+					oldestStartSecondsDatum = parser.DNull
+				} else {
+					oldestStartSecondsDatum = parser.NewDInt(parser.DInt(oldestStartSeconds))
+				}
+
+				kvTxnIDDatum := parser.DNull
+				if session.KvTxnID != nil {
+					kvTxnIDDatum = parser.NewDString(session.KvTxnID.String())
+				}
+
+				row := parser.Datums{
+					parser.NewDInt(parser.DInt(session.NodeID)),
+					parser.NewDString(session.Username),
+					parser.NewDString(session.ClientAddress),
+					parser.NewDString(session.ApplicationName),
+					parser.NewDString(activeQueries.String()),
+					parser.NewDInt(parser.DInt(session.Start.Unix())),
+					oldestStartSecondsDatum,
+					kvTxnIDDatum,
+				}
+				if _, err := v.rows.AddRow(ctx, row); err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+			}
+
+			v.err = mergeErrors(response.Errors)
+
+			return v, nil
 		},
 	}, nil
 }
