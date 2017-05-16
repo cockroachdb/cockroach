@@ -2580,13 +2580,26 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	s := tc.store
 
 	ctx := context.Background()
-	cleanup1, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{})
+
+	cleanupNonEmpty1, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+		RangeSize: 1,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n := s.ReservationCount(); n != 1 {
 		t.Fatalf("expected 1 reservation, but found %d", n)
 	}
+
+	// Ensure we allow a concurrent empty snapshot.
+	cleanupEmpty, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := s.ReservationCount(); n != 2 {
+		t.Fatalf("expected 2 reservations, but found %d", n)
+	}
+	cleanupEmpty()
 
 	// Verify we don't allow concurrent snapshots by spawning a goroutine which
 	// will execute the cleanup after a short delay but only if another snapshot
@@ -2595,16 +2608,18 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	go func() {
 		time.Sleep(20 * time.Millisecond)
 		if atomic.LoadInt32(&boom) == 0 {
-			cleanup1()
+			cleanupNonEmpty1()
 		}
 	}()
 
-	cleanup2, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{})
+	cleanupNonEmpty2, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+		RangeSize: 1,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	atomic.StoreInt32(&boom, 1)
-	cleanup2()
+	cleanupNonEmpty2()
 
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
