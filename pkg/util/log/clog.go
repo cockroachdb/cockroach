@@ -324,7 +324,14 @@ func (t *traceLocation) Set(value string) error {
 	return nil
 }
 
-var entryRE = regexp.MustCompile(
+// Use separate regexes for detecting the start of a log entry and for actually
+// capturing/extracting the components of that log entry. The only difference
+// is that when capturing the components we want to capture across newlines,
+// but doing so when searching for matches in EntryDecoder.split is very
+// expensive. As of May 2017, this optimization gives a 40x speedup on MacOS.
+var entryMatchRE = regexp.MustCompile(
+	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) (?:(\d+) )?([^:]+):(\d+)  (.*)`)
+var entryCaptureRE = regexp.MustCompile(
 	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) (?:(\d+) )?([^:]+):(\d+)  ((?s).*)`)
 
 // EntryDecoder reads successive encoded log entries from the input
@@ -351,7 +358,7 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			return io.EOF
 		}
 		b := d.scanner.Bytes()
-		m := entryRE.FindSubmatch(b)
+		m := entryCaptureRE.FindSubmatch(b)
 		if m == nil {
 			continue
 		}
@@ -385,7 +392,7 @@ func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte
 	}
 	// We assume we're currently positioned at a log entry. We want to find the
 	// next one so we start our search at data[1].
-	i := entryRE.FindIndex(data[1:])
+	i := entryMatchRE.FindIndex(data[1:])
 	if i == nil {
 		if atEOF {
 			return len(data), data, nil
