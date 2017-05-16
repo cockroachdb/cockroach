@@ -328,7 +328,7 @@ func (p *planner) getDataSource(
 		return p.getGeneratorPlan(ctx, t)
 
 	case *parser.Subquery:
-		return p.getSubqueryPlan(ctx, t.Select, nil)
+		return p.getSubqueryPlan(ctx, anonymousTable, t.Select, nil)
 
 	case *parser.JoinTableExpr:
 		// Joins: two sources.
@@ -571,7 +571,7 @@ func (p *planner) getViewPlan(
 	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as
 	// just passing the entire select here or will inserting an ORDER BY in the
 	// middle of a query plan break things?
-	plan, err := p.getSubqueryPlan(ctx, sel.Select, sqlbase.ResultColumnsFromColDescs(desc.Columns))
+	plan, err := p.getSubqueryPlan(ctx, *tn, sel.Select, sqlbase.ResultColumnsFromColDescs(desc.Columns))
 	if err != nil {
 		return plan, err
 	}
@@ -582,7 +582,7 @@ func (p *planner) getViewPlan(
 // getSubqueryPlan builds a planDataSource for a select statement, including
 // for simple VALUES statements.
 func (p *planner) getSubqueryPlan(
-	ctx context.Context, sel parser.SelectStatement, cols sqlbase.ResultColumns,
+	ctx context.Context, tn parser.TableName, sel parser.SelectStatement, cols sqlbase.ResultColumns,
 ) (planDataSource, error) {
 	plan, err := p.newPlan(ctx, sel, nil)
 	if err != nil {
@@ -592,7 +592,7 @@ func (p *planner) getSubqueryPlan(
 		cols = plan.Columns()
 	}
 	return planDataSource{
-		info: newSourceInfoForSingleTable(anonymousTable, cols),
+		info: newSourceInfoForSingleTable(tn, cols),
 		plan: plan,
 	}, nil
 }
