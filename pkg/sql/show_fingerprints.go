@@ -121,21 +121,17 @@ func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
 	}
 	index := n.indexes[n.rowIdx]
 
-	queryArgs := make([]interface{}, 0, len(n.tableDesc.Columns)+2)
-	placeholders := make([]string, 0, len(n.tableDesc.Columns))
-	var placeholderIdx int
+	cols := make([]string, 0, len(n.tableDesc.Columns))
 	addColumn := func(col sqlbase.ColumnDescriptor) {
-		placeholderIdx++
-		queryArgs = append(queryArgs, col.Name)
 
 		// TODO(dan): This is known to be a flawed way to fingerprint. Any datum
 		// with the same string representation is fingerprinted the same, even
 		// if they're different types.
 		switch col.Type.Kind {
 		case sqlbase.ColumnType_BYTES:
-			placeholders = append(placeholders, fmt.Sprintf("$%d", placeholderIdx))
+			cols = append(cols, fmt.Sprintf("%s:::bytes", col.Name))
 		default:
-			placeholders = append(placeholders, fmt.Sprintf("$%d::string::bytes", placeholderIdx))
+			cols = append(cols, fmt.Sprintf("%s::string::bytes", parser.Name(col.Name).String()))
 		}
 	}
 
@@ -170,7 +166,7 @@ func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
 	sql := fmt.Sprintf(`SELECT
 	  XOR_AGG(FNV64(%s))::string AS fingerprint
 	  FROM %s.%s@{FORCE_INDEX=%s,NO_INDEX_JOIN}
-	`, strings.Join(placeholders, `,`), n.tn.DatabaseName, n.tn.TableName, parser.Name(index.Name))
+	`, strings.Join(cols, `,`), n.tn.DatabaseName, n.tn.TableName, parser.Name(index.Name))
 
 	var fingerprintCols parser.Datums
 	if err := n.p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -184,7 +180,7 @@ func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
 		p.avoidCachedDescriptors = true
 
 		var err error
-		fingerprintCols, err = p.QueryRow(ctx, sql, queryArgs...)
+		fingerprintCols, err = p.QueryRow(ctx, sql)
 		return err
 	}); err != nil {
 		return false, err
