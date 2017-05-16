@@ -1,7 +1,7 @@
 ![CockroachDB](docs/media/cockroach_db.png?raw=true "CockroachDB logo")
 =======================================================================
 
-CockroachDB is a scalable, survivable, strongly-consistent SQL database.
+CockroachDB is a cloud-native SQL database for building global, scalable cloud services that survive disasters.
 
 [![TeamCity CI](https://teamcity.cockroachdb.com/guestAuth/app/rest/builds/buildType:(id:Cockroach_UnitTests)/statusIcon.svg)](https://teamcity.cockroachdb.com/viewLog.html?buildTypeId=Cockroach_UnitTests&buildId=lastFinished&guest=1)
 [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.svg)](https://godoc.org/github.com/cockroachdb/cockroach)
@@ -48,7 +48,7 @@ For guidance on installation, development, deployment, and administration, see o
 
 1. [Secure the cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html) with TLS encryption.
 
-1. [Learn more about CockroachDB SQL](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html).
+1. [Learn about CockroachDB SQL](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html).
 
 1. [Explore core features](https://www.cockroachlabs.com/docs/demo-data-replication.html), such as data replication and fault tolerance and recovery.
 
