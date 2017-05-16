@@ -430,9 +430,20 @@ type Store struct {
 		at time.Time
 	}
 
-	// Semaphore to limit concurrent snapshot application and replica data
-	// destruction.
-	snapshotApplySem chan struct{}
+	// Semaphore to limit concurrent non-empty snapshot application and replica
+	// data destruction.
+	nonEmptySnapshotApplySem chan struct{}
+
+	// Sempahore to limit empty snapshot application. Empty snapshots are limited
+	// separately from non-empty snapshots so that an store with empty ranges can
+	// transmit those empty ranges to an underfull store without getting stuck
+	// behind large snapshots from a store without empty ranges.
+	//
+	// Once we have rebalancing that balances bytes and not just the number of
+	// ranges on each store, separating empty and non-empty snapshots will be
+	// unnecessary.
+	emptySnapshotApplySem chan struct{}
+
 	// Are rebalances to this store allowed or prohibited. Rebalances are
 	// prohibited while a store is catching up replicas (i.e. recovering) after
 	// being restarted.
@@ -664,9 +675,13 @@ type StoreConfig struct {
 
 	TestingKnobs StoreTestingKnobs
 
-	// concurrentSnapshotApplyLimit is the maximum number of snapshots that are
-	// permitted to be applied concurrently.
-	concurrentSnapshotApplyLimit int
+	// concurrentNonEmptySnapshotApplyLimit is the maximum number of non-empty
+	// snapshots that are permitted to be applied concurrently.
+	concurrentNonEmptySnapshotApplyLimit int
+
+	// concurrentEmptySnapshotApplyLimit is the maximum number of empty snapshots
+	// that are permitted to be applied concurrently.
+	concurrentEmptySnapshotApplyLimit int
 
 	// RangeLeaseActiveDuration is the duration of the active period of leader
 	// leases requested.
@@ -857,11 +872,21 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
-	if sc.concurrentSnapshotApplyLimit == 0 {
+	if sc.concurrentNonEmptySnapshotApplyLimit == 0 {
 		// NB: setting this value higher than 1 is likely to degrade client
 		// throughput.
-		sc.concurrentSnapshotApplyLimit =
+		//
+		// This environment variable has an ambiguous name for backwards
+		// compatibility.
+		sc.concurrentNonEmptySnapshotApplyLimit =
 			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", 1)
+	}
+	if sc.concurrentEmptySnapshotApplyLimit == 0 {
+		// NB: setting this value higher than it's default is unlikely to degrade
+		// throughput, but will allow multiple overfull stores to dump too many
+		// replicas on an underfull store.
+		sc.concurrentEmptySnapshotApplyLimit =
+			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_EMPTY_SNAPSHOT_APPLY_LIMIT", 3)
 	}
 
 	rangeLeaseActiveDuration, rangeLeaseRenewalDuration :=
@@ -931,7 +956,8 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.tsCacheMu.cache = newTimestampCache(s.cfg.Clock)
 	s.tsCacheMu.Unlock()
 
-	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
+	s.nonEmptySnapshotApplySem = make(chan struct{}, cfg.concurrentNonEmptySnapshotApplyLimit)
+	s.emptySnapshotApplySem = make(chan struct{}, cfg.concurrentEmptySnapshotApplyLimit)
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
@@ -2120,16 +2146,16 @@ func (s *Store) RemoveReplica(
 ) error {
 	if destroy {
 		// Destroying replica state is moderately expensive, so we serialize such
-		// operations with applying snapshots.
+		// operations with applying non-empty snapshots.
 		select {
-		case s.snapshotApplySem <- struct{}{}:
+		case s.nonEmptySnapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-s.stopper.ShouldStop():
 			return errors.Errorf("stopped")
 		}
 		defer func() {
-			<-s.snapshotApplySem
+			<-s.nonEmptySnapshotApplySem
 		}()
 	}
 
@@ -2644,12 +2670,17 @@ func (s *Store) Send(
 func (s *Store) reserveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header,
 ) (func(), error) {
+	sem := s.nonEmptySnapshotApplySem
+	if header.RangeSize == 0 {
+		sem = s.emptySnapshotApplySem
+	}
+
 	if header.CanDecline {
 		if atomic.LoadInt32(&s.rebalancesDisabled) == 1 {
 			return nil, nil
 		}
 		select {
-		case s.snapshotApplySem <- struct{}{}:
+		case sem <- struct{}{}:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-s.stopper.ShouldStop():
@@ -2659,7 +2690,7 @@ func (s *Store) reserveSnapshot(
 		}
 	} else {
 		select {
-		case s.snapshotApplySem <- struct{}{}:
+		case sem <- struct{}{}:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-s.stopper.ShouldStop():
@@ -2672,7 +2703,7 @@ func (s *Store) reserveSnapshot(
 	return func() {
 		s.metrics.ReservedReplicaCount.Dec(1)
 		s.metrics.Reserved.Dec(header.RangeSize)
-		<-s.snapshotApplySem
+		<-sem
 	}, nil
 }
 
