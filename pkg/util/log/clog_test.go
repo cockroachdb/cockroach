@@ -17,6 +17,7 @@
 package log
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -155,12 +156,25 @@ func TestEntryDecoder(t *testing.T) {
 	t3 := t2.Add(time.Microsecond)
 	t4 := t3.Add(time.Microsecond)
 	t5 := t4.Add(time.Microsecond)
+	t6 := t5.Add(time.Microsecond)
+	t7 := t6.Add(time.Microsecond)
+	t8 := t7.Add(time.Microsecond)
+
+	// Verify the truncation logic for reading logs that are longer than the
+	// default scanner can handle.
+	preambleLength := len(formatEntry(Severity_INFO, t1, 0, "clog_test.go", 136, ""))
+	maxMessageLength := bufio.MaxScanTokenSize - preambleLength - 1
+	reallyLongEntry := string(bytes.Repeat([]byte("a"), maxMessageLength))
+	tooLongEntry := reallyLongEntry + "a"
 
 	contents := formatEntry(Severity_INFO, t1, 0, "clog_test.go", 136, "info")
 	contents += formatEntry(Severity_INFO, t2, 1, "clog_test.go", 137, "multi-\nline")
-	contents += formatEntry(Severity_WARNING, t3, 2, "clog_test.go", 138, "warning")
-	contents += formatEntry(Severity_ERROR, t4, 3, "clog_test.go", 139, "error")
-	contents += formatEntry(Severity_FATAL, t5, 4, "clog_test.go", 140, "fatal\nstack\ntrace")
+	contents += formatEntry(Severity_INFO, t3, 2, "clog_test.go", 138, reallyLongEntry)
+	contents += formatEntry(Severity_INFO, t4, 3, "clog_test.go", 139, tooLongEntry)
+	contents += formatEntry(Severity_WARNING, t5, 4, "clog_test.go", 140, "warning")
+	contents += formatEntry(Severity_ERROR, t6, 5, "clog_test.go", 141, "error")
+	contents += formatEntry(Severity_FATAL, t7, 6, "clog_test.go", 142, "fatal\nstack\ntrace")
+	contents += formatEntry(Severity_INFO, t8, 7, "clog_test.go", 143, tooLongEntry)
 
 	readAllEntries := func(contents string) []Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents))
@@ -198,30 +212,54 @@ func TestEntryDecoder(t *testing.T) {
 line`,
 		},
 		{
-			Severity:  Severity_WARNING,
+			Severity:  Severity_INFO,
 			Time:      t3.UnixNano(),
 			Goroutine: 2,
 			File:      `clog_test.go`,
 			Line:      138,
-			Message:   `warning`,
+			Message:   reallyLongEntry,
 		},
 		{
-			Severity:  Severity_ERROR,
+			Severity:  Severity_INFO,
 			Time:      t4.UnixNano(),
 			Goroutine: 3,
 			File:      `clog_test.go`,
 			Line:      139,
-			Message:   `error`,
+			Message:   tooLongEntry[:maxMessageLength],
 		},
 		{
-			Severity:  Severity_FATAL,
+			Severity:  Severity_WARNING,
 			Time:      t5.UnixNano(),
 			Goroutine: 4,
 			File:      `clog_test.go`,
 			Line:      140,
+			Message:   `warning`,
+		},
+		{
+			Severity:  Severity_ERROR,
+			Time:      t6.UnixNano(),
+			Goroutine: 5,
+			File:      `clog_test.go`,
+			Line:      141,
+			Message:   `error`,
+		},
+		{
+			Severity:  Severity_FATAL,
+			Time:      t7.UnixNano(),
+			Goroutine: 6,
+			File:      `clog_test.go`,
+			Line:      142,
 			Message: `fatal
 stack
 trace`,
+		},
+		{
+			Severity:  Severity_INFO,
+			Time:      t8.UnixNano(),
+			Goroutine: 7,
+			File:      `clog_test.go`,
+			Line:      143,
+			Message:   tooLongEntry[:maxMessageLength],
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
