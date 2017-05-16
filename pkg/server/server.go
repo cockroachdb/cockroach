@@ -377,6 +377,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
+		s.admin,
 		s.db,
 		s.gossip,
 		s.recorder,
