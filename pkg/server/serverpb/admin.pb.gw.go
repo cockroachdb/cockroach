@@ -260,6 +260,10 @@ func request_Admin_Drain_0(ctx context.Context, marshaler runtime.Marshaler, cli
 
 }
 
+var (
+	filter_Admin_RangeLog_0 = &utilities.DoubleArray{Encoding: map[string]int{"range_id": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
+)
+
 func request_Admin_RangeLog_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq RangeLogRequest
 	var metadata runtime.ServerMetadata
@@ -280,6 +284,10 @@ func request_Admin_RangeLog_0(ctx context.Context, marshaler runtime.Marshaler, 
 
 	if err != nil {
 		return nil, metadata, err
+	}
+
+	if err := runtime.PopulateQueryParameters(&protoReq, req.URL.Query(), filter_Admin_RangeLog_0); err != nil {
+		return nil, metadata, grpc.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
 	msg, err := client.RangeLog(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
