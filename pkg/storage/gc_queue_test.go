@@ -145,7 +145,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 			// leading to inconsistent state.
 			tc.repl.mu.Lock()
 			defer tc.repl.mu.Unlock()
-			if err := tc.repl.stateLoader.setMVCCStats(context.Background(), tc.repl.store.Engine(), &ms); err != nil {
+			if err := tc.repl.mu.stateLoader.setMVCCStats(context.Background(), tc.repl.store.Engine(), &ms); err != nil {
 				t.Fatal(err)
 			}
 			tc.repl.mu.state.Stats = ms

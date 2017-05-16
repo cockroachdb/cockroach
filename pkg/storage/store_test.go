@@ -636,10 +636,9 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	}
 
 	r := &Replica{
-		RangeID:     desc.RangeID,
-		stateLoader: makeReplicaStateLoader(desc.RangeID),
-		store:       store,
-		abortCache:  NewAbortCache(desc.RangeID),
+		RangeID:    desc.RangeID,
+		store:      store,
+		abortCache: NewAbortCache(desc.RangeID),
 	}
 	if err := r.init(desc, store.Clock(), 0); err != nil {
 		t.Fatal(err)
@@ -2036,8 +2035,8 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := repl.mu.state.GCThreshold
+		pgcThreshold, err := repl.mu.stateLoader.loadGCThreshold(context.Background(), store.Engine())
 		repl.mu.Unlock()
-		pgcThreshold, err := repl.stateLoader.loadGCThreshold(context.Background(), store.Engine())
 		if err != nil {
 			t.Fatal(err)
 		}

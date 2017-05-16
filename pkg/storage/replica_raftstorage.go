@@ -38,10 +38,13 @@ import (
 
 var _ raft.Storage = (*Replica)(nil)
 
-// All calls to raft.RawNode require that an exclusive lock is held.
-// All of the functions exposed via the raft.Storage interface will in
-// turn be called from RawNode. So the lock that guards raftGroup must
-// be the same as the lock that guards all the inner fields.
+// All calls to raft.RawNode require that both Replica.raftMu and
+// Replica.mu are held. All of the functions exposed via the
+// raft.Storage interface will in turn be called from RawNode, so none
+// of these methods may acquire either lock, but they may require
+// their caller to hold one or both locks (even though they do not
+// follow our "Locked" naming convention). Specific locking
+// requirements are noted in each method's comments.
 //
 // Many of the methods defined in this file are wrappers around static
 // functions. This is done to facilitate their use from
@@ -51,10 +54,10 @@ var _ raft.Storage = (*Replica)(nil)
 // to Replica.store.Engine().
 
 // InitialState implements the raft.Storage interface.
-// InitialState requires that the replica lock be held.
+// InitialState requires that r.mu is held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.stateLoader.loadHardState(ctx, r.store.Engine())
+	hs, err := r.mu.stateLoader.loadHardState(ctx, r.store.Engine())
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -70,7 +73,6 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Passing maxBytes equal to zero disables size checking.
-// Entries requires that the replica lock is held.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
@@ -194,7 +196,6 @@ func iterateEntries(
 }
 
 // Term implements the raft.Storage interface.
-// Term requires that the replica lock is held.
 func (r *Replica) Term(i uint64) (uint64, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
@@ -225,7 +226,7 @@ func term(
 }
 
 // LastIndex implements the raft.Storage interface.
-// LastIndex requires that the replica lock is held.
+// LastIndex requires that r.mu is held.
 func (r *Replica) LastIndex() (uint64, error) {
 	return r.mu.lastIndex, nil
 }
@@ -233,14 +234,14 @@ func (r *Replica) LastIndex() (uint64, error) {
 // raftTruncatedStateLocked returns metadata about the log that preceded the
 // first current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
-// raftTruncatedStateLocked requires that the replica lock be held.
+// raftTruncatedStateLocked requires that r.mu is held.
 func (r *Replica) raftTruncatedStateLocked(
 	ctx context.Context,
 ) (roachpb.RaftTruncatedState, error) {
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
-	ts, err := r.stateLoader.loadTruncatedState(ctx, r.store.Engine())
+	ts, err := r.mu.stateLoader.loadTruncatedState(ctx, r.store.Engine())
 	if err != nil {
 		return ts, err
 	}
@@ -251,7 +252,7 @@ func (r *Replica) raftTruncatedStateLocked(
 }
 
 // FirstIndex implements the raft.Storage interface.
-// FirstIndex requires that the replica lock is held.
+// FirstIndex requires that r.mu is held.
 func (r *Replica) FirstIndex() (uint64, error) {
 	ctx := r.AnnotateCtx(context.TODO())
 	ts, err := r.raftTruncatedStateLocked(ctx)
@@ -261,16 +262,16 @@ func (r *Replica) FirstIndex() (uint64, error) {
 	return ts.Index + 1, nil
 }
 
-// GetFirstIndex is the same function as FirstIndex but it does not
-// require that the replica lock is held.
+// GetFirstIndex is the same function as FirstIndex but it requires
+// that r.mu is not held.
 func (r *Replica) GetFirstIndex() (uint64, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.FirstIndex()
 }
 
-// Snapshot implements the raft.Storage interface. Snapshot requires that the
-// replica lock is held. Note that the returned snapshot is a placeholder and
+// Snapshot implements the raft.Storage interface. Snapshot requires that
+// r.mu is held. Note that the returned snapshot is a placeholder and
 // does not contain any of the replica data. The snapshot is actually generated
 // (and sent) by the Raft snapshot queue.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
@@ -432,7 +433,7 @@ func snapshot(
 // append the given entries to the raft log. Takes the previous values of
 // r.mu.lastIndex and r.mu.raftLogSize, and returns new values. We do this
 // rather than modifying them directly because these modifications need to be
-// atomic with the commit of the batch.
+// atomic with the commit of the batch. This method requires that r.raftMu is held.
 func (r *Replica) append(
 	ctx context.Context,
 	batch engine.ReadWriter,
@@ -447,7 +448,7 @@ func (r *Replica) append(
 	var value roachpb.Value
 	for i := range entries {
 		ent := &entries[i]
-		key := r.stateLoader.RaftLogKey(ent.Index)
+		key := r.raftMu.stateLoader.RaftLogKey(ent.Index)
 		if err := value.SetProto(ent); err != nil {
 			return 0, 0, err
 		}
@@ -466,14 +467,14 @@ func (r *Replica) append(
 	// Delete any previously appended log entries which never committed.
 	lastIndex := entries[len(entries)-1].Index
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
-		err := engine.MVCCDelete(ctx, batch, &diff, r.stateLoader.RaftLogKey(i),
+		err := engine.MVCCDelete(ctx, batch, &diff, r.raftMu.stateLoader.RaftLogKey(i),
 			hlc.Timestamp{}, nil /* txn */)
 		if err != nil {
 			return 0, 0, err
 		}
 	}
 
-	if err := r.stateLoader.setLastIndex(ctx, batch, lastIndex); err != nil {
+	if err := r.raftMu.stateLoader.setLastIndex(ctx, batch, lastIndex); err != nil {
 		return 0, 0, err
 	}
 
@@ -544,6 +545,7 @@ func clearRangeData(desc *roachpb.RangeDescriptor, eng engine.Engine, batch engi
 // for correctness, i.e. the parameters to this method must be taken from
 // a raft.Ready. It is the caller's responsibility to call
 // r.store.processRangeDescriptorUpdate(r) after a successful applySnapshot.
+// This method requires that r.raftMu is held.
 func (r *Replica) applySnapshot(
 	ctx context.Context, inSnap IncomingSnapshot, snap raftpb.Snapshot, hs raftpb.HardState,
 ) (err error) {
@@ -648,7 +650,7 @@ func (r *Replica) applySnapshot(
 	// say it isn't going to accept a snapshot which is identical to the current
 	// state?
 	if !raft.IsEmptyHardState(hs) {
-		if err := r.stateLoader.setHardState(ctx, distinctBatch, hs); err != nil {
+		if err := r.raftMu.stateLoader.setHardState(ctx, distinctBatch, hs); err != nil {
 			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 		}
 	}
@@ -684,7 +686,7 @@ func (r *Replica) applySnapshot(
 	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(s.Stats)
 	r.mu.state = s
-	r.assertStateRLocked(ctx, r.store.Engine())
+	r.assertStateLocked(ctx, r.store.Engine())
 	r.mu.Unlock()
 
 	// As the last deferred action after committing the batch, update other
