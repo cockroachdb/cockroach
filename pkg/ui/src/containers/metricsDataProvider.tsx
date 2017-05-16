@@ -120,9 +120,9 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     (props: MetricsDataProviderProps & {children?: React.ReactNode}) => props.children,
     (children) => {
       // MetricsDataProvider should contain only one direct child.
-      let child: React.ReactElement<MetricsDataComponentProps> = React.Children.only(this.props.children);
+      const child: React.ReactElement<MetricsDataComponentProps> = React.Children.only(this.props.children);
       // Perform a simple DFS to find all children which are Metric objects.
-      let selectors: React.ReactElement<MetricProps>[] = findChildrenOfType(children, Metric);
+      const selectors: React.ReactElement<MetricProps>[] = findChildrenOfType(children, Metric);
       // Construct a query for each found selector child.
       return _.map(selectors, (s) => queryFromProps(s.props, child.props));
     });
@@ -147,12 +147,12 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
    * trigger a new request if the previous query is no longer valid.
    */
   refreshMetricsIfStale(props: MetricsDataProviderProps) {
-    let request = this.requestMessage(props);
+    const request = this.requestMessage(props);
     if (!request) {
       return;
     }
-    let { metrics, queryMetrics, id } = props;
-    let nextRequest = metrics && metrics.nextRequest;
+    const { metrics, queryMetrics, id } = props;
+    const nextRequest = metrics && metrics.nextRequest;
     if (!nextRequest || !_.isEqual(nextRequest, request)) {
       queryMetrics(id, request);
     }
@@ -171,7 +171,7 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
 
   getData() {
     if (this.props.metrics) {
-      let { data, request } = this.props.metrics;
+      const { data, request } = this.props.metrics;
       // Do not attach data if queries are not equivalent.
       if (data && request && _.isEqual(request.queries, this.requestMessage(this.props).queries)) {
         return data;
@@ -182,8 +182,8 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
 
   render() {
     // MetricsDataProvider should contain only one direct child.
-    let child = React.Children.only(this.props.children);
-    let dataProps: MetricsDataComponentProps = {
+    const child = React.Children.only(this.props.children);
+    const dataProps: MetricsDataComponentProps = {
       data: this.getData(),
       timeInfo: this.props.timeInfo,
     };
@@ -193,7 +193,7 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
 
 // timeInfoSelector converts the current global time window into a set of Long
 // timestamps, which can be sent with requests to the server.
-let timeInfoSelector = createSelector(
+const timeInfoSelector = createSelector(
   (state: AdminUIState) => state.timewindow,
   (tw) => {
     if (!_.isObject(tw.currentWindow)) {
@@ -206,7 +206,7 @@ let timeInfoSelector = createSelector(
     };
   });
 
-let current = () => {
+const current = () => {
   let now = moment();
   // Round to the nearest 10 seconds. There are 10000 ms in 10 s.
   now = moment(Math.floor(now.valueOf() / 10000) * 10000);
@@ -218,7 +218,7 @@ let current = () => {
 };
 
 // Connect the MetricsDataProvider class to redux state.
-let metricsDataProviderConnected = connect(
+const metricsDataProviderConnected = connect(
   (state: AdminUIState, ownProps: MetricsDataProviderExplicitProps) => {
 
     return {

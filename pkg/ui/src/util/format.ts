@@ -25,7 +25,7 @@ export function ComputePrefixExponent(value: number, prefixMultiple: number, pre
 }
 
 export function BytesToUnitValue(bytes: number): UnitValue {
-  let scale = ComputePrefixExponent(bytes, kibi, byteUnits);
+  const scale = ComputePrefixExponent(bytes, kibi, byteUnits);
   return {
     value: bytes / Math.pow(kibi, scale),
     units: byteUnits[scale],
@@ -41,7 +41,7 @@ export function BytesToUnitValue(bytes: number): UnitValue {
  * https://stackoverflow.com/questions/10420352/converting-file-size-in-bytes-to-human-readable
  */
 export function Bytes(bytes: number): string {
-  let unitVal = BytesToUnitValue(bytes);
+  const unitVal = BytesToUnitValue(bytes);
   if (!unitVal.value) {
     return "0 B";
   }
@@ -64,7 +64,7 @@ export function Percentage(numerator: number, denominator: number): string {
  * be converted into larger units.
  */
 export function Duration(nanoseconds: number): string {
-  let scale = ComputePrefixExponent(nanoseconds, 1000, durationUnits);
-  let unitVal = nanoseconds / Math.pow(1000, scale);
+  const scale = ComputePrefixExponent(nanoseconds, 1000, durationUnits);
+  const unitVal = nanoseconds / Math.pow(1000, scale);
   return unitVal.toFixed(1) + " " + durationUnits[scale];
 }

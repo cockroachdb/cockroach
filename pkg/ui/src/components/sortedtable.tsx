@@ -76,7 +76,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
       if (!sortSetting) {
         return data;
       }
-      let sortColumn = columns[sortSetting.sortKey];
+      const sortColumn = columns[sortSetting.sortKey];
       if (!sortColumn || !sortColumn.sort) {
         return data;
       }
@@ -105,7 +105,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
     });
 
   render() {
-    let { data, sortSetting, onChangeSortSetting } = this.props;
+    const { data, sortSetting, onChangeSortSetting } = this.props;
     if (data) {
       return <SortableTable count={data.length}
                             sortSetting={sortSetting}

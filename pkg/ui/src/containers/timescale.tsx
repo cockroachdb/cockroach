@@ -27,15 +27,15 @@ interface TimeRangeProps {
 // TimeRange is a prettified string representation of the current timescale.
 class TimeRange extends React.Component<TimeRangeProps, {}> {
   render() {
-    let s = this.props.start.clone().utc();
-    let e = this.props.end.clone().utc();
-    let startTimeSpan = <span className="time-range__time">{s.format("HH:mm:SS")}</span>;
-    let endTimeSpan = <span className="time-range__time">{e.format("HH:mm:SS")}</span>;
-    let startDateSpan = <span className="time-range__date">{s.format("MMM DD, YYYY")}</span>;
-    let endDateSpan = <span className="time-range__date">{e.format("MMM DD, YYYY")}</span>;
+    const s = this.props.start.clone().utc();
+    const e = this.props.end.clone().utc();
+    const startTimeSpan = <span className="time-range__time">{s.format("HH:mm:SS")}</span>;
+    const endTimeSpan = <span className="time-range__time">{e.format("HH:mm:SS")}</span>;
+    const startDateSpan = <span className="time-range__date">{s.format("MMM DD, YYYY")}</span>;
+    const endDateSpan = <span className="time-range__date">{e.format("MMM DD, YYYY")}</span>;
 
-    let rangeHours = e.diff(s, "hours");
-    let pastHours = moment().diff(s, "hours");
+    const rangeHours = e.diff(s, "hours");
+    const pastHours = moment().diff(s, "hours");
     // If start and end times are on the same day, show the times.
     if (rangeHours < 24 && s.date() === e.date()) {
       // If start and end times are today, omit the date, otherwise include it.
@@ -72,7 +72,7 @@ interface TimeScaleDropdownProps {
 // for graphs.
 class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
   changeSettings = (newTimescaleKey: DropdownOption) => {
-    let newSettings = timewindow.availableTimeScales[newTimescaleKey.value];
+    const newSettings = timewindow.availableTimeScales[newTimescaleKey.value];
     if (newSettings) {
       this.props.setTimeScale(newSettings);
     }
@@ -107,7 +107,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
   }
 
   getTimescaleOptions = () => {
-    let timescaleOptions = _.map(timewindow.availableTimeScales, (_ts, k) => {
+    const timescaleOptions = _.map(timewindow.availableTimeScales, (_ts, k) => {
       return { value: k, label: "Last " + k };
     });
 
@@ -126,10 +126,10 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
   // Sets the default timescale based on the start time of the oldest node.
   setDefaultTime(props = this.props) {
     if (props.nodeStatusesValid && !props.defaultTimescaleSet) {
-      let oldestNode = _.minBy(props.nodeStatuses, (nodeStatus: NodeStatus$Properties) => nodeStatus.started_at);
-      let clusterStarted = LongToMoment(oldestNode.started_at);
+      const oldestNode = _.minBy(props.nodeStatuses, (nodeStatus: NodeStatus$Properties) => nodeStatus.started_at);
+      const clusterStarted = LongToMoment(oldestNode.started_at);
       // TODO (maxlang): This uses the longest uptime, not the oldest
-      let clusterDurationHrs = moment.utc().diff(clusterStarted, "hours");
+      const clusterDurationHrs = moment.utc().diff(clusterStarted, "hours");
       if (clusterDurationHrs > 1) {
         if (clusterDurationHrs < 6) {
           props.setTimeScale(props.availableScales["1 hour"]);
@@ -155,13 +155,13 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
   }
 
   render() {
-    let currentScale = this.props.currentScale;
+    const currentScale = this.props.currentScale;
     let timeRange: React.ReactNode = "";
-    let disabledArrows = [];
+    const disabledArrows = [];
 
     // If the time scale doesn't end at the present, display the time range.
     if (currentScale.windowEnd) {
-      let start = currentScale.windowEnd.clone().subtract(currentScale.windowSize);
+      const start = currentScale.windowEnd.clone().subtract(currentScale.windowSize);
       timeRange = <TimeRange start={start} end={currentScale.windowEnd} />;
     } else {
       // If the time scale does end at the present hide the right arrow.

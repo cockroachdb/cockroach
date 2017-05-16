@@ -23,11 +23,11 @@ export default class extends React.Component<RouterState, {}> {
     // Responsibility for rendering a title is decided based on the route;
     // specifically, the most specific current route for which that route's
     // component implements a "title" method.
-    let { routes, children } = this.props;
+    const { routes, children } = this.props;
     let title: React.ReactElement<any>;
 
     for (let i = routes.length - 1; i >= 0; i--) {
-      let component: Object | TitledComponent = routes[i].component;
+      const component: Object | TitledComponent = routes[i].component;
       if (isTitledComponent(component)) {
         title = component.title(this.props);
         break;

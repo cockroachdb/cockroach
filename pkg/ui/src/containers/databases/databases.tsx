@@ -22,7 +22,7 @@ const excludedTableList = {
   "pg_catalog": true,
 };
 
-let databasePages = [
+const databasePages = [
   { value: "tables", label: "Tables" },
   { value: "grants", label: "Grants" },
 ];
@@ -114,10 +114,10 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
 }
 
 // Base selectors to extract data from redux state.
-let databaseNames = (state: AdminUIState): string[] => state.cachedData.databases.data && state.cachedData.databases.data.databases;
+const databaseNames = (state: AdminUIState): string[] => state.cachedData.databases.data && state.cachedData.databases.data.databases;
 
 // Connect the DatabaseTablesList class with our redux store.
-let databaseTablesListConnected = connect(
+const databaseTablesListConnected = connect(
   (state: AdminUIState) => {
     return {
       databaseNames: databaseNames(state),
@@ -129,7 +129,7 @@ let databaseTablesListConnected = connect(
 )(DatabaseTablesList);
 
 // Connect the DatabaseGrantsList class with our redux store.
-let databaseGrantsListConnected = connect(
+const databaseGrantsListConnected = connect(
   (state: AdminUIState) => {
     return {
       databaseNames: databaseNames(state),

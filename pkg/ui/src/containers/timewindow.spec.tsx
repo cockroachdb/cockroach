@@ -11,14 +11,14 @@ import * as timewindow from "../redux/timewindow";
 describe("<TimeWindowManager>", function() {
   let spy: sinon.SinonSpy;
   let state: timewindow.TimeWindowState;
-  let now = () => moment("11-12-1955 10:04PM -0800", "MM-DD-YYYY hh:mma Z");
+  const now = () => moment("11-12-1955 10:04PM -0800", "MM-DD-YYYY hh:mma Z");
 
   beforeEach(function() {
     spy = sinon.spy();
     state = new timewindow.TimeWindowState();
   });
 
-  let getManager = () => shallow(<TimeWindowManager timeWindow={_.clone(state)}
+  const getManager = () => shallow(<TimeWindowManager timeWindow={_.clone(state)}
                                                     setTimeWindow={spy}
                                                     now={now} />);
 
@@ -95,7 +95,7 @@ describe("<TimeWindowManager>", function() {
       end: now().subtract(state.scale.windowValid.asMilliseconds() - 5),
     };
 
-    let manager = getManager();
+    const manager = getManager();
     assert.isTrue(spy.notCalled);
 
     // Set new props on currentWindow. The previous timeout should be abandoned.
