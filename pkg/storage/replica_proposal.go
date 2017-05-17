@@ -788,7 +788,7 @@ func (r *Replica) handleLocalEvalResult(
 	return shouldAssert
 }
 
-func (r *Replica) handleEvalResult(
+func (r *Replica) handleEvalResultRaftMuLocked(
 	ctx context.Context, lResult *LocalEvalResult, rResult storagebase.ReplicatedEvalResult,
 ) {
 	shouldAssert := r.handleReplicatedEvalResult(ctx, rResult)
@@ -799,6 +799,8 @@ func (r *Replica) handleEvalResult(
 	if shouldAssert {
 		// Assert that the on-disk state doesn't diverge from the in-memory
 		// state as a result of the side effects.
-		r.assertState(ctx, r.store.Engine())
+		r.mu.Lock()
+		r.assertStateLocked(ctx, r.store.Engine())
+		r.mu.Unlock()
 	}
 }
