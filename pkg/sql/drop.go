@@ -842,6 +842,10 @@ func (p *planner) dropTableImpl(
 		if err != nil {
 			return droppedViews, err
 		}
+		// This view is already getting dropped. Don't do it twice.
+		if viewDesc.Dropped() {
+			continue
+		}
 		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, parser.DropCascade)
 		if err != nil {
 			return droppedViews, err
