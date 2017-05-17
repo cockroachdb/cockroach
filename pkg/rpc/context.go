@@ -58,6 +58,12 @@ const (
 	maximumPingDurationMult = 2
 )
 
+const (
+	defaultWindowSize     = 65535
+	initialWindowSize     = defaultWindowSize * 32 // for an RPC
+	initialConnWindowSize = initialWindowSize * 16 // for a connection
+)
+
 // SourceAddr provides a way to specify a source/local address for outgoing
 // connections. It should only ever be set by testing code, and is not thread
 // safe (so it must be initialized before the server starts).
@@ -86,6 +92,10 @@ func NewServer(ctx *Context) *grpc.Server {
 		// Our maximum kv size is unlimited, so we need this to be very large.
 		// TODO(peter,tamird): need tests before lowering
 		grpc.MaxMsgSize(math.MaxInt32),
+		// Adjust the stream and connection window sizes. The gRPC defaults are too
+		// low for high latency connections.
+		grpc.InitialWindowSize(initialWindowSize),
+		grpc.InitialConnWindowSize(initialConnWindowSize),
 		// The default number of concurrent streams/requests on a client connection
 		// is 100, while the server is unlimited. The client setting can only be
 		// controlled by adjusting the server value. Set a very large value for the
