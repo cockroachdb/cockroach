@@ -144,3 +144,24 @@ func (c Comparable) Equal(o Comparable) bool {
 // Operation is indicating that no further work needs to be done and so the DoMatching function
 // should traverse no further.
 type Operation func(Interface) (done bool)
+
+type Tree interface {
+	AdjustRanges()
+	Len() int
+	Get(r Range) []Interface
+	GetWithOverlapper(r Range, overlapper Overlapper) []Interface
+	Insert(e Interface, fast bool) error
+	Delete(e Interface, fast bool) error
+	Do(fn Operation) bool
+	DoMatching(fn Operation, r Range) bool
+	Iterator() TreeIterator
+}
+
+type TreeIterator interface {
+	Next() (Interface, bool)
+}
+
+// NewTree creates a new interval tree with the given overlapper function.
+func NewTree(overlapper Overlapper) Tree {
+	return newLLBRTree(overlapper)
+}

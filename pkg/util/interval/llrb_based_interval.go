@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build !interval_btree
-
 // Package interval implements an interval tree based on an augmented
 // Left-Leaning Red Black tree.
 package interval
@@ -12,42 +10,42 @@ import (
 	"github.com/biogo/store/llrb"
 )
 
-// Operation mode of the underlying LLRB tree.
+// Operation LLRBMode of the underlying LLRB tree.
 const (
 	TD234 = iota
 	BU23
 )
 
 func init() {
-	if Mode != TD234 && Mode != BU23 {
-		panic("interval: unknown mode")
+	if LLRBMode != TD234 && LLRBMode != BU23 {
+		panic("interval: unknown LLRBMode")
 	}
 }
 
 // A Node represents a node in a tree.
-type Node struct {
+type llbrNode struct {
 	Elem        Interface
 	Range       Range
-	Left, Right *Node
+	Left, Right *llbrNode
 	Color       llrb.Color
 }
 
-// Tree manages the root node of an interval tree. Public methods are exposed through this type.
-type Tree struct {
-	Root       *Node // root node of the tree.
-	Count      int   // number of elements stored.
+// llbrTree manages the root node of an interval tree. Public methods are exposed through this type.
+type llbrTree struct {
+	Root       *llbrNode // root node of the tree.
+	Count      int       // number of elements stored.
 	Overlapper Overlapper
 }
 
-// NewTree creates a new interval tree with the given overlapper function.
-func NewTree(overlapper Overlapper) Tree {
-	return Tree{Overlapper: overlapper}
+// newLLBRTree creates a new interval tree with the given overlapper function.
+func newLLBRTree(overlapper Overlapper) *llbrTree {
+	return &llbrTree{Overlapper: overlapper}
 }
 
 // Helper methods
 
 // color returns the effect color of a Node. A nil node returns black.
-func (n *Node) color() llrb.Color {
+func (n *llbrNode) color() llrb.Color {
 	if n == nil {
 		return llrb.Black
 	}
@@ -57,7 +55,7 @@ func (n *Node) color() llrb.Color {
 // maxRange returns the furthest right position held by the subtree
 // rooted at root, assuming that the left and right nodes have correct
 // range extents.
-func maxRange(root, left, right *Node) Comparable {
+func maxRange(root, left, right *llbrNode) Comparable {
 	end := root.Elem.Range().End
 	if left != nil && left.Range.End.Compare(end) > 0 {
 		end = left.Range.End
@@ -69,7 +67,7 @@ func maxRange(root, left, right *Node) Comparable {
 }
 
 // (a,c)b -rotL-> ((a,)b,)c
-func (n *Node) rotateLeft() (root *Node) {
+func (n *llbrNode) rotateLeft() (root *llbrNode) {
 	// Assumes: n has a right child.
 	root = n.Right
 	n.Right = root.Left
@@ -89,7 +87,7 @@ func (n *Node) rotateLeft() (root *Node) {
 }
 
 // (a,c)b -rotR-> (,(,c)b)a
-func (n *Node) rotateRight() (root *Node) {
+func (n *llbrNode) rotateRight() (root *llbrNode) {
 	// Assumes: n has a left child.
 	root = n.Left
 	n.Left = root.Right
@@ -109,7 +107,7 @@ func (n *Node) rotateRight() (root *Node) {
 }
 
 // (aR,cR)bB -flipC-> (aB,cB)bR | (aB,cB)bR -flipC-> (aR,cR)bB
-func (n *Node) flipColors() {
+func (n *llbrNode) flipColors() {
 	// Assumes: n has two children.
 	n.Color = !n.Color
 	n.Left.Color = !n.Left.Color
@@ -118,12 +116,12 @@ func (n *Node) flipColors() {
 
 // fixUp ensures that black link balance is correct, that red nodes lean left,
 // and that 4 nodes are split in the case of BU23 and properly balanced in TD234.
-func (n *Node) fixUp(fast bool) *Node {
+func (n *llbrNode) fixUp(fast bool) *llbrNode {
 	if !fast {
 		n.adjustRange()
 	}
 	if n.Right.color() == llrb.Red {
-		if Mode == TD234 && n.Right.Left.color() == llrb.Red {
+		if LLRBMode == TD234 && n.Right.Left.color() == llrb.Red {
 			n.Right = n.Right.rotateRight()
 		}
 		n = n.rotateLeft()
@@ -131,7 +129,7 @@ func (n *Node) fixUp(fast bool) *Node {
 	if n.Left.color() == llrb.Red && n.Left.Left.color() == llrb.Red {
 		n = n.rotateRight()
 	}
-	if Mode == BU23 && n.Left.color() == llrb.Red && n.Right.color() == llrb.Red {
+	if LLRBMode == BU23 && n.Left.color() == llrb.Red && n.Right.color() == llrb.Red {
 		n.flipColors()
 	}
 
@@ -140,7 +138,7 @@ func (n *Node) fixUp(fast bool) *Node {
 
 // adjustRange sets the Range to the maximum extent of the children's Range
 // spans and the node's Elem span.
-func (n *Node) adjustRange() {
+func (n *llbrNode) adjustRange() {
 	if n.Left == nil {
 		n.Range.Start = n.Elem.Range().Start
 	} else {
@@ -149,20 +147,20 @@ func (n *Node) adjustRange() {
 	n.Range.End = maxRange(n, n.Left, n.Right)
 }
 
-func (n *Node) moveRedLeft() *Node {
+func (n *llbrNode) moveRedLeft() *llbrNode {
 	n.flipColors()
 	if n.Right.Left.color() == llrb.Red {
 		n.Right = n.Right.rotateRight()
 		n = n.rotateLeft()
 		n.flipColors()
-		if Mode == TD234 && n.Right.Right.color() == llrb.Red {
+		if LLRBMode == TD234 && n.Right.Right.color() == llrb.Red {
 			n.Right = n.Right.rotateLeft()
 		}
 	}
 	return n
 }
 
-func (n *Node) moveRedRight() *Node {
+func (n *llbrNode) moveRedRight() *llbrNode {
 	n.flipColors()
 	if n.Left.Left.color() == llrb.Red {
 		n = n.rotateRight()
@@ -172,18 +170,18 @@ func (n *Node) moveRedRight() *Node {
 }
 
 // Len returns the number of intervals stored in the Tree.
-func (t *Tree) Len() int {
+func (t *llbrTree) Len() int {
 	return t.Count
 }
 
 // Get returns a slice of Interfaces that overlap r in the Tree.
-func (t *Tree) Get(r Range) (o []Interface) {
+func (t *llbrTree) Get(r Range) (o []Interface) {
 	return t.GetWithOverlapper(r, t.Overlapper)
 }
 
 // GetWithOverlapper returns a slice of Interfaces that overlap r in the Tree
 // using the provided overlapper function.
-func (t *Tree) GetWithOverlapper(r Range, overlapper Overlapper) (o []Interface) {
+func (t *llbrTree) GetWithOverlapper(r Range, overlapper Overlapper) (o []Interface) {
 	if t.Root != nil && overlapper.Overlap(r, t.Root.Range) {
 		t.Root.doMatch(func(e Interface) (done bool) { o = append(o, e); return }, r, overlapper.Overlap)
 	}
@@ -193,14 +191,14 @@ func (t *Tree) GetWithOverlapper(r Range, overlapper Overlapper) (o []Interface)
 // AdjustRanges fixes range fields for all Nodes in the Tree. This must be
 // called before Get or DoMatching* is used if fast insertion or deletion has
 // been performed.
-func (t *Tree) AdjustRanges() {
+func (t *llbrTree) AdjustRanges() {
 	if t.Root == nil {
 		return
 	}
 	t.Root.adjustRanges()
 }
 
-func (n *Node) adjustRanges() {
+func (n *llbrNode) adjustRanges() {
 	if n.Left != nil {
 		n.Left.adjustRanges()
 	}
@@ -212,7 +210,7 @@ func (n *Node) adjustRanges() {
 
 // Insert inserts the Interface e into the Tree. Insertions may replace existing
 // stored intervals.
-func (t *Tree) Insert(e Interface, fast bool) (err error) {
+func (t *llbrTree) Insert(e Interface, fast bool) (err error) {
 	r := e.Range()
 	if err := rangeError(r); err != nil {
 		return err
@@ -224,9 +222,9 @@ func (t *Tree) Insert(e Interface, fast bool) (err error) {
 	return
 }
 
-func (n *Node) insert(e Interface, min Comparable, id uintptr, fast bool) (root *Node, d int) {
+func (n *llbrNode) insert(e Interface, min Comparable, id uintptr, fast bool) (root *llbrNode, d int) {
 	if n == nil {
-		return &Node{Elem: e, Range: e.Range()}, 1
+		return &llbrNode{Elem: e, Range: e.Range()}, 1
 	} else if n.Elem == nil {
 		n.Elem = e
 		if !fast {
@@ -235,7 +233,7 @@ func (n *Node) insert(e Interface, min Comparable, id uintptr, fast bool) (root 
 		return n, 1
 	}
 
-	if Mode == TD234 {
+	if LLRBMode == TD234 {
 		if n.Left.color() == llrb.Red && n.Right.color() == llrb.Red {
 			n.flipColors()
 		}
@@ -267,7 +265,7 @@ func (n *Node) insert(e Interface, min Comparable, id uintptr, fast bool) (root 
 		n = n.rotateRight()
 	}
 
-	if Mode == BU23 {
+	if LLRBMode == BU23 {
 		if n.Left.color() == llrb.Red && n.Right.color() == llrb.Red {
 			n.flipColors()
 		}
@@ -281,10 +279,10 @@ func (n *Node) insert(e Interface, min Comparable, id uintptr, fast bool) (root 
 	return
 }
 
-var _ = (*Tree)(nil).DeleteMin
+var _ = (*llbrTree)(nil).DeleteMin
 
 // DeleteMin deletes the leftmost interval.
-func (t *Tree) DeleteMin(fast bool) {
+func (t *llbrTree) DeleteMin(fast bool) {
 	if t.Root == nil {
 		return
 	}
@@ -297,7 +295,7 @@ func (t *Tree) DeleteMin(fast bool) {
 	t.Root.Color = llrb.Black
 }
 
-func (n *Node) deleteMin(fast bool) (root *Node, d int) {
+func (n *llbrNode) deleteMin(fast bool) (root *llbrNode, d int) {
 	if n.Left == nil {
 		return nil, -1
 	}
@@ -314,10 +312,10 @@ func (n *Node) deleteMin(fast bool) (root *Node, d int) {
 	return
 }
 
-var _ = (*Tree)(nil).DeleteMax
+var _ = (*llbrTree)(nil).DeleteMax
 
 // DeleteMax deletes the rightmost interval.
-func (t *Tree) DeleteMax(fast bool) {
+func (t *llbrTree) DeleteMax(fast bool) {
 	if t.Root == nil {
 		return
 	}
@@ -330,7 +328,7 @@ func (t *Tree) DeleteMax(fast bool) {
 	t.Root.Color = llrb.Black
 }
 
-func (n *Node) deleteMax(fast bool) (root *Node, d int) {
+func (n *llbrNode) deleteMax(fast bool) (root *llbrNode, d int) {
 	if n.Left != nil && n.Left.color() == llrb.Red {
 		n = n.rotateRight()
 	}
@@ -351,7 +349,7 @@ func (n *Node) deleteMax(fast bool) (root *Node, d int) {
 }
 
 // Delete deletes the element e if it exists in the Tree.
-func (t *Tree) Delete(e Interface, fast bool) (err error) {
+func (t *llbrTree) Delete(e Interface, fast bool) (err error) {
 	r := e.Range()
 	if err := rangeError(r); err != nil {
 		return err
@@ -369,7 +367,7 @@ func (t *Tree) Delete(e Interface, fast bool) (err error) {
 	return
 }
 
-func (n *Node) delete(min Comparable, id uintptr, fast bool) (root *Node, d int) {
+func (n *llbrNode) delete(min Comparable, id uintptr, fast bool) (root *llbrNode, d int) {
 	if p := min.Compare(n.Elem.Range().Start); p < 0 || (p == 0 && id < n.Elem.ID()) {
 		if n.Left != nil {
 			if n.Left.color() == llrb.Black && n.Left.Left.color() == llrb.Black {
@@ -408,43 +406,43 @@ func (n *Node) delete(min Comparable, id uintptr, fast bool) (root *Node, d int)
 	return
 }
 
-var _ = (*Tree)(nil).Min
+var _ = (*llbrTree)(nil).Min
 
 // Min returns the leftmost interval stored in the tree.
-func (t *Tree) Min() Interface {
+func (t *llbrTree) Min() Interface {
 	if t.Root == nil {
 		return nil
 	}
 	return t.Root.min().Elem
 }
 
-func (n *Node) min() *Node {
+func (n *llbrNode) min() *llbrNode {
 	for ; n.Left != nil; n = n.Left {
 	}
 	return n
 }
 
-var _ = (*Tree)(nil).Max
+var _ = (*llbrTree)(nil).Max
 
 // Max returns the rightmost interval stored in the tree.
-func (t *Tree) Max() Interface {
+func (t *llbrTree) Max() Interface {
 	if t.Root == nil {
 		return nil
 	}
 	return t.Root.max().Elem
 }
 
-func (n *Node) max() *Node {
+func (n *llbrNode) max() *llbrNode {
 	for ; n.Right != nil; n = n.Right {
 	}
 	return n
 }
 
-var _ = (*Tree)(nil).Floor
+var _ = (*llbrTree)(nil).Floor
 
 // Floor returns the largest value equal to or less than the query q according to
 // q.Start.Compare(), with ties broken by comparison of ID() values.
-func (t *Tree) Floor(q Interface) (o Interface, err error) {
+func (t *llbrTree) Floor(q Interface) (o Interface, err error) {
 	if t.Root == nil {
 		return
 	}
@@ -455,7 +453,7 @@ func (t *Tree) Floor(q Interface) (o Interface, err error) {
 	return n.Elem, nil
 }
 
-func (n *Node) floor(m Comparable, id uintptr) *Node {
+func (n *llbrNode) floor(m Comparable, id uintptr) *llbrNode {
 	if n == nil {
 		return nil
 	}
@@ -481,11 +479,11 @@ func (n *Node) floor(m Comparable, id uintptr) *Node {
 	return n
 }
 
-var _ = (*Tree)(nil).Ceil
+var _ = (*llbrTree)(nil).Ceil
 
 // Ceil returns the smallest value equal to or greater than the query q according to
 // q.Start.Compare(), with ties broken by comparison of ID() values.
-func (t *Tree) Ceil(q Interface) (o Interface, err error) {
+func (t *llbrTree) Ceil(q Interface) (o Interface, err error) {
 	if t.Root == nil {
 		return
 	}
@@ -496,7 +494,7 @@ func (t *Tree) Ceil(q Interface) (o Interface, err error) {
 	return n.Elem, nil
 }
 
-func (n *Node) ceil(m Comparable, id uintptr) *Node {
+func (n *llbrNode) ceil(m Comparable, id uintptr) *llbrNode {
 	if n == nil {
 		return nil
 	}
@@ -526,14 +524,14 @@ func (n *Node) ceil(m Comparable, id uintptr) *Node {
 // indicating whether the Do traversal was interrupted by an Operation returning
 // true. If fn alters stored intervals' sort relationships, future tree
 // operation behaviors are undefined.
-func (t *Tree) Do(fn Operation) bool {
+func (t *llbrTree) Do(fn Operation) bool {
 	if t.Root == nil {
 		return false
 	}
 	return t.Root.do(fn)
 }
 
-func (n *Node) do(fn Operation) (done bool) {
+func (n *llbrNode) do(fn Operation) (done bool) {
 	if n.Left != nil {
 		done = n.Left.do(fn)
 		if done {
@@ -550,19 +548,19 @@ func (n *Node) do(fn Operation) (done bool) {
 	return
 }
 
-var _ = (*Tree)(nil).DoReverse
+var _ = (*llbrTree)(nil).DoReverse
 
 // DoReverse performs fn on all intervals stored in the tree, but in reverse of sort order. A boolean
 // is returned indicating whether the Do traversal was interrupted by an Operation returning true.
 // If fn alters stored intervals' sort relationships, future tree operation behaviors are undefined.
-func (t *Tree) DoReverse(fn Operation) bool {
+func (t *llbrTree) DoReverse(fn Operation) bool {
 	if t.Root == nil {
 		return false
 	}
 	return t.Root.doReverse(fn)
 }
 
-func (n *Node) doReverse(fn Operation) (done bool) {
+func (n *llbrNode) doReverse(fn Operation) (done bool) {
 	if n.Right != nil {
 		done = n.Right.doReverse(fn)
 		if done {
@@ -579,7 +577,7 @@ func (n *Node) doReverse(fn Operation) (done bool) {
 	return
 }
 
-var _ = (*Tree)(nil).DoMatchingReverse
+var _ = (*llbrTree)(nil).DoMatchingReverse
 
 // DoMatching performs fn on all intervals stored in the tree that match r
 // according to t.Overlapper, with Overlapper() used to guide tree traversal, so
@@ -589,14 +587,14 @@ var _ = (*Tree)(nil).DoMatchingReverse
 // whether the Do traversal was interrupted by an Operation returning true. If
 // fn alters stored intervals' sort relationships, future tree operation
 // behaviors are undefined.
-func (t *Tree) DoMatching(fn Operation, r Range) bool {
+func (t *llbrTree) DoMatching(fn Operation, r Range) bool {
 	if t.Root != nil && t.Overlapper.Overlap(r, t.Root.Range) {
 		return t.Root.doMatch(fn, r, t.Overlapper.Overlap)
 	}
 	return false
 }
 
-func (n *Node) doMatch(fn Operation, r Range, overlaps func(Range, Range) bool) (done bool) {
+func (n *llbrNode) doMatch(fn Operation, r Range, overlaps func(Range, Range) bool) (done bool) {
 	if n.Left != nil && overlaps(r, n.Left.Range) {
 		done = n.Left.doMatch(fn, r, overlaps)
 		if done {
@@ -615,7 +613,7 @@ func (n *Node) doMatch(fn Operation, r Range, overlaps func(Range, Range) bool) 
 	return
 }
 
-var _ = (*Tree)(nil).DoMatchingReverse
+var _ = (*llbrTree)(nil).DoMatchingReverse
 
 // DoMatchingReverse performs fn on all intervals stored in the tree that match r according to
 // t.Overlapper, with Overlapper() used to guide tree traversal, so DoMatching() will outperform
@@ -623,14 +621,14 @@ var _ = (*Tree)(nil).DoMatchingReverse
 // be reliably used if the condition is independent of sort order. A boolean is returned indicating
 // whether the Do traversal was interrupted by an Operation returning true. If fn alters stored
 // intervals' sort relationships, future tree operation behaviors are undefined.
-func (t *Tree) DoMatchingReverse(fn Operation, r Range) bool {
+func (t *llbrTree) DoMatchingReverse(fn Operation, r Range) bool {
 	if t.Root != nil && t.Overlapper.Overlap(r, t.Root.Range) {
 		return t.Root.doMatchReverse(fn, r, t.Overlapper.Overlap)
 	}
 	return false
 }
 
-func (n *Node) doMatchReverse(fn Operation, r Range, overlaps func(Range, Range) bool) (done bool) {
+func (n *llbrNode) doMatchReverse(fn Operation, r Range, overlaps func(Range, Range) bool) (done bool) {
 	if n.Right != nil && overlaps(r, n.Right.Range) {
 		done = n.Right.doMatchReverse(fn, r, overlaps)
 		if done {
@@ -649,14 +647,14 @@ func (n *Node) doMatchReverse(fn Operation, r Range, overlaps func(Range, Range)
 	return
 }
 
-// TreeIterator iterates over all intervals stored in the Tree, in-order.
-type TreeIterator struct {
-	stack []*Node
+// llbrTreeIterator iterates over all intervals stored in the Tree, in-order.
+type llbrTreeIterator struct {
+	stack []*llbrNode
 }
 
 // Next moves the iterator to the next Node in the Tree and returns the node's
 // Elem. The method returns false if no Nodes remain in the Tree.
-func (ti *TreeIterator) Next() (i Interface, ok bool) {
+func (ti *llbrTreeIterator) Next() (i Interface, ok bool) {
 	if len(ti.stack) == 0 {
 		return nil, false
 	}
@@ -670,10 +668,10 @@ func (ti *TreeIterator) Next() (i Interface, ok bool) {
 
 // Iterator creates an iterator to iterate over all intervals stored in the
 // tree, in-order.
-func (t *Tree) Iterator() TreeIterator {
-	var ti TreeIterator
+func (t *llbrTree) Iterator() TreeIterator {
+	var ti llbrTreeIterator
 	for n := t.Root; n != nil; n = n.Left {
 		ti.stack = append(ti.stack, n)
 	}
-	return ti
+	return &ti
 }

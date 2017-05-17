@@ -16,8 +16,6 @@
 //
 // Author: Jingguo Yao (yaojingguo@gmail.com)
 
-// +build interval_btree
-
 // Package interval implements an interval tree based on an augmented B-tree.
 // For all the functions which have a fast argment, fast being true means a fast
 // operation which does not adjust node ranges. If fast is false, node ranges
@@ -35,23 +33,23 @@ const (
 	DefaultBTreeMinimumDegree = 32
 )
 
-// NewTree creates a new interval tree with the given overlapper function and
+// newBTree creates a new interval tree with the given overlapper function and
 // the default B-tree minimum degree.
-func NewTree(overlapper Overlapper) Tree {
-	return NewTreeWithDegree(overlapper, DefaultBTreeMinimumDegree)
+func newBTree(overlapper Overlapper) btree {
+	return newBTreeWithDegree(overlapper, DefaultBTreeMinimumDegree)
 }
 
-// NewTreeWithDegree creates a new interval tree with the given overlapper
+// newBTreeWithDegree creates a new interval tree with the given overlapper
 // function and the given minimum degree. A minimum degree less than 2 will
 // cause a panic.
 //
-// NewTreeWithDegree(overlapper, 2), for example, will create a 2-3-4 tree (each
+// newBTreeWithDegree(overlapper, 2), for example, will create a 2-3-4 tree (each
 // node contains 1-3 Interfaces and 2-4 children).
-func NewTreeWithDegree(overlapper Overlapper, minimumDegree int) Tree {
+func newBTreeWithDegree(overlapper Overlapper, minimumDegree int) btree {
 	if minimumDegree < 2 {
 		panic("bad minimum degree")
 	}
-	return Tree{
+	return btree{
 		MinimumDegree: minimumDegree,
 		Overlapper:    overlapper,
 	}
@@ -159,7 +157,7 @@ type node struct {
 	Range    Range
 	items    items
 	children children
-	t        *Tree
+	t        *btree
 }
 
 // split splits the given node at the given index. The current node shrinks, and
@@ -274,20 +272,20 @@ func (n *node) insert(e Interface, fast bool) (out Interface, extended bool) {
 	return
 }
 
-func (t *Tree) isEmpty() bool {
+func (t *btree) isEmpty() bool {
 	return t.root == nil || len(t.root.items) == 0
 }
 
 // Get returns a slice of Interfaces that overlap r in the tree. The slice is
 // sorted nondecreasingly by interval start.
-func (t *Tree) Get(r Range) (o []Interface) {
+func (t *btree) Get(r Range) (o []Interface) {
 	return t.GetWithOverlapper(r, t.Overlapper)
 }
 
 // GetWithOverlapper returns a slice of Interfaces that overlap r in the tree
 // using the provided overlapper function. The slice is sorted nondecreasingly
 // by interval start.
-func (t *Tree) GetWithOverlapper(r Range, overlapper Overlapper) (o []Interface) {
+func (t *btree) GetWithOverlapper(r Range, overlapper Overlapper) (o []Interface) {
 	if err := rangeError(r); err != nil {
 		return
 	}
@@ -303,7 +301,7 @@ func (t *Tree) GetWithOverlapper(r Range, overlapper Overlapper) (o []Interface)
 // is returned indicating whether the traversal was interrupted by an Operation
 // returning true. If fn alters stored intervals' sort relationships, future
 // tree operation behaviors are undefined.
-func (t *Tree) DoMatching(fn Operation, r Range) bool {
+func (t *btree) DoMatching(fn Operation, r Range) bool {
 	if err := rangeError(r); err != nil {
 		return false
 	}
@@ -313,7 +311,7 @@ func (t *Tree) DoMatching(fn Operation, r Range) bool {
 	return t.root.doMatch(fn, r, t.Overlapper)
 }
 
-func (t *Tree) overlappable(r Range) bool {
+func (t *btree) overlappable(r Range) bool {
 	if t.isEmpty() || !t.Overlapper.Overlap(r, t.root.Range) {
 		return false
 	}
@@ -413,7 +411,7 @@ func (n *node) exclusiveDoMatch(fn Operation, r Range, overlapper Overlapper) (d
 // whether the traversal was interrupted by an Operation returning true. If fn
 // alters stored intervals' sort relationships, future tree operation behaviors
 // are undefined.
-func (t *Tree) Do(fn Operation) bool {
+func (t *btree) Do(fn Operation) bool {
 	if t.root == nil {
 		return false
 	}
@@ -747,14 +745,14 @@ func (n *node) mergeWithRightChild(i int, fast bool) {
 	}
 }
 
-// Tree is a B-tree based interval tree.
+// btree is a B-tree based interval tree.
 //
 // Tree stores Instances in an ordered structure, allowing easy insertion,
 // removal, and iteration.
 //
 // Write operations are not safe for concurrent mutation by multiple
 // goroutines, but Read operations are.
-type Tree struct {
+type btree struct {
 	root          *node
 	length        int
 	Overlapper    Overlapper
@@ -807,7 +805,7 @@ func (n *node) rangeEnd() Comparable {
 // AdjustRanges fixes range fields for all nodes in the tree. This must be
 // called before Get, Do or DoMatching* is used if fast insertion or deletion
 // has been performed.
-func (t *Tree) AdjustRanges() {
+func (t *btree) AdjustRanges() {
 	if t.isEmpty() {
 		return
 	}
@@ -822,24 +820,24 @@ func (n *node) adjustRanges() {
 }
 
 // maxItems returns the max number of Interfaces to allow per node.
-func (t *Tree) maxItems() int {
+func (t *btree) maxItems() int {
 	return t.MinimumDegree*2 - 1
 }
 
 // minItems returns the min number of Interfaces to allow per node (ignored
 // for the root node).
-func (t *Tree) minItems() int {
+func (t *btree) minItems() int {
 	return t.MinimumDegree - 1
 }
 
-func (t *Tree) newNode() (n *node) {
+func (t *btree) newNode() (n *node) {
 	n = &node{t: t}
 	return
 }
 
 // Insert inserts the Interface e into the tree. Insertions may replace an
 // existing Interface which is equal to the Interface e.
-func (t *Tree) Insert(e Interface, fast bool) (err error) {
+func (t *btree) Insert(e Interface, fast bool) (err error) {
 	// t.metrics("Insert")
 	if err = isValidInterface(e); err != nil {
 		return
@@ -874,7 +872,7 @@ func (t *Tree) Insert(e Interface, fast bool) (err error) {
 
 // Delete deletes the Interface e if it exists in the B-tree. The deleted
 // Interface is equal to the Interface e.
-func (t *Tree) Delete(e Interface, fast bool) (err error) {
+func (t *btree) Delete(e Interface, fast bool) (err error) {
 	// t.metrics("Delete")
 	if err = isValidInterface(e); err != nil {
 		return
@@ -886,7 +884,7 @@ func (t *Tree) Delete(e Interface, fast bool) (err error) {
 	return
 }
 
-func (t *Tree) delete(e Interface, typ toRemove, fast bool) Interface {
+func (t *btree) delete(e Interface, typ toRemove, fast bool) Interface {
 	out, _ := t.root.remove(e, t.minItems(), typ, fast)
 	if len(t.root.items) == 0 && len(t.root.children) > 0 {
 		t.root = t.root.children[0]
@@ -898,21 +896,20 @@ func (t *Tree) delete(e Interface, typ toRemove, fast bool) Interface {
 }
 
 // Len returns the number of Interfaces currently in the tree.
-func (t *Tree) Len() int {
+func (t *btree) Len() int {
 	return t.length
 }
 
-// TreeIterator iterates over all intervals stored in the Tree, in-order.
-type TreeIterator struct {
+type btreeIterator struct {
 }
 
 // Next iterates over the items stored in the tree, in-order.
-func (ti *TreeIterator) Next() (i Interface, ok bool) {
+func (ti *btreeIterator) Next() (i Interface, ok bool) {
 	panic("TODO")
 }
 
 // Iterator creates an iterator to iterate over all intervals stored in the
 // tree, in-order.
-func (t *Tree) Iterator() TreeIterator {
-	panic("TODO")
+func (t *btree) Iterator() TreeIterator {
+	return &btreeIterator{}
 }
