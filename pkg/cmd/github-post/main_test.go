@@ -88,8 +88,8 @@ func TestRunGH(t *testing.T) {
 		},
 		"stress-fatal": {
 			packageName: envPkg,
-			testName:    "TestRaftRemoveRace",
-			body:        "F161007 00:27:33.243126 449 storage/store.go:2446  [s3] [n3,s3,r1:/M{in-ax}]: could not remove placeholder after preemptive snapshot",
+			testName:    "TestGossipHandlesReplacedNode",
+			body:        "F170517 07:33:43.763059 69575 storage/replica.go:1360  [n3,s3,r1/3:/M{in-ax}] on-disk and in-memory state diverged:",
 		},
 	} {
 		for _, foundIssue := range []bool{true, false} {
