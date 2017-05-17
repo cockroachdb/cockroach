@@ -41,7 +41,7 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
       const columns = [
         {
           title: "Time",
-          cell: (index: number) => LongToMoment(logEntries[index].time).format("YYYY-MM-DD HH:mm:SS"),
+          cell: (index: number) => LongToMoment(logEntries[index].time).format("YYYY-MM-DD HH:mm:ss"),
         },
         {
           title: "Severity",
