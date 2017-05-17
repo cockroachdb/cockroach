@@ -54,9 +54,9 @@ const (
 	// administrative interface to the cockroach cluster.
 	adminPrefix = "/_admin/v1/"
 
-	// eventLimit is the maximum number of events returned by any endpoints
-	// returning events.
-	apiEventLimit = 1000
+	// defaultAPIEventLimit is the default maximum number of events returned by any
+	// endpoints returning events.
+	defaultAPIEventLimit = 1000
 )
 
 // apiServerMessage is the standard body for all HTTP 500 responses.
@@ -681,6 +681,11 @@ func (s *adminServer) Events(
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
+	limit := req.Limit
+	if limit == 0 {
+		limit = defaultAPIEventLimit
+	}
+
 	// Execute the query.
 	q := makeSQLQuery()
 	q.Append("SELECT timestamp, eventType, targetID, reportingID, info, uniqueID ")
@@ -693,7 +698,9 @@ func (s *adminServer) Events(
 		q.Append("AND targetID = $ ", parser.NewDInt(parser.DInt(req.TargetId)))
 	}
 	q.Append("ORDER BY timestamp DESC ")
-	q.Append("LIMIT $", parser.NewDInt(parser.DInt(apiEventLimit)))
+	if limit > 0 {
+		q.Append("LIMIT $", parser.NewDInt(parser.DInt(limit)))
+	}
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
@@ -743,6 +750,11 @@ func (s *adminServer) RangeLog(
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
+	limit := req.Limit
+	if limit == 0 {
+		limit = defaultAPIEventLimit
+	}
+
 	// Execute the query.
 	q := makeSQLQuery()
 	q.Append("SELECT timestamp, rangeID, storeID, eventType, otherRangeID, info ")
@@ -750,7 +762,9 @@ func (s *adminServer) RangeLog(
 	rangeID := parser.NewDInt(parser.DInt(req.RangeId))
 	q.Append("WHERE rangeID = $ OR otherRangeID = $", rangeID, rangeID)
 	q.Append("ORDER BY timestamp DESC ")
-	q.Append("LIMIT $", parser.NewDInt(parser.DInt(apiEventLimit)))
+	if limit > 0 {
+		q.Append("LIMIT $", parser.NewDInt(parser.DInt(limit)))
+	}
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
