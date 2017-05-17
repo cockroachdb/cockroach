@@ -36,6 +36,10 @@ import:
 - package: golang.org/x/text
   version: 470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4
 
+# TODO(dt,mjibson): API changed
+- package: github.com/Azure/azure-sdk-for-go
+  version: 8dd1f3ff407c300cff0a4bfedd969111ca5a7903
+
 # Pins to prevent unintended version changes to libs we care about when adding/
 # removing/changing other deps. These are grouped separately to make it easier
 # to comment them out in bulk when running an across-the-board dep update.
