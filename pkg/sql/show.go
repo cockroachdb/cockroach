@@ -364,7 +364,7 @@ func (p *planner) ShowCreateTable(
 		return nil, err
 	}
 
-	desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
 	if err != nil {
 		return nil, err
 	}
@@ -819,7 +819,7 @@ func (p *planner) ShowConstraints(
 		return nil, err
 	}
 
-	desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
 	if err != nil {
 		return nil, err
 	}
