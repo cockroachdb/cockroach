@@ -38,7 +38,7 @@ func fakePrevKey(k []byte) roachpb.Key {
 
 	// When the byte array is empty.
 	if length == 0 {
-		panic(fmt.Sprint("cannot get the prev key of an empty key"))
+		panic("cannot get the prev key of an empty key")
 	}
 	if length > maxLen {
 		panic(fmt.Sprintf("test does not support key longer than %d characters: %q", maxLen, k))
