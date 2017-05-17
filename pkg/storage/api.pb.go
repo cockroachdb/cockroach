@@ -8,6 +8,7 @@
 	It is generated from these files:
 		cockroach/pkg/storage/api.proto
 		cockroach/pkg/storage/liveness.proto
+		cockroach/pkg/storage/log.proto
 		cockroach/pkg/storage/raft.proto
 
 	It has these top-level messages:
@@ -15,6 +16,7 @@
 		CollectChecksumRequest
 		CollectChecksumResponse
 		Liveness
+		RangeLogEvent
 		RaftHeartbeat
 		RaftMessageRequest
 		RaftMessageRequestBatch

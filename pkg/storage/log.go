@@ -19,6 +19,7 @@ package storage
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -30,48 +31,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// TODO(mrtracy): All of this logic should probably be moved into the SQL
-// package; there are going to be additional event log tables which will not be
-// strongly associated with a store, and it would be better to keep event log
-// tables close together in the code.
-
-// RangeEventLogType describes a specific event type recorded in the range log
-// table.
-type RangeEventLogType string
-
-const (
-	// RangeEventLogSplit is the event type recorded when a range splits.
-	RangeEventLogSplit RangeEventLogType = "split"
-	// RangeEventLogAdd is the event type recorded when a range adds a
-	// new replica.
-	RangeEventLogAdd RangeEventLogType = "add"
-	// RangeEventLogRemove is the event type recorded when a range removes a
-	// replica.
-	RangeEventLogRemove RangeEventLogType = "remove"
-)
-
-type rangeLogEvent struct {
-	timestamp    time.Time
-	rangeID      roachpb.RangeID
-	storeID      roachpb.StoreID
-	eventType    RangeEventLogType
-	otherRangeID *roachpb.RangeID
-	info         *string
-}
-
 func (s *Store) insertRangeLogEvent(
-	ctx context.Context, txn *client.Txn, event rangeLogEvent,
+	ctx context.Context, txn *client.Txn, event RangeLogEvent,
 ) error {
 	// Record range log event to console log.
 	var info string
-	if event.info != nil {
-		info = *event.info
+	if event.Info != nil {
+		info = event.Info.String()
 	}
 	if log.V(1) {
 		log.Infof(ctx, "Range Event: %q, range: %d, info: %s",
-			event.eventType,
-			event.rangeID,
-			info)
+			event.EventType, event.RangeID, info)
 	}
 
 	const insertEventTableStmt = `
@@ -83,29 +53,33 @@ VALUES(
 )
 `
 	args := []interface{}{
-		event.timestamp,
-		event.rangeID,
-		event.storeID,
-		event.eventType,
+		event.Timestamp,
+		event.RangeID,
+		event.StoreID,
+		event.EventType.String(),
 		nil, // otherRangeID
 		nil, // info
 	}
-	if event.otherRangeID != nil {
-		args[4] = *event.otherRangeID
+	if event.OtherRangeID != 0 {
+		args[4] = event.OtherRangeID
 	}
-	if event.info != nil {
-		args[5] = *event.info
+	if event.Info != nil {
+		infoBytes, err := json.Marshal(*event.Info)
+		if err != nil {
+			return err
+		}
+		args[5] = string(infoBytes)
 	}
 
 	// Update range event metrics. We do this close to the insertion of the
 	// corresponding range log entry to reduce potential skew between metrics and
 	// range log.
-	switch event.eventType {
-	case RangeEventLogSplit:
+	switch event.EventType {
+	case RangeLogEventType_SPLIT:
 		s.metrics.RangeSplits.Inc(1)
-	case RangeEventLogAdd:
+	case RangeLogEventType_ADD:
 		s.metrics.RangeAdds.Inc(1)
-	case RangeEventLogRemove:
+	case RangeLogEventType_REMOVE:
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
@@ -130,22 +104,16 @@ func (s *Store) logSplit(
 	if !s.cfg.LogRangeEvents {
 		return nil
 	}
-	info := struct {
-		UpdatedDesc roachpb.RangeDescriptor
-		NewDesc     roachpb.RangeDescriptor
-	}{updatedDesc, newDesc}
-	infoBytes, err := json.Marshal(info)
-	if err != nil {
-		return err
-	}
-	infoStr := string(infoBytes)
-	return s.insertRangeLogEvent(ctx, txn, rangeLogEvent{
-		timestamp:    selectEventTimestamp(s, txn.Proto().Timestamp),
-		rangeID:      updatedDesc.RangeID,
-		eventType:    RangeEventLogSplit,
-		storeID:      s.StoreID(),
-		otherRangeID: &newDesc.RangeID,
-		info:         &infoStr,
+	return s.insertRangeLogEvent(ctx, txn, RangeLogEvent{
+		Timestamp:    selectEventTimestamp(s, txn.Proto().Timestamp),
+		RangeID:      updatedDesc.RangeID,
+		EventType:    RangeLogEventType_SPLIT,
+		StoreID:      s.StoreID(),
+		OtherRangeID: newDesc.RangeID,
+		Info: &RangeLogEvent_Info{
+			UpdatedDesc: &updatedDesc,
+			NewDesc:     &newDesc,
+		},
 	})
 }
 
@@ -164,36 +132,31 @@ func (s *Store) logChange(
 		return nil
 	}
 
-	var logType RangeEventLogType
-	var infoStruct interface{}
+	var logType RangeLogEventType
+	var info RangeLogEvent_Info
 	switch changeType {
 	case roachpb.ADD_REPLICA:
-		logType = RangeEventLogAdd
-		infoStruct = struct {
-			AddReplica  roachpb.ReplicaDescriptor
-			UpdatedDesc roachpb.RangeDescriptor
-		}{replica, desc}
+		logType = RangeLogEventType_ADD
+		info = RangeLogEvent_Info{
+			AddedReplica: &replica,
+			UpdatedDesc:  &desc,
+		}
 	case roachpb.REMOVE_REPLICA:
-		logType = RangeEventLogRemove
-		infoStruct = struct {
-			RemovedReplica roachpb.ReplicaDescriptor
-			UpdatedDesc    roachpb.RangeDescriptor
-		}{replica, desc}
+		logType = RangeLogEventType_REMOVE
+		info = RangeLogEvent_Info{
+			RemovedReplica: &replica,
+			UpdatedDesc:    &desc,
+		}
 	default:
 		return errors.Errorf("unknown replica change type %s", changeType)
 	}
 
-	infoBytes, err := json.Marshal(infoStruct)
-	if err != nil {
-		return err
-	}
-	infoStr := string(infoBytes)
-	return s.insertRangeLogEvent(ctx, txn, rangeLogEvent{
-		timestamp: selectEventTimestamp(s, txn.Proto().Timestamp),
-		rangeID:   desc.RangeID,
-		eventType: logType,
-		storeID:   s.StoreID(),
-		info:      &infoStr,
+	return s.insertRangeLogEvent(ctx, txn, RangeLogEvent{
+		Timestamp: selectEventTimestamp(s, txn.Proto().Timestamp),
+		RangeID:   desc.RangeID,
+		EventType: logType,
+		StoreID:   s.StoreID(),
+		Info:      &info,
 	})
 }
 
@@ -210,4 +173,26 @@ func selectEventTimestamp(s *Store, input hlc.Timestamp) time.Time {
 		return s.Clock().PhysicalTime()
 	}
 	return input.GoTime()
+}
+
+// UnmarshalRangeLogEventInfoJSON is required to parse from the older formats
+// for rangeLogEventInfos.
+func UnmarshalRangeLogEventInfoJSON(s string) (*RangeLogEvent_Info, error) {
+	var info *RangeLogEvent_Info
+	if err := json.Unmarshal([]byte(s), &info); err != nil {
+		return nil, err
+	}
+	if info.UpdatedDesc != nil ||
+		info.AddedReplica != nil ||
+		info.RemovedReplica != nil ||
+		info.NewDesc != nil {
+		return info, nil
+	}
+	// Convert from the older format:
+	s = strings.Replace(s, "UpdatedDesc", "updated_desc", -1)
+	s = strings.Replace(s, "AddReplica", "added_replica", -1)
+	s = strings.Replace(s, "NewDesc", "new_desc", -1)
+	s = strings.Replace(s, "RemovedReplica", "removed_replica", -1)
+	err := json.Unmarshal([]byte(s), &info)
+	return info, err
 }
