@@ -19,6 +19,7 @@ package storage
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -43,9 +45,6 @@ import (
 const (
 	// gcQueueTimerDuration is the duration between GCs of queued replicas.
 	gcQueueTimerDuration = 1 * time.Second
-	// gcByteCountNormalization is the count of GC'able bytes which
-	// amount to a score of "1" added to total replica priority.
-	gcByteCountNormalization = 1 << 20 // 1 MB
 	// intentAgeNormalization is the average age of outstanding intents
 	// which amount to a score of "1" added to total replica priority.
 	intentAgeNormalization = 24 * time.Hour // 1 day
@@ -67,9 +66,10 @@ const (
 	// aborted and whose abort cache entry is being deleted.
 	abortCacheAgeThreshold = 5 * base.DefaultHeartbeatInterval
 
-	// considerThreshold is used in shouldQueue. Only an a normalized GC bytes
-	// or intent byte age larger than the threshold queues the replica for GC.
-	considerThreshold = 10
+	// thresholds used by shouldQueue to decide whether to queue for GC based
+	// on keys and intents.
+	gcKeyScoreThreshold    = 2
+	gcIntentScoreThreshold = 10
 
 	// gcTaskLimit is the maximum number of concurrent goroutines
 	// that will be created by GC.
@@ -114,37 +114,229 @@ func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 type pushFunc func(hlc.Timestamp, *roachpb.Transaction, roachpb.PushTxnType)
 type resolveFunc func([]roachpb.Intent, bool, bool) error
 
+// gcQueueScore holds details about the score returned by makeGCQueueScoreImpl for
+// testing and logging. The fields in this struct are documented in
+// makeGCQueueScoreImpl.
+type gcQueueScore struct {
+	TTL                 time.Duration
+	LikelyLastGC        time.Duration
+	DeadFraction        float64
+	ValuesScalableScore float64
+	IntentScore         float64
+	FuzzFactor          float64
+	FinalScore          float64
+	ShouldQueue         bool
+
+	GCBytes                  int64
+	GCByteAge                int64
+	ExpMinGCByteAgeReduction int64
+}
+
+func (r gcQueueScore) String() string {
+	if (r == gcQueueScore{}) {
+		return "(empty)"
+	}
+	if r.ExpMinGCByteAgeReduction < 0 {
+		r.ExpMinGCByteAgeReduction = 0
+	}
+	return fmt.Sprintf("queue=%t with %.2f/fuzz(%.2f)=%.2f=valScaleScore(%.2f)*deadFrac(%.2f)+intentScore(%.2f)\n"+
+		"likely last GC: %s ago, %s non-live, curr. age %s*s, min exp. reduction: %s*s",
+		r.ShouldQueue, r.FinalScore, r.FuzzFactor, r.FinalScore/r.FuzzFactor, r.ValuesScalableScore,
+		r.DeadFraction, r.IntentScore, r.LikelyLastGC, humanizeutil.IBytes(r.GCBytes),
+		humanizeutil.IBytes(r.GCByteAge), humanizeutil.IBytes(r.ExpMinGCByteAgeReduction))
+}
+
 // shouldQueue determines whether a replica should be queued for garbage
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (gcq *gcQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
-) (shouldQ bool, priority float64) {
+) (bool, float64) {
+	r := makeGCQueueScore(ctx, repl, now, sysCfg)
+	return r.ShouldQueue, r.FinalScore
+}
+
+func makeGCQueueScore(
+	ctx context.Context, repl *Replica, now hlc.Timestamp, sysCfg config.SystemConfig,
+) gcQueueScore {
+	repl.mu.Lock()
+	ms := repl.mu.state.Stats
+	gcThreshold := repl.mu.state.GCThreshold
+	repl.mu.Unlock()
+
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		log.Errorf(ctx, "could not find zone config for range %s: %s", repl, err)
-		return
+		return gcQueueScore{}
+	}
+	// Use desc.RangeID for fuzzing the final score, so that different ranges
+	// have slightly different priorities and even symmetrical workloads don't
+	// trigger GC at the same time.
+	r := makeGCQueueScoreImpl(
+		ctx, int64(desc.RangeID), now, ms, zone.GC.TTLSeconds,
+	)
+	r.LikelyLastGC = time.Duration(now.WallTime - gcThreshold.Add(r.TTL.Nanoseconds(), 0).WallTime)
+	return r
+}
+
+// makeGCQueueScoreImpl is used to compute when to trigger the GC Queue. It's
+// important that we don't queue a replica before a relevant amount of data is
+// actually deletable, or the queue might run in a tight loop. To this end, we
+// use a base score with the right interplay between GCByteAge and TTL and
+// additionally weigh it so that GC is delayed when a large proportion of the
+// data in the replica is live. Additionally, returned scores are slightly
+// perturbed to avoid groups of replicas becoming eligible for GC at the same
+// time repeatedly.
+//
+// More details below.
+//
+// When a key of size `B` is deleted at timestamp `T` or superseded by a newer
+// version, it henceforth is accounted for in the range's `GCBytesAge`. At time
+// `S`, its contribution to age will be `B*seconds(S-T)`. The aggregate
+// `GCBytesAge` of all deleted versions in the cluster is what the GC queue at
+// the time of writing bases its `shouldQueue` method on.
+//
+// If a replica is queued to have its old values garbage collected, its contents
+// are scanned. However, the values which are deleted follow a criterion that
+// isn't immediately connected to `GCBytesAge`: We (basically) delete everything
+// that's older than the Replica's `TTLSeconds`.
+//
+// Thus, it's not obvious that garbage collection has the effect of reducing the
+// metric that we use to consider the replica for the next GC cycle, and it
+// seems that we messed it up.
+//
+// The previous metric used for queueing: `GCBytesAge/(1<<20 * ttl)` does not
+// have the right scaling. For example, consider that a value of size `1mb` is
+// overwritten with a newer version. After `ttl` seconds, it contributes `1mb`
+// to `GCBytesAge`, and so the replica has a score of `1`, i.e. (roughly) the
+// range becomes interesting to the GC queue. When GC runs, it will delete value
+// that are `ttl` old, which our value is. But a Replica is ~64mb, so picture
+// that you have 64mb of key-value data all at the same timestamp, and they
+// become superseded. Already after `ttl/64`, the metric becomes 1, but they
+// keys won't be GC'able for another (63*ttl)/64. Thus, GC will run "all the
+// time" long before it can actually have an effect.
+//
+// The metric with correct scaling must thus take into account the size of the
+// range. What size exactly? Any data that isn't live (i.e. isn't readable by a
+// scan from the far future). That's `KeyBytes + ms.ValBytes - ms.LiveBytes`,
+// which is also known as `GCBytes` in the code. Hence, the better metric is
+// `GCBytesAge/(ttl*GCBytes)`.
+//
+// Using this metric guarantees that after truncation, `GCBytesAge` is at most
+// `ttl*GCBytes` (where `GCBytes` has been updated), i.e. the new metric is at
+// most 1.
+//
+// To visualize this, picture a rectangular frame of width `ttl` and height
+// `GCBytes` (i.e. the horizontal dimension is time, the vertical one bytes),
+// where the right boundary of the frame corresponds to age zero. Each non-live
+// key is a domino aligned with the right side of the frame, its width equal to
+// its size, and its height given by the duration (in seconds) it's been
+// non-live.
+//
+// The combined surface of the dominos is then `GCBytesAge`, and the claim is
+// that if the total sum of domino heights (i.e. sizes) is `GCBytes`, and the
+// surface is larger than `ttl*GCBytes` by some positive `X`, then after
+// removing the dominos that cross the line `x=-ttl` (i.e. `ttl` to the left
+// from the right side of the frame), at least a surface area of `X` has been
+// removed.
+//
+//               x=-ttl                 GCBytes=1+4
+//                 |           3 (age)
+//                 |          +-------+
+//                 |          | keep  | 1 (bytes)
+//                 |          +-------+
+//            +-----------------------+
+//            |                       |
+//            |        remove         | 3 (bytes)
+//            |                       |
+//            +-----------------------+
+//                 |   7 (age)
+//
+// This is true because
+//
+// deletable area  = total area       - nondeletable area
+//                 = X + ttl*GCBytes  - nondeletable area
+//                >= X + ttl*GCBytes  - ttl*(bytes in nondeletable area)
+//                 = X + ttl*(GCBytes - bytes in nondeletable area)
+//                >= X.
+//
+// Or, in other words, you can only hope to put `ttl*GCBytes` of area in the
+// "safe" rectangle. Once you've done that, everything else you put is going to
+// be deleted.
+//
+// This means that running GC will always result in a `GCBytesAge` of `<=
+// ttl*GCBytes`, and that a decent trigger for GC is a multiple of
+// `ttl*GCBytes`.
+func makeGCQueueScoreImpl(
+	ctx context.Context, fuzzSeed int64, now hlc.Timestamp, ms enginepb.MVCCStats, ttlSeconds int32,
+) gcQueueScore {
+	ms.AgeTo(now.WallTime)
+	var r gcQueueScore
+	r.TTL = time.Duration(ttlSeconds) * time.Second
+
+	// Treat a zero TTL as a one-second TTL, which avoids a priority of infinity
+	// and otherwise behaves indistinguishable given that we can't possibly hope
+	// to GC values faster than that.
+	if r.TTL == 0 {
+		r.TTL = time.Second
 	}
 
-	ms := repl.GetMVCCStats()
-	// GC score is the total GC'able bytes age normalized by 1 MB * the replica's TTL in seconds.
-	gcScore := float64(ms.GCByteAge(now.WallTime)) / float64(zone.GC.TTLSeconds) / float64(gcByteCountNormalization)
+	r.GCByteAge = ms.GCByteAge(now.WallTime)
+	r.GCBytes = ms.GCBytes()
 
-	// Intent score. This computes the average age of outstanding intents
-	// and normalizes.
-	intentScore := ms.AvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
+	// If we GC'ed now, we can expect to delete at least this much GCByteAge.
+	// GCByteAge - TTL*GCBytes = ExpMinGCByteAgeReduction & algebra.
+	//
+	// Note that for ranges with ContainsEstimates=true, the value here may not
+	// reflect reality, and may even be nonsensical (though that's unlikely).
+	r.ExpMinGCByteAgeReduction = r.GCByteAge - r.GCBytes*int64(r.TTL.Seconds())
+
+	// DeadFraction is close to 1 when most values are dead, and close to zero
+	// when most of the replica is live. For example, for a replica with no
+	// superseded values, this should be (almost) zero. For one just hit
+	// completely by a DeleteRange, it should be (almost) one.
+	//
+	// The algebra below is complicated by the fact that ranges may contain
+	// stats that aren't exact (ContainsEstimates=true).
+	clamp := func(n int64) float64 {
+		if n < 0 {
+			return 0.0
+		}
+		return float64(n)
+	}
+	r.DeadFraction = math.Max(1-clamp(ms.LiveBytes)/(1+clamp(ms.ValBytes)+clamp(ms.KeyBytes)), 0)
+
+	// The "raw" GC score is the total GC'able bytes age normalized by (non-live
+	// size * the replica's TTL in seconds). This is a scale-invariant factor by
+	// (at least) which GCByteAge reduces when deleting values older than the
+	// TTL. The risk of an inaccurate GCBytes in the presence of estimated stats
+	// is neglected as GCByteAge and GCBytes undercount in the same way and
+	// estimation only happens for timeseries writes.
+	denominator := r.TTL.Seconds() * (1.0 + clamp(r.GCBytes)) // +1 avoids NaN
+	r.ValuesScalableScore = clamp(r.GCByteAge) / denominator
+	// However, it doesn't take into account the size of the live data, which
+	// also needs to be scanned in order to GC. We don't want to run this costly
+	// scan unless we get a corresponding expected reduction in GCByteAge, so we
+	// weighs by fraction of non-live data below.
+
+	// Intent score. This computes the average age of outstanding intents and
+	// normalizes. Note that at the time of writing this criterion hasn't
+	// undergone a reality check yet.
+	r.IntentScore = ms.AvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
+
+	// Random factor in [0.75, 1.25] to cause decoherence of replicas with
+	// similar load. This isn't 100% symmetric due to rounding issues near zero,
+	// but not an issue in practice.
+	r.FuzzFactor = 0.75 + rand.New(rand.NewSource(fuzzSeed)).Float64()/2.0
 
 	// Compute priority.
-	if gcScore >= considerThreshold {
-		priority += gcScore
-	}
-	if intentScore >= considerThreshold {
-		priority += intentScore
-	}
-	shouldQ = priority > 0
-	return
+	valScore := r.DeadFraction * r.ValuesScalableScore
+	r.ShouldQueue = r.FuzzFactor*valScore > gcKeyScoreThreshold || r.FuzzFactor*r.IntentScore > gcIntentScoreThreshold
+	r.FinalScore = r.FuzzFactor * (valScore + r.IntentScore)
+
+	return r
 }
 
 // processLocalKeyRange scans the local range key entries, consisting of
@@ -336,6 +528,13 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 	}
 
 	now := repl.store.Clock().Now()
+	r := makeGCQueueScore(ctx, repl, now, sysCfg)
+	// Yes, comparing floats to 0 is bad. However, FinalScore is either exactly zero or
+	// far away from zero.
+	if r.FinalScore == 0 {
+		log.Eventf(ctx, "skipping replica; low score %s", r)
+	}
+	log.Eventf(ctx, "processing replica with score %s", r)
 	gcKeys, info, err := RunGC(ctx, desc, snap, now, zone.GC,
 		func(now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			pushTxn(ctx, gcq.store.DB(), now, txn, typ)
@@ -348,11 +547,11 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 		return err
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "completed with stats %+v", info)
-	}
-
-	info.updateMetrics(gcq.store.metrics)
+	log.Eventf(ctx, "MVCC stats: %+v", repl.GetMVCCStats())
+	log.Eventf(ctx, "assembled GC keys, now proceeding to GC; stats so far %+v", info)
+	defer func() {
+		info.updateMetrics(gcq.store.metrics)
+	}()
 
 	var ba roachpb.BatchRequest
 	var gcArgs roachpb.GCRequest
@@ -374,6 +573,8 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 		log.ErrEvent(ctx, pErr.String())
 		return pErr.GoError()
 	}
+
+	log.Eventf(ctx, "done GC'ing, new score is %s", makeGCQueueScore(ctx, repl, repl.store.Clock().Now(), sysCfg))
 	return nil
 }
 

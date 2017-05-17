@@ -129,13 +129,12 @@ message MVCCStats {
   // data included in key_bytes and val_bytes, but not live_bytes).
   // See the comment on MVCCStats.
   optional sfixed64 gc_bytes_age = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge"];
-
   // live_bytes is the number of bytes stored in keys and values which can in
-  // principle be read by means of a Scan or Get, including intents but not
-  // deletion tombstones (or their intents). Note that the size of the meta kv
-  // pair (which could be explicit or implicit) is included in this.
-  // Only the meta kv pair counts for the actual length of the encoded key
-  // (regular pairs only count the timestamp suffix).
+  // principle be read by means of a Scan or Get in the far future, including
+  // intents but not deletion tombstones (or their intents). Note that the
+  // size of the meta kv pair (which could be explicit or implicit) is
+  // included in this. Only the meta kv pair counts for the actual length of
+  // the encoded key (regular pairs only count the timestamp suffix).
   optional sfixed64 live_bytes = 4 [(gogoproto.nullable) = false];
   // live_count is the number of meta keys tracked under live_bytes.
   optional sfixed64 live_count = 5 [(gogoproto.nullable) = false];
