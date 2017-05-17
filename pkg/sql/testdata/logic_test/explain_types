@@ -23,9 +23,9 @@ INSERT INTO t VALUES (1, 2)
 query ITTTTT
 EXPLAIN (TYPES) SELECT 42
 ----
-0  render                              ("42" int)
-0                 render 0  (42)[int]
-1  nullrow                             ()
+0  render                        ("42" int)  ="42"
+0           render 0  (42)[int]
+1  nullrow                       ()
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT * FROM t
@@ -277,23 +277,23 @@ EXPLAIN (TYPES,NOEXPAND) SELECT * FROM tt WHERE x < 10 AND y > 10
 query ITTTTT
 EXPLAIN (TYPES) SELECT $1 + 2 AS a
 ----
-0  render                                                (a int)
-0                 render 0  (($1)[int] + (2)[int])[int]
-1  nullrow                                               ()
+0  render                                          (a int)  =a
+0           render 0  (($1)[int] + (2)[int])[int]
+1  nullrow                                         ()
 
 query ITTTTT
 EXPLAIN (TYPES,NONORMALIZE) SELECT ABS(2-3) AS a
 ----
-0  render                                          (a int)
-0                 render 0  (abs((-1)[int]))[int]
-1  nullrow                                         ()
+0  render                                    (a int)  =a
+0           render 0  (abs((-1)[int]))[int]
+1  nullrow                                   ()
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT ABS(2-3) AS a
 ----
-0  render                             (a int)
-0                 render 0  (1)[int]
-1  nullrow                            ()
+0  render                       (a int)  =a
+0           render 0  (1)[int]
+1  nullrow                      ()
 
 # Check array subscripts (#13811)
 query ITTTTT
@@ -301,6 +301,6 @@ EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
 0  render                                                         ("x[1]" int)
 0           render 0  ((x)[int[]][(1)[int]])[int]
-1  render                                                         (x int[])
+1  render                                                         (x int[])     =x
 1           render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]
 2  nullrow                                                        ()

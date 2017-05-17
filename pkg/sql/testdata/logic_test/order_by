@@ -281,16 +281,30 @@ SELECT a FROM t ORDER BY a.b
 query ITTT
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
-0  scan
-0        table  t@primary
-0        spans  ALL
+0  nosort
+0          order  +"1 + 2"
+1  render
+2  scan
+2          table  t@primary
+2          spans  ALL
+
+query ITTT
+EXPLAIN SELECT 1, * FROM t ORDER BY 1
+----
+0  render
+1  scan
+1          table  t@primary
+1          spans  ALL
 
 query ITTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
-0  scan
-0        table  t@primary
-0        spans  ALL
+0  nosort
+0          order  +"length('abc')"
+1  render
+2  scan
+2          table  t@primary
+2          spans  ALL
 
 # Check that the sort key reuses the existing render.
 query ITTTTT
@@ -654,12 +668,10 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS 
 query ITTTTT
 EXPLAIN (METADATA) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-0  insert                   (b)
-0           into   t(a, b)
-1  sort                     (x, y)  +x
-1           order  +x
-2  render                   (x, y)
-3  nullrow                  ()
+0  insert                  (b)
+0           into  t(a, b)
+1  render                  (x, y)  =x,=y
+2  nullrow                 ()
 
 query ITTTTT
 EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
@@ -676,7 +688,7 @@ EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
 0  update                    (b)
 0          table  t
 0          set    c
-1  render                    (a, b, c, "true")
+1  render                    (a, b, c, "true")  ="true"
 2  scan                      (a, b, c)
 2          table  t@primary
 2          spans  ALL
