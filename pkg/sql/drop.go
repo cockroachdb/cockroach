@@ -243,7 +243,7 @@ func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode,
 			return nil, err
 		}
 
-		tableDesc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+		tableDesc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
 		if err != nil {
 			return nil, err
 		}

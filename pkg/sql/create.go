@@ -144,7 +144,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *parser.CreateIndex) (planN
 		return nil, err
 	}
 
-	tableDesc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	tableDesc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
 	if err != nil {
 		return nil, err
 	}
@@ -1053,7 +1053,7 @@ func addInterleave(
 		return err
 	}
 
-	parentTable, err := mustGetTableDesc(ctx, txn, vt, tn)
+	parentTable, err := mustGetTableDesc(ctx, txn, vt, tn, true /*allowAdding*/)
 	if err != nil {
 		return err
 	}
