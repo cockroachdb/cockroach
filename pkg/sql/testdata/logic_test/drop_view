@@ -169,3 +169,26 @@ DROP VIEW x
 
 statement ok
 DROP VIEW y, x
+
+# Ensure that dropping a database works even when views get referred to more=
+# than once. See #15953 for more details.
+statement ok
+CREATE DATABASE a
+
+statement ok
+SET DATABASE=a
+
+statement ok
+CREATE TABLE a (a int);
+
+statement ok
+CREATE TABLE b (b int);
+
+statement ok
+CREATE VIEW v AS SELECT a.a, b.b FROM a CROSS JOIN b
+
+statement ok
+CREATE VIEW u AS SELECT a FROM a UNION SELECT a FROM a
+
+statement ok
+DROP DATABASE a
