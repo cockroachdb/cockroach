@@ -29,8 +29,8 @@ class TimeRange extends React.Component<TimeRangeProps, {}> {
   render() {
     const s = this.props.start.clone().utc();
     const e = this.props.end.clone().utc();
-    const startTimeSpan = <span className="time-range__time">{s.format("HH:mm:SS")}</span>;
-    const endTimeSpan = <span className="time-range__time">{e.format("HH:mm:SS")}</span>;
+    const startTimeSpan = <span className="time-range__time">{s.format("HH:mm:ss")}</span>;
+    const endTimeSpan = <span className="time-range__time">{e.format("HH:mm:ss")}</span>;
     const startDateSpan = <span className="time-range__date">{s.format("MMM DD, YYYY")}</span>;
     const endDateSpan = <span className="time-range__date">{e.format("MMM DD, YYYY")}</span>;
 
