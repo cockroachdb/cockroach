@@ -195,16 +195,32 @@ func main() {
 			}
 		}
 		if vendorChanged {
-			cmd := exec.Command("glide", "install")
-			cmd.Dir = crdb.Dir
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			log.Println(cmd.Args)
-			if err := cmd.Run(); err != nil {
-				log.Fatal(err)
+			{
+				// Clear the glide cache for robustness, because glide doesn't always
+				// update it properly.
+				cmd := exec.Command("glide", "cc")
+				cmd.Dir = crdb.Dir
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				log.Println(cmd.Args)
+				if err := cmd.Run(); err != nil {
+					log.Fatal(err)
+				}
+			}
+
+			{
+				cmd := exec.Command("glide", "install")
+				cmd.Dir = crdb.Dir
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				log.Println(cmd.Args)
+				if err := cmd.Run(); err != nil {
+					log.Fatal(err)
+				}
 			}
 
 			// Check for diffs.
+			var haveDiff bool
 			for _, dir := range []string{crdb.Dir, filepath.Join(crdb.Dir, "vendor")} {
 				cmd := exec.Command("git", "diff")
 				cmd.Dir = dir
@@ -212,8 +228,12 @@ func main() {
 				if output, err := cmd.Output(); err != nil {
 					log.Fatal(err)
 				} else if len(output) > 0 {
-					log.Fatalf("unexpected diff:\n%s", output)
+					log.Printf("unexpected diff:\n%s", output)
+					haveDiff = true
 				}
+			}
+			if haveDiff {
+				os.Exit(1)
 			}
 		}
 	} else {
