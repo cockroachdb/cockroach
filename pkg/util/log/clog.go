@@ -324,15 +324,11 @@ func (t *traceLocation) Set(value string) error {
 	return nil
 }
 
-// Use separate regexes for detecting the start of a log entry and for actually
-// capturing/extracting the components of that log entry. The only difference
-// is that when capturing the components we want to capture the message, but
-// capturing multiline messages when searching for matches in EntryDecoder.split
-// is very expensive. As of May 2017, this gives a 40x speedup on MacOS.
-var entryMatchRE = regexp.MustCompile(
+// We don't include a capture group for the log message here, just for the
+// preamble, because a capture group that handles multiline messages is very
+// slow when running on the large buffers passed to EntryDecoder.split.
+var entryRE = regexp.MustCompile(
 	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) (?:(\d+) )?([^:]+):(\d+)`)
-var entryCaptureRE = regexp.MustCompile(
-	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) (?:(\d+) )?([^:]+):(\d+)  ((?s).*)`)
 
 // EntryDecoder reads successive encoded log entries from the input
 // buffer. Each entry is preceded by a single big-ending uint32
@@ -359,7 +355,7 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			return io.EOF
 		}
 		b := d.scanner.Bytes()
-		m := entryCaptureRE.FindSubmatch(b)
+		m := entryRE.FindSubmatch(b)
 		if m == nil {
 			continue
 		}
@@ -382,7 +378,7 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			return err
 		}
 		entry.Line = int64(line)
-		entry.Message = strings.TrimSpace(string(m[6]))
+		entry.Message = strings.TrimSpace(string(b[len(m[0]):]))
 		return nil
 	}
 }
@@ -392,7 +388,7 @@ func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte
 		return 0, nil, nil
 	}
 	if d.truncatedLastEntry {
-		i := entryMatchRE.FindIndex(data)
+		i := entryRE.FindIndex(data)
 		if i == nil {
 			// If there's no entry that starts in this chunk, advance past it, since
 			// we've truncated the entry it was originally part of.
@@ -410,7 +406,7 @@ func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte
 	}
 	// From this point on, we assume we're currently positioned at a log entry.
 	// We want to find the next one so we start our search at data[1].
-	i := entryMatchRE.FindIndex(data[1:])
+	i := entryRE.FindIndex(data[1:])
 	if i == nil {
 		if atEOF {
 			return len(data), data, nil
