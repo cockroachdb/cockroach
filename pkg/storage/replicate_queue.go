@@ -186,9 +186,6 @@ func (rq *replicateQueue) shouldQueue(
 		}
 	}
 
-	// Check for a rebalancing opportunity. Note that leaseStoreID will be 0 if
-	// the range doesn't currently have a lease which will allow the current
-	// replica to be considered a rebalancing source.
 	target, err := rq.allocator.RebalanceTarget(
 		ctx,
 		zone.Constraints,
