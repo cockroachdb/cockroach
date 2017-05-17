@@ -1,5 +1,5 @@
-hash: fc0b1a51280176d84e80717f73ef0128e61e0f35608a90364ddc81dbb87e52c9
-updated: 2017-05-17T10:06:48.687769178-04:00
+hash: 1761d84fe439a296fab45493e0a64156f42349b8c4e0e9ba7c42d1854cac2e77
+updated: 2017-05-17T10:42:39.575779187-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -203,6 +203,7 @@ imports:
   - protoc-gen-go/descriptor
   - protoc-gen-go/generator
   - protoc-gen-go/plugin
+  - ptypes/any
   - ptypes/timestamp
 - name: github.com/golang/snappy
   version: 553a641470496b2327abcac10b36396bd98e45c9
@@ -507,13 +508,14 @@ imports:
   subpackages:
   - googleapis/api/annotations
   - googleapis/iam/v1
+  - googleapis/rpc/status
 - name: google.golang.org/grpc
-  version: ded79a3531af2dd320eed5b2fd138f23fb2e3f59
-  repo: https://github.com/andreimatei/grpc-go
+  version: 3419b42955675df23457629c75f58eb8dcd56954
   subpackages:
   - codes
   - credentials
   - credentials/oauth
+  - grpclb/grpc_lb_v1
   - grpclog
   - internal
   - keepalive
@@ -521,6 +523,7 @@ imports:
   - naming
   - peer
   - stats
+  - status
   - tap
   - transport
 - name: gopkg.in/yaml.v2
