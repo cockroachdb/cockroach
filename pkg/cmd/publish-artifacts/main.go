@@ -81,10 +81,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("unable to locate CRDB directory: %s", err)
 	}
+
 	var versionStr string
+	var isStableRelease bool
 	if *isRelease {
-		if _, err := version.NewVersion(branch); err != nil {
+		ver, err := version.NewVersion(branch)
+		if err != nil {
 			log.Fatalf("refusing to build release with invalid version name '%s' (err: %s)", branch, err)
+		}
+
+		// Prerelease returns anything after the `-` and before metadata. eg: `beta` for `1.0.1-beta+metadata`
+		if ver.Prerelease() == "" {
+			isStableRelease = true
 		}
 		versionStr = branch
 	} else {
@@ -120,7 +128,10 @@ func main() {
 	// rather than a full key. This means that the actual artifact will no
 	// longer be named "-latest".
 	latestStr := "latest"
-	releaseVersionStrs := []string{versionStr, latestStr}
+	releaseVersionStrs := []string{versionStr}
+	if isStableRelease {
+		releaseVersionStrs = append(releaseVersionStrs, latestStr)
+	}
 
 	noCache := "no-cache"
 
