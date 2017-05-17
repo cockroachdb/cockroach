@@ -682,6 +682,9 @@ func TestParse(t *testing.T) {
 		{`BACKUP foo TO 'bar' WITH OPTIONS ('key1', 'key2'='value')`},
 		{`RESTORE foo FROM 'bar' WITH OPTIONS ('key1', 'key2'='value')`},
 		{`SET ROW (1, true, NULL)`},
+
+		// Regression for #15926
+		{`SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
