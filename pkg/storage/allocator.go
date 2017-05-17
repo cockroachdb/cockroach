@@ -539,9 +539,18 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 	existing []roachpb.ReplicaDescriptor,
 	stats *replicaStats,
 ) (transferDecision, roachpb.ReplicaDescriptor) {
+	// Only use load-based rebalancing if it's enabled and we have both
+	// stats and locality information to base our decision on.
 	if stats == nil || !EnableLoadBasedLeaseRebalancing.Get() {
 		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
+	replicaLocalities := a.storePool.getLocalities(existing)
+	for _, locality := range replicaLocalities {
+		if len(locality.Tiers) == 0 {
+			return decideWithoutStats, roachpb.ReplicaDescriptor{}
+		}
+	}
+
 	requestCounts, requestCountsDur := stats.getRequestCounts()
 
 	// If we haven't yet accumulated enough data, avoid transferring for now. Do
@@ -561,7 +570,6 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 	}
 
 	replicaWeights := make(map[roachpb.NodeID]float64)
-	replicaLocalities := a.storePool.getLocalities(existing)
 	for requestLocalityStr, count := range requestCounts {
 		var requestLocality roachpb.Locality
 		if err := requestLocality.Set(requestLocalityStr); err != nil {
