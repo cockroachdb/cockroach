@@ -3740,6 +3740,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {Object}
                  * @property {string} [type] EventsRequest type.
                  * @property {Long} [target_id] EventsRequest target_id.
+                 * @property {number} [limit] EventsRequest limit.
                  */
 
                 /**
@@ -3768,6 +3769,12 @@ export const cockroach = $root.cockroach = (() => {
                 EventsRequest.prototype.target_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
+                 * EventsRequest limit.
+                 * @type {number}
+                 */
+                EventsRequest.prototype.limit = 0;
+
+                /**
                  * Creates a new EventsRequest instance using the specified properties.
                  * @param {cockroach.server.serverpb.EventsRequest$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.EventsRequest} EventsRequest instance
@@ -3789,6 +3796,8 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 1, wireType 2 =*/10).string(message.type);
                     if (message.target_id != null && message.hasOwnProperty("target_id"))
                         writer.uint32(/* id 2, wireType 0 =*/16).int64(message.target_id);
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).int32(message.limit);
                     return writer;
                 };
 
@@ -3822,6 +3831,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 2:
                             message.target_id = reader.int64();
+                            break;
+                        case 3:
+                            message.limit = reader.int32();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -3858,6 +3870,9 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.target_id != null && message.hasOwnProperty("target_id"))
                         if (!$util.isInteger(message.target_id) && !(message.target_id && $util.isInteger(message.target_id.low) && $util.isInteger(message.target_id.high)))
                             return "target_id: integer|Long expected";
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        if (!$util.isInteger(message.limit))
+                            return "limit: integer expected";
                     return null;
                 };
 
@@ -3881,6 +3896,8 @@ export const cockroach = $root.cockroach = (() => {
                             message.target_id = object.target_id;
                         else if (typeof object.target_id === "object")
                             message.target_id = new $util.LongBits(object.target_id.low >>> 0, object.target_id.high >>> 0).toNumber();
+                    if (object.limit != null)
+                        message.limit = object.limit | 0;
                     return message;
                 };
 
@@ -3910,6 +3927,7 @@ export const cockroach = $root.cockroach = (() => {
                             object.target_id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                         } else
                             object.target_id = options.longs === String ? "0" : 0;
+                        object.limit = 0;
                     }
                     if (message.type != null && message.hasOwnProperty("type"))
                         object.type = message.type;
@@ -3918,6 +3936,8 @@ export const cockroach = $root.cockroach = (() => {
                             object.target_id = options.longs === String ? String(message.target_id) : message.target_id;
                         else
                             object.target_id = options.longs === String ? $util.Long.prototype.toString.call(message.target_id) : options.longs === Number ? new $util.LongBits(message.target_id.low >>> 0, message.target_id.high >>> 0).toNumber() : message.target_id;
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        object.limit = message.limit;
                     return object;
                 };
 
@@ -7445,6 +7465,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @typedef cockroach.server.serverpb.RangeLogRequest$Properties
                  * @type {Object}
                  * @property {Long} [range_id] RangeLogRequest range_id.
+                 * @property {number} [limit] RangeLogRequest limit.
                  */
 
                 /**
@@ -7467,6 +7488,12 @@ export const cockroach = $root.cockroach = (() => {
                 RangeLogRequest.prototype.range_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
+                 * RangeLogRequest limit.
+                 * @type {number}
+                 */
+                RangeLogRequest.prototype.limit = 0;
+
+                /**
                  * Creates a new RangeLogRequest instance using the specified properties.
                  * @param {cockroach.server.serverpb.RangeLogRequest$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.RangeLogRequest} RangeLogRequest instance
@@ -7486,6 +7513,8 @@ export const cockroach = $root.cockroach = (() => {
                         writer = $Writer.create();
                     if (message.range_id != null && message.hasOwnProperty("range_id"))
                         writer.uint32(/* id 1, wireType 0 =*/8).int64(message.range_id);
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).int32(message.limit);
                     return writer;
                 };
 
@@ -7516,6 +7545,9 @@ export const cockroach = $root.cockroach = (() => {
                         switch (tag >>> 3) {
                         case 1:
                             message.range_id = reader.int64();
+                            break;
+                        case 2:
+                            message.limit = reader.int32();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -7549,6 +7581,9 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.range_id != null && message.hasOwnProperty("range_id"))
                         if (!$util.isInteger(message.range_id) && !(message.range_id && $util.isInteger(message.range_id.low) && $util.isInteger(message.range_id.high)))
                             return "range_id: integer|Long expected";
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        if (!$util.isInteger(message.limit))
+                            return "limit: integer expected";
                     return null;
                 };
 
@@ -7570,6 +7605,8 @@ export const cockroach = $root.cockroach = (() => {
                             message.range_id = object.range_id;
                         else if (typeof object.range_id === "object")
                             message.range_id = new $util.LongBits(object.range_id.low >>> 0, object.range_id.high >>> 0).toNumber();
+                    if (object.limit != null)
+                        message.limit = object.limit | 0;
                     return message;
                 };
 
@@ -7592,17 +7629,21 @@ export const cockroach = $root.cockroach = (() => {
                     if (!options)
                         options = {};
                     let object = {};
-                    if (options.defaults)
+                    if (options.defaults) {
                         if ($util.Long) {
                             let long = new $util.Long(0, 0, false);
                             object.range_id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                         } else
                             object.range_id = options.longs === String ? "0" : 0;
+                        object.limit = 0;
+                    }
                     if (message.range_id != null && message.hasOwnProperty("range_id"))
                         if (typeof message.range_id === "number")
                             object.range_id = options.longs === String ? String(message.range_id) : message.range_id;
                         else
                             object.range_id = options.longs === String ? $util.Long.prototype.toString.call(message.range_id) : options.longs === Number ? new $util.LongBits(message.range_id.low >>> 0, message.range_id.high >>> 0).toNumber() : message.range_id;
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        object.limit = message.limit;
                     return object;
                 };
 

@@ -2049,6 +2049,7 @@ export namespace cockroach {
             type EventsRequest$Properties = {
                 type?: string;
                 target_id?: Long;
+                limit?: number;
             };
 
             /**
@@ -2078,6 +2079,12 @@ export namespace cockroach {
                  * @type {Long}
                  */
                 public target_id: Long;
+
+                /**
+                 * EventsRequest limit.
+                 * @type {number}
+                 */
+                public limit: number;
 
                 /**
                  * Creates a new EventsRequest instance using the specified properties.
@@ -4254,6 +4261,7 @@ export namespace cockroach {
 
             type RangeLogRequest$Properties = {
                 range_id?: Long;
+                limit?: number;
             };
 
             /**
@@ -4277,6 +4285,12 @@ export namespace cockroach {
                  * @type {Long}
                  */
                 public range_id: Long;
+
+                /**
+                 * RangeLogRequest limit.
+                 * @type {number}
+                 */
+                public limit: number;
 
                 /**
                  * Creates a new RangeLogRequest instance using the specified properties.

@@ -737,73 +737,86 @@ func TestAdminAPIEvents(t *testing.T) {
 	const allEvents = ""
 	type testcase struct {
 		eventType sql.EventLogType
+		hasLimit  bool
+		limit     int
 		expCount  int
 	}
 	testcases := []testcase{
-		{sql.EventLogNodeJoin, 1},
-		{sql.EventLogNodeRestart, 0},
-		{sql.EventLogDropDatabase, 0},
-		{sql.EventLogCreateDatabase, 1},
-		{sql.EventLogDropTable, 2},
-		{sql.EventLogCreateTable, 3},
+		{sql.EventLogNodeJoin, false, 0, 1},
+		{sql.EventLogNodeRestart, false, 0, 0},
+		{sql.EventLogDropDatabase, false, 0, 0},
+		{sql.EventLogCreateDatabase, false, 0, 1},
+		{sql.EventLogDropTable, false, 0, 2},
+		{sql.EventLogCreateTable, false, 0, 3},
+		{sql.EventLogCreateTable, true, 0, 3},
+		{sql.EventLogCreateTable, true, -1, 3},
+		{sql.EventLogCreateTable, true, 2, 2},
 	}
 	minTotalEvents := 0
 	for _, tc := range testcases {
-		minTotalEvents += tc.expCount
+		if !tc.hasLimit {
+			minTotalEvents += tc.expCount
+		}
 	}
-	testcases = append(testcases, testcase{allEvents, minTotalEvents})
+	testcases = append(testcases, testcase{allEvents, false, 0, minTotalEvents})
 
 	for i, tc := range testcases {
 		url := "events"
 		if tc.eventType != allEvents {
 			url += "?type=" + string(tc.eventType)
-		}
-		var resp serverpb.EventsResponse
-		if err := getAdminJSONProto(s, url, &resp); err != nil {
-			t.Fatal(err)
-		}
-		if tc.eventType == allEvents {
-			// When retrieving all events, we expect that there will be some system
-			// database migrations, unrelated to this test, that add to the log entry
-			// count. So, we do a looser check here.
-			if a, min := len(resp.Events), tc.expCount; a < tc.expCount {
-				t.Fatalf("%d: total # of events %d < min %d", i, a, min)
-			}
-		} else {
-			if a, e := len(resp.Events), tc.expCount; a != e {
-				t.Fatalf("%d: # of %s events %d != expected %d", i, tc.eventType, a, e)
+			if tc.hasLimit {
+				url += fmt.Sprintf("&limit=%d", tc.limit)
 			}
 		}
 
-		// Ensure we don't have blank / nonsensical fields.
-		for _, e := range resp.Events {
-			if e.Timestamp == (time.Time{}) {
-				t.Errorf("%d: missing/empty timestamp", i)
+		t.Run(url, func(t *testing.T) {
+			var resp serverpb.EventsResponse
+			if err := getAdminJSONProto(s, url, &resp); err != nil {
+				t.Fatal(err)
 			}
-
-			if len(tc.eventType) > 0 {
-				if a, e := e.EventType, string(tc.eventType); a != e {
-					t.Errorf("%d: event type %s != expected %s", i, a, e)
+			if tc.eventType == allEvents {
+				// When retrieving all events, we expect that there will be some system
+				// database migrations, unrelated to this test, that add to the log entry
+				// count. So, we do a looser check here.
+				if a, min := len(resp.Events), tc.expCount; a < tc.expCount {
+					t.Fatalf("%d: total # of events %d < min %d", i, a, min)
 				}
 			} else {
-				if len(e.EventType) == 0 {
-					t.Errorf("%d: missing event type in event", i)
+				if a, e := len(resp.Events), tc.expCount; a != e {
+					t.Fatalf("%d: # of %s events %d != expected %d", i, tc.eventType, a, e)
 				}
 			}
 
-			if e.TargetID == 0 {
-				t.Errorf("%d: missing/empty TargetID", i)
+			// Ensure we don't have blank / nonsensical fields.
+			for _, e := range resp.Events {
+				if e.Timestamp == (time.Time{}) {
+					t.Errorf("%d: missing/empty timestamp", i)
+				}
+
+				if len(tc.eventType) > 0 {
+					if a, e := e.EventType, string(tc.eventType); a != e {
+						t.Errorf("%d: event type %s != expected %s", i, a, e)
+					}
+				} else {
+					if len(e.EventType) == 0 {
+						t.Errorf("%d: missing event type in event", i)
+					}
+				}
+
+				if e.TargetID == 0 {
+					t.Errorf("%d: missing/empty TargetID", i)
+				}
+				if e.ReportingID == 0 {
+					t.Errorf("%d: missing/empty ReportingID", i)
+				}
+				if len(e.Info) == 0 {
+					t.Errorf("%d: missing/empty Info", i)
+				}
+				if len(e.UniqueID) == 0 {
+					t.Errorf("%d: missing/empty UniqueID", i)
+				}
 			}
-			if e.ReportingID == 0 {
-				t.Errorf("%d: missing/empty ReportingID", i)
-			}
-			if len(e.Info) == 0 {
-				t.Errorf("%d: missing/empty Info", i)
-			}
-			if len(e.UniqueID) == 0 {
-				t.Errorf("%d: missing/empty UniqueID", i)
-			}
-		}
+		})
 	}
 }
 
@@ -1058,18 +1071,41 @@ func TestAdminAPIRangeLog(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	var resp serverpb.RangeLogResponse
-	if err := getAdminJSONProto(s, "rangelog/1", &resp); err != nil {
-		t.Fatal(err)
+	testCases := []struct {
+		rangeID  int
+		hasLimit bool
+		limit    int
+		expected int
+	}{
+		{1, false, 0, 1},
+		{2, false, 0, 2},
+		{2, true, 0, 2},
+		{2, true, -1, 2},
+		{2, true, 1, 1},
 	}
 
-	if len(resp.Events) == 0 {
-		t.Fatalf("expected at least 1 event, got none")
-	}
-
-	for _, event := range resp.Events {
-		if e, a := roachpb.RangeID(1), event.RangeID; e != a {
-			t.Errorf("expected rangeID to be %d, got %d", e, a)
+	for _, tc := range testCases {
+		url := fmt.Sprintf("rangelog/%d", tc.rangeID)
+		if tc.hasLimit {
+			url += fmt.Sprintf("?limit=%d", tc.limit)
 		}
+		t.Run(url, func(t *testing.T) {
+			var resp serverpb.RangeLogResponse
+			if err := getAdminJSONProto(s, url, &resp); err != nil {
+				t.Fatal(err)
+			}
+
+			if e, a := tc.expected, len(resp.Events); e != a {
+				t.Fatalf("expected %d events, got %d", e, a)
+			}
+
+			for _, event := range resp.Events {
+				if event.RangeID != roachpb.RangeID(tc.rangeID) &&
+					event.OtherRangeID != roachpb.RangeID(tc.rangeID) {
+					t.Errorf("expected rangeID or otherRangeID to be r%d, got r%d and r%d",
+						tc.rangeID, event.RangeID, event.OtherRangeID)
+				}
+			}
+		})
 	}
 }
