@@ -417,6 +417,18 @@ message RangeLogResponse {
   repeated Event events = 1 [(gogoproto.nullable) = false];
 }
 
+// QueryPlanRequest requests the query plans for a SQL string.
+message QueryPlanRequest {
+  // query is the SQL query string.
+  string query = 1;
+}
+
+// QueryPlanResponse contains the query plans for a SQL string (currently only
+// the distsql physical query plan).
+message QueryPlanResponse {
+  string distsql_physical_query_plan = 1 [(gogoproto.customname) = "DistSQLPhysicalQueryPlan"];
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -530,6 +542,13 @@ service Admin {
   rpc Liveness(LivenessRequest) returns (LivenessResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/liveness"
+    };
+  }
+
+  // QueryPlan returns the query plans for a SQL string.
+  rpc QueryPlan(QueryPlanRequest) returns (QueryPlanResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/queryplan"
     };
   }
 

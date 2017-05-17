@@ -120,3 +120,67 @@
 .nvd3 text
   opacity .6
   font-size 10px
+
+
+// Styles for the QueryPlanGraph component
+$core-color = #ffffcc
+$router-color = #ffb380
+$synchronizer-color = #80b3ff
+.query-plan__graph
+  svg
+    width 100%
+    height 100%
+    pointer-events all
+    fill white
+
+  .background
+    fill white
+
+  .node
+    stroke black
+    stroke-width 1px
+    cursor move
+    fill beige
+
+  .core
+    stroke black
+    stroke-width 1px
+    cursor move
+    fill $core-color
+
+  .synchronizer
+    stroke black
+    stroke-width 1px
+    cursor move
+    fill $synchronizer-color
+
+  .router
+    stroke black
+    stroke-width 1px
+    cursor move
+    fill $router-color
+
+  .link
+    fill none
+    stroke black
+    stroke-width 3px
+    opacity .7
+    marker-end url(#end-arrow)
+
+  .linkinvisible
+    fill none
+    stroke none
+
+  .label
+    fill black
+    font-family Verdana
+    font-size 16px
+    text-anchor middle
+    cursor move
+
+  .guideline
+    stroke orangered
+    stroke-width 4px
+
+  textarea
+    font-size 12px
