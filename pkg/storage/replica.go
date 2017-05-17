@@ -1268,10 +1268,7 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 }
 
 // getLastReplicaGCTimestamp reads the timestamp at which the replica was
-// last checked for garbage collection.
-//
-// TODO(tschottdorf): we may want to phase this out in favor of using
-// gcThreshold.
+// last checked for removal by the replica gc queue.
 func (r *Replica) getLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	var timestamp hlc.Timestamp
@@ -2497,7 +2494,7 @@ func (r *Replica) propose(
 
 	if proposal.command.Size() > int(maxCommandSize.Get()) {
 		// Once a command is written to the raft log, it must be loaded
-		// into memory and repliayed on all replicas. If a command is
+		// into memory and replayed on all replicas. If a command is
 		// too big, stop it here.
 		return nil, nil, errors.Errorf("command is too large: %d bytes (max: %d)",
 			proposal.command.Size(), maxCommandSize.Get())
