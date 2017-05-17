@@ -596,8 +596,10 @@ func (bq *baseQueue) processReplica(
 				if log.V(3) {
 					log.Infof(queueCtx, "%s; skipping", v)
 				}
+				log.Eventf(ctx, "%s; skipping", v)
 				return nil
 			default:
+				log.ErrEventf(ctx, "could not obtain lease: %s", pErr)
 				return errors.Wrapf(pErr.GoError(), "%s: could not obtain lease", repl)
 			}
 		}
