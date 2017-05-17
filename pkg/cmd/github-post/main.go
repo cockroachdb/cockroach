@@ -24,6 +24,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 
 	"golang.org/x/oauth2"
@@ -69,16 +70,40 @@ func main() {
 	}
 }
 
+var stacktraceRE = regexp.MustCompile(`(?m:^goroutine\s\d+)`)
+
 func trimIssueRequestBody(message string, usedCharacters int) string {
 	maxLength := githubIssueBodyMaximumLength - usedCharacters
 
-	for len(message) > maxLength {
-		if idx := strings.IndexByte(message, '\n'); idx != -1 {
-			message = message[idx+1:]
-		} else {
-			message = message[len(message)-maxLength:]
+	if m := stacktraceRE.FindStringIndex(message); m != nil {
+		// We want the top stack traces plus a few lines before.
+		{
+			startIdx := m[0]
+			for i := 0; i < 10; i++ {
+				if idx := strings.LastIndexByte(message[:startIdx], '\n'); idx != -1 {
+					startIdx = idx
+				}
+			}
+			message = message[startIdx:]
+		}
+		for len(message) > maxLength {
+			if idx := strings.LastIndexByte(message, '\n'); idx != -1 {
+				message = message[:idx]
+			} else {
+				message = message[:maxLength]
+			}
+		}
+	} else {
+		// We want the FAIL line.
+		for len(message) > maxLength {
+			if idx := strings.IndexByte(message, '\n'); idx != -1 {
+				message = message[idx+1:]
+			} else {
+				message = message[len(message)-maxLength:]
+			}
 		}
 	}
+
 	return message
 }
 
