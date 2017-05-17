@@ -67,7 +67,7 @@ func (ms *MVCCStats) AgeTo(nowNanos int64) {
 	if ms.LastUpdateNanos >= nowNanos {
 		return
 	}
-	diffSeconds := nowNanos/1E9 - ms.LastUpdateNanos/1E9 // not (...)/1E9!
+	diffSeconds := nowNanos/1E9 - ms.LastUpdateNanos/1E9 // not (a-b)/1E9!
 
 	ms.GCBytesAge += ms.GCBytes() * diffSeconds
 	ms.IntentAge += ms.IntentCount * diffSeconds
