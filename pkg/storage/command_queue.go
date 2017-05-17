@@ -610,11 +610,11 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 	}
 }
 
-func (cq *CommandQueue) tree(c *cmd) *interval.Tree {
+func (cq *CommandQueue) tree(c *cmd) interval.Tree {
 	if c.readOnly {
-		return &cq.reads
+		return cq.reads
 	}
-	return &cq.writes
+	return cq.writes
 }
 
 func (cq *CommandQueue) nextID() int64 {

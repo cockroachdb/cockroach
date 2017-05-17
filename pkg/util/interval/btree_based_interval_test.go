@@ -14,8 +14,6 @@
 //
 // Author: Jingguo Yao (yaojingguo@gmail.com)
 
-// +build interval_btree
-
 package interval
 
 import (
@@ -114,7 +112,7 @@ func (children children) Swap(i, j int) {
 
 // describe returns a string description of the tree. The format is similar to
 // https://en.wikipedia.org/wiki/Newick_format
-func (tree *Tree) describe() string {
+func (tree *btree) describe() string {
 	if tree.isEmpty() {
 		return ";"
 	}
@@ -190,7 +188,7 @@ func (n *node) isSorted(t *testing.T) bool {
 	return true
 }
 
-func (tree *Tree) computeHeight() (h int) {
+func (tree *btree) computeHeight() (h int) {
 	h = -1
 	for node := tree.root; ; {
 		h++
@@ -273,14 +271,14 @@ func (n *node) bound() Range {
 	return r
 }
 
-func checkWithLen(t *testing.T, tree *Tree, l int) {
+func checkWithLen(t *testing.T, tree *btree, l int) {
 	if tree.Len() != l {
 		t.Errorf("expected tree length %d, got %d", l, tree.Len())
 	}
 	check(t, tree)
 }
 
-func check(t *testing.T, tree *Tree) {
+func check(t *testing.T, tree *btree) {
 	t.Logf("tree: %s", tree.describe())
 	if !tree.isLeafSameDepth(t) {
 		t.Error("Not all the leaves have the same depth as the tree height")
@@ -299,7 +297,7 @@ func check(t *testing.T, tree *Tree) {
 	}
 }
 
-func (tree *Tree) isLeafSameDepth(t *testing.T) bool {
+func (tree *btree) isLeafSameDepth(t *testing.T) bool {
 	if tree.isEmpty() {
 		return true
 	}
@@ -308,7 +306,7 @@ func (tree *Tree) isLeafSameDepth(t *testing.T) bool {
 	return tree.root.isDepthEqualToHeight(t, 0, h)
 }
 
-func (tree *Tree) isCountAllowed(t *testing.T) bool {
+func (tree *btree) isCountAllowed(t *testing.T) bool {
 	if tree.isEmpty() {
 		return true
 	}
@@ -316,21 +314,21 @@ func (tree *Tree) isCountAllowed(t *testing.T) bool {
 }
 
 // Does every node correctly annotate the range of its children.
-func (tree *Tree) isIntervalInRange(t *testing.T) bool {
+func (tree *btree) isIntervalInRange(t *testing.T) bool {
 	if tree.isEmpty() {
 		return true
 	}
 	return tree.root.isIntervalInRange(t)
 }
 
-func (tree *Tree) isSorted(t *testing.T) bool {
+func (tree *btree) isSorted(t *testing.T) bool {
 	if tree.isEmpty() {
 		return true
 	}
 	return tree.root.isSorted(t)
 }
 
-func (tree *Tree) isKeyInRange(t *testing.T) bool {
+func (tree *btree) isKeyInRange(t *testing.T) bool {
 	if tree.isEmpty() {
 		return true
 	}
@@ -350,7 +348,7 @@ func checkEqualIntervals(t *testing.T, actual, expected items) {
 	}
 }
 
-func checkTraversal(t *testing.T, tree *Tree, ivs items) {
+func checkTraversal(t *testing.T, tree *btree, ivs items) {
 	// Get, GetWithOverlapper
 	r := Range{Comparable{0x0}, Comparable{0x1}}
 	expectedIntervals := items{ivs[0], ivs[2], ivs[4]}
@@ -374,7 +372,7 @@ func checkTraversal(t *testing.T, tree *Tree, ivs items) {
 	checkEqualIntervals(t, all, ivs)
 }
 
-func checkFastDelete(t *testing.T, tree *Tree, ivs items, deleteCount int) {
+func checkFastDelete(t *testing.T, tree *btree, ivs items, deleteCount int) {
 	for i, iv := range ivs[:deleteCount] {
 		if err := tree.Delete(iv, true); err != nil {
 			t.Fatalf("delete error: %s", err)
@@ -418,7 +416,7 @@ func makeIntervals() items {
 
 // TestBTree is based on https://github.com/google/btree/blob/master/btree_test.go.
 func TestBTree(t *testing.T) {
-	tree := NewTreeWithDegree(InclusiveOverlapper, *btreeMinDegree)
+	tree := newBTreeWithDegree(InclusiveOverlapper, *btreeMinDegree)
 	const treeSize = 10000
 	for i := 0; i < 10; i++ {
 		for _, iv := range perm(treeSize) {
@@ -485,7 +483,7 @@ func TestBTree(t *testing.T) {
 // part of a merge, the root does have any Interface after the merge. The
 // subsequent adjustment of node range should take this into account.
 func TestDeleteAfterRootNodeMerge(t *testing.T) {
-	tree := NewTreeWithDegree(InclusiveOverlapper, 2)
+	tree := newBTreeWithDegree(InclusiveOverlapper, 2)
 	ivs := items{
 		&Interval{Range{Comparable{1}, Comparable{8}}, 0},
 		&Interval{Range{Comparable{2}, Comparable{3}}, 1},
@@ -530,7 +528,7 @@ func TestDeleteAfterRootNodeMerge(t *testing.T) {
 }
 
 func TestSmallTree(t *testing.T) {
-	tree := NewTreeWithDegree(InclusiveOverlapper, 2)
+	tree := newBTreeWithDegree(InclusiveOverlapper, 2)
 	ivs := makeIntervals()
 
 	// Insert
@@ -554,7 +552,7 @@ func TestSmallTree(t *testing.T) {
 }
 
 func TestSmallTreeWithFastOperations(t *testing.T) {
-	tree := NewTreeWithDegree(InclusiveOverlapper, 2)
+	tree := newBTreeWithDegree(InclusiveOverlapper, 2)
 	ivs := makeIntervals()
 
 	// Fast insert
@@ -579,7 +577,7 @@ func TestLargeTree(t *testing.T) {
 		ivs = append(ivs, iv)
 	}
 
-	tree := NewTreeWithDegree(ExclusiveOverlapper, *btreeMinDegree)
+	tree := newBTreeWithDegree(ExclusiveOverlapper, *btreeMinDegree)
 	for _, iv := range ivs {
 		if err := tree.Insert(iv, true); err != nil {
 			t.Fatalf("fast insert error: %s", err)
