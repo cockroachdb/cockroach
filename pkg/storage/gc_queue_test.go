@@ -18,9 +18,10 @@ package storage
 
 import (
 	"fmt"
-	"math"
+	"math/rand"
 	"reflect"
 	"testing"
+	"testing/quick"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -34,10 +35,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/kr/pretty"
 )
 
 // makeTS creates a new hybrid logical timestamp.
@@ -48,115 +52,312 @@ func makeTS(nanos int64, logical int32) hlc.Timestamp {
 	}
 }
 
-// TestGCQueueShouldQueue verifies conditions which inform priority
-// and whether or not the range should be queued into the GC queue.
-// Ranges are queued for GC based on two conditions. The age of bytes
-// available to be GC'd, and the age of unresolved intents.
-func TestGCQueueShouldQueue(t *testing.T) {
+func TestGCQueueScoreString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
-		t.Fatal("config not set")
-	}
-	desc := tc.repl.Desc()
-	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Errorf(context.Background(), "could not find GC policy for range %s: %s, got zone %+v",
-			tc.repl, err, zone)
-		return
-	}
-	policy := zone.GC
-
-	iaN := intentAgeNormalization.Nanoseconds()
-	ia := iaN / 1E9
-	bc := int64(gcByteCountNormalization)
-	ttl := int64(policy.TTLSeconds)
-
-	now := makeTS(considerThreshold*iaN, 0) // at time of stats object
-
-	testCases := []struct {
-		gcBytes     int64
-		gcBytesAge  int64
-		intentCount int64
-		intentAge   int64
-		now         hlc.Timestamp // at time of shouldQueue
-		shouldQ     bool
-		priority    float64
+	for i, c := range []struct {
+		r   gcQueueScore
+		exp string
 	}{
-		// First, test cases where shouldQueue is called with the same
-		// timestamp that the stats are at.
-
-		// No GC'able bytes, no time elapsed.
-		{0, 0, 0, 0, now, false, 0},
-		// No GC'able bytes, with intent age, 1/2 intent normalization period elapsed.
-		{0, 0, 1, ia / 2, now, false, 0},
-		// No GC'able bytes, with intent age=1/2 period, and other 1/2 period elapsed.
-		{0, 0, 1, ia / 2, now, false, 0},
-		// No GC'able bytes, with (abs and avg) intent age=1.5*normalization.
-		{0, 0, 1, 3 * ia / 2, now, true, 1.5},
-		// No GC'able bytes, 2 intents, with avg intent age=3.5*normalization.
-		{0, 0, 2, 7 * ia, now, true, 3.5},
-		// GC'able bytes, no time elapsed.
-		{bc, 0, 0, 0, now, false, 0},
-		// GC'able bytes, avg age = just below TTLSeconds.
-		{bc, bc*ttl - 1, 0, 0, now, false, 0},
-		// GC'able bytes, avg age = 2*TTLSeconds.
-		{bc, 2 * bc * ttl, 0, 0, now, true, 2},
-		// x2 GC'able bytes, avg age = TTLSeconds.
-		{2 * bc, 2 * bc * ttl, 0, 0, now, true, 2},
-		// GC'able bytes, intent bytes, and intent normalization * 2 elapsed.
-		// Queues solely because of gc'able bytes.
-		{bc, 5 * bc * ttl, 10 * ia, 0, now, true, 5},
-		// A contribution of 1 from gc, 10/5 from intents.
-		{bc, bc * ttl, 5, 10 * ia, now, true, (1 + 2)},
-
-		// Some tests where the ages increase since we call shouldNow with
-		// a later timestamp.
-
-		// One normalized unit of unaged gc'able bytes at time zero.
-		{ttl * bc, 0, 0, 0, hlc.Timestamp{}, true, float64(now.WallTime) / (1E9 * considerThreshold)},
-
-		// 2 intents aging from zero to now (which is exactly the intent age
-		// normalization).
-		{0, 0, 2, 0, hlc.Timestamp{}, true, 1},
-	}
-
-	gcQ := newGCQueue(tc.store, tc.gossip)
-
-	for i, test := range testCases {
-		// Write gc'able bytes as key bytes; since "live" bytes will be
-		// zero, this will translate into non live bytes.  Also write
-		// intent count. Note: the actual accounting on bytes is fictional
-		// in this test.
-		ms := enginepb.MVCCStats{
-			KeyBytes:        test.gcBytes,
-			IntentCount:     test.intentCount,
-			IntentAge:       test.intentAge * considerThreshold,
-			GCBytesAge:      test.gcBytesAge * considerThreshold,
-			LastUpdateNanos: test.now.WallTime,
+		{gcQueueScore{}, "(empty)"},
+		{gcQueueScore{
+			ShouldQueue:              true,
+			FuzzFactor:               1.25,
+			FinalScore:               3.45 * 1.25,
+			ValuesScalableScore:      4,
+			DeadFraction:             0.25,
+			IntentScore:              0.45,
+			ExpMinGCByteAgeReduction: 256 * 1024,
+			GCByteAge:                512 * 1024,
+			GCBytes:                  1024 * 3,
+			LikelyLastGC:             5 * time.Second,
+		},
+			`queue=true with 4.31/fuzz(1.25)=3.45=valScaleScore(4.00)*deadFrac(0.25)+intentScore(0.45)
+likely last GC: 5s ago, 3.0 KiB non-live, curr. age 512 KiB*s, min exp. reduction: 256 KiB*s`},
+	} {
+		if act := c.r.String(); act != c.exp {
+			t.Errorf("%d: wanted:\n'%s'\ngot:\n'%s'", i, c.exp, act)
 		}
-		func() {
-			// Hold lock throughout to reduce chance of random commands
-			// leading to inconsistent state.
-			tc.repl.mu.Lock()
-			defer tc.repl.mu.Unlock()
-			if err := tc.repl.stateLoader.setMVCCStats(context.Background(), tc.repl.store.Engine(), &ms); err != nil {
+	}
+}
+
+func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rnd, seed := randutil.NewPseudoRand()
+	cfg := quick.Config{
+		MaxCount: 50000,
+		Rand:     rnd,
+	}
+	initialNow := hlc.Timestamp{}.Add(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano(), 0)
+	ctx := context.Background()
+
+	// Verify that the basic assumption always holds: We won't queue based on
+	// GCByte{s,Age} unless TTL-based deletion would actually delete something.
+	if err := quick.Check(func(
+		seed uint16, uTTLSec uint32, uTimePassed time.Duration, uGCBytes uint32, uGCByteAge uint32,
+	) bool {
+		ttlSec, timePassed := int32(uTTLSec), time.Duration(uTimePassed)
+		gcBytes, gcByteAge := int64(uGCBytes), int64(uGCByteAge)
+
+		ms := enginepb.MVCCStats{
+			LastUpdateNanos: initialNow.WallTime,
+			ValBytes:        gcBytes,
+			GCBytesAge:      gcByteAge,
+		}
+		now := initialNow.Add(timePassed.Nanoseconds(), 0)
+		r := makeGCQueueScoreImpl(ctx, int64(seed), now, ms, ttlSec)
+		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
+		result := !r.ShouldQueue || wouldHaveToDeleteSomething
+		if !result {
+			log.Warningf(ctx, "failing on ttl=%d, timePassed=%s, gcBytes=%d, gcByteAge=%d:\n%s",
+				ttlSec, timePassed, gcBytes, gcByteAge, r)
+		}
+		return result
+	}, &cfg); err != nil {
+		t.Fatal(errors.Wrapf(err, "with seed %d", seed))
+	}
+}
+
+func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if err := quick.Check(func(keyBytes, valBytes, liveBytes int32, containsEstimates bool) bool {
+		r := makeGCQueueScoreImpl(context.Background(), 0, hlc.Timestamp{}, enginepb.MVCCStats{
+			ContainsEstimates: containsEstimates,
+			LiveBytes:         int64(liveBytes),
+			ValBytes:          int64(valBytes),
+			KeyBytes:          int64(keyBytes),
+		}, 60)
+		return r.DeadFraction >= 0 && r.DeadFraction <= 1
+	}, &quick.Config{MaxCount: 1000}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const cacheFirstLen = 3
+
+type gcTestCacheKey struct {
+	enginepb.MVCCStats
+	string
+}
+type gcTestCacheVal struct {
+	first [cacheFirstLen]enginepb.MVCCStats
+	last  enginepb.MVCCStats
+}
+
+type cachedWriteSimulator struct {
+	cache map[gcTestCacheKey]gcTestCacheVal
+	t     *testing.T
+}
+
+func newCachedWriteSimulator(t *testing.T) *cachedWriteSimulator {
+	var cws cachedWriteSimulator
+	cws.t = t
+	cws.cache = map[gcTestCacheKey]gcTestCacheVal{
+		{enginepb.MVCCStats{LastUpdateNanos: 946684800000000000}, "1-1m0s-1.0 MiB"}: {
+			first: [cacheFirstLen]enginepb.MVCCStats{
+				{ContainsEstimates: false, LastUpdateNanos: 946684800000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+				{ContainsEstimates: false, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+				{ContainsEstimates: false, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 3145779, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+			},
+			last: enginepb.MVCCStats{ContainsEstimates: false, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1918925190, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+		},
+	}
+	return &cws
+}
+
+func (cws *cachedWriteSimulator) value(size int) roachpb.Value {
+	var value roachpb.Value
+	kb := make([]byte, size)
+	if n, err := rand.New(rand.NewSource(int64(size))).Read(kb); err != nil {
+		cws.t.Fatal(err)
+	} else if n != size {
+		cws.t.Fatalf("wrote only %d < %d", n, size)
+	}
+	value.SetBytes(kb)
+	return value
+}
+
+func (cws *cachedWriteSimulator) multiKey(
+	numOps int, size int, txn *roachpb.Transaction, ms *enginepb.MVCCStats,
+) {
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer eng.Close()
+	t, ctx := cws.t, context.Background()
+
+	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
+	key, value := []byte("multikey"), cws.value(size)
+	var eachMS enginepb.MVCCStats
+	if err := engine.MVCCPut(ctx, eng, &eachMS, key, ts, value, txn); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < numOps; i++ {
+		ms.Add(eachMS)
+	}
+}
+
+func (cws *cachedWriteSimulator) singleKeySteady(
+	qps int, duration time.Duration, size int, ms *enginepb.MVCCStats,
+) {
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer eng.Close()
+	t, ctx := cws.t, context.Background()
+	cacheKey := fmt.Sprintf("%d-%s-%s", qps, duration, humanizeutil.IBytes(int64(size)))
+	cached, ok := cws.cache[gcTestCacheKey{*ms, cacheKey}]
+	if !ok && duration > 0 {
+		t.Fatalf("cache key missing: %s with %s", cacheKey, pretty.Sprint(*ms))
+	}
+	firstSl := make([]enginepb.MVCCStats, 0, cacheFirstLen)
+	// Pick random bytes once; they don't matter for stats but we want reproducability.
+	key, value := []byte("0123456789"), cws.value(size)
+
+	initialNow := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
+
+	for elapsed := time.Duration(0); elapsed <= duration; elapsed += time.Second {
+		for i := 0; i < qps; i++ {
+			now := initialNow.Add(elapsed.Nanoseconds(), int32(i))
+
+			if err := engine.MVCCPut(ctx, eng, ms, key, now, value, nil /* txn */); err != nil {
 				t.Fatal(err)
 			}
-			tc.repl.mu.state.Stats = ms
-		}()
-		shouldQ, priority := gcQ.shouldQueue(context.TODO(), now, tc.repl, cfg)
-		if shouldQ != test.shouldQ {
-			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
+			if len(firstSl) < cacheFirstLen {
+				firstSl = append(firstSl, *ms)
+			} else if len(firstSl) == cacheFirstLen {
+				if ok && reflect.DeepEqual(firstSl, cached.first[:cacheFirstLen]) {
+					*ms = cached.last
+					// Exit both loops.
+					elapsed += duration
+					break
+				} else {
+					ok = false
+				}
+			}
 		}
-		if scaledExpPri := test.priority * considerThreshold; math.Abs(priority-scaledExpPri) > 0.00001 {
-			t.Errorf("%d: priority expected %f; got %f", i, scaledExpPri, priority)
-		}
+	}
+
+	if !ok && duration > 0 {
+		copy(cached.first[:3], firstSl)
+		cached.last = *ms
+		t.Fatalf("missing or incorrect cache entry for %s, should be \n%s", cacheKey, pretty.Sprint(cached))
+	}
+}
+
+func (cws *cachedWriteSimulator) shouldQueue(
+	b bool, prio float64, after time.Duration, ttl time.Duration, ms enginepb.MVCCStats,
+) {
+	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
+	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, int32(ttl.Seconds()))
+	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
+		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
+			b, r.ShouldQueue, prio, r.FinalScore, after, ttl, ms, r)
+	}
+}
+
+// TestGCQueueMakeGCScoreRealistic verifies conditions which inform priority and
+// whether or not the range should be queued into the GC queue. Ranges are
+// queued for GC based on two conditions. The age of bytes available to be GC'd,
+// and the age of unresolved intents.
+func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cws := newCachedWriteSimulator(t)
+
+	initialMS := func() enginepb.MVCCStats {
+		var zeroMS enginepb.MVCCStats
+		zeroMS.AgeTo(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano())
+		return zeroMS
+	}
+
+	minuteTTL, hourTTL := time.Minute, time.Hour
+
+	{
+		// Hammer a key with 1MB blobs for a (simulated) minute. Logically, at
+		// the end of that you have around 60MB that are non-live, but cannot
+		// immediately be deleted. Deletion is only possible for keys that are
+		// (more or less) past TTL, and shouldQueue should respect that.
+		ms := initialMS()
+		cws.singleKeySteady(1, time.Minute, 1<<20, &ms)
+
+		// First, check that a zero second TTL behaves like a one second one.
+		// This is a special case without which the priority would be +Inf.
+		//
+		// Since at the time of this check the data is already 30s old on
+		// average (i.e. ~30x the TTL), we expect to *really* want GC.
+		cws.shouldQueue(true, 36.68, time.Duration(0), 0, ms)
+		cws.shouldQueue(true, 36.68, time.Duration(0), 0, ms)
+
+		// Right after we finished writing, we don't want to GC yet with a one-minute TTL.
+		cws.shouldQueue(false, 0.61, time.Duration(0), minuteTTL, ms)
+
+		// Neither after a minute. The first values are about to become GC'able, though.
+		cws.shouldQueue(false, 1.81, time.Minute, minuteTTL, ms)
+		// 90 seconds in it's really close, but still just shy of GC. Half of the
+		// values could be deleted now (remember that we wrote them over a one
+		// minute period).
+		cws.shouldQueue(true, 2.42, 3*time.Minute/2, minuteTTL, ms)
+		// Advancing another 1/4 minute does the trick.
+		cws.shouldQueue(true, 2.72, 7*time.Minute/4, minuteTTL, ms)
+		// After an hour, that's (of course) still true with a very high priority.
+		cws.shouldQueue(true, 72.76, time.Hour, minuteTTL, ms)
+
+		// Let's see what the same would look like with a 1h TTL.
+		// Can't delete anything until 59min have passed, and indeed the score is low.
+		cws.shouldQueue(false, 0.01, time.Duration(0), hourTTL, ms)
+		cws.shouldQueue(false, 0.03, time.Minute, hourTTL, ms)
+		cws.shouldQueue(false, 1.21, time.Hour, hourTTL, ms)
+		// After 90 minutes, we're getting closer. After two hours, definitely ripe for
+		// GC (and this would delete all the values).
+		cws.shouldQueue(false, 1.81, 3*time.Hour/2, hourTTL, ms)
+		cws.shouldQueue(true, 2.42, 2*time.Hour, hourTTL, ms)
+	}
+
+	{
+		ms, valSize := initialMS(), 1<<10
+
+		// Write 999 distinct 1kb keys at the initial timestamp without transaction.
+		cws.multiKey(999, valSize, nil /* no txn */, &ms)
+
+		// GC shouldn't move at all, even after a long time and short TTL.
+		cws.shouldQueue(false, 0, 24*time.Hour, minuteTTL, ms)
+
+		// Write a single key twice.
+		cws.singleKeySteady(2, 0, valSize, &ms)
+
+		// Now we have the situation in which the replica is pretty large
+		// compared to the amount of (ever) GC'able data it has. Consequently,
+		// the GC score should rise very slowly.
+
+		// If the fact that 99.9% of the replica is live were not taken into
+		// account, this would get us at least close to GC.
+		cws.shouldQueue(false, 0.01, 5*time.Minute, minuteTTL, ms)
+
+		// 12 hours in the score becomes relevant, but not yet large enough.
+		// The key is of course GC'able and has been for a long time, but
+		// to find it we'd have to scan all the other kv pairs as well.
+		cws.shouldQueue(false, 0.87, 12*time.Hour, minuteTTL, ms)
+
+		// Two days in we're more than ready to go, would queue for GC, and
+		// delete.
+		cws.shouldQueue(true, 3.49, 48*time.Hour, minuteTTL, ms)
+	}
+
+	{
+		irrelevantTTL := 24 * time.Hour * 365
+		ms, valSize := initialMS(), 1<<10
+		txn := newTransaction(
+			"txn", roachpb.Key("key"), roachpb.NormalUserPriority, enginepb.SERIALIZABLE,
+			hlc.NewClock(func() int64 { return ms.LastUpdateNanos }, time.Millisecond))
+
+		// Write 1000 distinct 1kb intents at the initial timestamp. This means that
+		// the average intent age is just the time elapsed from now, and this is roughly
+		// normalized by one day at the time of writing. Note that the size of the writes
+		// doesn't matter. In reality, the value-based GC score will often strike first.
+		cws.multiKey(100, valSize, txn, &ms)
+
+		cws.shouldQueue(false, 1.22, 24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 2.45, 2*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 4.89, 4*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 8.56, 7*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(true, 11, 9*24*time.Hour, irrelevantTTL, ms)
 	}
 }
 
