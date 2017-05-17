@@ -59,3 +59,26 @@ func TestShowFingerprintsAsOfSystemTime(t *testing.T) {
 	fprint3Query := fmt.Sprintf(`%s AS OF SYSTEM TIME '%s'`, fprintQuery, ts)
 	sqlDB.CheckQueryResults(fprint3Query, fprint1)
 }
+
+func TestShowFingerprintsColumnNames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
+	sqlDB.Exec(`CREATE DATABASE d`)
+	sqlDB.Exec(`CREATE TABLE d.t (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`)
+
+	sqlDB.Exec(`INSERT INTO d.t VALUES (1, 2)`)
+	fprint1 := sqlDB.QueryStr(`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)
+
+	sqlDB.Exec(`TRUNCATE TABLE d.t`)
+	sqlDB.Exec(`INSERT INTO d.t VALUES (3, 4)`)
+	fprint2 := sqlDB.QueryStr(`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)
+
+	if reflect.DeepEqual(fprint1, fprint2) {
+		t.Errorf("expected different fingerprints: %v vs %v", fprint1, fprint2)
+	}
+}
