@@ -136,6 +136,17 @@ public class main {
 		if (nCols != 0) {
 		    throw new Exception("unexpected: SELECT returns " + nCols + " columns, expected 0");
 		}
+
+		stmt = conn.prepareStatement("SELECT 1.0::DECIMAL");
+		rs = stmt.executeQuery();
+		rs.next();
+		// The JDBC Postgres driver's getObject has different behavior than both
+		// its getString and getBigDecimal with respect to how it handles the type modifier:
+		// https://github.com/pgjdbc/pgjdbc/blob/REL42.1.1/pgjdbc/src/main/java/org/postgresql/jdbc/PgResultSet.java#L188
+		Object dec = rs.getObject(1);
+		if (!dec.toString().equals("1.0")) {
+			throw new Exception("unexpected: expected 1.0 to be \"1.0\", got \"" + dec.toString() + "\"");
+		}
 	}
 }
 EOF
