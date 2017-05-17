@@ -3,13 +3,11 @@
 #
 # https://help.github.com/articles/ignoring-files/#create-a-global-gitignore
 #
-# To initialize a global gitignore which combines all of Github's per-language
-# gitignore templates, run the following:
+# For advice on what entries to include in your global gitignore, please see
+# GitHub's gitignore repository, which contains an excellent set of entries for
+# many different editing tools:
 #
-# (cd $(mktemp -d) &&
-#   git clone https://github.com/github/gitignore . &&
-#   git ls-files '*.gitignore' | xargs cat >> ~/.gitignore_global &&
-#   git config --global core.excludesfile ~/.gitignore_global)
+# https://github.com/github/gitignore/tree/master/Global
 
 artifacts
 /bin
@@ -24,11 +22,6 @@ builds.xml
 *.test*
 # Various `sed -i~` invocations in our scripts.
 *~
-
-# TODO(benesch): the .bootstrap file has moved into the bin directory; remove
-# this entry once it's unlikely developers have branches that straddle this
-# change (a few weeks after 4/7/2017).
-.bootstrap
 
 # Custom or private env vars (e.g. internal keys, access tokens, etc).
 customenv.mk
