@@ -1340,15 +1340,9 @@ func (r *Replica) State() storagebase.RangeInfo {
 	return ri
 }
 
-func (r *Replica) assertState(ctx context.Context, reader engine.Reader) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.assertStateLocked(ctx, reader)
-}
-
 // assertStateLocked can be called from the Raft goroutine to check that the
-// in-memory and on-disk states of the Replica are congruent. See also
-// assertState if the replica mutex is not currently held.
+// in-memory and on-disk states of the Replica are congruent.
+// Requires that both r.raftMu and r.mu are held.
 //
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
@@ -2485,7 +2479,9 @@ func (r *Replica) propose(
 				"requestToProposal returned error %s without eval results", pErr)
 		}
 		intents := proposal.Local.detachIntents()
-		r.handleEvalResult(ctx, proposal.Local, proposal.command.ReplicatedEvalResult)
+		r.raftMu.Lock()
+		r.handleEvalResultRaftMuLocked(ctx, proposal.Local, proposal.command.ReplicatedEvalResult)
+		r.raftMu.Unlock()
 		if endCmds != nil {
 			endCmds.done(nil, pErr, proposalNoRetry)
 		}
@@ -3703,7 +3699,7 @@ func (r *Replica) processRaftCommand(
 		//
 		// Note that this must happen after committing (the engine.Batch), but
 		// before notifying a potentially waiting client.
-		r.handleEvalResult(ctx, lResult, raftCmd.ReplicatedEvalResult)
+		r.handleEvalResultRaftMuLocked(ctx, lResult, raftCmd.ReplicatedEvalResult)
 	}
 
 	if proposedLocally {
