@@ -175,11 +175,11 @@ type MVCCStats struct {
 	// See the comment on MVCCStats.
 	GCBytesAge int64 `protobuf:"fixed64,3,opt,name=gc_bytes_age,json=gcBytesAge" json:"gc_bytes_age"`
 	// live_bytes is the number of bytes stored in keys and values which can in
-	// principle be read by means of a Scan or Get, including intents but not
-	// deletion tombstones (or their intents). Note that the size of the meta kv
-	// pair (which could be explicit or implicit) is included in this.
-	// Only the meta kv pair counts for the actual length of the encoded key
-	// (regular pairs only count the timestamp suffix).
+	// principle be read by means of a Scan or Get in the far future, including
+	// intents but not deletion tombstones (or their intents). Note that the
+	// size of the meta kv pair (which could be explicit or implicit) is
+	// included in this. Only the meta kv pair counts for the actual length of
+	// the encoded key (regular pairs only count the timestamp suffix).
 	LiveBytes int64 `protobuf:"fixed64,4,opt,name=live_bytes,json=liveBytes" json:"live_bytes"`
 	// live_count is the number of meta keys tracked under live_bytes.
 	LiveCount int64 `protobuf:"fixed64,5,opt,name=live_count,json=liveCount" json:"live_count"`
