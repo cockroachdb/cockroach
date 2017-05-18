@@ -133,6 +133,9 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.putInt32(int32(len(result)))
 		b.write(result)
 
+	case *parser.DUuid:
+		b.writeLengthPrefixedString(v.UUID.String())
+
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
 
@@ -301,6 +304,10 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 	case *parser.DBytes:
 		b.putInt32(int32(len(*v)))
 		b.write([]byte(*v))
+
+	case *parser.DUuid:
+		b.putInt32(16)
+		b.write(v.GetBytes())
 
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
@@ -526,6 +533,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return nil, errors.Errorf("could not parse string %q as interval", b)
 			}
 			return d, nil
+		case oid.T_uuid:
+			d, err := parser.ParseDUuidFromString(string(b))
+			if err != nil {
+				return nil, errors.Errorf("could not parse string %q as uuid", b)
+			}
+			return d, nil
 		case oid.T__int2, oid.T__int4, oid.T__int8:
 			var arr pq.Int64Array
 			if err := (&arr).Scan(b); err != nil {
@@ -700,6 +713,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			i := int32(binary.BigEndian.Uint32(b))
 			return pgBinaryToDate(i), nil
+		case oid.T_uuid:
+			u, err := parser.ParseDUuidFromBytes(b[:16])
+			if err != nil {
+				return nil, errors.Errorf("uuid requires 16 bytes for binary format")
+			}
+			return u, nil
 		case oid.T__int2, oid.T__int4, oid.T__int8, oid.T__text, oid.T__name:
 			return decodeBinaryArray(b, code)
 		}
