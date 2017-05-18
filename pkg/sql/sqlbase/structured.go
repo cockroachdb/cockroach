@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -58,6 +57,9 @@ type IndexID parser.IndexID
 
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint32
+
+// InvalidDescriptorVersion is the uninitialised descriptor version.
+const InvalidDescriptorVersion DescriptorVersion = 0
 
 // FormatVersion is a custom type for TableDescriptor versions of the sql to
 // key:value mapping.
@@ -156,33 +158,18 @@ func GetDatabaseDescFromID(
 // ID passed in using an existing txn. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
 func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDescriptor, error) {
-	table, _, err := GetTableDescAndTimestampFromID(ctx, txn, id)
-	return table, err
-}
-
-// GetTableDescAndTimestampFromID retrieves the table descriptor for the table
-// ID passed in using an existing txn. Returns an error if the
-// descriptor doesn't exist or if it exists and is not a table.
-func GetTableDescAndTimestampFromID(
-	ctx context.Context, txn *client.Txn, id ID,
-) (*TableDescriptor, hlc.Timestamp, error) {
 	descKey := MakeDescMetadataKey(id)
 
-	kv, err := txn.Get(ctx, descKey)
-	if err != nil {
-		return nil, hlc.Timestamp{}, err
-	}
-
 	desc := &Descriptor{}
-	if err := kv.ValueProto(desc); err != nil {
-		return nil, hlc.Timestamp{}, err
+	if err := txn.GetProto(ctx, descKey, desc); err != nil {
+		return nil, err
 	}
 
 	table := desc.GetTable()
 	if table == nil {
-		return nil, hlc.Timestamp{}, ErrDescriptorNotFound
+		return nil, ErrDescriptorNotFound
 	}
-	return table, kv.Value.Timestamp, nil
+	return table, nil
 }
 
 // RunOverAllColumns applies its argument fn to each of the column IDs in desc.
@@ -495,7 +482,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	if desc.NextColumnID == 0 {
 		desc.NextColumnID = 1
 	}
-	if desc.Version == 0 {
+	if desc.Version == InvalidDescriptorVersion {
 		desc.Version = 1
 	}
 	if desc.NextMutationID == InvalidMutationID {

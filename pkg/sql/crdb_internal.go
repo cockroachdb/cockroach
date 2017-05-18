@@ -221,7 +221,7 @@ CREATE TABLE crdb_internal.leases (
   parent_id   INT NOT NULL,
   expiration  TIMESTAMP NOT NULL,
   released    BOOL NOT NULL,
-  deleted     BOOL NOT NULL
+  dropped     BOOL NOT NULL
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
@@ -238,7 +238,7 @@ CREATE TABLE crdb_internal.leases (
 				ts.mu.Lock()
 				defer ts.mu.Unlock()
 
-				deleted := parser.MakeDBool(parser.DBool(ts.deleted))
+				dropped := parser.MakeDBool(parser.DBool(ts.dropped))
 
 				for _, state := range ts.active.data {
 					if !userCanSeeDescriptor(&state.TableDescriptor, p.session.User) {
@@ -252,7 +252,7 @@ CREATE TABLE crdb_internal.leases (
 						parser.NewDInt(parser.DInt(int64(state.ParentID))),
 						&expCopy,
 						parser.MakeDBool(parser.DBool(state.released)),
-						deleted,
+						dropped,
 					); err != nil {
 						return err
 					}
