@@ -702,7 +702,7 @@ type StoreConfig struct {
 type StoreTestingKnobs struct {
 	// TestingProposalFilter is called before proposing each command.
 	// TODO(bdarnell): Implement this when a test needs it.
-	//TestingProposalFilter storagebase.ReplicaCommandFilter
+	TestingProposalFilter storagebase.ReplicaCommandFilter
 
 	// TestingEvalFilter is called before evaluating each command. The
 	// number of times this callback is run depends on the propEvalKV

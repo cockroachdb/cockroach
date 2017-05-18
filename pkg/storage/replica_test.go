@@ -6255,9 +6255,9 @@ func TestGCIncorrectRange(t *testing.T) {
 // TestReplicaCancelRaft checks that it is possible to safely abandon Raft
 // commands via a cancelable context.Context.
 func TestReplicaCancelRaft(t *testing.T) {
-	t.Skip()
-
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("TestingProposalFilter needed for this test to function correctly")
 	for _, cancelEarly := range []bool{true, false} {
 		func() {
 			// Pick a key unlikely to be used by background processes.
@@ -6265,7 +6265,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cfg := TestStoreConfig(nil)
 			if !cancelEarly {
-				cfg.TestingKnobs.TestingEvalFilter =
+				cfg.TestingKnobs.TestingProposalFilter =
 					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 						if filterArgs.Req.Header().Key.Equal(key) {
 							cancel()
