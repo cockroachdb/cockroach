@@ -2077,6 +2077,11 @@ type DTable struct {
 	ValueGenerator
 }
 
+// EmptyDTable returns a new, empty DTable.
+func EmptyDTable() *DTable {
+	return &DTable{&arrayValueGenerator{array: NewDArray(TypeAny)}}
+}
+
 // AmbiguousFormat implements the Datum interface.
 func (*DTable) AmbiguousFormat() bool { return false }
 
