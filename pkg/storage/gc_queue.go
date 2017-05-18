@@ -66,7 +66,7 @@ const (
 	// aborted and whose abort cache entry is being deleted.
 	abortCacheAgeThreshold = 5 * base.DefaultHeartbeatInterval
 
-	// thresholds used by shouldQueue to decide whether to queue for GC based
+	// Thresholds used to decide whether to queue for GC based
 	// on keys and intents.
 	gcKeyScoreThreshold    = 2
 	gcIntentScoreThreshold = 10
@@ -517,6 +517,20 @@ func processAbortCache(
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
 func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.SystemConfig) error {
+	now := repl.store.Clock().Now()
+	r := makeGCQueueScore(ctx, repl, now, sysCfg)
+	if !r.ShouldQueue {
+		log.Eventf(ctx, "skipping replica; low score %s", r)
+		return nil
+	}
+
+	log.Eventf(ctx, "processing replica with score %s", r)
+	return gcq.processImpl(ctx, repl, sysCfg, now)
+}
+
+func (gcq *gcQueue) processImpl(
+	ctx context.Context, repl *Replica, sysCfg config.SystemConfig, now hlc.Timestamp,
+) error {
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
 	defer snap.Close()
@@ -527,14 +541,6 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 		return errors.Errorf("could not find zone config for range %s: %s", repl, err)
 	}
 
-	now := repl.store.Clock().Now()
-	r := makeGCQueueScore(ctx, repl, now, sysCfg)
-	// Yes, comparing floats to 0 is bad. However, FinalScore is either exactly zero or
-	// far away from zero.
-	if r.FinalScore == 0 {
-		log.Eventf(ctx, "skipping replica; low score %s", r)
-	}
-	log.Eventf(ctx, "processing replica with score %s", r)
 	gcKeys, info, err := RunGC(ctx, desc, snap, now, zone.GC,
 		func(now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			pushTxn(ctx, gcq.store.DB(), now, txn, typ)
