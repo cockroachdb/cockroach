@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -35,11 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -442,34 +439,6 @@ func (tc *TxnCoordSender) Send(
 				log.Eventf(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
 			}
 		}
-	}
-
-	// Embed the trace metadata into the header for use by RPC recipients. We need
-	// to do this after the maybeBeginTxn call above.
-	// TODO(tschottdorf): To get rid of the spurious alloc below we need to
-	// implement the carrier interface on ba.Header or make Span non-nullable,
-	// both of which force all of ba on the Heap. It's already there, so may
-	// not be a big deal, but ba should live on the stack. Also not easy to use
-	// a buffer pool here since anything that goes into the RPC layer could be
-	// used by goroutines we didn't wait for.
-	if ba.TraceContext == nil {
-		ba.TraceContext = &tracing.SpanContextCarrier{}
-	} else {
-		// We didn't make this object but are about to mutate it, so we
-		// have to take a copy - the original might already have been
-		// passed to the RPC layer.
-		ba.TraceContext = protoutil.Clone(ba.TraceContext).(*tracing.SpanContextCarrier)
-	}
-	// TODO(andrei): we shouldn't be injecting the span here; we should be
-	// injecting it at a much lower level, when we're actually sending the RPC
-	// (i.e. in gRPCTransport). Injecting it here causes the server-side spans to
-	// not be children of the client's leaf spans.
-	if err := tracer.Inject(sp.Context(), basictracer.Delegator, ba.TraceContext); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-	// Clear the trace context if it wasn't initialized.
-	if ba.TraceContext.TraceID == 0 {
-		ba.TraceContext = nil
 	}
 
 	// Send the command through wrapped sender, taking appropriate measures

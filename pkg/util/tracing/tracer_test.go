@@ -229,17 +229,22 @@ func TestTracerInjectExtract(t *testing.T) {
 	if !IsNoopSpan(noop1) {
 		t.Fatalf("expected noop span: %+v", noop1)
 	}
-	carrier := &SpanContextCarrier{}
-	if err := tr.Inject(noop1.Context(), basictracer.Delegator, carrier); err != nil {
+	carrier := make(opentracing.HTTPHeadersCarrier)
+	if err := tr.Inject(noop1.Context(), opentracing.HTTPHeaders, carrier); err != nil {
 		t.Fatal(err)
 	}
-	if carrier.TraceID != 0 {
+	if len(carrier) != 0 {
 		t.Errorf("noop span has carrier: %+v", carrier)
 	}
-	_, noop2, err := JoinRemoteTrace(context.Background(), tr2, carrier, "remote op")
+
+	wireContext, err := tr2.Extract(opentracing.HTTPHeaders, carrier)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, noopCtx := wireContext.(noopSpanContext); !noopCtx {
+		t.Errorf("expected noop context: %v", wireContext)
+	}
+	noop2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
 	if !IsNoopSpan(noop2) {
 		t.Fatalf("expected noop span: %+v", noop2)
 	}
@@ -253,15 +258,17 @@ func TestTracerInjectExtract(t *testing.T) {
 	StartRecording(s1)
 	s1.SetBaggageItem(Snowball, "1")
 
-	carrier = &SpanContextCarrier{}
-	if err := tr.Inject(s1.Context(), basictracer.Delegator, carrier); err != nil {
+	carrier = make(opentracing.HTTPHeadersCarrier)
+	if err := tr.Inject(s1.Context(), opentracing.HTTPHeaders, carrier); err != nil {
 		t.Fatal(err)
 	}
 
-	_, s2, err := JoinRemoteTrace(context.Background(), tr2, carrier, "remote op")
+	wireContext, err = tr2.Extract(opentracing.HTTPHeaders, carrier)
 	if err != nil {
 		t.Fatal(err)
 	}
+	s2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
+
 	// Compare TraceIDs
 	trace1 := s1.Context().(*spanContext).TraceID
 	trace2 := s2.Context().(*spanContext).TraceID

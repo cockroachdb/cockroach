@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/peer"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	otext "github.com/opentracing/opentracing-go/ext"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -830,7 +831,7 @@ func (n *Node) batchInternal(
 	if err := n.stopper.RunTaskWithErr(ctx, func(ctx context.Context) error {
 		var finishSpan func(*roachpb.BatchResponse)
 		// Shadow ctx from the outer function. Written like this to pass the linter.
-		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, args.TraceContext)
+		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx)
 		defer func(br **roachpb.BatchResponse) {
 			finishSpan(*br)
 		}(&br)
@@ -905,49 +906,49 @@ func (n *Node) Batch(
 // response is to serialized. The BatchResponse can be nil in case no response
 // is to be returned to the rpc caller.
 func (n *Node) setupSpanForIncomingRPC(
-	ctx context.Context, remoteTraceContext *tracing.SpanContextCarrier,
+	ctx context.Context,
 ) (context.Context, func(*roachpb.BatchResponse)) {
-	const opName = "node.Batch"
-	var sp opentracing.Span
-	remoteParent := false
-	if opentracing.SpanFromContext(ctx) != nil {
-		// Child span of local parent.
-		ctx, sp = tracing.ChildSpan(ctx, opName)
-	} else {
-		tr := n.storeCfg.AmbientCtx.Tracer
-		if remoteTraceContext == nil {
-			// Root span.
-			sp = tr.StartSpan(opName)
-			ctx = opentracing.ContextWithSpan(ctx, sp)
+	// The operation name matches the one created by the interceptor in the
+	// remoteTrace case below.
+	const opName = "/cockroach.roachpb.Internal/Batch"
+	remoteTrace := false
+	sp := opentracing.SpanFromContext(ctx)
+	if sp != nil {
+		// To figure out if the parent trace was set up by the gRPC interceptor, we
+		// check if the SpanKindRPCServer tag was set.
+		// Note that if tracing is disabled and this is not a snowball trace, sp is
+		// a noop span so this check won't work (but it's all the same).
+		if tracing.GetSpanTag(sp, string(otext.SpanKind)) == otext.SpanKindRPCServerEnum {
+			// A "/cockroach.roachpb.Internal/Batch" span has been opened for us.
+			remoteTrace = true
 		} else {
-			// Child span of remote parent.
-			var err error
-			ctx, sp, err = tracing.JoinRemoteTrace(ctx, tr, remoteTraceContext, opName)
-			if err != nil {
-				// Fallback to root span.
-				log.Warningf(ctx, "failed to join remote trace: %s", err)
-				sp = tr.StartSpan(opName)
-				ctx = opentracing.ContextWithSpan(ctx, sp)
-			}
-			remoteParent = true
+			// This is a local request which circumvented gRPC. Start a span now.
+			ctx, sp = tracing.ChildSpan(ctx, opName)
 		}
+	} else {
+		// No parent span, start a root span.
+		sp = n.storeCfg.AmbientCtx.Tracer.StartSpan(opName)
+		ctx = opentracing.ContextWithSpan(ctx, sp)
 	}
 
 	finishSpan := func(br *roachpb.BatchResponse) {
-		sp.Finish()
+		if !remoteTrace {
+			sp.Finish()
+		}
 		if br == nil {
 			return
 		}
-		if remoteParent {
+		if remoteTrace {
 			// If this is a "snowball trace", we'll need to encode all the recorded
 			// spans in the BatchResponse at the end of the request.
+			// We don't want to do this if the operation is on the same host, in which
+			// case everything is already part of the same recording.
 			for _, rawSpan := range tracing.GetRecording(sp) {
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err == nil {
 					br.CollectedSpans = append(br.CollectedSpans, encSp)
 				} else {
-					// We can't log to the finished span; strip the span from the context.
-					log.Warning(opentracing.ContextWithSpan(ctx, nil), err)
+					log.Warning(ctx, err)
 				}
 			}
 		}
