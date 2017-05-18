@@ -141,6 +141,7 @@ var reservedKeywords = map[string]struct{}{
 	"UNIQUE":            {},
 	"USER":              {},
 	"USING":             {},
+	"UUID":              {},
 	"VALUES":            {},
 	"VARCHAR":           {},
 	"VARIADIC":          {},

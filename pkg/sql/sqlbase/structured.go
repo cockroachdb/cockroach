@@ -1202,7 +1202,7 @@ func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 		typ = encoding.Float
 	case ColumnType_INTERVAL:
 		typ = encoding.Duration
-	case ColumnType_STRING, ColumnType_BYTES, ColumnType_COLLATEDSTRING, ColumnType_NAME:
+	case ColumnType_STRING, ColumnType_BYTES, ColumnType_COLLATEDSTRING, ColumnType_NAME, ColumnType_UUID:
 		// STRINGs are counted as runes, so this isn't totally correct, but this
 		// seems better than always assuming the maximum rune width.
 		typ, size = encoding.Bytes, int(col.Type.Width)
@@ -1760,6 +1760,8 @@ func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 		ctyp.Kind = ColumnType_TIMESTAMPTZ
 	case parser.TypeInterval:
 		ctyp.Kind = ColumnType_INTERVAL
+	case parser.TypeUUID:
+		ctyp.Kind = ColumnType_UUID
 	case parser.TypeOid:
 		ctyp.Kind = ColumnType_OID
 	case parser.TypeNull:
@@ -1803,6 +1805,8 @@ func (c *ColumnType) ToDatumType() parser.Type {
 		return parser.TypeTimestampTZ
 	case ColumnType_INTERVAL:
 		return parser.TypeInterval
+	case ColumnType_UUID:
+		return parser.TypeUUID
 	case ColumnType_COLLATEDSTRING:
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")

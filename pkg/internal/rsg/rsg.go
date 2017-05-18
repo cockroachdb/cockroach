@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // RSG is a random syntax generator.
@@ -237,6 +238,9 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 	case parser.TypeInterval:
 		d := duration.Duration{Nanos: r.Int63()}
 		v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
+	case parser.TypeUUID:
+		u := uuid.MakeV4()
+		v = fmt.Sprintf(`'%s'`, u)
 	case parser.TypeIntArray,
 		parser.TypeStringArray,
 		parser.TypeOid,

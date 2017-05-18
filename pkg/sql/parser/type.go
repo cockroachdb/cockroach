@@ -89,6 +89,8 @@ var (
 	TypeTimestampTZ Type = tTimestampTZ{}
 	// TypeInterval is the type of a DInterval. Can be compared with ==.
 	TypeInterval Type = tInterval{}
+	// TypeUUID is the type of a DUuid. Can be compared with ==.
+	TypeUUID Type = tUUID{}
 	// TypeTuple is the type family of a DTuple. CANNOT be compared with ==.
 	TypeTuple Type = TTuple(nil)
 	// TypeTable is the type family of a DTable. CANNOT be compared with ==.
@@ -143,6 +145,7 @@ var (
 		TypeTimestamp,
 		TypeTimestampTZ,
 		TypeInterval,
+		TypeUUID,
 		TypeOid,
 	}
 )
@@ -186,6 +189,7 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_text:         TypeString,
 	oid.T_timestamp:    TypeTimestamp,
 	oid.T_timestamptz:  TypeTimestampTZ,
+	oid.T_uuid:         TypeUUID,
 	oid.T_varchar:      typeVarChar,
 }
 
@@ -382,6 +386,16 @@ func (tInterval) Size() (uintptr, bool)       { return unsafe.Sizeof(DInterval{}
 func (tInterval) Oid() oid.Oid                { return oid.T_interval }
 func (tInterval) SQLName() string             { return "interval" }
 func (tInterval) IsAmbiguous() bool           { return false }
+
+type tUUID struct{}
+
+func (tUUID) String() string              { return "uuid" }
+func (tUUID) Equivalent(other Type) bool  { return UnwrapType(other) == TypeUUID || other == TypeAny }
+func (tUUID) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeUUID }
+func (tUUID) Size() (uintptr, bool)       { return unsafe.Sizeof(DUuid{}), fixedSize }
+func (tUUID) Oid() oid.Oid                { return oid.T_uuid }
+func (tUUID) SQLName() string             { return "uuid" }
+func (tUUID) IsAmbiguous() bool           { return false }
 
 // TTuple is the type of a DTuple.
 type TTuple []Type

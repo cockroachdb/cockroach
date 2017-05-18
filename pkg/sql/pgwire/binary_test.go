@@ -213,3 +213,14 @@ func TestRandomBinaryDecimal(t *testing.T) {
 		}
 	}
 }
+
+func TestBinaryUuid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "uuid", func(val string) parser.Datum {
+		u, err := parser.ParseDUuidFromString(val)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	})
+}

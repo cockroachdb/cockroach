@@ -677,6 +677,7 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 2206  regtype       1782195457    NULL      8       true      b
 2249  record        1782195457    NULL      0       true      b
 2283  anyelement    1782195457    NULL      -1      false     b
+2950  uuid          1782195457    NULL      16      true      b
 4089  regnamespace  1782195457    NULL      8       true      b
 
 query OTTBBTOOO colnames
@@ -712,6 +713,7 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 2206  regtype       N            false           true          ,         0         0        0
 2249  record        P            false           true          ,         0         0        0
 2283  anyelement    P            false           true          ,         0         0        0
+2950  uuid          U            false           true          ,         0         0        0
 4089  regnamespace  N            false           true          ,         0         0        0
 
 query OTOOOOOOO colnames
@@ -747,6 +749,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 2206  regtype       regtypein       regtypeout       regtyperecv       regtypesend       0         0          0
 2249  record        record_in       record_out       record_recv       record_send       0         0          0
 2283  anyelement    anyelement_in   anyelement_out   anyelement_recv   anyelement_send   0         0          0
+2950  uuid          uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
 4089  regnamespace  regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
 
 query OTTTBOI colnames
@@ -782,6 +785,7 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 2206  regtype       NULL      NULL        false       0            -1
 2249  record        NULL      NULL        false       0            -1
 2283  anyelement    NULL      NULL        false       0            -1
+2950  uuid          NULL      NULL        false       0            -1
 4089  regnamespace  NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
@@ -817,6 +821,7 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 2206  regtype       0         0             NULL           NULL        NULL
 2249  record        0         0             NULL           NULL        NULL
 2283  anyelement    0         0             NULL           NULL        NULL
+2950  uuid          0         0             NULL           NULL        NULL
 4089  regnamespace  0         0             NULL           NULL        NULL
 
 ## pg_catalog.pg_proc
