@@ -1678,6 +1678,102 @@ func TestReplicateRemoveAndAdd(t *testing.T) {
 	testReplicaAddRemove(t, false)
 }
 
+// TestQuotaPool verifies that writes get throttled in the case where we have
+// two fast moving replicas with sufficiently fast growing raft logs and a
+// slower replica catching up. By throttling write throughput we avoid having
+// to constantly catch up the slower node via snapshots. See #8659.
+func TestQuotaPool(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const quota = 10000
+	const numReplicas = 3
+	const rangeID = 1
+	sc := storage.TestStoreConfig(nil)
+	// Suppress timeout-based elections to avoid leadership changes in ways
+	// this test doesn't expect.
+	sc.RaftElectionTimeoutTicks = 100000
+	mtc := &multiTestContext{storeConfig: &sc}
+	mtc.Start(t, numReplicas)
+	defer mtc.Stop()
+
+	mtc.replicateRange(rangeID, 1, 2)
+
+	leaderRepl := mtc.getRaftLeader(rangeID)
+	leaderRepl.SetQuotaPool(quota)
+	leaderRepl.InitQuotaReleaseQueue()
+	leaderRepl.InitCommandSizes()
+
+	followerRepl := func() *storage.Replica {
+		for _, store := range mtc.stores {
+			repl, err := store.GetReplica(rangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if repl == leaderRepl {
+				continue
+			}
+			return repl
+		}
+		return nil
+	}()
+	if followerRepl == nil {
+		t.Fatal("could not get a handle on a follower replica")
+	}
+
+	followerDesc, err := followerRepl.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We block the third replica effectively causing acquisition of quota
+	// without subsequent release.
+	//
+	// NB: See TestRaftBlockedReplica/#9914 for why we use a separate goroutine.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		followerRepl.RaftLock()
+		wg.Done()
+	}()
+	wg.Wait()
+
+	// We keep writing to the same key, generating raft log entries, until we
+	// detect that we're being throttled.
+	//
+	// NB: Quota acquisition is based on the size (in bytes) of the
+	// log entry which may very well change in the future, which is why we wait
+	// until quota is depleted as opposed to writing a fixed number of entries.
+	// Additionally there are other moving parts of the system that can get proposals in (e.g.
+	// node liveness heartbeats and raft log truncations).
+	var count int64
+	incArgs := incrementArgs([]byte("k"), 1)
+	ch := make(chan *roachpb.Error, 1)
+	for {
+		go func() {
+			_, pErr := client.SendWrapped(context.Background(), leaderRepl, incArgs)
+			ch <- pErr
+		}()
+		select {
+		case pErr := <-ch:
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
+			count += 1
+			continue
+		case <-time.After(50 * time.Millisecond):
+		}
+		break
+	}
+
+	expected := []int64{count, count, count}
+	expected[followerDesc.ReplicaID-1] = 0
+	mtc.waitForValues(roachpb.Key("k"), expected)
+
+	followerRepl.RaftUnlock()
+
+	mtc.waitForValues(roachpb.Key("k"), []int64{count + 1, count + 1, count + 1})
+}
+
 // TestRaftHeartbeats verifies that coalesced heartbeats are correctly
 // suppressing elections in an idle cluster.
 func TestRaftHeartbeats(t *testing.T) {
