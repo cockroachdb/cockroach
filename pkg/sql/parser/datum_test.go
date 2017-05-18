@@ -108,6 +108,18 @@ func TestDatumOrdering(t *testing.T) {
 			`'-768614336404564650y-8mon-9223372036854775808d-2562047h-47m-16s-854ms-775µs-808ns'`,
 			`'768614336404564650y7mon9223372036854775807d2562047h47m16s854ms775µs807ns'`},
 
+		// UUIDs
+		{`'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid`, `'ffffffff-ffff-ffff-ffff-fffffffffffe'`, valIsMax,
+			`'00000000-0000-0000-0000-000000000000'`, `'ffffffff-ffff-ffff-ffff-ffffffffffff'`},
+		{`'00000000-0000-0000-0000-000000000000'::uuid`, valIsMin, `'00000000-0000-0000-0000-000000000001'`,
+			`'00000000-0000-0000-0000-000000000000'`, `'ffffffff-ffff-ffff-ffff-ffffffffffff'`},
+		{`'ffffffff-ffff-ffff-0000-000000000000'::uuid`, `'ffffffff-ffff-fffe-ffff-ffffffffffff'`,
+			`'ffffffff-ffff-ffff-0000-000000000001'`, `'00000000-0000-0000-0000-000000000000'`,
+			`'ffffffff-ffff-ffff-ffff-ffffffffffff'`},
+		{`'00000000-0000-0000-ffff-ffffffffffff'::uuid`, `'00000000-0000-0000-ffff-fffffffffffe'`,
+			`'00000000-0000-0001-0000-000000000000'`, `'00000000-0000-0000-0000-000000000000'`,
+			`'ffffffff-ffff-ffff-ffff-ffffffffffff'`},
+
 		// NULL
 		{`NULL`, valIsMin, valIsMax, `NULL`, `NULL`},
 
