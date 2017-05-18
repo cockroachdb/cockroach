@@ -23,6 +23,8 @@ import (
 	"encoding/gob"
 	"fmt"
 	"math/rand"
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/net/context"
@@ -32,6 +34,7 @@ import (
 	"github.com/lightstep/lightstep-tracer-go"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	otext "github.com/opentracing/opentracing-go/ext"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 )
@@ -41,6 +44,20 @@ const Snowball = "sb"
 
 // maxLogsPerSpan limits the number of logs in a Span; use a comfortable limit.
 const maxLogsPerSpan = 1000
+
+// These constants are used to form keys to represent tracing context
+// information in carriers supporting opentracing.HTTPHeaders format.
+// These must be identical to what lightstep uses (to allow us to inject the
+// information into lightstep); see:
+//   github.com/lightstep/lightstep-tracer-go/basictracer/propagation_ot.go
+const (
+	prefixTracerState = "ot-tracer-"
+	prefixBaggage     = "ot-baggage-"
+
+	fieldNameTraceID = prefixTracerState + "traceid"
+	fieldNameSpanID  = prefixTracerState + "spanid"
+	fieldNameSampled = prefixTracerState + "sampled"
+)
 
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
 //
@@ -85,15 +102,43 @@ func (t *Tracer) isNoop() bool {
 	return !t.netTrace && t.lightstep == nil
 }
 
+// lightstepExtractIDsCarrier is used as a carrier for getLightstepSpanIDs.
+type lightstepExtractIDsCarrier struct {
+	traceID, spanID uint64
+}
+
+var _ opentracing.TextMapWriter = &lightstepExtractIDsCarrier{}
+
+// Set is part of the opentracing.TextMapWriter interface.
+func (l *lightstepExtractIDsCarrier) Set(key, val string) {
+	var err error
+	switch key {
+	case fieldNameTraceID:
+		l.traceID, err = strconv.ParseUint(val, 16, 64)
+	case fieldNameSpanID:
+		l.spanID, err = strconv.ParseUint(val, 16, 64)
+	default:
+		// Ignore all other keys.
+		return
+	}
+	if err != nil {
+		panic(err)
+	}
+}
+
+// getLightstepSpanIDs extracts the TraceID and SpanID from a lightstep context.
 func (t *Tracer) getLightstepSpanIDs(
 	spanCtx opentracing.SpanContext,
 ) (traceID uint64, spanID uint64) {
 	// Retrieve the trace metadata from lightstep.
-	carrier := &SpanContextCarrier{}
-	if err := t.lightstep.Inject(spanCtx, basictracer.Delegator, carrier); err != nil {
+	var carrier lightstepExtractIDsCarrier
+	if err := t.lightstep.Inject(spanCtx, opentracing.TextMap, &carrier); err != nil {
 		panic(fmt.Sprintf("error injecting lightstep context %s", err))
 	}
-	return carrier.TraceID, carrier.SpanID
+	if carrier.traceID == 0 || carrier.spanID == 0 {
+		panic(fmt.Sprintf("lightstep did not inject IDs: %d, %d", carrier.traceID, carrier.spanID))
+	}
+	return carrier.traceID, carrier.spanID
 }
 
 type recordableOption struct{}
@@ -111,53 +156,57 @@ func (recordableOption) Apply(*opentracing.StartSpanOptions) {}
 func (t *Tracer) StartSpan(
 	operationName string, opts ...opentracing.StartSpanOption,
 ) opentracing.Span {
-	// We don't use the StartSpanOption.Apply() pattern because it causes a heap
-	// allocation which we want to avoid in the noopSpan case (it shows up in
-	// profiles to the tune of 0.2% with read-only kv load). This pattern is
-	// pretty useless anyway because the members of StartSpanOptions don't allow
-	// for any extensibility.
+	if t.isNoop() {
+		// Fast paths to avoid the allocation of StartSpanOptions below when tracing
+		// is disabled: if we have no options or a single SpanReference (the common
+		// case) with a noop context, return a noop span now.
+		switch len(opts) {
+		case 0:
+			return &t.noopSpan
+		case 1:
+			if o, ok := opts[0].(opentracing.SpanReference); ok {
+				if _, noopCtx := o.ReferencedContext.(noopSpanContext); noopCtx {
+					return &t.noopSpan
+				}
+			}
+		}
+	}
 
-	var startTime time.Time
-	var tags map[string]interface{}
+	var sso opentracing.StartSpanOptions
+	var recordable bool
+	for _, o := range opts {
+		o.Apply(&sso)
+		if _, ok := o.(recordableOption); ok {
+			recordable = true
+		}
+	}
+
+	var hasParent bool
 	var parentType opentracing.SpanReferenceType
 	var parentCtx *spanContext
-	hasParent := false
-	recordable := false
 	var recordingGroup *spanGroup
 
-	// Decode the options.
-	for _, o := range opts {
-		switch o := o.(type) {
-		case opentracing.SpanReference:
-			if o.Type != opentracing.ChildOfRef && o.Type != opentracing.FollowsFromRef {
-				break
-			}
-			if _, noopCtx := o.ReferencedContext.(noopSpanContext); noopCtx {
-				break
-			}
-			hasParent = true
-			parentType = o.Type
-			parentCtx = o.ReferencedContext.(*spanContext)
-			if parentCtx.recordingGroup != nil {
-				recordingGroup = parentCtx.recordingGroup
-			} else if parentCtx.Baggage[Snowball] != "" {
-				// Automatically enable recording if we have the Snowball baggage item.
-				recordingGroup = new(spanGroup)
-			}
-			// TODO(radu): can we do something for multiple references?
-
-		case opentracing.StartTime:
-			startTime = time.Time(o)
-
-		case opentracing.Tags:
-			tags = o
-
-		case recordableOption:
-			recordable = true
-
-		default:
-			panic(fmt.Sprintf("unknown StartSpanOption %T", o))
+	for _, r := range sso.References {
+		if r.Type != opentracing.ChildOfRef && r.Type != opentracing.FollowsFromRef {
+			continue
 		}
+		if r.ReferencedContext == nil {
+			continue
+		}
+		if _, noopCtx := r.ReferencedContext.(noopSpanContext); noopCtx {
+			continue
+		}
+		hasParent = true
+		parentType = r.Type
+		parentCtx = r.ReferencedContext.(*spanContext)
+		if parentCtx.recordingGroup != nil {
+			recordingGroup = parentCtx.recordingGroup
+		} else if parentCtx.Baggage[Snowball] != "" {
+			// Automatically enable recording if we have the Snowball baggage item.
+			recordingGroup = new(spanGroup)
+		}
+		// TODO(radu): can we do something for multiple references?
+		break
 	}
 
 	// If tracing is disabled, the Recordable option wasn't passed, and we're not
@@ -170,7 +219,7 @@ func (t *Tracer) StartSpan(
 	s := &span{
 		tracer:    t,
 		operation: operationName,
-		startTime: startTime,
+		startTime: sso.StartTime,
 	}
 	if s.startTime.IsZero() {
 		s.startTime = time.Now()
@@ -184,11 +233,11 @@ func (t *Tracer) StartSpan(
 		// Create the shadow lightstep span.
 		var lsOpts []opentracing.StartSpanOption
 		// Replicate the options, using the lightstep context in the reference.
-		if !startTime.IsZero() {
-			lsOpts = append(lsOpts, opentracing.StartTime(startTime))
+		if !sso.StartTime.IsZero() {
+			lsOpts = append(lsOpts, opentracing.StartTime(sso.StartTime))
 		}
-		if tags != nil {
-			lsOpts = append(lsOpts, opentracing.Tags(tags))
+		if sso.Tags != nil {
+			lsOpts = append(lsOpts, opentracing.Tags(sso.Tags))
 		}
 		if hasParent {
 			if parentCtx.lightstep == nil {
@@ -246,11 +295,11 @@ func (t *Tracer) StartSpan(
 		}
 	}
 
-	// Set tags but only if they actually go somewhere (x/net/trace or lightstep).
+	for k, v := range sso.Tags {
+		s.SetTag(k, v)
+	}
+
 	if t.netTrace || t.lightstep != nil {
-		for k, v := range tags {
-			s.SetTag(k, v)
-		}
 		// Copy baggage items to tags so they show up in the Lightstep UI or x/net/trace.
 		for k, v := range s.mu.Baggage {
 			s.SetTag(k, v)
@@ -260,68 +309,98 @@ func (t *Tracer) StartSpan(
 	return s
 }
 
-var dummyTracer = basictracer.New(nil)
-
 // Inject is part of the opentracing.Tracer interface.
 func (t *Tracer) Inject(
 	osc opentracing.SpanContext, format interface{}, carrier interface{},
 ) error {
 	if _, noopCtx := osc.(noopSpanContext); noopCtx {
+		// Fast path when tracing is disabled. Extract will accept an empty map as a
+		// noop context.
 		return nil
 	}
-	sc := osc.(*spanContext)
-	if t.lightstep != nil {
-		// If using lightstep, serialize that context.
-		return t.lightstep.Inject(sc.lightstep, format, carrier)
+
+	// We only support the HTTPHeaders/TextMap format.
+	if format != opentracing.HTTPHeaders && format != opentracing.TextMap {
+		return opentracing.ErrUnsupportedFormat
 	}
-	// We use the Inject/Extract functionality of a dummy basictracer.
-	bc := basictracer.SpanContext{
-		TraceID: sc.TraceID,
-		SpanID:  sc.SpanID,
-		Baggage: sc.Baggage,
+
+	mapWriter, ok := carrier.(opentracing.TextMapWriter)
+	if !ok {
+		return opentracing.ErrInvalidCarrier
 	}
-	return dummyTracer.Inject(bc, format, carrier)
+
+	sc, ok := osc.(*spanContext)
+	if !ok {
+		return opentracing.ErrInvalidSpanContext
+	}
+
+	mapWriter.Set(fieldNameTraceID, strconv.FormatUint(sc.TraceID, 16))
+	mapWriter.Set(fieldNameSpanID, strconv.FormatUint(sc.SpanID, 16))
+	mapWriter.Set(fieldNameSampled, "true")
+
+	for k, v := range sc.Baggage {
+		mapWriter.Set(prefixBaggage+k, v)
+	}
+
+	return nil
 }
 
 // Extract is part of the opentracing.Tracer interface.
+// It always returns a valid context, even in error cases (this is assumed by the
+// grpc-opentracing interceptor).
 func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.SpanContext, error) {
-	if t.lightstep != nil {
-		// Extract the lightstep context. Note that lightstep uses basictracer
-		// underneath so things won't break even if one side is using lightstep and
-		// one isn't.
-		lightstepCtx, err := t.lightstep.Extract(format, carrier)
-		if err != nil {
-			return nil, err
-		}
+	// We only support the HTTPHeaders/TextMap format.
+	if format != opentracing.HTTPHeaders && format != opentracing.TextMap {
+		return noopSpanContext{}, opentracing.ErrUnsupportedFormat
+	}
 
-		sc := &spanContext{lightstep: lightstepCtx}
-		sc.TraceID, sc.SpanID = t.getLightstepSpanIDs(lightstepCtx)
-		lightstepCtx.ForeachBaggageItem(func(k, v string) bool {
-			if sc.Baggage == nil {
-				sc.Baggage = make(map[string]string)
+	mapReader, ok := carrier.(opentracing.TextMapReader)
+	if !ok {
+		return noopSpanContext{}, opentracing.ErrInvalidCarrier
+	}
+
+	var sc spanContext
+
+	err := mapReader.ForeachKey(func(k, v string) error {
+		switch k = strings.ToLower(k); k {
+		case fieldNameTraceID:
+			var err error
+			sc.TraceID, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return opentracing.ErrSpanContextCorrupted
 			}
-			sc.Baggage[k] = v
-			return true
-		})
-		return sc, nil
-	}
-
-	// We use the Inject/Extract functionality of a dummy basictracer.
-	extracted, err := dummyTracer.Extract(format, carrier)
+		case fieldNameSpanID:
+			var err error
+			sc.SpanID, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return opentracing.ErrSpanContextCorrupted
+			}
+		default:
+			if strings.HasPrefix(k, prefixBaggage) {
+				if sc.Baggage == nil {
+					sc.Baggage = make(map[string]string)
+				}
+				sc.Baggage[strings.TrimPrefix(k, prefixBaggage)] = v
+			}
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, err
+		return noopSpanContext{}, err
 	}
-	bc := extracted.(basictracer.SpanContext)
-	if bc.TraceID == 0 {
+	if sc.TraceID == 0 && sc.SpanID == 0 {
 		return noopSpanContext{}, nil
 	}
-	return &spanContext{
-		spanMeta: spanMeta{
-			TraceID: bc.TraceID,
-			SpanID:  bc.SpanID,
-		},
-		Baggage: bc.Baggage,
-	}, nil
+
+	if t.lightstep != nil {
+		// Extract the lightstep context. For this to work, our key-value "schema"
+		// must match lighstep's exactly (otherwise we get an error here).
+		sc.lightstep, err = t.lightstep.Extract(format, carrier)
+		if err != nil {
+			return noopSpanContext{}, err
+		}
+	}
+	return &sc, nil
 }
 
 // FinishSpan closes the given span (if not nil). It is a convenience wrapper
@@ -423,6 +502,11 @@ func SetEnabled(enabled bool) func() {
 	}
 }
 
+func init() {
+	// The grpc-opentracing interceptors use SpanKindEnum as tag values.
+	gob.Register(otext.SpanKindEnum(""))
+}
+
 // EncodeRawSpan encodes a raw span into bytes, using the given dest slice
 // as a buffer.
 func EncodeRawSpan(rawSpan *basictracer.RawSpan, dest []byte) ([]byte, error) {
@@ -517,28 +601,6 @@ func StartSnowballTrace(
 	}
 	StartRecording(span)
 	span.SetBaggageItem(Snowball, "1")
-	return opentracing.ContextWithSpan(ctx, span), span, nil
-}
-
-// JoinRemoteTrace takes a Context and returns a derived one with a Span that's
-// a child of a remote span carried over by carrier. The caller is responsible
-// for Finish()ing this span.
-//
-// If the trace is a "snowball trace", then the created span will have recording
-// enabled (GetRecording() can be used).
-func JoinRemoteTrace(
-	ctx context.Context, tr opentracing.Tracer, carrier *SpanContextCarrier, opName string,
-) (context.Context, opentracing.Span, error) {
-	if tr == nil {
-		return ctx, nil, errors.Errorf("JoinRemoteTrace called with nil Tracer")
-	}
-
-	wireContext, err := tr.Extract(basictracer.Delegator, carrier)
-	if err != nil {
-		return ctx, nil, err
-	}
-
-	span := tr.StartSpan(opName, opentracing.FollowsFrom(wireContext))
 	return opentracing.ContextWithSpan(ctx, span), span, nil
 }
 

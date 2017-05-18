@@ -115,7 +115,7 @@ func TestExplainTrace(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer rows.Close()
-				expParts := []string{"explain trace", "grpcTransport SendNext", "node.Batch"}
+				expParts := []string{"explain trace", "grpcTransport SendNext", "/cockroach.roachpb.Internal/Batch"}
 				var parts []string
 
 				pretty := rowsToStrings(rows)

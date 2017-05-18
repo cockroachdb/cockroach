@@ -26,6 +26,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	lightstep "github.com/lightstep/lightstep-tracer-go"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
@@ -229,17 +230,22 @@ func TestTracerInjectExtract(t *testing.T) {
 	if !IsNoopSpan(noop1) {
 		t.Fatalf("expected noop span: %+v", noop1)
 	}
-	carrier := &SpanContextCarrier{}
-	if err := tr.Inject(noop1.Context(), basictracer.Delegator, carrier); err != nil {
+	carrier := make(opentracing.HTTPHeadersCarrier)
+	if err := tr.Inject(noop1.Context(), opentracing.HTTPHeaders, carrier); err != nil {
 		t.Fatal(err)
 	}
-	if carrier.TraceID != 0 {
+	if len(carrier) != 0 {
 		t.Errorf("noop span has carrier: %+v", carrier)
 	}
-	_, noop2, err := JoinRemoteTrace(context.Background(), tr2, carrier, "remote op")
+
+	wireContext, err := tr2.Extract(opentracing.HTTPHeaders, carrier)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, noopCtx := wireContext.(noopSpanContext); !noopCtx {
+		t.Errorf("expected noop context: %v", wireContext)
+	}
+	noop2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
 	if !IsNoopSpan(noop2) {
 		t.Fatalf("expected noop span: %+v", noop2)
 	}
@@ -253,15 +259,17 @@ func TestTracerInjectExtract(t *testing.T) {
 	StartRecording(s1)
 	s1.SetBaggageItem(Snowball, "1")
 
-	carrier = &SpanContextCarrier{}
-	if err := tr.Inject(s1.Context(), basictracer.Delegator, carrier); err != nil {
+	carrier = make(opentracing.HTTPHeadersCarrier)
+	if err := tr.Inject(s1.Context(), opentracing.HTTPHeaders, carrier); err != nil {
 		t.Fatal(err)
 	}
 
-	_, s2, err := JoinRemoteTrace(context.Background(), tr2, carrier, "remote op")
+	wireContext, err = tr2.Extract(opentracing.HTTPHeaders, carrier)
 	if err != nil {
 		t.Fatal(err)
 	}
+	s2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
+
 	// Compare TraceIDs
 	trace1 := s1.Context().(*spanContext).TraceID
 	trace2 := s2.Context().(*spanContext).TraceID
@@ -303,4 +311,61 @@ func TestTracerInjectExtract(t *testing.T) {
 		span remote op:
 			x: 1
 	`)
+}
+
+func TestLighstepContext(t *testing.T) {
+	lsTr := lightstep.NewTracer(lightstep.Options{
+		AccessToken: "invalid",
+		Collector: lightstep.Endpoint{
+			Host:      "127.0.0.1",
+			Port:      65535,
+			Plaintext: true,
+		},
+		MaxLogsPerSpan: maxLogsPerSpan,
+		UseGRPC:        true,
+	})
+	tr := newTracer(false /* netTrace */, lsTr)
+	s := tr.StartSpan("test")
+
+	const testBaggageKey = "test-baggage"
+	const testBaggageVal = "test-val"
+	s.SetBaggageItem(testBaggageKey, testBaggageVal)
+
+	carrier := make(opentracing.HTTPHeadersCarrier)
+	if err := tr.Inject(s.Context(), opentracing.HTTPHeaders, carrier); err != nil {
+		t.Fatal(err)
+	}
+	traceID, spanID := tr.getLightstepSpanIDs(s.(*span).lightstep.Context())
+	if traceID == 0 || spanID == 0 {
+		t.Errorf("invalid trace/span IDs: %d %d", traceID, spanID)
+	}
+
+	// Extract also extracts the context in lightstep; this will fail if the
+	// contexts are not compatible.
+	wireContext, err := tr.Extract(opentracing.HTTPHeaders, carrier)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s2 := tr.StartSpan("child", opentracing.FollowsFrom(wireContext))
+	s2Ctx := s2.(*span).lightstep.Context()
+
+	traceID2, spanID2 := tr.getLightstepSpanIDs(s2Ctx)
+
+	if traceID2 != traceID || spanID2 == 0 {
+		t.Errorf("invalid child trace/span IDs: %d %d", traceID2, spanID2)
+	}
+
+	// Verify that the baggage is correct in both the tracer context and in the
+	// lightstep context.
+	for i, spanCtx := range []opentracing.SpanContext{s2.Context(), s2Ctx} {
+		baggage := make(map[string]string)
+		spanCtx.ForeachBaggageItem(func(k, v string) bool {
+			baggage[k] = v
+			return true
+		})
+		if len(baggage) != 1 || baggage[testBaggageKey] != testBaggageVal {
+			t.Errorf("%d: expected baggage %s=%s, got %v", i, testBaggageKey, testBaggageVal, baggage)
+		}
+	}
 }
