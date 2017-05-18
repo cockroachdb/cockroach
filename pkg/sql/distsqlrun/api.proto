@@ -24,7 +24,6 @@ import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/sql/distsqlrun/data.proto";
 import "cockroach/pkg/sql/distsqlrun/processors.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";
-import "cockroach/pkg/util/tracing/span_context_carrier.proto";
 import "gogoproto/gogo.proto";
 
 message SetupFlowRequest {
@@ -34,8 +33,9 @@ message SetupFlowRequest {
   // versions, up to its own version. See server.go for more details.
   optional uint32 version = 5 [(gogoproto.nullable) = false];
 
-  // If set, the context of an active tracing span.
-  optional util.tracing.SpanContextCarrier trace_context = 2;
+  // trace_context is no longer used.
+  reserved 2;
+
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 
   optional EvalContext evalContext = 6 [(gogoproto.nullable) = false];
