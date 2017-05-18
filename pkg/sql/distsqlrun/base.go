@@ -29,9 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	basictracer "github.com/opentracing/basictracer-go"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type joinType int
@@ -595,22 +592,6 @@ func (rb *RowBuffer) ConsumerClosed() {
 	if rb.args.OnConsumerClosed != nil {
 		rb.args.OnConsumerClosed(rb)
 	}
-}
-
-// SetFlowRequestTrace populates req.Trace with the context of the current Span
-// in the context (if any).
-func SetFlowRequestTrace(ctx context.Context, req *SetupFlowRequest) error {
-	sp := opentracing.SpanFromContext(ctx)
-	if sp == nil || tracing.IsNoopSpan(sp) {
-		return nil
-	}
-	tracer := sp.Tracer()
-	var traceContext tracing.SpanContextCarrier
-	if err := tracer.Inject(sp.Context(), basictracer.Delegator, &traceContext); err != nil {
-		return err
-	}
-	req.TraceContext = &traceContext
-	return nil
 }
 
 // String implements fmt.Stringer.

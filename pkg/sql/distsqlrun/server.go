@@ -125,7 +125,10 @@ func (ds *ServerImpl) Start() {
 // Note: unless an error is returned, the returned context contains a span that
 // must be finished through Flow.Cleanup.
 func (ds *ServerImpl) setupFlow(
-	ctx context.Context, req *SetupFlowRequest, syncFlowConsumer RowReceiver,
+	ctx context.Context,
+	spanCtx opentracing.SpanContext,
+	req *SetupFlowRequest,
+	syncFlowConsumer RowReceiver,
 ) (context.Context, *Flow, error) {
 	if req.Version < MinAcceptedVersion ||
 		req.Version > Version {
@@ -136,29 +139,20 @@ func (ds *ServerImpl) setupFlow(
 		log.Warning(ctx, err)
 		return ctx, nil, err
 	}
-
-	const opName = "flow"
-	var sp opentracing.Span
-	if req.TraceContext == nil {
-		sp = ds.Tracer.StartSpan(opName)
-		ctx = opentracing.ContextWithSpan(ctx, sp)
-	} else {
-		var err error
-		// TODO(andrei): in the following call we're ignoring the returned
-		// recordedTrace. Figure out how to return the recording to the remote
-		// caller after the flow is done.
-		ctx, _, err = tracing.JoinRemoteTrace(ctx, ds.Tracer, req.TraceContext, opName)
-		if err != nil {
-			sp = ds.Tracer.StartSpan(opName)
-			ctx = opentracing.ContextWithSpan(ctx, sp)
-			log.Warningf(ctx, "failed to join a remote trace: %s", err)
-		}
-	}
-
 	nodeID := ds.ServerConfig.NodeID.Get()
 	if nodeID == 0 {
 		return nil, nil, errors.Errorf("setupFlow called before the NodeID was resolved")
 	}
+
+	const opName = "flow"
+	var sp opentracing.Span
+	if spanCtx == nil {
+		sp = ds.Tracer.StartSpan(opName)
+	} else {
+		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
+		sp = ds.Tracer.StartSpan(opName, opentracing.FollowsFrom(spanCtx))
+	}
+	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	monitor := mon.MakeMonitor("flow",
 		ds.Counter, ds.Hist, -1 /* use default block size */, noteworthyMemoryUsageBytes)
@@ -204,7 +198,7 @@ func (ds *ServerImpl) setupFlow(
 
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
 	flowCtx.AddLogTagStr("f", f.id.Short())
-	if err := f.setupFlow(ctx, &req.Flow); err != nil {
+	if err := f.setup(ctx, &req.Flow); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)
 		ctx = opentracing.ContextWithSpan(ctx, nil)
@@ -221,7 +215,11 @@ func (ds *ServerImpl) setupFlow(
 func (ds *ServerImpl) SetupSyncFlow(
 	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
 ) (context.Context, *Flow, error) {
-	return ds.setupFlow(ds.AnnotateCtx(ctx), req, output)
+	var spanCtx opentracing.SpanContext
+	if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
+		spanCtx = parentSp.Context()
+	}
+	return ds.setupFlow(ds.AnnotateCtx(ctx), spanCtx, req, output)
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
@@ -256,11 +254,18 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 }
 
 // SetupFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) SetupFlow(_ context.Context, req *SetupFlowRequest) (*SimpleResponse, error) {
+func (ds *ServerImpl) SetupFlow(
+	ctx context.Context, req *SetupFlowRequest,
+) (*SimpleResponse, error) {
+	var spanCtx opentracing.SpanContext
+	if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
+		spanCtx = parentSp.Context()
+	}
+
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
-	ctx := ds.AnnotateCtx(context.TODO())
-	ctx, f, err := ds.setupFlow(ctx, req, nil)
+	ctx = ds.AnnotateCtx(context.Background())
+	ctx, f, err := ds.setupFlow(ctx, spanCtx, req, nil)
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}

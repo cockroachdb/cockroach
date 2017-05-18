@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestCloneProto(t *testing.T) {
@@ -50,7 +49,6 @@ func TestCloneProto(t *testing.T) {
 		{&config.ZoneConfig{}, false},
 		{&gossip.Info{}, false},
 		{&gossip.BootstrapInfo{}, false},
-		{&tracing.SpanContextCarrier{}, false},
 		{&sqlbase.IndexDescriptor{}, false},
 		{&roachpb.SplitTrigger{}, false},
 		{&roachpb.Value{}, false},

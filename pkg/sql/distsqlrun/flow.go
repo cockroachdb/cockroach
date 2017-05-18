@@ -234,7 +234,7 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 	return newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
 }
 
-func (f *Flow) setupFlow(ctx context.Context, spec *FlowSpec) error {
+func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 	// First step: setup the input synchronizers for all processors.
 	inputSyncs := make([][]RowSource, len(spec.Processors))
 	for pIdx, ps := range spec.Processors {

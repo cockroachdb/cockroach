@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -116,6 +117,11 @@ func NewServer(ctx *Context) *grpc.Server {
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
+	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
+		opts = append(opts, grpc.UnaryInterceptor(
+			otgrpc.OpenTracingServerInterceptor(tracer),
+		))
+	}
 	s := grpc.NewServer(opts...)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              ctx.LocalClock,
@@ -135,6 +141,7 @@ type connMeta struct {
 type Context struct {
 	*base.Config
 
+	AmbientCtx   log.AmbientContext
 	LocalClock   *hlc.Clock
 	breakerClock breakerClock
 	Stopper      *stop.Stopper
@@ -166,6 +173,7 @@ func NewContext(
 		panic("nil clock is forbidden")
 	}
 	ctx := &Context{
+		AmbientCtx: ambient,
 		Config:     baseCtx,
 		LocalClock: hlcClock,
 		breakerClock: breakerClock{
@@ -294,6 +302,12 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 					}
 					return dialer.Dial("tcp", addr)
 				},
+			))
+		}
+
+		if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
+			dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(
+				otgrpc.OpenTracingClientInterceptor(tracer),
 			))
 		}
 
