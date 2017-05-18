@@ -59,6 +59,23 @@ func RecoverAndReportPanic(ctx context.Context) {
 	}
 }
 
+// A Safe panic can be reported verbatim, i.e. does not leak information.
+//
+// TODO(dt): flesh out, see #15892.
+type Safe struct {
+	V interface{}
+}
+
+func format(r interface{}) string {
+	switch wrapped := r.(type) {
+	case *Safe:
+		return fmt.Sprintf("%+v", wrapped.V)
+	case Safe:
+		return fmt.Sprintf("%+v", wrapped.V)
+	}
+	return fmt.Sprintf("%T", r)
+}
+
 // ReportPanic reports a panic has occurred on the real stderr.
 func ReportPanic(ctx context.Context, r interface{}, depth int) {
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
@@ -71,7 +88,8 @@ func ReportPanic(ctx context.Context, r interface{}, depth int) {
 	// We capture the full stacktrace below, so we only need the short file and
 	// line here help uniquely identify the error.
 	file, line, _ := caller.Lookup(depth + 3)
-	reportable := fmt.Sprintf("%T %s:%d", r, filepath.Base(file), line)
+
+	reportable := fmt.Sprintf("%s %s:%d", format(r), filepath.Base(file), line)
 	sendCrashReport(ctx, reportable, depth+3)
 
 	// Ensure that the logs are flushed before letting a panic
