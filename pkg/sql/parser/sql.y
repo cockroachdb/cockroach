@@ -689,7 +689,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
-%token <str>   UPDATE UPSERT USER USERS USING
+%token <str>   UPDATE UPSERT USER USERS USING UUID
 
 %token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
 
@@ -3403,6 +3403,10 @@ simple_typename:
   {
     $$.val = intColTypeSmallSerial
   }
+| UUID
+  {
+    $$.val = uuidColTypeUUID
+  }
 | BIGSERIAL
   {
     $$.val = intColTypeBigSerial
@@ -5382,6 +5386,7 @@ col_name_keyword:
 | TIMESTAMPTZ
 | TREAT
 | TRIM
+| UUID
 | VALUES
 | VARCHAR
 
