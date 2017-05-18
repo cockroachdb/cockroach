@@ -832,6 +832,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT * FROM pg_catalog.pg_class WHERE relnamespace = $1": {
 			baseTest.SetArgs(1),
 		},
+		"SELECT $1::UUID": {
+			baseTest.SetArgs("63616665-6630-3064-6465-616462656562").Results("63616665-6630-3064-6465-616462656562"),
+		},
 
 		// TODO(jordan): blocked on #13651
 		//"SELECT $1::INT[]": {
