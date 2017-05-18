@@ -32,6 +32,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 const (
@@ -855,7 +856,7 @@ const (
 	Duration
 	True
 	False
-
+	UUID
 	SentinelType Type = 15 // Used in the Value encoding.
 )
 
@@ -1225,6 +1226,13 @@ func EncodeDurationValue(appendTo []byte, colID uint32, d duration.Duration) []b
 	return EncodeNonsortingVarint(appendTo, d.Nanos)
 }
 
+// EncodeUUIDValue encodes a uuid.UUID value, appends it to the supplied buffer,
+// and returns the final buffer.
+func EncodeUUIDValue(appendTo []byte, colID uint32, u uuid.UUID) []byte {
+	appendTo = encodeValueTag(appendTo, colID, UUID)
+	return append(appendTo, u.GetBytes()...)
+}
+
 // DecodeValueTag decodes a value encoded by encodeValueTag, used as a prefix in
 // each of the other EncodeFooValue methods.
 //
@@ -1381,6 +1389,19 @@ func DecodeDurationValue(b []byte) (remaining []byte, d duration.Duration, err e
 	return b, duration.Duration{Months: months, Days: days, Nanos: nanos}, nil
 }
 
+// DecodeUUIDValue decodes a value encoded by EncodeUUIDValue.
+func DecodeUUIDValue(b []byte) (remaining []byte, u uuid.UUID, err error) {
+	b, err = decodeValueTypeAssert(b, UUID)
+	if err != nil {
+		return b, uuid.UUID{}, err
+	}
+	u, err = uuid.FromBytes(b[:uuid.Length])
+	if err != nil {
+		return b, uuid.UUID{}, err
+	}
+	return b[uuid.Length:], u, nil
+}
+
 func decodeValueTypeAssert(b []byte, expected Type) ([]byte, error) {
 	_, dataOffset, _, typ, err := DecodeValueTag(b)
 	if err != nil {
@@ -1433,6 +1454,8 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 	case Duration:
 		n, err := getMultiNonsortingVarintLen(b, 3)
 		return typeOffset, dataOffset + n, err
+	case UUID:
+		return typeOffset, dataOffset + uuid.Length, err
 	default:
 		return 0, 0, errors.Errorf("unknown type %s", typ)
 	}

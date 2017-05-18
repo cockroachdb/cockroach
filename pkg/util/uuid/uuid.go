@@ -19,8 +19,13 @@ package uuid
 import (
 	"encoding/binary"
 
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
 )
+
+// Length is the number of bytes in a UUID.
+const Length = 16
 
 // UUID is a thin wrapper around "github.com/satori/go.uuid".UUID that can be
 // used as a gogo/protobuf customtype.
@@ -51,6 +56,11 @@ var _ = (UUID).Bytes
 // GetBytes returns the UUID as a byte slice.
 func (u UUID) GetBytes() []byte {
 	return u.UUID.Bytes()
+}
+
+// ToUint128 returns the UUID as a Uint128.
+func (u UUID) ToUint128() uint128.Uint128 {
+	return uint128.FromBytes(u.GetBytes())
 }
 
 // Size returns the marshalled size of u, in bytes.
@@ -96,4 +106,14 @@ func FromBytes(input []byte) (UUID, error) {
 func FromString(input string) (UUID, error) {
 	u, err := uuid.FromString(input)
 	return UUID{u}, err
+}
+
+// FromUint128 delegates to "github.com/satori/go.uuid".FromBytes and wraps the
+// result in a UUID.
+func FromUint128(input uint128.Uint128) UUID {
+	u, err := uuid.FromBytes(input.GetBytes())
+	if err != nil {
+		panic(errors.Wrap(err, "should never happen with 16 byte slice"))
+	}
+	return UUID{u}
 }

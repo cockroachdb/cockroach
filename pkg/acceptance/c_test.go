@@ -31,7 +31,7 @@ func TestDockerC(t *testing.T) {
 
 	ctx := context.Background()
 	t.Run("Success", func(t *testing.T) {
-		testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11", 1)})
+		testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12", 1)})
 	})
 	t.Run("Fail", func(t *testing.T) {
 		testDockerFail(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)})
@@ -285,6 +285,13 @@ int main(int argc, char const *argv[]) {
 		return 1;
 	}
 
+	char uuidBytes[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+	PGuuid uuid = uuidBytes;
+	if (!PQputf(param, "%uuid", uuid)) {
+		fprintf(stderr, "ERROR PQputf(uuid): %s\n", PQgeterror());
+		return 1;
+	}
+
 	PGint8 i;
 	PGarray arr;
 
@@ -448,6 +455,11 @@ int main(int argc, char const *argv[]) {
 				return 1;
 			}
 
+			PGuuid recvuuid;
+			if (!PQgetf(result, 0, "%uuid", i++, &recvuuid)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(uuid): %s\n", resultFormat, PQgeterror());
+				return 1;
+			}
 
 			// Libpqtypes doesn't support text array decoding.
 			if (resultFormat == 1) {
