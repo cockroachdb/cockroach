@@ -988,6 +988,35 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				if !status.lease.OwnedBy(r.store.StoreID()) {
 					_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(status.lease.Replica.StoreID)
 					if !stillMember {
+						// This would be the situation in which the lease holder gets removed when
+						// holding the lease, or in which a lease request erroneously gets accepted
+						// for a replica that is not in the replica set. Neither of the two can
+						// happen since appropriate mechanisms have been added:
+						//
+						// 1. Only the lease holder (at the time) schedules removal of a replica,
+						// but the lease can change hands and so the situation in which a follower
+						// coordinates a replica removal of the (new) lease holder is possible (if
+						// unlikely) in practice. In this situation, the new lease holder would at
+						// some point be asked to propose the replica change's EndTransaction to
+						// Raft. A check has been added that prevents proposals that amount to the
+						// removal of the proposer's (and hence lease holder's) Replica, preventing
+						// this scenario.
+						//
+						// 2. A lease is accepted for a Replica that has been removed. Without
+						// precautions, this could happen because lease requests are special in
+						// that they are the only command that is proposed on a follower (other
+						// commands may be proposed from followers, but not successfully so). For
+						// all proposals, processRaftCommand checks that their ProposalLease is
+						// compatible with the active lease for the log position. For commands
+						// proposed on the lease holder, the command queue then serializes
+						// everything. But lease requests get created on followers based on their
+						// local state and thus without being sequenced through the command queue.
+						// Thus a recently removed follower (unaware of its own removal) could
+						// submit a proposal for the lease (correctly using as a ProposerLease the
+						// last active lease), and would receive it given the up-to-date
+						// ProposerLease. Hence, an extra check is in order: processRaftCommand
+						// makes sure that lease requests for a replica not in the descriptor are
+						// bounced.
 						log.Fatalf(ctx, "lease %s owned by replica %+v that no longer exists",
 							status.lease, status.lease.Replica)
 					}
@@ -1092,9 +1121,9 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 							}
 
 							// Getting a LeaseRejectedError back means someone else got there
-							// first, or the lease request was somehow invalid due to a
-							// to a concurrent change. That concurrent change could have been
-							// that this replica was removed, so check for that case before
+							// first, or the lease request was somehow invalid due to a concurrent
+							// change. That concurrent change could have been that this replica was
+							// removed (see processRaftCommand), so check for that case before
 							// falling back to a NotLeaseHolderError.
 							var err error
 							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
@@ -3546,7 +3575,7 @@ func (r *Replica) processRaftCommand(
 			forcedErr = roachpb.NewError(nlhe)
 		} else {
 			// For lease requests we return a special error that
-			// replica.RedirectOnOrAcquireLease() understands. Note that these
+			// redirectOnOrAcquireLease() understands. Note that these
 			// requests don't go through the DistSender.
 			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
@@ -3554,11 +3583,19 @@ func (r *Replica) processRaftCommand(
 			})
 		}
 	} else if isLeaseRequest {
-		// Lease commands are ignored by the counter (and their MaxLeaseIndex
-		// is ignored). This makes sense since lease commands are proposed by
-		// anyone, so we can't expect a coherent MaxLeaseIndex. Also, lease
-		// proposals are often replayed, so not making them update the counter
-		// makes sense from a testing perspective.
+		// Lease commands are ignored by the counter (and their MaxLeaseIndex is ignored). This
+		// makes sense since lease commands are proposed by anyone, so we can't expect a coherent
+		// MaxLeaseIndex. Also, lease proposals are often replayed, so not making them update the
+		// counter makes sense from a testing perspective.
+		//
+		// However, leases get special vetting to make sure we don't give one to a replica that was
+		// since removed (see #15385 and a comment in redirectOnOrAcquireLease).
+		if _, ok := r.mu.state.Desc.GetReplicaDescriptor(requestedLease.Replica.StoreID); !ok {
+			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
+				Existing:  *r.mu.state.Lease,
+				Requested: requestedLease,
+			})
+		}
 	} else if r.mu.state.LeaseAppliedIndex < raftCmd.MaxLeaseIndex {
 		// The happy case: the command is applying at or ahead of the minimal
 		// permissible index. It's ok if it skips a few slots (as can happen
