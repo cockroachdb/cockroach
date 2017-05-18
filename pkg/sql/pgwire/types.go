@@ -133,6 +133,10 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.putInt32(int32(len(result)))
 		b.write(result)
 
+	case *parser.DUuid:
+		b.putInt32(36)
+		b.writeString(v.UUID.String())
+
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
 
@@ -301,6 +305,10 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 	case *parser.DBytes:
 		b.putInt32(int32(len(*v)))
 		b.write([]byte(*v))
+
+	case *parser.DUuid:
+		b.putInt32(16)
+		b.write(v.GetBytes())
 
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
