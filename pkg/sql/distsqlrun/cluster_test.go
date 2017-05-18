@@ -199,16 +199,6 @@ func TestClusterFlow(t *testing.T) {
 		},
 	}
 
-	if err := SetFlowRequestTrace(ctx, req1); err != nil {
-		t.Fatal(err)
-	}
-	if err := SetFlowRequestTrace(ctx, req2); err != nil {
-		t.Fatal(err)
-	}
-	if err := SetFlowRequestTrace(ctx, req3); err != nil {
-		t.Fatal(err)
-	}
-
 	var clients []DistSQLClient
 	for i := 0; i < 3; i++ {
 		s := tc.Server(i)
