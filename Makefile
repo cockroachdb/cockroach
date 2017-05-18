@@ -129,11 +129,7 @@ endif
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
 
 .DEFAULT_GOAL := all
-.PHONY: all
-all: build test lint
-
-.PHONY: short
-short: build testshort lintshort
+all: build
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 
@@ -283,6 +279,13 @@ clean: clean-c-deps
 .PHONY: protobuf
 protobuf:
 	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
+
+# pre-push locally runs most of the checks CI will run. Notably, it doesn't run
+# the acceptance tests.
+.PHONY: pre-push
+pre-push: generate lint test
+	$(MAKE) -C $(REPO_ROOT)/pkg/ui lint test
+	! git status --porcelain | read || (git status; git --no-pager diff -a 1>&2; exit 1)
 
 # archive builds a source tarball out of this repository. Files in the special
 # directory build/archive/contents are inserted directly into $(ARCHIVE_BASE).
