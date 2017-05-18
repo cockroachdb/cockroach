@@ -270,6 +270,7 @@ var keywords = map[string]int{
 	"USER":                      USER,
 	"USERS":                     USERS,
 	"USING":                     USING,
+	"UUID":                      UUID,
 	"VALID":                     VALID,
 	"VALIDATE":                  VALIDATE,
 	"VALUE":                     VALUE,
