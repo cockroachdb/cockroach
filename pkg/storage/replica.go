@@ -1345,7 +1345,15 @@ func (r *Replica) assertStateRLocked(reader engine.Reader) {
 		log.Fatal(ctx, err)
 	}
 	if !reflect.DeepEqual(diskState, r.mu.state) {
-		log.Fatalf(ctx, "on-disk and in-memory state diverged:\n%s", pretty.Diff(diskState, r.mu.state))
+		// The roundabout way of printing here is to expose this information in sentry.io.
+		//
+		// TODO(dt): expose properly once #15892 is addressed.
+		log.Errorf(ctx, "on-disk and in-memory state diverged:\n%s", pretty.Diff(diskState, r.mu.state))
+		r.mu.state.Desc, diskState.Desc = nil, nil
+		log.Fatal(
+			ctx, log.Safe{
+				V: fmt.Sprintf("on-disk and in-memory state diverged:\n%s", pretty.Diff(diskState, r.mu.state)),
+			})
 	}
 }
 
