@@ -193,8 +193,8 @@ bench: BENCHES := .
 bench: TESTS := -
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
-.PHONY: test testshort testrace testlogic bench
-test testshort testrace bench: gotestdashi
+.PHONY: check test testshort testrace testlogic bench
+check test testshort testrace bench: gotestdashi
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
@@ -271,13 +271,6 @@ lint: gotestdashi
 lintshort: override TAGS += lint
 lintshort: gotestdashi
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
-
-.PHONY: check checkshort
-check checkshort:
-	@# TODO(benesch): make this target an alias for the `test` target.
-	@echo 'To adhere to convention, `make check` will soon be an alias for `make test`.' >&2
-	@echo 'The linters have moved to `make lint` and `make lintshort`.' >&2
-	@false
 
 .PHONY: clean
 clean: clean-c-deps

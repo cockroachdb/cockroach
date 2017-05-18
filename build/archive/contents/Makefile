@@ -1,3 +1,3 @@
-.PHONY: all build buildoss install test
-all build buildoss install test:
+.PHONY: all build buildoss check install test
+all build buildoss check install test:
 	$(MAKE) -C src/github.com/cockroachdb/cockroach $@
