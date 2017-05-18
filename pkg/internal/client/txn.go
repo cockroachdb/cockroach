@@ -980,7 +980,7 @@ func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
 // the txn. If the error is not a RetryableTxnError, then this is a no-op. For a
 // retryable error, the Transaction proto is either initialized with the updated
 // proto from the error, or a new Transaction proto is initialized.
-// This needs to be called when a SQL hits a retryable error outside of the
+// This needs to be called when a SQL statement hits a retryable error outside of the
 // TxnCoordSender, like in distSQL or retryable errors in SQL logic.
 func (txn *Txn) UpdateStateOnRetryableErr(ctx context.Context, pErr roachpb.Error) {
 	txn.mu.Lock()
