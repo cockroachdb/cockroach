@@ -112,9 +112,13 @@ executable will be in your current directory and can be run as shown in the
   not point to a specific package; those commits may begin with "*:" or "all:"
   to indicate their reach.
 
-+ Run the test suite locally:
++ Run the linters, code generators, and unit test suites locally:
 
-  `make generate lint test testrace`
+  ```
+  make pre-push
+  ````
+
+  This will take several minutes.
 
 + When you’re ready for review, groom your work: each commit should pass tests
   and contain a substantial (but not overwhelming) unit of work. You may also
