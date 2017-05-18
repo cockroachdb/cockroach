@@ -170,3 +170,16 @@ SELECT generate_series(1, 3) + generate_series(1, 3)
 
 query error pq: column name "generate_series" not found
 SELECT generate_series(1, 3) FROM t WHERE generate_series > 3
+
+# Regressions for #15900: ensure that null parameters to generate_series don't
+# cause issues.
+
+query T
+SELECT * from generate_series(1, (select * from generate_series(1, 0)))
+----
+
+# The following query is designed to produce a null array argument to unnest
+# in a way that the type system can't detect before evaluation.
+query T
+SELECT unnest((select current_schemas((select isnan((select round(3.4, (select generate_series(1, 0)))))))));
+----
