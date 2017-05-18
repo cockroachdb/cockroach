@@ -199,6 +199,10 @@ func (expr *ExistsExpr) Walk(v Visitor) Expr {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *FuncExpr) CopyNode() *FuncExpr {
 	exprCopy := *expr
+	if expr.WindowDef != nil {
+		windowDefCopy := *expr.WindowDef
+		exprCopy.WindowDef = &windowDefCopy
+	}
 	exprCopy.Exprs = append(Exprs(nil), exprCopy.Exprs...)
 	if windowDef := exprCopy.WindowDef; windowDef != nil {
 		windowDef.Partitions = append(Exprs(nil), windowDef.Partitions...)
