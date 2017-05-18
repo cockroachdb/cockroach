@@ -284,6 +284,10 @@ clean: clean-c-deps
 protobuf:
 	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
 
+.PHONY: ui
+ui:
+	$(MAKE) -C $(REPO_ROOT)/pkg/ui
+
 # archive builds a source tarball out of this repository. Files in the special
 # directory build/archive/contents are inserted directly into $(ARCHIVE_BASE).
 # All other files in the repository are inserted into the archive with prefix
