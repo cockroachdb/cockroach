@@ -191,7 +191,8 @@ type multiTestContext struct {
 	clock       *hlc.Clock
 	rpcContext  *rpc.Context
 
-	nodeIDtoAddr map[roachpb.NodeID]net.Addr
+	nodeIDtoAddrMu *syncutil.RWMutex
+	nodeIDtoAddr   map[roachpb.NodeID]net.Addr
 
 	transport *storage.RaftTransport
 
@@ -223,9 +224,9 @@ type multiTestContext struct {
 }
 
 func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
-	m.mu.RLock()
+	m.nodeIDtoAddrMu.RLock()
 	addr, ok := m.nodeIDtoAddr[nodeID]
-	m.mu.RUnlock()
+	m.nodeIDtoAddrMu.RUnlock()
 	if ok {
 		return addr, nil
 	}
@@ -249,6 +250,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 	m.t = t
 
+	m.nodeIDtoAddrMu = &syncutil.RWMutex{}
 	m.mu = &syncutil.RWMutex{}
 	m.stores = make([]*storage.Store, numStores)
 	m.storePools = make([]*storage.StorePool, numStores)
@@ -705,8 +707,8 @@ func (m *multiTestContext) addStore(idx int) {
 	// previous stores as resolvers as doing so can cause delays in bringing the
 	// gossip network up.
 	resolvers := func() []resolver.Resolver {
-		m.mu.Lock()
-		defer m.mu.Unlock()
+		m.nodeIDtoAddrMu.Lock()
+		defer m.nodeIDtoAddrMu.Unlock()
 		addr := m.nodeIDtoAddr[1]
 		if addr == nil {
 			return nil
@@ -762,7 +764,7 @@ func (m *multiTestContext) addStore(idx int) {
 	if err != nil {
 		m.t.Fatal(err)
 	}
-	m.mu.Lock()
+	m.nodeIDtoAddrMu.Lock()
 	if m.nodeIDtoAddr == nil {
 		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
 	}
@@ -770,7 +772,7 @@ func (m *multiTestContext) addStore(idx int) {
 	if !ok {
 		m.nodeIDtoAddr[nodeID] = ln.Addr()
 	}
-	m.mu.Unlock()
+	m.nodeIDtoAddrMu.Unlock()
 	if ok {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
