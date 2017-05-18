@@ -3491,58 +3491,20 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 	}
 }
 
-// processRaftCommand processes a raft command by unpacking the
-// command struct to get args and reply and then applying the command
-// to the state machine via applyRaftCommand(). The result is sent on
-// the command's done channel, if available. As a special case, the
-// zero idKey signifies an empty Raft command, which will apply as a
-// no-op (without accessing raftCmd), updating only the applied index.
-//
-// This method returns true if the command successfully applied a
-// replica change.
-//
-// TODO(tschottdorf): once we properly check leases and lease requests etc,
-// make sure that the error returned from this method is always populated in
-// those cases, as one of the callers uses it to abort replica changes.
-func (r *Replica) processRaftCommand(
-	ctx context.Context, idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
-) bool {
-	if index == 0 {
-		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
-	}
-
-	if log.V(4) {
-		log.Infof(ctx, "processing command %x: maxLeaseIndex=%d", idKey, raftCmd.MaxLeaseIndex)
-	}
-
-	var isLeaseRequest bool
-	var requestedLease roachpb.Lease
-	var ts hlc.Timestamp
-	var rSpan roachpb.RSpan
-	if idKey != "" {
-		isLeaseRequest = raftCmd.ReplicatedEvalResult.IsLeaseRequest
-		if isLeaseRequest {
-			requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
-		}
-		ts = raftCmd.ReplicatedEvalResult.Timestamp
-		rSpan = roachpb.RSpan{
-			Key:    raftCmd.ReplicatedEvalResult.StartKey,
-			EndKey: raftCmd.ReplicatedEvalResult.EndKey,
-		}
-	}
-
-	r.mu.Lock()
-	proposal, proposedLocally := r.mu.proposals[idKey]
-
-	// TODO(tschottdorf): consider the Trace situation here.
-	if proposedLocally {
-		// We initiated this command, so use the caller-supplied context.
-		ctx = proposal.ctx
-		proposal.ctx = nil // avoid confusion
-		delete(r.mu.proposals, idKey)
-	}
+func (r *Replica) checkForcedErrLocked(
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	raftCmd storagebase.RaftCommand,
+	proposal *ProposalData,
+	proposedLocally bool,
+) (uint64, *roachpb.Error) {
 	leaseIndex := r.mu.state.LeaseAppliedIndex
 
+	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
+	var requestedLease roachpb.Lease
+	if isLeaseRequest {
+		requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
+	}
 	var forcedErr *roachpb.Error
 	if idKey == "" {
 		// This is an empty Raft command (which is sent by Raft after elections
@@ -3594,6 +3556,7 @@ func (r *Replica) processRaftCommand(
 			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
 				Requested: requestedLease,
+				Message:   "replica not part of range",
 			})
 		}
 	} else if r.mu.state.LeaseAppliedIndex < raftCmd.MaxLeaseIndex {
@@ -3639,6 +3602,56 @@ func (r *Replica) processRaftCommand(
 			}()
 		}
 	}
+	return leaseIndex, forcedErr
+}
+
+// processRaftCommand processes a raft command by unpacking the
+// command struct to get args and reply and then applying the command
+// to the state machine via applyRaftCommand(). The result is sent on
+// the command's done channel, if available. As a special case, the
+// zero idKey signifies an empty Raft command, which will apply as a
+// no-op (without accessing raftCmd), updating only the applied index.
+//
+// This method returns true if the command successfully applied a
+// replica change.
+//
+// TODO(tschottdorf): once we properly check leases and lease requests etc,
+// make sure that the error returned from this method is always populated in
+// those cases, as one of the callers uses it to abort replica changes.
+func (r *Replica) processRaftCommand(
+	ctx context.Context, idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
+) bool {
+	if index == 0 {
+		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
+	}
+
+	if log.V(4) {
+		log.Infof(ctx, "processing command %x: maxLeaseIndex=%d", idKey, raftCmd.MaxLeaseIndex)
+	}
+
+	var ts hlc.Timestamp
+	var rSpan roachpb.RSpan
+	if idKey != "" {
+		ts = raftCmd.ReplicatedEvalResult.Timestamp
+		rSpan = roachpb.RSpan{
+			Key:    raftCmd.ReplicatedEvalResult.StartKey,
+			EndKey: raftCmd.ReplicatedEvalResult.EndKey,
+		}
+	}
+
+	r.mu.Lock()
+	proposal, proposedLocally := r.mu.proposals[idKey]
+
+	// TODO(tschottdorf): consider the Trace situation here.
+	if proposedLocally {
+		// We initiated this command, so use the caller-supplied context.
+		ctx = proposal.ctx
+		proposal.ctx = nil // avoid confusion
+		delete(r.mu.proposals, idKey)
+	}
+
+	leaseIndex, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)
+
 	r.mu.Unlock()
 
 	if forcedErr == nil {
