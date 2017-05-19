@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 
 /**
  * TopBar represents the static header bar that is present on all pages. The

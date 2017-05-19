@@ -95,4 +95,10 @@ module.exports = {
       appMountId: 'react-layout',
     }),
   ],
+
+  // https://webpack.js.org/configuration/stats/
+  stats: {
+    colors: true,
+    chunks: false,
+  },
 };
