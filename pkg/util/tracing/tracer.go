@@ -176,8 +176,9 @@ var lightstepOnly = envutil.EnvOrDefaultBool("COCKROACH_LIGHTSTEP_ONLY", false)
 
 var enableTracing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_TRACING", false)
 
-// newTracer implements NewTracer and allows that function to be mocked out via Disable().
-var newTracer = func() opentracing.Tracer {
+// NewTracer creates a Tracer which records to the net/trace
+// endpoint.
+func NewTracer() opentracing.Tracer {
 	if !enableTracing {
 		return opentracing.NoopTracer{}
 	}
@@ -196,12 +197,6 @@ var newTracer = func() opentracing.Tracer {
 		return NewTeeTracer(lsTr, basicTr)
 	}
 	return basictracer.NewWithOptions(basictracerOptions(nil))
-}
-
-// NewTracer creates a Tracer which records to the net/trace
-// endpoint.
-func NewTracer() opentracing.Tracer {
-	return newTracer()
 }
 
 // EnsureContext checks whether the given context.Context contains a Span. If
@@ -223,10 +218,16 @@ func EnsureContext(
 // synchronization, so no moving parts are allowed while Disable and the
 // closure are called.
 func Disable() func() {
-	orig := newTracer
-	newTracer = func() opentracing.Tracer { return opentracing.NoopTracer{} }
+	return SetEnabled(false)
+}
+
+// SetEnabled enables or disables tracing. Returns a function that restores
+// the previous setting.
+func SetEnabled(enabled bool) func() {
+	orig := enableTracing
+	enableTracing = enabled
 	return func() {
-		newTracer = orig
+		enableTracing = orig
 	}
 }
 
@@ -458,11 +459,13 @@ func StartSnowballTrace(
 		return ctx, nil, errors.Errorf("there's already a recorder in the ctx.")
 	}
 	if span := opentracing.SpanFromContext(ctx); span != nil {
-		// We're in the context of a span; we'll create a TeeTracer.
-		teeSpan, recorder := createTeeSpanWithRecorder(
-			span, false /* adopt */, opName, true /* snowball */)
-		return opentracing.ContextWithSpan(
-			withRecorder(ctx, recorder), teeSpan), recorder, nil
+		if _, noop := span.Tracer().(opentracing.NoopTracer); !noop {
+			// We're in the context of a span; we'll create a TeeTracer.
+			teeSpan, recorder := createTeeSpanWithRecorder(
+				span, false /* adopt */, opName, true, /* snowball */
+			)
+			return opentracing.ContextWithSpan(withRecorder(ctx, recorder), teeSpan), recorder, nil
+		}
 	}
 	// There's no active trace so no need for a TeeTracer.
 	tracer, recorder := NewRecordingTracer()
@@ -471,9 +474,10 @@ func StartSnowballTrace(
 	// This must be set *before* SetBaggageItem, as that will otherwise be ignored.
 	otext.SamplingPriority.Set(rootSp, 1)
 	rootSp.SetBaggageItem(Snowball, "1")
-	return opentracing.ContextWithSpan(
-		withRecorder(ctx, recorder), rootSp), recorder, nil
+	return opentracing.ContextWithSpan(withRecorder(ctx, recorder), rootSp), recorder, nil
 }
+
+var dummyExtractTracer = basictracer.New(nil /* recorder */)
 
 // JoinRemoteTrace takes a Context and returns a derived one with a Span that's
 // a child of a remote span carried over by carrier. The caller is responsible
@@ -496,23 +500,40 @@ func JoinRemoteTrace(
 		return ctx, nil, errors.Errorf("JoinRemoteTrace called with nil Tracer")
 	}
 
-	var sp opentracing.Span
-	wireContext, err := tr.Extract(basictracer.Delegator, carrier)
-	switch err {
-	case nil:
-		sp = tr.StartSpan(opName, opentracing.FollowsFrom(wireContext))
-		// Copy baggage items to tags so they show up in the Lightstep UI.
-		sp.Context().ForeachBaggageItem(func(k, v string) bool {
-			sp.SetTag(k, v)
-			return true
-		})
-		sp.LogFields(otlog.String("event", opName))
-	case opentracing.ErrSpanContextNotFound:
-		fallthrough
-	default:
+	extractTracer := tr
+	_, noopTracer := extractTracer.(opentracing.NoopTracer)
+	if noopTracer {
+		// Tracing is disabled on this node, but we still want snowball tracing to
+		// work; for that we need to extract the context. Use a separate basictracer
+		// just for extraction.
+		extractTracer = dummyExtractTracer
+	}
+
+	wireContext, err := extractTracer.Extract(basictracer.Delegator, carrier)
+	if err != nil {
 		return ctx, nil, err
 	}
-	if sp.BaggageItem(Snowball) == "" {
+	// Check for the snowball baggage item. We don't check this from the span
+	// below because we may be using NoopTracer (in which case the span won't have
+	// any baggage items, or any other information for that matter).
+	snowball := false
+	wireContext.ForeachBaggageItem(func(k, v string) bool {
+		if k == Snowball && v != "" {
+			snowball = true
+			return false
+		}
+		return true
+	})
+
+	sp := tr.StartSpan(opName, opentracing.FollowsFrom(wireContext))
+	// Copy baggage items to tags so they show up in the Lightstep UI.
+	sp.Context().ForeachBaggageItem(func(k, v string) bool {
+		sp.SetTag(k, v)
+		return true
+	})
+	sp.LogFields(otlog.String("event", opName))
+
+	if !snowball {
 		return opentracing.ContextWithSpan(ctx, sp), nil, nil
 	}
 	// This is a "snowball trace"; we'll use a TeeTracer.
@@ -522,10 +543,24 @@ func JoinRemoteTrace(
 		// support multiple snowballs on the same trace.
 		return ctx, nil, errors.Errorf("there's already a recorder in the ctx")
 	}
-	teeSpan, recorder := createTeeSpanWithRecorder(
-		sp, true /* adopt */, opName, true /* snowball */)
-	return opentracing.ContextWithSpan(
-		withRecorder(ctx, recorder), teeSpan), recorder, nil
+
+	var span opentracing.Span
+	var recorder *RecordedTrace
+	if noopTracer {
+		// Don't use a TeeTracer in this case. NoopTracer can't be the first member
+		// of a TeeTracer because the TeeTracer relies on its implementation of
+		// Inject and others.
+		var recordingTr opentracing.Tracer
+		recordingTr, recorder = NewRecordingTracer()
+		span = recordingTr.StartSpan(opName)
+		span.SetBaggageItem(Snowball, "1")
+	} else {
+		span, recorder = createTeeSpanWithRecorder(
+			sp, true /* adopt */, opName, true, /* snowball */
+		)
+	}
+
+	return opentracing.ContextWithSpan(withRecorder(ctx, recorder), span), recorder, nil
 }
 
 // IngestRemoteSpans takes a bunch of encoded spans and passes them to a
