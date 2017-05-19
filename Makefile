@@ -126,7 +126,11 @@ override TAGS += make $(NATIVE_SPECIFIER_TAG)
 # to the host machine's actual macOS version works around this. See:
 # https://github.com/jemalloc/jemalloc/issues/494.
 ifdef MACOS
-export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion)
+# The default MACOSX_DEPLOYMENT_TARGET uses only the major and minor
+# version numbers, not the patch number. The linker will emit a warning if
+# e.g. we try to link a library built for 10.12.4 while the
+# MACOSX_DEPLOYMENT_TARGET is 10.12.
+export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion | grep -oE '\d+\.\d+')
 endif
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
