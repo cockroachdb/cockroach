@@ -313,14 +313,19 @@ func typeCheckOverloadedExprs(
 		return typedExprs, nil, nil
 	}
 
+	overloadIdxs := make([]int, len(overloads))
+	for i := 0; i < len(overloads); i++ {
+		overloadIdxs[i] = i
+	}
+
 	// Function to filter overloads which return false from the provided closure.
 	filterOverloads := func(fn func(overloadImpl) bool) {
-		for i := 0; i < len(overloads); {
-			if fn(overloads[i]) {
+		for i := 0; i < len(overloadIdxs); {
+			if fn(overloads[overloadIdxs[i]]) {
 				i++
 			} else {
-				overloads[i], overloads[len(overloads)-1] = overloads[len(overloads)-1], overloads[i]
-				overloads = overloads[:len(overloads)-1]
+				overloadIdxs[i], overloadIdxs[len(overloadIdxs)-1] = overloadIdxs[len(overloadIdxs)-1], overloadIdxs[i]
+				overloadIdxs = overloadIdxs[:len(overloadIdxs)-1]
 			}
 		}
 	}
@@ -345,10 +350,10 @@ func typeCheckOverloadedExprs(
 	// Filter out overloads on resolved types.
 	for _, expr := range resolvableExprs {
 		paramDesired := TypeAny
-		if len(overloads) == 1 {
+		if len(overloadIdxs) == 1 {
 			// Once we get down to a single overload candidate, begin desiring its
 			// parameter types for the corresponding argument expressions.
-			paramDesired = overloads[0].params().getAt(expr.i)
+			paramDesired = overloads[overloadIdxs[0]].params().getAt(expr.i)
 		}
 		typ, err := expr.e.TypeCheck(ctx, paramDesired)
 		if err != nil {
@@ -364,14 +369,14 @@ func typeCheckOverloadedExprs(
 	// if we should stop overload resolution, along with a nullable overloadImpl to return if
 	// we should stop overload resolution.
 	checkReturn := func() (bool, overloadImpl, error) {
-		switch len(overloads) {
+		switch len(overloadIdxs) {
 		case 0:
 			if err := defaultTypeCheck(false); err != nil {
 				return true, nil, err
 			}
 			return true, nil, nil
 		case 1:
-			o := overloads[0]
+			o := overloads[overloadIdxs[0]]
 			p := o.params()
 			for _, expr := range constExprs {
 				des := p.getAt(expr.i)
@@ -434,7 +439,7 @@ func typeCheckOverloadedExprs(
 	}
 
 	if len(constExprs) > 0 {
-		before := overloads
+		before := overloadIdxs
 
 		// The second heuristic is to prefer candidates where all numeric constants can become
 		// a homogeneous type, if all resolvable expressions became one. This is only possible
@@ -455,13 +460,13 @@ func typeCheckOverloadedExprs(
 				}
 			}
 		}
-		if len(overloads) == 1 {
+		if len(overloadIdxs) == 1 {
 			if ok, fn, err := checkReturn(); ok {
 				return typedExprs, fn, err
 			}
 		}
 		// Restore the expressions if this did not work.
-		overloads = before
+		overloadIdxs = before
 
 		// The third heuristic is to prefer candidates where all numeric constants can become
 		// their "natural"" types.
@@ -473,13 +478,13 @@ func typeCheckOverloadedExprs(
 				})
 			}
 		}
-		if len(overloads) == 1 {
+		if len(overloadIdxs) == 1 {
 			if ok, fn, err := checkReturn(); ok {
 				return typedExprs, fn, err
 			}
 		}
 		// Restore the expressions if this did not work.
-		overloads = before
+		overloadIdxs = before
 
 		// The fourth heuristic is to prefer candidates that accepts the "best" mutual
 		// type in the resolvable type set of all numeric constants.
@@ -516,12 +521,13 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
-	if err := defaultTypeCheck(len(overloads) > 0); err != nil {
+	if err := defaultTypeCheck(len(overloadIdxs) > 0); err != nil {
 		return nil, nil, err
 	}
 
 	var preferred overloadImpl
-	for _, c := range overloads {
+	for _, i := range overloadIdxs {
+		c := overloads[i]
 		if c.preferred() {
 			if preferred != nil {
 				return typedExprs, nil, nil
