@@ -584,9 +584,6 @@ type txnState struct {
 	schemaChangers schemaChangerCollection
 
 	sp opentracing.Span
-	// When sql.trace.txn.threshold is >0, trace accumulates spans as
-	// they're closed. All the spans pertain to the current txn.
-	trace *tracing.RecordedTrace
 
 	// The timestamp to report for current_timestamp(), now() etc.
 	// This must be constant for the lifetime of a SQL transaction.
@@ -620,34 +617,30 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
 	// into a larger discussion about how to drain SQL and rollback open txns.
 	ctx := s.context
+	tracer := e.cfg.AmbientCtx.Tracer
+	var sp opentracing.Span
 	if traceTxnThreshold.Get() > 0 {
 		var err error
-		ctx, ts.trace, err = tracing.StartSnowballTrace(ctx, "traceSQL")
+		ctx, sp, err = tracing.StartSnowballTrace(ctx, tracer, "traceSQL")
 		if err != nil {
 			log.Fatalf(ctx, "unable to create snowball tracer: %s", err)
 		}
-	} else if debugTrace7881Enabled {
-		var err error
-		ctx, ts.trace, err = tracing.NewTracerAndSpanFor7881(ctx)
-		if err != nil {
-			log.Fatalf(ctx, "couldn't create a tracer for debugging #7881: %s", err)
-		}
 	} else {
-		var sp opentracing.Span
-		if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
+		if debugTrace7881Enabled {
+			sp = tracer.StartSpan("root-for-7881", tracing.Force)
+			tracing.StartRecording(sp)
+		} else if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
 			// Create a child span for this SQL txn.
-			tracer := parentSp.Tracer()
-			sp = tracer.StartSpan("sql txn", opentracing.ChildOf(parentSp.Context()))
+			sp = parentSp.Tracer().StartSpan("sql txn", opentracing.ChildOf(parentSp.Context()))
 		} else {
 			// Create a root span for this SQL txn.
-			tracer := e.cfg.AmbientCtx.Tracer
 			sp = tracer.StartSpan("sql txn")
 		}
 		// Put the new span in the context.
 		ctx = opentracing.ContextWithSpan(ctx, sp)
 	}
 
-	ts.sp = opentracing.SpanFromContext(ctx)
+	ts.sp = sp
 	ts.Ctx = ctx
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
@@ -694,16 +687,16 @@ func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 	}
 	sampledFor7881 := (ts.sp.BaggageItem(keyFor7881Sample) != "")
 	ts.sp.Finish()
-	ts.sp = nil
-	if ts.trace != nil {
+	if r := tracing.GetRecording(ts.sp); r != nil {
 		durThreshold := traceTxnThreshold.Get()
 		if sampledFor7881 || (durThreshold > 0 && timeutil.Since(ts.sqlTimestamp) >= durThreshold) {
-			dump := tracing.FormatRawSpans(ts.trace.GetSpans())
+			dump := tracing.FormatRawSpans(r)
 			if len(dump) > 0 {
 				log.Infof(sessionCtx, "SQL trace:\n%s", dump)
 			}
 		}
 	}
+	ts.sp = nil
 }
 
 // updateStateAndCleanupOnErr updates txnState based on the type of error that we
