@@ -1344,8 +1344,18 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{PGTag: s.StatementTag()}, nil
 	}
 
-	// Create a new planner from the Session to execute the statement.
-	planner := session.newPlanner(e, txnState.txn)
+	var planner *planner
+	runInParallel := parallelize && !implicitTxn
+	if runInParallel {
+		// Create a new planner from the Session to execute the statement, since
+		// we're executing in parallel.
+		planner = session.newPlanner(e, txnState.txn)
+	} else {
+		// We're not executing in parallel. We can use the cached planner on the
+		// session.
+		planner = &session.planner
+		session.resetPlanner(planner, e, txnState.txn)
+	}
 	planner.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
 	planner.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 	planner.semaCtx.Placeholders.Assign(pinfo)
@@ -1353,7 +1363,7 @@ func (e *Executor) execStmtInOpenTxn(
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
 	var result Result
-	if parallelize && !implicitTxn {
+	if runInParallel {
 		// Only run statements asynchronously through the parallelize queue if the
 		// statements are parallelized and we're in a transaction. Parallelized
 		// statements outside of a transaction are run synchronously with mocked
