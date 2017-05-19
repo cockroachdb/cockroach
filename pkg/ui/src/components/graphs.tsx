@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import _ from "lodash";
 import * as nvd3 from "nvd3";
 import * as d3 from "d3";
