@@ -78,6 +78,8 @@ type planner struct {
 	srfExtractionVisitor  srfExtractionVisitor
 }
 
+var emptyPlanner planner
+
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
 // internal SQL pool before the pool starts explicitly logging overall usage
 // growth in the log.
