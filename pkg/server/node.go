@@ -908,38 +908,40 @@ func (n *Node) setupSpanForIncomingRPC(
 	ctx context.Context, remoteTraceContext *tracing.SpanContextCarrier,
 ) (context.Context, func(*roachpb.BatchResponse)) {
 	const opName = "node.Batch"
-	tr := n.storeCfg.AmbientCtx.Tracer
-	var recordedTrace *tracing.RecordedTrace
-	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+	var sp opentracing.Span
+	remoteParent := false
+	if opentracing.SpanFromContext(ctx) != nil {
 		// Child span of local parent.
-		ctx, _ = tracing.ChildSpan(ctx, opName)
+		ctx, sp = tracing.ChildSpan(ctx, opName)
 	} else {
+		tr := n.storeCfg.AmbientCtx.Tracer
 		if remoteTraceContext == nil {
 			// Root span.
-			ctx = opentracing.ContextWithSpan(ctx, tr.StartSpan(opName))
+			sp = tr.StartSpan(opName)
+			ctx = opentracing.ContextWithSpan(ctx, sp)
 		} else {
 			// Child span of remote parent.
 			var err error
-			ctx, recordedTrace, err = tracing.JoinRemoteTrace(ctx, tr, remoteTraceContext, opName)
+			ctx, sp, err = tracing.JoinRemoteTrace(ctx, tr, remoteTraceContext, opName)
 			if err != nil {
 				// Fallback to root span.
 				log.Warningf(ctx, "failed to join remote trace: %s", err)
-				ctx = opentracing.ContextWithSpan(ctx, tr.StartSpan(opName))
+				sp = tr.StartSpan(opName)
+				ctx = opentracing.ContextWithSpan(ctx, sp)
 			}
+			remoteParent = true
 		}
 	}
 
 	finishSpan := func(br *roachpb.BatchResponse) {
-		opentracing.SpanFromContext(ctx).Finish()
+		sp.Finish()
 		if br == nil {
 			return
 		}
-		// If this is a "snowball trace", we'll need to encode all the recorded
-		// spans in the BatchResponse at the end of the request.
-		if recordedTrace != nil {
-			// Encode all the spans into the BatchResponse.
-			recordedTrace.Done()
-			for _, rawSpan := range recordedTrace.GetSpans() {
+		if remoteParent {
+			// If this is a "snowball trace", we'll need to encode all the recorded
+			// spans in the BatchResponse at the end of the request.
+			for _, rawSpan := range tracing.GetRecording(sp)
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err == nil {
 					br.CollectedSpans = append(br.CollectedSpans, encSp)
