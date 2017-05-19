@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/context"
@@ -89,11 +90,11 @@ func FinishEventLog(ctx context.Context) {
 }
 
 // getSpanOrEventLog returns the current Span. If there is no Span, it returns
-// the current ctxEventLog. If neither (or the Span is NoopTracer), returns
+// the current ctxEventLog. If neither (or the Span is "noop"), returns
 // false.
 func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, bool) {
 	if sp := opentracing.SpanFromContext(ctx); sp != nil {
-		if _, ok := sp.Tracer().(opentracing.NoopTracer); ok {
+		if tracing.IsNoopSpan(sp) {
 			return nil, nil, false
 		}
 		return sp, nil, true
