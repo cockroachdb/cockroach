@@ -534,6 +534,15 @@ func (e *Executor) ExecutePreparedStatement(
 
 	defer logIfPanicking(session.Ctx(), stmts.String())
 
+	{
+		// No parsing is taking place, but we need to set the parsing phase time
+		// because the service latency is measured from
+		// phaseTimes[sessionStartParse].
+		now := timeutil.Now()
+		session.phaseTimes[sessionStartParse] = now
+		session.phaseTimes[sessionEndParse] = now
+	}
+
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
 	return e.execParsed(session, stmts, pinfo, copyMsgNone)
