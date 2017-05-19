@@ -601,15 +601,17 @@ func (rb *RowBuffer) ConsumerClosed() {
 // in the context (if any).
 func SetFlowRequestTrace(ctx context.Context, req *SetupFlowRequest) error {
 	sp := opentracing.SpanFromContext(ctx)
-	if sp == nil {
+	if sp == nil || tracing.IsNoopSpan(sp) {
 		return nil
 	}
 	tracer := sp.Tracer()
-	if _, ok := tracer.(opentracing.NoopTracer); ok {
-		return nil
-	}
 	req.TraceContext = &tracing.SpanContextCarrier{}
-	return tracer.Inject(sp.Context(), basictracer.Delegator, req.TraceContext)
+	err := tracer.Inject(sp.Context(), basictracer.Delegator, req.TraceContext)
+	// Clear the trace context if it wasn't initialized.
+	if err != nil || req.TraceContext.TraceID == 0 {
+		req.TraceContext = nil
+	}
+	return err
 }
 
 // String implements fmt.Stringer.
