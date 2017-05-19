@@ -7,12 +7,9 @@
  * activeClass, rather than the logic below.
  */
 
-import * as React from "react";
-import { Link, InjectedRouter } from "react-router";
-
-interface ListLinkContext {
-  router: InjectedRouter;
-}
+import React from "react";
+import PropTypes from "prop-types";
+import { Link, InjectedRouter, RouterState } from "react-router";
 
 export interface LinkProps {
   to: string;
@@ -21,8 +18,10 @@ export interface LinkProps {
 }
 
 export class ListLink extends React.Component<LinkProps, {}> {
+  // TODO(mrtracy): Switch this, and the other uses of contextTypes, to use the
+  // 'withRouter' HoC after upgrading to react-router 4.x.
   static contextTypes = {
-    router: React.PropTypes.object,
+    router: PropTypes.object.isRequired,
   };
 
   static defaultProps = {
@@ -30,7 +29,7 @@ export class ListLink extends React.Component<LinkProps, {}> {
     onlyActiveOnIndex: false,
   };
 
-  context: ListLinkContext;
+  context: { router: InjectedRouter & RouterState; };
 
   render() {
     let { to, className, onlyActiveOnIndex, children } = this.props;

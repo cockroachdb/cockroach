@@ -1,5 +1,5 @@
 import _ from "lodash";
-import * as React from "react";
+import React from "react";
 import { RouterState, Link } from "react-router";
 import { AdminUIState } from "../redux/state";
 import { refreshLogs, refreshNodes } from "../redux/apiReducers";

@@ -73,7 +73,7 @@ import Long from "long";
 protobuf.util.Long = Long as any;
 protobuf.configure();
 
-import * as React from "react";
+import React from "react";
 import * as ReactDOM from "react-dom";
 import { Provider } from "react-redux";
 import { Router, Route, IndexRoute, IndexRedirect } from "react-router";

@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import { createSelector } from "reselect";
 import { connect } from "react-redux";
 import _ from "lodash";

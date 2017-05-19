@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import { RouterState, Link } from "react-router";
 import { connect } from "react-redux";
 

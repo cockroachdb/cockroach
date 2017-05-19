@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import { Sticky } from "react-sticky";
 
 export function PageConfig(props: {children?: React.ReactNode}) {

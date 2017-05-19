@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import {runVisualization, viewWidth, viewHeight} from "../js/sim/index";
 
 /**

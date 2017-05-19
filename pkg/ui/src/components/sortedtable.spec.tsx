@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import _ from "lodash";
 import { assert } from "chai";
 import { mount } from "enzyme";
