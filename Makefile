@@ -68,7 +68,7 @@ else
 $(error unknown build type $(TYPE))
 endif
 
-override GOFLAGS += -installsuffix $(INSTALLSUFFIX)
+override GOFLAGS += -pkgdir $(GOPATH)/pkg/$(INSTALLSUFFIX)
 override TAGS += make $(NATIVE_TAG)
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))

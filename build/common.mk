@@ -265,8 +265,7 @@ PROTOC 		 := $(PROTOC_DIR)/protoc
 C_LIBS := $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb
 
 # Go does not permit dashes in build tags. This is undocumented. Fun!
-INSTALLSUFFIX := $(subst -,_,$(TARGET_TRIPLE))$(if $(USE_STDMALLOC),_stdmalloc)$(if $(USE_DEADLOCK),_deadlock)
-NATIVE_TAG := $(INSTALLSUFFIX)$(if $(USE_RACE),_race)$(if $(USE_MSAN),_msan)
+NATIVE_TAG := $(subst -,_,$(TARGET_TRIPLE))$(if $(USE_STDMALLOC),_stdmalloc)$(if $(USE_DEADLOCK),_deadlock)$(if $(USE_RACE),_race)$(if $(USE_MSAN),_msan)
 
 # In each package that uses cgo, we inject include and library search paths into
 # files named zcgo_flags.go and zcgo_flags_{NATIVE_TAG}.go. The logic for this
