@@ -25,6 +25,7 @@ import (
 
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	otlog "github.com/opentracing/opentracing-go/log"
 )
 
 type traceLogData struct {
@@ -71,6 +72,14 @@ func FormatRawSpans(spans []basictracer.RawSpan) string {
 			start = sp.Start
 		}
 		d := depth(sp.ParentSpanID)
+		// Issue a log with the operation name.
+		logs = append(logs, traceLogData{
+			LogRecord: opentracing.LogRecord{
+				Timestamp: sp.Start,
+				Fields:    []otlog.Field{otlog.String("event", sp.Operation)},
+			},
+			depth: d,
+		})
 		for _, e := range sp.Logs {
 			logs = append(logs, traceLogData{LogRecord: e, depth: d})
 		}

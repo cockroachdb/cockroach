@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
@@ -52,7 +51,8 @@ func TestTxnSnowballTrace(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	db := NewDB(newTestSender(nil), clock)
-	ctx, trace, err := tracing.StartSnowballTrace(context.Background(), "test-txn")
+	tracer := tracing.NewTracer()
+	ctx, sp, err := tracing.StartSnowballTrace(context.Background(), tracer, "test-txn")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,10 +64,8 @@ func TestTxnSnowballTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.Event(ctx, "txn complete")
-	sp := opentracing.SpanFromContext(ctx)
 	sp.Finish()
-	trace.Done()
-	collectedSpans := trace.GetSpans()
+	collectedSpans := tracing.GetRecording(sp)
 	dump := tracing.FormatRawSpans(collectedSpans)
 	// dump:
 	//    0.105ms      0.000ms    event:inside txn
