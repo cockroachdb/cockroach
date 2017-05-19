@@ -68,7 +68,20 @@ else
 $(error unknown build type $(TYPE))
 endif
 
-override GOFLAGS += -pkgdir $(GOPATH)/pkg/$(INSTALLSUFFIX)
+# Go's default of using `$GOOS_$GOARCH[_race][_msan]` to isolate compilation
+# artifacts for different platforms isn't sufficient. We also want to isolate
+# artifacts from our stdmalloc and deadlock builds, for example, and by compiler
+# when targeting e.g. different versions of glibc on the same machine.
+# Unfortunately, attempting ot use -installsuffix for this purpose (which is
+# literally the point of -installsuffix, to be clear) causes Go to attempt to
+# write some core packages to $GOROOT, where it often doesn't have write access.
+#
+# Since we're already constructing a NATIVE_TAG to isolate artifacts from C and
+# C++ dependencies, just use that same tag to construct our own pkgdir. Note
+# that -pkgdir completely overrides the automatic -installsuffix, so we're
+# careful to include _race and _msan in NATIVE_TAG when GOFLAGS contains -race
+# or -msan, respectively.
+override GOFLAGS += -pkgdir $(GOPATH)/pkg/$(NATIVE_TAG)
 override TAGS += make $(NATIVE_TAG)
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))

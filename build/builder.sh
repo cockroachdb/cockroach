@@ -132,32 +132,12 @@ if test -d "${backtrace_dir}"; then
 fi
 
 if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
-  vols="${vols} --volume=${gopath0}/src:/go/src"
+  vols="${vols} --volume=${gopath0}/src:/root/go/src"
 fi
-vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
+vols="${vols} --volume=${cockroach_toplevel}:/root/go/src/github.com/cockroachdb/cockroach"
 
 mkdir -p "${cockroach_toplevel}"/bin.docker_amd64
 vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin"
-
-mkdir -p "${gocache}"/docker/bin
-vols="${vols} --volume=${gocache}/docker/bin:/go/bin"
-mkdir -p "${gocache}"/docker/native
-vols="${vols} --volume=${gocache}/docker/native:/go/native"
-mkdir -p "${gocache}"/docker/pkg
-vols="${vols} --volume=${gocache}/docker/pkg:/go/pkg"
-
-# TODO(tamird,benesch): this is horrible, but we do it because we want to
-# cache stdlib artifacts and we can't mount over GOROOT. Replace with
-# `-pkgdir` when the kinks are worked out.
-for pkgdir in {darwin,windows}_amd64{,_race}; do
-  mkdir -p "${gocache}/docker/pkg/${pkgdir}"
-  vols="${vols} --volume=${gocache}/docker/pkg/${pkgdir}:/usr/local/go/pkg/${pkgdir}"
-done
-# Linux supports more stuff, so it needs a separate loop.
-for pkgdir in linux_amd64{,_release-{gnu,musl}}{,_msan,_race}; do
-  mkdir -p "${gocache}/docker/pkg/${pkgdir}"
-  vols="${vols} --volume=${gocache}/docker/pkg/${pkgdir}:/usr/local/go/pkg/${pkgdir}"
-done
 
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.

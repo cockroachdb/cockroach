@@ -114,7 +114,7 @@ RUN curl -fsSL https://storage.googleapis.com/golang/go1.8.1.src.tar.gz -o golan
  && rm -rf /*.patch \
  && apt-get autoremove -y golang
 
-ENV GOPATH /go
+ENV GOPATH /root/go
 ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 
 RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
@@ -122,7 +122,7 @@ WORKDIR $GOPATH
 
 # END https://github.com/docker-library/golang/blob/master/1.8/alpine/Dockerfile
 
-RUN chmod -R a+w $(go env GOTOOLDIR)
+RUN chmod -R a+w $(go env GOROOT)
 
 # Allow Go support files in gdb.
 RUN echo "add-auto-load-safe-path $(go env GOROOT)/src/runtime/runtime-gdb.py" > ~/.gdbinit
@@ -133,5 +133,5 @@ RUN curl -fsSL https://releases.hashicorp.com/terraform/0.8.7/terraform_0.8.7_li
 
 ENV PATH /opt/backtrace/bin:$PATH
 
-COPY cmd /go/src/cmd
+COPY cmd /root/go/src/cmd
 RUN GOBIN=/usr/local/bin go install ./src/cmd/... && rm -rf ./src/cmd
