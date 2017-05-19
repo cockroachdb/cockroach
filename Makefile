@@ -33,12 +33,14 @@ TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
 GOFLAGS      :=
-COCKROACH    := ./cockroach
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
 BUILDMODE    := install
 BUILDTARGET  := .
 SUFFIX       :=
+INSTALL      := install
+prefix       := /usr/local
+bindir       := $(prefix)/bin
 
 # Possible values:
 # <empty>: use the default toolchain
@@ -129,15 +131,17 @@ endif
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
 
+COCKROACH := ./cockroach$(SUFFIX)$$($(XGO) env GOEXE)
+
 .DEFAULT_GOAL := all
-all: build
+all: $(COCKROACH)
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 
-build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)$$($(XGO) env GOEXE)
+$(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-build buildoss install: override LINKFLAGS += \
+$(COCKROACH) build buildoss go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
@@ -147,11 +151,16 @@ build buildoss install: override LINKFLAGS += \
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
 .PHONY: build buildoss install
-build buildoss install: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
+$(COCKROACH) build buildoss go-install: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
+.PHONY: install
+install: $(COCKROACH)
+	$(INSTALL) -d -m 755 $(DESTDIR)$(bindir)
+	$(INSTALL) -m 755 $(COCKROACH) $(DESTDIR)$(bindir)/cockroach
+
 .PHONY: start
-start: build
+start: $(COCKROACH)
 start:
 	$(COCKROACH) start $(STARTFLAGS)
 
@@ -185,8 +194,8 @@ bench: BENCHES := .
 bench: TESTS := -
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
-.PHONY: test testshort testrace testlogic bench
-test testshort testrace bench: gotestdashi
+.PHONY: check test testshort testrace testlogic bench
+check test testshort testrace bench: gotestdashi
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
@@ -263,13 +272,6 @@ lint: gotestdashi
 lintshort: override TAGS += lint
 lintshort: gotestdashi
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
-
-.PHONY: check checkshort
-check checkshort:
-	@# TODO(benesch): make this target an alias for the `test` target.
-	@echo 'To adhere to convention, `make check` will soon be an alias for `make test`.' >&2
-	@echo 'The linters have moved to `make lint` and `make lintshort`.' >&2
-	@false
 
 .PHONY: clean
 clean: clean-c-deps
