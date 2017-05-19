@@ -988,6 +988,35 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				if !status.lease.OwnedBy(r.store.StoreID()) {
 					_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(status.lease.Replica.StoreID)
 					if !stillMember {
+						// This would be the situation in which the lease holder gets removed when
+						// holding the lease, or in which a lease request erroneously gets accepted
+						// for a replica that is not in the replica set. Neither of the two can
+						// happen since appropriate mechanisms have been added:
+						//
+						// 1. Only the lease holder (at the time) schedules removal of a replica,
+						// but the lease can change hands and so the situation in which a follower
+						// coordinates a replica removal of the (new) lease holder is possible (if
+						// unlikely) in practice. In this situation, the new lease holder would at
+						// some point be asked to propose the replica change's EndTransaction to
+						// Raft. A check has been added that prevents proposals that amount to the
+						// removal of the proposer's (and hence lease holder's) Replica, preventing
+						// this scenario.
+						//
+						// 2. A lease is accepted for a Replica that has been removed. Without
+						// precautions, this could happen because lease requests are special in
+						// that they are the only command that is proposed on a follower (other
+						// commands may be proposed from followers, but not successfully so). For
+						// all proposals, processRaftCommand checks that their ProposalLease is
+						// compatible with the active lease for the log position. For commands
+						// proposed on the lease holder, the command queue then serializes
+						// everything. But lease requests get created on followers based on their
+						// local state and thus without being sequenced through the command queue.
+						// Thus a recently removed follower (unaware of its own removal) could
+						// submit a proposal for the lease (correctly using as a ProposerLease the
+						// last active lease), and would receive it given the up-to-date
+						// ProposerLease. Hence, an extra check is in order: processRaftCommand
+						// makes sure that lease requests for a replica not in the descriptor are
+						// bounced.
 						log.Fatalf(ctx, "lease %s owned by replica %+v that no longer exists",
 							status.lease, status.lease.Replica)
 					}
@@ -1092,9 +1121,9 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 							}
 
 							// Getting a LeaseRejectedError back means someone else got there
-							// first, or the lease request was somehow invalid due to a
-							// to a concurrent change. That concurrent change could have been
-							// that this replica was removed, so check for that case before
+							// first, or the lease request was somehow invalid due to a concurrent
+							// change. That concurrent change could have been that this replica was
+							// removed (see processRaftCommand), so check for that case before
 							// falling back to a NotLeaseHolderError.
 							var err error
 							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
@@ -3462,70 +3491,20 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 	}
 }
 
-// processRaftCommand processes a raft command by unpacking the
-// command struct to get args and reply and then applying the command
-// to the state machine via applyRaftCommand(). The result is sent on
-// the command's done channel, if available. As a special case, the
-// zero idKey signifies an empty Raft command, which will apply as a
-// no-op (without accessing raftCmd), updating only the applied index.
-//
-// This method returns true if the command successfully applied a
-// replica change.
-//
-// TODO(tschottdorf): once we properly check leases and lease requests etc,
-// make sure that the error returned from this method is always populated in
-// those cases, as one of the callers uses it to abort replica changes.
-func (r *Replica) processRaftCommand(
-	ctx context.Context, idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
-) bool {
-	if index == 0 {
-		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
-	}
-
-	if log.V(4) {
-		log.Infof(ctx, "processing command %x: maxLeaseIndex=%d", idKey, raftCmd.MaxLeaseIndex)
-	}
-
-	var isLeaseRequest bool
-	var requestedLease roachpb.Lease
-	var ts hlc.Timestamp
-	var rSpan roachpb.RSpan
-	if idKey != "" {
-		isLeaseRequest = raftCmd.ReplicatedEvalResult.IsLeaseRequest
-		if isLeaseRequest {
-			requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
-		}
-		ts = raftCmd.ReplicatedEvalResult.Timestamp
-		rSpan = roachpb.RSpan{
-			Key:    raftCmd.ReplicatedEvalResult.StartKey,
-			EndKey: raftCmd.ReplicatedEvalResult.EndKey,
-		}
-	}
-
-	r.mu.Lock()
-	proposal, proposedLocally := r.mu.proposals[idKey]
-
-	// Verify the lease matches the proposer's expectation. We rely on
-	// the proposer's determination of whether the existing lease is
-	// held, and can be used, or is expired, and can be replaced.
-	// Verify checks that the lease has not been modified since proposal
-	// due to Raft delays / reorderings.
-	// To understand why this lease verification is necessary, see comments on the
-	// proposer_lease field in the proto.
-	verifyLease := func() error {
-		// Handle the case of pre-epoch-based-leases command.
-		return raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease)
-	}
-
-	// TODO(tschottdorf): consider the Trace situation here.
-	if proposedLocally {
-		// We initiated this command, so use the caller-supplied context.
-		ctx = proposal.ctx
-		proposal.ctx = nil // avoid confusion
-		delete(r.mu.proposals, idKey)
-	}
+func (r *Replica) checkForcedErrLocked(
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	raftCmd storagebase.RaftCommand,
+	proposal *ProposalData,
+	proposedLocally bool,
+) (uint64, *roachpb.Error) {
 	leaseIndex := r.mu.state.LeaseAppliedIndex
 
+	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
+	var requestedLease roachpb.Lease
+	if isLeaseRequest {
+		requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
+	}
 	var forcedErr *roachpb.Error
 	if idKey == "" {
 		// This is an empty Raft command (which is sent by Raft after elections
@@ -3534,11 +3513,19 @@ func (r *Replica) processRaftCommand(
 		// (which is bogus) doesn't get executed (for it is empty and so
 		// properties like key range are undefined).
 		forcedErr = roachpb.NewErrorf("no-op on empty Raft entry")
-	} else if err := verifyLease(); err != nil {
+	} else if !raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease) {
+		// Verify the lease matches the proposer's expectation. We rely on
+		// the proposer's determination of whether the existing lease is
+		// held, and can be used, or is expired, and can be replaced.
+		// Verify checks that the lease has not been modified since proposal
+		// due to Raft delays / reorderings.
+		// To understand why this lease verification is necessary, see comments on the
+		// proposer_lease field in the proto.
+
 		log.VEventf(
 			ctx, 1,
-			"command proposed from replica %+v: %s",
-			raftCmd.ProposerReplica, err,
+			"command proposed from replica %+v with %v incompatible to %v",
+			raftCmd.ProposerReplica, raftCmd.ProposerLease, *r.mu.state.Lease,
 		)
 		if !isLeaseRequest {
 			// We return a NotLeaseHolderError so that the DistSender retries.
@@ -3550,7 +3537,7 @@ func (r *Replica) processRaftCommand(
 			forcedErr = roachpb.NewError(nlhe)
 		} else {
 			// For lease requests we return a special error that
-			// replica.RedirectOnOrAcquireLease() understands. Note that these
+			// redirectOnOrAcquireLease() understands. Note that these
 			// requests don't go through the DistSender.
 			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
@@ -3558,11 +3545,20 @@ func (r *Replica) processRaftCommand(
 			})
 		}
 	} else if isLeaseRequest {
-		// Lease commands are ignored by the counter (and their MaxLeaseIndex
-		// is ignored). This makes sense since lease commands are proposed by
-		// anyone, so we can't expect a coherent MaxLeaseIndex. Also, lease
-		// proposals are often replayed, so not making them update the counter
-		// makes sense from a testing perspective.
+		// Lease commands are ignored by the counter (and their MaxLeaseIndex is ignored). This
+		// makes sense since lease commands are proposed by anyone, so we can't expect a coherent
+		// MaxLeaseIndex. Also, lease proposals are often replayed, so not making them update the
+		// counter makes sense from a testing perspective.
+		//
+		// However, leases get special vetting to make sure we don't give one to a replica that was
+		// since removed (see #15385 and a comment in redirectOnOrAcquireLease).
+		if _, ok := r.mu.state.Desc.GetReplicaDescriptor(requestedLease.Replica.StoreID); !ok {
+			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
+				Existing:  *r.mu.state.Lease,
+				Requested: requestedLease,
+				Message:   "replica not part of range",
+			})
+		}
 	} else if r.mu.state.LeaseAppliedIndex < raftCmd.MaxLeaseIndex {
 		// The happy case: the command is applying at or ahead of the minimal
 		// permissible index. It's ok if it skips a few slots (as can happen
@@ -3606,6 +3602,56 @@ func (r *Replica) processRaftCommand(
 			}()
 		}
 	}
+	return leaseIndex, forcedErr
+}
+
+// processRaftCommand processes a raft command by unpacking the
+// command struct to get args and reply and then applying the command
+// to the state machine via applyRaftCommand(). The result is sent on
+// the command's done channel, if available. As a special case, the
+// zero idKey signifies an empty Raft command, which will apply as a
+// no-op (without accessing raftCmd), updating only the applied index.
+//
+// This method returns true if the command successfully applied a
+// replica change.
+//
+// TODO(tschottdorf): once we properly check leases and lease requests etc,
+// make sure that the error returned from this method is always populated in
+// those cases, as one of the callers uses it to abort replica changes.
+func (r *Replica) processRaftCommand(
+	ctx context.Context, idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
+) bool {
+	if index == 0 {
+		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
+	}
+
+	if log.V(4) {
+		log.Infof(ctx, "processing command %x: maxLeaseIndex=%d", idKey, raftCmd.MaxLeaseIndex)
+	}
+
+	var ts hlc.Timestamp
+	var rSpan roachpb.RSpan
+	if idKey != "" {
+		ts = raftCmd.ReplicatedEvalResult.Timestamp
+		rSpan = roachpb.RSpan{
+			Key:    raftCmd.ReplicatedEvalResult.StartKey,
+			EndKey: raftCmd.ReplicatedEvalResult.EndKey,
+		}
+	}
+
+	r.mu.Lock()
+	proposal, proposedLocally := r.mu.proposals[idKey]
+
+	// TODO(tschottdorf): consider the Trace situation here.
+	if proposedLocally {
+		// We initiated this command, so use the caller-supplied context.
+		ctx = proposal.ctx
+		proposal.ctx = nil // avoid confusion
+		delete(r.mu.proposals, idKey)
+	}
+
+	leaseIndex, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)
+
 	r.mu.Unlock()
 
 	if forcedErr == nil {
