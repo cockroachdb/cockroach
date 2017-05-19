@@ -1,5 +1,5 @@
 import _ from "lodash";
-import * as React from "react";
+import React from "react";
 import * as d3 from "d3";
 import { RouterState, Link } from "react-router";
 import { connect } from "react-redux";

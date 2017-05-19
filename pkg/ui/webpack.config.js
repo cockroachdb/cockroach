@@ -20,6 +20,14 @@ class RemoveBrokenDependenciesPlugin {
   }
 }
 
+// https://webpack.js.org/configuration/stats/
+const stats = {
+  colors: true,
+  chunks: false,
+  chunkModules: false,
+  chunkOrigins: false,
+};
+
 module.exports = {
   entry: './src/index.tsx',
   output: {
@@ -95,4 +103,6 @@ module.exports = {
       appMountId: 'react-layout',
     }),
   ],
+
+  stats: stats,
 };

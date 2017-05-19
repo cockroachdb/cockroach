@@ -46,6 +46,12 @@ module.exports = function(config) {
       },
     }),
 
+    // "stats" needs to be copied to webpackMiddleware configuration in order
+    // to correctly configure console output
+    webpackMiddleware: {
+      noInfo: true,
+      stats: webpackConfig.stats,
+    },
 
     // test results reporter to use
     // possible values: 'dots', 'progress'

@@ -41,9 +41,9 @@ lint: $(YARN_INSTALLED_TARGET) | protos
 test: $(YARN_INSTALLED_TARGET) | protos
 	karma start
 
-.PHONY: test-debug
-test-debug: $(YARN_INSTALLED_TARGET) | protos
-	karma start --browsers Chrome --no-single-run --reporters mocha
+.PHONY: test-watch
+test-watch: $(YARN_INSTALLED_TARGET) | protos
+	karma start --no-single-run --auto-watch
 
 $(GOBINDATA_TARGET): $(YARN_INSTALLED_TARGET) $(shell git ls-files | grep -vF $(GOBINDATA_TARGET)) | protos
 	rm -rf dist
