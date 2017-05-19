@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-func newTestServer(t *testing.T, ctx *Context, compression bool) (*grpc.Server, net.Listener) {
+func newTestServer(t testing.TB, ctx *Context, compression bool) (*grpc.Server, net.Listener) {
 	tlsConfig, err := ctx.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
@@ -670,4 +670,24 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	// the (application-level) heartbeats performed by rpc.Context, but the
 	// behaviour of our heartbeats in the face of transport failures is
 	// sufficiently tested in TestHeartbeatHealthTransport.
+}
+
+func BenchmarkGRPCDial(b *testing.B) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
+	ctx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
+
+	_, ln := newTestServer(b, ctx, false)
+	remoteAddr := ln.Addr().String()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, err := ctx.GRPCDial(remoteAddr)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }
