@@ -193,6 +193,12 @@ type Session struct {
 	// structure.
 	virtualSchemas virtualSchemaHolder
 
+	// planner is the "default planner" on a session, to save planner allocations
+	// during serial execution. Since planners are not threadsafe, this is only
+	// safe to use when a statement is not being parallelized. It must be reset
+	// before using.
+	planner planner
+
 	//
 	// Run-time state.
 	//
@@ -420,15 +426,10 @@ func (s *Session) hijackCtx(ctx context.Context) func() {
 	return s.TxnState.hijackCtx(ctx)
 }
 
-// newPlanner creates a planner inside the scope of the given Session. The
-// statement executed by the planner will be executed in txn. The planner
-// should only be used to execute one statement.
-func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
-	p := &planner{
-		session: s,
-		// phaseTimes is an array, not a slice, so this performs a copy-by-value.
-		phaseTimes: s.phaseTimes,
-	}
+func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
+	p.session = s
+	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
+	p.phaseTimes = s.phaseTimes
 
 	p.semaCtx = parser.MakeSemaContext(s.User == security.RootUser)
 	p.semaCtx.Location = &s.Location
@@ -442,7 +443,22 @@ func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
 	}
 
 	p.setTxn(txn)
+}
 
+// FinishPlan releases the resources that were consumed by the currently active
+// default planner. It does not check to see whether any other resources are
+// still pointing to the planner, so it should only be called when a connection
+// is entirely finished executing a statement.
+func (s *Session) FinishPlan() {
+	s.planner = emptyPlanner
+}
+
+// newPlanner creates a planner inside the scope of the given Session. The
+// statement executed by the planner will be executed in txn. The planner
+// should only be used to execute one statement.
+func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
+	p := &planner{}
+	s.resetPlanner(p, e, txn)
 	return p
 }
 
