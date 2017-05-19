@@ -49,8 +49,8 @@ include $(REPO_ROOT)/build/common.mk
 # symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
 # to the host machine's actual macOS version works around this. See:
 # https://github.com/jemalloc/jemalloc/issues/494.
-ifdef MACOS
-export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion)
+ifdef HOST_MACOS
+export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion | grep -oE '\d+\.\d+')
 endif
 
 # We intentionally use LINKFLAGS instead of the more traditional LDFLAGS
