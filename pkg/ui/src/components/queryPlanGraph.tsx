@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import * as d3 from "d3";
 import {event as d3Event} from "d3";
 

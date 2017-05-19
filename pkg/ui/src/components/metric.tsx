@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 
 /**
  * MetricProps reperesents the properties assigned to a selector component. A

@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import _ from "lodash";
 import { RouterState } from "react-router";
 import { StickyContainer } from "react-sticky";

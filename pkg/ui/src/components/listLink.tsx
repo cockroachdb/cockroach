@@ -7,7 +7,8 @@
  * activeClass, rather than the logic below.
  */
 
-import * as React from "react";
+import React from "react";
+import PropTypes from "prop-types";
 import { Link, InjectedRouter } from "react-router";
 
 interface ListLinkContext {
@@ -22,7 +23,7 @@ export interface LinkProps {
 
 export class ListLink extends React.Component<LinkProps, {}> {
   static contextTypes = {
-    router: React.PropTypes.object,
+    router: PropTypes.object,
   };
 
   static defaultProps = {
