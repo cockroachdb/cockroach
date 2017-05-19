@@ -1082,7 +1082,7 @@ func (l Lease) Type() LeaseType {
 // Ignore proposed timestamps for lease verification; for epoch-
 // based leases, the start time of the lease is sufficient to
 // avoid using an older lease with same epoch.
-func (l Lease) Equivalent(ol Lease) error {
+func (l Lease) Equivalent(ol Lease) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, ol.ProposedTS = nil, nil
 	l.DeprecatedStartStasis = ol.DeprecatedStartStasis
@@ -1096,10 +1096,7 @@ func (l Lease) Equivalent(ol Lease) error {
 		l.Expiration.Less(ol.Expiration) {
 		l.Expiration = ol.Expiration
 	}
-	if l == ol {
-		return nil
-	}
-	return errors.Errorf("leases %+v and %+v are not equivalent", l, ol)
+	return l == ol
 }
 
 // AsIntents takes a slice of spans and returns it as a slice of intents for

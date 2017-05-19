@@ -680,6 +680,39 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	}
 }
 
+func TestLeaseReplicaNotInDesc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	lease, _ := tc.repl.GetLease()
+	invalidLease := lease
+	invalidLease.Replica.StoreID += 12345
+
+	raftCmd := storagebase.RaftCommand{
+		ProposerLease:   lease,
+		ProposerReplica: invalidLease.Replica,
+		ReplicatedEvalResult: storagebase.ReplicatedEvalResult{
+			IsLeaseRequest: true,
+			State: storagebase.ReplicaState{
+				Lease: &invalidLease,
+			},
+		},
+	}
+	tc.repl.mu.Lock()
+	_, pErr := tc.repl.checkForcedErrLocked(
+		context.Background(), makeIDKey(), raftCmd, nil /* proposal */, false, /* !proposedLocally */
+	)
+	tc.repl.mu.Unlock()
+	if _, isErr := pErr.GetDetail().(*roachpb.LeaseRejectedError); !isErr {
+		t.Fatal(pErr)
+	} else if !testutils.IsPError(pErr, "replica not part of range") {
+		t.Fatal(pErr)
+	}
+}
+
 func TestReplicaRangeBoundsChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
