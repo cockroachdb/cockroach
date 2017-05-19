@@ -49,6 +49,7 @@ SUFFIX       :=
 #
 # All non-empty variants only work in the cockroachdb/builder docker image, as
 # they depend on cross-compilation toolchains available there.
+# The name of the cockroach binary depends on the release type.
 TYPE :=
 
 # We intentionally use LINKFLAGS instead of the more traditional LDFLAGS
