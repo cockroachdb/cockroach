@@ -75,15 +75,16 @@ func (UnaryOp) preferred() bool {
 func init() {
 	for op, overload := range UnaryOps {
 		for i, impl := range overload {
-			impl.types = ArgTypes{{"arg", impl.Typ}}
-			impl.retType = fixedReturnType(impl.ReturnType)
-			UnaryOps[op][i] = impl
+			casted := impl.(UnaryOp)
+			casted.types = ArgTypes{{"arg", casted.Typ}}
+			casted.retType = fixedReturnType(casted.ReturnType)
+			UnaryOps[op][i] = casted
 		}
 	}
 }
 
 // unaryOpOverload is an overloaded set of unary operator implementations.
-type unaryOpOverload []UnaryOp
+type unaryOpOverload []overloadImpl
 
 // UnaryOps contains the unary operations indexed by operation type.
 var UnaryOps = map[UnaryOperator]unaryOpOverload{
@@ -194,20 +195,22 @@ func (BinOp) preferred() bool {
 func init() {
 	for op, overload := range BinOps {
 		for i, impl := range overload {
-			impl.types = ArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
-			impl.retType = fixedReturnType(impl.ReturnType)
-			BinOps[op][i] = impl
+			casted := impl.(BinOp)
+			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
+			casted.retType = fixedReturnType(casted.ReturnType)
+			BinOps[op][i] = casted
 		}
 	}
 }
 
 // binOpOverload is an overloaded set of binary operator implementations.
-type binOpOverload []BinOp
+type binOpOverload []overloadImpl
 
 func (o binOpOverload) lookupImpl(left, right Type) (BinOp, bool) {
 	for _, fn := range o {
-		if fn.matchParams(left, right) {
-			return fn, true
+		casted := fn.(BinOp)
+		if casted.matchParams(left, right) {
+			return casted, true
 		}
 	}
 	return BinOp{}, false
@@ -993,19 +996,21 @@ func (CmpOp) preferred() bool {
 func init() {
 	for op, overload := range CmpOps {
 		for i, impl := range overload {
-			impl.types = ArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
-			CmpOps[op][i] = impl
+			casted := impl.(CmpOp)
+			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
+			CmpOps[op][i] = casted
 		}
 	}
 }
 
 // cmpOpOverload is an overloaded set of comparison operator implementations.
-type cmpOpOverload []CmpOp
+type cmpOpOverload []overloadImpl
 
 func (o cmpOpOverload) lookupImpl(left, right Type) (CmpOp, bool) {
 	for _, fn := range o {
-		if fn.matchParams(left, right) {
-			return fn, true
+		casted := fn.(CmpOp)
+		if casted.matchParams(left, right) {
+			return casted, true
 		}
 	}
 	return CmpOp{}, false
