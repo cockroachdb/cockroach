@@ -833,7 +833,6 @@ func TestReplicaLease(t *testing.T) {
 	}
 }
 
-// TestReplicaNotLeaseHolderError verifies NotLeaderError when lease is rejected.
 func TestReplicaNotLeaseHolderError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
