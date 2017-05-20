@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,12 +13,49 @@
 // permissions and limitations under the License.
 //
 // Author: Irfan Sharif (irfansharif@cockroachlabs.com)
+//
+// The code below is a modified version of a similar structure found in
+// grpc-go (github.com/grpc/grpc-go/blob/b2fae0c/transport/control.go).
+// Specifically we allow for arbitrarily sized acquisitions and avoid
+// starvation by internally maintaining a FIFO structure.
+
+/*
+*
+* Copyright 2014, Google Inc.
+* All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are
+* met:
+*
+*     * Redistributions of source code must retain the above copyright
+* notice, this list of conditions and the following disclaimer.
+*     * Redistributions in binary form must reproduce the above
+* copyright notice, this list of conditions and the following disclaimer
+* in the documentation and/or other materials provided with the
+* distribution.
+*     * Neither the name of Google Inc. nor the names of its
+* contributors may be used to endorse or promote products derived from
+* this software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+* "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+* LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+* A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+* OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+* SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+* LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+* DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+* THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+* (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*
+ */
 
 package storage
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,154 +67,222 @@ import (
 type quotaPool struct {
 	syncutil.Mutex
 
-	q        int64
-	max      int64
-	cond     *sync.Cond
-	closed   bool
-	closedCh chan struct{}
+	// We service quota acquisitions in a first come, first serve basis. This
+	// is done so as to in order to prevent starvations of large acquisitions
+	// from a continuous stream of smaller ones. Acquisitions 'register'
+	// themselves for a notification that indicates they're now first in line.
+	// This is done by appending to the queue the channel they will then wait
+	// on. If a thread no longer needs to be notified, i.e.  their acquisition
+	// context has been cancelled, the thread is responsible for blocking
+	// subsequent notifications to the channel by filling up the channel
+	// buffer.
+	queue []chan struct{}
+
+	// We use a channel to 'park' our quota value for easier composition with
+	// context cancellation and quotaPool closing (see quotaPool.acquire).
+	//
+	// Quota additions push a value into the channel whereas the acquisition
+	// first in line waits on the channel itself.
+	q   chan int64
+	cap int64
+
+	// Ongoing acquisitions listen on quotaPool.done which is closed when the quota
+	// pool is closed (see quotaPool.close)
+	done   chan struct{}
+	closed bool
 }
 
-// newQuotaPool returns a new instance of a quota pool initialized with the
-// specified quota. The quota pool is capped at this amount.
-func newQuotaPool(v int64) *quotaPool {
+// newQuotaPool returns a new quota pool initialized with a given quota, the quota
+// is capped at this amount.
+func newQuotaPool(q int64) *quotaPool {
 	qp := &quotaPool{
-		q:        v,
-		max:      v,
-		closedCh: make(chan struct{}),
+		q:    make(chan int64, 1),
+		done: make(chan struct{}),
+		cap:  q,
 	}
-	qp.cond = sync.NewCond(qp)
+	qp.q <- q
 	return qp
 }
 
-// add returns the specified amount back to the quota pool and is a blocking
-// call. We let adds go through on a closed quota pool given subsequent
-// acquisitions will not succeed. Safe for concurrent use.
-func (qp *quotaPool) add(q int64) {
+// add adds the specified quota back to the pool. At no point does the total
+// quota in the pool exceed the maximum capacity determined during
+// initialization. Safe for concurrent use.
+func (qp *quotaPool) add(v int64) {
 	qp.Lock()
-	q += qp.q
-	if q < qp.max {
-		qp.q = q
-	} else {
-		qp.q = qp.max
+	select {
+	case q := <-qp.q:
+		v += q
+	default:
 	}
-	qp.cond.Broadcast()
+	if v > qp.cap {
+		v = qp.cap
+	}
+	qp.q <- v
 	qp.Unlock()
 }
 
-// acquire attempts to acquire the specified amount of quota and blocks
-// indefinitely until we have done so. Alternatively if the given context gets
-// cancelled or quota pool is closed altogether we return with an error
-// specifying so. The lack of an error indicates a successful quota
-// acquisition, the caller is responsible for returning the quota back to the
-// pool eventually (see quotaPool.add). Safe for concurrent use.
+// acquire acquires the specified amount of quota from the pool. On success,
+// nil is returned and the caller must call add(v) or otherwise arrange for the
+// quota to be returned to the pool. If 'v' is greater than the total capacity
+// of the pool, we instead try to acquire quota equal to the maximum capacity.
+// Safe for concurrent use.
 func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
-	res := make(chan error, 1)
-	done := new(bool)
-	go func() {
-		qp.acquireInternal(v, done, res)
-	}()
+	if v > qp.cap {
+		v = qp.cap
+	}
+
+	notifyCh := make(chan struct{}, 1)
+	qp.Lock()
+	qp.queue = append(qp.queue, notifyCh)
+	// If we're first in line, we notify ourself immediately.
+	if len(qp.queue) == 1 {
+		notifyCh <- struct{}{}
+	}
+	qp.Unlock()
 	slowTimer := timeutil.NewTimer()
-	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
+	defer slowTimer.Stop()
 
 	for {
 		select {
 		case <-slowTimer.C:
 			log.Warningf(ctx, "have been waiting %s attempting to acquire quota",
 				base.SlowRequestThreshold)
+			continue
 		case <-ctx.Done():
-			// Given we've seen a context cancellation here, we ensure the quota
-			// acquisition goroutine runs to completion. We do so by waiting for a
-			// result on the 'res' channel. If we end up acquiring quota, we're
-			// sure to return it.
-			*done = true
+			qp.Lock()
+			// We no longer need to notified but we need to be careful and check
+			// whether or not we're first in queue. If so, we need to notify the
+			// next acquisition thread and clean up the waiting queue while doing
+			// so.
+			// Otherwise we simply 'unregister' ourselves from the queue by filling
+			// up the channel buffer. This is what is checked when a thread wishes
+			// to notify the next in line.
 
-			// Wake up the acquisition goroutine to signal it to stop working.
-			qp.cond.Broadcast()
-
-			// We've acquired quota, need to release it back because context was
-			// cancelled.
-			if err := <-res; err == nil {
-				qp.add(v)
+			if qp.queue[0] == notifyCh {
+				// We're at the head of the queue. We traverse until we find a
+				// thread waiting to be notified, notify the thread and truncate
+				// our queue so to ensure the said thread is at the head of the queue.
+				// If we determine there are non threads waiting, we simply
+				// truncate the queue to reflect this.
+				//
+				// NB: Notifying the channel before moving it to the head of the
+				// queue is safe because the queue itself is guarded by a lock.
+				// Threads are not a risk of getting notified and finding out
+				// they're not first in line.
+				for i, ch := range qp.queue[1:] {
+					select {
+					case ch <- struct{}{}:
+						qp.queue = qp.queue[i+1:]
+						qp.Unlock()
+						return ctx.Err()
+					default:
+					}
+				}
+				qp.queue = qp.queue[:0]
+			} else {
+				notifyCh <- struct{}{}
 			}
 
+			qp.Unlock()
 			return ctx.Err()
-		case <-qp.closedCh:
-			// Given the quota pool was just closed, we ensure the quota
-			// acquisition goroutine runs to completion. We do so by waiting for a
-			// result on the 'res' channel. If we end up acquiring quota, we're
-			// sure to return it.
-			*done = true
+		case <-qp.done:
+			// We don't need to 'unregister' ourselves as in the case when the
+			// context is cancelled. By not doing so we in fact 'suck' up the
+			// notification (if any) and all acquisitions threads further along the
+			// queue will definitely receive on qp.done.
+			return errors.New("quota pool no longer in use")
+		case <-notifyCh:
+		}
+		break
+	}
 
-			// Wake up the acquisition goroutine to signal it to stop working.
-			qp.cond.Broadcast()
+	// We're first in line to receive quota, we keep accumulating quota until
+	// we've acquired enough or determine we no longer need the acquisition.
+	// If we have acquired the quota needed or our context gets cancelled,
+	// we're sure to remove ourselves from the queue and notify the thread next
+	// in line (if any).
 
-			// We acquired quota, we release it back because the quota pool was
-			// closed.
-			// NB: Strictly speaking this is not necessary given future allocations
-			// will fail anyway.
-			if err := <-res; err == nil {
-				qp.add(v)
+	var acquired int64
+	for acquired < v {
+		select {
+		case <-slowTimer.C:
+			log.Warningf(ctx, "have been waiting %s attempting to acquire quota",
+				base.SlowRequestThreshold)
+		case <-ctx.Done():
+			if acquired > 0 {
+				qp.add(acquired)
 			}
-
-			return errors.New("quota pool closed")
-		case err := <-res:
-			return err
+			qp.Lock()
+			for i, ch := range qp.queue[1:] {
+				select {
+				case ch <- struct{}{}:
+					qp.queue = qp.queue[i+1:]
+					qp.Unlock()
+					return ctx.Err()
+				default:
+				}
+			}
+			qp.queue = qp.queue[:0]
+			qp.Unlock()
+			return ctx.Err()
+		case <-qp.done:
+			// We don't need to release quota back as all ongoing and
+			// subsequent acquisitions will fail with an error indicating that
+			// the pool is now closed.
+			return errors.New("quota pool no longer in use")
+		case q := <-qp.q:
+			acquired += q
 		}
 	}
-}
-
-func (qp *quotaPool) acquireInternal(v int64, done *bool, res chan<- error) {
-	// sync.Cond has the following usage pattern:
-	//
-	// // Acquire this monitor's lock.
-	// c.L.Lock()
-	// // While the condition/predicate/assertion that we are waiting for is not true...
-	// for !condition() {
-	//     // Wait on this monitor's lock and condition variable.
-	//     c.Wait()
-	// }
-	//
-	// // Critical section, we have the lock.
-	// ...
-	//
-	// // Wake another waiting thread if appropriate.
-	// if signal() {
-	//     c.L.Signal()
-	// }
-	//
-	// // Release this monitor's lock.
-	// c.L.Unlock()
+	if acquired > v {
+		qp.add(acquired - v)
+	}
 
 	qp.Lock()
-
-	for !(v <= qp.q) {
-		qp.cond.Wait()
-		// If we were signalled it could possibly be because quota was just
-		// added to the pool which we check in the next loop iteration.
-		// Alternatively we no longer need the result.
-		if *done {
+	for i, ch := range qp.queue[1:] {
+		select {
+		case ch <- struct{}{}:
+			qp.queue = qp.queue[i+1:]
 			qp.Unlock()
-			res <- errors.New("acquisition cancelled")
-			return
+			return nil
+		default:
 		}
 	}
-
-	// Critical section, we have the lock.
-	// While the lock is held, no other go routine is acquiring/decrementing quota.
-	qp.q -= v
-
+	qp.queue = qp.queue[:0]
 	qp.Unlock()
-	res <- nil
+	return nil
 }
 
-// close closes the quota pool and is safe for concurrent use. Any
-// ongoing and subsequent acquisitions fail with an error indicating so.
+// quota will correctly report the amount of quota available in the
+// system only if there are no ongoing acquisition threads. If there are, it's
+// return value can be up to 'v' less than currently available quota where 'v'
+// is the value the acquisition thread first in line is attempting to acquire.
+func (qp *quotaPool) quota() int64 {
+	qp.Lock()
+	defer qp.Unlock()
+
+	select {
+	case q := <-qp.q:
+		qp.q <- q
+		return q
+	default:
+		return 0
+	}
+}
+
+// close closes the quota pool and is safe for concurrent use.
+//
+// NB: This is best effort, we try to fail all ongoing and subsequent
+// acquisitions with an error indicating so but acquisitions may still seep
+// through. This is due to go's behaviour where if we're waiting on multiple
+// channels in a select statement, if there are values ready for more than one
+// channel the runtime will pseudo-randomly choose one to proceed.
 func (qp *quotaPool) close() {
 	qp.Lock()
 	if !qp.closed {
-		close(qp.closedCh)
 		qp.closed = true
+		close(qp.done)
 	}
 	qp.Unlock()
 }

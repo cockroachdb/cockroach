@@ -256,8 +256,9 @@ func (r *Replica) GetLease() (roachpb.Lease, *roachpb.Lease) {
 }
 
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
-// a given quota. Only safe to call on the leader replica.
-func (r *Replica) SetQuotaPool(quota int64) {
+// a given quota. Additionally it initializes the replica's quota release queue
+// and its command sizes map. Only safe to call on the leader replica.
+func (r *Replica) InitQuotaPool(quota int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -266,24 +267,16 @@ func (r *Replica) SetQuotaPool(quota int64) {
 		r.mu.proposalQuota.close()
 	}
 	r.mu.proposalQuota = newQuotaPool(quota)
-}
-
-// InitQuotaReleaseQueue initializes the replica's quota release queue. Only
-// intended to be called on the leader replica.
-func (r *Replica) InitQuotaReleaseQueue() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.mu.quotaReleaseQueue = make([]int, 0)
-}
-
-// InitCommandSizes initializes the replica's command sizes map. Only intended
-// to be called on the leader replica.
-func (r *Replica) InitCommandSizes() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+	r.mu.quotaReleaseQueue = nil
 	r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
+}
+
+// QuotaAvailable returns the quota available in the replica's quota pool. Only
+// safe to call on the replica that is both leaseholder and range leader.
+func (r *Replica) QuotaAvailable() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.proposalQuota.quota()
 }
 
 // GetTimestampCacheLowWater returns the timestamp cache low water mark.
