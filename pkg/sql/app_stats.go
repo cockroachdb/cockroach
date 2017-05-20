@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -102,6 +103,7 @@ func (a *appStats) recordStatement(
 	if _, ok := stmt.(parser.HiddenFromStats); ok {
 		return
 	}
+	now := timeutil.Now()
 
 	// Extend the statement key with a character that indicated whether
 	// there was an error and/or whether the query was distributed, so
@@ -112,6 +114,10 @@ func (a *appStats) recordStatement(
 
 	// Get the statistics object.
 	s := a.getStatsForStmt(stmtKey{stmt: buf.String(), failed: err != nil, distSQLUsed: distSQLUsed})
+
+	// Make sure to add statement recording to the overhead latency! The above
+	// FormatNode call is particularly expensive.
+	ovhLat += timeutil.Now().Sub(now).Seconds()
 
 	// Collect the per-statement statistics.
 	s.Lock()
