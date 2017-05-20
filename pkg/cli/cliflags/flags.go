@@ -458,4 +458,17 @@ is the prefix for range local keys.`}
 		Name:        "replicated",
 		Description: "Restrict scan to replicated data.",
 	}
+
+	InputFile = FlagInfo{
+		Name:        "file",
+		Shorthand:   "f",
+		Description: "File to read input from. If specified, takes priority over host/port flags.",
+	}
+
+	PrintSystemConfig = FlagInfo{
+		Name: "print-system-config",
+		Description: `
+If specified, print the system config contents. Beware that the output will be
+long and not particularly human-readable.`,
+	}
 )

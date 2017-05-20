@@ -304,6 +304,7 @@ func init() {
 	boolFlag(setUserCmd.Flags(), &password, cliflags.Password, false)
 
 	clientCmds := []*cobra.Command{
+		debugGossipValuesCmd,
 		debugZipCmd,
 		dumpCmd,
 		genHAProxyCmd,
@@ -378,6 +379,10 @@ func init() {
 
 		f = debugRangeDataCmd.Flags()
 		boolFlag(f, &debugCtx.replicated, cliflags.Replicated, false)
+
+		f = debugGossipValuesCmd.Flags()
+		stringFlag(f, &debugCtx.inputFile, cliflags.InputFile, "")
+		boolFlag(f, &debugCtx.printSystemConfig, cliflags.PrintSystemConfig, false)
 	}
 }
 
