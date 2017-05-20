@@ -458,4 +458,19 @@ is the prefix for range local keys.`}
 		Name:        "replicated",
 		Description: "Restrict scan to replicated data.",
 	}
+
+	GossipInputFile = FlagInfo{
+		Name:      "file",
+		Shorthand: "f",
+		Description: `
+File containing the JSON output from a node's /_status/gossip/ endpoint.
+If specified, takes priority over host/port flags.`,
+	}
+
+	PrintSystemConfig = FlagInfo{
+		Name: "print-system-config",
+		Description: `
+If specified, print the system config contents. Beware that the output will be
+long and not particularly human-readable.`,
+	}
 )
