@@ -83,12 +83,16 @@ const (
 	mergeTxnName         = "merge"
 
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
-
-	// TODO(irfansharif, peter): What's a good default? Too low and everything comes
-	// to a grinding halt, too high and we're not really throttling anything
-	// (we'll still generate snapshots). Should it be adjusted dynamically?
-	defaultProposalQuota = 10 << 20 // 10 MB
 )
+
+// TODO(irfansharif, peter): What's a good default? Too low and everything comes
+// to a grinding halt, too high and we're not really throttling anything
+// (we'll still generate snapshots). Should it be adjusted dynamically?
+//
+// We set the defaultProposalQuota to be less than raftLogMaxSize, in doing so
+// we ensure all replicas have sufficiently up to date logs so that when the
+// log gets truncated, the followers do not need non-preemptive snapshots.
+var defaultProposalQuota = raftLogMaxSize / 4
 
 // This flag controls whether Transaction entries are automatically gc'ed
 // upon EndTransaction if they only have local intents (which can be
@@ -834,16 +838,17 @@ func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) er
 	// go through without any throttling whatsoever but given how short lived
 	// these scenarios are we don't try to remedy any further.
 	//
-	// NB: For the very first time we acquire quota (think the first write
-	// through the system), r.mu.proposalQuota can still be nil despite the
-	// replica being the leader. This will occur when the replica goes through
-	// this codepath prior to handleRaftReadyRaftMuLocked ->
-	// updateProposalQuotaRaftMuLocked where the quota pool is first initialized. We
-	// let the first write proceed despite not having any quota to acquire
-	// from.
+	// NB: It is necessary to allow proposals with a nil quota pool to go
+	// through, for otherwise a follower could never request the lease.
 
 	if quotaPool == nil {
 		return nil
+	}
+
+	// Trace if we're running low on available proposal quota; it might explain
+	// why we're taking so long.
+	if q := quotaPool.approximateQuota(); q < quotaPool.maxQuota()/10 && log.HasSpanOrEvent(ctx) {
+		log.Eventf(ctx, "quota running low, currently available ~%d", q)
 	}
 
 	return quotaPool.acquire(ctx, quota)
@@ -868,8 +873,13 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			if r.mu.proposalQuota != nil {
 				log.Fatal(ctx, "proposalQuota was not nil before becoming the leader")
 			}
+			if len(r.mu.quotaReleaseQueue) != 0 {
+				log.Fatal(ctx, "quotaReleaseQueue was non-zero length before becoming the leader")
+			}
+			if len(r.mu.commandSizes) != 0 {
+				log.Fatal(ctx, "commandSizes was non-zero length before becoming the leader")
+			}
 			r.mu.proposalQuota = newQuotaPool(defaultProposalQuota)
-			r.mu.quotaReleaseQueue = make([]int, 0)
 			r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 		} else if r.mu.proposalQuota != nil {
 			// We're either becoming a follower or simply observing a
@@ -939,8 +949,8 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// quota releases.
 		delta := int64(minIndex - r.mu.proposalQuotaBaseIndex)
 		numReleases := delta
-		if int64(len(r.mu.quotaReleaseQueue)) < delta {
-			numReleases = int64(len(r.mu.quotaReleaseQueue))
+		if qLen := int64(len(r.mu.quotaReleaseQueue)); qLen < delta {
+			numReleases = qLen
 		}
 		sum := 0
 		for i := int64(0); i < numReleases; i++ {
@@ -948,6 +958,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 		r.mu.proposalQuotaBaseIndex += uint64(numReleases)
 		r.mu.quotaReleaseQueue = r.mu.quotaReleaseQueue[numReleases:]
+
 		r.mu.proposalQuota.add(int64(sum))
 	}
 }
@@ -2694,6 +2705,9 @@ func (r *Replica) propose(
 		return ch, func() bool { return false }, noop, nil
 	}
 
+	// TODO(irfansharif): This int cast indicates that if someone configures a
+	// very large max proposal size, there is weird overflow behavior and it
+	// will not work the way it should.
 	if proposal.command.Size() > int(maxCommandSize.Get()) {
 		// Once a command is written to the raft log, it must be loaded
 		// into memory and replayed on all replicas. If a command is
@@ -2704,6 +2718,25 @@ func (r *Replica) propose(
 
 	if err := r.maybeAcquireProposalQuota(ctx, int64(proposal.command.Size())); err != nil {
 		return nil, nil, noop, err
+	}
+
+	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
+		for index, union := range ba.Requests {
+			filterArgs := storagebase.FilterArgs{
+				Ctx:   ctx,
+				CmdID: idKey,
+				Index: index,
+				Sid:   r.store.StoreID(),
+				Req:   union.GetInner(),
+				Hdr:   ba.Header,
+			}
+			if pErr := filter(filterArgs); pErr != nil {
+				ch := make(chan proposalResult, 1)
+				ch <- proposalResult{Err: pErr}
+				close(ch)
+				return ch, func() bool { return false }, noop, nil
+			}
+		}
 	}
 
 	// submitProposalLocked calls withRaftGroupLocked which requires that
@@ -2727,13 +2760,9 @@ func (r *Replica) propose(
 	}
 	undoQuotaAcquisition := func() {
 		r.mu.Lock()
-		qp := r.mu.proposalQuota
-		if r.mu.commandSizes != nil {
+		if r.mu.commandSizes != nil && r.mu.proposalQuota != nil {
 			delete(r.mu.commandSizes, proposal.idKey)
-		}
-
-		if qp != nil {
-			qp.add(int64(proposal.command.Size()))
+			r.mu.proposalQuota.add(int64(proposal.command.Size()))
 		}
 		r.mu.Unlock()
 	}
@@ -2795,15 +2824,6 @@ func (r *Replica) isSoloReplicaRLocked() bool {
 }
 
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
-	// Trace if there are other proposals ahead of us; it might explain why
-	// we're taking so long. The -1 avoids counting this proposal itself.
-	//
-	// TODO(irfahsharif): once we have size-based quota, we could log how
-	// much in-flight quota there is - that's more instructive than a number.
-	if numInFlight := len(r.mu.proposals) - 1; numInFlight > 0 && log.HasSpanOrEvent(p.ctx) {
-		log.Eventf(p.ctx, "~%d requests in-flight", numInFlight)
-	}
-
 	data, err := protoutil.Marshal(&p.command)
 	if err != nil {
 		return err
@@ -3132,11 +3152,18 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			r.store.metrics.RaftCommandsApplied.Inc(1)
 			stats.processed++
 
-			if r.mu.quotaReleaseQueue != nil {
-				r.mu.Lock()
-				r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, r.mu.commandSizes[commandID])
-				r.mu.Unlock()
+			r.mu.Lock()
+			if r.mu.replicaID == r.mu.leaderID {
+				// At this point we're not guaranteed to have proposalQuota
+				// initialized, the same is true for quotaReleaseQueue and
+				// commandSizes. By checking if the specified commandID is
+				// present in commandSizes, we'll only queue the cmdSize if
+				// they're all initialized.
+				if cmdSize, ok := r.mu.commandSizes[commandID]; ok {
+					r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, cmdSize)
+				}
 			}
+			r.mu.Unlock()
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
@@ -3160,11 +3187,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 			stats.processed++
 
-			if r.mu.quotaReleaseQueue != nil {
-				r.mu.Lock()
-				r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, r.mu.commandSizes[commandID])
-				r.mu.Unlock()
+			r.mu.Lock()
+			if r.mu.replicaID == r.mu.leaderID {
+				if cmdSize, ok := r.mu.commandSizes[commandID]; ok {
+					r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, cmdSize)
+				}
 			}
+			r.mu.Unlock()
+
 			if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 				raftGroup.ApplyConfChange(cc)
 				return true, nil
