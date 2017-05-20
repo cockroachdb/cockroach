@@ -944,7 +944,8 @@ func (n *Node) setupSpanForIncomingRPC(
 				if err == nil {
 					br.CollectedSpans = append(br.CollectedSpans, encSp)
 				} else {
-					log.Warning(ctx, err)
+					// We can't log to the finished span; strip the span from the context.
+					log.Warning(opentracing.ContextWithSpan(ctx, nil), err)
 				}
 			}
 		}
