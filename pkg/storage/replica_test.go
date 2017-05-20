@@ -6256,8 +6256,6 @@ func TestGCIncorrectRange(t *testing.T) {
 // commands via a cancelable context.Context.
 func TestReplicaCancelRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	t.Skip("TestingProposalFilter needed for this test to function correctly")
 	for _, cancelEarly := range []bool{true, false} {
 		func() {
 			// Pick a key unlikely to be used by background processes.
@@ -6797,16 +6795,6 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			}
 			repl.mu.Lock()
 
-			if repl.mu.commandSizes != nil {
-				repl.mu.commandSizes[proposal.idKey] = proposal.command.Size()
-			}
-
-			undoQuotaAcquisition := func() {
-				if repl.mu.commandSizes != nil {
-					delete(repl.mu.commandSizes, proposal.idKey)
-				}
-			}
-
 			repl.insertProposalLocked(proposal, repDesc, lease)
 			// We actually propose the command only if we don't
 			// cancel it to simulate the case in which Raft loses
@@ -6815,7 +6803,6 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			if rand.Intn(2) == 0 {
 				log.Infof(context.Background(), "abandoning command %d", i)
 				delete(repl.mu.proposals, proposal.idKey)
-				undoQuotaAcquisition()
 			} else if err := repl.submitProposalLocked(proposal); err != nil {
 				t.Error(err)
 			} else {

@@ -191,8 +191,10 @@ type multiTestContext struct {
 	clock       *hlc.Clock
 	rpcContext  *rpc.Context
 
-	nodeIDtoAddrMu *syncutil.RWMutex
-	nodeIDtoAddr   map[roachpb.NodeID]net.Addr
+	nodeIDtoAddrMu struct {
+		*syncutil.RWMutex
+		nodeIDtoAddr map[roachpb.NodeID]net.Addr
+	}
 
 	transport *storage.RaftTransport
 
@@ -225,7 +227,7 @@ type multiTestContext struct {
 
 func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
 	m.nodeIDtoAddrMu.RLock()
-	addr, ok := m.nodeIDtoAddr[nodeID]
+	addr, ok := m.nodeIDtoAddrMu.nodeIDtoAddr[nodeID]
 	m.nodeIDtoAddrMu.RUnlock()
 	if ok {
 		return addr, nil
@@ -250,7 +252,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 	m.t = t
 
-	m.nodeIDtoAddrMu = &syncutil.RWMutex{}
+	m.nodeIDtoAddrMu.RWMutex = &syncutil.RWMutex{}
 	m.mu = &syncutil.RWMutex{}
 	m.stores = make([]*storage.Store, numStores)
 	m.storePools = make([]*storage.StorePool, numStores)
@@ -709,7 +711,7 @@ func (m *multiTestContext) addStore(idx int) {
 	resolvers := func() []resolver.Resolver {
 		m.nodeIDtoAddrMu.Lock()
 		defer m.nodeIDtoAddrMu.Unlock()
-		addr := m.nodeIDtoAddr[1]
+		addr := m.nodeIDtoAddrMu.nodeIDtoAddr[1]
 		if addr == nil {
 			return nil
 		}
@@ -765,12 +767,12 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatal(err)
 	}
 	m.nodeIDtoAddrMu.Lock()
-	if m.nodeIDtoAddr == nil {
-		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
+	if m.nodeIDtoAddrMu.nodeIDtoAddr == nil {
+		m.nodeIDtoAddrMu.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
 	}
-	_, ok := m.nodeIDtoAddr[nodeID]
+	_, ok := m.nodeIDtoAddrMu.nodeIDtoAddr[nodeID]
 	if !ok {
-		m.nodeIDtoAddr[nodeID] = ln.Addr()
+		m.nodeIDtoAddrMu.nodeIDtoAddr[nodeID] = ln.Addr()
 	}
 	m.nodeIDtoAddrMu.Unlock()
 	if ok {
@@ -829,7 +831,7 @@ func (m *multiTestContext) addStore(idx int) {
 }
 
 func (m *multiTestContext) nodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
-	addr := m.nodeIDtoAddr[nodeID]
+	addr := m.nodeIDtoAddrMu.nodeIDtoAddr[nodeID]
 	return &roachpb.NodeDescriptor{
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),

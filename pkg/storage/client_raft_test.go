@@ -1698,11 +1698,31 @@ func TestQuotaPool(t *testing.T) {
 
 	mtc.replicateRange(rangeID, 1, 2)
 
-	leaderRepl := mtc.getRaftLeader(rangeID)
-	leaderRepl.SetQuotaPool(quota)
-	leaderRepl.InitQuotaReleaseQueue()
-	leaderRepl.InitCommandSizes()
+	assertEqualLastIndex := func() error {
+		var expectedIndex uint64
 
+		for i, s := range mtc.stores {
+			repl, err := s.GetReplica(rangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			index, err := repl.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if i == 0 {
+				expectedIndex = index
+			} else if expectedIndex != index {
+				return fmt.Errorf("%s: expected lastIndex %d, but found %d", repl, expectedIndex, index)
+			}
+		}
+		return nil
+	}
+	testutils.SucceedsSoon(t, assertEqualLastIndex)
+
+	leaderRepl := mtc.getRaftLeader(rangeID)
+	leaderRepl.InitQuotaPool(quota)
 	followerRepl := func() *storage.Replica {
 		for _, store := range mtc.stores {
 			repl, err := store.GetReplica(rangeID)
@@ -1720,15 +1740,11 @@ func TestQuotaPool(t *testing.T) {
 		t.Fatal("could not get a handle on a follower replica")
 	}
 
-	followerDesc, err := followerRepl.GetReplicaDescriptor()
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// We block the third replica effectively causing acquisition of quota
 	// without subsequent release.
 	//
-	// NB: See TestRaftBlockedReplica/#9914 for why we use a separate goroutine.
+	// NB: See TestRaftBlockedReplica/#9914 for why we use a separate
+	// goroutine.
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -1737,41 +1753,46 @@ func TestQuotaPool(t *testing.T) {
 	}()
 	wg.Wait()
 
-	// We keep writing to the same key, generating raft log entries, until we
-	// detect that we're being throttled.
+	// In order to verify write throttling we insert a value 3/4th the size of
+	// total quota available in the system. This should effectively go through
+	// and block the subsequent insert of the same size. We check to see whether
+	// or not after this write has gone through by verifying that the total
+	// quota available has decreased as expected.
 	//
-	// NB: Quota acquisition is based on the size (in bytes) of the
-	// log entry which may very well change in the future, which is why we wait
-	// until quota is depleted as opposed to writing a fixed number of entries.
-	// Additionally there are other moving parts of the system that can get proposals in (e.g.
-	// node liveness heartbeats and raft log truncations).
-	var count int64
-	incArgs := incrementArgs([]byte("k"), 1)
-	ch := make(chan *roachpb.Error, 1)
-	for {
-		go func() {
-			_, pErr := client.SendWrapped(context.Background(), leaderRepl, incArgs)
-			ch <- pErr
-		}()
-		select {
-		case pErr := <-ch:
-			if pErr != nil {
-				t.Fatal(pErr)
-			}
-			count += 1
-			continue
-		case <-time.After(50 * time.Millisecond):
-		}
-		break
+	// Following this we unblock the 'slow' replica allowing it to catch up to
+	// the first write. This in turn releases quota back to the pool and the
+	// second write, previously blocked by virtue of there not being enough
+	// quota, is now free to proceed. We expect the final quota in the system
+	// to be the same as what we started with.
+	key := roachpb.Key("k")
+	value := bytes.Repeat([]byte("v"), (3*quota)/4)
+	_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 
-	expected := []int64{count, count, count}
-	expected[followerDesc.ReplicaID-1] = 0
-	mtc.waitForValues(roachpb.Key("k"), expected)
+	if curQuota := leaderRepl.QuotaAvailable(); curQuota > quota/4 {
+		t.Fatalf("didn't observe the expected quota acquisition, available: %d", curQuota)
+	}
+
+	ch := make(chan *roachpb.Error, 1)
+	go func() {
+		_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
+		ch <- pErr
+	}()
 
 	followerRepl.RaftUnlock()
 
-	mtc.waitForValues(roachpb.Key("k"), []int64{count + 1, count + 1, count + 1})
+	testutils.SucceedsSoonDepth(1, t, func() error {
+		if curQuota := leaderRepl.QuotaAvailable(); curQuota != quota {
+			return errors.Errorf("expected available quota %d, got %d", quota, curQuota)
+		}
+		return nil
+	})
+
+	if pErr := <-ch; pErr != nil {
+		t.Fatal(pErr)
+	}
 }
 
 // TestRaftHeartbeats verifies that coalesced heartbeats are correctly

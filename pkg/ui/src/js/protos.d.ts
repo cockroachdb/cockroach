@@ -15363,6 +15363,7 @@ export namespace cockroach {
                 num_pending?: Long;
                 num_dropped?: Long;
                 raft_log_size?: Long;
+                approximate_proposal_quota?: Long;
             };
 
             /**
@@ -15410,6 +15411,12 @@ export namespace cockroach {
                  * @type {Long}
                  */
                 public raft_log_size: Long;
+
+                /**
+                 * RangeInfo approximate_proposal_quota.
+                 * @type {Long}
+                 */
+                public approximate_proposal_quota: Long;
 
                 /**
                  * Creates a new RangeInfo instance using the specified properties.
