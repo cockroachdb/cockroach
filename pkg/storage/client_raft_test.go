@@ -1699,9 +1699,7 @@ func TestQuotaPool(t *testing.T) {
 	mtc.replicateRange(rangeID, 1, 2)
 
 	leaderRepl := mtc.getRaftLeader(rangeID)
-	leaderRepl.SetQuotaPool(quota)
-	leaderRepl.InitQuotaReleaseQueue()
-	leaderRepl.InitCommandSizes()
+	leaderRepl.InitQuotaPool(quota)
 
 	followerRepl := func() *storage.Replica {
 		for _, store := range mtc.stores {
