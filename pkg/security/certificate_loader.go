@@ -17,11 +17,13 @@
 package security
 
 import (
+	"crypto/x509"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -124,6 +126,15 @@ type CertInfo struct {
 
 	// Name is the blob in the middle of the filename. eg: username for client certs.
 	Name string
+
+	// Parsed certificates. This is used to debugging/printing/monitoring only,
+	// TLS config objects are passed raw certificate file contents.
+	// CA certs may contain (and use) more than one certificate.
+	// Client/Server certs may contain more than one, but only the first certificate will be used.
+	ParsedCertificates []*x509.Certificate
+
+	// Expiration time is the latest "Not After" date across all parsed certificates.
+	ExpirationTime time.Time
 
 	// Error is any error encountered when loading the certificate/key pair.
 	// For example: bad permissions on the key will be stored here.
@@ -234,14 +245,18 @@ func (cl *CertificateLoader) Load() error {
 			continue
 		}
 
-		// Look for the associated key.
-		// Any errors are kept for better visibility later.
-		if err := cl.findKey(ci); err != nil {
+		// Parse certificate, then look for the private key.
+		// Errors are persisted for better visibility later.
+		if err := parseCertificate(ci); err != nil {
+			log.Warningf(context.Background(), "could not parse certificate for %s: %v", fullPath, err)
+			ci.Error = err
+		} else if err := cl.findKey(ci); err != nil {
 			log.Warningf(context.Background(), "error finding key for %s: %v", fullPath, err)
 			ci.Error = err
 		} else if log.V(3) {
 			log.Infof(context.Background(), "found certificate %s", ci.Filename)
 		}
+
 		cl.certificates = append(cl.certificates, ci)
 	}
 
@@ -338,5 +353,46 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 
 	ci.KeyFilename = keyFilename
 	ci.KeyFileContents = keyPEMBlock
+	return nil
+}
+
+// parseCertificate attempts to parse the cert file contents into x509 certificate objects.
+// The Error field must be nil
+func parseCertificate(ci *CertInfo) error {
+	if ci.Error != nil {
+		return errors.Wrapf(ci.Error, "parseCertificate called on bad CertInfo object: %s", ci.Filename)
+	}
+
+	if len(ci.FileContents) == 0 {
+		return errors.Errorf("empty certificate file: %s", ci.Filename)
+	}
+
+	// PEM-decode the file.
+	derCerts, err := PEMToCertificates(ci.FileContents)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse certificate file %s as PEM", ci.Filename)
+	}
+
+	// Make sure we get at least one certificate.
+	if len(derCerts) == 0 {
+		return errors.Errorf("no certificates found in %s", ci.Filename)
+	}
+
+	certs := make([]*x509.Certificate, len(derCerts))
+	var latest time.Time
+	for i, c := range derCerts {
+		x509Cert, err := x509.ParseCertificate(c.Bytes)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse certificate at position %d in file %s", i, ci.Filename)
+		}
+
+		if x509Cert.NotAfter.After(latest) {
+			latest = x509Cert.NotAfter
+		}
+		certs[i] = x509Cert
+	}
+
+	ci.ParsedCertificates = certs
+	ci.ExpirationTime = latest
 	return nil
 }
