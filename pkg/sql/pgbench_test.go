@@ -111,23 +111,26 @@ func execPgbench(b *testing.B, pgURL url.URL) {
 	b.StopTimer()
 }
 
-func BenchmarkPgbenchExec_Cockroach(b *testing.B) {
-	defer tracing.Disable()()
-	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{Insecure: true})
-	defer s.Stopper().Stop(context.TODO())
+func BenchmarkPgbenchExec(b *testing.B) {
+	b.Run("Cockroach", func(b *testing.B) {
+		defer tracing.Disable()()
+		s, _, _ := serverutils.StartServer(b, base.TestServerArgs{Insecure: true})
+		defer s.Stopper().Stop(context.TODO())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(
-		b, s.ServingAddr(), "benchmarkCockroach", url.User(security.RootUser))
-	pgURL.RawQuery = "sslmode=disable"
-	defer cleanupFn()
+		pgURL, cleanupFn := sqlutils.PGUrl(
+			b, s.ServingAddr(), "benchmarkCockroach", url.User(security.RootUser))
+		pgURL.RawQuery = "sslmode=disable"
+		defer cleanupFn()
 
-	execPgbench(b, pgURL)
-}
+		execPgbench(b, pgURL)
+	})
 
-func BenchmarkPgbenchExec_Postgres(b *testing.B) {
-	pgURL, err := url.Parse("postgres://localhost:5432?sslmode=disable")
-	if err != nil {
-		b.Fatal(err)
-	}
-	execPgbench(b, *pgURL)
+	b.Run("Postgres", func(b *testing.B) {
+		pgURL := url.URL{
+			Scheme:   "postgres",
+			Host:     "localhost:5432",
+			RawQuery: "sslmode=disable",
+		}
+		execPgbench(b, pgURL)
+	})
 }
