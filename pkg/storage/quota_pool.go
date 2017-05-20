@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,20 +30,18 @@ import (
 type quotaPool struct {
 	syncutil.Mutex
 
-	q        int64
-	max      int64
-	cond     *sync.Cond
-	closed   bool
-	closedCh chan struct{}
+	q      int64
+	max    int64
+	cond   *sync.Cond
+	closed bool
 }
 
 // newQuotaPool returns a new instance of a quota pool initialized with the
 // specified quota. The quota pool is capped at this amount.
 func newQuotaPool(v int64) *quotaPool {
 	qp := &quotaPool{
-		q:        v,
-		max:      v,
-		closedCh: make(chan struct{}),
+		q:   v,
+		max: v,
 	}
 	qp.cond = sync.NewCond(qp)
 	return qp
@@ -54,10 +52,8 @@ func newQuotaPool(v int64) *quotaPool {
 // acquisitions will not succeed. Safe for concurrent use.
 func (qp *quotaPool) add(q int64) {
 	qp.Lock()
-	q += qp.q
-	if q < qp.max {
-		qp.q = q
-	} else {
+	qp.q += q
+	if qp.q > qp.max {
 		qp.q = qp.max
 	}
 	qp.cond.Broadcast()
@@ -72,12 +68,10 @@ func (qp *quotaPool) add(q int64) {
 // pool eventually (see quotaPool.add). Safe for concurrent use.
 func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 	res := make(chan error, 1)
-	done := new(bool)
 	go func() {
-		qp.acquireInternal(v, done, res)
+		qp.acquireInternal(v, ctx.Done(), res)
 	}()
 	slowTimer := timeutil.NewTimer()
-	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
 
 	for {
@@ -90,7 +84,6 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 			// acquisition goroutine runs to completion. We do so by waiting for a
 			// result on the 'res' channel. If we end up acquiring quota, we're
 			// sure to return it.
-			*done = true
 
 			// Wake up the acquisition goroutine to signal it to stop working.
 			qp.cond.Broadcast()
@@ -101,54 +94,16 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 				qp.add(v)
 			}
 
+			slowTimer.Stop()
 			return ctx.Err()
-		case <-qp.closedCh:
-			// Given the quota pool was just closed, we ensure the quota
-			// acquisition goroutine runs to completion. We do so by waiting for a
-			// result on the 'res' channel. If we end up acquiring quota, we're
-			// sure to return it.
-			*done = true
-
-			// Wake up the acquisition goroutine to signal it to stop working.
-			qp.cond.Broadcast()
-
-			// We acquired quota, we release it back because the quota pool was
-			// closed.
-			// NB: Strictly speaking this is not necessary given future allocations
-			// will fail anyway.
-			if err := <-res; err == nil {
-				qp.add(v)
-			}
-
-			return errors.New("quota pool closed")
 		case err := <-res:
+			slowTimer.Stop()
 			return err
 		}
 	}
 }
 
-func (qp *quotaPool) acquireInternal(v int64, done *bool, res chan<- error) {
-	// sync.Cond has the following usage pattern:
-	//
-	// // Acquire this monitor's lock.
-	// c.L.Lock()
-	// // While the condition/predicate/assertion that we are waiting for is not true...
-	// for !condition() {
-	//     // Wait on this monitor's lock and condition variable.
-	//     c.Wait()
-	// }
-	//
-	// // Critical section, we have the lock.
-	// ...
-	//
-	// // Wake another waiting thread if appropriate.
-	// if signal() {
-	//     c.L.Signal()
-	// }
-	//
-	// // Release this monitor's lock.
-	// c.L.Unlock()
-
+func (qp *quotaPool) acquireInternal(v int64, done <-chan struct{}, res chan<- error) {
 	qp.Lock()
 
 	for !(v <= qp.q) {
@@ -156,11 +111,27 @@ func (qp *quotaPool) acquireInternal(v int64, done *bool, res chan<- error) {
 		// If we were signalled it could possibly be because quota was just
 		// added to the pool which we check in the next loop iteration.
 		// Alternatively we no longer need the result.
-		if *done {
+		select {
+		case <-done:
 			qp.Unlock()
 			res <- errors.New("acquisition cancelled")
 			return
+		default:
 		}
+
+		if qp.closed {
+			qp.Unlock()
+			res <- errors.New("quota pool closed")
+			return
+		}
+	}
+
+	// Critical section, we have the lock. If the pool was closed, we fail with
+	// an error indicating so.
+	if qp.closed {
+		qp.Unlock()
+		res <- errors.New("quota pool closed")
+		return
 	}
 
 	// Critical section, we have the lock.
@@ -176,8 +147,8 @@ func (qp *quotaPool) acquireInternal(v int64, done *bool, res chan<- error) {
 func (qp *quotaPool) close() {
 	qp.Lock()
 	if !qp.closed {
-		close(qp.closedCh)
 		qp.closed = true
+		qp.cond.Broadcast()
 	}
 	qp.Unlock()
 }

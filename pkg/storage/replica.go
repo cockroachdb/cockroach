@@ -3097,11 +3097,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			r.store.metrics.RaftCommandsApplied.Inc(1)
 			stats.processed++
 
-			if r.mu.quotaReleaseQueue != nil {
-				r.mu.Lock()
+			r.mu.Lock()
+			if r.mu.replicaID == r.mu.leaderID {
 				r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, r.mu.commandSizes[commandID])
-				r.mu.Unlock()
 			}
+			r.mu.Unlock()
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
@@ -3125,11 +3125,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 			stats.processed++
 
-			if r.mu.quotaReleaseQueue != nil {
-				r.mu.Lock()
+			r.mu.Lock()
+			if r.mu.replicaID == r.mu.leaderID {
 				r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, r.mu.commandSizes[commandID])
-				r.mu.Unlock()
 			}
+			r.mu.Unlock()
+
 			if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 				raftGroup.ApplyConfChange(cc)
 				return true, nil
