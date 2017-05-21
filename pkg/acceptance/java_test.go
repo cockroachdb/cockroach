@@ -147,6 +147,12 @@ public class main {
 		if (!dec.toString().equals("1.0")) {
 			throw new Exception("unexpected: expected 1.0 to be \"1.0\", got \"" + dec.toString() + "\"");
 		}
+
+		stmt = conn.prepareStatement("CREATE TABLE str (s STRING)");
+		stmt.executeUpdate();
+		stmt = conn.prepareStatement("UPDATE str SET s = ?");
+		stmt.setString(1, "hello");
+		stmt.execute();
 	}
 }
 EOF
