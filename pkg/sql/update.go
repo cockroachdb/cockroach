@@ -193,7 +193,7 @@ func (ss scalarSlot) checkColumnTypes(row []parser.TypedExpr, pmap *parser.Place
 }
 
 // addOrMergeExpr inserts an Expr into a renderNode, attempting to reuse
-// previous renders if possible by using render.addOrMergeRender, returning the
+// previous renders if possible by using render.addOrReuseRender, returning the
 // column index at which the rendered value can be accessed.
 func addOrMergeExpr(
 	ctx context.Context,
