@@ -503,21 +503,21 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		TypeRegProcedure,
 		TypeRegType:
 		return oidTypeToColType(t), nil
-	default:
-		if typ, ok := t.(TCollatedString); ok {
-			return &CollatedStringColType{Name: "STRING", Locale: typ.Locale}, nil
-		}
-		if typ, ok := t.(TArray); ok {
-			elemTyp, err := DatumTypeToColumnType(typ.Typ)
-			if err != nil {
-				return nil, err
-			}
-			return arrayOf(elemTyp, Exprs(nil))
-		}
-		if typ, ok := t.(tOidWrapper); ok {
-			return DatumTypeToColumnType(typ.Type)
-		}
 	}
+
+	switch typ := t.(type) {
+	case TCollatedString:
+		return &CollatedStringColType{Name: "STRING", Locale: typ.Locale}, nil
+	case TArray:
+		elemTyp, err := DatumTypeToColumnType(typ.Typ)
+		if err != nil {
+			return nil, err
+		}
+		return arrayOf(elemTyp, Exprs(nil))
+	case tOidWrapper:
+		return DatumTypeToColumnType(typ.Type)
+	}
+
 	return nil, errors.Errorf("value type %s cannot be used for table columns", t)
 }
 
