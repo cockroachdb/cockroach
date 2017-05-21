@@ -267,8 +267,7 @@ func (s *Server) maybeReportDiagnostics(
 
 func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 	info := reportingInfo{}
-
-	n := s.node.recorder.GetStatusSummary()
+	n := s.node.recorder.GetStatusSummary(ctx)
 	info.Node = nodeInfo{NodeID: s.node.Descriptor.NodeID}
 
 	info.Stores = make([]storeInfo, len(n.StoreStatuses))
