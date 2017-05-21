@@ -964,61 +964,16 @@ func NewDDateFromTime(t time.Time, loc *time.Location) *DDate {
 	return NewDDate(DDate(secs / secondsInDay))
 }
 
-// time.Time formats.
-const (
-	dateFormat                = "2006-01-02"
-	dateFormatWithOffset      = dateFormat + " -070000"
-	dateFormatNoPad           = "2006-1-2"
-	dateFormatNoPadWithOffset = dateFormatNoPad + " -070000"
-)
-
-var dateFormats = []string{
-	dateFormat,
-	dateFormatWithOffset,
-	dateFormatNoPad,
-	dateFormatNoPadWithOffset,
-	time.RFC3339Nano,
-}
-
-var tzMatch = regexp.MustCompile(` [+-]`)
-
 // ParseDDate parses and returns the *DDate Datum value represented by the provided
 // string in the provided location, or an error if parsing is unsuccessful.
 func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 	// No need to ParseInLocation here because we're only parsing dates.
-
-	l := len(s)
-	// HACK: go doesn't handle offsets that are not zero-padded from psql/jdbc.
-	// Thus, if we see `2015-10-05 +0:0:0` we need to change it to `+000000`.
-	if l > 6 && s[l-2] == ':' && s[l-4] == ':' && (s[l-6] == '+' || s[l-6] == '-') {
-		s = fmt.Sprintf("%s %c0%c0%c0%c", s[:l-6], s[l-6], s[l-5], s[l-3], s[l-1])
+	t, err := parseTimestampInLocation(s, time.UTC, TypeDate)
+	if err != nil {
+		return nil, err
 	}
 
-	if loc := tzMatch.FindStringIndex(s); loc != nil && l > loc[1] {
-		// Remove `:` characters from timezone specifier and pad to 6 digits. A
-		// leading 0 will be added if there are an odd number of digits in the
-		// specifier, since this is short-hand for an offset with number of hours
-		// equal to the leading digit.
-		// This converts all timezone specifiers to the stdNumSecondsTz format in
-		// time/format.go: `-070000`.
-		tzPos := loc[1]
-		tzSpec := strings.Replace(s[tzPos:], ":", "", -1)
-		if len(tzSpec)%2 == 1 {
-			tzSpec = "0" + tzSpec
-		}
-		if len(tzSpec) < 6 {
-			tzSpec += strings.Repeat("0", 6-len(tzSpec))
-		}
-		s = s[:tzPos] + tzSpec
-	}
-
-	for _, format := range dateFormats {
-		if t, err := time.Parse(format, s); err == nil {
-			return NewDDateFromTime(t, loc), nil
-		}
-	}
-
-	return nil, makeParseError(s, TypeDate, nil)
+	return NewDDateFromTime(t, loc), nil
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1113,40 +1068,90 @@ func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 
 // time.Time formats.
 const (
-	timestampFormat                       = "2006-01-02 15:04:05"
-	timestampWithOffsetZoneFormat         = timestampFormat + "-07"
-	timestampWithOffsetSecondsZoneFormat  = timestampWithOffsetZoneFormat + ":00"
-	timestampWithNamedZoneFormat          = timestampFormat + " MST"
-	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
-	timestampSequelizeFormat              = timestampFormat + ".000 -07:00"
+	dateFormat                = "2006-01-02"
+	dateFormatWithOffset      = dateFormat + " -070000"
+	dateFormatNoPad           = "2006-1-2"
+	dateFormatNoPadWithOffset = dateFormatNoPad + " -070000"
 
-	TimestampJdbcFormat = timestampFormat + ".999999 -07:00:00"
-	TimestampNodeFormat = timestampFormat + ".999999-07:00"
+	timestampFormat                      = dateFormatNoPad + " 15:04:05"
+	timestampWithOffsetZoneFormat        = timestampFormat + "-07"
+	timestampWithOffsetMinutesZoneFormat = timestampWithOffsetZoneFormat + ":00"
+	timestampWithOffsetSecondsZoneFormat = timestampWithOffsetMinutesZoneFormat + ":00"
+	timestampWithNamedZoneFormat         = timestampFormat + " MST"
+	timestampRFC3339WithoutZoneFormat    = dateFormat + "T15:04:05"
+	timestampSequelizeFormat             = timestampFormat + ".000 -07:00"
+
+	timestampJdbcFormat = timestampFormat + ".999999 -070000"
+	timestampNodeFormat = timestampFormat + ".999999-07:00"
+
+	// See https://github.com/lib/pq/blob/8df6253/encode.go#L480.
+	timestampPgwireFormat = "2006-01-02 15:04:05.999999999Z07:00"
+
+	// TimestampOutputFormat is used to output all timestamps.
+	TimestampOutputFormat = "2006-01-02 15:04:05.999999-07:00"
 )
 
 var timeFormats = []string{
 	dateFormat,
+	dateFormatWithOffset,
+	dateFormatNoPad,
+	dateFormatNoPadWithOffset,
 	time.RFC3339Nano,
+	timestampPgwireFormat,
 	timestampWithOffsetZoneFormat,
+	timestampWithOffsetMinutesZoneFormat,
 	timestampWithOffsetSecondsZoneFormat,
 	timestampFormat,
 	timestampWithNamedZoneFormat,
-	timestampRFC3339NanoWithoutZoneFormat,
+	timestampRFC3339WithoutZoneFormat,
 	timestampSequelizeFormat,
-	TimestampNodeFormat,
-	TimestampJdbcFormat,
+	timestampNodeFormat,
+	timestampJdbcFormat,
 }
 
-func parseTimestampInLocation(s string, loc *time.Location) (time.Time, error) {
+var (
+	tzMatch        = regexp.MustCompile(` [+-]`)
+	loneZeroRMatch = regexp.MustCompile(`:(\d(?:[^\d]|$))`)
+)
+
+func parseTimestampInLocation(s string, loc *time.Location, typ Type) (time.Time, error) {
+	origS := s
+	l := len(s)
+	// HACK: go doesn't handle offsets that are not zero-padded from psql/jdbc.
+	// Thus, if we see `2015-10-05 3:0:5 +0:0:0` we need to change it to
+	// `... 3:00:50 +00:00:00`.
+	s = loneZeroRMatch.ReplaceAllString(s, ":0${1}")
+	// This must be run twice, since ReplaceAllString doesn't touch overlapping
+	// matches and thus wouldn't fix a string of the form 3:3:3.
+	s = loneZeroRMatch.ReplaceAllString(s, ":0${1}")
+
+	if loc := tzMatch.FindStringIndex(s); loc != nil && l > loc[1] {
+		// Remove `:` characters from timezone specifier and pad to 6 digits. A
+		// leading 0 will be added if there are an odd number of digits in the
+		// specifier, since this is short-hand for an offset with number of hours
+		// equal to the leading digit.
+		// This converts all timezone specifiers to the stdNumSecondsTz format in
+		// time/format.go: `-070000`.
+		tzPos := loc[1]
+		tzSpec := strings.Replace(s[tzPos:], ":", "", -1)
+		if len(tzSpec)%2 == 1 {
+			tzSpec = "0" + tzSpec
+		}
+		if len(tzSpec) < 6 {
+			tzSpec += strings.Repeat("0", 6-len(tzSpec))
+		}
+		s = s[:tzPos] + tzSpec
+	}
+
 	for _, format := range timeFormats {
 		if t, err := time.ParseInLocation(format, s, loc); err == nil {
 			if err := checkForMissingZone(t, loc); err != nil {
-				return time.Time{}, makeParseError(s, TypeTimestamp, err)
+				return time.Time{}, makeParseError(origS, typ, err)
 			}
 			return t, nil
 		}
 	}
-	return time.Time{}, makeParseError(s, TypeTimestamp, nil)
+	return time.Time{}, makeParseError(origS, typ, nil)
 }
 
 // Unfortunately Go is very strict when parsing abbreviated zone names -- with
@@ -1177,7 +1182,7 @@ func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
 	// we do not want to add a non-UTC zone if one is not explicitly stated, so we
 	// use time.UTC rather than the session location. Unfortunately this also means
 	// we do not use the session zone for resolving abbreviations.
-	t, err := parseTimestampInLocation(s, time.UTC)
+	t, err := parseTimestampInLocation(s, time.UTC, TypeTimestamp)
 	if err != nil {
 		return nil, err
 	}
@@ -1270,7 +1275,7 @@ func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
-	buf.WriteString(d.UTC().Format(TimestampNodeFormat))
+	buf.WriteString(d.UTC().Format(TimestampOutputFormat))
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
@@ -1302,7 +1307,7 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) *DTimestampTZ {
 func ParseDTimestampTZ(
 	s string, loc *time.Location, precision time.Duration,
 ) (*DTimestampTZ, error) {
-	t, err := parseTimestampInLocation(s, loc)
+	t, err := parseTimestampInLocation(s, loc, TypeTimestampTZ)
 	if err != nil {
 		return nil, err
 	}
@@ -1367,7 +1372,7 @@ func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
-	buf.WriteString(d.UTC().Format(TimestampNodeFormat))
+	buf.WriteString(d.UTC().Format(TimestampOutputFormat))
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}

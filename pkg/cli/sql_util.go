@@ -487,7 +487,7 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 		return fmt.Sprintf("%+q", t)
 
 	case time.Time:
-		return t.Format(parser.TimestampNodeFormat)
+		return t.Format(parser.TimestampOutputFormat)
 	}
 
 	return fmt.Sprint(val)
