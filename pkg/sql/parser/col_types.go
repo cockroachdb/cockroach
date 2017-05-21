@@ -514,6 +514,9 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 			}
 			return arrayOf(elemTyp, Exprs(nil))
 		}
+		if typ, ok := t.(tOidWrapper); ok {
+			return DatumTypeToColumnType(typ.Type)
+		}
 	}
 	return nil, errors.Errorf("value type %s cannot be used for table columns", t)
 }
