@@ -262,6 +262,10 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			parseOptions: typeSet(TypeString, TypeBytes, TypeTimestamp, TypeTimestampTZ),
 		},
 		{
+			c:            &StrVal{s: "2006-07-08T00:00:00.000000123Z", bytesEsc: false},
+			parseOptions: typeSet(TypeString, TypeBytes, TypeTimestamp, TypeTimestampTZ, TypeDate),
+		},
+		{
 			c:            &StrVal{s: "PT12H2M", bytesEsc: false},
 			parseOptions: typeSet(TypeString, TypeBytes, TypeInterval),
 		},

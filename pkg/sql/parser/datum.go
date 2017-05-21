@@ -1122,11 +1122,15 @@ const (
 
 	TimestampJdbcFormat = timestampFormat + ".999999 -07:00:00"
 	TimestampNodeFormat = timestampFormat + ".999999-07:00"
+
+	// See https://github.com/lib/pq/blob/8df6253/encode.go#L480.
+	timestampPgwireFormat = "2006-01-02 15:04:05.999999999Z07:00"
 )
 
 var timeFormats = []string{
 	dateFormat,
 	time.RFC3339Nano,
+	timestampPgwireFormat,
 	timestampWithOffsetZoneFormat,
 	timestampWithOffsetSecondsZoneFormat,
 	timestampFormat,

@@ -384,30 +384,6 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	return b
 }
 
-// parseTs parses timestamps in any of the formats that Postgres accepts over
-// the wire protocol.
-//
-// Postgres is lenient in what it accepts as a timestamp, so we must also be
-// lenient. As new drivers are used with CockroachDB and formats are found that
-// we don't support but Postgres does, add them here. Then create an integration
-// test for the driver and add a case to TestParseTs.
-func parseTs(str string) (time.Time, error) {
-	// See https://github.com/lib/pq/blob/8df6253/encode.go#L480.
-	if ts, err := time.Parse("2006-01-02 15:04:05.999999999Z07:00", str); err == nil {
-		return ts, nil
-	}
-
-	// See https://github.com/cockroachdb/pq/blob/44a6473/encode.go#L470.
-	if ts, err := time.Parse(time.RFC3339Nano, str); err == nil {
-		return ts, nil
-	}
-
-	// pq.ParseTimestamp parses the timestamp format that both Postgres and
-	// CockroachDB send in responses, so this allows roundtripping of the encoded
-	// timestamps that we send.
-	return pq.ParseTimestamp(nil, str)
-}
-
 var (
 	pgEpochJDate         = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	pgEpochJDateFromUnix = int32(pgEpochJDate.Unix() / secondsInDay)
@@ -498,19 +474,19 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			return nil, errors.Errorf("unsupported bytea encoding: %q", b)
 		case oid.T_timestamp:
-			ts, err := parseTs(string(b))
+			d, err := parser.ParseDTimestamp(string(b), time.Nanosecond)
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as timestamp", b)
 			}
-			return parser.MakeDTimestamp(ts, time.Microsecond), nil
+			return d, nil
 		case oid.T_timestamptz:
-			ts, err := parseTs(string(b))
+			d, err := parser.ParseDTimestampTZ(string(b), time.UTC, time.Nanosecond)
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as timestamp", b)
+				return nil, errors.Errorf("could not parse string %q as timestamptz", b)
 			}
-			return parser.MakeDTimestampTZ(ts, time.Microsecond), nil
+			return d, nil
 		case oid.T_date:
-			ts, err := parseTs(string(b))
+			ts, err := parser.ParseDTimestamp(string(b), time.Microsecond)
 			if err != nil {
 				res, err := parser.ParseDDate(string(b), time.UTC)
 				if err != nil {
