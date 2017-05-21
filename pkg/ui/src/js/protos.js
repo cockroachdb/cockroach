@@ -15942,6 +15942,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {Array.<cockroach.server.status.StoreStatus$Properties>} [store_statuses] NodeStatus store_statuses.
                  * @property {Array.<string>} [args] NodeStatus args.
                  * @property {Array.<string>} [env] NodeStatus env.
+                 * @property {Object.<string,Long>} [latencies] NodeStatus latencies.
                  */
 
                 /**
@@ -15955,6 +15956,7 @@ export const cockroach = $root.cockroach = (() => {
                     this.store_statuses = [];
                     this.args = [];
                     this.env = [];
+                    this.latencies = {};
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                             if (properties[keys[i]] != null)
@@ -16010,6 +16012,12 @@ export const cockroach = $root.cockroach = (() => {
                 NodeStatus.prototype.env = $util.emptyArray;
 
                 /**
+                 * NodeStatus latencies.
+                 * @type {Object.<string,Long>}
+                 */
+                NodeStatus.prototype.latencies = $util.emptyObject;
+
+                /**
                  * Creates a new NodeStatus instance using the specified properties.
                  * @param {cockroach.server.status.NodeStatus$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.status.NodeStatus} NodeStatus instance
@@ -16047,6 +16055,9 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.env != null && message.env.length)
                         for (let i = 0; i < message.env.length; ++i)
                             writer.uint32(/* id 8, wireType 2 =*/66).string(message.env[i]);
+                    if (message.latencies != null && message.hasOwnProperty("latencies"))
+                        for (let keys = Object.keys(message.latencies), i = 0; i < keys.length; ++i)
+                            writer.uint32(/* id 9, wireType 2 =*/74).fork().uint32(/* id 1, wireType 0 =*/8).int64(keys[i]).uint32(/* id 2, wireType 0 =*/16).int64(message.latencies[keys[i]]).ldelim();
                     return writer;
                 };
 
@@ -16109,6 +16120,14 @@ export const cockroach = $root.cockroach = (() => {
                             if (!(message.env && message.env.length))
                                 message.env = [];
                             message.env.push(reader.string());
+                            break;
+                        case 9:
+                            reader.skip().pos++;
+                            if (message.latencies === $util.emptyObject)
+                                message.latencies = {};
+                            key = reader.int64();
+                            reader.pos++;
+                            message.latencies[typeof key === "object" ? $util.longToHash(key) : key] = reader.int64();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -16186,6 +16205,17 @@ export const cockroach = $root.cockroach = (() => {
                             if (!$util.isString(message.env[i]))
                                 return "env: string[] expected";
                     }
+                    if (message.latencies != null && message.hasOwnProperty("latencies")) {
+                        if (!$util.isObject(message.latencies))
+                            return "latencies: object expected";
+                        let key = Object.keys(message.latencies);
+                        for (let i = 0; i < key.length; ++i) {
+                            if (!$util.key64Re.test(key[i]))
+                                return "latencies: integer|Long key{k:int64} expected";
+                            if (!$util.isInteger(message.latencies[key[i]]) && !(message.latencies[key[i]] && $util.isInteger(message.latencies[key[i]].low) && $util.isInteger(message.latencies[key[i]].high)))
+                                return "latencies: integer|Long{k:int64} expected";
+                        }
+                    }
                     return null;
                 };
 
@@ -16257,6 +16287,20 @@ export const cockroach = $root.cockroach = (() => {
                         for (let i = 0; i < object.env.length; ++i)
                             message.env[i] = String(object.env[i]);
                     }
+                    if (object.latencies) {
+                        if (typeof object.latencies !== "object")
+                            throw TypeError(".cockroach.server.status.NodeStatus.latencies: object expected");
+                        message.latencies = {};
+                        for (let keys = Object.keys(object.latencies), i = 0; i < keys.length; ++i)
+                            if ($util.Long)
+                                (message.latencies[keys[i]] = $util.Long.fromValue(object.latencies[keys[i]])).unsigned = false;
+                            else if (typeof object.latencies[keys[i]] === "string")
+                                message.latencies[keys[i]] = parseInt(object.latencies[keys[i]], 10);
+                            else if (typeof object.latencies[keys[i]] === "number")
+                                message.latencies[keys[i]] = object.latencies[keys[i]];
+                            else if (typeof object.latencies[keys[i]] === "object")
+                                message.latencies[keys[i]] = new $util.LongBits(object.latencies[keys[i]].low >>> 0, object.latencies[keys[i]].high >>> 0).toNumber();
+                    }
                     return message;
                 };
 
@@ -16284,8 +16328,10 @@ export const cockroach = $root.cockroach = (() => {
                         object.args = [];
                         object.env = [];
                     }
-                    if (options.objects || options.defaults)
+                    if (options.objects || options.defaults) {
                         object.metrics = {};
+                        object.latencies = {};
+                    }
                     if (options.defaults) {
                         object.desc = null;
                         object.build_info = null;
@@ -16334,6 +16380,14 @@ export const cockroach = $root.cockroach = (() => {
                         object.env = [];
                         for (let j = 0; j < message.env.length; ++j)
                             object.env[j] = message.env[j];
+                    }
+                    if (message.latencies && (keys2 = Object.keys(message.latencies)).length) {
+                        object.latencies = {};
+                        for (let j = 0; j < keys2.length; ++j)
+                            if (typeof message.latencies[keys2[j]] === "number")
+                                object.latencies[keys2[j]] = options.longs === String ? String(message.latencies[keys2[j]]) : message.latencies[keys2[j]];
+                            else
+                                object.latencies[keys2[j]] = options.longs === String ? $util.Long.prototype.toString.call(message.latencies[keys2[j]]) : options.longs === Number ? new $util.LongBits(message.latencies[keys2[j]].low >>> 0, message.latencies[keys2[j]].high >>> 0).toNumber() : message.latencies[keys2[j]];
                     }
                     return object;
                 };

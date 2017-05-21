@@ -115,7 +115,9 @@ func createTestNode(
 		settings.TestingDuration(time.Millisecond*10),
 		/* deterministic */ false,
 	)
-	node := NewNode(cfg, status.NewMetricsRecorder(cfg.Clock), metric.NewRegistry(), stopper,
+	metricsRecorder := status.NewMetricsRecorder(cfg.Clock, cfg.NodeLiveness,
+		nodeRPCContext.RemoteClocks, cfg.Gossip)
+	node := NewNode(cfg, metricsRecorder, metric.NewRegistry(), stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
