@@ -361,3 +361,52 @@ func TestParseDDate(t *testing.T) {
 		}
 	}
 }
+
+func TestParseDTimestamp(t *testing.T) {
+	testData := []struct {
+		str      string
+		expected time.Time
+	}{
+		{"2001-02-03", time.Date(2001, time.February, 3, 0, 0, 0, 0, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.000001", time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.00001", time.Date(2001, time.February, 3, 4, 5, 6, 10000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.0001", time.Date(2001, time.February, 3, 4, 5, 6, 100000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.001", time.Date(2001, time.February, 3, 4, 5, 6, 1000000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.01", time.Date(2001, time.February, 3, 4, 5, 6, 10000000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.1", time.Date(2001, time.February, 3, 4, 5, 6, 100000000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.12", time.Date(2001, time.February, 3, 4, 5, 6, 120000000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.123", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.1234", time.Date(2001, time.February, 3, 4, 5, 6, 123400000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.12345", time.Date(2001, time.February, 3, 4, 5, 6, 123450000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.123456", time.Date(2001, time.February, 3, 4, 5, 6, 123456000, time.FixedZone("", 0))},
+		{"2001-02-03 04:05:06.123-07", time.Date(2001, time.February, 3, 4, 5, 6, 123000000,
+			time.FixedZone("", -7*60*60))},
+		{"2001-02-03 04:05:06-07", time.Date(2001, time.February, 3, 4, 5, 6, 0,
+			time.FixedZone("", -7*60*60))},
+		{"2001-02-03 04:05:06-07:42", time.Date(2001, time.February, 3, 4, 5, 6, 0,
+			time.FixedZone("", -(7*60*60+42*60)))},
+		{"2001-02-03 04:05:06-07:30:09", time.Date(2001, time.February, 3, 4, 5, 6, 0,
+			time.FixedZone("", -(7*60*60+30*60+9)))},
+		{"2001-02-03 04:05:06+07", time.Date(2001, time.February, 3, 4, 5, 6, 0,
+			time.FixedZone("", 7*60*60))},
+		{"2001-02-03 04:0:06", time.Date(2001, time.February, 3, 4, 0, 6, 0,
+			time.FixedZone("", 0))},
+		{"2001-02-03 0:0:06", time.Date(2001, time.February, 3, 0, 0, 6, 0,
+			time.FixedZone("", 0))},
+		{"2001-02-03 4:05:0", time.Date(2001, time.February, 3, 4, 5, 0, 0,
+			time.FixedZone("", 0))},
+		{"2001-02-03 4:05:0-07:0:00", time.Date(2001, time.February, 3, 4, 5, 0, 0,
+			time.FixedZone("", -7*60*60))},
+	}
+	for _, td := range testData {
+		actual, err := ParseDTimestamp(td.str, time.Nanosecond)
+		if err != nil {
+			t.Errorf("unexpected error while parsing TIMESTAMP %s: %s", td.str, err)
+			continue
+		}
+		if !actual.Time.Equal(td.expected) {
+			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, td.expected)
+		}
+	}
+}
