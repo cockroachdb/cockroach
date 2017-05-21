@@ -184,11 +184,11 @@ func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) 
 	case defaultZoneName:
 		return path, nil
 	case metaZoneName:
-		return []sqlbase.ID{keys.MetaRangesID}, nil
+		return append(path, keys.MetaRangesID), nil
 	case systemZoneName:
-		return []sqlbase.ID{keys.SystemRangesID}, nil
+		return append(path, keys.SystemRangesID), nil
 	case timeseriesZoneName:
-		return []sqlbase.ID{keys.TimeseriesRangesID}, nil
+		return append(path, keys.TimeseriesRangesID), nil
 	}
 	for _, name := range names {
 		id, err := queryNamespace(conn, path[len(path)-1], name)
