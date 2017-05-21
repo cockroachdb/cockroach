@@ -81,6 +81,15 @@ public class main {
 		if (!tsStr.equals("2015-05-07 18:20:00.0")) {
 			throw new Exception("unexpected value for ts: "+tsStr);
 		}
+
+		stmt = conn.prepareStatement("INSERT INTO test.f VALUES (?, ?)");
+		stmt.setInt(1, 1);
+		stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+		res = stmt.executeUpdate();
+		if (res != 1) {
+		    throw new Exception("unexpected: INSERT reports " + res + " rows changed, expecting 1");
+		}
+
 		stmt = conn.prepareStatement("DROP TABLE test.f");
 		res = stmt.executeUpdate();
 		if (res != 0) {
