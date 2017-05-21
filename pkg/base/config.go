@@ -212,24 +212,27 @@ func (cfg *Config) GetCertificateManager() (*security.CertificateManager, error)
 // It also enables the reload-on-SIGHUP functionality on the certificate manager.
 // This should be called early in the life of the server to make sure there are no
 // issues with TLS configs.
-func (cfg *Config) InitializeNodeTLSConfigs(stopper *stop.Stopper) error {
+// Returns the certificate manager if successfully created and in secure mode.
+func (cfg *Config) InitializeNodeTLSConfigs(
+	stopper *stop.Stopper,
+) (*security.CertificateManager, error) {
 	if cfg.Insecure {
-		return nil
+		return nil, nil
 	}
 
 	if _, err := cfg.GetServerTLSConfig(); err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := cfg.GetClientTLSConfig(); err != nil {
-		return err
+		return nil, err
 	}
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cm.RegisterSignalHandler(stopper)
-	return nil
+	return cm, nil
 }
 
 // GetClientTLSConfig returns the client TLS config, initializing it if needed.
