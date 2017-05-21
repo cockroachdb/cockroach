@@ -8930,6 +8930,7 @@ export namespace cockroach {
                 store_statuses?: cockroach.server.status.StoreStatus$Properties[];
                 args?: string[];
                 env?: string[];
+                latencies?: { [k: string]: Long };
             };
 
             /**
@@ -8995,6 +8996,12 @@ export namespace cockroach {
                  * @type {Array.<string>}
                  */
                 public env: string[];
+
+                /**
+                 * NodeStatus latencies.
+                 * @type {Object.<string,Long>}
+                 */
+                public latencies: { [k: string]: Long };
 
                 /**
                  * Creates a new NodeStatus instance using the specified properties.
