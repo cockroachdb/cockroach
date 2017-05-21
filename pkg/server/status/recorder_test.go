@@ -26,6 +26,8 @@ import (
 
 	"github.com/kr/pretty"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -145,7 +147,7 @@ func TestMetricsRecorder(t *testing.T) {
 		registry: metric.NewRegistry(),
 	}
 	manual := hlc.NewManualClock(100)
-	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond), nil, nil, nil)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258")
@@ -343,7 +345,7 @@ func TestMetricsRecorder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nodeSummary := recorder.GetStatusSummary()
+	nodeSummary := recorder.GetStatusSummary(context.Background())
 	if nodeSummary == nil {
 		t.Fatalf("recorder did not return nodeSummary")
 	}
@@ -355,6 +357,7 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	nodeSummary.Args = nil
 	nodeSummary.Env = nil
+	nodeSummary.Latencies = nil
 
 	sort.Sort(byStoreDescID(nodeSummary.StoreStatuses))
 	if a, e := nodeSummary, expectedNodeSummary; !reflect.DeepEqual(a, e) {

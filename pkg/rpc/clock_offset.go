@@ -32,9 +32,6 @@ import (
 )
 
 // RemoteClockMetrics is the collection of metrics for the clock monitor.
-//
-// TODO(a-robinson): Better expose per-node latency for debugging purposes
-// in addition to this aggregated metric.
 type RemoteClockMetrics struct {
 	ClockOffsetMeanNanos   *metric.Gauge
 	ClockOffsetStdDevNanos *metric.Gauge
@@ -112,6 +109,19 @@ func (r *RemoteClockMonitor) Latency(addr string) (time.Duration, bool) {
 		return time.Duration(int64(avg.Value())), true
 	}
 	return 0, false
+}
+
+// AllLatencies resturns a map of all currently valid latency measurements.
+func (r *RemoteClockMonitor) AllLatencies() map[string]time.Duration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make(map[string]time.Duration)
+	for addr, avg := range r.mu.latenciesNanos {
+		if avg.Value() != 0.0 {
+			result[addr] = time.Duration(int64(avg.Value()))
+		}
+	}
+	return result
 }
 
 // UpdateOffset is a thread-safe way to update the remote clock and latency

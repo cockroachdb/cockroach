@@ -369,7 +369,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg.TestingKnobs = *s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs)
 	}
 
-	s.recorder = status.NewMetricsRecorder(s.clock)
+	s.recorder = status.NewMetricsRecorder(s.clock, s.nodeLiveness, s.rpcContext.RemoteClocks, s.gossip)
 	s.registry.AddMetricStruct(s.rpcContext.RemoteClocks.Metrics())
 
 	s.runtime = status.MakeRuntimeStatSampler(s.clock)
@@ -836,6 +836,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(rangeDebugEndpoint, http.HandlerFunc(s.status.handleDebugRange))
 	s.mux.Handle(problemRangesDebugEndpoint, http.HandlerFunc(s.status.handleProblemRanges))
 	s.mux.Handle(certificatesDebugEndpoint, http.HandlerFunc(s.status.handleDebugCertificates))
+	s.mux.Handle(networkDebugEndpoint, http.HandlerFunc(s.status.handleDebugNetwork))
 	log.Event(ctx, "added http endpoints")
 
 	// Before serving SQL requests, we have to make sure the database is
