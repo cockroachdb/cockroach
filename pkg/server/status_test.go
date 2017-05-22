@@ -20,6 +20,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -616,4 +618,54 @@ func TestHandleDebugRange(t *testing.T) {
 	} else if !bytes.Contains(body, []byte("<TITLE>Range ID:1</TITLE>")) {
 		t.Errorf("expected \"<title>Range Id: 1</title>\" got: \n%s", body)
 	}
+}
+
+func TestCertificatesResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.TODO())
+
+	var response serverpb.CertificatesResponse
+	if err := getStatusJSONProto(ts, "certificates/local", &response); err != nil {
+		t.Fatal(err)
+	}
+
+	// We expect two certificates: CA and node.
+	if a, e := len(response.Certificates), 2; a != e {
+		t.Errorf("expected %d certificates, found %d", e, a)
+	}
+
+	// Read the certificates from the embedded assets.
+	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
+	nodePath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert)
+
+	caFile, err := securitytest.EmbeddedAssets.ReadFile(caPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nodeFile, err := securitytest.EmbeddedAssets.ReadFile(nodePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The response is ordered: CA cert followed by node cert.
+	cert := response.Certificates[0]
+	if a, e := cert.Type, serverpb.CertificateDetails_CA; a != e {
+		t.Errorf("wrong type %s, expected %s", a, e)
+	} else if cert.ErrorMessage != "" {
+		t.Errorf("expected cert without error, got %v", cert.ErrorMessage)
+	} else if a, e := cert.Data, caFile; !bytes.Equal(a, e) {
+		t.Errorf("mismatched contents: %s vs %s", a, e)
+	}
+
+	cert = response.Certificates[1]
+	if a, e := cert.Type, serverpb.CertificateDetails_NODE; a != e {
+		t.Errorf("wrong type %s, expected %s", a, e)
+	} else if cert.ErrorMessage != "" {
+		t.Errorf("expected cert without error, got %v", cert.ErrorMessage)
+	} else if a, e := cert.Data, nodeFile; !bytes.Equal(a, e) {
+		t.Errorf("mismatched contents: %s vs %s", a, e)
+	}
+
 }

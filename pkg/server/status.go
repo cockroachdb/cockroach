@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -87,6 +88,7 @@ type metricMarshaler interface {
 type statusServer struct {
 	log.AmbientContext
 
+	cfg          *base.Config
 	admin        *adminServer
 	db           *client.DB
 	gossip       *gossip.Gossip
@@ -100,6 +102,7 @@ type statusServer struct {
 // newStatusServer allocates and returns a statusServer.
 func newStatusServer(
 	ambient log.AmbientContext,
+	cfg *base.Config,
 	adminServer *adminServer,
 	db *client.DB,
 	gossip *gossip.Gossip,
@@ -112,6 +115,7 @@ func newStatusServer(
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
 		AmbientContext: ambient,
+		cfg:            cfg,
 		admin:          adminServer,
 		db:             db,
 		gossip:         gossip,
@@ -184,6 +188,64 @@ func (s *statusServer) Gossip(
 		return nil, err
 	}
 	return status.Gossip(ctx, req)
+}
+
+// Certificates returns the x509 certificates.
+func (s *statusServer) Certificates(
+	ctx context.Context, req *serverpb.CertificatesRequest,
+) (*serverpb.CertificatesResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if s.cfg.Insecure {
+		return nil, errors.New("server is in insecure mode, cannot examine certificates")
+	}
+
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Certificates(ctx, req)
+	}
+
+	cm, err := s.cfg.GetCertificateManager()
+	if err != nil {
+		return nil, err
+	}
+
+	// The certificate manager gives us a list of CertInfo objects to avoid
+	// making security depend on serverpb.
+	certs, err := cm.ListCertificates()
+	if err != nil {
+		return nil, err
+	}
+
+	cr := &serverpb.CertificatesResponse{}
+	for _, cert := range certs {
+		details := serverpb.CertificateDetails{}
+		switch cert.FileUsage {
+		case security.CAPem:
+			details.Type = serverpb.CertificateDetails_CA
+		case security.NodePem:
+			details.Type = serverpb.CertificateDetails_NODE
+		default:
+			// Ignore client certificates for now.
+			continue
+		}
+
+		if cert.Error == nil {
+			details.Data = cert.FileContents
+		} else {
+			details.ErrorMessage = cert.Error.Error()
+		}
+		cr.Certificates = append(cr.Certificates, details)
+	}
+
+	return cr, nil
 }
 
 // Details returns node details.

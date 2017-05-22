@@ -8646,6 +8646,621 @@ export const cockroach = $root.cockroach = (() => {
                 return Admin;
             })();
 
+            serverpb.CertificatesRequest = (function() {
+
+                /**
+                 * Properties of a CertificatesRequest.
+                 * @typedef cockroach.server.serverpb.CertificatesRequest$Properties
+                 * @type {Object}
+                 * @property {string} [node_id] CertificatesRequest node_id.
+                 */
+
+                /**
+                 * Constructs a new CertificatesRequest.
+                 * @exports cockroach.server.serverpb.CertificatesRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CertificatesRequest$Properties=} [properties] Properties to set
+                 */
+                function CertificatesRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * CertificatesRequest node_id.
+                 * @type {string}
+                 */
+                CertificatesRequest.prototype.node_id = "";
+
+                /**
+                 * Creates a new CertificatesRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CertificatesRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CertificatesRequest} CertificatesRequest instance
+                 */
+                CertificatesRequest.create = function create(properties) {
+                    return new CertificatesRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified CertificatesRequest message. Does not implicitly {@link cockroach.server.serverpb.CertificatesRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificatesRequest$Properties} message CertificatesRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CertificatesRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.node_id);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified CertificatesRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CertificatesRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificatesRequest$Properties} message CertificatesRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CertificatesRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a CertificatesRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CertificatesRequest} CertificatesRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CertificatesRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.CertificatesRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.node_id = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a CertificatesRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CertificatesRequest} CertificatesRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CertificatesRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a CertificatesRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                CertificatesRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isString(message.node_id))
+                            return "node_id: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a CertificatesRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificatesRequest} CertificatesRequest
+                 */
+                CertificatesRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.CertificatesRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.CertificatesRequest();
+                    if (object.node_id != null)
+                        message.node_id = String(object.node_id);
+                    return message;
+                };
+
+                /**
+                 * Creates a CertificatesRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CertificatesRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificatesRequest} CertificatesRequest
+                 */
+                CertificatesRequest.from = CertificatesRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a CertificatesRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CertificatesRequest} message CertificatesRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CertificatesRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults)
+                        object.node_id = "";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        object.node_id = message.node_id;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this CertificatesRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CertificatesRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this CertificatesRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                CertificatesRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return CertificatesRequest;
+            })();
+
+            serverpb.CertificateDetails = (function() {
+
+                /**
+                 * Properties of a CertificateDetails.
+                 * @typedef cockroach.server.serverpb.CertificateDetails$Properties
+                 * @type {Object}
+                 * @property {cockroach.server.serverpb.CertificateDetails.CertificateType} [type] CertificateDetails type.
+                 * @property {string} [error_message] CertificateDetails error_message.
+                 * @property {Uint8Array} [data] CertificateDetails data.
+                 */
+
+                /**
+                 * Constructs a new CertificateDetails.
+                 * @exports cockroach.server.serverpb.CertificateDetails
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CertificateDetails$Properties=} [properties] Properties to set
+                 */
+                function CertificateDetails(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * CertificateDetails type.
+                 * @type {cockroach.server.serverpb.CertificateDetails.CertificateType}
+                 */
+                CertificateDetails.prototype.type = 0;
+
+                /**
+                 * CertificateDetails error_message.
+                 * @type {string}
+                 */
+                CertificateDetails.prototype.error_message = "";
+
+                /**
+                 * CertificateDetails data.
+                 * @type {Uint8Array}
+                 */
+                CertificateDetails.prototype.data = $util.newBuffer([]);
+
+                /**
+                 * Creates a new CertificateDetails instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CertificateDetails$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails instance
+                 */
+                CertificateDetails.create = function create(properties) {
+                    return new CertificateDetails(properties);
+                };
+
+                /**
+                 * Encodes the specified CertificateDetails message. Does not implicitly {@link cockroach.server.serverpb.CertificateDetails.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificateDetails$Properties} message CertificateDetails message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CertificateDetails.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.type);
+                    if (message.error_message != null && message.hasOwnProperty("error_message"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.error_message);
+                    if (message.data != null && message.hasOwnProperty("data"))
+                        writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.data);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified CertificateDetails message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CertificateDetails.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificateDetails$Properties} message CertificateDetails message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CertificateDetails.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a CertificateDetails message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CertificateDetails.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.CertificateDetails();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.type = reader.uint32();
+                            break;
+                        case 2:
+                            message.error_message = reader.string();
+                            break;
+                        case 3:
+                            message.data = reader.bytes();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a CertificateDetails message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CertificateDetails.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a CertificateDetails message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                CertificateDetails.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        switch (message.type) {
+                        default:
+                            return "type: enum value expected";
+                        case 0:
+                        case 1:
+                            break;
+                        }
+                    if (message.error_message != null && message.hasOwnProperty("error_message"))
+                        if (!$util.isString(message.error_message))
+                            return "error_message: string expected";
+                    if (message.data != null && message.hasOwnProperty("data"))
+                        if (!(message.data && typeof message.data.length === "number" || $util.isString(message.data)))
+                            return "data: buffer expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a CertificateDetails message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails
+                 */
+                CertificateDetails.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.CertificateDetails)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.CertificateDetails();
+                    switch (object.type) {
+                    case "CA":
+                    case 0:
+                        message.type = 0;
+                        break;
+                    case "NODE":
+                    case 1:
+                        message.type = 1;
+                        break;
+                    }
+                    if (object.error_message != null)
+                        message.error_message = String(object.error_message);
+                    if (object.data != null)
+                        if (typeof object.data === "string")
+                            $util.base64.decode(object.data, message.data = $util.newBuffer($util.base64.length(object.data)), 0);
+                        else if (object.data.length)
+                            message.data = object.data;
+                    return message;
+                };
+
+                /**
+                 * Creates a CertificateDetails message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CertificateDetails.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails
+                 */
+                CertificateDetails.from = CertificateDetails.fromObject;
+
+                /**
+                 * Creates a plain object from a CertificateDetails message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CertificateDetails} message CertificateDetails
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CertificateDetails.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.type = options.enums === String ? "CA" : 0;
+                        object.error_message = "";
+                        object.data = options.bytes === String ? "" : [];
+                    }
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        object.type = options.enums === String ? $root.cockroach.server.serverpb.CertificateDetails.CertificateType[message.type] : message.type;
+                    if (message.error_message != null && message.hasOwnProperty("error_message"))
+                        object.error_message = message.error_message;
+                    if (message.data != null && message.hasOwnProperty("data"))
+                        object.data = options.bytes === String ? $util.base64.encode(message.data, 0, message.data.length) : options.bytes === Array ? Array.prototype.slice.call(message.data) : message.data;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this CertificateDetails message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CertificateDetails.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this CertificateDetails to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                CertificateDetails.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                /**
+                 * CertificateType enum.
+                 * @name CertificateType
+                 * @memberof cockroach.server.serverpb.CertificateDetails
+                 * @enum {number}
+                 * @property {number} CA=0 CA value
+                 * @property {number} NODE=1 NODE value
+                 */
+                CertificateDetails.CertificateType = (function() {
+                    const valuesById = {}, values = Object.create(valuesById);
+                    values[valuesById[0] = "CA"] = 0;
+                    values[valuesById[1] = "NODE"] = 1;
+                    return values;
+                })();
+
+                return CertificateDetails;
+            })();
+
+            serverpb.CertificatesResponse = (function() {
+
+                /**
+                 * Properties of a CertificatesResponse.
+                 * @typedef cockroach.server.serverpb.CertificatesResponse$Properties
+                 * @type {Object}
+                 * @property {Array.<cockroach.server.serverpb.CertificateDetails$Properties>} [certificates] CertificatesResponse certificates.
+                 */
+
+                /**
+                 * Constructs a new CertificatesResponse.
+                 * @exports cockroach.server.serverpb.CertificatesResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CertificatesResponse$Properties=} [properties] Properties to set
+                 */
+                function CertificatesResponse(properties) {
+                    this.certificates = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * CertificatesResponse certificates.
+                 * @type {Array.<cockroach.server.serverpb.CertificateDetails$Properties>}
+                 */
+                CertificatesResponse.prototype.certificates = $util.emptyArray;
+
+                /**
+                 * Creates a new CertificatesResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CertificatesResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CertificatesResponse} CertificatesResponse instance
+                 */
+                CertificatesResponse.create = function create(properties) {
+                    return new CertificatesResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified CertificatesResponse message. Does not implicitly {@link cockroach.server.serverpb.CertificatesResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificatesResponse$Properties} message CertificatesResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CertificatesResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.certificates != null && message.certificates.length)
+                        for (let i = 0; i < message.certificates.length; ++i)
+                            $root.cockroach.server.serverpb.CertificateDetails.encode(message.certificates[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified CertificatesResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CertificatesResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificatesResponse$Properties} message CertificatesResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CertificatesResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a CertificatesResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CertificatesResponse} CertificatesResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CertificatesResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.CertificatesResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            if (!(message.certificates && message.certificates.length))
+                                message.certificates = [];
+                            message.certificates.push($root.cockroach.server.serverpb.CertificateDetails.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a CertificatesResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CertificatesResponse} CertificatesResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CertificatesResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a CertificatesResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                CertificatesResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.certificates != null && message.hasOwnProperty("certificates")) {
+                        if (!Array.isArray(message.certificates))
+                            return "certificates: array expected";
+                        for (let i = 0; i < message.certificates.length; ++i) {
+                            let error = $root.cockroach.server.serverpb.CertificateDetails.verify(message.certificates[i]);
+                            if (error)
+                                return "certificates." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a CertificatesResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificatesResponse} CertificatesResponse
+                 */
+                CertificatesResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.CertificatesResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.CertificatesResponse();
+                    if (object.certificates) {
+                        if (!Array.isArray(object.certificates))
+                            throw TypeError(".cockroach.server.serverpb.CertificatesResponse.certificates: array expected");
+                        message.certificates = [];
+                        for (let i = 0; i < object.certificates.length; ++i) {
+                            if (typeof object.certificates[i] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.CertificatesResponse.certificates: object expected");
+                            message.certificates[i] = $root.cockroach.server.serverpb.CertificateDetails.fromObject(object.certificates[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a CertificatesResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CertificatesResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificatesResponse} CertificatesResponse
+                 */
+                CertificatesResponse.from = CertificatesResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a CertificatesResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CertificatesResponse} message CertificatesResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CertificatesResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.certificates = [];
+                    if (message.certificates && message.certificates.length) {
+                        object.certificates = [];
+                        for (let j = 0; j < message.certificates.length; ++j)
+                            object.certificates[j] = $root.cockroach.server.serverpb.CertificateDetails.toObject(message.certificates[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this CertificatesResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CertificatesResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this CertificatesResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                CertificatesResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return CertificatesResponse;
+            })();
+
             serverpb.DetailsRequest = (function() {
 
                 /**
@@ -14530,6 +15145,33 @@ export const cockroach = $root.cockroach = (() => {
                 Status.create = function create(rpcImpl, requestDelimited, responseDelimited) {
                     return new this(rpcImpl, requestDelimited, responseDelimited);
                 };
+
+                /**
+                 * Callback as used by {@link Status#certificates}.
+                 * @typedef Status_certificates_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.CertificatesResponse} [response] CertificatesResponse
+                 */
+
+                /**
+                 * Calls Certificates.
+                 * @param {cockroach.server.serverpb.CertificatesRequest|Object.<string,*>} request CertificatesRequest message or plain object
+                 * @param {Status_certificates_Callback} callback Node-style callback called with the error, if any, and CertificatesResponse
+                 * @returns {undefined}
+                 */
+                Status.prototype.certificates = function certificates(request, callback) {
+                    return this.rpcCall(certificates, $root.cockroach.server.serverpb.CertificatesRequest, $root.cockroach.server.serverpb.CertificatesResponse, request, callback);
+                };
+
+                /**
+                 * Calls Certificates.
+                 * @name Status#certificates
+                 * @function
+                 * @param {cockroach.server.serverpb.CertificatesRequest|Object.<string,*>} request CertificatesRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.CertificatesResponse>} Promise
+                 * @variation 2
+                 */
 
                 /**
                  * Callback as used by {@link Status#details}.
