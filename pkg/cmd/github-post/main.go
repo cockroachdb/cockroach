@@ -79,7 +79,7 @@ func trimIssueRequestBody(message string, usedCharacters int) string {
 		// We want the top stack traces plus a few lines before.
 		{
 			startIdx := m[0]
-			for i := 0; i < 10; i++ {
+			for i := 0; i < 100; i++ {
 				if idx := strings.LastIndexByte(message[:startIdx], '\n'); idx != -1 {
 					startIdx = idx
 				}
