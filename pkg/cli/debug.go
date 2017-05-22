@@ -19,16 +19,20 @@ package cli
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
+	"os"
+	"sort"
 	"strconv"
+	"strings"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -38,9 +42,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -772,6 +779,114 @@ func runDebugSSTables(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+var debugGossipValuesCmd = &cobra.Command{
+	Use:   "gossip-values [directory]",
+	Short: "dump all the values in a node's gossip instance",
+	Long: `
+Pretty-prints the values in a node's gossip instance.
+
+Can connect to a running server to get the values or can be provided with
+a JSON file captured from a node's /_status/gossip/ debug endpoint.
+`,
+	RunE: MaybeDecorateGRPCError(runDebugGossipValues),
+}
+
+func runDebugGossipValues(cmd *cobra.Command, args []string) error {
+	// If a file is provided, use it. Otherwise, try talking to the running node.
+	var gossipInfo *gossip.InfoStatus
+	if debugCtx.inputFile != "" {
+		file, err := os.Open(debugCtx.inputFile)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		gossipInfo = new(gossip.InfoStatus)
+		if err := jsonpb.Unmarshal(file, gossipInfo); err != nil {
+			return errors.Wrap(err, "failed to parse provided file as gossip.InfoStatus")
+		}
+	} else {
+		conn, _, stopper, err := getClientGRPCConn()
+		if err != nil {
+			return err
+		}
+		ctx := stopperContext(stopper)
+		defer stopper.Stop(ctx)
+
+		status := serverpb.NewStatusClient(conn)
+		gossipInfo, err = status.Gossip(ctx, &serverpb.GossipRequest{})
+		if err != nil {
+			return errors.Wrap(err, "failed to retrieve gossip from server")
+		}
+	}
+
+	output, err := parseGossipValues(gossipInfo)
+	if err != nil {
+		return err
+	}
+	fmt.Println(output)
+	return nil
+}
+
+func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
+	var output []string
+	for key, info := range gossipInfo.Infos {
+		bytes, err := info.Value.GetBytes()
+		if err != nil {
+			return "", errors.Wrapf(err, "failed to extract bytes for key %q", key)
+		}
+		if key == gossip.KeyClusterID || key == gossip.KeySentinel {
+			clusterID, err := uuid.FromBytes(bytes)
+			if err != nil {
+				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			output = append(output, fmt.Sprintf("%q: %v", key, clusterID))
+		} else if key == gossip.KeySystemConfig {
+			if debugCtx.printSystemConfig {
+				var config config.SystemConfig
+				if err := proto.Unmarshal(bytes, &config); err != nil {
+					return "", errors.Wrapf(err, "failed to parse value for key %q", key)
+				}
+				output = append(output, fmt.Sprintf("%q: %+v", key, config))
+			} else {
+				output = append(output, fmt.Sprintf("%q: omitted", key))
+			}
+		} else if key == gossip.KeyFirstRangeDescriptor {
+			var desc roachpb.RangeDescriptor
+			if err := proto.Unmarshal(bytes, &desc); err != nil {
+				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			output = append(output, fmt.Sprintf("%q: %v", key, desc))
+		} else if gossip.IsNodeIDKey(key) {
+			var desc roachpb.NodeDescriptor
+			if err := proto.Unmarshal(bytes, &desc); err != nil {
+				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			output = append(output, fmt.Sprintf("%q: %+v", key, desc))
+		} else if strings.HasPrefix(key, gossip.KeyStorePrefix) {
+			var desc roachpb.StoreDescriptor
+			if err := proto.Unmarshal(bytes, &desc); err != nil {
+				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			output = append(output, fmt.Sprintf("%q: %+v", key, desc))
+		} else if strings.HasPrefix(key, gossip.KeyNodeLivenessPrefix) {
+			var liveness storage.Liveness
+			if err := proto.Unmarshal(bytes, &liveness); err != nil {
+				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			output = append(output, fmt.Sprintf("%q: %+v", key, liveness))
+		} else if strings.HasPrefix(key, gossip.KeyDeadReplicasPrefix) {
+			var deadReplicas roachpb.StoreDeadReplicas
+			if err := proto.Unmarshal(bytes, &deadReplicas); err != nil {
+				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			output = append(output, fmt.Sprintf("%q: %+v", key, deadReplicas))
+		}
+	}
+
+	sort.Strings(output)
+	return strings.Join(output, "\n"), nil
+}
+
 func init() {
 	debugCmd.AddCommand(debugCmds...)
 }
@@ -786,6 +901,7 @@ var debugCmds = []*cobra.Command{
 	debugRocksDBCmd,
 	debugCompactCmd,
 	debugSSTablesCmd,
+	debugGossipValuesCmd,
 	rangeCmd,
 	debugEnvCmd,
 	debugZipCmd,
