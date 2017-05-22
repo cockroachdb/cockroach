@@ -15,6 +15,13 @@
     "outDir": "./dist/",
     "sourceMap": true,
     "strictNullChecks": false,
-    "target": "es6"
+    "target": "es6",
+    "baseUrl": ".",
+    "paths": {
+      "*": [
+        "*",
+        "node_modules/*"
+      ]
+    }
   }
 }

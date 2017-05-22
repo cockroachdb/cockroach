@@ -3,10 +3,10 @@ import { combineReducers } from "redux";
 import moment from "moment";
 
 import { CachedDataReducer, CachedDataReducerState, KeyedCachedDataReducer, KeyedCachedDataReducerState } from "./cachedDataReducer";
-import * as api from "../util/api";
-import { VersionList } from "../interfaces/cockroachlabs";
-import { versionCheck } from "../util/cockroachlabsAPI";
-import { NodeStatus$Properties, RollupStoreMetrics } from "../util/proto";
+import * as api from "src/util/api";
+import { VersionList } from "src/interfaces/cockroachlabs";
+import { versionCheck } from "src/util/cockroachlabsAPI";
+import { NodeStatus$Properties, RollupStoreMetrics } from "src/util/proto";
 
 // The primary export of this file are the "refresh" functions of the various
 // reducers, which are used by many react components to request fresh data.

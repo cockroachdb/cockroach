@@ -1,4 +1,4 @@
-import * as protos from "../../js/protos";
+import * as protos from "src/js/protos";
 
 type TableDetailsResponse = protos.cockroach.server.serverpb.TableDetailsResponse;
 type TableStatsResponse = protos.cockroach.server.serverpb.TableStatsResponse;

@@ -8,11 +8,11 @@ import CodeMirror from "react-codemirror";
 // This import makes SQL highlighting info available to CodeMirror.
 import "codemirror/mode/sql/sql";
 
-import * as protos from "../js/protos";
-import { AdminUIState } from "../redux/state";
-import { refreshQueryPlan } from "../redux/apiReducers";
+import * as protos from "src/js/protos";
+import { AdminUIState } from "src/redux/state";
+import { refreshQueryPlan } from "src/redux/apiReducers";
 
-import { QueryPlanGraph } from "../components/queryPlanGraph";
+import { QueryPlanGraph } from "src/components/queryPlanGraph";
 
 // Constants used to store per-page sort settings in the redux UI store.
 export const UI_QUERY_PLAN_SOURCE_STRING_KEY = "queryPlan/query";

@@ -5,10 +5,10 @@ import _ from "lodash";
 import Long from "long";
 import * as sinon from "sinon";
 
-import * as protos from  "../js/protos";
+import * as protos from  "src/js/protos";
 import { EventBoxUnconnected as EventBox, EventRow, getEventInfo } from "./events";
-import { refreshEvents } from "../redux/apiReducers";
-import { allEvents } from "../util/eventTypes";
+import { refreshEvents } from "src/redux/apiReducers";
+import { allEvents } from "src/util/eventTypes";
 
 type Event = protos.cockroach.server.serverpb.EventsResponse.Event;
 

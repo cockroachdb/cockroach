@@ -3,9 +3,9 @@ import _ from "lodash";
 import moment from "moment";
 import Long from "long";
 
-import fetchMock from "../util/fetch-mock";
+import fetchMock from "./fetch-mock";
 
-import * as protos from "../js/protos";
+import * as protos from "src/js/protos";
 import * as api from "./api";
 
 describe("rest api", function() {
