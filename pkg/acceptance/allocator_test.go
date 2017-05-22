@@ -388,9 +388,9 @@ func (at *allocatorTest) allocatorStats(db *gosql.DB) (s replicationStats, err e
 	}()
 
 	eventTypes := []interface{}{
-		string(storage.RangeEventLogSplit),
-		string(storage.RangeEventLogAdd),
-		string(storage.RangeEventLogRemove),
+		storage.RangeLogEventType_split.String(),
+		storage.RangeLogEventType_add.String(),
+		storage.RangeLogEventType_remove.String(),
 	}
 
 	q := `SELECT NOW()-timestamp, rangeID, storeID, eventType FROM rangelog WHERE ` +

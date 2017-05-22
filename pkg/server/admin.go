@@ -32,6 +32,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
+	"encoding/json"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -44,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -782,7 +785,7 @@ func (s *adminServer) RangeLog(
 		if row.Len() != 6 {
 			return nil, errors.Errorf("incorrect number of columns in response, expected 6, got %d", row.Len())
 		}
-		var event serverpb.RangeLogResponse_Event
+		var event storage.RangeLogEvent
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("Timestamp didn't parse correctly: %s", row[0].String()))
@@ -798,9 +801,16 @@ func (s *adminServer) RangeLog(
 			return nil, errors.Wrap(err, fmt.Sprintf("StoreID didn't parse correctly: %s", row[2].String()))
 		}
 		event.StoreID = roachpb.StoreID(int32(storeID))
-		if err := scanner.ScanIndex(row, 3, &event.EventType); err != nil {
+		var eventTypeString string
+		if err := scanner.ScanIndex(row, 3, &eventTypeString); err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("EventType didn't parse correctly: %s", row[3].String()))
 		}
+		if eventType, ok := storage.RangeLogEventType_value[eventTypeString]; ok {
+			event.EventType = storage.RangeLogEventType(eventType)
+		} else {
+			return nil, errors.Errorf("EventType didn't parse correctly: %s", eventTypeString)
+		}
+
 		var otherRangeID int64
 		if row[4].String() != "NULL" {
 			if err := scanner.ScanIndex(row, 4, &otherRangeID); err != nil {
@@ -809,8 +819,12 @@ func (s *adminServer) RangeLog(
 			event.OtherRangeID = roachpb.RangeID(otherRangeID)
 		}
 		if row[5].String() != "NULL" {
-			if err := scanner.ScanIndex(row, 5, &event.Info); err != nil {
+			var info string
+			if err := scanner.ScanIndex(row, 5, &info); err != nil {
 				return nil, errors.Wrap(err, fmt.Sprintf("info didn't parse correctly: %s", row[5].String()))
+			}
+			if err := json.Unmarshal([]byte(info), &event.Info); err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("info didn't parse correctly: %s", info))
 			}
 		}
 
