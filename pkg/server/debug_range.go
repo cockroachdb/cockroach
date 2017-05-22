@@ -16,6 +16,7 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -732,16 +733,38 @@ func (d *debugRangeData) postProcessing() {
 			if int64(event.RangeID) != d.RangeID {
 				rowClass = debugRangeClassOtherRange
 			}
+			var infoBuffer bytes.Buffer
+			if event.Info.UpdatedDesc != nil {
+				infoBuffer.WriteString("Updated Range Descriptor: ")
+				infoBuffer.WriteString(event.Info.UpdatedDesc.String())
+				infoBuffer.WriteRune('\n')
+			}
+			if event.Info.NewDesc != nil {
+				infoBuffer.WriteString("New Range Descriptor: ")
+				infoBuffer.WriteString(event.Info.NewDesc.String())
+				infoBuffer.WriteRune('\n')
+			}
+			if event.Info.AddedReplica != nil {
+				infoBuffer.WriteString("Added Replica: ")
+				infoBuffer.WriteString(event.Info.AddedReplica.String())
+				infoBuffer.WriteRune('\n')
+			}
+			if event.Info.RemovedReplica != nil {
+				infoBuffer.WriteString("Removed Replica: ")
+				infoBuffer.WriteString(event.Info.RemovedReplica.String())
+				infoBuffer.WriteRune('\n')
+			}
+
 			d.RangeLog = append(d.RangeLog, debugRangeLogEvent{
 				Timestamp: *outputSameTitleValue(event.Timestamp.String()),
-				EventType: *outputSameTitleValue(event.EventType),
+				EventType: *outputSameTitleValue(event.EventType.String()),
 				RangeID: debugRangeOutput{
 					Value: event.RangeID.String(),
 					Title: fmt.Sprintf("r%d", event.RangeID),
 				},
 				OtherRangeID: otherRangeID,
 				StoreID:      *outputSameTitleValue(fmt.Sprintf("s%d", event.StoreID)),
-				Info:         *outputSameTitleValue(event.Info),
+				Info:         *outputSameTitleValue(infoBuffer.String()),
 				RowClass:     rowClass,
 			})
 		}
@@ -888,7 +911,6 @@ const debugRangeTemplate = `
         height: 20px;
         overflow: hidden;
         text-overflow: ellipsis;
-        white-space: nowrap;
         border-width: 1px 1px 0 0;
         border-color: rgba(0, 0, 0, 0.1);
         border-style: solid;
@@ -923,6 +945,7 @@ const debugRangeTemplate = `
         border-width: 1px 1px 0 0;
         border-color: rgba(0, 0, 0, 0.1);
         border-style: solid;
+        white-space: pre;
       }
       .log-row:first-of-type .log-cell {
         font-weight: 900;

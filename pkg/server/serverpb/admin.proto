@@ -21,6 +21,7 @@ option go_package = "serverpb";
 import "cockroach/pkg/config/config.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "cockroach/pkg/storage/liveness.proto";
+import "cockroach/pkg/storage/log.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
@@ -381,40 +382,7 @@ message RangeLogRequest {
 
 // RangeLogResponse contains a list of entries from the range log table.
 message RangeLogResponse {
-  message Event {
-    // timestamp is the time at which the event occurred.
-    google.protobuf.Timestamp timestamp = 1 [
-      (gogoproto.nullable) = false,
-      (gogoproto.stdtime) = true
-    ];
-
-    // range_id is the target for this event.
-    int64 range_id = 2 [
-      (gogoproto.customname) = "RangeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
-    ];
-
-    // store_id is the store that recorded this event.
-    int32 store_id = 3 [
-      (gogoproto.customname) = "StoreID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
-    ];
-
-    // event_type is the type of the event (e.g. "split", "add", "remove").
-    string event_type = 4;
-
-    // other_range_id is any other range involved in this event.
-    int64 other_range_id = 5 [
-      (gogoproto.customname) = "OtherRangeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
-    ];
-
-    // info has more detailed information for the event. The contents vary
-    // depending on the event.
-    string info = 6;
-  }
-
-  repeated Event events = 1 [(gogoproto.nullable) = false];
+  repeated storage.RangeLogEvent events = 1 [(gogoproto.nullable) = false];
 }
 
 // QueryPlanRequest requests the query plans for a SQL string.
