@@ -477,7 +477,7 @@ func (l *LocalCluster) createRoach(
 func (l *LocalCluster) createCACert() {
 	maybePanic(security.CreateCAPair(
 		l.CertsDir, filepath.Join(l.CertsDir, security.EmbeddedCAKey),
-		keyLen, 48*time.Hour, false, false))
+		keyLen, 96*time.Hour, false, false))
 }
 
 func (l *LocalCluster) createNodeCerts() {
