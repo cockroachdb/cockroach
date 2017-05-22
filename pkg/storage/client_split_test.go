@@ -1681,6 +1681,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	storeCfg.GossipWhenCapacityDeltaExceedsFraction = 0.5 // 50% for testing
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableScanner = true
+	storeCfg.TestingKnobs.DisableLeaseCapacityGossip = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
@@ -1725,6 +1726,9 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	var rangeCount int32
 	for i := 0; rangeCount < 20; i++ {
 		if pErr := splitFunc(i); pErr != nil {
+			if testutils.IsPError(pErr, "rejecting command with timestamp in the future") {
+				continue
+			}
 			t.Fatal(pErr)
 		}
 		select {
