@@ -2,9 +2,9 @@ import React from "react";
 import { Dispatch, bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
-import { AlertBox } from "../components/alertBox";
-import { Alert, bannerAlertsSelector } from "../redux/alerts";
-import { AdminUIState } from "../redux/state";
+import { AlertBox } from "components/alertBox";
+import { Alert, bannerAlertsSelector } from "redux/alerts";
+import { AdminUIState } from "redux/state";
 
 interface AlertBannerProps {
   /**

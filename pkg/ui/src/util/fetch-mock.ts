@@ -1,4 +1,4 @@
-import "../js/object-assign";
+import "js/object-assign";
 import fetchMock from "fetch-mock";
 
 fetchMock.configure({

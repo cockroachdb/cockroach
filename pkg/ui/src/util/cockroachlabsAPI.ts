@@ -5,7 +5,7 @@
 import "whatwg-fetch"; // needed for jsdom?
 import moment from "moment";
 
-import { VersionList, VersionCheckRequest, RegistrationRequest, UnregistrationRequest } from "../interfaces/cockroachlabs";
+import { VersionList, VersionCheckRequest, RegistrationRequest, UnregistrationRequest } from "interfaces/cockroachlabs";
 import { withTimeout } from "./api";
 
 export const COCKROACHLABS_ADDR = "https://register.cockroachdb.com";

@@ -1,16 +1,16 @@
 import _ from "lodash";
 import React from "react";
 import { RouterState, Link } from "react-router";
-import { AdminUIState } from "../redux/state";
-import { refreshLogs, refreshNodes } from "../redux/apiReducers";
 import { connect } from "react-redux";
 
-import * as protos from "../js/protos";
-import { NodeStatus$Properties } from "../util/proto";
-import { nodeIDAttr } from "../util/constants";
-import { LogEntriesResponseMessage } from "../util/api";
-import { LongToMoment } from "../util/convert";
-import { SortableTable } from "../components/sortabletable";
+import * as protos from "js/protos";
+import { NodeStatus$Properties } from "util/proto";
+import { nodeIDAttr } from "util/constants";
+import { LogEntriesResponseMessage } from "util/api";
+import { LongToMoment } from "util/convert";
+import { SortableTable } from "components/sortabletable";
+import { AdminUIState } from "redux/state";
+import { refreshLogs, refreshNodes } from "redux/apiReducers";
 
 import { currentNode } from "./nodeOverview";
 

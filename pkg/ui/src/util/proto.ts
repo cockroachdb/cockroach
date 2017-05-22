@@ -1,6 +1,6 @@
 import _ from "lodash";
 
-import * as protos from "../js/protos";
+import * as protos from "js/protos";
 
 export type NodeStatus$Properties = protos.cockroach.server.status.NodeStatus$Properties;
 const nodeStatus: NodeStatus$Properties = null;

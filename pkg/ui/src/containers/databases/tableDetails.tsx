@@ -2,17 +2,17 @@ import React from "react";
 import { RouterState, Link } from "react-router";
 import { connect } from "react-redux";
 
-import * as protos from "../../js/protos";
-import { databaseNameAttr, tableNameAttr } from "../../util/constants";
-import { Bytes } from "../../util/format";
-import { AdminUIState } from "../../redux/state";
-import { LocalSetting } from "../../redux/localsettings";
-import { refreshTableDetails, refreshTableStats, generateTableID } from "../../redux/apiReducers";
-import { SummaryBar, SummaryHeadlineStat } from "../../components/summaryBar";
+import * as protos from "js/protos";
+import { databaseNameAttr, tableNameAttr } from "util/constants";
+import { Bytes } from "util/format";
+import { AdminUIState } from "redux/state";
+import { LocalSetting } from "redux/localsettings";
+import { refreshTableDetails, refreshTableStats, generateTableID } from "redux/apiReducers";
+import { SummaryBar, SummaryHeadlineStat } from "components/summaryBar";
 
 import { TableInfo } from "./data";
-import { SortSetting } from "../../components/sortabletable";
-import { SortedTable } from "../../components/sortedtable";
+import { SortSetting } from "components/sortabletable";
+import { SortedTable } from "components/sortedtable";
 import * as hljs from "highlight.js";
 
 // Specialization of generic SortedTable component:

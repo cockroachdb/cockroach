@@ -1,17 +1,17 @@
 import React from "react";
 import { connect } from "react-redux";
 
-import * as protos from  "../../js/protos";
+import * as protos from  "js/protos";
 
-import { SummaryBar, SummaryHeadlineStat } from "../../components/summaryBar";
-import { SortSetting } from "../../components/sortabletable";
-import { SortedTable } from "../../components/sortedtable";
+import { SummaryBar, SummaryHeadlineStat } from "components/summaryBar";
+import { SortSetting } from "components/sortabletable";
+import { SortedTable } from "components/sortedtable";
 
-import { AdminUIState } from "../../redux/state";
-import { LocalSetting } from "../../redux/localsettings";
+import { AdminUIState } from "redux/state";
+import { LocalSetting } from "redux/localsettings";
 import {
     refreshDatabaseDetails, refreshTableDetails, refreshTableStats,
-} from "../../redux/apiReducers";
+} from "redux/apiReducers";
 
 import {
     DatabaseSummaryBase, DatabaseSummaryExplicitData, databaseDetails, tableInfos, grants,

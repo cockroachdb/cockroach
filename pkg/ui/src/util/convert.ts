@@ -1,6 +1,6 @@
 import moment from "moment";
 
-import * as protos from "../js/protos";
+import * as protos from "js/protos";
 
 /**
  * NanoToMilli converts a nanoseconds value into milliseconds.

@@ -1,6 +1,6 @@
 import React from "react";
 
-import { MetricsDataProvider } from "../containers/metricsDataProvider";
+import { MetricsDataProvider } from "containers/metricsDataProvider";
 
 /**
  * GraphGroup is a stateless react component that wraps a group of graphs (the

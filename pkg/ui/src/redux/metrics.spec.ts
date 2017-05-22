@@ -2,10 +2,10 @@ import { assert } from "chai";
 import _ from "lodash";
 import Long from "long";
 import { Action } from "redux";
-import fetchMock from "../util/fetch-mock";
+import fetchMock from "util/fetch-mock";
 
-import * as protos from "../js/protos";
-import * as api from "../util/api";
+import * as protos from "js/protos";
+import * as api from "util/api";
 import * as metrics from "./metrics";
 import reducer from "./metrics";
 

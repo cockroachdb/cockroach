@@ -1,6 +1,6 @@
 import { assert } from "chai";
 import { generateTableID, databaseRequestToID, tableRequestToID } from "./apiReducers";
-import * as protos from "../js/protos";
+import * as protos from "js/protos";
 
 describe("table id generator", function () {
   it("generates encoded db/table id", function () {

@@ -2,10 +2,10 @@ import { assert } from "chai";
 import _ from "lodash";
 import { Action } from "redux";
 import * as protobuf from "protobufjs/minimal";
-import fetchMock from "../util/fetch-mock";
+import fetchMock from "util/fetch-mock";
 
-import * as protos from "../js/protos";
-import * as api from "../util/api";
+import * as protos from "js/protos";
+import * as api from "util/api";
 import reducer from "./uiData";
 import * as uidata from "./uiData";
 

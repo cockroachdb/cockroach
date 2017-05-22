@@ -4,17 +4,17 @@ import PropTypes from "prop-types";
 import { InjectedRouter, RouterState } from "react-router";
 import { connect } from "react-redux";
 
-import * as protos from "../js/protos";
+import * as protos from "js/protos";
 
-import Dropdown, { DropdownOption } from "../components/dropdown";
-import { PageConfig, PageConfigItem } from "../components/pageconfig";
+import Dropdown, { DropdownOption } from "components/dropdown";
+import { PageConfig, PageConfigItem } from "components/pageconfig";
 
-import { refreshNodes } from "../redux/apiReducers";
-import { AdminUIState } from "../redux/state";
+import { refreshNodes } from "redux/apiReducers";
+import { AdminUIState } from "redux/state";
 
 import {
   nodeIDAttr, dashboardNameAttr,
-} from "../util/constants";
+} from "util/constants";
 
 import TimeScaleDropdown from "./timescale";
 

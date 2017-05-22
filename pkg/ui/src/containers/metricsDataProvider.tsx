@@ -5,13 +5,13 @@ import _ from "lodash";
 import Long from "long";
 import moment from "moment";
 
-import * as protos from  "../js/protos";
-import { AdminUIState } from "../redux/state";
-import { queryMetrics, MetricsQuery } from "../redux/metrics";
-import { MetricsDataComponentProps } from "../components/graphs";
-import { Metric, MetricProps } from "../components/metric";
-import { findChildrenOfType } from "../util/find";
-import { MilliToNano } from "../util/convert";
+import * as protos from  "js/protos";
+import { AdminUIState } from "redux/state";
+import { queryMetrics, MetricsQuery } from "redux/metrics";
+import { MetricsDataComponentProps } from "components/graphs";
+import { Metric, MetricProps } from "components/metric";
+import { findChildrenOfType } from "util/find";
+import { MilliToNano } from "util/convert";
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data

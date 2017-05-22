@@ -6,16 +6,16 @@ import _ from "lodash";
 
 import {
   NodesSummary, nodesSummarySelector, LivenessStatus,
-} from "../redux/nodes";
-import { nodeIDAttr } from "./../util/constants";
-import { AdminUIState } from "../redux/state";
-import { refreshNodes } from "../redux/apiReducers";
-import { NodeStatus$Properties, MetricConstants, StatusMetrics } from  "../util/proto";
-import { Bytes, Percentage } from "../util/format";
-import { LongToMoment } from "../util/convert";
+} from "redux/nodes";
+import { nodeIDAttr } from "util/constants";
+import { AdminUIState } from "redux/state";
+import { refreshNodes } from "redux/apiReducers";
+import { NodeStatus$Properties, MetricConstants, StatusMetrics } from  "util/proto";
+import { Bytes, Percentage } from "util/format";
+import { LongToMoment } from "util/convert";
 import {
   SummaryBar, SummaryLabel, SummaryValue,
-} from "../components/summaryBar";
+} from "components/summaryBar";
 
 interface NodeOverviewProps extends RouterState {
   node: NodeStatus$Properties;

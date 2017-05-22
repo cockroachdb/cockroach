@@ -2,9 +2,9 @@ import _ from "lodash";
 import { Action, Dispatch } from "redux";
 import * as protobuf from "protobufjs/minimal";
 
-import * as protos from  "../js/protos";
-import { PayloadAction } from "../interfaces/action";
-import { getUIData, setUIData } from "../util/api";
+import * as protos from  "js/protos";
+import { PayloadAction } from "interfaces/action";
+import { getUIData, setUIData } from "util/api";
 import { AdminUIState } from "./state";
 
 export const SET = "cockroachui/uidata/SET_OPTIN";

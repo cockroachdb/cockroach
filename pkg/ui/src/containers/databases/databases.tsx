@@ -4,11 +4,11 @@ import PropTypes from "prop-types";
 import { connect } from "react-redux";
 import { InjectedRouter, RouterState } from "react-router";
 
-import Dropdown, { DropdownOption } from "../../components/dropdown";
-import { PageConfig, PageConfigItem } from "../../components/pageconfig";
+import Dropdown, { DropdownOption } from "components/dropdown";
+import { PageConfig, PageConfigItem } from "components/pageconfig";
 
-import { AdminUIState } from "../../redux/state";
-import { refreshDatabases } from "../../redux/apiReducers";
+import { AdminUIState } from "redux/state";
+import { refreshDatabases } from "redux/apiReducers";
 
 import DatabaseSummaryTables from "./databaseTables";
 import DatabaseSummaryGrants from "./databaseGrants";

@@ -1,9 +1,9 @@
 import React from "react";
 import classNames from "classnames";
 
-import { AlertInfo, AlertLevel } from "../redux/alerts";
-import { warningIcon, notificationIcon, criticalIcon } from "../components/icons";
-import { trustIcon } from "../util/trust";
+import { AlertInfo, AlertLevel } from "redux/alerts";
+import { warningIcon, notificationIcon, criticalIcon } from "components/icons";
+import { trustIcon } from "util/trust";
 
 function alertIcon (level: AlertLevel) {
   switch (level) {

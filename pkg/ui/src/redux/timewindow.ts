@@ -4,7 +4,7 @@
  */
 
 import { Action } from "redux";
-import { PayloadAction } from "../interfaces/action";
+import { PayloadAction } from "interfaces/action";
 import _ from "lodash";
 import moment from "moment";
 

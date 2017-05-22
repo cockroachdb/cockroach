@@ -2,7 +2,7 @@ import React from "react";
 import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
-import { findChildrenOfType } from "../util/find";
+import { findChildrenOfType } from "util/find";
 import {
   MetricsDataComponentProps, Axis, AxisProps, ConfigureLineChart, InitLineChart,
   updateLinkedGuidelines,

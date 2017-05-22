@@ -4,12 +4,12 @@ import ReactPaginate from "react-paginate";
 import { Link } from "react-router";
 import { connect } from "react-redux";
 
-import * as protos from "../js/protos";
+import * as protos from "js/protos";
 
-import { AdminUIState } from "../redux/state";
-import { refreshRaft } from "../redux/apiReducers";
-import { CachedDataReducerState } from "../redux/cachedDataReducer";
-import { ToolTipWrapper } from "../components/toolTip";
+import { AdminUIState } from "redux/state";
+import { refreshRaft } from "redux/apiReducers";
+import { CachedDataReducerState } from "redux/cachedDataReducer";
+import { ToolTipWrapper } from "components/toolTip";
 
 /******************************
  *   RAFT RANGES MAIN COMPONENT

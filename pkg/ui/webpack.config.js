@@ -1,6 +1,8 @@
 'use strict;'
 
+const path = require('path');
 const rimraf = require('rimraf');
+
 
 const FaviconsWebpackPlugin = require('favicons-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
@@ -30,6 +32,13 @@ module.exports = {
   resolve: {
     // Add '.ts' and '.tsx' as resolvable extensions.
     extensions: ['.ts', '.tsx', '.js', '.json'],
+    // Resolve modules from src directory or node_modules.
+    // The 'path.resolve' is used to make these into absolute paths, meaning
+    // that only the exact directory is checked. A relative path would follow
+    // the resolution behavior used by node.js for "node_modules", which checks
+    // for a "node_modules" child directory located in either the current
+    // directory *or in any parent directory*.
+    modules: [path.resolve(__dirname, "src"), path.resolve(__dirname, "node_modules")]
   },
 
   module: {

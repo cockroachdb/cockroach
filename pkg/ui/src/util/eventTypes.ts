@@ -2,7 +2,7 @@
 
 import _ from "lodash";
 
-import * as protos from "../js/protos";
+import * as protos from "js/protos";
 
 type Event = protos.cockroach.server.serverpb.EventsResponse.Event;
 

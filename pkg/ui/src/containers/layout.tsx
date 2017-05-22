@@ -3,9 +3,9 @@ import _ from "lodash";
 import { RouterState } from "react-router";
 import { StickyContainer } from "react-sticky";
 
-import { TitledComponent } from "../interfaces/layout";
-import NavigationBar from "../components/layoutSidebar";
-import TimeWindowManager from "../containers/timewindow";
+import { TitledComponent } from "interfaces/layout";
+import NavigationBar from "components/layoutSidebar";
+import TimeWindowManager from "containers/timewindow";
 import AlertBanner from "./alertBanner";
 
 function isTitledComponent(obj: Object | TitledComponent): obj is TitledComponent {

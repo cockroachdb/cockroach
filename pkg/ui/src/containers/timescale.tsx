@@ -3,15 +3,15 @@ import { connect } from "react-redux";
 import _ from "lodash";
 import moment from "moment";
 
-import Dropdown, { DropdownOption, ArrowDirection } from "../components/dropdown";
+import Dropdown, { DropdownOption, ArrowDirection } from "components/dropdown";
 
-import { AdminUIState } from "../redux/state";
-import { refreshNodes } from "../redux/apiReducers";
-import * as timewindow from "../redux/timewindow";
-import { LocalSetting } from "../redux/localsettings";
+import { AdminUIState } from "redux/state";
+import { refreshNodes } from "redux/apiReducers";
+import * as timewindow from "redux/timewindow";
+import { LocalSetting } from "redux/localsettings";
 
-import { NodeStatus$Properties } from "../util/proto";
-import { LongToMoment } from "../util/convert";
+import { NodeStatus$Properties } from "util/proto";
+import { LongToMoment } from "util/convert";
 
 // Tracks whether the default timescale been set once in the app. Tracked across
 // the entire app so that changing pages doesn't cause it to reset.
