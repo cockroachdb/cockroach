@@ -129,7 +129,7 @@ func BenchmarkPgbenchExec(b *testing.B) {
 		pgURL := url.URL{
 			Scheme:   "postgres",
 			Host:     "localhost:5432",
-			RawQuery: "sslmode=disable",
+			RawQuery: "sslmode=disable&dbname=postgres",
 		}
 		execPgbench(b, pgURL)
 	})
