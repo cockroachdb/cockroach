@@ -1,5 +1,6 @@
 import _ from "lodash";
-import * as React from "react";
+import React from "react";
+import PropTypes from "prop-types";
 import { connect } from "react-redux";
 import { InjectedRouter, RouterState } from "react-router";
 
@@ -31,10 +32,12 @@ const databasePages = [
 class DatabaseListNav extends React.Component<{selected: string}, {}> {
   // Magic to add react router to the context.
   // See https://github.com/ReactTraining/react-router/issues/975
+  // TODO(mrtracy): Switch this, and the other uses of contextTypes, to use the
+  // 'withRouter' HoC after upgrading to react-router 4.x.
   static contextTypes = {
-    router: React.PropTypes.object.isRequired,
+    router: PropTypes.object.isRequired,
   };
-  context: { router?: InjectedRouter & RouterState; };
+  context: { router: InjectedRouter & RouterState; };
 
   render() {
     return <PageConfig>

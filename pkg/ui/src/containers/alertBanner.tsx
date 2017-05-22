@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import { Dispatch, bindActionCreators } from "redux";
 import { connect } from "react-redux";
 

@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 
 /**
  * findChildrenOfType performs a DFS of the supplied React children collection,

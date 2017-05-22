@@ -27,7 +27,9 @@ const argv = require('yargs')
 
 const port = argv.port, remote = argv._[0];
 
-app.use(webpackDevMiddleware(compiler, {}));
+app.use(webpackDevMiddleware(compiler, {
+  stats: webpackConfig.stats,
+}));
 
 app.use('/', proxy({
   target: remote,

@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
