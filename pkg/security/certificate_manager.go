@@ -259,6 +259,8 @@ func (cm *CertificateManager) updateMetricsLocked() {
 	}
 
 	// Node certificate expiration.
+	// TODO(marc): we need to examine the entire certificate chain here, if the CA cert
+	// used to sign the node cert expires sooner, then that is the expiration time to report.
 	if cm.certMetrics.NodeExpiration != nil {
 		if cm.nodeCert != nil && cm.nodeCert.Error == nil {
 			cm.certMetrics.NodeExpiration.Update(cm.nodeCert.ExpirationTime.Unix())
