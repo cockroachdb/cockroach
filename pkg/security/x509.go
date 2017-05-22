@@ -25,6 +25,9 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -51,8 +54,9 @@ func newTemplate(commonName string, lifetime time.Duration) (*x509.Certificate, 
 		return nil, err
 	}
 
-	notBefore := timeutil.Now().Add(validFrom)
-	notAfter := notBefore.Add(lifetime)
+	now := timeutil.Now()
+	notBefore := now.Add(validFrom)
+	notAfter := now.Add(lifetime)
 
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
@@ -107,9 +111,16 @@ func GenerateServerCert(
 	lifetime time.Duration,
 	hosts []string,
 ) ([]byte, error) {
+	// Create template for user "NodeUser".
 	template, err := newTemplate(NodeUser, lifetime)
 	if err != nil {
 		return nil, err
+	}
+
+	// Don't issue certificates that outlast the CA cert.
+	if template.NotAfter.After(caCert.NotAfter) {
+		log.Infof(context.Background(), "Using expiration date from CA certificate: %s", caCert.NotAfter)
+		template.NotAfter = caCert.NotAfter
 	}
 
 	// Only server authentication is allowed.
@@ -148,9 +159,16 @@ func GenerateClientCert(
 		return nil, errors.Errorf("user cannot be empty")
 	}
 
+	// Create template for "user".
 	template, err := newTemplate(user, lifetime)
 	if err != nil {
 		return nil, err
+	}
+
+	// Don't issue certificates that outlast the CA cert.
+	if template.NotAfter.After(caCert.NotAfter) {
+		log.Infof(context.Background(), "Using expiration date from CA certificate: %s", caCert.NotAfter)
+		template.NotAfter = caCert.NotAfter
 	}
 
 	// Set client-specific fields.
