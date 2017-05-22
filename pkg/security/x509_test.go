@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -64,8 +65,15 @@ func TestGenerateCertLifetime(t *testing.T) {
 		t.Fatalf("CA expiration differs from requested: %s vs %s", a, e)
 	}
 
-	// Create a Node certificate expiring in 4 days. Should get reduced to the CA lifetime.
+	// Create a Node certificate expiring in 4 days. Fails on shorter CA lifetime.
 	nodeDuration := time.Hour * 96
+	_, err = security.GenerateServerCert(caCert, testKey, testKey.Public(), nodeDuration, []string{"localhost"})
+	if !testutils.IsError(err, "CA lifetime is .*, shorter than the requested .*") {
+		t.Fatal(err)
+	}
+
+	// Try again, but expiring before the CA cert.
+	nodeDuration = time.Hour * 24
 	nodeBytes, err := security.GenerateServerCert(caCert, testKey, testKey.Public(), nodeDuration, []string{"localhost"})
 	if err != nil {
 		t.Fatal(err)
@@ -76,50 +84,25 @@ func TestGenerateCertLifetime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if a, e := nodeCert.NotAfter, caCert.NotAfter; a != e {
-		t.Fatalf("expected node expiration (%s) to be set to CA expiration (%s)", a, e)
-	}
-
-	// Try again, but expiring before the CA cert.
-	nodeDuration = time.Hour * 24
-	nodeBytes, err = security.GenerateServerCert(caCert, testKey, testKey.Public(), nodeDuration, []string{"localhost"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	nodeCert, err = x509.ParseCertificate(nodeBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	if a, e := nodeCert.NotAfter, now.Add(nodeDuration); !timesFuzzyEqual(a, e) {
 		t.Fatalf("node expiration differs from requested: %s vs %s", a, e)
 	}
 
 	// Create a Client certificate expiring in 4 days. Should get reduced to the CA lifetime.
 	clientDuration := time.Hour * 96
+	_, err = security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration, "testuser")
+	if !testutils.IsError(err, "CA lifetime is .*, shorter than the requested .*") {
+		t.Fatal(err)
+	}
+
+	// Try again, but expiring before the CA cert.
+	clientDuration = time.Hour * 24
 	clientBytes, err := security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration, "testuser")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	clientCert, err := x509.ParseCertificate(clientBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if a, e := clientCert.NotAfter, caCert.NotAfter; a != e {
-		t.Fatalf("expected client expiration (%s) to be set to CA expiration (%s)", a, e)
-	}
-
-	// Try again, but expiring before the CA cert.
-	clientDuration = time.Hour * 24
-	clientBytes, err = security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration, "testuser")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	clientCert, err = x509.ParseCertificate(clientBytes)
 	if err != nil {
 		t.Fatal(err)
 	}

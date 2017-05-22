@@ -31,7 +31,7 @@ const defaultKeySize = 2048
 
 // We use 366 days on certificate lifetimes to at least match X years,
 // otherwise leap years risk putting us just under.
-const defaultCALifetime = 10 * 366 * 24 * time.Hour   // ten years
+const defaultCALifetime = 20 * 366 * 24 * time.Hour   // twenty years
 const defaultCertLifetime = 10 * 366 * 24 * time.Hour // ten years
 
 var keySize int
@@ -82,7 +82,7 @@ At least one host should be passed in (either IP address or dns name).
 
 Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
 If "ca.crt" contains more than one certificate, the first is used.
-If the CA expiration is earlier than "now + lifetime", the CA expiration is used.
+Creation fails if the CA expiration time is before the desired certificate expiration.
 `,
 	RunE: MaybeDecorateGRPCError(runCreateNodeCert),
 }
@@ -117,7 +117,7 @@ If --overwrite is true, any existing files are overwritten.
 
 Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
 If "ca.crt" contains more than one certificate, the first is used.
-If the CA expiration is earlier than "now + lifetime", the CA expiration is used.
+Creation fails if the CA expiration time is before the desired certificate expiration.
 `,
 	RunE: MaybeDecorateGRPCError(runCreateClientCert),
 }

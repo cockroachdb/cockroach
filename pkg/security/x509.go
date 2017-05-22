@@ -25,9 +25,6 @@ import (
 	"net"
 	"time"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -101,6 +98,19 @@ func GenerateCA(signer crypto.Signer, lifetime time.Duration) ([]byte, error) {
 	return certBytes, nil
 }
 
+func checkLifetimeAgainstCA(cert, ca *x509.Certificate) error {
+	if ca.NotAfter.After(cert.NotAfter) || ca.NotAfter.Equal(cert.NotAfter) {
+		return nil
+	}
+
+	now := timeutil.Now()
+	// Truncate the lifetime to round hours, the maximum "pretty" duration.
+	niceCALifetime := ca.NotAfter.Sub(now).Hours()
+	niceCertLifetime := cert.NotAfter.Sub(now).Hours()
+	return errors.Errorf("CA lifetime is %fh, shorter than the requested %fh",
+		niceCALifetime, niceCertLifetime)
+}
+
 // GenerateServerCert generates a server certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the node public key, the certificate lifetime,
 // and the list of hosts/ip addresses this certificate applies to.
@@ -118,9 +128,8 @@ func GenerateServerCert(
 	}
 
 	// Don't issue certificates that outlast the CA cert.
-	if template.NotAfter.After(caCert.NotAfter) {
-		log.Infof(context.Background(), "Using expiration date from CA certificate: %s", caCert.NotAfter)
-		template.NotAfter = caCert.NotAfter
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
+		return nil, err
 	}
 
 	// Only server authentication is allowed.
@@ -166,9 +175,8 @@ func GenerateClientCert(
 	}
 
 	// Don't issue certificates that outlast the CA cert.
-	if template.NotAfter.After(caCert.NotAfter) {
-		log.Infof(context.Background(), "Using expiration date from CA certificate: %s", caCert.NotAfter)
-		template.NotAfter = caCert.NotAfter
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
+		return nil, err
 	}
 
 	// Set client-specific fields.
