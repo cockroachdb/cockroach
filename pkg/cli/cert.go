@@ -82,6 +82,7 @@ At least one host should be passed in (either IP address or dns name).
 
 Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
 If "ca.crt" contains more than one certificate, the first is used.
+If the CA expiration is earlier than "now + lifetime", the CA expiration is used.
 `,
 	RunE: MaybeDecorateGRPCError(runCreateNodeCert),
 }
@@ -116,6 +117,7 @@ If --overwrite is true, any existing files are overwritten.
 
 Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
 If "ca.crt" contains more than one certificate, the first is used.
+If the CA expiration is earlier than "now + lifetime", the CA expiration is used.
 `,
 	RunE: MaybeDecorateGRPCError(runCreateClientCert),
 }
