@@ -24,11 +24,21 @@ import (
 	"syscall"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
+)
+
+var (
+	metaCAExpiration = metric.Metadata{
+		Name: "security.certificate.expiration.ca",
+		Help: "Expiration timestamp for the CA certificate. 0 means no certificate or error."}
+	metaNodeExpiration = metric.Metadata{
+		Name: "security.certificate.expiration.node",
+		Help: "Expiration timestamp for the node certificate. 0 means no certificate or error."}
 )
 
 // CertificateManager lives for the duration of the process and manages certificates and keys.
@@ -39,8 +49,11 @@ import (
 // but these are by no means complete. Completeness is not required as nodes restarting have
 // no fallback if invalid certs/keys are present.
 type CertificateManager struct {
-	// Immutable fields after object construction.
+	// Certificate directory is not modified after initialization.
 	certsDir string
+	// The metrics struct is initialized at init time and metrics do their
+	// own locking.
+	certMetrics CertificateMetrics
 
 	// mu protects all remaining fields.
 	mu syncutil.RWMutex
@@ -61,9 +74,27 @@ type CertificateManager struct {
 	clientConfig *tls.Config
 }
 
+// CertificateMetrics holds metrics about the various certificates.
+// These are initialized when the certificate manager is created and updated
+// on reload.
+type CertificateMetrics struct {
+	CAExpiration   *metric.Gauge
+	NodeExpiration *metric.Gauge
+}
+
+func makeCertificateManager(certsDir string) *CertificateManager {
+	cm := &CertificateManager{certsDir: os.ExpandEnv(certsDir)}
+	// Initialize metrics:
+	cm.certMetrics = CertificateMetrics{
+		CAExpiration:   metric.NewGauge(metaCAExpiration),
+		NodeExpiration: metric.NewGauge(metaNodeExpiration),
+	}
+	return cm
+}
+
 // NewCertificateManager creates a new certificate manager.
 func NewCertificateManager(certsDir string) (*CertificateManager, error) {
-	cm := &CertificateManager{certsDir: os.ExpandEnv(certsDir)}
+	cm := makeCertificateManager(certsDir)
 	return cm, cm.LoadCertificates()
 }
 
@@ -72,12 +103,17 @@ func NewCertificateManager(certsDir string) (*CertificateManager, error) {
 // This should only be called when generating certificates, the server has
 // no business creating the certs directory.
 func NewCertificateManagerFirstRun(certsDir string) (*CertificateManager, error) {
-	cm := &CertificateManager{certsDir: os.ExpandEnv(certsDir)}
+	cm := makeCertificateManager(certsDir)
 	if err := NewCertificateLoader(cm.certsDir).MaybeCreateCertsDir(); err != nil {
 		return nil, err
 	}
 
 	return cm, cm.LoadCertificates()
+}
+
+// Metrics returns the metrics struct.
+func (cm *CertificateManager) Metrics() CertificateMetrics {
+	return cm.certMetrics
 }
 
 // RegisterSignalHandler registers a signal handler for SIGHUP, triggering a
@@ -203,7 +239,35 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.serverConfig = nil
 	cm.clientConfig = nil
 
+	cm.updateMetricsLocked()
 	return nil
+}
+
+// updateMetricsLocked updates the values on the certificate metrics.
+// The metrics may not exist (eg: in tests that build their own CertificateManager).
+// If the corresponding certificate is missing or invalid (Error != nil), we reset the
+// metric to zero.
+// cm.mu must be held to protect the certificates. Metrics do their own atomicity.
+func (cm *CertificateManager) updateMetricsLocked() {
+	// CA certificate expiration.
+	if cm.certMetrics.CAExpiration != nil {
+		if cm.caCert != nil && cm.caCert.Error == nil {
+			cm.certMetrics.CAExpiration.Update(cm.caCert.ExpirationTime.Unix())
+		} else {
+			cm.certMetrics.CAExpiration.Update(0)
+		}
+	}
+
+	// Node certificate expiration.
+	// TODO(marc): we need to examine the entire certificate chain here, if the CA cert
+	// used to sign the node cert expires sooner, then that is the expiration time to report.
+	if cm.certMetrics.NodeExpiration != nil {
+		if cm.nodeCert != nil && cm.nodeCert.Error == nil {
+			cm.certMetrics.NodeExpiration.Update(cm.nodeCert.ExpirationTime.Unix())
+		} else {
+			cm.certMetrics.NodeExpiration.Update(0)
+		}
+	}
 }
 
 // GetServerTLSConfig returns a server TLS config with a callback to fetch the
