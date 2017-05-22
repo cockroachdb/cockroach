@@ -129,17 +129,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.AmbientCtx.Tracer = tracing.NewTracer()
 	}
 
-	// Attempt to load TLS configs right away, failures are permanent.
-	if err := cfg.InitializeNodeTLSConfigs(stopper); err != nil {
-		return nil, err
+	s := &Server{
+		mux:      http.NewServeMux(),
+		clock:    hlc.NewClock(hlc.UnixNano, cfg.MaxOffset),
+		stopper:  stopper,
+		cfg:      cfg,
+		registry: metric.NewRegistry(),
 	}
 
-	s := &Server{
-		mux:     http.NewServeMux(),
-		clock:   hlc.NewClock(hlc.UnixNano, cfg.MaxOffset),
-		stopper: stopper,
-		cfg:     cfg,
+	// Attempt to load TLS configs right away, failures are permanent.
+	if certMgr, err := cfg.InitializeNodeTLSConfigs(stopper); err != nil {
+		return nil, err
+	} else if certMgr != nil {
+		// The certificate manager is non-nil in secure mode.
+		s.registry.AddMetricStruct(certMgr.Metrics())
 	}
+
 	// Add a dynamic log tag value for the node ID.
 	//
 	// We need to pass an ambient context to the various server components, but we
@@ -164,7 +169,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.grpc = rpc.NewServer(s.rpcContext)
 
-	s.registry = metric.NewRegistry()
 	s.gossip = gossip.New(
 		s.cfg.AmbientCtx,
 		&s.nodeIDContainer,
