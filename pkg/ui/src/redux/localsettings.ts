@@ -12,7 +12,7 @@
 import _ from "lodash";
 import { createSelector, Selector } from "reselect";
 import { Action } from "redux";
-import { PayloadAction } from "../interfaces/action";
+import { PayloadAction } from "src/interfaces/action";
 
 const SET_UI_VALUE = "cockroachui/ui/SET_UI_VALUE";
 

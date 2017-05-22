@@ -5,14 +5,14 @@ import _ from "lodash";
 import Long from "long";
 import * as sinon from "sinon";
 
-import * as protos from  "../js/protos";
-import { TextGraph, Axis } from "../components/graphs";
-import { Metric } from "../components/metric";
+import * as protos from  "src/js/protos";
+import { TextGraph, Axis } from "src/components/graphs";
+import { Metric } from "src/components/metric";
 import {
   MetricsDataProviderUnconnected as MetricsDataProvider,
   QueryTimeInfo,
 } from "./metricsDataProvider";
-import { queryMetrics, MetricsQuery } from "../redux/metrics";
+import { queryMetrics, MetricsQuery } from "src/redux/metrics";
 
 function makeDataProvider(
   id: string,

@@ -1,7 +1,7 @@
 import React from "react";
 import { ListLink, LinkProps } from "./listLink";
 import * as Icons from "./icons";
-import { trustIcon } from "../util/trust";
+import { trustIcon } from "src/util/trust";
 
 interface IconLinkProps extends LinkProps {
   icon?: string;

@@ -1,5 +1,5 @@
 // tslint:disable-next-line:no-var-requires
-const spinner = require<string>("../../assets/spinner.gif");
+const spinner = require<string>("assets/spinner.gif");
 
 import React from "react";
 import classNames from "classnames";

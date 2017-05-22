@@ -8,9 +8,9 @@
 import _ from "lodash";
 import { Action, Dispatch } from "redux";
 
-import * as protos from  "../js/protos";
-import { PayloadAction } from "../interfaces/action";
-import { queryTimeSeries } from "../util/api";
+import * as protos from  "src/js/protos";
+import { PayloadAction } from "src/interfaces/action";
+import { queryTimeSeries } from "src/util/api";
 
 type TSRequest = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;

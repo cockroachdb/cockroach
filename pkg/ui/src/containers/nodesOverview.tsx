@@ -7,16 +7,16 @@ import _ from "lodash";
 
 import {
   NodesSummary, nodesSummarySelector, LivenessStatus, deadTimeout,
-} from "../redux/nodes";
-import { SummaryBar, SummaryHeadlineStat } from "../components/summaryBar";
-import { AdminUIState } from "../redux/state";
-import { refreshNodes, refreshLiveness } from "../redux/apiReducers";
-import { LocalSetting } from "../redux/localsettings";
-import { SortSetting } from "../components/sortabletable";
-import { SortedTable } from "../components/sortedtable";
-import { NanoToMilli, LongToMoment } from "../util/convert";
-import { Bytes } from "../util/format";
-import { NodeStatus$Properties, MetricConstants, BytesUsed } from  "../util/proto";
+} from "src/redux/nodes";
+import { SummaryBar, SummaryHeadlineStat } from "src/components/summaryBar";
+import { AdminUIState } from "src/redux/state";
+import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import { LocalSetting } from "src/redux/localsettings";
+import { SortSetting } from "src/components/sortabletable";
+import { SortedTable } from "src/components/sortedtable";
+import { NanoToMilli, LongToMoment } from "src/util/convert";
+import { Bytes } from "src/util/format";
+import { NodeStatus$Properties, MetricConstants, BytesUsed } from  "src/util/proto";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,

@@ -2,13 +2,13 @@ import React from "react";
 import _ from "lodash";
 import * as nvd3 from "nvd3";
 import * as d3 from "d3";
-import * as protos from "../js/protos";
 import Long from "long";
 import moment from "moment";
 
-import { NanoToMilli } from "../util/convert";
-import { Bytes, ComputePrefixExponent, Duration, kibi } from "../util/format";
-import { QueryTimeInfo } from "../containers/metricsDataProvider";
+import * as protos from "src/js/protos";
+import { NanoToMilli } from "src/util/convert";
+import { Bytes, ComputePrefixExponent, Duration, kibi } from "src/util/format";
+import { QueryTimeInfo } from "src/containers/metricsDataProvider";
 
 import { MetricProps } from "./metric";
 

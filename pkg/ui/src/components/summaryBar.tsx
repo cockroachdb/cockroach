@@ -2,8 +2,8 @@ import _ from "lodash";
 import React from "react";
 import classNames from "classnames";
 
-import { MetricsDataProvider } from "../containers/metricsDataProvider";
-import { MetricsDataComponentProps } from "../components/graphs";
+import { MetricsDataProvider } from "src/containers/metricsDataProvider";
+import { MetricsDataComponentProps } from "./graphs";
 
 interface SummaryValueProps {
   title: React.ReactNode;
