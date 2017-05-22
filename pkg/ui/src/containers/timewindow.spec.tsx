@@ -6,7 +6,7 @@ import moment from "moment";
 import _ from "lodash";
 
 import { TimeWindowManagerUnconnected as TimeWindowManager } from "./timewindow";
-import * as timewindow from "../redux/timewindow";
+import * as timewindow from "src/redux/timewindow";
 
 describe("<TimeWindowManager>", function() {
   let spy: sinon.SinonSpy;

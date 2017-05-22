@@ -6,22 +6,22 @@ import { connect } from "react-redux";
 
 import {
   nodeIDAttr, dashboardNameAttr,
-} from "../util/constants";
+} from "src/util/constants";
 
-import { AdminUIState } from "../redux/state";
-import { refreshNodes, refreshLiveness } from "../redux/apiReducers";
-import { nodesSummarySelector, NodesSummary } from "../redux/nodes";
-import GraphGroup from "../components/graphGroup";
+import { AdminUIState } from "src/redux/state";
+import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import GraphGroup from "src/components/graphGroup";
 import {
   SummaryBar, SummaryLabel, SummaryStat, SummaryStatMessage, SummaryStatBreakdown, SummaryMetricStat,
-} from "../components/summaryBar";
+} from "src/components/summaryBar";
 import Alerts from "./alerts";
-import { Axis, AxisUnits } from "../components/graphs";
-import { LineGraph } from "../components/linegraph";
-import { Metric } from "../components/metric";
-import { EventBox } from "../containers/events";
-import { Bytes } from "../util/format";
-import { NanoToMilli } from "../util/convert";
+import { Axis, AxisUnits } from "src/components/graphs";
+import { LineGraph } from "src/components/linegraph";
+import { Metric } from "src/components/metric";
+import { EventBox } from "src/containers/events";
+import { Bytes } from "src/util/format";
+import { NanoToMilli } from "src/util/convert";
 
 // The properties required by the NodeTotalsSummary component.
 interface NodeTotalsSummaryProps {

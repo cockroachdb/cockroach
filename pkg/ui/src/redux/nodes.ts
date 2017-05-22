@@ -3,9 +3,9 @@ import _ from "lodash";
 import { createSelector } from "reselect";
 
 import { AdminUIState } from "./state";
-import { NanoToMilli } from "../util/convert";
-import { NodeStatus$Properties, MetricConstants, BytesUsed } from "../util/proto";
-import { nullOfReturnType } from "../util/types";
+import { NanoToMilli } from "src/util/convert";
+import { NodeStatus$Properties, MetricConstants, BytesUsed } from "src/util/proto";
+import { nullOfReturnType } from "src/util/types";
 
 /**
  * deadTimeout indicates a grace-period duration where nodes are still
