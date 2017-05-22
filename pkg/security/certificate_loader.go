@@ -127,7 +127,7 @@ type CertInfo struct {
 	// Name is the blob in the middle of the filename. eg: username for client certs.
 	Name string
 
-	// Parsed certificates. This is used to debugging/printing/monitoring only,
+	// Parsed certificates. This is used by debugging/printing/monitoring only,
 	// TLS config objects are passed raw certificate file contents.
 	// CA certs may contain (and use) more than one certificate.
 	// Client/Server certs may contain more than one, but only the first certificate will be used.
