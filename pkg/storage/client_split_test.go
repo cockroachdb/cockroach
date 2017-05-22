@@ -1679,6 +1679,10 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.GossipWhenCapacityDeltaExceedsFraction = 0.5 // 50% for testing
+	// We can't properly test how frequently changes in the number of ranges
+	// trigger the store to gossip its capacities if we have to worry about
+	// changes in the number of leases also triggering store gossip.
+	storeCfg.TestingKnobs.DisableLeaseCapacityGossip = true
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableScanner = true
 	stopper := stop.NewStopper()
@@ -1725,6 +1729,11 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	var rangeCount int32
 	for i := 0; rangeCount < 20; i++ {
 		if pErr := splitFunc(i); pErr != nil {
+			// Avoid flakes caused by bad clocks.
+			if testutils.IsPError(pErr, "rejecting command with timestamp in the future") {
+				log.Warningf(context.TODO(), "ignoring split error: %s", pErr)
+				continue
+			}
 			t.Fatal(pErr)
 		}
 		select {
