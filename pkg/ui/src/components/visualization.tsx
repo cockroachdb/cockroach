@@ -1,7 +1,7 @@
 // tslint:disable-next-line:no-var-requires
 const spinner = require<string>("../../assets/spinner.gif");
 
-import * as React from "react";
+import React from "react";
 import classNames from "classnames";
 import { ToolTipWrapper } from "./toolTip";
 
