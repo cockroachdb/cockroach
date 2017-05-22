@@ -102,7 +102,7 @@ func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 		conn.Close()
 	}
 
-	db, err := gosql.Open("postgres", "sslmode=require host=localhost port=5432")
+	db, err := gosql.Open("postgres", "sslmode=require host=localhost port=5432 dbname=postgres")
 	if err != nil {
 		b.Fatal(err)
 	}
