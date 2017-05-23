@@ -619,11 +619,21 @@ func (s *Session) SerializeToResponse() serverpb.SessionResponse {
 		kvTxnID = txn.DebugName()
 	}
 
+	activeQueries := make([]serverpb.QueryResponse, 0, len(s.mu.ActiveQueries))
+
+	for _, query := range s.mu.ActiveQueries {
+		activeQueries = append(activeQueries, serverpb.QueryResponse{
+			Start: query.start.Unix(),
+			Sql:   query.sql,
+		})
+	}
+
 	return serverpb.SessionResponse{
 		Username:        s.User,
 		ClientAddress:   s.RemoteStr,
 		ApplicationName: s.mu.ApplicationName,
 		Start:           s.phaseTimes[sessionInit].Unix(),
+		ActiveQueries:   activeQueries,
 		KvTxnId:         kvTxnID,
 	}
 }

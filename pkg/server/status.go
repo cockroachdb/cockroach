@@ -793,6 +793,10 @@ func (s *statusServer) LocalSessions(
 	sessions := make([]serverpb.SessionResponse, 0, len(registry.Store))
 
 	for session := range registry.Store {
+		if !(req.Username == "root" || req.Username == session.User) {
+			continue
+		}
+
 		serializedSession := session.SerializeToResponse()
 		serializedSession.NodeID = s.gossip.NodeID.String()
 
@@ -866,7 +870,7 @@ func (s *statusServer) Sessions(
 		// Wait group finished before timeout
 	case <-time.After(3000 * time.Millisecond):
 		// 3 second timeout expired
-		return nil, errors.New("Timed out looking up sessions in cluster")
+		return nil, errors.New("Timed out querying sessions from other nodes")
 	}
 
 	mu.Lock()

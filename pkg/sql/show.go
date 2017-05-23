@@ -898,7 +898,7 @@ func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planN
 		{Name: "start", Typ: parser.TypeInt},
 		{Name: "query", Typ: parser.TypeString},
 		{Name: "client_address", Typ: parser.TypeString},
-		{Name: "application_name", Typ: parser.TypeInt},
+		{Name: "application_name", Typ: parser.TypeString},
 	}
 
 	return &delayedNode{
@@ -910,10 +910,11 @@ func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planN
 
 			var response *serverpb.SessionsResponse
 			var err error
+			sessionsRequest := &serverpb.SessionsRequest{Username: p.session.User}
 			if n.Cluster {
-				response, err = statusServer.Sessions(ctx, &serverpb.SessionsRequest{})
+				response, err = statusServer.Sessions(ctx, sessionsRequest)
 			} else {
-				response, err = statusServer.LocalSessions(ctx, &serverpb.SessionsRequest{})
+				response, err = statusServer.LocalSessions(ctx, sessionsRequest)
 			}
 
 			if err != nil {
@@ -968,10 +969,11 @@ func (p *planner) ShowSessions(ctx context.Context, n *parser.ShowSessions) (pla
 
 			var response *serverpb.SessionsResponse
 			var err error
+			sessionsRequest := &serverpb.SessionsRequest{Username: p.session.User}
 			if n.Cluster {
-				response, err = statusServer.Sessions(ctx, &serverpb.SessionsRequest{})
+				response, err = statusServer.Sessions(ctx, sessionsRequest)
 			} else {
-				response, err = statusServer.LocalSessions(ctx, &serverpb.SessionsRequest{})
+				response, err = statusServer.LocalSessions(ctx, sessionsRequest)
 			}
 
 			if err != nil {
