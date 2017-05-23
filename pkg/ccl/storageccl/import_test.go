@@ -11,7 +11,6 @@ package storageccl
 import (
 	"fmt"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -49,22 +48,14 @@ func slurpSSTablesLatestKey(
 	defer batch.Close()
 
 	for _, path := range paths {
-		readerTempDir, err := ioutil.TempDir(dir, "RocksDBSstFileReader")
-		if err != nil {
-			t.Fatalf("%+v", err)
-		}
-		defer func() {
-			if err := os.RemoveAll(readerTempDir); err != nil {
-				t.Fatalf("%+v", err)
-			}
-		}()
-
-		sst, err := engine.MakeRocksDBSstFileReader(readerTempDir)
-		if err != nil {
-			t.Fatalf("%+v", err)
-		}
+		sst := engine.MakeRocksDBSstFileReader()
 		defer sst.Close()
-		if err := sst.AddFile(filepath.Join(dir, path)); err != nil {
+
+		fileContents, err := ioutil.ReadFile(filepath.Join(dir, path))
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if err := sst.IngestExternalFile(fileContents); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
