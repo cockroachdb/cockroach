@@ -78,7 +78,7 @@ type SchemaAccessor interface {
 
 	// notifySchemaChange notifies that an outstanding schema change
 	// exists for the table.
-	notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationID)
+	notifySchemaChange(tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID)
 
 	// writeTableDesc effectively writes a table descriptor to the
 	// database within the current planner transaction.
@@ -435,9 +435,9 @@ func (p *planner) getAliasedTableName(n parser.TableExpr) (*parser.TableName, er
 }
 
 // notifySchemaChange implements the SchemaAccessor interface.
-func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationID) {
+func (p *planner) notifySchemaChange(tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID) {
 	sc := SchemaChanger{
-		tableID:    id,
+		tableID:    tableDesc.GetID(),
 		mutationID: mutationID,
 		nodeID:     p.evalCtx.NodeID,
 		leaseMgr:   p.LeaseMgr(),
