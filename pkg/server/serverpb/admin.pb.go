@@ -40,6 +40,9 @@
 		RangeLogResponse
 		QueryPlanRequest
 		QueryPlanResponse
+		CertificatesRequest
+		CertificateDetails
+		CertificatesResponse
 		DetailsRequest
 		DetailsResponse
 		NodesRequest
