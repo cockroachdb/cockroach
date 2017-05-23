@@ -288,3 +288,24 @@ func CreateClientPair(
 
 	return nil
 }
+
+// PEMContentsToX509 takes raw pem-encoded contents and attempts to parse into
+// x509.Certificate objects.
+func PEMContentsToX509(contents []byte) ([]*x509.Certificate, error) {
+	derCerts, err := PEMToCertificates(contents)
+	if err != nil {
+		return nil, err
+	}
+
+	certs := make([]*x509.Certificate, len(derCerts))
+	for i, c := range derCerts {
+		x509Cert, err := x509.ParseCertificate(c.Bytes)
+		if err != nil {
+			return nil, err
+		}
+
+		certs[i] = x509Cert
+	}
+
+	return certs, nil
+}
