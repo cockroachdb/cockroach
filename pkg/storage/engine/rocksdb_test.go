@@ -23,6 +23,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"testing"
@@ -349,6 +350,13 @@ func TestConcurrentBatch(t *testing.T) {
 		t.Skip()
 	}
 
+	maxTime := 10 * time.Second
+	// TODO(bram): #14486 This tests takes a very long time to complete on
+	// windows.
+	if runtime.GOOS == "windows" {
+		maxTime = 30 * time.Second
+	}
+
 	dir, err := ioutil.TempDir("", t.Name())
 	if err != nil {
 		t.Fatal(err)
@@ -412,7 +420,7 @@ func TestConcurrentBatch(t *testing.T) {
 		if err := db.Put(MakeMVCCMetadataKey(key), nil); err != nil {
 			t.Fatal(err)
 		}
-		if elapsed := timeutil.Since(start); elapsed >= 10*time.Second {
+		if elapsed := timeutil.Since(start); elapsed >= maxTime {
 			t.Fatalf("write took %0.1fs\n", elapsed.Seconds())
 		}
 	}
