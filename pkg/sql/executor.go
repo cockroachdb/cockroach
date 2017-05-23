@@ -531,7 +531,7 @@ func (e *Executor) ExecuteStatements(
 // ExecutePreparedStatement executes the given statement and returns a response.
 func (e *Executor) ExecutePreparedStatement(
 	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
-) StatementResults {
+) (StatementResults, error) {
 
 	var stmts parser.StatementList
 	if stmt.Statement != nil {
@@ -551,7 +551,19 @@ func (e *Executor) ExecutePreparedStatement(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execParsed(session, stmts, pinfo, copyMsgNone)
+	results := e.execParsed(session, stmts, pinfo, copyMsgNone)
+	if len(results.ResultList) > 1 {
+		results.Close(session.Ctx())
+		return StatementResults{}, errWrongNumberOfPreparedStatements(len(results.ResultList))
+	} else if len(results.ResultList) == 1 {
+		result := results.ResultList[0]
+		if result.Rows != nil && !result.Columns.TypesEqual(stmt.Columns) {
+			results.Close(session.Ctx())
+			return StatementResults{}, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+				"cached plan must not change result type")
+		}
+	}
+	return results, nil
 }
 
 // CopyData adds data to the COPY buffer and executes if there are enough rows.
@@ -1332,14 +1344,11 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 			qArgs[idx] = typedExpr
 		}
-		results := e.ExecutePreparedStatement(session, prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
-		if results.Empty {
-			return Result{}, nil
+		results, err := e.ExecutePreparedStatement(session, prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
+		if err == nil && len(results.ResultList) == 1 {
+			return results.ResultList[0], nil
 		}
-		if len(results.ResultList) > 1 {
-			return Result{}, errWrongNumberOfPreparedStatements(len(results.ResultList))
-		}
-		return results.ResultList[0], nil
+		return Result{}, err
 
 	case *parser.Deallocate:
 		if s.Name == "" {
