@@ -44,8 +44,7 @@ import (
 
 // Default constants for timeouts.
 const (
-	defaultClientTimeout     = 10 * time.Second
-	defaultPendingRPCTimeout = 1 * time.Second
+	defaultClientTimeout = 10 * time.Second
 
 	// The default maximum number of ranges to return from a range
 	// lookup.
@@ -1230,26 +1229,19 @@ func (ds *DistSender) sendToReplicas(
 					// was already received, we must return an ambiguous commit
 					// error instead of returned error.
 					log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
-					timer := time.NewTimer(defaultPendingRPCTimeout)
-					defer timer.Stop()
 					// If there are still pending RPC(s), try to wait them out.
-					for timedOut := false; pending > 0 && !timedOut; {
-						select {
-						case pendingCall := <-done:
-							pending--
-							if err := pendingCall.Err; err != nil {
-								if grpc.Code(err) != codes.Unavailable {
-									ambiguousResult = true
-								}
-							} else if pendingCall.Reply.Error == nil {
-								return pendingCall.Reply, nil
+					for ; pending > 0; pending-- {
+						pendingCall := <-done
+						if err := pendingCall.Err; err != nil {
+							if grpc.Code(err) != codes.Unavailable {
+								ambiguousResult = true
 							}
-						case <-timer.C:
-							timedOut = true
+						} else if pendingCall.Reply.Error == nil {
+							return pendingCall.Reply, nil
 						}
 					}
 					if haveCommit {
-						if pending > 0 || ambiguousResult {
+						if ambiguousResult {
 							log.ErrEventf(ctx, "returning ambiguous result (pending=%d)", pending)
 							return nil, roachpb.NewAmbiguousResultError(
 								fmt.Sprintf("error=%s, pending RPCs=%d", call.Reply.Error, pending))
