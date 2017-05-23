@@ -195,11 +195,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
 	distSenderCfg := kv.DistSenderConfig{
-		AmbientCtx:      s.cfg.AmbientCtx,
-		Clock:           s.clock,
-		RPCContext:      s.rpcContext,
-		RPCRetryOptions: &retryOpts,
-		SendNextTimeout: s.cfg.SendNextTimeout,
+		AmbientCtx:        s.cfg.AmbientCtx,
+		Clock:             s.clock,
+		RPCContext:        s.rpcContext,
+		RPCRetryOptions:   &retryOpts,
+		SendNextTimeout:   s.cfg.SendNextTimeout,
+		PendingRPCTimeout: s.cfg.PendingRPCTimeout,
 	}
 	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
 	s.registry.AddMetricStruct(s.distSender.Metrics())
