@@ -3,7 +3,7 @@ import React from "react";
 import _ from "lodash";
 
 import {leftArrow, rightArrow} from "./icons";
-import { trustIcon } from "../util/trust";
+import { trustIcon } from "src/util/trust";
 
 export interface DropdownOption {
   value: string;

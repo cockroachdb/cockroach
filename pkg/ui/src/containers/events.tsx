@@ -5,15 +5,15 @@ import { connect } from "react-redux";
 import moment from "moment";
 import * as protobuf from "protobufjs/minimal";
 
-import * as protos from "../js/protos";
+import * as protos from "src/js/protos";
 
-import { AdminUIState } from "../redux/state";
-import { refreshEvents } from "../redux/apiReducers";
-import { LocalSetting } from "../redux/localsettings";
-import { TimestampToMoment } from "../util/convert";
-import * as eventTypes from "../util/eventTypes";
-import { SortSetting } from "../components/sortabletable";
-import { SortedTable } from "../components/sortedtable";
+import { AdminUIState } from "src/redux/state";
+import { refreshEvents } from "src/redux/apiReducers";
+import { LocalSetting } from "src/redux/localsettings";
+import { TimestampToMoment } from "src/util/convert";
+import * as eventTypes from "src/util/eventTypes";
+import { SortSetting } from "src/components/sortabletable";
+import { SortedTable } from "src/components/sortedtable";
 
 type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.Event$Properties;
 

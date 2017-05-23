@@ -1,6 +1,6 @@
 import React from "react";
 
-import { ListLink } from "../components/listLink";
+import { ListLink } from "src/components/listLink";
 
 /**
  * Renders the layout of the nodes page.

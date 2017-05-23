@@ -1,5 +1,5 @@
 import React from "react";
-import {runVisualization, viewWidth, viewHeight} from "../js/sim/index";
+import {runVisualization, viewWidth, viewHeight} from "src/js/sim/index";
 
 /**
  * Renders the layout of the ClusterViz page. "ClusterViz" is an experimental
