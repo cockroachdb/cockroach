@@ -38,13 +38,13 @@ import (
 type explainTraceNode struct {
 	plan planNode
 	// Internal state, not to be initialized.
-	earliest  time.Time
-	exhausted bool
-	rows      []parser.Datums
-	lastTS    time.Time
-	lastPos   int
-	trace     *tracing.RecordedTrace
-	p         *planner
+	earliest    time.Time
+	exhausted   bool
+	rows        []parser.Datums
+	lastTS      time.Time
+	lastPos     int
+	recordingSp opentracing.Span
+	p           *planner
 
 	// Initialized at Start() time. When called, restores the planner's context to
 	// what it was before this node hijacked it.
@@ -103,11 +103,12 @@ func (n *explainTraceNode) Start(ctx context.Context) error {
 // sortNode.Next() after the explandPlanNode closes the tracing span (resulting
 // in a span use-after-finish).
 func (n *explainTraceNode) hijackTxnContext(ctx context.Context) error {
-	tracingCtx, recorder, err := tracing.StartSnowballTrace(ctx, "explain trace")
+	tracer := n.p.session.execCfg.AmbientCtx.Tracer
+	tracingCtx, sp, err := tracing.StartSnowballTrace(ctx, tracer, "explain trace")
 	if err != nil {
 		return err
 	}
-	n.trace = recorder
+	n.recordingSp = sp
 	n.tracingCtx = tracingCtx
 	// Everything running on the planner/session until Close() will be done with
 	// the tracingCtx. More exactly, the inner n.plan will run with this hijacked
@@ -159,18 +160,33 @@ func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 			vals = n.plan.DebugValues()
 		}
 		var basePos int
-		if len(n.trace.GetSpans()) == 0 {
+		recording := tracing.GetRecording(n.recordingSp)
+		// Remove empty spans. We do this because we use ClearRecordedLogs which
+		// clears logs but doesn't remove spans.
+		for i := 0; i < len(recording); {
+			if len(recording[i].Logs) == 0 {
+				copy(recording[i:], recording[i+1:])
+				recording = recording[:len(recording)-1]
+			} else {
+				i++
+			}
+		}
+		if len(recording) == 0 {
 			if !n.exhausted {
-				n.trace.AddDummySpan(basictracer.RawSpan{
+				err := tracing.ImportRemoteSpans(n.recordingSp, []basictracer.RawSpan{{
 					Logs: []opentracing.LogRecord{{Timestamp: n.lastTS}},
-				})
+				}})
+				if err != nil {
+					return false, err
+				}
+				recording = tracing.GetRecording(n.recordingSp)
 			}
 			basePos = n.lastPos + 1
 		}
 
 		// Iterate through once to determine earliest timestamp.
 		var earliest time.Time
-		for _, sp := range n.trace.GetSpans() {
+		for _, sp := range recording {
 			for _, entry := range sp.Logs {
 				if n.earliest.IsZero() || entry.Timestamp.Before(earliest) {
 					n.earliest = entry.Timestamp
@@ -178,7 +194,7 @@ func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 			}
 		}
 
-		for _, sp := range n.trace.GetSpans() {
+		for _, sp := range recording {
 			for i, entry := range sp.Logs {
 				commulativeDuration := fmt.Sprintf("%.3fms", entry.Timestamp.Sub(n.earliest).Seconds()*1000)
 				var duration string
@@ -212,9 +228,9 @@ func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 				n.lastTS, n.lastPos = entry.Timestamp, i
 			}
 		}
-		// Clear the spans that have been accumulated so far, so that we'll
-		// associate new spans with the next "debug values".
-		n.trace.ClearSpans()
+		// Clear the logs that have been accumulated so far, so that we'll associate
+		// new logs with the next "debug values".
+		tracing.ClearRecordedLogs(n.recordingSp)
 	}
 
 	if first {
