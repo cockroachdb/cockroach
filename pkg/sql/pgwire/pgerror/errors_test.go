@@ -46,12 +46,12 @@ func TestPGError(t *testing.T) {
 	}
 
 	// Test NewError.
-	pErr := NewError(code, msg).(*Error)
+	pErr := NewError(code, msg)
 	checkErr(pErr, msg)
 
 	// Test NewErrorf.
 	const prefix = "prefix"
-	pErr = NewErrorf(code, "%s: %s", prefix, msg).(*Error)
+	pErr = NewErrorf(code, "%s: %s", prefix, msg)
 	expected := fmt.Sprintf("%s: %s", prefix, msg)
 	checkErr(pErr, expected)
 

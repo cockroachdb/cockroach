@@ -126,6 +126,11 @@ func TestReportUsage(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		if _, err := db.Exec(`ALTER TABLE foo RENAME CONSTRAINT x TO y`); !testutils.IsError(
+			err, "unimplemented",
+		) {
+			t.Fatal(err)
+		}
 		// Even queries that don't use placeholders and contain literal strings
 		// should still not cause those strings to appear in reports.
 		for _, q := range []string{
@@ -237,6 +242,15 @@ func TestReportUsage(t *testing.T) {
 		if !reflect.DeepEqual(r, tbl) {
 			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, tbl, r)
 		}
+	}
+	if expected, actual := 1, len(r.last.UnimplementedErrors); expected != actual {
+		t.Fatalf("expected %d unimplemented feature errors, got %d", expected, actual)
+	}
+	if expected, actual := uint(10), r.last.UnimplementedErrors["alter table rename constraint"]; expected != actual {
+		t.Fatalf(
+			"unexpected %d hits to unimplemented alter table rename constrain, got %d from %v",
+			expected, actual, r.last.UnimplementedErrors,
+		)
 	}
 
 	if expected, actual := 2, len(r.last.QueryStats); expected != actual {
