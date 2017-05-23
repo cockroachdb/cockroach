@@ -544,6 +544,22 @@ const (
 	snapTypePreemptive = "preemptive"
 )
 
+var disableSnapshotClearRange = false
+
+// TestingSetDisableSnapshotClearRange allows tests to control whether RocksDB
+// range tombstones (the ClearRange operation on Engine) may be used in
+// snapshots.
+//
+// TODO(dan): This is exposed while RocksDB doesn't support using range
+// tombstones with IngestExternalFile: https://github.com/facebook/rocksdb/issues/2344
+func TestingSetDisableSnapshotClearRange(x bool) func() {
+	saved := disableSnapshotClearRange
+	disableSnapshotClearRange = x
+	return func() {
+		disableSnapshotClearRange = saved
+	}
+}
+
 func clearRangeData(desc *roachpb.RangeDescriptor, eng engine.Engine, batch engine.Batch) error {
 	iter := eng.NewIterator(false)
 	defer iter.Close()
@@ -553,7 +569,7 @@ func clearRangeData(desc *roachpb.RangeDescriptor, eng engine.Engine, batch engi
 		// The metadata ranges have a relatively small number of keys making usage
 		// of range tombstones (as created by ClearRange) a pessimization.
 		var err error
-		if i < metadataRanges {
+		if disableSnapshotClearRange || i < metadataRanges {
 			err = batch.ClearIterRange(iter, keyRange.start, keyRange.end)
 		} else {
 			err = batch.ClearRange(keyRange.start, keyRange.end)

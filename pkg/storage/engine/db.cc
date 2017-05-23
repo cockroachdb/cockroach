@@ -2339,6 +2339,7 @@ DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file) {
   if (!status.ok()) {
     return ToDBStatus(status);
   }
+
   return kSuccess;
 }
 
