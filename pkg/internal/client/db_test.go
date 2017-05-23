@@ -371,6 +371,7 @@ func TestCommonMethods(t *testing.T) {
 		{dbType, "AdminTransferLease"}:               {},
 		{dbType, "AdminChangeReplicas"}:              {},
 		{dbType, "CheckConsistency"}:                 {},
+		{dbType, "ExperimentalAddSSTable"}:           {},
 		{dbType, "Run"}:                              {},
 		{dbType, "Txn"}:                              {},
 		{dbType, "GetSender"}:                        {},
