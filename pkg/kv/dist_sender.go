@@ -44,8 +44,7 @@ import (
 
 // Default constants for timeouts.
 const (
-	defaultClientTimeout     = 10 * time.Second
-	defaultPendingRPCTimeout = 1 * time.Second
+	defaultClientTimeout = 10 * time.Second
 
 	// The default maximum number of ranges to return from a range
 	// lookup.
@@ -145,13 +144,14 @@ type DistSender struct {
 	rangeCache           *RangeDescriptorCache
 	rangeLookupMaxRanges int32
 	// leaseHolderCache caches range lease holders by range ID.
-	leaseHolderCache *LeaseHolderCache
-	transportFactory TransportFactory
-	rpcContext       *rpc.Context
-	rpcRetryOptions  retry.Options
-	sendNextTimeout  time.Duration
-	asyncSenderSem   chan struct{}
-	asyncSenderCount int32
+	leaseHolderCache  *LeaseHolderCache
+	transportFactory  TransportFactory
+	rpcContext        *rpc.Context
+	rpcRetryOptions   retry.Options
+	sendNextTimeout   time.Duration
+	pendingRPCTimeout time.Duration
+	asyncSenderSem    chan struct{}
+	asyncSenderCount  int32
 }
 
 var _ client.Sender = &DistSender{}
@@ -178,6 +178,7 @@ type DistSenderConfig struct {
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 	SendNextTimeout   time.Duration
+	PendingRPCTimeout time.Duration
 	// SenderConcurrency specifies the parallelization available when
 	// splitting batches into multiple requests when they span ranges.
 	// TODO(spencer): This is per-process. We should add a per-batch limit.
@@ -237,6 +238,11 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 		ds.sendNextTimeout = cfg.SendNextTimeout
 	} else {
 		ds.sendNextTimeout = base.DefaultSendNextTimeout
+	}
+	if cfg.PendingRPCTimeout != 0 {
+		ds.pendingRPCTimeout = cfg.PendingRPCTimeout
+	} else {
+		ds.pendingRPCTimeout = base.DefaultPendingRPCTimeout
 	}
 	if cfg.SenderConcurrency != 0 {
 		ds.asyncSenderSem = make(chan struct{}, cfg.SenderConcurrency)
@@ -1220,17 +1226,18 @@ func (ds *DistSender) sendToReplicas(
 
 				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
 
-				if propagateError {
+				if propagateError && haveCommit {
 					// The error received is not specific to this replica, so we
 					// should return it instead of trying other replicas. However,
 					// if we're trying to commit a transaction and there are
 					// still other RPCs outstanding or an ambiguous RPC error
 					// was already received, we must return an ambiguous commit
 					// error instead of returned error.
-					timer := time.NewTimer(defaultPendingRPCTimeout)
+					timer := time.NewTimer(ds.pendingRPCTimeout)
 					defer timer.Stop()
 					// If there are still pending RPC(s), try to wait them out.
-					for timedOut := false; pending > 0 && !timedOut; {
+				pendingLoop:
+					for pending > 0 {
 						select {
 						case pendingCall := <-done:
 							pending--
@@ -1242,15 +1249,13 @@ func (ds *DistSender) sendToReplicas(
 								return pendingCall.Reply, nil
 							}
 						case <-timer.C:
-							timedOut = true
+							break pendingLoop
 						}
 					}
-					if haveCommit {
-						if pending > 0 || ambiguousResult {
-							log.ErrEventf(ctx, "returning ambiguous result (pending=%d)", pending)
-							return nil, roachpb.NewAmbiguousResultError(
-								fmt.Sprintf("error=%s, pending RPCs=%d", call.Reply.Error, pending))
-						}
+					if pending > 0 || ambiguousResult {
+						log.ErrEventf(ctx, "returning ambiguous result (pending=%d)", pending)
+						return nil, roachpb.NewAmbiguousResultError(
+							fmt.Sprintf("error=%s, pending RPCs=%d", call.Reply.Error, pending))
 					}
 					return call.Reply, nil
 				}

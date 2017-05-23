@@ -83,6 +83,7 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 				},
 			}
 			params.SendNextTimeout = 50 * time.Millisecond
+			params.PendingRPCTimeout = 50 * time.Millisecond
 			testClusterArgs := base.TestClusterArgs{
 				ReplicationMode: base.ReplicationAuto,
 				ServerArgs:      params,
