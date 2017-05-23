@@ -35,12 +35,15 @@ const singleQuote = '\''
 
 // Scanner lexes SQL statements.
 type Scanner struct {
-	in          string
-	pos         int
-	tokBuf      sqlSymType
-	lastTok     sqlSymType
-	nextTok     *sqlSymType
-	lastError   string
+	in        string
+	pos       int
+	tokBuf    sqlSymType
+	lastTok   sqlSymType
+	nextTok   *sqlSymType
+	lastError struct {
+		msg                  string
+		unimplementedFeature string
+	}
 	stmts       []Statement
 	identQuote  int
 	stringQuote int
@@ -124,6 +127,20 @@ func (s *Scanner) Lex(lval *sqlSymType) int {
 	return lval.id
 }
 
+// Unimplemented wraps Error, setting lastUnimplementedError.
+func (s *Scanner) Unimplemented(feature string) {
+	s.Error("unimplemented")
+	s.lastError.unimplementedFeature = feature
+}
+
+// UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
+func (s *Scanner) UnimplementedWithIssue(issue int) {
+	s.Error(fmt.Sprintf(
+		"unimplemented (see issue https://github.com/cockroachdb/cockroach/issues/%d)", issue,
+	))
+	s.lastError.unimplementedFeature = fmt.Sprintf("#%d", issue)
+}
+
 func (s *Scanner) Error(e string) {
 	var buf bytes.Buffer
 	if s.lastTok.id == ERROR {
@@ -146,8 +163,8 @@ func (s *Scanner) Error(e string) {
 	fmt.Fprintf(&buf, "\n%s\n", s.in[:i])
 	// Output a caret indicating where the last token starts.
 	fmt.Fprintf(&buf, "%s^\n", strings.Repeat(" ", s.lastTok.pos-j))
-
-	s.lastError = buf.String()
+	s.lastError.unimplementedFeature = ""
+	s.lastError.msg = buf.String()
 }
 
 func (s *Scanner) scan(lval *sqlSymType) {

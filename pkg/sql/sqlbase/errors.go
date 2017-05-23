@@ -169,7 +169,7 @@ func NewDependentObjectError(msg string) error {
 // NewDependentObjectErrorWithHint creates a dependent object error with a hint
 func NewDependentObjectErrorWithHint(msg string, hint string) error {
 	pErr := pgerror.NewError(pgerror.CodeDependentObjectsStillExistError, msg)
-	pErr.(*pgerror.Error).Hint = hint
+	pErr.Hint = hint
 	return pErr
 }
 

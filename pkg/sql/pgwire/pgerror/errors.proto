@@ -34,4 +34,7 @@ message Error {
       string function = 3;
   }
   Source source = 5;
+
+  // "Internal query: the text of a failed internally-generated command."
+  string internalCommand = 6;
 };
