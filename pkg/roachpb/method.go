@@ -133,4 +133,6 @@ const (
 	// AdminScatter moves replicas and leaseholders for a selection of ranges.
 	// Best-effort.
 	AdminScatter
+	// AddSSTable links a file into the RocksDB log-structured merge-tree.
+	AddSSTable
 )
