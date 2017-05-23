@@ -10,7 +10,6 @@ package storageccl
 
 import (
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -64,22 +63,14 @@ func TestExport(t *testing.T) {
 		for _, file := range res.(*roachpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
 
-			readerTempDir, err := ioutil.TempDir(dir, "RocksDBSstFileReader")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() {
-				if err := os.RemoveAll(readerTempDir); err != nil {
-					t.Fatal(err)
-				}
-			}()
+			sst := engine.MakeRocksDBSstFileReader()
+			defer sst.Close()
 
-			sst, err := engine.MakeRocksDBSstFileReader(readerTempDir)
+			fileContents, err := ioutil.ReadFile(filepath.Join(dir, file.Path))
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
-			defer sst.Close()
-			if err := sst.AddFile(filepath.Join(dir, file.Path)); err != nil {
+			if err := sst.IngestExternalFile(fileContents); err != nil {
 				t.Fatalf("%+v", err)
 			}
 			start, end := engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}

@@ -256,8 +256,9 @@ DBSSTable* DBGetSSTables(DBEngine* db, int* n);
 DBString DBGetUserProperties(DBEngine* db);
 
 // Bulk adds the file at the given path to a database. See the RocksDB
-// documentation on `AddFile` for the various restrictions on what can be added.
-DBStatus DBEngineAddFile(DBEngine* db, DBSlice path);
+// documentation on `IngestExternalFile` for the various restrictions on what
+// can be added.
+DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path);
 
 typedef struct DBSstFileWriter DBSstFileWriter;
 
@@ -278,6 +279,9 @@ DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
 DBStatus DBSstFileWriterClose(DBSstFileWriter* fw);
 
 void DBRunLDB(int argc, char** argv);
+
+// DBEnvWriteFile writes the given data as a new "file" in the given engine.
+DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
 
 #ifdef __cplusplus
 }  // extern "C"

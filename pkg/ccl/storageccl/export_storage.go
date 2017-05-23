@@ -524,54 +524,6 @@ func (s *azureStorage) Close() error {
 	return nil
 }
 
-// FetchFile returns the path to a local file containing the content of
-// the requested filename, and a cleanup func to be called when done reading it.
-func FetchFile(
-	ctx context.Context, tempPrefix string, e ExportStorage, basename string,
-) (string, func(), error) {
-	cleanup := func() {}
-	// special-case local files to avoid copying to tmp.
-	if loc, ok := e.(*localFileStorage); ok {
-		return filepath.Join(loc.base, basename), cleanup, nil
-	}
-
-	if tempPrefix == "" {
-		return "", cleanup, errors.New("must provide tempdir path")
-	}
-
-	const maxAttempts = 3
-	var fileName string
-	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		r, err := e.ReadFile(ctx, basename)
-		if err != nil {
-			return errors.Wrapf(err, "creating reader for %q", basename)
-		}
-		defer r.Close()
-
-		f, err := ioutil.TempFile(tempPrefix, basename)
-		if err != nil {
-			return errors.Wrap(err, "creating tmpfile")
-		}
-		defer f.Close()
-		cleanup = func() {
-			if err := errors.Wrapf(os.Remove(f.Name()), "cleaning up tmpfile", f.Name()); err != nil {
-				log.Warningf(ctx, "%+v", err)
-			}
-		}
-
-		if _, err := io.Copy(f, r); err != nil {
-			cleanup()
-			cleanup = func() {}
-			return errors.Wrapf(err, "fetching file content for %q", basename)
-		}
-		fileName = f.Name()
-		return nil
-	}); err != nil {
-		return "", cleanup, err
-	}
-	return fileName, cleanup, nil
-}
-
 // ExportFileWriter provides a local path, to a file or pipe, that can be
 // written to before calling Finish() to store the written content to an
 // ExportStorage. This caters to non-Go clients (like RocksDB) that want to open

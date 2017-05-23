@@ -12,17 +12,18 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"os"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -127,15 +128,25 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 				log.Warningf(ctx, "close export storage failed %v", err)
 			}
 		}()
-		tempPrefix := cArgs.EvalCtx.GetTempPrefix()
-		localPath, cleanup, err := FetchFile(ctx, tempPrefix, dir, file.Path)
-		if err != nil {
-			return nil, err
+
+		const maxAttempts = 3
+		var fileContents []byte
+		if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+			f, err := dir.ReadFile(ctx, file.Path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			fileContents, err = ioutil.ReadAll(f)
+			return err
+		}); err != nil {
+			return nil, errors.Wrapf(err, "fetching %q", file.Path)
 		}
-		defer cleanup()
+
+		dataSize += int64(len(fileContents))
 
 		if len(file.Sha512) > 0 {
-			checksum, err := sha512ChecksumFile(localPath)
+			checksum, err := sha512ChecksumData(fileContents)
 			if err != nil {
 				return nil, err
 			}
@@ -144,33 +155,13 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			}
 		}
 
-		fileInfo, err := os.Lstat(localPath)
-		if err != nil {
-			return nil, err
-		}
-		dataSize += fileInfo.Size()
-
-		readerTempDir, err := ioutil.TempDir(tempPrefix, "import-sstreader")
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := os.RemoveAll(readerTempDir); err != nil {
-				log.Warning(ctx, err)
-			}
-		}()
-
-		sst, err := engine.MakeRocksDBSstFileReader(readerTempDir)
-		if err != nil {
-			return nil, err
-		}
+		sst := engine.MakeRocksDBSstFileReader()
 		defer sst.Close()
 
-		// Add each file in its own sst reader because AddFile requires the
-		// affected keyrange be empty and the keys in these files might overlap.
-		// This becomes less heavyweight when we figure out how to use RocksDB's
-		// TableReader directly.
-		if err := sst.AddFile(localPath); err != nil {
+		// Add each file in its own sst reader because IngestExternalFile
+		// requires the affected keyrange be empty and the keys in these files
+		// might overlap.
+		if err := sst.IngestExternalFile(fileContents); err != nil {
 			return nil, err
 		}
 
