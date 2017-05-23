@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Package interval provides two implementations for an interval tree. One is
+// based on an augmented Left-Leaning Red Black tree. The other is based on an
+// augmented BTree.
 package interval
 
 import (
@@ -32,6 +35,13 @@ func rangeError(r Range) error {
 // A Range is a type that describes the basic characteristics of an interval.
 type Range struct {
 	Start, End Comparable
+}
+
+var _ = Range{}.Equal
+
+// Equal returns whether the two ranges are equal.
+func (r Range) Equal(other Range) bool {
+	return r.Start.Equal(other.Start) && r.End.Equal(other.End)
 }
 
 // String implements the Stringer interface.
@@ -145,19 +155,51 @@ func (c Comparable) Equal(o Comparable) bool {
 // should traverse no further.
 type Operation func(Interface) (done bool)
 
+// Tree is an interval tree. For all the functions which have a fast argment,
+// fast being true means a fast operation which does not adjust node ranges. If
+// fast is false, node ranges are adjusted.
 type Tree interface {
+	// AdjustRanges fixes range fields for all nodes in the tree. This must be
+	// called before Get, Do or DoMatching* is used if fast insertion or deletion
+	// has been performed.
 	AdjustRanges()
+	// Len returns the number of intervals stored in the Tree.
 	Len() int
+	// Get returns a slice of Interfaces that overlap r in the tree. The slice is
+	// sorted nondecreasingly by interval start.
 	Get(r Range) []Interface
+	// GetWithOverlapper returns a slice of Interfaces that overlap r in the tree
+	// using the provided overlapper function. The slice is sorted nondecreasingly
+	// by interval start.
 	GetWithOverlapper(r Range, overlapper Overlapper) []Interface
+	// Insert inserts the Interface e into the tree. Insertions may replace an
+	// existing Interface which is equal to the Interface e.
 	Insert(e Interface, fast bool) error
+	// Delete deletes the Interface e if it exists in the tree. The deleted
+	// Interface is equal to the Interface e.
 	Delete(e Interface, fast bool) error
+	// Do performs fn on all intervals stored in the tree. The traversal is done
+	// in the nondecreasing order of interval start. A boolean is returned
+	// indicating whether the traversal was interrupted by an Operation returning
+	// true. If fn alters stored intervals' sort relationships, future tree
+	// operation behaviors are undefined.
 	Do(fn Operation) bool
+	// DoMatching performs fn on all intervals stored in the tree that overlaps r.
+	// The traversal is done in the nondecreasing order of interval start. A
+	// boolean is returned indicating whether the traversal was interrupted by an
+	// Operation returning true. If fn alters stored intervals' sort
+	// relationships, future tree operation behaviors are undefined.
 	DoMatching(fn Operation, r Range) bool
+	// Iterator creates an iterator to iterate over all intervals stored in the
+	// tree, in-order.
 	Iterator() TreeIterator
 }
 
+// TreeIterator iterates over all intervals stored in the interval tree, in-order.
 type TreeIterator interface {
+	// Next returns the current interval stored in the interval tree	and moves
+	// the iterator to the next interval. The method returns false if no intervals
+	// remain in the interval tree.
 	Next() (Interface, bool)
 }
 
