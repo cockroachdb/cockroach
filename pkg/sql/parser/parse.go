@@ -55,11 +55,37 @@ type Parser struct {
 	containsWindowVisitor ContainsWindowVisitor
 }
 
+// UnimplementedError wraps an error to indicate that it was throw by an attempt
+// to use an unimplemented feature.
+type unimplementedError struct {
+	error
+	feature string
+}
+
+// UnimplementedFeature returns the name of the unimplemented feature.
+func (e unimplementedError) UnimplementedFeature() string {
+	return e.feature
+}
+
+var _ UnimplementedFeatureError = unimplementedError{}
+
+// UnimplementedFeatureError is an error returned by an unimplemented feature.
+// The `UnimplementedFeature` method returns some short string uniquely
+// identifying the feature or functionality in question.
+type UnimplementedFeatureError interface {
+	error
+	UnimplementedFeature() string
+}
+
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
 	p.scanner.init(sql)
 	if p.parserImpl.Parse(&p.scanner) != 0 {
-		return nil, errors.New(p.scanner.lastError)
+		err := errors.New(p.scanner.lastError.msg)
+		if feat := p.scanner.lastError.unimplementedFeature; feat != "" {
+			return nil, unimplementedError{err, feat}
+		}
+		return nil, err
 	}
 	return p.scanner.stmts, nil
 }

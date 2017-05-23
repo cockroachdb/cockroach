@@ -225,6 +225,12 @@ type Executor struct {
 
 	// Application-level SQL statistics
 	sqlStats sqlStats
+
+	// Attempts to use unimplemented features.
+	unimplementedErrors struct {
+		syncutil.Mutex
+		counts map[string]uint
+	}
 }
 
 // An ExecutorConfig encompasses the auxiliary objects and configuration
@@ -625,6 +631,9 @@ func (e *Executor) execRequest(
 	session.phaseTimes[sessionEndParse] = timeutil.Now()
 
 	if err != nil {
+		if u, ok := err.(parser.UnimplementedFeatureError); ok {
+			e.recordUnimplementedFeature(u.UnimplementedFeature())
+		}
 		if log.V(2) || logStatementsExecuteEnabled.Get() {
 			log.Infof(session.Ctx(), "execRequest: error: %v", err)
 		}
