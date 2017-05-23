@@ -230,7 +230,7 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
-	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
+	n.p.notifySchemaChange(n.tableDesc, mutationID)
 
 	return nil
 }
@@ -492,7 +492,7 @@ func (n *createViewNode) Start(ctx context.Context) error {
 		}
 	}
 	if desc.Adding() {
-		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
+		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
 	if err := desc.Validate(ctx, n.p.txn); err != nil {
 		return err
@@ -678,7 +678,7 @@ func (n *createTableNode) Start(ctx context.Context) error {
 		}
 	}
 	if desc.Adding() {
-		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
+		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
 
 	for _, index := range desc.AllNonDropIndexes() {
@@ -1020,7 +1020,7 @@ func (p *planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.Tabl
 	if err := p.writeTableDesc(ctx, td); err != nil {
 		return err
 	}
-	p.notifySchemaChange(td.ID, sqlbase.InvalidMutationID)
+	p.notifySchemaChange(td, sqlbase.InvalidMutationID)
 	return nil
 }
 
