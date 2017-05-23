@@ -811,6 +811,11 @@ type StoreTestingKnobs struct {
 	// path (but leaves synchronous resolution). This can avoid some
 	// edge cases in tests that start and stop servers.
 	DisableAsyncIntentResolution bool
+	// DisableLeaseCapacityGossip disables the ability of a changing number of
+	// leases to trigger the store to gossip its capacity. With this enabled,
+	// only changes in the number of replicas can cause the store to gossip its
+	// capacity.
+	DisableLeaseCapacityGossip bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -1440,6 +1445,9 @@ const (
 // immediate gossip of this store's descriptor, to include updated
 // capacity information.
 func (s *Store) maybeGossipOnCapacityChange(ctx context.Context, cce capacityChangeEvent) {
+	if s.cfg.TestingKnobs.DisableLeaseCapacityGossip && cce == leaseChangeEvent {
+		return
+	}
 	if (cce == rangeChangeEvent && atomic.AddInt32(&s.gossipRangeCountdown, -1) == 0) ||
 		(cce == leaseChangeEvent && atomic.AddInt32(&s.gossipLeaseCountdown, -1) == 0) {
 		// Reset countdowns to avoid unnecessary gossiping.
