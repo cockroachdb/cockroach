@@ -17,6 +17,10 @@
 package storage
 
 import (
+	"crypto/sha512"
+	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"reflect"
 	"time"
 
@@ -27,10 +31,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -267,6 +273,13 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Replicated.RaftLogDelta = nil
 
+	if p.Replicated.AddSSTable == nil {
+		p.Replicated.AddSSTable = q.Replicated.AddSSTable
+	} else if q.Replicated.AddSSTable != nil {
+		return errors.New("conflicting AddSSTable")
+	}
+	q.Replicated.AddSSTable = nil
+
 	if q.Local.intents != nil {
 		if p.Local.intents == nil {
 			p.Local.intents = q.Local.intents
@@ -467,6 +480,39 @@ func (r *Replica) leasePostApply(
 	// Mark the new lease in the replica's lease history.
 	if r.leaseHistory != nil {
 		r.leaseHistory.add(newLease)
+	}
+}
+
+var addMu syncutil.Mutex
+
+func (r *Replica) addSSTablePostApply(ctx context.Context, data []byte) {
+	var checksum []byte
+	{
+		hash := sha512.New()
+		if _, err := hash.Write(data); err != nil {
+			panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
+		}
+		checksum = hash.Sum(nil)
+	}
+
+	var path string
+	var move bool
+	if inmem, ok := r.store.engine.(engine.InMem); ok {
+		path = fmt.Sprintf("%x", checksum)
+		move = false
+		if err := inmem.WriteFile(path, data); err != nil {
+			panic(err)
+		}
+	} else {
+		path = filepath.Join(r.store.engine.GetTempDir(), fmt.Sprintf("addsstable-%x", checksum))
+		move = true
+		if err := ioutil.WriteFile(path, data, 0644); err != nil {
+			panic(err)
+		}
+	}
+
+	if err := r.store.engine.IngestExternalFile(ctx, path, move); err != nil {
+		panic(err)
 	}
 }
 
@@ -687,6 +733,11 @@ func (r *Replica) handleReplicatedEvalResult(
 		if checkRaftLog {
 			r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 		}
+	}
+
+	if rResult.AddSSTable != nil {
+		r.addSSTablePostApply(ctx, rResult.AddSSTable)
+		rResult.AddSSTable = nil
 	}
 
 	if !reflect.DeepEqual(rResult, storagebase.ReplicatedEvalResult{}) {

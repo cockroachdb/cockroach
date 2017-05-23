@@ -140,6 +140,7 @@ var commands = map[roachpb.Method]Command{
 	roachpb.ComputeChecksum:    {DeclareKeys: DefaultDeclareKeys, Eval: evalComputeChecksum},
 	roachpb.WriteBatch:         writeBatchCmd,
 	roachpb.Export:             exportCmd,
+	roachpb.AddSSTable:         addSSTableCmd,
 
 	roachpb.DeprecatedVerifyChecksum: {
 		DeclareKeys: DefaultDeclareKeys,
@@ -2357,6 +2358,7 @@ func makeUnimplementedCommand(method roachpb.Method) Command {
 }
 
 var writeBatchCmd = makeUnimplementedCommand(roachpb.WriteBatch)
+var addSSTableCmd = makeUnimplementedCommand(roachpb.AddSSTable)
 var exportCmd = makeUnimplementedCommand(roachpb.Export)
 var importCmdFn ImportCmdFunc = func(context.Context, CommandArgs) (*roachpb.ImportResponse, error) {
 	return &roachpb.ImportResponse{}, errors.Errorf("unimplemented command: %s", roachpb.Import)
@@ -2367,6 +2369,13 @@ var importCmdFn ImportCmdFunc = func(context.Context, CommandArgs) (*roachpb.Imp
 func SetWriteBatchCmd(cmd Command) {
 	// This is safe if SetWriteBatchCmd is only called at init time.
 	commands[roachpb.WriteBatch] = cmd
+}
+
+// SetAddSSTableCmd allows setting the function that will be called as the
+// implementation of the AddSSTable command. Only allowed to be called by Init.
+func SetAddSSTableCmd(cmd Command) {
+	// This is safe if SetAddSSTableCmd is only called at init time.
+	commands[roachpb.AddSSTable] = cmd
 }
 
 // SetExportCmd allows setting the function that will be called as the

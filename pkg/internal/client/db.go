@@ -421,6 +421,14 @@ func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byt
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
+// data in the range is cleared.
+func (db *DB) AddSSTable(ctx context.Context, begin, end interface{}, data []byte) error {
+	b := &Batch{}
+	b.addSSTable(begin, end, data)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.

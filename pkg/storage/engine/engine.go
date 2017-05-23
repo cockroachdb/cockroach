@@ -20,6 +20,7 @@ package engine
 
 import (
 	"github.com/gogo/protobuf/proto"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -210,6 +211,9 @@ type Engine interface {
 	NewSnapshot() Reader
 	// SetTempDir overrides the tempdir path returned by GetTempDir.
 	SetTempDir(dir string) error
+	// IngestExternalFile links a file into the RocksDB log-structured
+	// merge-tree.
+	IngestExternalFile(ctx context.Context, path string, move bool) error
 }
 
 // Batch is the interface for batch specific operations.

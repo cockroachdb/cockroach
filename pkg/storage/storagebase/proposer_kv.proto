@@ -84,6 +84,7 @@ message ReplicatedEvalResult {
   optional storage.engine.enginepb.MVCCStats delta = 10 [(gogoproto.nullable) = false];
   optional ChangeReplicas change_replicas = 12;
   optional int64 raft_log_delta = 13;
+  optional bytes add_sstable = 16 [(gogoproto.nullable) = false, (gogoproto.customname) = "AddSSTable"];
 
   reserved 10001 to 10013;
 }
