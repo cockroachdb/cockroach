@@ -24,7 +24,7 @@ CockroachDB Community License Agreement
 
             https://github.com/cockroachdb/cockroach
 
-    (c) "Cockroach Enterprise Edition" shall mean the additional features made
+    (c) "CockroachDB Enterprise Edition" shall mean the additional features made
         available by Cockroach Labs, the use of which is subject to additional
         terms set out below.
 
@@ -198,7 +198,7 @@ CockroachDB Community License Agreement
      Edition is granted without charge for the trial or evaluation period
      specified when You signed up, or if no term was specified, for thirty (30)
      calendar days, provided that Your License is granted solely for purposes of
-     Your internal evaluation of Cockroach Enterprise Edition during the trial
+     Your internal evaluation of CockroachDB Enterprise Edition during the trial
      or evaluation period (a "Trial License").  You may not use CockroachDB
      Enterprise Edition under a Trial License more than once in any twelve (12)
      month period.  Cockroach Labs may revoke a Trial License at any time and
