@@ -4870,6 +4870,375 @@ export namespace cockroach {
                 public rangeLog(request: (cockroach.server.serverpb.RangeLogRequest|{ [k: string]: any }), callback: Admin_rangeLog_Callback): void;
             }
 
+            type CertificatesRequest$Properties = {
+                node_id?: string;
+            };
+
+            /**
+             * Constructs a new CertificatesRequest.
+             * @exports cockroach.server.serverpb.CertificatesRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.CertificatesRequest$Properties=} [properties] Properties to set
+             */
+            class CertificatesRequest {
+
+                /**
+                 * Constructs a new CertificatesRequest.
+                 * @exports cockroach.server.serverpb.CertificatesRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CertificatesRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.CertificatesRequest$Properties);
+
+                /**
+                 * CertificatesRequest node_id.
+                 * @type {string}
+                 */
+                public node_id: string;
+
+                /**
+                 * Creates a new CertificatesRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CertificatesRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CertificatesRequest} CertificatesRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.CertificatesRequest$Properties): cockroach.server.serverpb.CertificatesRequest;
+
+                /**
+                 * Encodes the specified CertificatesRequest message. Does not implicitly {@link cockroach.server.serverpb.CertificatesRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificatesRequest$Properties} message CertificatesRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.CertificatesRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified CertificatesRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CertificatesRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificatesRequest$Properties} message CertificatesRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.CertificatesRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a CertificatesRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CertificatesRequest} CertificatesRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.CertificatesRequest;
+
+                /**
+                 * Decodes a CertificatesRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CertificatesRequest} CertificatesRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.CertificatesRequest;
+
+                /**
+                 * Verifies a CertificatesRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a CertificatesRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificatesRequest} CertificatesRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.CertificatesRequest;
+
+                /**
+                 * Creates a CertificatesRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CertificatesRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificatesRequest} CertificatesRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.CertificatesRequest;
+
+                /**
+                 * Creates a plain object from a CertificatesRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CertificatesRequest} message CertificatesRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.CertificatesRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this CertificatesRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this CertificatesRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type CertificateDetails$Properties = {
+                type?: cockroach.server.serverpb.CertificateDetails.CertificateType;
+                error_message?: string;
+                data?: Uint8Array;
+            };
+
+            /**
+             * Constructs a new CertificateDetails.
+             * @exports cockroach.server.serverpb.CertificateDetails
+             * @constructor
+             * @param {cockroach.server.serverpb.CertificateDetails$Properties=} [properties] Properties to set
+             */
+            class CertificateDetails {
+
+                /**
+                 * Constructs a new CertificateDetails.
+                 * @exports cockroach.server.serverpb.CertificateDetails
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CertificateDetails$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.CertificateDetails$Properties);
+
+                /**
+                 * CertificateDetails type.
+                 * @type {cockroach.server.serverpb.CertificateDetails.CertificateType}
+                 */
+                public type: cockroach.server.serverpb.CertificateDetails.CertificateType;
+
+                /**
+                 * CertificateDetails error_message.
+                 * @type {string}
+                 */
+                public error_message: string;
+
+                /**
+                 * CertificateDetails data.
+                 * @type {Uint8Array}
+                 */
+                public data: Uint8Array;
+
+                /**
+                 * Creates a new CertificateDetails instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CertificateDetails$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.CertificateDetails$Properties): cockroach.server.serverpb.CertificateDetails;
+
+                /**
+                 * Encodes the specified CertificateDetails message. Does not implicitly {@link cockroach.server.serverpb.CertificateDetails.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificateDetails$Properties} message CertificateDetails message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.CertificateDetails$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified CertificateDetails message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CertificateDetails.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificateDetails$Properties} message CertificateDetails message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.CertificateDetails$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a CertificateDetails message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.CertificateDetails;
+
+                /**
+                 * Decodes a CertificateDetails message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.CertificateDetails;
+
+                /**
+                 * Verifies a CertificateDetails message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a CertificateDetails message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.CertificateDetails;
+
+                /**
+                 * Creates a CertificateDetails message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CertificateDetails.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.CertificateDetails;
+
+                /**
+                 * Creates a plain object from a CertificateDetails message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CertificateDetails} message CertificateDetails
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.CertificateDetails, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this CertificateDetails message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this CertificateDetails to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace CertificateDetails {
+
+                /**
+                 * CertificateType enum.
+                 * @name CertificateType
+                 * @memberof cockroach.server.serverpb.CertificateDetails
+                 * @enum {number}
+                 * @property {number} CA=0 CA value
+                 * @property {number} NODE=1 NODE value
+                 */
+                enum CertificateType {
+                    CA = 0,
+                    NODE = 1
+                }
+            }
+
+            type CertificatesResponse$Properties = {
+                certificates?: cockroach.server.serverpb.CertificateDetails$Properties[];
+            };
+
+            /**
+             * Constructs a new CertificatesResponse.
+             * @exports cockroach.server.serverpb.CertificatesResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.CertificatesResponse$Properties=} [properties] Properties to set
+             */
+            class CertificatesResponse {
+
+                /**
+                 * Constructs a new CertificatesResponse.
+                 * @exports cockroach.server.serverpb.CertificatesResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CertificatesResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.CertificatesResponse$Properties);
+
+                /**
+                 * CertificatesResponse certificates.
+                 * @type {Array.<cockroach.server.serverpb.CertificateDetails$Properties>}
+                 */
+                public certificates: cockroach.server.serverpb.CertificateDetails$Properties[];
+
+                /**
+                 * Creates a new CertificatesResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CertificatesResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CertificatesResponse} CertificatesResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.CertificatesResponse$Properties): cockroach.server.serverpb.CertificatesResponse;
+
+                /**
+                 * Encodes the specified CertificatesResponse message. Does not implicitly {@link cockroach.server.serverpb.CertificatesResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificatesResponse$Properties} message CertificatesResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.CertificatesResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified CertificatesResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CertificatesResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CertificatesResponse$Properties} message CertificatesResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.CertificatesResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a CertificatesResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CertificatesResponse} CertificatesResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.CertificatesResponse;
+
+                /**
+                 * Decodes a CertificatesResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CertificatesResponse} CertificatesResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.CertificatesResponse;
+
+                /**
+                 * Verifies a CertificatesResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a CertificatesResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificatesResponse} CertificatesResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.CertificatesResponse;
+
+                /**
+                 * Creates a CertificatesResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CertificatesResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CertificatesResponse} CertificatesResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.CertificatesResponse;
+
+                /**
+                 * Creates a plain object from a CertificatesResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CertificatesResponse} message CertificatesResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.CertificatesResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this CertificatesResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this CertificatesResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type DetailsRequest$Properties = {
                 node_id?: string;
             };
@@ -8198,6 +8567,14 @@ export namespace cockroach {
                  * @returns {Status} RPC service. Useful where requests and/or responses are streamed.
                  */
                 public static create(rpcImpl: $protobuf.RPCImpl, requestDelimited?: boolean, responseDelimited?: boolean): Status;
+
+                /**
+                 * Calls Certificates.
+                 * @param {cockroach.server.serverpb.CertificatesRequest|Object.<string,*>} request CertificatesRequest message or plain object
+                 * @param {Status_certificates_Callback} callback Node-style callback called with the error, if any, and CertificatesResponse
+                 * @returns {undefined}
+                 */
+                public certificates(request: (cockroach.server.serverpb.CertificatesRequest|{ [k: string]: any }), callback: Status_certificates_Callback): void;
 
                 /**
                  * Calls Details.
@@ -16894,6 +17271,8 @@ type Admin_queryPlan_Callback = (error: Error, response?: cockroach.server.serve
 type Admin_drain_Callback = (error: Error, response?: cockroach.server.serverpb.DrainResponse) => void;
 
 type Admin_rangeLog_Callback = (error: Error, response?: cockroach.server.serverpb.RangeLogResponse) => void;
+
+type Status_certificates_Callback = (error: Error, response?: cockroach.server.serverpb.CertificatesResponse) => void;
 
 type Status_details_Callback = (error: Error, response?: cockroach.server.serverpb.DetailsResponse) => void;
 
