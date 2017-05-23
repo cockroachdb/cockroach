@@ -3,9 +3,9 @@ import _ from "lodash";
 import { Dispatch, bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
-import { AlertBox } from "../components/alertBox";
-import { AdminUIState } from "../redux/state";
-import { Alert, panelAlertsSelector } from "../redux/alerts";
+import { AlertBox } from "src/components/alertBox";
+import { AdminUIState } from "src/redux/state";
+import { Alert, panelAlertsSelector } from "src/redux/alerts";
 
 interface AlertSectionProps {
   /**

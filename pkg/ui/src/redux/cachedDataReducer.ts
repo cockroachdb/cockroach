@@ -9,9 +9,9 @@ import { Action, Dispatch } from "redux";
 import { assert } from "chai";
 import moment from "moment";
 
-import { APIRequestFn } from "../util/api";
+import { APIRequestFn } from "src/util/api";
 
-import { PayloadAction, WithRequest } from "../interfaces/action";
+import { PayloadAction, WithRequest } from "src/interfaces/action";
 
 // CachedDataReducerState is used to track the state of the cached data.
 export class CachedDataReducerState<TResponseMessage> {

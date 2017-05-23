@@ -2,8 +2,8 @@ import React from "react";
 import { connect } from "react-redux";
 import moment from "moment";
 
-import { AdminUIState } from "../redux/state";
-import * as timewindow from "../redux/timewindow";
+import { AdminUIState } from "src/redux/state";
+import * as timewindow from "src/redux/timewindow";
 
 interface TimeWindowManagerProps {
   // The current timewindow redux state.

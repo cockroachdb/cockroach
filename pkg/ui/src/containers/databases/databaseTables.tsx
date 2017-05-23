@@ -3,17 +3,17 @@ import React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router";
 
-import { SummaryBar, SummaryHeadlineStat } from "../../components/summaryBar";
-import { SortSetting } from "../../components/sortabletable";
-import { SortedTable } from "../../components/sortedtable";
+import { SummaryBar, SummaryHeadlineStat } from "src/components/summaryBar";
+import { SortSetting } from "src/components/sortabletable";
+import { SortedTable } from "src/components/sortedtable";
 
-import { AdminUIState } from "../../redux/state";
-import { LocalSetting } from "../../redux/localsettings";
+import { AdminUIState } from "src/redux/state";
+import { LocalSetting } from "src/redux/localsettings";
 import {
     refreshDatabaseDetails, refreshTableDetails, refreshTableStats,
-} from "../../redux/apiReducers";
+} from "src/redux/apiReducers";
 
-import { Bytes } from "../../util/format";
+import { Bytes } from "src/util/format";
 
 import { TableInfo } from "./data";
 

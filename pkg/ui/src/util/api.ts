@@ -6,7 +6,7 @@ import _ from "lodash";
 import "whatwg-fetch"; // needed for jsdom?
 import moment from "moment";
 
-import * as protos from "../js/protos";
+import * as protos from "src/js/protos";
 
 export type DatabasesRequestMessage = protos.cockroach.server.serverpb.DatabasesRequest;
 export type DatabasesResponseMessage = protos.cockroach.server.serverpb.DatabasesResponse;

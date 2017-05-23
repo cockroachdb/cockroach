@@ -1,10 +1,10 @@
 import { assert } from "chai";
-import fetchMock from "../util/fetch-mock";
+import fetchMock from "src/util/fetch-mock";
 import { Store } from "redux";
 import moment from "moment";
 
-import * as protos from "../js/protos";
-import { API_PREFIX } from "../util/api";
+import * as protos from "src/js/protos";
+import { API_PREFIX } from "src/util/api";
 import { AdminUIState, createAdminUIStore } from "./state";
 import {
   AlertLevel,

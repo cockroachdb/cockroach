@@ -1,12 +1,12 @@
 import _ from "lodash";
 import React from "react";
 
-import * as protos from "../../js/protos";
+import * as protos from "src/js/protos";
 
-import { AdminUIState } from "../../redux/state";
-import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, generateTableID} from "../../redux/apiReducers";
+import { AdminUIState } from "src/redux/state";
+import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, generateTableID} from "src/redux/apiReducers";
 
-import { SortSetting } from "../../components/sortabletable";
+import { SortSetting } from "src/components/sortabletable";
 
 import { TableInfo } from "./data";
 
