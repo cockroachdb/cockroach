@@ -102,6 +102,8 @@ type reportingInfo struct {
 	Stores     []storeInfo                                       `json:"stores"`
 	Schema     []sqlbase.TableDescriptor                         `json:"schema"`
 	QueryStats map[string]map[string]roachpb.StatementStatistics `json:"sqlstats"`
+	// UnimplementedErrors reports when unimplemented features are encountered.
+	UnimplementedErrors map[string]uint `json:"unimplemented"`
 }
 
 type nodeInfo struct {
@@ -258,26 +260,28 @@ func (s *Server) maybeReportDiagnostics(
 		s.reportDiagnostics(running)
 	}
 	s.sqlExecutor.ResetStatementStats(ctx)
+	s.sqlExecutor.ResetUnimplementedCounts()
 
 	return scheduled.Add(diagnosticReportFrequency.Get())
 }
 
 func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
+	info := reportingInfo{}
+
 	n := s.node.recorder.GetStatusSummary()
+	info.Node = nodeInfo{NodeID: s.node.Descriptor.NodeID}
 
-	summary := nodeInfo{NodeID: s.node.Descriptor.NodeID}
-
-	stores := make([]storeInfo, len(n.StoreStatuses))
+	info.Stores = make([]storeInfo, len(n.StoreStatuses))
 	for i, r := range n.StoreStatuses {
-		stores[i].NodeID = r.Desc.Node.NodeID
-		stores[i].StoreID = r.Desc.StoreID
-		stores[i].KeyCount = int(r.Metrics["keycount"])
-		summary.KeyCount += stores[i].KeyCount
-		stores[i].RangeCount = int(r.Metrics["replicas"])
-		summary.RangeCount += stores[i].RangeCount
+		info.Stores[i].NodeID = r.Desc.Node.NodeID
+		info.Stores[i].StoreID = r.Desc.StoreID
+		info.Stores[i].KeyCount = int(r.Metrics["keycount"])
+		info.Node.KeyCount += info.Stores[i].KeyCount
+		info.Stores[i].RangeCount = int(r.Metrics["replicas"])
+		info.Node.RangeCount += info.Stores[i].RangeCount
 		bytes := int(r.Metrics["sysbytes"] + r.Metrics["intentbytes"] + r.Metrics["valbytes"] + r.Metrics["keybytes"])
-		stores[i].Bytes = bytes
-		summary.Bytes += bytes
+		info.Stores[i].Bytes = bytes
+		info.Node.Bytes += bytes
 	}
 
 	schema, err := s.collectSchemaInfo(ctx)
@@ -285,8 +289,11 @@ func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 		log.Warningf(ctx, "error collecting schema info for diagnostic report: %+v", err)
 		schema = nil
 	}
-
-	return reportingInfo{summary, stores, schema, s.sqlExecutor.GetScrubbedStmtStats()}
+	info.Schema = schema
+	info.QueryStats = s.sqlExecutor.GetScrubbedStmtStats()
+	info.UnimplementedErrors = make(map[string]uint)
+	s.sqlExecutor.FillUnimplementedErrorCounts(info.UnimplementedErrors)
+	return info
 }
 
 func (s *Server) reportDiagnostics(runningTime time.Duration) {

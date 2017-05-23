@@ -30,12 +30,12 @@ func (pg *Error) Error() string {
 }
 
 // NewError creates an Error.
-func NewError(code string, msg string) error {
+func NewError(code string, msg string) *Error {
 	return NewErrorf(code, msg)
 }
 
 // NewErrorf creates an Error with a format string.
-func NewErrorf(code string, format string, args ...interface{}) error {
+func NewErrorf(code string, format string, args ...interface{}) *Error {
 	srcCtx := makeSrcCtx(1)
 	return &Error{
 		Message: fmt.Sprintf(format, args...),

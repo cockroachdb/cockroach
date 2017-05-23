@@ -636,7 +636,7 @@ func NewError(err error) *Error {
 		return &Error{
 			Detail: &Error_PGError{
 				PGError: pgerror.NewError(
-					pgerror.CodeInternalError, err.Error()).(*pgerror.Error)}}
+					pgerror.CodeInternalError, err.Error())}}
 	}
 }
 
