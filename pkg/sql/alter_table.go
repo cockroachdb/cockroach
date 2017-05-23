@@ -476,7 +476,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
+	n.p.notifySchemaChange(n.tableDesc, mutationID)
 
 	return nil
 }

@@ -399,7 +399,7 @@ func (p *planner) dropIndexByName(
 	); err != nil {
 		return err
 	}
-	p.notifySchemaChange(tableDesc.ID, mutationID)
+	p.notifySchemaChange(tableDesc, mutationID)
 
 	return nil
 }
@@ -872,7 +872,7 @@ func (p *planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.Tabl
 	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
 		return err
 	}
-	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
+	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 	return nil
 }
 
