@@ -493,9 +493,9 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %type <*Limit> limit_clause offset_clause
 %type <Expr>  select_limit_value
-// %type <empty> opt_select_fetch_first_value
+%type <Expr> opt_select_fetch_first_value
 %type <empty> row_or_rows
-// %type <empty> first_or_next
+%type <empty> first_or_next
 
 %type <Statement>  insert_rest
 %type <NameList> opt_conf_expr
@@ -2874,8 +2874,10 @@ limit_clause:
     }
   }
 // SQL:2008 syntax
-// TODO(pmattis): Should we support this?
-// | FETCH first_or_next opt_select_fetch_first_value row_or_rows ONLY { return unimplemented(sqllex) }
+| FETCH first_or_next opt_select_fetch_first_value row_or_rows ONLY
+  {
+    $$.val = &Limit{Count: $3.expr()}
+  }
 
 offset_clause:
   OFFSET a_expr
@@ -2900,19 +2902,28 @@ select_limit_value:
 // Allowing full expressions without parentheses causes various parsing
 // problems with the trailing ROW/ROWS key words. SQL only calls for constants,
 // so we allow the rest only with parentheses. If omitted, default to 1.
-// opt_select_fetch_first_value:
-//   signed_iconst { return unimplemented(sqllex) }
-// | '(' a_expr ')' { return unimplemented(sqllex) }
-// | /* EMPTY */ {}
+ opt_select_fetch_first_value:
+   signed_iconst
+   {
+     $$.val = $1.expr()
+   }
+ | '(' a_expr ')'
+   {
+     $$.val = $2.expr()
+   }
+ | /* EMPTY */
+   {
+     $$.val = &NumVal{Value: constant.MakeInt64(1)}
+   }
 
 // noise words
 row_or_rows:
   ROW {}
 | ROWS {}
 
-// first_or_next:
-//   FIRST { return unimplemented(sqllex) }
-// | NEXT { return unimplemented(sqllex) }
+first_or_next:
+  FIRST {}
+| NEXT {}
 
 // This syntax for group_clause tries to follow the spec quite closely.
 // However, the spec allows only column references, not expressions,
