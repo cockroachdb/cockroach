@@ -1601,3 +1601,38 @@ func TestPGWireAuth(t *testing.T) {
 		}
 	})
 }
+
+func TestPGWireResultChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE DATABASE testing`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`CREATE TABLE testing.f (v INT)`); err != nil {
+		t.Fatal(err)
+	}
+	stmt, err := db.Prepare(`SELECT * FROM testing.f`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE testing.f ADD COLUMN u int`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO testing.f VALUES (1, 2)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stmt.Exec(); !testutils.IsError(err, "must not change result type") {
+		t.Fatal("expected error")
+	}
+}
