@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var btreeMinDegree = flag.Int("btree_min_degree", 32, "B-Tree minimum degree")
+var btreeMinDegree = flag.Int("btree_min_degree", DefaultBTreeMinimumDegree, "B-Tree minimum degree")
 
 func init() {
 	seed := timeutil.Now().Unix()
@@ -342,8 +342,11 @@ func checkEqualIntervals(t *testing.T, actual, expected items) {
 			break
 		}
 	}
-	sort.Sort(expected)
-	if !reflect.DeepEqual(actual, expected) {
+	itemsLen := len(expected)
+	sortedExpected := make(items, itemsLen)
+	copy(sortedExpected, expected)
+	sort.Sort(sortedExpected)
+	if !reflect.DeepEqual(actual, sortedExpected) {
 		t.Errorf("expected intervals %v, got %v", expected, actual)
 	}
 }
@@ -370,6 +373,15 @@ func checkTraversal(t *testing.T, tree *btree, ivs items) {
 		return false
 	})
 	checkEqualIntervals(t, all, ivs)
+}
+
+func checkIterator(t *testing.T, tree *btree, ivs items) {
+	var actual items
+	it := tree.Iterator()
+	for r, ok := it.Next(); ok; r, ok = it.Next() {
+		actual = append(actual, r)
+	}
+	checkEqualIntervals(t, actual, ivs)
 }
 
 func checkFastDelete(t *testing.T, tree *btree, ivs items, deleteCount int) {
@@ -536,10 +548,11 @@ func TestSmallTree(t *testing.T) {
 		if err := tree.Insert(iv, false); err != nil {
 			t.Fatalf("insert error: %s", err)
 		}
-		checkWithLen(t, &tree, i+1)
+		checkWithLen(t, tree, i+1)
 	}
 
-	checkTraversal(t, &tree, ivs)
+	checkTraversal(t, tree, ivs)
+	checkIterator(t, tree, ivs)
 
 	// Delete
 	l := tree.Len()
@@ -547,7 +560,7 @@ func TestSmallTree(t *testing.T) {
 		if err := tree.Delete(iv, false); err != nil {
 			t.Fatalf("delete error: %s", err)
 		}
-		checkWithLen(t, &tree, l-i-1)
+		checkWithLen(t, tree, l-i-1)
 	}
 }
 
@@ -562,10 +575,11 @@ func TestSmallTreeWithFastOperations(t *testing.T) {
 		}
 	}
 	tree.AdjustRanges()
-	checkWithLen(t, &tree, len(ivs))
+	checkWithLen(t, tree, len(ivs))
 
-	checkTraversal(t, &tree, ivs)
-	checkFastDelete(t, &tree, ivs, tree.Len())
+	checkTraversal(t, tree, ivs)
+	checkIterator(t, tree, ivs)
+	checkFastDelete(t, tree, ivs, tree.Len())
 }
 
 func TestLargeTree(t *testing.T) {
@@ -584,6 +598,23 @@ func TestLargeTree(t *testing.T) {
 		}
 	}
 	tree.AdjustRanges()
-	checkWithLen(t, &tree, treeSize)
-	checkFastDelete(t, &tree, ivs, 10)
+	checkWithLen(t, tree, treeSize)
+	checkFastDelete(t, tree, ivs, 10)
+}
+
+func TestIterator(t *testing.T) {
+	var ivs items
+	const treeSize = 400
+	for i := uint32(0); i < treeSize; i++ {
+		iv := makeMultiByteInterval(i, i+1, i)
+		ivs = append(ivs, iv)
+	}
+	tree := newBTreeWithDegree(InclusiveOverlapper, 4)
+	for _, iv := range ivs {
+		if err := tree.Insert(iv, true); err != nil {
+			t.Fatalf("fast insert error: %s", err)
+		}
+	}
+	tree.AdjustRanges()
+	checkIterator(t, tree, ivs)
 }
