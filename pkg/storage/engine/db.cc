@@ -2327,13 +2327,20 @@ DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file) {
   const std::vector<std::string> paths = { ToString(path) };
   rocksdb::IngestExternalFileOptions ingest_options;
   ingest_options.move_files = move_file;
-  ingest_options.snapshot_consistency = true;
+  // TODO(dan): BEFORE MERGE switch snapshot_consistency back to true. The
+  // RocksDB in-memory env doesn't support NewRandomRWFile, which is used when a
+  // file is ingested while a snapshot is outstanding (it rewrites the sequence
+  // number in the ingested file to be greated than the snapshot's sequence
+  // number). Setting the option to false avoids this codepath during
+  // development.
+  ingest_options.snapshot_consistency = false;
   ingest_options.allow_global_seqno = true;
   ingest_options.allow_blocking_flush = false;
   rocksdb::Status status = db->rep->IngestExternalFile(paths, ingest_options);
   if (!status.ok()) {
     return ToDBStatus(status);
   }
+
   return kSuccess;
 }
 
