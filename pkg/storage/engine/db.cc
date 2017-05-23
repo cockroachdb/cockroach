@@ -2283,7 +2283,7 @@ DBString DBGetUserProperties(DBEngine* db) {
   return db->GetUserProperties();
 }
 
-DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
+DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path) {
   const std::vector<std::string> paths = { ToString(path) };
   rocksdb::IngestExternalFileOptions ifo;
   ifo.move_files = false;
@@ -2376,6 +2376,32 @@ void DBRunLDB(int argc, char** argv) {
   ldb_options.key_formatter.reset(new CockroachKeyFormatter);
   rocksdb::LDBTool tool;
   tool.Run(argc, argv, options, ldb_options);
+}
+
+DBStatus DBMemEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents) {
+  auto dbimpl = dynamic_cast<DBImpl*>(db);
+  if (dbimpl == NULL) {
+    return FmtStatus("DBMemEnvWriteFile can only be called on DBImpl");
+  }
+  if (dbimpl->memenv.get() == NULL) {
+    return FmtStatus("DBMemEnvWriteFile can only be called on in-memory RocksDBs");
+  }
+
+  rocksdb::Status s;
+
+  const rocksdb::EnvOptions soptions;
+  rocksdb::unique_ptr<rocksdb::WritableFile> destfile;
+  s = dbimpl->memenv->NewWritableFile(ToString(path), &destfile, soptions);
+  if (!s.ok()) {
+    return ToDBStatus(s);
+  }
+
+  s = destfile->Append(ToSlice(contents));
+  if (!s.ok()) {
+    return ToDBStatus(s);
+  }
+
+  return kSuccess;
 }
 
 const rocksdb::Comparator* CockroachComparator() {
