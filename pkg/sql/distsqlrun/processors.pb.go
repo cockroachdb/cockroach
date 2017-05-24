@@ -270,7 +270,8 @@ type PostProcessSpec struct {
 	RenderExprs []Expression `protobuf:"bytes,4,rep,name=render_exprs,json=renderExprs" json:"render_exprs"`
 	// If nonzero, the first <offset> rows will be suppressed.
 	Offset uint64 `protobuf:"varint,5,opt,name=offset" json:"offset"`
-	// If nonzero, the processor will stop after emitting this many rows.
+	// If nonzero, the processor will stop after emitting this many rows. The rows
+	// suppressed by <offset>, if any, do not count towards this limit.
 	Limit uint64 `protobuf:"varint,6,opt,name=limit" json:"limit"`
 }
 

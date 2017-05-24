@@ -243,6 +243,16 @@ SELECT * FROM xyzw ORDER BY x LIMIT 1 OFFSET 1
 ----
 4 5 6 7
 
+query IIII
+SELECT * FROM xyzw ORDER BY y OFFSET 1
+----
+4 5 6 7
+
+query IIII
+SELECT * FROM xyzw ORDER BY y OFFSET 1 LIMIT 1
+----
+4 5 6 7
+
 # Multiplying by zero so the result is deterministic.
 query IIII
 SELECT * FROM xyzw LIMIT (RANDOM() * 0.0)::int OFFSET (RANDOM() * 0.0)::int
