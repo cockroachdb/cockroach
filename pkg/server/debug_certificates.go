@@ -227,6 +227,12 @@ const debugCertificatesTemplate = `
           </DIV>
         {{- else}}
           {{- range $i, $cert := .CertFields}}
+            {{- if gt $i 0}}
+              <DIV CLASS="row">
+                <DIV CLASS="header cell"></DIV>
+                <DIV CLASS="cell"></DIV>
+              </DIV>
+            {{- end}}
             <DIV CLASS="row">
               <DIV CLASS="header cell">Cert ID</DIV>
               <DIV CLASS="cell">{{$i}}</DIV>
