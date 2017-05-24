@@ -36,6 +36,10 @@ const (
 	// another replica to send a KV batch.
 	DefaultSendNextTimeout = 500 * time.Millisecond
 
+	// DefaultPendingRPCTimeout is the duration to wait for outstanding RPCs
+	// after receiving an error.
+	DefaultPendingRPCTimeout = time.Minute
+
 	// SlowRequestThreshold is the amount of time to wait before considering a
 	// request to be "slow".
 	SlowRequestThreshold = 60 * time.Second
