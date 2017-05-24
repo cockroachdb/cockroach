@@ -3842,7 +3842,7 @@ func (r *Replica) adminScatter(
 
 	rng := rand.New(rand.NewSource(rand.Int63()))
 
-	sl, _, _ := r.store.cfg.StorePool.getStoreList(roachpb.RangeID(0))
+	sl, _, _ := r.store.cfg.StorePool.getStoreList(roachpb.RangeID(0), storeFilterNone)
 	stores := make([]roachpb.ReplicationTarget, len(sl.stores))
 	for i, sd := range sl.stores {
 		stores[i].StoreID = sd.StoreID
