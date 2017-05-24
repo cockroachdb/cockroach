@@ -36,6 +36,7 @@ const defaultCALifetime = 10 * 366 * 24 * time.Hour  // ten years
 const defaultCertLifetime = 5 * 366 * 24 * time.Hour // five years
 
 var keySize int
+var caCertificateLifetime time.Duration
 var certificateLifetime time.Duration
 var allowCAKeyReuse bool
 var overwriteFiles bool
@@ -63,7 +64,7 @@ func runCreateCACert(cmd *cobra.Command, args []string) error {
 			baseCfg.SSLCertsDir,
 			baseCfg.SSLCAKey,
 			keySize,
-			certificateLifetime,
+			caCertificateLifetime,
 			allowCAKeyReuse,
 			overwriteFiles),
 		"failed to generate CA cert and key")

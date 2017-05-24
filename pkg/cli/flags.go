@@ -283,7 +283,7 @@ func init() {
 	for _, cmd := range []*cobra.Command{createCACertCmd} {
 		f := cmd.Flags()
 		// CA certificates have a longer expiration time.
-		durationFlag(f, &certificateLifetime, cliflags.CertificateLifetime, defaultCALifetime)
+		durationFlag(f, &caCertificateLifetime, cliflags.CertificateLifetime, defaultCALifetime)
 		// The CA key can be re-used if it exists.
 		boolFlag(f, &allowCAKeyReuse, cliflags.AllowCAKeyReuse, false)
 	}
