@@ -402,11 +402,7 @@ func (ds *DistSender) sendRPC(
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	reply, err := ds.sendToReplicas(ctx, rpcOpts, rangeID, replicas, ba, ds.rpcContext)
-	if err != nil {
-		return nil, err
-	}
-	return reply, nil
+	return ds.sendToReplicas(ctx, rpcOpts, rangeID, replicas, ba, ds.rpcContext)
 }
 
 // CountRanges returns the number of ranges that encompass the given key span.
@@ -1222,6 +1218,8 @@ func (ds *DistSender) sendToReplicas(
 					propagateError = true
 				}
 
+				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
+
 				if propagateError {
 					// The error received is not specific to this replica, so we
 					// should return it instead of trying other replicas. However,
@@ -1229,7 +1227,6 @@ func (ds *DistSender) sendToReplicas(
 					// still other RPCs outstanding or an ambiguous RPC error
 					// was already received, we must return an ambiguous commit
 					// error instead of returned error.
-					log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
 					timer := time.NewTimer(defaultPendingRPCTimeout)
 					defer timer.Stop()
 					// If there are still pending RPC(s), try to wait them out.
@@ -1265,7 +1262,6 @@ func (ds *DistSender) sendToReplicas(
 				// one to return; we may want to remember the "best" error
 				// we've seen (for example, a NotLeaseHolderError conveys more
 				// information than a RangeNotFound).
-				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
 				err = call.Reply.Error.GoError()
 			} else {
 				// All connection errors except for an unavailable node (this
