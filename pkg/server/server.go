@@ -431,11 +431,6 @@ func (s *Server) InitialBoot() bool {
 	return s.node.initialBoot
 }
 
-// ClusterStores returns a list of known stores in the cluster.
-func (s *Server) ClusterStores() []roachpb.ReplicationTarget {
-	return s.storePool.GetStores()
-}
-
 // grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC
 // gateway.
 type grpcGatewayServer interface {
