@@ -39,7 +39,10 @@ type sorter struct {
 	out      procOutputHelper
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
-	limit    int64
+	// limit is the maximum number of rows that the sorter will push to the
+	// procOutputHelper. 0 if the sorter should sort and push all the rows from
+	// the input.
+	limit int64
 }
 
 var _ processor = &sorter{}
@@ -47,13 +50,19 @@ var _ processor = &sorter{}
 func newSorter(
 	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*sorter, error) {
+	limit := int64(0)
+	if post.Limit != 0 {
+		// The sorter needs to produce Offset + Limit rows. The procOutputHelper
+		// will discard the first Offset ones.
+		limit = int64(post.Limit) + int64(post.Offset)
+	}
 	s := &sorter{
 		flowCtx:  flowCtx,
 		input:    MakeNoMetadataRowSource(input, output),
 		rawInput: input,
 		ordering: convertToColumnOrdering(spec.OutputOrdering),
 		matchLen: spec.OrderingMatchLen,
-		limit:    int64(post.Limit),
+		limit:    limit,
 	}
 	if err := s.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
 		return nil, err

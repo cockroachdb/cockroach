@@ -594,6 +594,8 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 
 	if len(p.ResultRouters) == 1 {
 		// We only have one processor producing results. Just update its PostProcessSpec.
+		// SELECT FROM (SELECT OFFSET 10 LIMIT 1000) OFFSET 5 LIMIT 20 becomes
+		// SELECT OFFSET 10+5 LIMIT min(1000, 20).
 		post := p.GetLastStagePost()
 		if offset != 0 {
 			if post.Limit > 0 && post.Limit <= uint64(offset) {
@@ -605,7 +607,6 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 				*p = emptyPlan(p.ResultTypes, node)
 				return nil
 			}
-			post.Limit -= uint64(offset)
 			post.Offset += uint64(offset)
 		}
 		if count != math.MaxInt64 && (post.Limit == 0 || post.Limit > uint64(count)) {
