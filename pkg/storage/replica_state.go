@@ -735,3 +735,7 @@ func (rec ReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease, error) 
 func (rec ReplicaEvalContext) GetTempPrefix() string {
 	return rec.repl.GetTempPrefix()
 }
+
+// TODO(dan): This is likely to be used by upcoming projects (IngestExternalFile
+// and/or DistSQL external storage). Delete it if that doesn't happen.
+var _ = (ReplicaEvalContext).GetTempPrefix

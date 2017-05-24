@@ -116,9 +116,8 @@ func TestImport(t *testing.T) {
 	writeSST := func(keys ...[]byte) string {
 		path := strconv.FormatInt(hlc.UnixNano(), 10)
 
-		sst := engine.MakeRocksDBSstFileWriter()
-		if err := sst.Open(filepath.Join(dir, path)); err != nil {
-			_ = sst.Close()
+		sst, err := engine.MakeRocksDBSstFileWriter()
+		if err != nil {
 			t.Fatalf("%+v", err)
 		}
 		ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
@@ -131,7 +130,11 @@ func TestImport(t *testing.T) {
 				t.Fatalf("%+v", err)
 			}
 		}
-		if err := sst.Close(); err != nil {
+		sstContents, err := sst.Close()
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if err := ioutil.WriteFile(filepath.Join(dir, path), sstContents, 0644); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		return path

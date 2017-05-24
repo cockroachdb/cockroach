@@ -4035,6 +4035,10 @@ func (s *Store) GetTempPrefix() string {
 	return s.engine.GetTempDir()
 }
 
+// TODO(dan): This is likely to be used by upcoming projects (IngestExternalFile
+// and/or DistSQL external storage). Delete it if that doesn't happen.
+var _ = (*Store).GetTempPrefix
+
 // The methods below can be used to control a store's queues. Stopping a queue
 // is only meant to happen in tests.
 

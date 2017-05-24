@@ -2341,10 +2341,12 @@ DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path) {
 
 struct DBSstFileWriter {
   std::unique_ptr<rocksdb::Options> options;
+  std::unique_ptr<rocksdb::Env> memenv;
   rocksdb::SstFileWriter rep;
 
-  DBSstFileWriter(rocksdb::Options* o)
+  DBSstFileWriter(rocksdb::Options* o, rocksdb::Env* m)
       : options(o),
+        memenv(m),
         rep(rocksdb::EnvOptions(), *o, o->comparator) {
   }
   virtual ~DBSstFileWriter() { }
@@ -2369,11 +2371,15 @@ DBSstFileWriter* DBSstFileWriterNew() {
   options->comparator = &kComparator;
   options->table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
-  return new DBSstFileWriter(options);
+  std::unique_ptr<rocksdb::Env> memenv;
+  memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
+  options->env = memenv.get();
+
+  return new DBSstFileWriter(options, memenv.release());
 }
 
-DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw, DBSlice path) {
-  rocksdb::Status status = fw->rep.Open(ToString(path));
+DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
+  rocksdb::Status status = fw->rep.Open("sst");
   if (!status.ok()) {
     return ToDBStatus(status);
   }
@@ -2388,12 +2394,38 @@ DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
   return kSuccess;
 }
 
-DBStatus DBSstFileWriterClose(DBSstFileWriter* fw) {
+DBStatus DBSstFileWriterClose(DBSstFileWriter* fw, DBString* data) {
   rocksdb::Status status = fw->rep.Finish();
-  delete fw;
   if (!status.ok()) {
+    delete fw;
     return ToDBStatus(status);
   }
+
+  uint64_t file_size;
+  status = fw->memenv->GetFileSize("sst", &file_size);
+  if (!status.ok()) {
+    delete fw;
+    return ToDBStatus(status);
+  }
+
+  const rocksdb::EnvOptions soptions;
+  rocksdb::unique_ptr<rocksdb::SequentialFile> sst;
+  status = fw->memenv->NewSequentialFile("sst", &sst, soptions);
+  if (!status.ok()) {
+    delete fw;
+    return ToDBStatus(status);
+  }
+
+  char* scratch = new char[file_size];
+  rocksdb::Slice sst_contents;
+  status = sst->Read(file_size, &sst_contents, scratch);
+  if (!status.ok()) {
+    delete fw;
+    return ToDBStatus(status);
+  }
+  *data = ToDBString(sst_contents);
+
+  delete fw;
   return kSuccess;
 }
 

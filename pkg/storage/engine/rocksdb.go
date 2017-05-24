@@ -1777,26 +1777,23 @@ type RocksDBSstFileWriter struct {
 	fw *C.DBSstFileWriter
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
+
+	// contents is cached version of the constructed file so that Close can be
+	// idempotent.
+	contents []byte
 }
 
 // MakeRocksDBSstFileWriter creates a new RocksDBSstFileWriter with the default
 // configuration.
-func MakeRocksDBSstFileWriter() RocksDBSstFileWriter {
-	return RocksDBSstFileWriter{C.DBSstFileWriterNew(), 0}
-}
-
-// Open creates a file at the given path for output of an sstable.
-func (fw *RocksDBSstFileWriter) Open(path string) error {
-	if fw == nil {
-		return errors.New("cannot call Open on a closed writer")
-	}
-	return statusToError(C.DBSstFileWriterOpen(fw.fw, goToCSlice([]byte(path))))
+func MakeRocksDBSstFileWriter() (RocksDBSstFileWriter, error) {
+	fw := C.DBSstFileWriterNew()
+	err := statusToError(C.DBSstFileWriterOpen(fw))
+	return RocksDBSstFileWriter{fw: fw}, err
 }
 
 // Add puts a kv entry into the sstable being built. An error is returned if it
 // is not greater than any previously added entry (according to the comparator
-// configured during writer creation). `Open` must have been called. `Close`
-// cannot have been called.
+// configured during writer creation). `Close` cannot have been called.
 func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
 	if fw == nil {
 		return errors.New("cannot call Open on a closed writer")
@@ -1805,15 +1802,17 @@ func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
 	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value)))
 }
 
-// Close finishes the writer, flushing any remaining writes to disk. At least
-// one kv entry must have been added. Close is idempotent.
-func (fw *RocksDBSstFileWriter) Close() error {
+// Close finishes the writer and returns the constructed file's contents. At
+// least one kv entry must have been added. Close is idempotent.
+func (fw *RocksDBSstFileWriter) Close() ([]byte, error) {
 	if fw.fw == nil {
-		return nil
+		return fw.contents, nil
 	}
-	err := statusToError(C.DBSstFileWriterClose(fw.fw))
+	var contents C.DBString
+	err := statusToError(C.DBSstFileWriterClose(fw.fw, &contents))
 	fw.fw = nil
-	return err
+	fw.contents = cStringToGoBytes(contents)
+	return fw.contents, err
 }
 
 // RunLDB runs RocksDB's ldb command-line tool. The passed

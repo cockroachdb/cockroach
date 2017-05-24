@@ -265,8 +265,8 @@ typedef struct DBSstFileWriter DBSstFileWriter;
 // Creates a new SstFileWriter with the default configuration.
 DBSstFileWriter* DBSstFileWriterNew();
 
-// Opens a file at the given path for output of an sstable.
-DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw, DBSlice path);
+// Opens an in-memory file for output of an sstable.
+DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw);
 
 // Adds a kv entry to the sstable being built. An error is returned if it is
 // not greater than any previously added entry (according to the comparator
@@ -274,9 +274,9 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw, DBSlice path);
 // cannot have been called.
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
 
-// Closes the writer, flushing any remaining writes to disk and freeing
+// Closes the writer, returning the constructed file's contents and freeing
 // memory and other resources. At least one kv entry must have been added.
-DBStatus DBSstFileWriterClose(DBSstFileWriter* fw);
+DBStatus DBSstFileWriterClose(DBSstFileWriter* fw, DBString* data);
 
 void DBRunLDB(int argc, char** argv);
 
