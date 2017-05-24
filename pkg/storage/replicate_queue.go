@@ -186,16 +186,12 @@ func (rq *replicateQueue) shouldQueue(
 		}
 	}
 
-	target, err := rq.allocator.RebalanceTarget(
+	target := rq.allocator.RebalanceTarget(
 		ctx,
 		zone.Constraints,
 		desc.Replicas,
 		desc.RangeID,
 	)
-	if err != nil {
-		log.ErrEventf(ctx, "rebalance target failed: %s", err)
-		return false, 0
-	}
 	if log.V(2) {
 		if target != nil {
 			log.Infof(ctx, "rebalance target found, enqueuing")
@@ -392,16 +388,12 @@ func (rq *replicateQueue) processOneChange(
 			}
 		}
 
-		rebalanceStore, err := rq.allocator.RebalanceTarget(
+		rebalanceStore := rq.allocator.RebalanceTarget(
 			ctx,
 			zone.Constraints,
 			desc.Replicas,
 			desc.RangeID,
 		)
-		if err != nil {
-			log.ErrEventf(ctx, "rebalance target failed %s", err)
-			return false, nil
-		}
 		if rebalanceStore == nil {
 			if log.V(1) {
 				log.Infof(ctx, "no suitable rebalance target")
