@@ -628,15 +628,12 @@ func TestAllocatorRebalance(t *testing.T) {
 
 	// Every rebalance target must be either store 1 or 2.
 	for i := 0; i < 10; i++ {
-		result, err := a.RebalanceTarget(
+		result := a.RebalanceTarget(
 			ctx,
 			config.Constraints{},
 			[]roachpb.ReplicaDescriptor{{StoreID: 3}},
 			firstRange,
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
 		if result == nil {
 			i-- // loop until we find 10 candidates
 			continue
@@ -726,11 +723,8 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			result, err := a.RebalanceTarget(
+			result := a.RebalanceTarget(
 				ctx, config.Constraints{}, c.existing, firstRange)
-			if err != nil {
-				t.Fatal(err)
-			}
 			if c.expected > 0 {
 				if result == nil {
 					t.Fatalf("expected %d, but found nil", c.expected)
@@ -904,15 +898,12 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
-		result, err := a.RebalanceTarget(
+		result := a.RebalanceTarget(
 			ctx,
 			config.Constraints{},
 			[]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}},
 			firstRange,
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
@@ -2146,15 +2137,12 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				},
 			}
 
-			actual, err := a.RebalanceTarget(
+			actual := a.RebalanceTarget(
 				ctx,
 				constraints,
 				existingReplicas,
 				firstRange,
 			)
-			if err != nil {
-				t.Fatal(err)
-			}
 
 			if tc.expected == nil && actual != nil {
 				t.Errorf("rebalancing to the incorrect store, expected nil, got %d", actual.StoreID)
@@ -2261,15 +2249,12 @@ func Example_rebalancing() {
 		// Next loop through test stores and maybe rebalance.
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
-			target, err := alloc.RebalanceTarget(
+			target := alloc.RebalanceTarget(
 				context.Background(),
 				config.Constraints{},
 				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
 				firstRange,
 			)
-			if err != nil {
-				panic(err)
-			}
 			if target != nil {
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
