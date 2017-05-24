@@ -42,11 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// Default constants for timeouts.
 const (
-	defaultClientTimeout     = 10 * time.Second
 	defaultPendingRPCTimeout = 1 * time.Second
-
 	// The default maximum number of ranges to return from a range
 	// lookup.
 	defaultRangeLookupMaxRanges = 8
