@@ -94,7 +94,8 @@ message PostProcessSpec {
   // If nonzero, the first <offset> rows will be suppressed.
   optional uint64 offset = 5 [(gogoproto.nullable) = false];
 
-  // If nonzero, the processor will stop after emitting this many rows.
+  // If nonzero, the processor will stop after emitting this many rows. The rows
+  // suppressed by <offset>, if any, do not count towards this limit.
   optional uint64 limit = 6 [(gogoproto.nullable) = false];
 }
 
