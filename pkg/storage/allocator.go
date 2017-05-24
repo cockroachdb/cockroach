@@ -262,7 +262,7 @@ func (a *Allocator) AllocateTarget(
 	rangeID roachpb.RangeID,
 	relaxConstraints bool,
 ) (*roachpb.StoreDescriptor, error) {
-	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeID)
+	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeID, storeFilterThrottled)
 
 	candidates := allocateCandidates(
 		sl,
@@ -308,7 +308,7 @@ func (a Allocator) RemoveTarget(
 	for i, exist := range existing {
 		existingStoreIDs[i] = exist.StoreID
 	}
-	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0))
+	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
 	candidates := removeCandidates(
 		sl,
@@ -358,7 +358,7 @@ func (a Allocator) RebalanceTarget(
 	existing []roachpb.ReplicaDescriptor,
 	rangeID roachpb.RangeID,
 ) (*roachpb.StoreDescriptor, error) {
-	sl, _, _ := a.storePool.getStoreList(rangeID)
+	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterThrottled)
 
 	existingCandidates, candidates := rebalanceCandidates(
 		ctx,
@@ -416,7 +416,7 @@ func (a *Allocator) TransferLeaseTarget(
 	checkTransferLeaseSource bool,
 	checkCandidateFullness bool,
 ) roachpb.ReplicaDescriptor {
-	sl, _, _ := a.storePool.getStoreList(rangeID)
+	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
 	sl = sl.filter(constraints)
 
 	// Filter stores that are on nodes containing existing replicas, but leave
@@ -507,7 +507,7 @@ func (a *Allocator) ShouldTransferLease(
 	if !ok {
 		return false
 	}
-	sl, _, _ := a.storePool.getStoreList(rangeID)
+	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
 	sl = sl.filter(constraints)
 	if log.V(3) {
 		log.Infof(ctx, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
