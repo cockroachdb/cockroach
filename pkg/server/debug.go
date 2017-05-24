@@ -156,6 +156,10 @@ func init() {
         <td><a href="/_status/raft">raft</a></td>
       </tr>
       <tr>
+        <td>security</td>
+        <td><a href="/debug/certificates">certificates</a></td>
+      </tr>
+      <tr>
         <td>pprof</td>
         <td>
           <!-- cribbed from the /debug/pprof endpoint -->
