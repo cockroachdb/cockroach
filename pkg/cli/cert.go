@@ -192,7 +192,11 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 	}
 
 	if cert := cm.CACert(); cert != nil {
-		addRow(cert, "")
+		var notes string
+		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
+			notes = fmt.Sprintf("num certs: %d", len(cert.ParsedCertificates))
+		}
+		addRow(cert, notes)
 	}
 
 	if cert := cm.NodeCert(); cert != nil {
