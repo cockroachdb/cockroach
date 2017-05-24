@@ -22,7 +22,6 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"testing"
@@ -439,24 +438,21 @@ func BenchmarkRocksDBSstFileWriter(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	sst := MakeRocksDBSstFileWriter()
-	if err := sst.Open(filepath.Join(dir, "sst")); err != nil {
+	sst, err := MakeRocksDBSstFileWriter()
+	if err != nil {
 		b.Fatal(sst)
 	}
-	defer func() {
-		if err := sst.Close(); err != nil {
-			b.Fatal(err)
-		}
-	}()
+	defer sst.Close()
 	for i := 1; i <= b.N; i++ {
 		if i%maxEntries == 0 {
-			if err := sst.Close(); err != nil {
+			if _, err := sst.Finish(); err != nil {
 				b.Fatal(err)
 			}
-			sst = MakeRocksDBSstFileWriter()
-			if err := sst.Open(filepath.Join(dir, "sst")); err != nil {
+			sst, err = MakeRocksDBSstFileWriter()
+			if err != nil {
 				b.Fatal(sst)
 			}
+			defer sst.Close()
 		}
 
 		b.StopTimer()
@@ -481,7 +477,7 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 		}
 	}()
 
-	sstPath := filepath.Join(dir, "sst")
+	var sstContents []byte
 	{
 		const maxEntries = 100000
 		const keyLen = 10
@@ -494,10 +490,11 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 			Value: make([]byte, valLen),
 		}
 
-		sst := MakeRocksDBSstFileWriter()
-		if err := sst.Open(sstPath); err != nil {
+		sst, err := MakeRocksDBSstFileWriter()
+		if err != nil {
 			b.Fatal(sst)
 		}
+		defer sst.Close()
 		var entries = b.N
 		if entries > maxEntries {
 			entries = maxEntries
@@ -509,7 +506,8 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
-		if err := sst.Close(); err != nil {
+		sstContents, err = sst.Finish()
+		if err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -518,10 +516,6 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 	sst := MakeRocksDBSstFileReader()
 	defer sst.Close()
 
-	sstContents, err := ioutil.ReadFile(sstPath)
-	if err != nil {
-		b.Fatal(err)
-	}
 	if err := sst.IngestExternalFile(sstContents); err != nil {
 		b.Fatal(err)
 	}
