@@ -179,7 +179,7 @@ Type: \q to exit (Ctrl+C/Ctrl+D also supported)
   \? or "help"      print this help.
 
 More documentation about our SQL dialect is available online:
-http://www.cockroachlabs.com/docs/
+https://www.cockroachlabs.com/docs/sql-statements.html
 
 `)
 }
