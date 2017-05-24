@@ -1224,12 +1224,13 @@ func (ds *DistSender) sendToReplicas(
 				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
 
 				if propagateError && haveCommit {
-					// The error received is not specific to this replica, so we
-					// should return it instead of trying other replicas. However,
-					// if we're trying to commit a transaction and there are
-					// still other RPCs outstanding or an ambiguous RPC error
-					// was already received, we must return an ambiguous commit
-					// error instead of returned error.
+					// The error received is likely not specific to this
+					// replica, so we should return it instead of trying other
+					// replicas. However, if we're trying to commit a
+					// transaction and there are still other RPCs outstanding
+					// or an ambiguous RPC error was already received, we must
+					// return an ambiguous commit error instead of the returned
+					// error.
 					timer := time.NewTimer(ds.pendingRPCTimeout)
 					defer timer.Stop()
 					// If there are still pending RPC(s), try to wait them out.
