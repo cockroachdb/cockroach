@@ -3,7 +3,7 @@ import React from "react";
 import classNames from "classnames";
 
 import { MetricsDataProvider } from "src/containers/metricsDataProvider";
-import { MetricsDataComponentProps } from "./graphs";
+import { MetricsDataComponentProps } from "src/components/graphs";
 
 interface SummaryValueProps {
   title: React.ReactNode;

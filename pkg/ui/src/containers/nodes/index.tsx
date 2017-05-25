@@ -16,7 +16,7 @@ import {
   nodeIDAttr, dashboardNameAttr,
 } from "src/util/constants";
 
-import TimeScaleDropdown from "./timescale";
+import TimeScaleDropdown from "src/containers/timescale";
 
 interface ClusterOverviewOwnProps {
   nodes: protos.cockroach.server.status.NodeStatus[];

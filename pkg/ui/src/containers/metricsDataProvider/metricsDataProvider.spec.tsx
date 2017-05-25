@@ -11,7 +11,7 @@ import { Metric } from "src/components/metric";
 import {
   MetricsDataProviderUnconnected as MetricsDataProvider,
   QueryTimeInfo,
-} from "./metricsDataProvider";
+} from "src/containers/metricsDataProvider";
 import { queryMetrics, MetricsQuery } from "src/redux/metrics";
 
 function makeDataProvider(
