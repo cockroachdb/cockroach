@@ -654,7 +654,7 @@ func TestAllocatorRebalance(t *testing.T) {
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(firstRange)
+		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
 		result := shouldRebalance(ctx, desc, sl)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
@@ -842,7 +842,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 
 			// Ensure gossiped store descriptor changes have propagated.
 			testutils.SucceedsSoon(t, func() error {
-				sl, _, _ := a.storePool.getStoreList(firstRange)
+				sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
 				for j, s := range sl.stores {
 					if a, e := s.Capacity.RangeCount, tc.cluster[j].rangeCount; a != e {
 						return errors.Errorf("range count for %d = %d != expected %d", j, a, e)
@@ -850,7 +850,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				}
 				return nil
 			})
-			sl, _, _ := a.storePool.getStoreList(firstRange)
+			sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
 
 			// Verify shouldRebalance returns the expected value.
 			for j, store := range stores {
@@ -924,7 +924,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(firstRange)
+		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
 		result := shouldRebalance(ctx, desc, sl)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)

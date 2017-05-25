@@ -465,22 +465,29 @@ storeLoop:
 	return makeStoreList(filteredDescs)
 }
 
-// GetStores returns a list of known stores in the cluster.
-func (sp *StorePool) GetStores() []roachpb.ReplicationTarget {
-	sl, _, _ := sp.getStoreList(roachpb.RangeID(0))
-	result := make([]roachpb.ReplicationTarget, len(sl.stores))
-	for i, sd := range sl.stores {
-		result[i].StoreID = sd.StoreID
-		result[i].NodeID = sd.Node.NodeID
-	}
-	return result
-}
+type storeFilter int
 
-// getStoreList returns a storeList that contains all active stores that
-// contain the required attributes and their associated stats. It also returns
-// the total number of alive and throttled stores. The passed in rangeID is used
-// to check for corrupted replicas.
-func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
+const (
+	_ storeFilter = iota
+	// storeFilterNone requests that the storeList include all live stores. Dead,
+	// unknown, and corrupted stores are always excluded from the storeList.
+	storeFilterNone
+	// storeFilterThrottled requests that the returned store list additionally
+	// exclude stores that have been throttled for declining a snapshot. (See
+	// storePool.throttle for details.) Throttled stores should not be considered
+	// for replica rebalancing, for example, but can still be considered for lease
+	// rebalancing.
+	storeFilterThrottled
+)
+
+// getStoreList returns a storeList that contains all active stores that contain
+// the required attributes and their associated stats. The storeList is filtered
+// according to the provided storeFilter. It also returns the total number of
+// alive and throttled stores. The passed in rangeID is used to check for
+// corrupted replicas.
+func (sp *StorePool) getStoreList(
+	rangeID roachpb.RangeID, filter storeFilter,
+) (StoreList, int, int) {
 	sp.detailsMu.RLock()
 	defer sp.detailsMu.RUnlock()
 
@@ -488,23 +495,23 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 	for storeID := range sp.detailsMu.storeDetails {
 		storeIDs = append(storeIDs, storeID)
 	}
-	return sp.getStoreListFromIDsRLocked(storeIDs, rangeID)
+	return sp.getStoreListFromIDsRLocked(storeIDs, rangeID, filter)
 }
 
 // getStoreListFromIDs is the same function as getStoreList but only returns stores
 // from the subset of passed in store IDs.
 func (sp *StorePool) getStoreListFromIDs(
-	storeIDs roachpb.StoreIDSlice, rangeID roachpb.RangeID,
+	storeIDs roachpb.StoreIDSlice, rangeID roachpb.RangeID, filter storeFilter,
 ) (StoreList, int, int) {
 	sp.detailsMu.RLock()
 	defer sp.detailsMu.RUnlock()
-	return sp.getStoreListFromIDsRLocked(storeIDs, rangeID)
+	return sp.getStoreListFromIDsRLocked(storeIDs, rangeID, filter)
 }
 
 // getStoreListFromIDsRLocked is the same function as getStoreList but requires
 // that the detailsMU read lock is held.
 func (sp *StorePool) getStoreListFromIDsRLocked(
-	storeIDs roachpb.StoreIDSlice, rangeID roachpb.RangeID,
+	storeIDs roachpb.StoreIDSlice, rangeID roachpb.RangeID, filter storeFilter,
 ) (StoreList, int, int) {
 	if sp.deterministic {
 		sort.Sort(storeIDs)
@@ -523,6 +530,9 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 		case storeStatusThrottled:
 			aliveStoreCount++
 			throttledStoreCount++
+			if filter != storeFilterThrottled {
+				storeDescriptors = append(storeDescriptors, *detail.desc)
+			}
 		case storeStatusReplicaCorrupted:
 			aliveStoreCount++
 		case storeStatusAvailable:

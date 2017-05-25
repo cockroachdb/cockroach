@@ -293,9 +293,10 @@ func (r *Replica) HasQuorum() bool {
 	return len(liveReplicas) >= quorum
 }
 
-// GetStoreList is the same function as GetStoreList exposed for tests only.
+// GetStoreList exposes getStoreList for testing only, but with a hardcoded
+// storeFilter of storeFilterNone.
 func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
-	return sp.getStoreList(rangeID)
+	return sp.getStoreList(rangeID, storeFilterNone)
 }
 
 // Stores returns a copy of sl.stores.
