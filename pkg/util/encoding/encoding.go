@@ -183,7 +183,10 @@ func DecodeUint64Descending(b []byte) ([]byte, uint64, error) {
 	return leftover, ^v, err
 }
 
-const maxVarintSize = 9
+const (
+	maxVarintSize        = 9
+	maxBinaryUvarintSize = 10
+)
 
 // EncodeVarintAscending encodes the int64 value using a variable length
 // (length-prefixed) representation. The length is encoded as a single
@@ -1106,6 +1109,16 @@ func DecodeNonsortingUvarint(buf []byte) (remaining []byte, length int, value ui
 	return buf, 0, 0, nil
 }
 
+// DecodeBinaryUvarint decodes a value encoded with binary.PutUvarint. It
+// returns the length of the encoded varint and value.
+func DecodeBinaryUvarint(buf []byte) (remaining []byte, length int, value uint64, err error) {
+	i, n := binary.Uvarint(buf)
+	if n <= 0 {
+		return buf, 0, 0, errors.New("buffer too small")
+	}
+	return buf[n:], n, i, nil
+}
+
 // PeekLengthNonsortingUvarint returns the length of the value that starts at
 // the beginning of buf and was encoded by EncodeNonsortingUvarint.
 func PeekLengthNonsortingUvarint(buf []byte) int {
@@ -1351,7 +1364,7 @@ func DecodeDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err error) {
 		return b, apd.Decimal{}, err
 	}
 	var i uint64
-	b, _, i, err = DecodeNonsortingUvarint(b)
+	b, _, i, err = DecodeBinaryUvarint(b)
 	if err != nil {
 		return b, apd.Decimal{}, err
 	}
@@ -1424,8 +1437,11 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		return typeOffset, dataOffset + n, err
 	case Float:
 		return typeOffset, dataOffset + floatValueEncodedLength, nil
-	case Bytes, Decimal:
+	case Bytes:
 		_, n, i, err := DecodeNonsortingUvarint(b)
+		return typeOffset, dataOffset + n + int(i), err
+	case Decimal:
+		_, n, i, err := DecodeBinaryUvarint(b)
 		return typeOffset, dataOffset + n + int(i), err
 	case Time:
 		n, err := getMultiNonsortingVarintLen(b, 2)
@@ -1458,7 +1474,7 @@ func UpperBoundValueEncodingSize(colID uint32, typ Type, size int) (int, bool) {
 		return 0, false
 	case Decimal:
 		if size > 0 {
-			return len(encodedTag) + maxVarintSize + upperBoundNonsortingDecimalUnscaledSize(size), true
+			return len(encodedTag) + maxBinaryUvarintSize + upperBoundNonsortingDecimalUnscaledSize(size), true
 		}
 		return 0, false
 	case Time:

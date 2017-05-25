@@ -1751,7 +1751,7 @@ func TestUpperBoundValueEncodingSize(t *testing.T) {
 		{colID: 0, typ: Int, width: 100, size: 10},
 		{colID: 0, typ: Float, size: 9},
 		{colID: 0, typ: Decimal, size: -1},
-		{colID: 0, typ: Decimal, width: 100, size: 68},
+		{colID: 0, typ: Decimal, width: 100, size: 69},
 		{colID: 0, typ: Time, size: 19},
 		{colID: 0, typ: Duration, size: 28},
 		{colID: 0, typ: Bytes, size: -1},
