@@ -111,34 +111,6 @@ func SeverityByName(s string) (Severity, bool) {
 	return 0, false
 }
 
-// colorProfile defines escape sequences which provide color in
-// terminals. Some terminals support 8 colors, some 256, others
-// none at all.
-type colorProfile struct {
-	infoPrefix  []byte
-	warnPrefix  []byte
-	errorPrefix []byte
-	timePrefix  []byte
-}
-
-var colorReset = []byte("\033[0m")
-
-// For terms with 8-color support.
-var colorProfile8 = &colorProfile{
-	infoPrefix:  []byte("\033[0;36;49m"),
-	warnPrefix:  []byte("\033[0;33;49m"),
-	errorPrefix: []byte("\033[0;31;49m"),
-	timePrefix:  []byte("\033[2;37;49m"),
-}
-
-// For terms with 256-color support.
-var colorProfile256 = &colorProfile{
-	infoPrefix:  []byte("\033[38;5;33m"),
-	warnPrefix:  []byte("\033[38;5;214m"),
-	errorPrefix: []byte("\033[38;5;160m"),
-	timePrefix:  []byte("\033[38;5;246m"),
-}
-
 // Level is exported because it appears in the arguments to V and is
 // the type of the v flag, which can be set programmatically.
 // It's a distinct type because we want to discriminate it from logType.
@@ -449,10 +421,10 @@ type flushSyncWriter interface {
 // 	file             The file name
 // 	line             The line number
 // 	msg              The user-supplied message
-func formatHeader(
+func (l *loggingT) formatHeader(
 	s Severity, now time.Time, gid int, file string, line int, colors *colorProfile,
 ) *buffer {
-	buf := logging.getBuffer()
+	buf := l.getBuffer()
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits
 	}
@@ -567,8 +539,8 @@ func (buf *buffer) someDigits(i, d int) int {
 	return copy(buf.tmp[i:], buf.tmp[j:])
 }
 
-func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
-	buf := formatHeader(entry.Severity, time.Unix(0, entry.Time),
+func (l *loggingT) formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
+	buf := l.formatHeader(entry.Severity, time.Unix(0, entry.Time),
 		int(entry.Goroutine), entry.File, int(entry.Line), colors)
 	_, _ = buf.WriteString(entry.Message)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
@@ -623,10 +595,6 @@ func SetSync(sync bool) {
 
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
-	nocolor         bool          // The -nocolor flag.
-	hasColorProfile bool          // True if the color profile has been determined
-	colorProfile    *colorProfile // Set via call to getTermColorProfile
-
 	noStderrRedirect bool
 
 	// Level flag for output to stderr. Handled atomically.
@@ -727,13 +695,56 @@ func (l *loggingT) putBuffer(b *buffer) {
 	l.freeListMu.Unlock()
 }
 
+// outputLogEntryInner executes the criticial section
+// of outputLogEntry()
+func (l *loggingT) outputLogEntryInner(s Severity, now time.Time, entry Entry, stacks []byte) {
+	buf := l.formatLogEntry(entry, stacks, nil)
+
+	l.mu.Lock()
+	if s >= l.stderrThreshold.get() {
+		stderrBuf := buf
+		if stderrColorProfile != nil {
+			stderrBuf = l.formatLogEntry(entry, stacks, stderrColorProfile)
+		}
+		if _, err := OrigStderr.Write(stderrBuf.Bytes()); err != nil {
+			l.mu.Unlock()
+			l.exit(err)
+		}
+		if stderrColorProfile != nil {
+			l.putBuffer(stderrBuf)
+		}
+	}
+	if logDir.isSet() && s >= l.fileThreshold.get() {
+		data := buf.Bytes()
+		if l.file == nil {
+			if err := l.createFile(now); err != nil {
+				// Make sure the message appears somewhere.
+				_, _ = OrigStderr.Write(data)
+				l.mu.Unlock()
+				l.exit(err)
+				return
+			}
+		}
+		if _, err := l.file.Write(data); err != nil {
+			// Make sure the message appears somewhere.
+			_, _ = OrigStderr.Write(data)
+			l.mu.Unlock()
+			l.exit(err)
+		}
+		if l.syncWrites {
+			_ = l.file.Flush()
+			_ = l.file.Sync()
+		}
+	}
+	l.mu.Unlock()
+
+	l.putBuffer(buf)
+}
+
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
 func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string) {
-	// TODO(tschottdorf): this is a pretty horrible critical section.
-	l.mu.Lock()
-
 	// Set additional details in log entry.
 	now := time.Now()
 	entry := Entry{
@@ -760,100 +771,21 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		}
 	}
 
-	if s >= l.stderrThreshold.get() {
-		l.outputToStderr(entry, stacks)
-	}
-	if logDir.isSet() && s >= l.fileThreshold.get() {
-		if l.file == nil {
-			if err := l.createFile(); err != nil {
-				// Make sure the message appears somewhere.
-				l.outputToStderr(entry, stacks)
-				l.mu.Unlock()
-				l.exit(err)
-				return
-			}
-		}
+	l.outputLogEntryInner(s, now, entry, stacks)
 
-		buf := l.processForFile(entry, stacks)
-		data := buf.Bytes()
-
-		if _, err := l.file.Write(data); err != nil {
-			panic(err)
-		}
-		if l.syncWrites {
-			_ = l.file.Flush()
-			_ = l.file.Sync()
-		}
-
-		l.putBuffer(buf)
-	}
-	exitFunc := l.exitFunc
-	l.mu.Unlock()
 	// Flush and exit on fatal logging.
 	if s == Severity_FATAL {
 		// If we got here via Exit rather than Fatal, print no stacks.
 		timeoutFlush(10 * time.Second)
+		l.mu.Lock()
+		exitFunc := l.exitFunc
+		l.mu.Unlock()
 		if atomic.LoadUint32(&fatalNoStacks) > 0 {
 			exitFunc(1)
 		} else {
 			exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
 		}
 	}
-}
-
-func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
-	buf := l.processForStderr(entry, stacks)
-	if _, err := OrigStderr.Write(buf.Bytes()); err != nil {
-		panic(err)
-	}
-	l.putBuffer(buf)
-}
-
-// processForStderr formats a log entry for output to standard error.
-func (l *loggingT) processForStderr(entry Entry, stacks []byte) *buffer {
-	return formatLogEntry(entry, stacks, l.getTermColorProfile())
-}
-
-// processForFile formats a log entry for output to a file.
-func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
-	return formatLogEntry(entry, stacks, nil)
-}
-
-// checkForColorTerm attempts to verify that stderr is a character
-// device and if so, that the terminal supports color output.
-func (l *loggingT) getTermColorProfile() *colorProfile {
-	if !l.hasColorProfile {
-		l.hasColorProfile = true
-		if !l.nocolor {
-			fi, err := OrigStderr.Stat() // get the FileInfo struct describing the standard input.
-			if err != nil {
-				// Stat() will return an error on Windows in both Powershell and
-				// console until go1.9. See https://github.com/golang/go/issues/14853.
-				//
-				// Note that this bug does not affect MSYS/Cygwin terminals.
-				//
-				// TODO(bram): remove this hack once we move to go 1.9.
-				//
-				// Console does not support our color profiles but
-				// Powershell supports colorProfile256. Sadly, detecting the
-				// shell is not well supported, so default to no-color.
-				if runtime.GOOS != "windows" {
-					panic(err)
-				}
-				return l.colorProfile
-			}
-			if (fi.Mode() & os.ModeCharDevice) != 0 {
-				term := os.Getenv("TERM")
-				switch term {
-				case "ansi", "xterm-color", "screen":
-					l.colorProfile = colorProfile8
-				case "xterm-256color", "screen-256color":
-					l.colorProfile = colorProfile256
-				}
-			}
-		}
-	}
-	return l.colorProfile
 }
 
 // timeoutFlush calls Flush and returns when it completes or after timeout
@@ -987,7 +919,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		// viewers that attempt to guess the character encoding.
 		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713\n"),
 	} {
-		buf := formatLogEntry(Entry{
+		buf := logging.formatLogEntry(Entry{
 			Severity:  Severity_INFO,
 			Time:      now.UnixNano(),
 			Goroutine: goid.Get(),
@@ -1030,17 +962,17 @@ func (l *loggingT) closeFileLocked() error {
 
 // createFile creates the log file.
 // l.mu is held.
-func (l *loggingT) createFile() error {
-	now := time.Now()
-	if l.file == nil {
-		sb := &syncBuffer{
-			logger: l,
-		}
-		if err := sb.rotateFile(now); err != nil {
-			return err
-		}
-		l.file = sb
+func (l *loggingT) createFile(now time.Time) error {
+	if l.file != nil {
+		return nil
 	}
+	sb := &syncBuffer{
+		logger: l,
+	}
+	if err := sb.rotateFile(now); err != nil {
+		return err
+	}
+	l.file = sb
 	return nil
 }
 
