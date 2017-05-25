@@ -2534,9 +2534,12 @@ func (r *Replica) AdminSplit(
 	}
 	for retryable := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); retryable.Next(); {
 		reply, _, pErr := r.adminSplitWithDescriptor(ctx, args, r.Desc())
-		// On seeing a ConditionFailedError, retry the command with the
-		// updated descriptor.
-		if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
+		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
+		// command with the updated descriptor.
+		switch pErr.GetDetail().(type) {
+		case *roachpb.ConditionFailedError:
+		case *roachpb.AmbiguousResultError:
+		default:
 			return reply, pErr
 		}
 	}
