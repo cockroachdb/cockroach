@@ -6,7 +6,7 @@ import { StickyContainer } from "react-sticky";
 import { TitledComponent } from "src/interfaces/layout";
 import NavigationBar from "src/components/layoutSidebar";
 import TimeWindowManager from "src/containers/timewindow";
-import AlertBanner from "./alertBanner";
+import AlertBanner from "src/containers/alertBanner";
 
 function isTitledComponent(obj: Object | TitledComponent): obj is TitledComponent {
   return obj && _.isFunction((obj as TitledComponent).title);

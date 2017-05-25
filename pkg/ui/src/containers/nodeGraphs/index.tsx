@@ -15,7 +15,7 @@ import GraphGroup from "src/components/graphGroup";
 import {
   SummaryBar, SummaryLabel, SummaryStat, SummaryStatMessage, SummaryStatBreakdown, SummaryMetricStat,
 } from "src/components/summaryBar";
-import Alerts from "./alerts";
+import Alerts from "src/containers/alerts";
 import { Axis, AxisUnits } from "src/components/graphs";
 import { LineGraph } from "src/components/linegraph";
 import { Metric } from "src/components/metric";

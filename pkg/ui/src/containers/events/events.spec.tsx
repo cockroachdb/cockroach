@@ -6,7 +6,7 @@ import Long from "long";
 import * as sinon from "sinon";
 
 import * as protos from  "src/js/protos";
-import { EventBoxUnconnected as EventBox, EventRow, getEventInfo } from "./events";
+import { EventBoxUnconnected as EventBox, EventRow, getEventInfo } from "src/containers/events";
 import { refreshEvents } from "src/redux/apiReducers";
 import { allEvents } from "src/util/eventTypes";
 

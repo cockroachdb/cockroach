@@ -6,9 +6,9 @@ import { findChildrenOfType } from "src/util/find";
 import {
   MetricsDataComponentProps, Axis, AxisProps, ConfigureLineChart, InitLineChart,
   updateLinkedGuidelines,
-} from "./graphs";
-import { Metric, MetricProps } from "./metric";
-import Visualization from "./visualization";
+} from "src/components/graphs";
+import { Metric, MetricProps } from "src/components/metric";
+import Visualization from "src/components/visualization";
 
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;

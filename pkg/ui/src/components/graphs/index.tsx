@@ -10,7 +10,7 @@ import { NanoToMilli } from "src/util/convert";
 import { Bytes, ComputePrefixExponent, Duration, kibi } from "src/util/format";
 import { QueryTimeInfo } from "src/containers/metricsDataProvider";
 
-import { MetricProps } from "./metric";
+import { MetricProps } from "src/components/metric";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
