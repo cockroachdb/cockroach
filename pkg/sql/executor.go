@@ -570,41 +570,6 @@ func (session *Session) CopyEnd(ctx context.Context) {
 	session.copyFrom = nil
 }
 
-// blockConfigUpdates blocks any gossip updates to the system config
-// until the unlock function returned is called. Useful in tests.
-func (e *Executor) blockConfigUpdates() func() {
-	e.systemConfigCond.L.Lock()
-	return func() {
-		e.systemConfigCond.L.Unlock()
-	}
-}
-
-// blockConfigUpdatesMaybe will ask the Executor to block config updates,
-// so that checkTestingVerifyMetadataInitialOrDie() can later be run.
-// The point is to lock the system config so that no gossip updates sneak in
-// under us, so that we're able to assert that the verify callback only succeeds
-// after a gossip update.
-//
-// It returns an unblock function which can be called after
-// checkTestingVerifyMetadata{Initial}OrDie() has been called.
-//
-// This lock does not change semantics. Even outside of tests, the Executor uses
-// static systemConfig for a user request, so locking the Executor's
-// systemConfig cannot change the semantics of the SQL operation being performed
-// under lock.
-func (e *Executor) blockConfigUpdatesMaybe() func() {
-	if !e.cfg.TestingKnobs.WaitForGossipUpdate {
-		return func() {}
-	}
-	return e.blockConfigUpdates()
-}
-
-// waitForConfigUpdate blocks the caller until a new SystemConfig is received
-// via gossip. This can only be called after blockConfigUpdates().
-func (e *Executor) waitForConfigUpdate() {
-	e.systemConfigCond.Wait()
-}
-
 // execRequest executes the request in the provided Session.
 // It parses the sql into statements, iterates through the statements, creates
 // KV transactions and automatically retries them when possible, and executes
@@ -673,8 +638,20 @@ func (e *Executor) execParsed(
 		return res
 	}
 
-	// If the Executor wants config updates to be blocked, then block them.
-	defer e.blockConfigUpdatesMaybe()()
+	// If the Executor wants config updates to be blocked, then block them so
+	// that checkTestingVerifyMetadataInitialOrDie() can later be run. The
+	// point is to lock the system config so that no gossip updates sneak in
+	// under us, so that we're able to assert that the verify callback only
+	// succeeds after a gossip update.
+	//
+	// This lock does not change semantics. Even outside of tests, the Executor uses
+	// static systemConfig for a user request, so locking the Executor's
+	// systemConfig cannot change the semantics of the SQL operation being performed
+	// under lock.
+	if e.cfg.TestingKnobs.WaitForGossipUpdate {
+		e.systemConfigCond.L.Lock()
+		defer e.systemConfigCond.L.Unlock()
+	}
 
 	for len(stmts) > 0 {
 		// Each iteration consumes a transaction's worth of statements.
@@ -848,24 +825,47 @@ func (e *Executor) execParsed(
 			txnState.finishSQLTxn(session.context)
 		}
 
+		// Verify that the metadata callback fails, if one was set. This is
+		// the precondition for validating that we need a gossip update for
+		// the callback to eventually succeed. Note that we are careful to
+		// check this just once per metadata callback (setting the callback
+		// clears session.verifyFnCheckedOnce).
+		if e.cfg.TestingKnobs.WaitForGossipUpdate {
+			if fn := session.testingVerifyMetadataFn; fn != nil && !session.verifyFnCheckedOnce {
+				if fn(e.systemConfig) == nil {
+					panic(fmt.Sprintf(
+						"expected %q (or the statements before them) to require a "+
+							"gossip update, but they did not", stmts))
+				}
+				session.verifyFnCheckedOnce = true
+			}
+		}
+
 		// If the txn is in any state but Open, exec the schema changes. They'll
 		// short-circuit themselves if the mutation that queued them has been
 		// rolled back from the table descriptor.
-		stmtsExecuted := stmts[:len(stmtsToExec)-len(remainingStmts)]
 		if txnState.State != Open {
-			session.checkTestingVerifyMetadataInitialOrDie(e, stmts)
-			session.checkTestingVerifyMetadataOrDie(e, stmtsExecuted)
+			// Verify that metadata callback eventually succeeds, if one was
+			// set.
+			if e.cfg.TestingKnobs.WaitForGossipUpdate {
+				if fn := session.testingVerifyMetadataFn; fn != nil {
+					if !session.verifyFnCheckedOnce {
+						panic("initial state of the condition to verify was not checked")
+					}
+
+					for fn(e.systemConfig) != nil {
+						e.systemConfigCond.Wait()
+					}
+
+					session.testingVerifyMetadataFn = nil
+				}
+			}
 
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
 			session.leases.releaseLeases(session.Ctx())
 			txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, session, res.ResultList)
-		} else {
-			// We're still in a txn, so we only check that the verifyMetadata callback
-			// fails the first time it's run. The gossip update that will make the
-			// callback succeed only happens when the txn is done.
-			session.checkTestingVerifyMetadataInitialOrDie(e, stmtsExecuted)
 		}
 
 		// Figure out what statements to run on the next iteration.
