@@ -3841,7 +3841,13 @@ func (r *Replica) adminScatter(
 	rangeDesc := *r.Desc()
 
 	rng := rand.New(rand.NewSource(rand.Int63()))
-	stores := r.store.cfg.StorePool.GetStores()
+
+	sl, _, _ := r.store.cfg.StorePool.getStoreList(roachpb.RangeID(0), storeFilterNone)
+	stores := make([]roachpb.ReplicationTarget, len(sl.stores))
+	for i, sd := range sl.stores {
+		stores[i].StoreID = sd.StoreID
+		stores[i].NodeID = sd.Node.NodeID
+	}
 
 	// Choose three random stores.
 	// TODO(radu): this is a toy implementation; we need to get a real

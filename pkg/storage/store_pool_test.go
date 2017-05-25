@@ -139,11 +139,12 @@ func verifyStoreList(
 	constraints config.Constraints,
 	rangeID roachpb.RangeID,
 	expected []int,
+	filter storeFilter,
 	expectedAliveStoreCount int,
 	expectedThrottledStoreCount int,
 ) error {
 	var actual []int
-	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(rangeID)
+	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(rangeID, filter)
 	sl = sl.filter(constraints)
 	if aliveStoreCount != expectedAliveStoreCount {
 		return errors.Errorf("expected AliveStoreCount %d does not match actual %d",
@@ -176,7 +177,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	constraints := config.Constraints{Constraints: []config.Constraint{{Value: "ssd"}, {Value: "dc"}}}
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
-	sl, _, _ := sp.getStoreList(roachpb.RangeID(0))
+	sl, _, _ := sp.getStoreList(roachpb.RangeID(0), storeFilterNone)
 	sl = sl.filter(constraints)
 	if len(sl.stores) != 0 {
 		t.Errorf("expected no stores, instead %+v", sl.stores)
@@ -264,6 +265,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 			int(declinedStore.StoreID),
 			int(corruptReplicaStore.StoreID),
 		},
+		storeFilterNone,
 		/* expectedAliveStoreCount */ 7,
 		/* expectedThrottledStoreCount */ 0,
 	); err != nil {
@@ -290,7 +292,24 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		[]int{
 			int(matchingStore.StoreID),
 			int(supersetStore.StoreID),
+			int(declinedStore.StoreID),
 		},
+		storeFilterNone,
+		/* expectedAliveStoreCount */ 6,
+		/* expectedThrottledStoreCount */ 1,
+	); err != nil {
+		t.Error(err)
+	}
+
+	if err := verifyStoreList(
+		sp,
+		constraints,
+		corruptedRangeID,
+		[]int{
+			int(matchingStore.StoreID),
+			int(supersetStore.StoreID),
+		},
+		storeFilterThrottled,
 		/* expectedAliveStoreCount */ 6,
 		/* expectedThrottledStoreCount */ 1,
 	); err != nil {
@@ -428,7 +447,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 		t.Errorf("expected 0 live and 0 dead replicas; got %v and %v", liveReplicas, deadReplicas)
 	}
 
-	sl, alive, throttled := sp.getStoreList(roachpb.RangeID(0))
+	sl, alive, throttled := sp.getStoreList(roachpb.RangeID(0), storeFilterNone)
 	if len(sl.stores) > 0 {
 		t.Errorf("expected no live stores; got list of %v", sl)
 	}
