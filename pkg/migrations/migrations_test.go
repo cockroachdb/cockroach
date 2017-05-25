@@ -400,6 +400,8 @@ func TestLeaseExpiration(t *testing.T) {
 	exitCalled := make(chan bool)
 	log.SetExitFunc(func(int) { exitCalled <- true })
 	defer log.SetExitFunc(os.Exit)
+	// Disable stack traces to make the test output in teamcity less deceiving.
+	defer log.DisableTracebacks()()
 
 	waitForExitMigration := migrationDescriptor{
 		name: "wait for exit to be called",
