@@ -217,11 +217,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.db = client.NewDB(s.txnCoordSender, s.clock)
 
-	nlActive, nlRenewal := storage.NodeLivenessDurations(
+	active, renewal := storage.NodeLivenessDurations(
 		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))
-
 	s.nodeLiveness = storage.NewNodeLiveness(
-		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, nlActive, nlRenewal,
+		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, active, renewal,
 	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
@@ -338,9 +337,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, s.cfg.TimeSeriesServerConfig, s.stopper)
 
-	rlActive, rlRenewal := storage.RangeLeaseDurations(
-		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))
-
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
 		AmbientCtx:                     s.cfg.AmbientCtx,
@@ -363,8 +359,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			LeaseManager: s.leaseMgr,
 		},
 		LogRangeEvents:            s.cfg.EventLogEnabled,
-		RangeLeaseActiveDuration:  rlActive,
-		RangeLeaseRenewalDuration: rlRenewal,
+		RangeLeaseActiveDuration:  active,
+		RangeLeaseRenewalDuration: renewal,
 		TimeSeriesDataStore:       s.tsDB,
 
 		EnableEpochRangeLeases: true,
