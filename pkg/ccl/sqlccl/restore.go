@@ -759,23 +759,12 @@ func Restore(
 				req := &roachpb.AdminScatterRequest{
 					Span: roachpb.Span{Key: span.Key, EndKey: span.EndKey},
 				}
-				res, pErr := client.SendWrapped(scatterCtx, db.GetSender(), req)
-				if pErr != nil {
-					return pErr.GoError()
-				}
-				// Scatter is best-effort, so log why any individual ranges
-				// didn't get scattered.
-				for _, r := range res.(*roachpb.AdminScatterResponse).Ranges {
-					if r.Error != nil {
-						log.Warningf(scatterCtx, "error scattering range [%s,%s): %+v",
-							r.Span.Key, r.Span.EndKey, r.Error.GoError())
-					}
-				}
-				return nil
+				_, pErr := client.SendWrapped(scatterCtx, db.GetSender(), req)
+				return pErr.GoError()
 			})
 		}
 		if err := g.Wait(); err != nil {
-			return failed, errors.Wrapf(err, "scattering %d ranges", len(importRequests))
+			log.Errorf(ctx, "failed scattering %d ranges: %s", len(importRequests), err)
 		}
 		log.Eventf(ctx, "scattered lease holders for %d key spans", len(newSpans))
 	}
