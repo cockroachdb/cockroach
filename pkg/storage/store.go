@@ -78,11 +78,11 @@ const (
 
 	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
-	rangeLeaseRaftElectionTimeoutMultiplier = 1.5
+	rangeLeaseRaftElectionTimeoutMultiplier = 3
 
 	// rangeLeaseRenewalFraction specifies what fraction the range lease renewal
 	// duration should be of the range lease active time.
-	rangeLeaseRenewalFraction = 0.5
+	rangeLeaseRenewalFraction = 0.8
 
 	// livenessRenewalFraction specifies what fraction the node liveness renewal
 	// duration should be of the node liveness duration.
@@ -148,8 +148,8 @@ func RaftElectionTimeout(
 func RangeLeaseDurations(
 	raftElectionTimeout time.Duration,
 ) (rangeLeaseActive time.Duration, rangeLeaseRenewal time.Duration) {
-	rangeLeaseActive = time.Duration(rangeLeaseRaftElectionTimeoutMultiplier * float64(raftElectionTimeout))
-	rangeLeaseRenewal = time.Duration(float64(rangeLeaseActive) * rangeLeaseRenewalFraction)
+	rangeLeaseActive = rangeLeaseRaftElectionTimeoutMultiplier * raftElectionTimeout
+	rangeLeaseRenewal = time.Duration(float64(rangeLeaseActive) * (1 - rangeLeaseRenewalFraction))
 	return
 }
 
