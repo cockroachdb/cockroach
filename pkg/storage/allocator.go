@@ -369,8 +369,9 @@ func (a Allocator) RebalanceTarget(
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	rangeID roachpb.RangeID,
+	filter storeFilter,
 ) *roachpb.StoreDescriptor {
-	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterThrottled)
+	sl, _, _ := a.storePool.getStoreList(rangeID, filter)
 
 	existingCandidates, candidates := rebalanceCandidates(
 		ctx,
@@ -427,6 +428,7 @@ func (a *Allocator) TransferLeaseTarget(
 	stats *replicaStats,
 	checkTransferLeaseSource bool,
 	checkCandidateFullness bool,
+	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
 	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
 	sl = sl.filter(constraints)
@@ -462,7 +464,9 @@ func (a *Allocator) TransferLeaseTarget(
 	// Try to pick a replica to transfer the lease to while also determining
 	// whether we actually should be transferring the lease. The transfer
 	// decision is only needed if we've been asked to check the source.
-	transferDec, repl := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
+	transferDec, repl := a.shouldTransferLeaseUsingStats(
+		ctx, sl, source, existing, stats, alwaysAllowDecisionWithoutStats,
+	)
 	if checkTransferLeaseSource {
 		switch transferDec {
 		case shouldNotTransfer:
@@ -525,7 +529,9 @@ func (a *Allocator) ShouldTransferLease(
 		log.Infof(ctx, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 	}
 
-	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
+	transferDec, _ := a.shouldTransferLeaseUsingStats(
+		ctx, sl, source, existing, stats, false, /* alwaysAllowDecisionWithoutStats */
+	)
 	var result bool
 	switch transferDec {
 	case shouldNotTransfer:
@@ -550,6 +556,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 	stats *replicaStats,
+	alwaysAllowDecisionWithoutStats bool,
 ) (transferDecision, roachpb.ReplicaDescriptor) {
 	// Only use load-based rebalancing if it's enabled and we have both
 	// stats and locality information to base our decision on.
@@ -565,12 +572,16 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 
 	requestCounts, requestCountsDur := stats.getRequestCounts()
 
-	// If we haven't yet accumulated enough data, avoid transferring for now. Do
-	// not fall back to the algorithm that doesn't use stats, since it can easily
-	// start fighting with the stats-based algorithm. This provides some amount of
-	// safety from lease thrashing, since leases cannot transfer more frequently
-	// than this threshold (because replica stats get reset upon lease transfer).
+	// If we haven't yet accumulated enough data, avoid transferring for now,
+	// unless we've been explicitly asked otherwise. Do not fall back to the
+	// algorithm that doesn't use stats, since it can easily start fighting with
+	// the stats-based algorithm. This provides some amount of safety from lease
+	// thrashing, since leases cannot transfer more frequently than this threshold
+	// (because replica stats get reset upon lease transfer).
 	if requestCountsDur < MinLeaseTransferStatsDuration {
+		if alwaysAllowDecisionWithoutStats {
+			return decideWithoutStats, roachpb.ReplicaDescriptor{}
+		}
 		return shouldNotTransfer, roachpb.ReplicaDescriptor{}
 	}
 

@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -3861,48 +3860,153 @@ func RelocateRange(
 	return nil
 }
 
+func doScatter(ctx context.Context, repl *Replica) error {
+	desc := repl.Desc()
+
+	sysCfg, _ := repl.store.cfg.Gossip.GetSystemConfig()
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
+	if err != nil {
+		return err
+	}
+
+	// XXX: These retry settings are pulled from nowhere.
+	const maxAttempts = 5
+	retryOptions := retry.Options{
+		InitialBackoff:      time.Second,
+		MaxBackoff:          16 * time.Second,
+		RandomizationFactor: .3,
+	}
+
+	// Start rebalancing by adding replicas of this range to the stores the
+	// allocator tells us to, if any exist.
+	maybeMoreWorkErr := errors.New("allocator may request suggest additional rebalance targets")
+	if err := retry.WithMaxAttempts(ctx, retryOptions, maxAttempts, func() error {
+		// Get an updated range descriptor, as we might sleep for several seconds
+		// between retries.
+		desc = repl.Desc()
+
+		targetStore := repl.store.allocator.RebalanceTarget(
+			ctx,
+			zone.Constraints,
+			desc.Replicas,
+			desc.RangeID,
+			storeFilterNone,
+		)
+		if targetStore == nil {
+			if log.V(2) {
+				log.Infof(ctx, "scatter: no rebalance targets found, moving on")
+			}
+			return nil
+		}
+		if log.V(2) {
+			log.Infof(ctx, "scatter: found rebalance target: %v", targetStore)
+		}
+
+		replicationTarget := roachpb.ReplicationTarget{
+			NodeID:  targetStore.Node.NodeID,
+			StoreID: targetStore.StoreID,
+		}
+		if err := repl.changeReplicas(
+			ctx, roachpb.ADD_REPLICA, replicationTarget, desc, SnapshotRequest_REBALANCE,
+		); err != nil {
+			if log.V(2) {
+				log.Infof(ctx, "scatter: unable to add replica to %v: %s", targetStore, err)
+			}
+			return err
+		}
+
+		return maybeMoreWorkErr
+	}); err != nil && err != maybeMoreWorkErr {
+		return err
+	}
+
+	// Then, transfer our lease away, if the allocator wants us to.
+	if err := retry.WithMaxAttempts(ctx, retryOptions, maxAttempts, func() error {
+		lease, _ := repl.getLease()
+		if !repl.IsLeaseValid(lease, repl.store.Clock().Now()) {
+			// We assume that, if we no longer have the lease, the replicate queue has
+			// already transferred it away to balance the cluster.
+			return nil
+		}
+
+		candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
+		target := repl.store.allocator.TransferLeaseTarget(
+			ctx,
+			zone.Constraints,
+			candidates,
+			repl.store.StoreID(),
+			desc.RangeID,
+			repl.stats,
+			true, /* checkTransferLeaseSource */
+			true, /* checkCandidateFullness */
+			true, /* alwaysAllowDecisionWithoutStats */
+		)
+
+		if target == (roachpb.ReplicaDescriptor{}) {
+			if log.V(2) {
+				log.Infof(ctx, "scatter: no lease transfer targets found, moving on")
+			}
+			return nil
+		}
+
+		if log.V(2) {
+			log.Infof(ctx, "scatter: attempting to transfer lease to s%d", target.StoreID)
+		}
+		if err := repl.AdminTransferLease(ctx, target.StoreID); err != nil {
+			if log.V(2) {
+				log.Infof(ctx, "scatter: unable to transfer lease to s%d: %s", target.StoreID, err)
+			}
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Wait for the new leaseholder's replicate queue to downreplicate the range
+	// to the appropriate replication factor. Issuing REMOVE_REPLICA requests here
+	// would be dangerous, as we'd race with the replicate queue and potentially
+	// cause underreplication.
+	if err := retry.WithMaxAttempts(ctx, retryOptions, maxAttempts, func() error {
+		// Get an updated range descriptor, as we might sleep for several seconds
+		// between retries.
+		desc = repl.Desc()
+
+		action, _ := repl.store.allocator.ComputeAction(ctx, zone, desc)
+		if action != AllocatorNoop {
+			if log.V(2) {
+				log.Infof(ctx, "scatter: allocator requests action %s, sleeping and retrying", action)
+			}
+			return errors.Errorf("scatter: allocator still requests action %s", action)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // adminScatter moves replicas and leaseholders for a selection of ranges.
 // Scatter is best-effort; ranges that cannot be moved will include an error
 // detail in the response and won't fail the request.
 func (r *Replica) adminScatter(
 	ctx context.Context, args roachpb.AdminScatterRequest,
 ) (roachpb.AdminScatterResponse, error) {
-	db := r.store.DB()
-	rangeDesc := *r.Desc()
-
-	rng := rand.New(rand.NewSource(rand.Int63()))
-
-	sl, _, _ := r.store.cfg.StorePool.getStoreList(roachpb.RangeID(0), storeFilterNone)
-	stores := make([]roachpb.ReplicationTarget, len(sl.stores))
-	for i, sd := range sl.stores {
-		stores[i].StoreID = sd.StoreID
-		stores[i].NodeID = sd.Node.NodeID
+	// The response purposely uses the start and end keys from when the scatter
+	// began so that the caller has a pessimistic span to retry, if it so chooses.
+	desc := r.Desc()
+	err := doScatter(ctx, r)
+	if log.V(2) && err != nil {
+		log.Warningf(ctx, "unable to scatter: %s", err)
 	}
-
-	// Choose three random stores.
-	// TODO(radu): this is a toy implementation; we need to get a real
-	// recommendation based on the zone config.
-	num := 3
-	if num > len(stores) {
-		num = len(stores)
-	}
-	for i := 0; i < num; i++ {
-		j := i + rng.Intn(len(stores)-i)
-		stores[i], stores[j] = stores[j], stores[i]
-	}
-	targets := stores[:num]
-
-	relocateErr := RelocateRange(ctx, db, rangeDesc, targets)
-
-	res := roachpb.AdminScatterResponse{
+	return roachpb.AdminScatterResponse{
 		Ranges: []roachpb.AdminScatterResponse_Range{{
 			Span: roachpb.Span{
-				Key:    rangeDesc.StartKey.AsRawKey(),
-				EndKey: rangeDesc.EndKey.AsRawKey(),
+				Key:    desc.StartKey.AsRawKey(),
+				EndKey: desc.EndKey.AsRawKey(),
 			},
-			Error: roachpb.NewError(relocateErr),
+			Error: roachpb.NewError(err),
 		}},
-	}
-
-	return res, nil
+	}, nil
 }

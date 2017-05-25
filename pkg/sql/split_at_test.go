@@ -145,14 +145,9 @@ func TestSplitAt(t *testing.T) {
 
 func TestScatter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#14955")
 
 	const numHosts = 4
-	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{
-		// TODO(radu): this test should be reliable in automatic mode as well;
-		// remove this when that is the case (#15003).
-		ReplicationMode: base.ReplicationManual,
-	})
+	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.TODO())
 
 	sqlutils.CreateTable(
