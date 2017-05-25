@@ -2,7 +2,7 @@ import Select from "react-select";
 import React from "react";
 import _ from "lodash";
 
-import {leftArrow, rightArrow} from "./icons";
+import {leftArrow, rightArrow} from "src/components/icons";
 import { trustIcon } from "src/util/trust";
 
 export interface DropdownOption {

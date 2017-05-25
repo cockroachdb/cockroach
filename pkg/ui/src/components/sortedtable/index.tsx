@@ -2,7 +2,7 @@ import React from "react";
 import _ from "lodash";
 import { createSelector } from "reselect";
 
-import { SortableTable, SortableColumn, SortSetting } from "./sortabletable";
+import { SortableTable, SortableColumn, SortSetting } from "src/components/sortabletable";
 
 /**
  * ColumnDescriptor is used to describe metadata about an individual column

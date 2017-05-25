@@ -3,7 +3,7 @@ const spinner = require<string>("assets/spinner.gif");
 
 import React from "react";
 import classNames from "classnames";
-import { ToolTipWrapper } from "./toolTip";
+import { ToolTipWrapper } from "src/components/toolTip";
 
 interface VisualizationProps {
   title: string;
