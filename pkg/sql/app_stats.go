@@ -313,3 +313,32 @@ func HashAppName(appName string) string {
 func (e *Executor) ResetStatementStats(ctx context.Context) {
 	e.sqlStats.resetStats(ctx)
 }
+
+// FillUnimplementedErrorCounts fills the passed map with the executor's current
+// counts of how often individual unimplemented features have been encountered.
+func (e *Executor) FillUnimplementedErrorCounts(fill map[string]uint) {
+	e.unimplementedErrors.Lock()
+	for k, v := range e.unimplementedErrors.counts {
+		fill[k] = v
+	}
+	e.unimplementedErrors.Unlock()
+}
+
+func (e *Executor) recordUnimplementedFeature(feature string) {
+	if feature == "" {
+		return
+	}
+	e.unimplementedErrors.Lock()
+	if e.unimplementedErrors.counts == nil {
+		e.unimplementedErrors.counts = make(map[string]uint)
+	}
+	e.unimplementedErrors.counts[feature]++
+	e.unimplementedErrors.Unlock()
+}
+
+// ResetUnimplementedCounts resets counting of unimplemented errors.
+func (e *Executor) ResetUnimplementedCounts() {
+	e.unimplementedErrors.Lock()
+	e.unimplementedErrors.counts = make(map[string]uint, len(e.unimplementedErrors.counts))
+	e.unimplementedErrors.Unlock()
+}

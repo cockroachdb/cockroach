@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/pkg/errors"
 )
 
@@ -59,7 +60,12 @@ type Parser struct {
 func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
 	p.scanner.init(sql)
 	if p.parserImpl.Parse(&p.scanner) != 0 {
-		return nil, errors.New(p.scanner.lastError)
+		if feat := p.scanner.lastError.unimplementedFeature; feat != "" {
+			err := pgerror.NewError(pgerror.CodeFeatureNotSupportedError, p.scanner.lastError.msg)
+			err.InternalCommand = feat
+			return nil, err
+		}
+		return nil, pgerror.NewError(pgerror.CodeSyntaxError, p.scanner.lastError.msg)
 	}
 	return p.scanner.stmts, nil
 }
