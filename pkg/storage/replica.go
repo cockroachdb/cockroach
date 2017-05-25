@@ -1714,7 +1714,7 @@ func (r *Replica) beginCmds(
 		select {
 		case <-ctx.Done():
 			err := ctx.Err()
-			errStr := fmt.Sprintf("%s before command queue: %s", err, ba)
+			errStr := fmt.Sprintf("%s before command queue: %s", err, ba.Summary())
 			log.Warning(ctx, errStr)
 			log.ErrEvent(ctx, errStr)
 			return nil, err
@@ -2257,7 +2257,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		}()
 	}
 
-	log.Event(ctx, "raft")
+	log.Event(ctx, "applied timestamp cache")
 
 	ch, tryAbandon, err := r.propose(ctx, lease, ba, endCmds, spans)
 	if err != nil {
@@ -2502,6 +2502,7 @@ func (r *Replica) propose(
 
 	idKey := makeIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, endCmds, spans)
+	log.Event(proposal.ctx, "evaluated request")
 	// An error here corresponds to a failfast-proposal: The command resulted
 	// in an error and did not need to commit a batch (the common error case).
 	if pErr != nil {
@@ -2543,6 +2544,7 @@ func (r *Replica) propose(
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	log.Event(proposal.ctx, "acquired {raft,replica}mu")
 
 	// NB: We need to check Replica.mu.destroyed again in case the Replica has
 	// been destroyed between the initial check at the beginning of this method
@@ -2601,7 +2603,14 @@ func (r *Replica) isSoloReplicaRLocked() bool {
 }
 
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
-	ctx := r.AnnotateCtx(context.TODO())
+	// Trace if there are other proposals ahead of us; it might explain why
+	// we're taking so long. The -1 avoids counting this proposal itself.
+	//
+	// TODO(irfahsharif): once we have size-based quota, we could log how
+	// much in-flight quota there is - that's more instructive than a number.
+	if numInFlight := len(r.mu.proposals) - 1; numInFlight > 0 && log.HasSpanOrEvent(p.ctx) {
+		log.Eventf(p.ctx, "~%d requests in-flight", numInFlight)
+	}
 
 	data, err := protoutil.Marshal(&p.command)
 	if err != nil {
@@ -2613,7 +2622,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		// EndTransactionRequest with a ChangeReplicasTrigger is special
 		// because raft needs to understand it; it cannot simply be an
 		// opaque command.
-		log.Infof(ctx, "proposing %s %+v: %+v",
+		log.Infof(p.ctx, "proposing %s %+v: %+v",
 			crt.ChangeType, crt.Replica, crt.UpdatedReplicas)
 
 		// Ensure that we aren't trying to remove ourselves from the range without
@@ -2624,7 +2633,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		// before (#12591).
 		if crt.ChangeType == roachpb.REMOVE_REPLICA &&
 			crt.Replica.ReplicaID == r.mu.replicaID {
-			log.Errorf(ctx, "received invalid ChangeReplicasTrigger %+v to remove leaseholder replica %+v",
+			log.Errorf(p.ctx, "received invalid ChangeReplicasTrigger %+v to remove leaseholder replica %+v",
 				crt, r.mu.state)
 			return errors.Errorf("%s: invalid ChangeReplicasTrigger %+v to remove leaseholder replica",
 				r, crt)
@@ -2655,7 +2664,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 
 	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if log.V(4) {
-			log.Infof(ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
+			log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 		}
 		// We're proposing a command so there is no need to wake the leader if we
 		// were quiesced.
