@@ -633,6 +633,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			config.Constraints{},
 			[]roachpb.ReplicaDescriptor{{StoreID: 3}},
 			firstRange,
+			storeFilterThrottled,
 		)
 		if result == nil {
 			i-- // loop until we find 10 candidates
@@ -724,7 +725,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			result := a.RebalanceTarget(
-				ctx, config.Constraints{}, c.existing, firstRange)
+				ctx, config.Constraints{}, c.existing, firstRange, storeFilterThrottled)
 			if c.expected > 0 {
 				if result == nil {
 					t.Fatalf("expected %d, but found nil", c.expected)
@@ -903,6 +904,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			config.Constraints{},
 			[]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}},
 			firstRange,
+			storeFilterThrottled,
 		)
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
@@ -976,7 +978,8 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 				0,
 				nil, /* replicaStats */
 				c.check,
-				true, /* checkCandidateFullness */
+				true,  /* checkCandidateFullness */
+				false, /* !alwaysAllowDecisionWithoutStats */
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1029,7 +1032,8 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 				0,
 				nil, /* replicaStats */
 				c.check,
-				true, /* checkCandidateFullness */
+				true,  /* checkCandidateFullness */
+				false, /* !alwaysAllowDecisionWithoutStats */
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1257,7 +1261,8 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 				0,
 				c.stats,
 				c.check,
-				true, /* checkCandidateFullness */
+				true,  /* checkCandidateFullness */
+				false, /* !alwaysAllowDecisionWithoutStats */
 			)
 			if c.expected != target.StoreID {
 				t.Errorf("expected %d, got %d", c.expected, target.StoreID)
@@ -2227,6 +2232,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				constraints,
 				existingReplicas,
 				firstRange,
+				storeFilterThrottled,
 			)
 
 			if tc.expected == nil && actual != nil {
@@ -2339,6 +2345,7 @@ func Example_rebalancing() {
 				config.Constraints{},
 				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
 				firstRange,
+				storeFilterThrottled,
 			)
 			if target != nil {
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))

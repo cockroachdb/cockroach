@@ -860,11 +860,12 @@ message AdminScatterRequest {
 // ScatterResponse is the response to a Scatter() operation.
 message AdminScatterResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-
   message Range {
     optional Span span = 1 [(gogoproto.nullable) = false];
-    // Error will be nil if this range was successfully scattered.
-    optional Error error = 2;
+    // When scatter was unreliable, it would report per-range errors to avoid
+    // failing the entire request when only a few ranges failed to scatter.
+    reserved "error";
+    reserved 2;
   }
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
 }

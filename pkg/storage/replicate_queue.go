@@ -196,6 +196,7 @@ func (rq *replicateQueue) shouldQueue(
 		zone.Constraints,
 		desc.Replicas,
 		desc.RangeID,
+		storeFilterThrottled,
 	)
 	if log.V(2) {
 		if target != nil {
@@ -428,6 +429,7 @@ func (rq *replicateQueue) processOneChange(
 			zone.Constraints,
 			desc.Replicas,
 			desc.RangeID,
+			storeFilterThrottled,
 		)
 		if rebalanceStore == nil {
 			if log.V(1) {
@@ -473,6 +475,7 @@ func (rq *replicateQueue) transferLease(
 		repl.leaseholderStats,
 		checkTransferLeaseSource,
 		checkCandidateFullness,
+		false, /* !alwaysAllowDecisionWithoutStats */
 	); target != (roachpb.ReplicaDescriptor{}) {
 		rq.metrics.TransferLeaseCount.Inc(1)
 		if log.V(1) {
