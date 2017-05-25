@@ -87,6 +87,7 @@ func enableLogFileOutput(dir string, stderrSeverity Severity) error {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 	logging.stderrThreshold = stderrSeverity
+	logging.noStderrRedirect = true
 	return logDir.Set(dir)
 }
 
