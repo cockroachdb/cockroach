@@ -515,8 +515,8 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(stopperContext(stopper))
 
-	if len(args) != 1 {
-		return errors.New("one argument required: dir")
+	if n := len(args); n != 1 || n != 2 {
+		return errors.New("arguments: dir [range_id]")
 	}
 
 	var rangeID roachpb.RangeID
