@@ -490,46 +490,6 @@ func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 	s.verifyFnCheckedOnce = false
 }
 
-// checkTestingVerifyMetadataInitialOrDie verifies that the metadata callback,
-// if one was set, fails. This validates that we need a gossip update for it to
-// eventually succeed.
-// No-op if we've already done an initial check for the set callback.
-// Gossip updates for the system config are assumed to be blocked when this is
-// called.
-func (s *Session) checkTestingVerifyMetadataInitialOrDie(e *Executor, stmts parser.StatementList) {
-	if !s.execCfg.TestingKnobs.WaitForGossipUpdate {
-		return
-	}
-	// If there's nothinging to verify, or we've already verified the initial
-	// condition, there's nothing to do.
-	if s.testingVerifyMetadataFn == nil || s.verifyFnCheckedOnce {
-		return
-	}
-	if s.testingVerifyMetadataFn(e.systemConfig) == nil {
-		panic(fmt.Sprintf(
-			"expected %q (or the statements before them) to require a "+
-				"gossip update, but they did not", stmts))
-	}
-	s.verifyFnCheckedOnce = true
-}
-
-// checkTestingVerifyMetadataOrDie verifies the metadata callback, if one was set.
-// Gossip updates for the system config are assumed to be blocked when this is called.
-func (s *Session) checkTestingVerifyMetadataOrDie(e *Executor, stmts parser.StatementList) {
-	if !s.execCfg.TestingKnobs.WaitForGossipUpdate ||
-		s.testingVerifyMetadataFn == nil {
-		return
-	}
-	if !s.verifyFnCheckedOnce {
-		panic("initial state of the condition to verify was not checked")
-	}
-
-	for s.testingVerifyMetadataFn(e.systemConfig) != nil {
-		e.waitForConfigUpdate()
-	}
-	s.testingVerifyMetadataFn = nil
-}
-
 // TxnStateEnum represents the state of a SQL txn.
 type TxnStateEnum int
 
