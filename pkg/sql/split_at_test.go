@@ -25,11 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
 )
 
 func TestSplitAt(t *testing.T) {
@@ -147,68 +145,54 @@ func TestScatter(t *testing.T) {
 	t.Skip("#14955")
 
 	const numHosts = 4
-	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{
-		// TODO(radu): this test should be reliable in automatic mode as well;
-		// remove this when that is the case (#15003).
-		ReplicationMode: base.ReplicationManual,
-	})
+	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.TODO())
 
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",
 		"k INT PRIMARY KEY, v INT",
-		100,
+		1000,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(10)),
 	)
 
 	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
 
-	// Introduce 9 splits to get 10 ranges.
-	r.Exec("ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM GENERATE_SERIES(1, 9) as g(i))")
+	// Introduce 99 splits to get 100 ranges.
+	r.Exec("ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 
-	// Scatter until each host has at least one leaseholder.
-	// The probability that a random distribution includes at most 3 hosts out of
-	// 4 is less than: 5 * (3/4)^10 = ~28%
-	// The probability of this happening (say) 20 times in a row is less than one
-	// in 100 billion.
-	testutils.SucceedsSoon(t, func() error {
-		r.Exec("ALTER TABLE test.t SCATTER")
-		rows := r.Query("SHOW TESTING_RANGES FROM TABLE test.t")
-		// See showRangesColumns for the schema.
-		if cols, err := rows.Columns(); err != nil {
+	// Ensure that scattering leaves each node with at least 20% of the leases.
+	r.Exec("ALTER TABLE test.t SCATTER")
+	rows := r.Query("SHOW TESTING_RANGES FROM TABLE test.t")
+	// See showRangesColumns for the schema.
+	if cols, err := rows.Columns(); err != nil {
+		t.Fatal(err)
+	} else if len(cols) != 4 {
+		t.Fatalf("expected 4 columns, got %#v", cols)
+	}
+	vals := []interface{}{
+		new(interface{}),
+		new(interface{}),
+		new(interface{}),
+		new(int),
+	}
+	leaseHolders := map[int]int{1: 0, 2: 0, 3: 0, 4: 0}
+	numRows := 0
+	for ; rows.Next(); numRows++ {
+		if err := rows.Scan(vals...); err != nil {
 			t.Fatal(err)
-		} else if len(cols) != 4 {
-			t.Fatalf("expected 4 columns, got %#v", cols)
 		}
-		vals := []interface{}{
-			new(interface{}),
-			new(interface{}),
-			new(interface{}),
-			new(int),
+		leaseHolder := *vals[3].(*int)
+		if leaseHolder < 1 || leaseHolder > numHosts {
+			t.Fatalf("invalid lease holder value: %d", leaseHolder)
 		}
-		var leaseHolders []int
-		seenHost := make([]bool, numHosts)
-		numRows := 0
-		for ; rows.Next(); numRows++ {
-			if err := rows.Scan(vals...); err != nil {
-				t.Fatal(err)
-			}
-			leaseHolder := *vals[3].(*int)
-			if leaseHolder < 1 || leaseHolder > numHosts {
-				t.Fatalf("invalid lease holder value: %d", leaseHolder)
-			}
-			leaseHolders = append(leaseHolders, leaseHolder)
-			seenHost[leaseHolder-1] = true
+		leaseHolders[leaseHolder]++
+	}
+	if numRows != 100 {
+		t.Fatalf("expected 100 ranges, got %d", numRows)
+	}
+	for i, count := range leaseHolders {
+		if count < 20 {
+			t.Errorf("less than 20 leaseholders on host %d (only %d)", i, count)
 		}
-		t.Logf("LeaseHolders: %v", leaseHolders)
-		if numRows != 10 {
-			t.Fatalf("expected 10 ranges, got %d", numRows)
-		}
-		for i, v := range seenHost {
-			if !v {
-				return errors.Errorf("no leaseholders on host %d", i+1)
-			}
-		}
-		return nil
-	})
+	}
 }

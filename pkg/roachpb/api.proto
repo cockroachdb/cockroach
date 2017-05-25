@@ -865,8 +865,7 @@ message AdminScatterResponse {
 
   message Range {
     optional Span span = 1 [(gogoproto.nullable) = false];
-    // Error will be nil if this range was successfully scattered.
-    optional Error error = 2;
+    reserved 2;
   }
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
 }
