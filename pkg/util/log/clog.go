@@ -63,6 +63,15 @@ var traceback = func() int {
 	}
 }()
 
+// DisableTracebacks turns off tracebacks for log.Fatals. Returns a function
+// that sets the traceback settings back to where they were.
+// Only intended for use by tests.
+func DisableTracebacks() func() {
+	oldVal := traceback
+	traceback = tracebackNone
+	return func() { traceback = oldVal }
+}
+
 // get returns the value of the Severity.
 func (s *Severity) get() Severity {
 	return Severity(atomic.LoadInt32((*int32)(s)))
