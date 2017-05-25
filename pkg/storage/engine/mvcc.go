@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -2111,8 +2112,19 @@ func MVCCGarbageCollect(
 	keys []roachpb.GCRequest_GCKey,
 	timestamp hlc.Timestamp,
 ) error {
-	iter := engine.NewIterator(false)
+	// We're allowed to use a prefix iterator because we always Seek() the
+	// iterator when handling a new user key.
+	iter := engine.NewIterator(true)
 	defer iter.Close()
+
+	{
+		begin := timeutil.Now()
+		defer func() {
+			log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec",
+				len(keys), float64(len(keys))*1E9/float64(timeutil.Now().Sub(begin)))
+		}()
+	}
+
 	// Iterate through specified GC keys.
 	meta := &enginepb.MVCCMetadata{}
 	for _, gcKey := range keys {
