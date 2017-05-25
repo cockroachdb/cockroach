@@ -135,7 +135,7 @@ spec:
     spec:
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v1.0
+        image: cockroachdb/cockroach:v1.0.1
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 26257
