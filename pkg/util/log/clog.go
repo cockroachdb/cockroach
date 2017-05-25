@@ -63,6 +63,15 @@ var traceback = func() int {
 	}
 }()
 
+// DisableTracebacks turns off tracebacks for log.Fatals. Returns a function
+// that sets the traceback settings back to where they were.
+// Only intended for use by tests.
+func DisableTracebacks() func() {
+	oldVal := traceback
+	traceback = tracebackNone
+	return func() { traceback = oldVal }
+}
+
 // get returns the value of the Severity.
 func (s *Severity) get() Severity {
 	return Severity(atomic.LoadInt32((*int32)(s)))
@@ -793,11 +802,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	if s == Severity_FATAL {
 		// If we got here via Exit rather than Fatal, print no stacks.
 		timeoutFlush(10 * time.Second)
-		if atomic.LoadUint32(&fatalNoStacks) > 0 {
-			exitFunc(1)
-		} else {
-			exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
-		}
+		exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
 	}
 }
 
@@ -1237,7 +1242,3 @@ func VDepth(level level, depth int) bool {
 	}
 	return false
 }
-
-// fatalNoStacks is non-zero if we are to exit without dumping goroutine stacks.
-// It allows Exit and relatives to use the Fatal logs.
-var fatalNoStacks uint32
