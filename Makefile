@@ -82,6 +82,8 @@ override LDFLAGS += $(MSAN_LDFLAGS)
 export CFLAGS
 export CXXFLAGS
 export LDFLAGS
+else ifeq ($(TYPE),portable)
+override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++"
 else ifeq ($(TYPE),release-linux-gnu)
 # We use a custom toolchain to target old Linux and glibc versions. However,
 # this toolchain's libstdc++ version is quite recent and must be statically
