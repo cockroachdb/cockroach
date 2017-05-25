@@ -1514,12 +1514,6 @@ func TestLogic(t *testing.T) {
 		}
 	}
 
-	// The tests below are likely to run concurrently; `log` is shared
-	// between all the goroutines and thus all tests, so it doesn't make
-	// sense to try to use separate `log.Scope` instances for each test.
-	logScope := log.Scope(t)
-	defer logScope.Close(t)
-
 	verbose := testing.Verbose() || log.V(1)
 	for idx, cfg := range logicTestConfigs {
 		paths := configPaths[idx]
