@@ -38,9 +38,6 @@ type spanMeta struct {
 
 	// A probabilistically unique identifier for a span.
 	SpanID uint64
-
-	// The span's associated baggage.
-	Baggage map[string]string
 }
 
 type spanContext struct {
@@ -51,6 +48,9 @@ type spanContext struct {
 
 	// If set, all spans derived from this context are being recorded as a group.
 	recordingGroup *spanGroup
+
+	// The span's associated baggage.
+	Baggage map[string]string
 }
 
 var _ opentracing.SpanContext = &spanContext{}
@@ -93,6 +93,9 @@ type span struct {
 		// TODO(radu): perhaps we want a recording to capture all the tags (even
 		// those that were set before recording started)?
 		tags opentracing.Tags
+
+		// The span's associated baggage.
+		Baggage map[string]string
 	}
 }
 
@@ -238,17 +241,22 @@ func (s *span) FinishWithOptions(opts opentracing.FinishOptions) {
 
 // Context is part of the opentracing.Span interface.
 func (s *span) Context() opentracing.SpanContext {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	baggageCopy := make(map[string]string, len(s.mu.Baggage))
+	for k, v := range s.mu.Baggage {
+		baggageCopy[k] = v
+	}
 	sc := &spanContext{
 		spanMeta: s.spanMeta,
+		Baggage:  baggageCopy,
 	}
 	if s.lightstep != nil {
 		sc.lightstep = s.lightstep.Context()
 	}
 
 	if s.isRecording() {
-		s.mu.Lock()
 		sc.recordingGroup = s.mu.recordingGroup
-		s.mu.Unlock()
 	}
 	return sc
 }
@@ -328,12 +336,13 @@ func (s *span) LogKV(alternatingKeyValues ...interface{}) {
 
 // SetBaggageItem is part of the opentracing.Span interface.
 func (s *span) SetBaggageItem(restrictedKey, value string) opentracing.Span {
-	// TODO(radu): the basictracer implementation uses a mutex here. This doesn't
-	// seem necessary at this point, but we may want to revisit this.
-	if s.Baggage == nil {
-		s.Baggage = make(map[string]string)
+	s.mu.Lock()
+	if s.mu.Baggage == nil {
+		s.mu.Baggage = make(map[string]string)
 	}
-	s.Baggage[restrictedKey] = value
+	s.mu.Baggage[restrictedKey] = value
+	s.mu.Unlock()
+
 	if s.lightstep != nil {
 		s.lightstep.SetBaggageItem(restrictedKey, value)
 	}
@@ -344,7 +353,9 @@ func (s *span) SetBaggageItem(restrictedKey, value string) opentracing.Span {
 
 // BaggageItem is part of the opentracing.Span interface.
 func (s *span) BaggageItem(restrictedKey string) string {
-	return s.Baggage[restrictedKey]
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.Baggage[restrictedKey]
 }
 
 // Tracer is part of the opentracing.Span interface.
@@ -408,9 +419,9 @@ func (ss *spanGroup) getSpans() []basictracer.RawSpan {
 			rs.Duration = time.Since(s.startTime)
 		}
 
-		if len(s.Baggage) > 0 {
+		if len(s.mu.Baggage) > 0 {
 			rs.Context.Baggage = make(map[string]string)
-			for k, v := range s.Baggage {
+			for k, v := range s.mu.Baggage {
 				rs.Context.Baggage[k] = v
 			}
 		}
