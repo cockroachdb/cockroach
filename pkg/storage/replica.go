@@ -2345,10 +2345,13 @@ func (r *Replica) requestToProposal(
 	}
 	var pErr *roachpb.Error
 	var result *EvalResult
-	// TODO(bdarnell): provide an option to disable spanSet validation
-	// (i.e. pass nil instead of `spans` here) once we're confident our coverage
-	// is good.
-	result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
+	// In evaluateProposal, the SpanSet is only used for assertions. These assertions
+	// are slow, so we don't use them in production but only in race-enabled builds.
+	if !raceEnabled {
+		result, pErr = r.evaluateProposal(ctx, idKey, ba, nil)
+	} else {
+		result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
+	}
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal.Local = &result.Local
 	proposal.command = storagebase.RaftCommand{
@@ -2375,6 +2378,9 @@ func (r *Replica) requestToProposal(
 // returns a nil error, the command could still return an error to the
 // client, but only after going through raft (e.g. to lay down
 // intents).
+//
+// The supplied SpanSet is only used for assertions and will typically
+// be `nil` in production.
 //
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
@@ -3927,21 +3933,24 @@ func (r *Replica) applyRaftCommand(
 	return rResult.Delta, nil
 }
 
-// evaluateProposalInner executes the command in a batch engine and returns
-// the batch containing the results. If the return value contains a non-nil
+// evaluateProposalInner executes the command in a batch engine and returns the
+// batch containing the results. If the return value contains a non-nil
 // WriteBatch, the caller should go ahead with the proposal (eventually
 // committing the data contained in the batch), even when the Err field is set
 // (which is then the result sent to the client).
 //
 // TODO(tschottdorf): the setting of WriteTooOld does not work. With
 // proposer-evaluated KV, TestStoreResolveWriteIntentPushOnRead fails in the
-// SNAPSHOT case since the transactional write in that test *always* catches
-// a WriteTooOldError. With proposer-evaluated KV disabled the same happens,
-// but the resulting WriteTooOld flag on the transaction is lost, letting the
-// test pass erroneously.
+// SNAPSHOT case since the transactional write in that test *always* catches a
+// WriteTooOldError. With proposer-evaluated KV disabled the same happens, but
+// the resulting WriteTooOld flag on the transaction is lost, letting the test
+// pass erroneously.
 //
-// TODO(bdarnell): merge evaluateProposal and evaluateProposalInner. There
-// is no longer a clear distinction between them.
+// The supplied SpanSet is only used for assertions and will typically be `nil`
+// in production.
+//
+// TODO(bdarnell): merge evaluateProposal and evaluateProposalInner. There is no
+// longer a clear distinction between them.
 func (r *Replica) evaluateProposalInner(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
 ) EvalResult {
@@ -4034,17 +4043,20 @@ type intentsWithArg struct {
 	intents []roachpb.Intent
 }
 
-// evaluateTxnWriteBatch attempts to execute transactional batches on
-// the 1-phase-commit path as just an atomic, non-transactional batch
-// of write commands. One phase commit batches contain transactional
-// writes sandwiched by BeginTransaction and EndTransaction requests.
+// evaluateTxnWriteBatch attempts to execute transactional batches on the
+// 1-phase-commit path as just an atomic, non-transactional batch of write
+// commands. One phase commit batches contain transactional writes sandwiched by
+// BeginTransaction and EndTransaction requests.
 //
-// If the batch is transactional, and there's nothing to suggest that
-// the transaction will require retry or restart, the batch's txn is
-// stripped and it's executed as a normal batch write. If the writes
-// cannot all be completed at the intended timestamp, the batch's txn
-// is restored and it's re-executed as transactional. This allows it
-// to lay down intents and return an appropriate retryable error.
+// If the batch is transactional, and there's nothing to suggest that the
+// transaction will require retry or restart, the batch's txn is stripped and
+// it's executed as a normal batch write. If the writes cannot all be completed
+// at the intended timestamp, the batch's txn is restored and it's re-executed
+// as transactional. This allows it to lay down intents and return an
+// appropriate retryable error.
+//
+// The supplied SpanSet is only used for assertions and will typically be `nil`
+// in production.
 func (r *Replica) evaluateTxnWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, EvalResult, *roachpb.Error) {
@@ -4065,6 +4077,9 @@ func (r *Replica) evaluateTxnWriteBatch(
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		batch := r.store.Engine().NewBatch()
 		if spans != nil {
+			if !raceEnabled {
+				panic("must not use SpanSetBatch in production")
+			}
 			batch = makeSpanSetBatch(batch, spans)
 		}
 		rec := ReplicaEvalContext{r, spans}
@@ -4117,6 +4132,9 @@ func (r *Replica) evaluateTxnWriteBatch(
 
 	batch := r.store.Engine().NewBatch()
 	if spans != nil {
+		if !raceEnabled {
+			panic("must not use SpanSetBatch in production")
+		}
 		batch = makeSpanSetBatch(batch, spans)
 	}
 	rec := ReplicaEvalContext{r, spans}
