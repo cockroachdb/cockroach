@@ -357,7 +357,7 @@ func (a Allocator) RebalanceTarget(
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	rangeID roachpb.RangeID,
-) (*roachpb.StoreDescriptor, error) {
+) *roachpb.StoreDescriptor {
 	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterThrottled)
 
 	existingCandidates, candidates := rebalanceCandidates(
@@ -385,12 +385,12 @@ func (a Allocator) RebalanceTarget(
 	if len(existing) > 1 && len(existingCandidates) < newQuorum {
 		// Don't rebalance as we won't be able to make quorum after the rebalance
 		// until the new replica has been caught up.
-		return nil, nil
+		return nil
 	}
 
 	// No need to rebalance.
 	if len(existingCandidates) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	// Find all candidates that are better than the worst existing replica.
@@ -400,7 +400,7 @@ func (a Allocator) RebalanceTarget(
 		log.Infof(ctx, "rebalance candidates: %s\nexisting replicas: %s\ntarget: %s",
 			candidates, existingCandidates, target)
 	}
-	return target, nil
+	return target
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
