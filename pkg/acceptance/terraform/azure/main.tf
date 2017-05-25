@@ -206,6 +206,11 @@ resource "null_resource" "cockroach-runner" {
     destination = "/home/ubuntu/nodectl"
   }
 
+  provisioner "file" {
+    source = "disable-hyperv"
+    destination = "/home/ubuntu/disable-hyperv"
+  }
+
   # This writes the filled-in supervisor template. It would be nice if we could
   # use rendered templates in the file provisioner.
   provisioner "remote-exec" {
@@ -225,6 +230,7 @@ FILE
   # Launch CockroachDB.
   provisioner "remote-exec" {
     inline = [
+      "chmod 755 cockroach nodectl disable-hyperv",
       # For consistency with other Terraform configs, we create the store in
       # /mnt/data0.
       "sudo mkdir /mnt/data0",
@@ -232,28 +238,26 @@ FILE
       # This sleep is needed to avoid apt-get errors below. It appears that when
       # the VM first launches, something is interfering with launches of apt-get.
       "sleep 30",
-      # Install test dependencies. NTP synchronization is especially needed for
-      # Azure VMs.
-      "sudo apt-get -qqy update >/dev/null",
-      "sudo apt-get -qqy install supervisor ntpdate >/dev/null",
-      "sudo ntpdate -b pool.ntp.org",
-      "sudo apt-get -qqy install ntp >/dev/null",
-      "sudo sed -i  's/^#statsdir/statsdir/' /etc/ntp.conf",
-      "sudo service supervisor stop",
+      # Install test dependencies.
       # TODO(cuongdo): Remove this dependency on Google Cloud SDK after we move
       # the test data to Azure Storage.
       "export CLOUD_SDK_REPO=\"cloud-sdk-$(lsb_release -c -s)\"",
       "echo \"deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main\" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list",
       "curl -sS https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -",
       "sudo apt-get -qqy update >/dev/null",
-      "sudo apt-get -qqy install google-cloud-sdk >/dev/null",
+      "sudo apt-get -qqy install google-cloud-sdk ntp supervisor ntpdate >/dev/null",
       # Install CockroachDB.
       "mkdir /mnt/data0/logs",
       "ln -sf /mnt/data0/logs logs",
-      "chmod 755 cockroach nodectl",
       "[ $(stat --format=%s cockroach) -ne 0 ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha} -o cockroach",
       "chmod +x cockroach",
+      # Restart supervisord with the custom config.
+      "sudo service supervisor stop",
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
+      # Disable hypervisor clock sync, because it can cause an unrecoverable
+      # amount of clock skew. This also forces an NTP sync
+      "./disable-hyperv",
+      # Start CockroachDB.
       "supervisorctl -c supervisor.conf start cockroach",
       # Install load generators.
       "curl -sfSL https://edge-binaries.cockroachdb.com/examples-go/block_writer.${var.block_writer_sha} -o block_writer",
