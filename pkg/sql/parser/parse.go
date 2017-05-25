@@ -61,9 +61,7 @@ func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
 	p.scanner.init(sql)
 	if p.parserImpl.Parse(&p.scanner) != 0 {
 		if feat := p.scanner.lastError.unimplementedFeature; feat != "" {
-			err := pgerror.NewError(pgerror.CodeFeatureNotSupportedError, p.scanner.lastError.msg)
-			err.InternalCommand = feat
-			return nil, err
+			return nil, pgerror.Unimplemented(feat, p.scanner.lastError.msg)
 		}
 		return nil, pgerror.NewError(pgerror.CodeSyntaxError, p.scanner.lastError.msg)
 	}

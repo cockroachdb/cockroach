@@ -24,9 +24,9 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // To understand dataSourceInfo below it is crucial to understand the
@@ -737,7 +737,7 @@ func (sources multiSourceInfo) findColumn(
 	c *parser.ColumnItem,
 ) (srcIdx int, colIdx int, err error) {
 	if len(c.Selector) > 0 {
-		return invalidSrcIdx, invalidColIdx, util.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", c)
+		return invalidSrcIdx, invalidColIdx, pgerror.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", c)
 	}
 
 	colName := c.ColumnName.Normalize()
