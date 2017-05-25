@@ -12,7 +12,7 @@ import { SortableTable } from "src/components/sortabletable";
 import { AdminUIState } from "src/redux/state";
 import { refreshLogs, refreshNodes } from "src/redux/apiReducers";
 
-import { currentNode } from "./nodeOverview";
+import { currentNode } from "src/containers/nodeOverview";
 
 interface LogProps {
   logs: LogEntriesResponseMessage;

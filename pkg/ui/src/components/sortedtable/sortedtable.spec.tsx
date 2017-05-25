@@ -4,8 +4,8 @@ import { assert } from "chai";
 import { mount } from "enzyme";
 import * as sinon from "sinon";
 
-import { SortedTable, ColumnDescriptor } from "./sortedtable";
-import { SortSetting } from "./sortabletable";
+import { SortedTable, ColumnDescriptor } from "src/components/sortedtable";
+import { SortSetting } from "src/components/sortabletable";
 
 class TestRow {
   constructor(public name: string, public value: number) { }

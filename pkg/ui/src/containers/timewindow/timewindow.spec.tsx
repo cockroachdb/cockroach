@@ -5,7 +5,7 @@ import * as sinon from "sinon";
 import moment from "moment";
 import _ from "lodash";
 
-import { TimeWindowManagerUnconnected as TimeWindowManager } from "./timewindow";
+import { TimeWindowManagerUnconnected as TimeWindowManager } from "src/containers/timewindow";
 import * as timewindow from "src/redux/timewindow";
 
 describe("<TimeWindowManager>", function() {
