@@ -444,6 +444,9 @@ type Store struct {
 	// be unnecessary.
 	emptySnapshotApplySem chan struct{}
 
+	// Sempahore to limit the number of concurrent scatter operations.
+	scatterSem chan struct{}
+
 	// Are rebalances to this store allowed or prohibited. Rebalances are
 	// prohibited while a store is catching up replicas (i.e. recovering) after
 	// being restarted.
@@ -935,7 +938,8 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.tsCacheMu.Unlock()
 
 	s.nonEmptySnapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
-	s.emptySnapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
+	s.emptySnapshotApplySem = make(chan struct{}, 10)
+	s.scatterSem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
