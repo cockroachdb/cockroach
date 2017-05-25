@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -75,10 +76,12 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 		case *parser.AlterTableAddColumn:
 			d := t.ColumnDef
 			if len(d.CheckExprs) > 0 {
-				return errors.Errorf("adding a CHECK constraint via ALTER not supported")
+				return pgerror.Unimplemented(
+					"alter add check", "adding a CHECK constraint via ALTER not supported")
 			}
 			if d.HasFKConstraint() {
-				return errors.Errorf("adding a REFERENCES constraint via ALTER not supported")
+				return pgerror.Unimplemented(
+					"alter add fk", "adding a REFERENCES constraint via ALTER not supported")
 			}
 			col, idx, err := sqlbase.MakeColumnDefDescs(d, n.p.session.SearchPath, &n.p.evalCtx)
 			if err != nil {

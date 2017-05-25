@@ -24,7 +24,6 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
 
@@ -254,10 +253,10 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	for i, t := range expr.Indirection {
 		if t.Slice {
-			return nil, util.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
+			return nil, pgerror.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
 		}
 		if i > 0 {
-			return nil, util.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
+			return nil, pgerror.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
 		}
 
 		beginExpr, err := typeCheckAndRequire(ctx, t.Begin, TypeInt, "ARRAY subscript")
