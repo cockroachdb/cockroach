@@ -17,10 +17,22 @@
 package distsqlrun
 
 import (
+	"bufio"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"time"
+
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
 
@@ -58,30 +70,236 @@ func newSortAllStrategy(rows rowContainer) sorterStrategy {
 //  - loads all rows into memory;
 //  - runs sort.Sort to sort rows in place;
 //  - sends each row out to the output stream.
-func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
-	defer ss.rows.Close(ctx)
-	for {
-		row, err := s.input.NextRow()
-		if err != nil {
-			return err
-		}
-		if row == nil {
-			break
-		}
-		if err := ss.rows.AddRow(ctx, row); err != nil {
-			return err
-		}
-	}
-	ss.rows.Sort()
+var sortUsing = settings.RegisterStringSetting("sort_using", "backend to sort with", "r")
 
-	for ss.rows.Len() > 0 {
+func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
+	fmt.Println("sortUsing", sortUsing)
+	defer ss.rows.Close(ctx)
+	start := time.Now()
+	switch sortUsing.Get() {
+	case "r":
+		ss.sortRocksDB(s)
+	case "e":
+		ss.sortExternal(s)
+	case "b":
+		ss.sortBadger(s)
+	default:
+		return errors.New("possible settings of SORT_USING are r, e, or b")
+	}
+	fmt.Println("sort took", time.Since(start))
+
+	/*for ss.rows.Len() > 0 {
 		// Push the row to the output; stop if they don't need more rows.
 		consumerStatus, err := s.out.emitRow(ctx, ss.rows.EncRow(0))
 		if err != nil || consumerStatus != NeedMoreRows {
 			return err
 		}
 		ss.rows.PopFirst()
+	}*/
+	return nil
+}
+
+func (ss *sortAllStrategy) sortRocksDB(s *sorter) error {
+	fmt.Println("running rocksdb sort")
+	path := "bench"
+	// Use as much disk space as possible.
+	fsu := gosigar.FileSystemUsage{}
+	if err := fsu.Get(path); err != nil {
+		return errors.New("could not get filesystem usage")
 	}
+	cache := engine.NewRocksDBCache(0 /* size */)
+	r, err := engine.NewRocksDB(
+		roachpb.Attributes{},
+		path,
+		cache,
+		int64(fsu.Total),
+		10000, /* open file limit */
+	)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		r.Close()
+		os.RemoveAll(path)
+		os.Mkdir(path, 0700)
+	}()
+	start := time.Now()
+	timeSpentWriting := start
+	for {
+		readTime := time.Now()
+		row, err := s.input.NextRow()
+		if err != nil {
+			return err
+		}
+		timeSpentWriting = timeSpentWriting.Add(time.Since(readTime))
+		if row == nil {
+			break
+		}
+		var key roachpb.Key
+		for _, val := range row {
+			// Assume ascending. Note that the comparator isn't set.
+			key, err = val.Encode(&ss.rows.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, key)
+			if err != nil {
+				return err
+			}
+		}
+		if err := r.Put(engine.MVCCKey{Key: key}, make([]byte, 0)); err != nil {
+			return err
+		}
+	}
+	fmt.Println("rocksdb writing and sorting data took", time.Since(start))
+	fmt.Println("total read time", timeSpentWriting.Sub(start))
+
+	i := r.NewIterator(false)
+	defer i.Close()
+
+	i.Seek(engine.NilKey)
+
+	start = time.Now()
+
+	types := s.input.src.Types()
+	timeEmit := start
+	for {
+		ok, err := i.Valid()
+		if err != nil {
+			return err
+		} else if !ok {
+			fmt.Println("rocksdb emitting took", time.Since(start))
+			fmt.Println("time emit", timeEmit.Sub(start))
+			return nil
+		}
+		key := i.Key().Key
+		row := make([]sqlbase.EncDatum, len(types))
+		for i, t := range types {
+			row[i], key, err = sqlbase.EncDatumFromBuffer(t, sqlbase.DatumEncoding_ASCENDING_KEY, key)
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+		}
+		lilt := time.Now()
+		consumerStatus, err := s.out.emitRow(context.TODO(), row)
+		if err != nil || consumerStatus != NeedMoreRows {
+			fmt.Println("rocksdb emitting took", time.Since(start))
+			return err
+		}
+		timeEmit = timeEmit.Add(time.Since(lilt))
+		i.Next()
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (ss *sortAllStrategy) sortExternal(s *sorter) error {
+	fmt.Println("running external sort")
+	path := "external_sort"
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		f.Close()
+		os.RemoveAll(path)
+	}()
+
+	start := time.Now()
+	totalReadTime := start
+	for {
+		readTime := time.Now()
+		row, err := s.input.NextRow()
+		if err != nil {
+			return err
+		}
+		totalReadTime = totalReadTime.Add(time.Since(readTime))
+		if row == nil {
+			break
+		}
+		var key roachpb.Key
+		for _, val := range row {
+			// Assume ascending for the purposes of the benchmark.
+			key, err = val.Encode(&ss.rows.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, key)
+			if err != nil {
+				return err
+			}
+		}
+		if _, err := f.Write([]byte(hex.EncodeToString(key) + "\n")); err != nil {
+			fmt.Println("write error", err)
+			return err
+		}
+	}
+
+	fmt.Println("ingesting data took", time.Since(start))
+	fmt.Println("total read time is", totalReadTime.Sub(start))
+
+	// NOTE: Run `export LC_ALL='C'` to set the locale to avoid parsing to
+	// unicode and dealing with complicated orderings since we don't need that.
+	start = time.Now()
+	if err := exec.Command("sort", path, "-o", path).Run(); err != nil {
+		return err
+	}
+	fmt.Println("external sort command took", time.Since(start))
+
+	if _, err := f.Seek(0, 0); err != nil {
+		return err
+	}
+
+	buf := bufio.NewReader(f)
+	start = time.Now()
+	timeSpentEmitting := start
+	types := s.input.src.Types()
+	for {
+		hexBytes, err := buf.ReadBytes('\n')
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("external emitting took", time.Since(start))
+				fmt.Println("time spent emitting is", timeSpentEmitting.Sub(start))
+				return nil
+			}
+			return err
+		}
+		// Remove delimiter.
+		hexBytes = hexBytes[:len(hexBytes)-1]
+		key, err := hex.DecodeString(string(hexBytes))
+		if err != nil {
+			return err
+		}
+		row := make([]sqlbase.EncDatum, len(types))
+		for i, t := range types {
+			row[i], key, err = sqlbase.EncDatumFromBuffer(t, sqlbase.DatumEncoding_ASCENDING_KEY, key)
+			if err != nil {
+				return err
+			}
+		}
+		emitTime := time.Now()
+		consumerStatus, err := s.out.emitRow(context.TODO(), row)
+		if err != nil || consumerStatus != NeedMoreRows {
+			fmt.Println("external emitting took", time.Since(start))
+			fmt.Println("time spent emitting is", timeSpentEmitting.Sub(start))
+			return err
+		}
+		timeSpentEmitting = timeSpentEmitting.Add(time.Since(emitTime))
+	}
+	return nil
+}
+
+func (ss *sortAllStrategy) sortBadger(s *sorter) error {
+	fmt.Println("running badger sort")
+	/*path := "badger_bench"
+	opts := badger.DefaultOptions
+	opts.Dir = path
+	b, err := badger.NewKV(&badger.DefaultOptions)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		b.Close()
+		os.RemoveAll(path)
+		os.Mkdir(path, 0700)
+	}()*/
 	return nil
 }
 
