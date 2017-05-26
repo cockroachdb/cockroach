@@ -550,12 +550,15 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddConfigDescriptor(keys.SystemDatabaseID, &DescriptorTable)
 	target.AddConfigDescriptor(keys.SystemDatabaseID, &UsersTable)
 	target.AddConfigDescriptor(keys.SystemDatabaseID, &ZonesTable)
+	target.AddConfigDescriptor(keys.SystemDatabaseID, &SettingsTable)
 
 	// Add all the other system tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &EventLogTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &RangeEventTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
+
+	target.AddDescriptor(keys.SystemDatabaseID, &JobsTable)
 
 	// NOTE(benesch): Installation of the jobs table is intentionally omitted
 	// here; it's added via a migration in both fresh clusters and existing
