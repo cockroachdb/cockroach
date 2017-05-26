@@ -947,6 +947,12 @@ func resolveFK(
 			}
 		}
 		if !found {
+			// Avoid unexpected index builds from ALTER TABLE ADD CONSTRAINT.
+			if mode == sqlbase.ConstraintValidity_Unvalidated {
+				return errors.Errorf(
+					"foreign key columns %s must be the prefix of an index", colNames(srcCols),
+				)
+			}
 			added, err := addIndexForFK(tbl, srcCols, constraintName, ref)
 			if err != nil {
 				return err
