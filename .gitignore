@@ -12,16 +12,12 @@
 artifacts
 /bin
 /bin.*
-# TeamCity sometimes creates this file during builds.
-builds.xml
 .buildinfo
 # cockroach-data, cockroach{,.race}-{darwin,linux,windows}-*
 /cockroach*
 /certs
 # make stress, acceptance produce stress.test, acceptance.test
 *.test*
-# Various `sed -i~` invocations in our scripts.
-*~
 
 # Custom or private env vars (e.g. internal keys, access tokens, etc).
 customenv.mk
