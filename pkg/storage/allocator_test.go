@@ -1847,6 +1847,91 @@ func TestAllocatorComputeAction(t *testing.T) {
 	}
 }
 
+func TestAllocatorComputeActionRemoveDead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Each test case should describe a repair situation which has a lower
+	// priority than the previous test case.
+	testCases := []struct {
+		zone           config.ZoneConfig
+		desc           roachpb.RangeDescriptor
+		expectedAction AllocatorAction
+		live           []roachpb.StoreID
+		dead           []roachpb.StoreID
+	}{
+		// Needs three replicas, one is dead, but there is no replacement.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction: AllocatorNoop,
+			live:           []roachpb.StoreID{1, 2},
+			dead:           []roachpb.StoreID{3},
+		},
+		// Needs three replicas, one is dead, but there is a replacement.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction: AllocatorRemoveDead,
+			live:           []roachpb.StoreID{1, 2, 4},
+			dead:           []roachpb.StoreID{3},
+		},
+	}
+
+	stopper, _, sp, a, _ := createTestAllocator( /* deterministic */ false)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	for i, tcase := range testCases {
+		mockStorePool(sp, tcase.live, tcase.dead, nil)
+
+		action, _ := a.ComputeAction(ctx, tcase.zone, &tcase.desc)
+		if tcase.expectedAction != action {
+			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+			continue
+		}
+	}
+}
+
 // TestAllocatorComputeActionNoStorePool verifies that
 // ComputeAction returns AllocatorNoop when storePool is nil.
 func TestAllocatorComputeActionNoStorePool(t *testing.T) {
