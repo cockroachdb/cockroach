@@ -2345,9 +2345,6 @@ func (r *Replica) requestToProposal(
 	}
 	var pErr *roachpb.Error
 	var result *EvalResult
-	// TODO(bdarnell): provide an option to disable spanSet validation
-	// (i.e. pass nil instead of `spans` here) once we're confident our coverage
-	// is good.
 	result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal.Local = &result.Local
@@ -4064,7 +4061,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		batch := r.store.Engine().NewBatch()
-		if spans != nil {
+		if raceEnabled && spans != nil {
 			batch = makeSpanSetBatch(batch, spans)
 		}
 		rec := ReplicaEvalContext{r, spans}
@@ -4116,7 +4113,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 	}
 
 	batch := r.store.Engine().NewBatch()
-	if spans != nil {
+	if raceEnabled && spans != nil {
 		batch = makeSpanSetBatch(batch, spans)
 	}
 	rec := ReplicaEvalContext{r, spans}
