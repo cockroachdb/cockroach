@@ -19,6 +19,7 @@ package server
 import (
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -433,30 +434,67 @@ func TestSystemConfigGossip(t *testing.T) {
 	})
 }
 
-func checkOfficialize(t *testing.T, network, oldAddrString, newAddrString, expAddrString string) {
-	resolvedAddr := util.NewUnresolvedAddr(network, newAddrString)
-
-	if unresolvedAddr, err := officialAddr(oldAddrString, resolvedAddr); err != nil {
-		t.Fatal(err)
-	} else if retAddrString := unresolvedAddr.String(); retAddrString != expAddrString {
-		t.Errorf("officialAddr(%s, %s) was %s; expected %s", oldAddrString, newAddrString, retAddrString, expAddrString)
-	}
-}
-
 func TestOfficializeAddr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	hostname, err := os.Hostname()
+	host, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+	addrs, err := net.DefaultResolver.LookupHost(context.TODO(), host)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, network := range []string{"tcp", "tcp4", "tcp6"} {
-		checkOfficialize(t, network, "hellow.world:0", "127.0.0.1:1234", "hellow.world:1234")
-		checkOfficialize(t, network, "hellow.world:1234", "127.0.0.1:2345", "hellow.world:1234")
-		checkOfficialize(t, network, ":1234", "127.0.0.1:2345", net.JoinHostPort(hostname, "1234"))
-		checkOfficialize(t, network, ":0", "127.0.0.1:2345", net.JoinHostPort(hostname, "2345"))
+		t.Run(fmt.Sprintf("network=%s", network), func(t *testing.T) {
+			for _, tc := range []struct {
+				cfgAddr, lnAddr, expAddr string
+			}{
+				{"localhost:0", "127.0.0.1:1234", "localhost:1234"},
+				{"localhost:1234", "127.0.0.1:2345", "localhost:2345"},
+				{":1234", net.JoinHostPort(addrs[0], "2345"), net.JoinHostPort(host, "2345")},
+				{":0", net.JoinHostPort(addrs[0], "2345"), net.JoinHostPort(host, "2345")},
+			} {
+				t.Run(tc.cfgAddr, func(t *testing.T) {
+					lnAddr := util.NewUnresolvedAddr(network, tc.lnAddr)
+
+					if unresolvedAddr, err := officialAddr(context.TODO(), tc.cfgAddr, lnAddr, os.Hostname); err != nil {
+						t.Fatal(err)
+					} else if retAddrString := unresolvedAddr.String(); retAddrString != tc.expAddr {
+						t.Errorf("officialAddr(%s, %s) was %s; expected %s", tc.cfgAddr, tc.lnAddr, retAddrString, tc.expAddr)
+					}
+				})
+			}
+		})
 	}
+
+	osHostnameError := errors.New("some error")
+
+	t.Run("osHostnameError", func(t *testing.T) {
+		if _, err := officialAddr(
+			context.TODO(),
+			":0",
+			util.NewUnresolvedAddr("tcp", "0.0.0.0:1234"),
+			func() (string, error) { return "", osHostnameError },
+		); errors.Cause(err) != osHostnameError {
+			t.Fatalf("unexpected error %v", err)
+		}
+	})
+
+	t.Run("LookupHostError", func(t *testing.T) {
+		if _, err := officialAddr(
+			context.TODO(),
+			"notarealhost:0",
+			util.NewUnresolvedAddr("tcp", "0.0.0.0:1234"),
+			os.Hostname,
+		); !testutils.IsError(err, "lookup notarealhost(?: on .+)?: no such host") {
+			// On Linux but not on macOS, the error returned from
+			// (*net.Resolver).LookupHost reports the DNS server used; permit
+			// both.
+			t.Fatalf("unexpected error %v", err)
+		}
+	})
 }
 
 func TestListenURLFileCreation(t *testing.T) {
