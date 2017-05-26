@@ -1165,6 +1165,7 @@ func TestStoreLongTxnStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := TestStoreConfig(nil)
 	storeCfg.DontRetryPushTxnFailures = true
+	storeCfg.TestingKnobs.DisableOnePhaseCommits = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, &storeCfg)
