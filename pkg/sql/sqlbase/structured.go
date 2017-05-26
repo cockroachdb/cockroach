@@ -1503,6 +1503,21 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
 }
 
+// GetIndexMutationCapabilities returns:
+// 1. Whether the index is a mutation
+// 2. if so, is it in state WRITE_ONLY
+func (desc *TableDescriptor) GetIndexMutationCapabilities(id IndexID) (bool, bool) {
+	for _, mutation := range desc.Mutations {
+		if mutationIndex := mutation.GetIndex(); mutationIndex != nil {
+			if mutationIndex.ID == id {
+				return true,
+					mutation.State == DescriptorMutation_WRITE_ONLY
+			}
+		}
+	}
+	return false, false
+}
+
 // IsInterleaved returns true if any part of this this table is interleaved with
 // another table's data.
 func (desc *TableDescriptor) IsInterleaved() bool {

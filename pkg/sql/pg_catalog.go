@@ -845,19 +845,9 @@ CREATE TABLE pg_catalog.pg_index (
 		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			tableOid := h.TableOid(db, table)
 			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
-				isValid := true
-				isReady := false
-				for _, mutation := range table.Mutations {
-					if mutationIndex := mutation.GetIndex(); mutationIndex != nil {
-						if mutationIndex.ID == index.ID {
-							isValid = false
-							if mutation.State == sqlbase.DescriptorMutation_WRITE_ONLY {
-								isReady = true
-							}
-							break
-						}
-					}
-				}
+				isMutation, isWriteOnly :=
+					table.GetIndexMutationCapabilities(index.ID)
+				isReady := isMutation && isWriteOnly
 				indkey, err := colIDArrayToVector(index.ColumnIDs)
 				if err != nil {
 					return err
@@ -871,7 +861,7 @@ CREATE TABLE pg_catalog.pg_index (
 					parser.MakeDBool(false),                      // indisexclusion
 					parser.MakeDBool(parser.DBool(index.Unique)), // indimmediate
 					parser.MakeDBool(false),                      // indisclustered
-					parser.MakeDBool(parser.DBool(isValid)),      // indisvalid
+					parser.MakeDBool(parser.DBool(!isMutation)),  // indisvalid
 					parser.MakeDBool(false),                      // indcheckxmin
 					parser.MakeDBool(parser.DBool(isReady)),      // indisready
 					parser.MakeDBool(true),                       // indislive
