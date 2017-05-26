@@ -17,12 +17,15 @@
 package distsqlrun
 
 import (
+	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 
 	"golang.org/x/net/context"
 )
@@ -40,12 +43,14 @@ func TestSorter(t *testing.T) {
 	desc := encoding.Descending
 
 	testCases := []struct {
+		name     string
 		spec     SorterSpec
 		post     PostProcessSpec
 		input    sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
 	}{
 		{
+			name: "SortAll",
 			// No specified input ordering and unspecified limit.
 			spec: SorterSpec{
 				OutputOrdering: convertToSpecOrdering(
@@ -74,6 +79,7 @@ func TestSorter(t *testing.T) {
 				{v[4], v[4], v[5]},
 			},
 		}, {
+			name: "SortLimit",
 			// No specified input ordering but specified limit.
 			spec: SorterSpec{
 				OutputOrdering: convertToSpecOrdering(
@@ -100,6 +106,7 @@ func TestSorter(t *testing.T) {
 				{v[3], v[3], v[0]},
 			},
 		}, {
+			name: "SortMatchOrderingNoLimit",
 			// Specified match ordering length but no specified limit.
 			spec: SorterSpec{
 				OrderingMatchLen: 2,
@@ -135,6 +142,7 @@ func TestSorter(t *testing.T) {
 				{v[4], v[4], v[5]},
 			},
 		}, {
+			name: "SortInputOrderingNoLimit",
 			// Specified input ordering but no specified limit.
 			spec: SorterSpec{
 				OrderingMatchLen: 2,
@@ -168,26 +176,26 @@ func TestSorter(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
 	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
-			ss := c.spec
+		t.Run(c.name, func(t *testing.T) {
 			types := make([]sqlbase.ColumnType, len(c.input[0]))
 			for i := range types {
-				types[i] = columnTypeInt
+				types[i] = c.input[0][i].Type
 			}
 			in := NewRowBuffer(types, c.input, RowBufferArgs{})
 			out := &RowBuffer{}
 			evalCtx := parser.MakeTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
+			defer evalCtx.Stop(ctx)
 			flowCtx := FlowCtx{
 				evalCtx: evalCtx,
 			}
 
-			s, err := newSorter(&flowCtx, &ss, in, &c.post, out)
+			s, err := newSorter(&flowCtx, &c.spec, in, &c.post, out)
 			if err != nil {
 				t.Fatal(err)
 			}
-			s.Run(context.Background(), nil)
+			s.Run(ctx, nil)
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -209,6 +217,90 @@ func TestSorter(t *testing.T) {
 			if expStr != retStr {
 				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
 					expStr, retStr)
+			}
+		})
+	}
+}
+
+// BenchmarkSortAll times how long it takes to sort an input of varying length.
+func BenchmarkSortAll(b *testing.B) {
+	ctx := context.Background()
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+	flowCtx := FlowCtx{
+		evalCtx: evalCtx,
+	}
+
+	// One column integer rows.
+	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	types := []sqlbase.ColumnType{columnTypeInt}
+	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+
+	spec := SorterSpec{
+		OutputOrdering: convertToSpecOrdering(sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}),
+	}
+	post := PostProcessSpec{}
+
+	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		input := make(sqlbase.EncDatumRows, inputSize)
+		for i := range input {
+			input[i] = sqlbase.EncDatumRow{
+				sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(rng.Int()))),
+			}
+		}
+		rowSource := NewRepeatableRowSource(types, input)
+		s, err := newSorter(&flowCtx, &spec, rowSource, &post, &RowDisposer{})
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.Run(fmt.Sprintf("InputSize%d", inputSize), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				s.Run(ctx, nil)
+				rowSource.Reset()
+			}
+		})
+	}
+}
+
+// BenchmarkSortLimit times how long it takes to sort a fixed size input with
+// varying limits.
+func BenchmarkSortLimit(b *testing.B) {
+	ctx := context.Background()
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+	flowCtx := FlowCtx{
+		evalCtx: evalCtx,
+	}
+
+	// One column integer rows.
+	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	types := []sqlbase.ColumnType{columnTypeInt}
+	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+
+	spec := SorterSpec{
+		OutputOrdering: convertToSpecOrdering(sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}),
+	}
+
+	inputSize := 1 << 16
+	input := make(sqlbase.EncDatumRows, inputSize)
+	for i := range input {
+		input[i] = sqlbase.EncDatumRow{
+			sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(rng.Int()))),
+		}
+	}
+	rowSource := NewRepeatableRowSource(types, input)
+
+	for _, limit := range []uint64{1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		s, err := newSorter(
+			&flowCtx, &spec, rowSource, &PostProcessSpec{Limit: limit}, &RowDisposer{},
+		)
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.Run(fmt.Sprintf("InputSize%dLimit%d", inputSize, limit), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				s.Run(ctx, nil)
+				rowSource.Reset()
 			}
 		})
 	}
