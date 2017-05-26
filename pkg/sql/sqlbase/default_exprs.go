@@ -70,3 +70,45 @@ func MakeDefaultExprs(
 	}
 	return defaultExprs, nil
 }
+
+// ProcessDefaultColumns adds columns with DEFAULT to cols if not present
+// and returns the defaultExprs for cols.
+func ProcessDefaultColumns(
+	cols []ColumnDescriptor,
+	tableDesc *TableDescriptor,
+	parse *parser.Parser,
+	evalCtx *parser.EvalContext,
+) ([]ColumnDescriptor, []parser.TypedExpr, error) {
+	colIDSet := make(map[ColumnID]struct{}, len(cols))
+	for _, col := range cols {
+		colIDSet[col.ID] = struct{}{}
+	}
+
+	// Add the column if it has a DEFAULT expression.
+	addIfDefault := func(col ColumnDescriptor) {
+		if col.DefaultExpr != nil {
+			if _, ok := colIDSet[col.ID]; !ok {
+				colIDSet[col.ID] = struct{}{}
+				cols = append(cols, col)
+			}
+		}
+	}
+
+	// Add any column that has a DEFAULT expression.
+	for _, col := range tableDesc.Columns {
+		addIfDefault(col)
+	}
+	// Also add any column in a mutation that is WRITE_ONLY and has
+	// a DEFAULT expression.
+	for _, m := range tableDesc.Mutations {
+		if m.State != DescriptorMutation_WRITE_ONLY {
+			continue
+		}
+		if col := m.GetColumn(); col != nil {
+			addIfDefault(*col)
+		}
+	}
+
+	defaultExprs, err := MakeDefaultExprs(cols, parse, evalCtx)
+	return cols, defaultExprs, err
+}
