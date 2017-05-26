@@ -17,6 +17,10 @@ there is potential for different use cases, these should be discussed with this
 RFC; the mechanism should then be generalized from the start. This seems
 feasible but has been omitted for clarity.
 
+Two alternatives are presented here. The simpler one, discussed in the
+alternatives section, is a simple reduction of the somewhat more involved one,
+discussed at length, and incurs an extra copy of the file.
+
 It is explicitly a non-goal to deal with (overly) large proposals, as none of
 the Raft interfaces expect proposals of nontrivial size. It is not expected that
 sideloadable proposals will exceed a few MB in size.
@@ -29,19 +33,21 @@ on Raft for simplicity, but the naive approach of sending a (chunked)
 
 1. all of the data is written to the Raft log, where it incurs a large write
    amplification, and
-1. applying `WriteBatch`es to RocksDB incurs another write amplification factor:
-   it is far better to link SSTables directly into the LSM.
+1. applying `WriteBatch`es to RocksDB incurs another sizable write amplification
+   factor: it is far better to link SSTables directly into the LSM.
 
 Instead, `RESTORE` sends small (initially ~2MB) SSTables which are to be linked
 directly into RocksDB. This eliminates the latter point above. However, it does
-not address the former, and this is what this RFC is about.
+not address the former, and this is what this RFC is about: achieving the
+optimal write amplification of 1, with the simpler alternative discussed at the
+end incurring an extra copy, for a write amplification of 2.
 
 Note also that housing the Raft log outside of RocksDB only addresses the former
 point if it results in a SSTable being stored inside of the RocksDB directory,
 which is likely to be a non-goal of that project.
 
-Thus, the proposal (original suggested by @bdarnell) is to special-case these
-proposals:
+The proposal (original suggested by @bdarnell) is to special-case the
+proposals containing SSTables for ingestion:
 
 1. When they are put into the Raft log (`append()`), what's actually put in the
    Raft log is a small piece of metadata, and
@@ -54,17 +60,16 @@ proposals:
    mechanism (`sendSnapshot` or rather its child `iterateEntries`), which sends
    a part of the Raft log along with the snapshot.
 1. When a sideloaded entry is applied to the state machine, the corresponding
-   file is moved (while leaving behind a file with a path to the new location)
-   and linked into RocksDB. The pointer file is needed because the contents may
-   still be sent to followers.
+   file is hard-linked into its RocksDB directory and, from there, ingested
+   by RocksDB. That way, even if RocksDB decided to remove the file, it would
+   still be available to Raft due to the way hardlinks work.
+   TODO: windows and other systems? Would we need to special-case anything?
+   We could fall-back to the simpler proposal in those cases and simply copy.
 1. When Raft log truncation runs and truncates the log up to and including index
-   `i`, then any leftovers in the temp dir (which must only contain pointer
-   files, as the corresponding payloads should have been ingested already)
+   `i`, then any sideloaded files for such indexes in the temp dir (all of which
+   must at that point be hardlinked into RocksDB already) are unlinked.
 1. The sideloaded data must be included in checksumming, consistency checks,
    etc.
-
-TODO: does RocksDB eventually delete that file if it's compacted away?
-Is it OK to move a directory that includes a live RocksDB SSTable?
 
 # Detailed design
 
@@ -91,7 +96,7 @@ out:
    support the respective Raft command would still fail, so it's not generally a
    great idea).
 
-Either way, we propose to flag sideloadable commands in this way. Armed with
+Either way, we propose to flag sideloadable commands in this manner. Armed with
 that, `(*Replica).append` and the other methods above can assure that there is
 no externally visible change to the way Raft proposals are handled, and we can
 drop sideloaded proposals directly on disk, where they are accessible via their
@@ -101,20 +106,7 @@ Next, when applying a sideloaded proposal, we synthesize a side effect which
 recovers the file's location from the log position, and performs a suitable
 action, which must be inferred from the file. If the feature is restricted to
 handle the SSTable ingestion required for `RESTORE`, it will simply treat the
-file as a SSTable, move it into the RocksDB directory, and then place a pointer
-file to the new location in the old location (which are then deleted during log
-truncation).
-
-TODO: symlinks doesn't seem very portable - think windows - what's a better way
-of doing this?
-
-TODO: If multiple use of sideloading is envisioned, additional information has to be
-hidden in the file. For example, a byte could be attached to the payload (but
-this would already complicate the SSTable use case), or instead of sideloading a
-file, the proposal is stored in a logIndex-keyed directory, with the convention
-that if multiple files are present, they represent the log entry in sorted
-order. It's probably best to think hard about whether there's any other use for
-this. Probably not.
+file as a SSTable, hard link it into the RocksDB directory, and ingest it there.
 
 That leaves describing how SSTable ingestion commands are proposed: They will
 arrive at the Replica in a regular command, with the SSTable in a byte slice.
@@ -133,7 +125,6 @@ non-issue - if backup fails, range never "used". Could some queue pick it up and
 panic, though? Or we could compute MVCCStats on the side and send for each
 chunk. Either way, none of these problems are new with this proposal.
 
-
 # Drawbacks
 
 There is some overlap with the project to move the Raft log out of RocksDB.
@@ -142,6 +133,44 @@ the changes proposed here are agnostic of changes in the Raft log backend.
 
 # Alternatives
 
+The alternative is not linking the sideloaded SSTable into RocksDB; instead,
+it is copied there wholesale. The only difference is that we don't have to
+worry about the feasability of hard linking as much, and we also avoid the
+problem (discussed below) of RocksDB mutating the file.
+
+On the downside, the write amplification is now 2x.
+
 # Unresolved questions
+
+## RocksDB may alter the file
+
+If we are aiming high and want 1x write amplification, then we do not want to
+copy the file to RocksDB; we want to hard-link it there. However, RocksDB may
+*alter* the SSTable. One case in which it does this is that it may set an
+internal sequence number used for RocksDB transactions; this happens when there
+are open RocksDB snapshots, for example.
+
+Knowing that this can happen, we can avoid it: the SSTable is always created
+with a zero sequence number, and we can ignore any updated on-disk sequence
+number when reading the file from disk for treating it as a log entry.
+
+However, we need to be very sure that RocksDB will not perform other
+modifications to the file that could trip the consistency checker.
+
+## Complications of using hard links
+
+They may not be supported across the board, and we crucially rely on the fact
+that a file is only deleted after all referencing hardlinks have been. However,
+it seems that once we detect these systems reliably (conservatively), we can
+always fall back to making an extra copy instead of a hard link.
+
+## Useful generalization?
+
+If multiple use of sideloading is envisioned, additional information has to be
+hidden in the file. For example, sideloadable payloads could be cut into sevaral
+parts, one of which dictates what kind of payload this is. It's probably best to
+think hard about whether there's any other use for this; probably not, not even
+for snapshots.
+
 
 [1]: https://github.com/cockroachdb/cockroach/pull/9459/files#diff-2967750a9f426e20041d924947ff1d46R707
