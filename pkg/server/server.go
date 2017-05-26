@@ -484,12 +484,12 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
-	unresolvedListenAddr, err := officialAddr(s.cfg.Addr, ln.Addr())
+	unresolvedListenAddr, err := officialAddr(ctx, s.cfg.Addr, ln.Addr())
 	if err != nil {
 		return err
 	}
 	s.cfg.Addr = unresolvedListenAddr.String()
-	unresolvedAdvertAddr, err := officialAddr(s.cfg.AdvertiseAddr, ln.Addr())
+	unresolvedAdvertAddr, err := officialAddr(ctx, s.cfg.AdvertiseAddr, ln.Addr())
 	if err != nil {
 		return err
 	}
@@ -509,7 +509,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	unresolvedHTTPAddr, err := officialAddr(s.cfg.HTTPAddr, httpLn.Addr())
+	unresolvedHTTPAddr, err := officialAddr(ctx, s.cfg.HTTPAddr, httpLn.Addr())
 	if err != nil {
 		return err
 	}
@@ -1011,7 +1011,9 @@ func (w *gzipResponseWriter) Close() {
 	}
 }
 
-func officialAddr(unresolvedAddr string, resolvedAddr net.Addr) (*util.UnresolvedAddr, error) {
+func officialAddr(
+	ctx context.Context, unresolvedAddr string, resolvedAddr net.Addr,
+) (*util.UnresolvedAddr, error) {
 	unresolvedHost, unresolvedPort, err := net.SplitHostPort(unresolvedAddr)
 	if err != nil {
 		return nil, err
@@ -1022,18 +1024,25 @@ func officialAddr(unresolvedAddr string, resolvedAddr net.Addr) (*util.Unresolve
 		return nil, err
 	}
 
-	var host string
-	if unresolvedHost != "" {
-		// A host was provided, use it.
-		host = unresolvedHost
-	} else {
-		// A host was not provided. Ask the system, and fall back to the listener.
-		if hostname, err := os.Hostname(); err == nil {
-			host = hostname
-		} else {
-			host = resolvedHost
+	host := func() string {
+		if unresolvedHost != "" {
+			// A host was provided, use it.
+			return unresolvedHost
 		}
-	}
+
+		// A host was not provided. Ask the system, and fall back to the
+		// resolved address.
+		if name, err := os.Hostname(); err != nil {
+			log.ErrEventf(ctx, "unable to get hostname: %s", err)
+		} else {
+			if _, err := net.DefaultResolver.LookupHost(ctx, name); err != nil {
+				log.ErrEventf(ctx, "unable to lookup hostname %s: %s", name, err)
+			} else {
+				return name
+			}
+		}
+		return resolvedHost
+	}()
 
 	var port string
 	if unresolvedPort != "0" {
