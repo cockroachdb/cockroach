@@ -96,4 +96,6 @@ message RangeInfo {
   // raft_log_size may be initially inaccurate after a server restart.
   // See storage.Replica.mu.raftLogSize.
   int64 raft_log_size = 6;
+  // Approximately the amount of quota available.
+  int64 approximate_proposal_quota = 7;
 }
