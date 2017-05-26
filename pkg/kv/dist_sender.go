@@ -1224,17 +1224,15 @@ func (ds *DistSender) sendToReplicas(
 				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
 
 				if propagateError {
-					if haveCommit {
-						// The error received is likely not specific to this
-						// replica, so we should return it instead of trying other
-						// replicas. However, if we're trying to commit a
-						// transaction and there are still other RPCs outstanding
-						// or an ambiguous RPC error was already received, we must
-						// return an ambiguous commit error instead of the returned
-						// error.
+					if pending > 0 {
+						// If there are still pending RPCs, try to wait them out.
+						//
+						// Note that ambiguous result errors can arrive from these
+						// in-flight RPCs, so if we've sent any, we better wait
+						// for them, even if we're not going to generate ambiguous
+						// results from them ourselves.
 						timer := time.NewTimer(ds.pendingRPCTimeout)
 						defer timer.Stop()
-						// If there are still pending RPC(s), try to wait them out.
 					pendingLoop:
 						for pending > 0 {
 							select {
@@ -1251,6 +1249,16 @@ func (ds *DistSender) sendToReplicas(
 								break pendingLoop
 							}
 						}
+					}
+
+					// The error received is likely not specific to this
+					// replica, so we should return it instead of trying other
+					// replicas. However, if we're trying to commit a
+					// transaction and there are still other RPCs outstanding
+					// or an ambiguous RPC error was already received, we must
+					// return an ambiguous commit error instead of the
+					// returned error.
+					if haveCommit {
 						if pending > 0 || ambiguousResult {
 							log.ErrEventf(ctx, "returning ambiguous result (pending=%d)", pending)
 							return nil, roachpb.NewAmbiguousResultError(
