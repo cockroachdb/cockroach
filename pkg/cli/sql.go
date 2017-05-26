@@ -178,8 +178,9 @@ Type: \q to exit (Ctrl+C/Ctrl+D also supported)
   \show             during a multi-line statement or transaction, show the SQL entered so far.
   \? or "help"      print this help.
 
-More documentation about our SQL dialect is available online:
-http://www.cockroachlabs.com/docs/
+More documentation about our SQL dialect and the CLI shell is available online:
+https://www.cockroachlabs.com/docs/sql-statements.html
+https://www.cockroachlabs.com/docs/use-the-built-in-sql-client.html
 
 `)
 }
