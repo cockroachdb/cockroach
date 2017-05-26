@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -213,12 +214,11 @@ type Executor struct {
 	QueryCount       *metric.Counter
 
 	// System Config and mutex.
-	systemConfig   config.SystemConfig
-	databaseCache  *databaseCache
-	systemConfigMu syncutil.RWMutex
-	// This uses systemConfigMu in RLocker mode to not block
-	// execution of statements. So don't go on changing state after you've
-	// Wait()ed on it.
+	systemConfig config.SystemConfig
+	// databaseCache is updated with systemConfigMu held, but read atomically in
+	// order to avoid recursive locking. See WaitForGossipUpdate.
+	databaseCache    atomic.Value
+	systemConfigMu   syncutil.Mutex
 	systemConfigCond *sync.Cond
 
 	distSQLPlanner *distSQLPlanner
@@ -363,8 +363,8 @@ func (e *Executor) Start(
 		e.cfg.TestingKnobs.DistSQLPlannerKnobs,
 	)
 
-	e.databaseCache = newDatabaseCache(e.systemConfig)
-	e.systemConfigCond = sync.NewCond(e.systemConfigMu.RLocker())
+	e.databaseCache.Store(newDatabaseCache(e.systemConfig))
+	e.systemConfigCond = sync.NewCond(&e.systemConfigMu)
 
 	gossipUpdateC := e.cfg.Gossip.RegisterSystemConfigChannel()
 	e.stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -406,17 +406,17 @@ func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
 	defer e.systemConfigMu.Unlock()
 	e.systemConfig = cfg
 	// The database cache gets reset whenever the system config changes.
-	e.databaseCache = newDatabaseCache(cfg)
+	e.databaseCache.Store(newDatabaseCache(cfg))
 	e.systemConfigCond.Broadcast()
 }
 
 // getDatabaseCache returns a database cache with a copy of the latest
 // system config.
 func (e *Executor) getDatabaseCache() *databaseCache {
-	e.systemConfigMu.RLock()
-	defer e.systemConfigMu.RUnlock()
-	cache := e.databaseCache
-	return cache
+	if v := e.databaseCache.Load(); v != nil {
+		return v.(*databaseCache)
+	}
+	return nil
 }
 
 // Prepare returns the result types of the given statement. pinfo may
@@ -523,6 +523,26 @@ func (e *Executor) ExecuteStatements(
 
 	defer logIfPanicking(session.Ctx(), stmts)
 
+	// If the Executor wants config updates to be blocked, then block them so
+	// that checkTestingVerifyMetadataInitialOrDie() can later be run. The
+	// point is to lock the system config so that no gossip updates sneak in
+	// under us, so that we're able to assert that the verify callback only
+	// succeeds after a gossip update.
+	//
+	// This lock does not change semantics. Even outside of tests, the Executor
+	// uses static systemConfig for a user request, so locking the Executor's
+	// systemConfig cannot change the semantics of the SQL operation being
+	// performed under lock.
+	//
+	// NB: The locking here implies that ExecuteStatements cannot be
+	// called recursively. So don't do that and don't try to adjust this locking
+	// to allow this method to be called recursively (sync.{Mutex,RWMutex} do not
+	// allow that).
+	if e.cfg.TestingKnobs.WaitForGossipUpdate {
+		e.systemConfigCond.L.Lock()
+		defer e.systemConfigCond.L.Unlock()
+	}
+
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
 	return e.execRequest(session, stmts, pinfo, copyMsgNone)
@@ -539,6 +559,13 @@ func (e *Executor) ExecutePreparedStatement(
 	}
 
 	defer logIfPanicking(session.Ctx(), stmts.String())
+
+	// Block system config updates. For more details, see the comment in
+	// ExecuteStatements.
+	if e.cfg.TestingKnobs.WaitForGossipUpdate {
+		e.systemConfigCond.L.Lock()
+		defer e.systemConfigCond.L.Unlock()
+	}
 
 	{
 		// No parsing is taking place, but we need to set the parsing phase time
@@ -636,21 +663,6 @@ func (e *Executor) execParsed(
 	if len(stmts) == 0 {
 		res.Empty = true
 		return res
-	}
-
-	// If the Executor wants config updates to be blocked, then block them so
-	// that checkTestingVerifyMetadataInitialOrDie() can later be run. The
-	// point is to lock the system config so that no gossip updates sneak in
-	// under us, so that we're able to assert that the verify callback only
-	// succeeds after a gossip update.
-	//
-	// This lock does not change semantics. Even outside of tests, the Executor uses
-	// static systemConfig for a user request, so locking the Executor's
-	// systemConfig cannot change the semantics of the SQL operation being performed
-	// under lock.
-	if e.cfg.TestingKnobs.WaitForGossipUpdate {
-		e.systemConfigCond.L.Lock()
-		defer e.systemConfigCond.L.Unlock()
 	}
 
 	for len(stmts) > 0 {
@@ -1332,7 +1344,9 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 			qArgs[idx] = typedExpr
 		}
-		results := e.ExecutePreparedStatement(session, prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
+		results := e.execParsed(session, parser.StatementList{prepared.Statement},
+			&parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes},
+			copyMsgNone)
 		if results.Empty {
 			return Result{}, nil
 		}
