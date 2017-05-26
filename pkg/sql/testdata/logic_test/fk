@@ -32,7 +32,7 @@ unindexed  primary                                         true    1    rowid   
 unindexed  unindexed_auto_index_fk_customer_ref_customers  false   1    customer  ASC        false    false
 unindexed  unindexed_auto_index_fk_customer_ref_customers  false   2    rowid     ASC        false    true
 
-statement error foreign key requires table "products" have a unique index on \("vendor"\)
+statement error there is no unique constraint matching given keys for referenced table products
 CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 
 statement error type of "customer" \(INT\) does not match foreign key "customers"."email" \(STRING\)
@@ -592,8 +592,20 @@ statement ok
 CREATE TABLE b (id SERIAL NOT NULL, PRIMARY KEY (id))
 
 # Adding a self-ref FK to an _existing_ table also works.
+statement error foreign key requires an existing index on columns \("self_id"\)
+ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a;
+
+statement ok
+CREATE INDEX ON a (self_id);
+
 statement ok
 ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a;
+
+statement error foreign key requires an existing index on columns \("b_id"\)
+ALTER TABLE a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES b;
+
+statement ok
+CREATE INDEX ON a (b_id);
 
 statement ok
 ALTER TABLE a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES b;
@@ -643,3 +655,22 @@ CREATE TABLE refers (a INT REFERENCES referee);
 
 statement ok
 COMMIT
+
+
+statement ok
+CREATE TABLE a (id BIGSERIAL NOT NULL, self_id INT, b_id INT UNIQUE NOT NULL, PRIMARY KEY (id));
+
+statement error foreign key requires an existing index on columns \("self_id"\)
+ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a(b_id);
+
+statement ok
+DROP TABLE a;
+
+statement ok
+CREATE TABLE a (id BIGSERIAL NOT NULL, self_id INT, b_id INT UNIQUE NOT NULL, PRIMARY KEY (id));
+
+statement error foreign key requires an existing index on columns \("self_id"\)
+ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a(b_id);
+
+statement ok
+DROP TABLE a;

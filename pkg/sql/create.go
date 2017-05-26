@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -910,7 +911,11 @@ func resolveFK(
 			}
 		}
 		if !found {
-			return fmt.Errorf("foreign key requires table %q have a unique index on %s", targetTable.String(), colNames(targetCols))
+			return pgerror.NewErrorf(
+				pgerror.CodeInvalidForeignKeyError,
+				"there is no unique constraint matching given keys for referenced table %s",
+				targetTable.String(),
+			)
 		}
 	}
 
@@ -927,7 +932,8 @@ func resolveFK(
 
 	if matchesIndex(srcCols, tbl.PrimaryIndex, matchPrefix) {
 		if tbl.PrimaryIndex.ForeignKey.IsSet() {
-			return fmt.Errorf("columns cannot be used by multiple foreign key constraints")
+			return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+				"columns cannot be used by multiple foreign key constraints")
 		}
 		tbl.PrimaryIndex.ForeignKey = ref
 		backref.Index = tbl.PrimaryIndex.ID
@@ -936,7 +942,8 @@ func resolveFK(
 		for i := range tbl.Indexes {
 			if matchesIndex(srcCols, tbl.Indexes[i], matchPrefix) {
 				if tbl.Indexes[i].ForeignKey.IsSet() {
-					return fmt.Errorf("columns cannot be used by multiple foreign key constraints")
+					return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+						"columns cannot be used by multiple foreign key constraints")
 				}
 				tbl.Indexes[i].ForeignKey = ref
 				backref.Index = tbl.Indexes[i].ID
@@ -945,6 +952,11 @@ func resolveFK(
 			}
 		}
 		if !found {
+			// Avoid unexpected index builds from ALTER TABLE ADD CONSTRAINT.
+			if mode == sqlbase.ConstraintValidity_Unvalidated {
+				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+					"foreign key requires an existing index on columns %s", colNames(srcCols))
+			}
 			added, err := addIndexForFK(tbl, srcCols, constraintName, ref)
 			if err != nil {
 				return err
