@@ -900,11 +900,25 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// We're still the leader.
 
+	// We need to check if the replica is being destroyed and if so, close the
+	// quota pool and unblock ongoing quota acquisition goroutines (if any).
+	if r.mu.destroyed != nil {
+		r.mu.proposalQuota.close()
+		r.mu.proposalQuota = nil
+		r.mu.quotaReleaseQueue = nil
+		r.mu.commandSizes = nil
+		return
+	}
+
 	// TODO(peter): Can we avoid retrieving the Raft status on every invocation
 	// in order to avoid the associated allocation? Tracking the progress
 	// ourselves via looking at MsgAppResp messages would be overkill. Perhaps
 	// another accessor on RawNode.
 	status := r.raftStatusRLocked()
+	if status == nil {
+		log.Fatal(ctx, "leader with nil internalRaftGroup")
+	}
+
 	// Find the minimum index that active followers have acknowledged.
 	minIndex := status.Commit
 
