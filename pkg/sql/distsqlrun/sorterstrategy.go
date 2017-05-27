@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/dgraph-io/badger/badger"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
@@ -271,7 +272,7 @@ func (ss *sortAllStrategy) sortExternal(s *sorter) error {
 
 func (ss *sortAllStrategy) sortBadger(s *sorter) error {
 	fmt.Println("running badger sort")
-	/*path := "badger_bench"
+	path := "badger_bench"
 	opts := badger.DefaultOptions
 	opts.Dir = path
 	b, err := badger.NewKV(&badger.DefaultOptions)
@@ -282,7 +283,7 @@ func (ss *sortAllStrategy) sortBadger(s *sorter) error {
 		b.Close()
 		os.RemoveAll(path)
 		os.Mkdir(path, 0700)
-	}()*/
+	}()
 	return nil
 }
 

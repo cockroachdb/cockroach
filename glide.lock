@@ -1,5 +1,5 @@
 hash: 1761d84fe439a296fab45493e0a64156f42349b8c4e0e9ba7c42d1854cac2e77
-updated: 2017-05-17T10:42:39.575779187-04:00
+updated: 2017-05-27T17:31:51.8351828-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -12,8 +12,10 @@ imports:
   - storage
 - name: github.com/abourget/teamcity
   version: e241104394f91bf4e65048f9ea5d0c0f3c25b35e
+- name: github.com/AndreasBriese/bbloom
+  version: 0320de81a58b973b5187098f4815608711c70f3b
 - name: github.com/aws/aws-sdk-go
-  version: fed27f4bd16c8c63d01003b978e5bc85fe727519
+  version: 26d4122e877bd86f43d528ad7fbde237dbbd3fa9
   subpackages:
   - aws
   - aws/awserr
@@ -60,6 +62,8 @@ imports:
   version: 913427a1d5e89604e50ea1db0f28f34966d61602
   subpackages:
   - llrb
+- name: github.com/bkaradzic/go-lz4
+  version: 7224d8d8f27ef618c0a95f1ae69dbb0488abc33a
 - name: github.com/cenk/backoff
   version: 5d150e7eec023ce7a124856b37c68e54b4050ac7
 - name: github.com/certifi/gocertifi
@@ -67,7 +71,7 @@ imports:
 - name: github.com/chzyer/readline
   version: 41eea22f717c616615e1e59aa06cf831f9901f35
 - name: github.com/client9/misspell
-  version: d06ddd376b273047dca6e16eeeb2a2a8f9791978
+  version: 7d2c205f6643efb73cdeab6bb87d45eff2b8d042
   subpackages:
   - cmd/misspell
 - name: github.com/cockroachdb/apd
@@ -97,10 +101,17 @@ imports:
   version: bcc0a711c5e6bbe72c7cb13d81c7109b45267fd2
   subpackages:
   - md2man
+- name: github.com/dgraph-io/badger
+  version: 22225f815f66bab8c951deb02b471aab8e1d3195
+  subpackages:
+  - badger
+  - skl
+  - table
+  - "y"
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/docker/distribution
-  version: 83f857ca120ce2b7d6dd61e788f8ed35db81180c
+  version: 1e2f10eb65743fed02f573d31a4587de09afb20e
   subpackages:
   - digestset
   - reference
@@ -154,7 +165,7 @@ imports:
 - name: github.com/ghemawat/stream
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
 - name: github.com/go-ini/ini
-  version: e7fea39b01aea8d5671f6858f0532f56e8bff3a5
+  version: afbc45e87f3ba324c532d12c71918ef52e0fb194
 - name: github.com/go-ole/go-ole
   version: de8695c8edbf8236f30d6e1376e20b198a028d42
   subpackages:
@@ -192,7 +203,7 @@ imports:
 - name: github.com/golang/glog
   version: 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 - name: github.com/golang/lint
-  version: cb00e5669539f047b2f4c53a421a01b0c8e172c6
+  version: a5f4a247366d8fc436941822e14fc3eac7727015
   subpackages:
   - golint
 - name: github.com/golang/protobuf
@@ -210,7 +221,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 4b7b445665c8ce4f3c10c753b1884e2c4f09e323
+  version: ebfec748347a9af6793c723f8859afcd906860fb
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -218,7 +229,7 @@ imports:
   subpackages:
   - query
 - name: github.com/google/pprof
-  version: c0fb62ec88c411cc91194465e54db2632845b650
+  version: fffc5831a499a958516664a34cb7ba2b9e228793
   subpackages:
   - driver
   - internal/binutils
@@ -329,7 +340,7 @@ imports:
   - syntax
   - syntax/golang
 - name: github.com/Microsoft/go-winio
-  version: d311c76e775b5092c023569caacdbb4e569c3243
+  version: f533f7a102197536779ea3a8cb881d639e21ec5a
 - name: github.com/mitchellh/go-homedir
   version: b8bc1bf767474819792c23f32d8286a45736f1c6
 - name: github.com/mitchellh/reflectwalk
@@ -414,21 +425,21 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: ad516a297a9f2a74ecc244861b298c94bdd28b9d
+  version: f047394b6d14284165300fd82dad67edb3a4d7f6
   subpackages:
   - google
   - internal
   - jws
   - jwt
 - name: golang.org/x/perf
-  version: 844f0140c89c0be84e3d3143f075ccff10819462
+  version: ae5bfa618416cf61d5e4975d1834ac60c6ab7fac
   subpackages:
   - benchstat
   - cmd/benchstat
   - internal/stats
   - storage/benchfmt
 - name: golang.org/x/sync
-  version: 57af736625aaa69dfa099432bb67e0808eef3bcc
+  version: f52d1811a62927559de87708c8913c1650ce4f26
   subpackages:
   - errgroup
   - singleflight
@@ -478,7 +489,7 @@ imports:
   - refactor/rename
   - refactor/satisfy
 - name: google.golang.org/api
-  version: 1377dd16e29553e6d668e68fd207a75a66574646
+  version: 0209b31435ad4749b84ce122e669fb098f556642
   subpackages:
   - gensupport
   - googleapi
@@ -490,7 +501,7 @@ imports:
   - storage/v1
   - transport
 - name: google.golang.org/appengine
-  version: 170382fa85b10b94728989dfcf6cc818b335c952
+  version: a2f4131514e563cedfdb6e7d267df9ad48591e93
   subpackages:
   - internal
   - internal/app_identity
@@ -504,7 +515,7 @@ imports:
   - socket
   - urlfetch
 - name: google.golang.org/genproto
-  version: 411e09b969b1170a9f0c467558eb4c4c110d9c77
+  version: d80a6e20e776b0b17a324d0ba1ab50a39c8e8944
   subpackages:
   - googleapis/api/annotations
   - googleapis/iam/v1
@@ -529,7 +540,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 - name: honnef.co/go/tools
-  version: aeda00f7ca49ce710df354fc703b08d94d3a23c0
+  version: e94d1c1a34c6b61d8d06c7793b8f22cd0dfcdd90
   subpackages:
   - callgraph
   - callgraph/static
