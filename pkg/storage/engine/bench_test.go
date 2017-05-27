@@ -67,6 +67,8 @@ func setupMVCCData(
 	exists := true
 	if _, err := os.Stat(loc); os.IsNotExist(err) {
 		exists = false
+	} else if err != nil {
+		b.Fatal(err)
 	}
 
 	eng := emk(b, loc)
