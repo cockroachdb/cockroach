@@ -905,6 +905,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// ourselves via looking at MsgAppResp messages would be overkill. Perhaps
 	// another accessor on RawNode.
 	status := r.raftStatusRLocked()
+	if status == nil {
+		return
+	}
+
 	// Find the minimum index that active followers have acknowledged.
 	minIndex := status.Commit
 
