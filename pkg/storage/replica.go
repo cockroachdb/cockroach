@@ -376,6 +376,8 @@ type Replica struct {
 		// newly recreated replica will have a complete range descriptor.
 		lastToReplica, lastFromReplica roachpb.ReplicaDescriptor
 
+		raftStorage *replicaRaftStorage
+
 		// submitProposalFn can be set to mock out the propose operation.
 		submitProposalFn func(*ProposalData) error
 		// Computed checksum at a snapshot UUID.
@@ -444,7 +446,7 @@ func (r *Replica) withRaftGroupLocked(
 
 	if r.mu.internalRaftGroup == nil {
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
-			raft.Storage(r),
+			raft.Storage(r.mu.raftStorage),
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
 			r.store.cfg,
@@ -526,6 +528,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		abortCache:     NewAbortCache(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
 	}
+	r.mu.raftStorage = newReplicaRaftStorage(r)
 	r.mu.stateLoader = makeReplicaStateLoader(rangeID)
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()

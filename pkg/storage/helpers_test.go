@@ -244,7 +244,7 @@ func (r *Replica) RaftUnlock() {
 func (r *Replica) GetLastIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.LastIndex()
+	return r.raftLastIndexLocked()
 }
 
 // GetLease exposes replica.getLease for tests.
