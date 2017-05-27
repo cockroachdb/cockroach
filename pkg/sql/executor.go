@@ -524,10 +524,10 @@ func (e *Executor) ExecuteStatements(
 	defer logIfPanicking(session.Ctx(), stmts)
 
 	// If the Executor wants config updates to be blocked, then block them so
-	// that checkTestingVerifyMetadataInitialOrDie() can later be run. The
-	// point is to lock the system config so that no gossip updates sneak in
-	// under us, so that we're able to assert that the verify callback only
-	// succeeds after a gossip update.
+	// that session.testingVerifyMetadataFn can later be run on a known version
+	// of the system config. The point is to lock the system config so that no
+	// gossip updates sneak in under us. We're then able to assert that the
+	// verify callback only succeeds after a gossip update.
 	//
 	// This lock does not change semantics. Even outside of tests, the Executor
 	// uses static systemConfig for a user request, so locking the Executor's
