@@ -381,6 +381,9 @@ type Replica struct {
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]replicaChecksum
 
+		proposalQuota          *quotaPool
+		proposalQuotaBaseIndex uint64
+
 		// Counts calls to Replica.tick()
 		ticks int
 
@@ -792,6 +795,79 @@ func (r *Replica) setEstimatedCommitIndexLocked(commit uint64) {
 	// arriving out of order.
 	if r.mu.estimatedCommitIndex < commit {
 		r.mu.estimatedCommitIndex = commit
+	}
+}
+
+func (r *Replica) maybeAcquireProposalQuota(ctx context.Context) error {
+	r.mu.RLock()
+	quota := r.mu.proposalQuota
+	r.mu.RUnlock()
+	if quota == nil {
+		return nil
+	}
+	return quota.acquire(ctx)
+}
+
+func (r *Replica) updateProposalQuotaLocked(newLeaderID roachpb.ReplicaID) {
+	if r.mu.leaderID != newLeaderID {
+		if r.mu.replicaID == newLeaderID {
+			// We're becoming the leader.
+			r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
+			r.mu.proposalQuota = newQuotaPool(defaultProposalQuota)
+		} else {
+			// We're becoming a follower.
+			r.mu.proposalQuota = nil
+		}
+		return
+	} else if r.mu.proposalQuota == nil {
+		// We're a follower.
+		return
+	}
+	// We're still the leader.
+
+	// TODO(peter): Can we avoid retrieving the Raft status on every invocation
+	// in order to avoid the associated allocation? Tracking the progress
+	// ourselves via looking at MsgAppResp messages would be overkill. Perhaps
+	// another accessor on RawNode.
+	status := r.raftStatusRLocked()
+	// Find the minimum index that active followers have acknowledged.
+	minIndex := status.Commit
+	// now := timeutil.Now()
+	for _, rep := range r.mu.state.Desc.Replicas {
+		// Only consider followers that have "healthy" RPC connections. We don't
+		// use node liveness here as doing so could lead to deadlock unless we
+		// avoided enforcing proposal quota for node liveness ranges.
+		if r.store.cfg.Transport.resolver != nil {
+			addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
+			if err != nil {
+				continue
+			}
+			if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
+				continue
+			}
+		}
+		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; ok {
+			// Only consider followers who are in advance of the quota base
+			// index. This prevents a follower from coming back online and preventing
+			// throughput to the range until it has caught up.
+			if progress.Match < r.mu.proposalQuotaBaseIndex {
+				continue
+			}
+			if progress.Match > 0 && minIndex > progress.Match {
+				minIndex = progress.Match
+			}
+		}
+	}
+
+	if r.mu.proposalQuotaBaseIndex < minIndex {
+		// Raft may propose commands itself (specifically the empty commands when
+		// leadership changes), and these commands don't go through the code paths
+		// where we acquire quota from the pool. We avoid releasing quota here that
+		// we never acquired by resetting the quota pool whenever leadership
+		// changes hands.
+		delta := int64(minIndex - r.mu.proposalQuotaBaseIndex)
+		r.mu.proposalQuotaBaseIndex = minIndex
+		r.mu.proposalQuota.add(delta)
 	}
 }
 
@@ -2259,6 +2335,10 @@ func (r *Replica) tryExecuteWriteBatch(
 
 	log.Event(ctx, "applied timestamp cache")
 
+	if err := r.maybeAcquireProposalQuota(ctx); err != nil {
+		return nil, roachpb.NewError(err), proposalNoRetry
+	}
+
 	ch, tryAbandon, err := r.propose(ctx, lease, ba, endCmds, spans)
 	if err != nil {
 		return nil, roachpb.NewError(err), proposalNoRetry
@@ -2865,6 +2945,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
 	r.mu.raftLogSize = raftLogSize
+	r.updateProposalQuotaLocked(leaderID)
 	r.mu.leaderID = leaderID
 	r.mu.Unlock()
 
