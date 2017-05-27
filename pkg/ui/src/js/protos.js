@@ -28394,6 +28394,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {Long} [num_pending] RangeInfo num_pending.
                  * @property {Long} [num_dropped] RangeInfo num_dropped.
                  * @property {Long} [raft_log_size] RangeInfo raft_log_size.
+                 * @property {Long} [approximate_proposal_quota] RangeInfo approximate_proposal_quota.
                  */
 
                 /**
@@ -28440,6 +28441,12 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.raft_log_size = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
+                 * RangeInfo approximate_proposal_quota.
+                 * @type {Long}
+                 */
+                RangeInfo.prototype.approximate_proposal_quota = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
                  * Creates a new RangeInfo instance using the specified properties.
                  * @param {cockroach.storage.storagebase.RangeInfo$Properties=} [properties] Properties to set
                  * @returns {cockroach.storage.storagebase.RangeInfo} RangeInfo instance
@@ -28467,6 +28474,8 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 5, wireType 0 =*/40).uint64(message.num_dropped);
                     if (message.raft_log_size != null && message.hasOwnProperty("raft_log_size"))
                         writer.uint32(/* id 6, wireType 0 =*/48).int64(message.raft_log_size);
+                    if (message.approximate_proposal_quota != null && message.hasOwnProperty("approximate_proposal_quota"))
+                        writer.uint32(/* id 7, wireType 0 =*/56).int64(message.approximate_proposal_quota);
                     return writer;
                 };
 
@@ -28509,6 +28518,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 6:
                             message.raft_log_size = reader.int64();
+                            break;
+                        case 7:
+                            message.approximate_proposal_quota = reader.int64();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -28556,6 +28568,9 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.raft_log_size != null && message.hasOwnProperty("raft_log_size"))
                         if (!$util.isInteger(message.raft_log_size) && !(message.raft_log_size && $util.isInteger(message.raft_log_size.low) && $util.isInteger(message.raft_log_size.high)))
                             return "raft_log_size: integer|Long expected";
+                    if (message.approximate_proposal_quota != null && message.hasOwnProperty("approximate_proposal_quota"))
+                        if (!$util.isInteger(message.approximate_proposal_quota) && !(message.approximate_proposal_quota && $util.isInteger(message.approximate_proposal_quota.low) && $util.isInteger(message.approximate_proposal_quota.high)))
+                            return "approximate_proposal_quota: integer|Long expected";
                     return null;
                 };
 
@@ -28609,6 +28624,15 @@ export const cockroach = $root.cockroach = (() => {
                             message.raft_log_size = object.raft_log_size;
                         else if (typeof object.raft_log_size === "object")
                             message.raft_log_size = new $util.LongBits(object.raft_log_size.low >>> 0, object.raft_log_size.high >>> 0).toNumber();
+                    if (object.approximate_proposal_quota != null)
+                        if ($util.Long)
+                            (message.approximate_proposal_quota = $util.Long.fromValue(object.approximate_proposal_quota)).unsigned = false;
+                        else if (typeof object.approximate_proposal_quota === "string")
+                            message.approximate_proposal_quota = parseInt(object.approximate_proposal_quota, 10);
+                        else if (typeof object.approximate_proposal_quota === "number")
+                            message.approximate_proposal_quota = object.approximate_proposal_quota;
+                        else if (typeof object.approximate_proposal_quota === "object")
+                            message.approximate_proposal_quota = new $util.LongBits(object.approximate_proposal_quota.low >>> 0, object.approximate_proposal_quota.high >>> 0).toNumber();
                     return message;
                 };
 
@@ -28653,6 +28677,11 @@ export const cockroach = $root.cockroach = (() => {
                             object.raft_log_size = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                         } else
                             object.raft_log_size = options.longs === String ? "0" : 0;
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.approximate_proposal_quota = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.approximate_proposal_quota = options.longs === String ? "0" : 0;
                     }
                     if (message.state != null && message.hasOwnProperty("state"))
                         object.state = $root.cockroach.storage.storagebase.ReplicaState.toObject(message.state, options);
@@ -28676,6 +28705,11 @@ export const cockroach = $root.cockroach = (() => {
                             object.raft_log_size = options.longs === String ? String(message.raft_log_size) : message.raft_log_size;
                         else
                             object.raft_log_size = options.longs === String ? $util.Long.prototype.toString.call(message.raft_log_size) : options.longs === Number ? new $util.LongBits(message.raft_log_size.low >>> 0, message.raft_log_size.high >>> 0).toNumber() : message.raft_log_size;
+                    if (message.approximate_proposal_quota != null && message.hasOwnProperty("approximate_proposal_quota"))
+                        if (typeof message.approximate_proposal_quota === "number")
+                            object.approximate_proposal_quota = options.longs === String ? String(message.approximate_proposal_quota) : message.approximate_proposal_quota;
+                        else
+                            object.approximate_proposal_quota = options.longs === String ? $util.Long.prototype.toString.call(message.approximate_proposal_quota) : options.longs === Number ? new $util.LongBits(message.approximate_proposal_quota.low >>> 0, message.approximate_proposal_quota.high >>> 0).toNumber() : message.approximate_proposal_quota;
                     return object;
                 };
 

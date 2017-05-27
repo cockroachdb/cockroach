@@ -191,7 +191,10 @@ type multiTestContext struct {
 	clock       *hlc.Clock
 	rpcContext  *rpc.Context
 
-	nodeIDtoAddr map[roachpb.NodeID]net.Addr
+	nodeIDtoAddrMu struct {
+		*syncutil.RWMutex
+		nodeIDtoAddr map[roachpb.NodeID]net.Addr
+	}
 
 	transport *storage.RaftTransport
 
@@ -223,9 +226,9 @@ type multiTestContext struct {
 }
 
 func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
-	m.mu.RLock()
-	addr, ok := m.nodeIDtoAddr[nodeID]
-	m.mu.RUnlock()
+	m.nodeIDtoAddrMu.RLock()
+	addr, ok := m.nodeIDtoAddrMu.nodeIDtoAddr[nodeID]
+	m.nodeIDtoAddrMu.RUnlock()
 	if ok {
 		return addr, nil
 	}
@@ -249,6 +252,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 	m.t = t
 
+	m.nodeIDtoAddrMu.RWMutex = &syncutil.RWMutex{}
 	m.mu = &syncutil.RWMutex{}
 	m.stores = make([]*storage.Store, numStores)
 	m.storePools = make([]*storage.StorePool, numStores)
@@ -705,9 +709,9 @@ func (m *multiTestContext) addStore(idx int) {
 	// previous stores as resolvers as doing so can cause delays in bringing the
 	// gossip network up.
 	resolvers := func() []resolver.Resolver {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		addr := m.nodeIDtoAddr[1]
+		m.nodeIDtoAddrMu.Lock()
+		defer m.nodeIDtoAddrMu.Unlock()
+		addr := m.nodeIDtoAddrMu.nodeIDtoAddr[1]
 		if addr == nil {
 			return nil
 		}
@@ -762,15 +766,15 @@ func (m *multiTestContext) addStore(idx int) {
 	if err != nil {
 		m.t.Fatal(err)
 	}
-	m.mu.Lock()
-	if m.nodeIDtoAddr == nil {
-		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
+	m.nodeIDtoAddrMu.Lock()
+	if m.nodeIDtoAddrMu.nodeIDtoAddr == nil {
+		m.nodeIDtoAddrMu.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
 	}
-	_, ok := m.nodeIDtoAddr[nodeID]
+	_, ok := m.nodeIDtoAddrMu.nodeIDtoAddr[nodeID]
 	if !ok {
-		m.nodeIDtoAddr[nodeID] = ln.Addr()
+		m.nodeIDtoAddrMu.nodeIDtoAddr[nodeID] = ln.Addr()
 	}
-	m.mu.Unlock()
+	m.nodeIDtoAddrMu.Unlock()
 	if ok {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
@@ -827,7 +831,7 @@ func (m *multiTestContext) addStore(idx int) {
 }
 
 func (m *multiTestContext) nodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
-	addr := m.nodeIDtoAddr[nodeID]
+	addr := m.nodeIDtoAddrMu.nodeIDtoAddr[nodeID]
 	return &roachpb.NodeDescriptor{
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
