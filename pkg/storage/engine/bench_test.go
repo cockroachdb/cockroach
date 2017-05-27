@@ -542,6 +542,11 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 			b.Fatal(err)
 		}
 		if err := copyDir(dir, locDirty); err != nil {
+			if os.IsNotExist(err) {
+				// Someone's changing things out from under us, perhaps
+				// RocksDB is doing some background work. Start over.
+				continue
+			}
 			b.Fatal(err)
 		}
 		dupEng := emk(b, locDirty)
