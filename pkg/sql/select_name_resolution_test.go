@@ -26,7 +26,7 @@ import (
 
 func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *renderNode {
 	p := makeTestPlanner()
-	scan := &scanNode{p: p}
+	scan := p.Scan()
 	scan.desc = *desc
 	// Note: scan.initDescDefaults only returns an error if its 2nd argument is not nil.
 	_ = scan.initDescDefaults(publicColumns, nil)

@@ -49,11 +49,11 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 		// node. The special value math.MaxInt64 means "no limit".
 		if !n.disableBatchLimits && numRows != math.MaxInt64 {
 			if soft {
-				n.hardLimit = 0
+				n.hardLimit = math.MaxInt64
 				n.softLimit = numRows
 			} else {
 				n.hardLimit = numRows
-				n.softLimit = 0
+				n.softLimit = math.MaxInt64
 			}
 		}
 

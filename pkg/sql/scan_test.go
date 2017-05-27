@@ -20,6 +20,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"testing"
@@ -193,17 +194,18 @@ func TestScanBatches(t *testing.T) {
 func TestKVLimitHint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	m := int64(math.MaxInt64)
 	testCases := []struct {
 		hardLimit int64
 		softLimit int64
 		filter    parser.TypedExpr
 		expected  int64
 	}{
-		{hardLimit: 0, softLimit: 0, filter: nil, expected: 0},
-		{hardLimit: 0, softLimit: 1, filter: nil, expected: 2},
-		{hardLimit: 0, softLimit: 23, filter: nil, expected: 46},
-		{hardLimit: 0, softLimit: 1, filter: parser.DBoolFalse, expected: 2},
-		{hardLimit: 1, softLimit: 0, filter: nil, expected: 1},
+		{hardLimit: m, softLimit: m, filter: nil, expected: 0},
+		{hardLimit: m, softLimit: 1, filter: nil, expected: 2},
+		{hardLimit: m, softLimit: 23, filter: nil, expected: 46},
+		{hardLimit: m, softLimit: 1, filter: parser.DBoolFalse, expected: 2},
+		{hardLimit: 1, softLimit: m, filter: nil, expected: 1},
 		{hardLimit: 1, softLimit: 23, filter: nil, expected: 1},
 		{hardLimit: 5, softLimit: 23, filter: nil, expected: 5},
 		{hardLimit: 1, softLimit: 23, filter: parser.DBoolTrue, expected: 1},

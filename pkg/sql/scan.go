@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -81,13 +82,15 @@ type scanNode struct {
 	scanInitialized bool
 	fetcher         sqlbase.RowFetcher
 
-	// if non-zero, hardLimit indicates that the scanNode only needs to provide
-	// this many rows (after applying any filter). It is a "hard" guarantee that
-	// Next will only be called this many times.
+	// if not MaxInt64, hardLimit indicates that the scanNode only
+	// needs to provide this many rows (after applying any filter). It
+	// is a "hard" guarantee that Next will only be called this many
+	// times.
 	hardLimit int64
-	// if non-zero, softLimit is an estimation that only this many rows (after
-	// applying any filter) might be needed. It is a (potentially optimistic)
-	// "hint". If hardLimit is set (non-zero), softLimit must be unset (zero).
+	// if not MaxInt64, softLimit is an estimation that only this many
+	// rows (after applying any filter) might be needed. It is a
+	// (potentially optimistic) "hint". If hardLimit is not MaxInt64,
+	// softLimit must be MaxInt64.
 	softLimit int64
 
 	disableBatchLimits bool
@@ -102,7 +105,7 @@ type scanNode struct {
 }
 
 func (p *planner) Scan() *scanNode {
-	return &scanNode{p: p}
+	return &scanNode{p: p, hardLimit: math.MaxInt64, softLimit: math.MaxInt64}
 }
 
 func (n *scanNode) Columns() sqlbase.ResultColumns {
@@ -135,8 +138,8 @@ func (n *scanNode) DebugValues() debugValues {
 // where we scan batches of unordered spans.
 func (n *scanNode) disableBatchLimit() {
 	n.disableBatchLimits = true
-	n.hardLimit = 0
-	n.softLimit = 0
+	n.hardLimit = math.MaxInt64
+	n.softLimit = math.MaxInt64
 }
 
 func (n *scanNode) Start(context.Context) error {
@@ -158,7 +161,7 @@ func (n *scanNode) initScan(ctx context.Context) error {
 
 func (n *scanNode) limitHint() int64 {
 	var limitHint int64
-	if n.hardLimit != 0 {
+	if n.hardLimit != math.MaxInt64 {
 		limitHint = n.hardLimit
 		if !isFilterTrue(n.filter) {
 			// The limit is hard, but it applies after the filter; read a multiple of
@@ -167,16 +170,19 @@ func (n *scanNode) limitHint() int64 {
 			// calculating that right now.
 			limitHint *= 2
 		}
-	} else {
+	} else if n.softLimit != math.MaxInt64 {
 		// Like above, read a multiple of the limit when the limit is "soft".
 		limitHint = n.softLimit * 2
+	} else {
+		// If there is no limit, rowFetcher expects a 0.
+		limitHint = 0
 	}
 	return limitHint
 }
 
 // debugNext is a helper function used by Next() when in explainDebug mode.
 func (n *scanNode) debugNext(ctx context.Context) (bool, error) {
-	if n.hardLimit > 0 && n.rowIndex >= n.hardLimit {
+	if n.hardLimit != math.MaxInt64 && n.rowIndex >= n.hardLimit {
 		return false, nil
 	}
 
@@ -226,7 +232,7 @@ func (n *scanNode) Next(ctx context.Context) (bool, error) {
 	}
 
 	// We fetch one row at a time until we find one that passes the filter.
-	for n.hardLimit == 0 || n.rowIndex < n.hardLimit {
+	for n.rowIndex < n.hardLimit {
 		var err error
 		n.row, err = n.fetcher.NextRowDecoded(ctx)
 		if err != nil || n.row == nil {

@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 
@@ -149,7 +150,7 @@ func (v *planVisitor) visit(plan planNode) {
 				}
 				v.observer.attr(name, "spans", spans)
 			}
-			if n.hardLimit > 0 && isFilterTrue(n.filter) {
+			if n.hardLimit != math.MaxInt64 && isFilterTrue(n.filter) {
 				v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
 			}
 		}

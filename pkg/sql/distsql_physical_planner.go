@@ -19,6 +19,7 @@ package sql
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -254,7 +255,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *scanNode:
 		rec := canDistribute
-		if n.hardLimit != 0 || n.softLimit != 0 {
+		if n.hardLimit != math.MaxInt64 || n.softLimit != math.MaxInt64 {
 			// We don't yet recommend distributing plans where limits propagate
 			// to scan nodes; we don't have infrastructure to only plan for a few
 			// ranges at a time.
@@ -523,9 +524,9 @@ func initTableReaderSpec(
 		Filter: distsqlplan.MakeExpression(n.filter, nil),
 	}
 
-	if n.hardLimit != 0 {
+	if n.hardLimit != math.MaxInt64 {
 		post.Limit = uint64(n.hardLimit)
-	} else if n.softLimit != 0 {
+	} else if n.softLimit != math.MaxInt64 {
 		s.LimitHint = n.softLimit
 	}
 	return s, post, nil
