@@ -533,8 +533,9 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 	b.StopTimer()
 	b.ResetTimer()
 
+	locDirty := dir + "_dirty"
+
 	for i := 0; i < b.N; i++ {
-		locDirty := dir + "_dirty"
 		if err := os.RemoveAll(locDirty); err != nil {
 			b.Fatal(err)
 		}
