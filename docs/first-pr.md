@@ -121,11 +121,6 @@ home to several other important open-source components of Cockroach:
 * **[cockroachdb/examples-orms]**, which showcases ORMs a toy API that uses an
   ORM to prepare its responses in several different languages.
 
-* **[cockroachdb/teamcity-config]**, which tracks all changes to our TeamCity
-  (continuous integration) configuration. The [wiki associated with this
-  repository](https://github.com/cockroachlabs/teamcity-config/wiki) has some
-  useful TeamCity troubleshooting information.
-
 Most of the remaining repositories under the [cockroachdb] organization are forks
 of existing Go libraries with some small, Cockroach-specific patches.
 
@@ -447,8 +442,8 @@ will fail because of flaky tests. You can verify by running a new build and
 seeing if the problem disappears; just hit the "Run" button on the top right of
 the page GitHub links to queue a new build. Less frequently, TeamCity will
 entirely fail to notice a PR, and GitHub will display "waiting for status to be
-reported" forever. The [cockroachdb/teamcity-config wiki] has [a management
-playbook] that describes how to fix this.
+reported" forever. The ["TeamCity Continuous Integration" wiki page] describes
+how to fix this.
 
 Unfortunately, a full tutorial on TeamCity is outside the scope of this
 document. Ask your Roachmate for an overview if you're confused, or post
@@ -623,10 +618,10 @@ Here's a checklist of action items to keep you sane:
 
 ["Building on Linux"]: #building-on-linux
 ["Internal documentation"]: #internal-documentation
+["TeamCity Continuous Integration" wiki page]: https://github.com/cockroachdb/cockroach/wiki/TeamCity-Continuous-Integration
 ["When to submit"]: #when-to-submit
 [@bdarnell]: https://github.com/bdarnell
 [@petermattis]: https://github.com/petermattis
-[a management playbook]: https://github.com/cockroachlabs/teamcity-config/wiki/TeamCity-management-playbook
 [block_writer]: https://github.com/cockroachdb/examples-go/tree/master/block_writer
 [build/README.md]: /build/README.md
 [cockroachdb]: https://github.com/cockroachdb
@@ -635,13 +630,10 @@ Here's a checklist of action items to keep you sane:
 [cockroachdb/examples-go]: https://github.com/cockroachdb/examples-go
 [cockroachdb/examples-orms]: https://github.com/cockroachdb/examples-orms
 [cockroachdb/loadgen]: https://github.com/cockroachdb/loadgen
-[cockroachdb/teamcity-config wiki]: https://github.com/cockroachlabs/teamcity-config/wiki
-[cockroachdb/teamcity-config]: http://github.com/cockroachdb/teamcity-config
 [CONTRIBUTING.md]: /CONTRIBUTING.md
 [design document]: /docs/design.md
 [docs/tech-notes]: /docs/tech-notes
 [docs/tech-notes/contexts.md]: /docs/tech-notes/contexts.md
-[monitoring.crdb.io]: http://monitoring.crdb.io
 [photos]: https://github.com/cockroachdb/examples-go/tree/master/photos
 [production-ready code]: #production-ready-code
 [Reviewable]: https://reviewable.io
