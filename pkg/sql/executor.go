@@ -551,7 +551,7 @@ func (e *Executor) ExecuteStatements(
 // ExecutePreparedStatement executes the given statement and returns a response.
 func (e *Executor) ExecutePreparedStatement(
 	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
-) StatementResults {
+) (StatementResults, error) {
 
 	var stmts parser.StatementList
 	if stmt.Statement != nil {
@@ -576,9 +576,27 @@ func (e *Executor) ExecutePreparedStatement(
 		session.phaseTimes[sessionEndParse] = now
 	}
 
+	return e.execPrepared(session, stmt, pinfo)
+}
+
+// execPrepared executes a prepared statement. It returns an error if there
+// is more than 1 result or the returned types differ from the prepared
+// return types.
+func (e *Executor) execPrepared(
+	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
+) (StatementResults, error) {
+	var stmts parser.StatementList
+	if stmt.Statement != nil {
+		stmts = parser.StatementList{stmt.Statement}
+	}
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execParsed(session, stmts, pinfo, copyMsgNone)
+	results := e.execParsed(session, stmts, pinfo, copyMsgNone, []sqlbase.ResultColumns{stmt.Columns})
+	if len(results.ResultList) > 1 {
+		results.Close(session.Ctx())
+		return StatementResults{}, errWrongNumberOfPreparedStatements(len(results.ResultList))
+	}
+	return results, nil
 }
 
 // CopyData adds data to the COPY buffer and executes if there are enough rows.
@@ -650,11 +668,15 @@ func (e *Executor) execRequest(
 		res.ResultList = append(res.ResultList, Result{Err: err})
 		return res
 	}
-	return e.execParsed(session, stmts, pinfo, copymsg)
+	return e.execParsed(session, stmts, pinfo, copymsg, nil)
 }
 
 func (e *Executor) execParsed(
-	session *Session, stmts parser.StatementList, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
+	session *Session,
+	stmts parser.StatementList,
+	pinfo *parser.PlaceholderInfo,
+	copymsg copyMsg,
+	expectResultColumns []sqlbase.ResultColumns,
 ) StatementResults {
 	var res StatementResults
 	var avoidCachedDescriptors bool
@@ -723,6 +745,12 @@ func (e *Executor) execParsed(
 		var results []Result
 		origState := txnState.State
 
+		var expect []sqlbase.ResultColumns
+		if expectResultColumns != nil {
+			expect = expectResultColumns[:len(stmtsToExec)]
+			expectResultColumns = expectResultColumns[len(stmtsToExec):]
+		}
+
 		// Track if we are retrying this query, so that we do not double count.
 		automaticRetryCount := 0
 		txnClosure := func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
@@ -742,9 +770,10 @@ func (e *Executor) execParsed(
 				// Some results were produced by a previous attempt. Discard them.
 				ResultList(results).Close(ctx)
 			}
+
 			results, remainingStmts, err = runTxnAttempt(
 				e, session, stmtsToExec, pinfo, origState, opt,
-				avoidCachedDescriptors, automaticRetryCount)
+				avoidCachedDescriptors, automaticRetryCount, expect)
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State == Aborted {
@@ -921,6 +950,7 @@ func runTxnAttempt(
 	opt *client.TxnExecOptions,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
+	expectResultColumns []sqlbase.ResultColumns,
 ) ([]Result, parser.StatementList, error) {
 
 	// Ignore the state that might have been set by a previous try of this
@@ -935,7 +965,8 @@ func runTxnAttempt(
 
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
 		session, stmts, pinfo, opt.AutoCommit, /* implicitTxn */
-		opt.AutoRetry /* txnBeginning */, avoidCachedDescriptors, automaticRetryCount)
+		opt.AutoRetry /* txnBeginning */, avoidCachedDescriptors, automaticRetryCount,
+		expectResultColumns)
 
 	if opt.AutoCommit && len(remainingStmts) > 0 {
 		panic("implicit txn failed to execute all stmts")
@@ -989,6 +1020,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 	txnBeginning bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
+	expectResultColumns []sqlbase.ResultColumns,
 ) ([]Result, parser.StatementList, error) {
 	var results []Result
 
@@ -1025,9 +1057,13 @@ func (e *Executor) execStmtsInCurrentTxn(
 		} else {
 			switch txnState.State {
 			case Open:
+				var expect sqlbase.ResultColumns
+				if expectResultColumns != nil {
+					expect = expectResultColumns[i]
+				}
 				res, err = e.execStmtInOpenTxn(
 					session, stmt, pinfo, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
-					avoidCachedDescriptors, automaticRetryCount)
+					avoidCachedDescriptors, automaticRetryCount, expect)
 			case Aborted, RestartWait:
 				res, err = e.execStmtInAbortedTxn(session, stmt)
 			case CommitWait:
@@ -1225,6 +1261,7 @@ func (e *Executor) execStmtInOpenTxn(
 	firstInTxn bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
+	expectResultColumns sqlbase.ResultColumns,
 ) (_ Result, err error) {
 	txnState := &session.TxnState
 	if txnState.State != Open {
@@ -1344,14 +1381,15 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 			qArgs[idx] = typedExpr
 		}
-		results := e.execParsed(session, parser.StatementList{prepared.Statement},
-			&parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes},
-			copyMsgNone)
-		if results.Empty {
-			return Result{}, nil
+		results, err := e.execPrepared(session, prepared,
+			&parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
+		if err != nil {
+			return Result{}, err
 		}
-		if len(results.ResultList) > 1 {
-			return Result{}, errWrongNumberOfPreparedStatements(len(results.ResultList))
+		// No need to check if len(results.ResultList) > 1 because execPrepared
+		// returns an error in that case.
+		if len(results.ResultList) == 0 {
+			return Result{}, nil
 		}
 		return results.ResultList[0], nil
 
@@ -1376,6 +1414,17 @@ func (e *Executor) execStmtInOpenTxn(
 	planner.semaCtx.Placeholders.Assign(pinfo)
 	planner.avoidCachedDescriptors = avoidCachedDescriptors
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+
+	if expectResultColumns != nil {
+		plan, err := planner.prepare(session.Ctx(), stmt)
+		if err != nil {
+			return Result{}, err
+		}
+		if !plan.Columns().TypesEqual(expectResultColumns) {
+			return Result{}, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+				"cached plan must not change result type")
+		}
+	}
 
 	var result Result
 	if parallelize && !implicitTxn {
