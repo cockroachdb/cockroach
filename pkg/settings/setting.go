@@ -14,16 +14,34 @@
 
 package settings
 
-// Setting implementions wrap a val with atomic access.
+// Setting implementations wrap a val with atomic access.
 type Setting interface {
 	setToDefault()
 	// Typ returns the short (1 char) string denoting the type of setting.
 	Typ() string
 	String() string
+
+	// AddChangeCallback registers a closure that is run after the setting
+	// changes value.
+	AddChangeCallback(cb func())
 }
 
 type numericSetting interface {
 	Setting
 	Validate(i int64) error
 	set(i int64) error
+}
+
+type settingBase struct {
+	changeCallbacks []func()
+}
+
+func (s *settingBase) AddChangeCallback(cb func()) {
+	s.changeCallbacks = append(s.changeCallbacks, cb)
+}
+
+func (s *settingBase) runChangeCallbacks() {
+	for _, cb := range s.changeCallbacks {
+		cb()
+	}
 }
