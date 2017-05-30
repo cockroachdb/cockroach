@@ -36,7 +36,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	cfg := MakeConfig()
 	cfg.Attrs = "attr1=val1::attr2=val2"
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
-	engines, err := cfg.CreateEngines()
+	engines, err := cfg.CreateEngines(context.TODO())
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
@@ -57,7 +57,7 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	cfg := MakeConfig()
 	cfg.JoinList = []string{"localhost:12345,,localhost:23456", "localhost:34567"}
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
-	engines, err := cfg.CreateEngines()
+	engines, err := cfg.CreateEngines(context.TODO())
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
