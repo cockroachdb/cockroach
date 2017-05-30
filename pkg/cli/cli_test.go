@@ -462,6 +462,7 @@ func Example_zone() {
 	c.Run("zone ls")
 	c.Run("zone set system --file=./testdata/zone_attrs.yaml")
 	c.Run("zone ls")
+	c.Run("zone get .meta")
 	c.Run("zone get system.nonexistent")
 	c.Run("zone get system.lease")
 	c.Run("zone set system.lease --file=./testdata/zone_attrs.yaml")
@@ -503,6 +504,14 @@ func Example_zone() {
 	// zone ls
 	// .default
 	// system
+	// zone get .meta
+	// .default
+	// range_min_bytes: 1048576
+	// range_max_bytes: 67108864
+	// gc:
+	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: []
 	// zone get system.nonexistent
 	// system.nonexistent not found
 	// zone get system.lease
@@ -541,32 +550,32 @@ func Example_zone() {
 	// zone rm .default
 	// unable to remove special zone .default
 	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 0
+	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 0
+	//   ttlseconds: 86400
 	// num_replicas: 3
 	// constraints: []
 	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 0
+	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 0
+	//   ttlseconds: 86400
 	// num_replicas: 3
 	// constraints: []
 	// zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 0
+	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 0
+	//   ttlseconds: 86400
 	// num_replicas: 3
 	// constraints: []
 	// zone get .system
 	// .system
-	// range_min_bytes: 0
+	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 0
+	//   ttlseconds: 86400
 	// num_replicas: 3
 	// constraints: []
 	// zone ls
