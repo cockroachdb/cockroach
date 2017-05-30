@@ -836,7 +836,7 @@ func TestAdminAPISettings(t *testing.T) {
 	allKeys := settings.Keys()
 
 	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
-		ref, desc, ok := settings.Lookup(k)
+		ref, ok := settings.Lookup(k)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}
@@ -846,7 +846,7 @@ func TestAdminAPISettings(t *testing.T) {
 			t.Errorf("%s: expected value %s, got %s", k, ref, v.Value)
 		}
 
-		if desc != v.Description {
+		if desc := ref.Description(); desc != v.Description {
 			t.Errorf("%s: expected description %s, got %s", k, desc, v.Description)
 		}
 		if typ != v.Type {

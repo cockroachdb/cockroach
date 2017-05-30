@@ -27,6 +27,7 @@ type StringSetting struct {
 	defaultValue string
 	v            atomic.Value
 	validateFn   func(string) error
+	common
 }
 
 var _ Setting = &StringSetting{}

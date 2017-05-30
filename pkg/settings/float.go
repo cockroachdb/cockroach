@@ -28,6 +28,7 @@ type FloatSetting struct {
 	defaultValue float64
 	v            uint64
 	validateFn   func(float64) error
+	common
 }
 
 var _ Setting = &FloatSetting{}

@@ -53,7 +53,7 @@ type MVCCIncrementalIterator struct {
 var TimeBoundIteratorsEnabled = func() *settings.BoolSetting {
 	name := "enterprise.kv.timebound_iterator.enabled"
 	s := settings.RegisterBoolSetting(name, "speed up incremental backups by efficiently skipping over old SSTs", false)
-	settings.Hide(name)
+	s.Hide()
 	return s
 }()
 

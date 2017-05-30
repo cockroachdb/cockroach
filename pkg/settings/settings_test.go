@@ -36,7 +36,10 @@ var fA = settings.RegisterFloatSetting("f", "", 5.4)
 var dA = settings.RegisterDurationSetting("d", "", time.Second)
 var eA = settings.RegisterEnumSetting("e", "", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = settings.RegisterByteSizeSetting("zzz", "", mb)
-var _ = settings.RegisterBoolSetting("sekretz", "", false)
+var _ = func() {
+	settings.RegisterBoolSetting("sekretz", "", false).Hide()
+}
+
 var strVal = settings.RegisterValidatedStringSetting(
 	"str.val", "", "", func(v string) error {
 		for _, c := range v {
@@ -62,10 +65,6 @@ var iVal = settings.RegisterValidatedIntSetting(
 		}
 		return nil
 	})
-
-func init() {
-	settings.Hide("sekretz")
-}
 
 func TestCache(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
@@ -117,28 +116,28 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("lookup", func(t *testing.T) {
-		if actual, _, ok := settings.Lookup("i.1"); !ok || i1A != actual {
+		if actual, ok := settings.Lookup("i.1"); !ok || i1A != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", i1A, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("i.Val"); !ok || iVal != actual {
+		if actual, ok := settings.Lookup("i.Val"); !ok || iVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", iVal, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("f"); !ok || fA != actual {
+		if actual, ok := settings.Lookup("f"); !ok || fA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", fA, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("fVal"); !ok || fVal != actual {
+		if actual, ok := settings.Lookup("fVal"); !ok || fVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", fVal, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("d"); !ok || dA != actual {
+		if actual, ok := settings.Lookup("d"); !ok || dA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", dA, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("dVal"); !ok || dVal != actual {
+		if actual, ok := settings.Lookup("dVal"); !ok || dVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", dVal, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("e"); !ok || eA != actual {
+		if actual, ok := settings.Lookup("e"); !ok || eA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", eA, actual, ok)
 		}
-		if actual, _, ok := settings.Lookup("dne"); ok {
+		if actual, ok := settings.Lookup("dne"); ok {
 			t.Fatalf("expected nothing, got %v", actual)
 		}
 	})
