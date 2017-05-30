@@ -7220,6 +7220,55 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 	}
 }
 
+// TestGCWithoutThreshold validates that GCRequest only declares the threshold
+// keys which are subject to change, and that it does not access these keys if
+// it does not declare them.
+func TestGCWithoutThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	desc := roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
+	ctx := context.Background()
+
+	options := []hlc.Timestamp{{}, hlc.Timestamp{}.Add(1, 0)}
+
+	for i, keyThresh := range options {
+		for j, txnThresh := range options {
+			func() {
+				var gc roachpb.GCRequest
+				var spans SpanSet
+
+				gc.Threshold = keyThresh
+				gc.TxnSpanGCThreshold = txnThresh
+				declareKeysGC(desc, roachpb.Header{}, &gc, &spans)
+
+				if num, exp := spans.len(), i+j+1; num != exp {
+					t.Fatalf("(%s,%s): expected %d declared keys, found %d",
+						keyThresh, txnThresh, exp, num)
+				}
+
+				eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+				defer eng.Close()
+
+				batch := eng.NewBatch()
+				defer batch.Close()
+				rw := makeSpanSetBatch(batch, &spans)
+
+				var resp roachpb.GCResponse
+
+				if _, err := evalGC(ctx, rw, CommandArgs{
+					Args: &gc,
+					EvalCtx: ReplicaEvalContext{
+						repl: &Replica{},
+						ss:   &spans,
+					},
+				}, &resp); err != nil {
+					t.Fatalf("at (%s,%s)", keyThresh, txnThresh)
+				}
+			}()
+		}
+	}
+}
+
 // TestCommandTimeThreshold verifies that commands outside the replica GC
 // threshold fail.
 func TestCommandTimeThreshold(t *testing.T) {
