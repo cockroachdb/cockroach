@@ -37,11 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	defer tracing.Disable()()
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{UseDatabase: "bench"})
 	defer s.Stopper().Stop(context.TODO())
@@ -54,7 +52,6 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 }
 
 func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	defer tracing.Disable()()
 	tc := testcluster.StartTestCluster(b, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
