@@ -52,6 +52,7 @@ func register(key, desc string, s Setting) {
 		panic(fmt.Sprintf("setting already defined: %s", key))
 	}
 	s.setToDefault()
+	s.setDescription(desc)
 	registry[key] = s
 }
 
