@@ -832,7 +832,10 @@ func (c *v3Conn) finishExecute(
 	results sql.StatementResults, formatCodes []formatCode, sendDescription bool, limit int,
 ) error {
 	// Delay evaluation of c.session.Ctx().
-	defer func() { results.Close(c.session.Ctx()) }()
+	defer func() {
+		results.Close(c.session.Ctx())
+		c.session.FinishPlan()
+	}()
 
 	tracing.AnnotateTrace()
 	if results.Empty {
