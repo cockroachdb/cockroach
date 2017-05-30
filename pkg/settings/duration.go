@@ -25,10 +25,10 @@ import (
 // updated automatically when the corresponding cluster-wide setting
 // of type "duration" is updated.
 type DurationSetting struct {
+	common
 	defaultValue time.Duration
 	v            int64
 	validateFn   func(time.Duration) error
-	common
 }
 
 var _ Setting = &DurationSetting{}
@@ -61,7 +61,9 @@ func (d *DurationSetting) set(v time.Duration) error {
 	if err := d.Validate(v); err != nil {
 		return err
 	}
-	atomic.StoreInt64(&d.v, int64(v))
+	if v := int64(v); atomic.SwapInt64(&d.v, v) != v {
+		d.changed()
+	}
 	return nil
 }
 
@@ -119,4 +121,10 @@ func TestingSetDuration(s **DurationSetting, v time.Duration) func() {
 // only.
 func TestingDuration(v time.Duration) *DurationSetting {
 	return &DurationSetting{v: int64(v)}
+}
+
+// OnChange registers a callback to be called when the setting changes.
+func (d *DurationSetting) OnChange(fn func()) *DurationSetting {
+	d.setOnChange(fn)
+	return d
 }

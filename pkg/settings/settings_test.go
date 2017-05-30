@@ -26,17 +26,29 @@ import (
 
 const mb = int64(1024 * 1024)
 
-var boolTA = settings.RegisterBoolSetting("bool.t", "", true)
+var changes = struct {
+	boolTA   int
+	strFooA  int
+	i1A      int
+	fA       int
+	dA       int
+	eA       int
+	byteSize int
+}{}
+
+var boolTA = settings.RegisterBoolSetting("bool.t", "", true).OnChange(func() { changes.boolTA++ })
 var boolFA = settings.RegisterBoolSetting("bool.f", "", false)
-var strFooA = settings.RegisterStringSetting("str.foo", "", "")
+var strFooA = settings.RegisterStringSetting("str.foo", "", "").OnChange(func() { changes.strFooA++ })
 var strBarA = settings.RegisterStringSetting("str.bar", "", "bar")
-var i1A = settings.RegisterIntSetting("i.1", "", 0)
+var i1A = settings.RegisterIntSetting("i.1", "", 0).OnChange(func() { changes.i1A++ })
 var i2A = settings.RegisterIntSetting("i.2", "", 5)
-var fA = settings.RegisterFloatSetting("f", "", 5.4)
-var dA = settings.RegisterDurationSetting("d", "", time.Second)
-var eA = settings.RegisterEnumSetting("e", "", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
-var byteSize = settings.RegisterByteSizeSetting("zzz", "", mb)
-var _ = func() {
+var fA = settings.RegisterFloatSetting("f", "", 5.4).OnChange(func() { changes.fA++ })
+var dA = settings.RegisterDurationSetting("d", "", time.Second).OnChange(func() { changes.dA++ })
+var eA = settings.RegisterEnumSetting("e", "", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"}).
+	OnChange(func() { changes.eA++ })
+var byteSize = settings.RegisterByteSizeSetting("zzz", "", mb).OnChange(func() { changes.byteSize++ })
+
+func init() {
 	settings.RegisterBoolSetting("sekretz", "", false).Hide()
 }
 
@@ -144,14 +156,26 @@ func TestCache(t *testing.T) {
 
 	t.Run("read and write each type", func(t *testing.T) {
 		u := settings.MakeUpdater()
+		if expected, actual := 0, changes.boolTA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("bool.t", settings.EncodeBool(false), "b"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.boolTA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("bool.f", settings.EncodeBool(true), "b"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.strFooA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("str.foo", "baz", "s"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.strFooA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("str.val", "valid", "s"); err != nil {
 			t.Fatal(err)
@@ -159,26 +183,50 @@ func TestCache(t *testing.T) {
 		if err := u.Set("i.2", settings.EncodeInt(3), "i"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.fA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("f", settings.EncodeFloat(3.1), "f"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.fA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("fVal", settings.EncodeFloat(3.1), "f"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.dA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("d", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.dA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("dVal", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.byteSize; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("zzz", settings.EncodeInt(mb*5), "z"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.byteSize; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("byteSize.Val", settings.EncodeInt(mb*5), "z"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.eA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if err := u.Set("e", settings.EncodeInt(2), "e"); err != nil {
 			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.eA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if expected, err := "strconv.Atoi: parsing \"notAValidValue\": invalid syntax",
 			u.Set("e", "notAValidValue", "e"); !testutils.IsError(err, expected) {
@@ -235,8 +283,14 @@ func TestCache(t *testing.T) {
 			if err := u.Set("bool.f", settings.EncodeBool(true), "b"); err != nil {
 				t.Fatal(err)
 			}
+			if expected, actual := 0, changes.i1A; expected != actual {
+				t.Fatalf("expected %d, got %d", expected, actual)
+			}
 			if err := u.Set("i.1", settings.EncodeInt(1), "i"); err != nil {
 				t.Fatal(err)
+			}
+			if expected, actual := 1, changes.i1A; expected != actual {
+				t.Fatalf("expected %d, got %d", expected, actual)
 			}
 			if err := u.Set("i.2", settings.EncodeInt(7), "i"); err != nil {
 				t.Fatal(err)
@@ -253,6 +307,14 @@ func TestCache(t *testing.T) {
 		// If the updater doesn't have a key, e.g. if the setting has been deleted,
 		// Doneing it from the cache.
 		settings.MakeUpdater().Done()
+
+		if expected, actual := 2, changes.boolTA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+
+		if expected, actual := 2, changes.i1A; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 
 		if expected, actual := false, boolFA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
