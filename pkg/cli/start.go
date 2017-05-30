@@ -81,7 +81,7 @@ uninitialized, specify the --join flag to point to any healthy node
 }
 
 func setDefaultSizeParameters(ctx *server.Config) {
-	if size, err := server.GetTotalMemory(); err == nil {
+	if size, err := server.GetTotalMemory(context.Background()); err == nil {
 		// Default the cache size to 1/4 of total memory. A larger cache size
 		// doesn't necessarily improve performance as this is memory that is
 		// dedicated to uncompressed blocks in RocksDB. A larger value here will
@@ -311,6 +311,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	serverCfg.Report(startCtx)
 
 	// Run the rest of the startup process in the background to avoid preventing
 	// proper handling of signals if we get stuck on something during
