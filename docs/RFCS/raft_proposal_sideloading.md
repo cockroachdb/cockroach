@@ -2,8 +2,8 @@
 - Status: draft/in-progress/completed/rejected/obsolete
 - Start Date: 2017-05-24
 - Authors: Dan Harrison and Tobias Schottdorf, original suggestion Ben Darnell
-- RFC PR: (PR # after acceptance of initial draft)
-- Cockroach Issue: (one or more # from the issue tracker)
+- RFC PR: #16159
+- Cockroach Issue: TBD
 
 # Summary and non-goals
 
@@ -12,14 +12,10 @@ amplification associated with storing them in the Raft log, and to allow RESTORE
 to directly link SSTables into the LSM. Proposals tagged as such are stored
 directly on the file system (i.e. not in the Raft log), with only metadata in
 the Raft log. This happens transparently on each node, i.e. the proposal is sent
-over the wire. This proposal special-cases for the ingestion of SSTables. If
-there is potential for different use cases, these should be discussed with this
-RFC; the mechanism should then be generalized from the start. This seems
-feasible but has been omitted for clarity.
-
-Two alternatives are presented here. The simpler one, discussed in the
-alternatives section, is a simple reduction of the somewhat more involved one,
-discussed at length, and incurs an extra copy of the file.
+over the wire. This proposal special-cases for the ingestion of SSTables, but is
+presented in some generality to apply also to large proposals created otherwise,
+though this generality is only maintained for as long as it is convenient, and
+the actual implementation may be specialized to apply to SSTable ingestion only.
 
 It is explicitly a non-goal to deal with (overly) large proposals, as none of
 the Raft interfaces expect proposals of nontrivial size. It is not expected that
@@ -33,8 +29,9 @@ on Raft for simplicity, but the naive approach of sending a (chunked)
 
 1. all of the data is written to the Raft log, where it incurs a large write
    amplification, and
-1. applying `WriteBatch`es to RocksDB incurs another sizable write amplification
-   factor: it is far better to link SSTables directly into the LSM.
+1. applying a large `WriteBatch` to RocksDB incurs another sizable write
+   amplification factor: it is far better to link SSTables directly into the
+   LSM.
 
 Instead, `RESTORE` sends small (initially ~2MB) SSTables which are to be linked
 directly into RocksDB. This eliminates the latter point above. However, it does
@@ -46,84 +43,103 @@ Note also that housing the Raft log outside of RocksDB only addresses the former
 point if it results in a SSTable being stored inside of the RocksDB directory,
 which is likely to be a non-goal of that project.
 
-The proposal (original suggested by @bdarnell) is to special-case the
-proposals containing SSTables for ingestion:
+## Detailed design
 
-1. When they are put into the Raft log (`append()`), what's actually put in the
-   Raft log is a small piece of metadata, and
-1. the actual payload is stored to the `Store`'s temp dir, accessible via its
-   log index. More precisely, we likely actually want to store a few files: at
-   least the payload and a checksum.
+The mechanism proposed here is the following:
+
+1. `storagebase.RaftCommand` wins fields `SideloadedSha512 []byte` (on
+   `ReplicatedEvalResult`) and `SideloadedData []byte` (next to `WriteBatch`)
+   which are unused for regular Raft proposals.
+1. When a proposal is to be sideloaded, a regular proposal is generated, but the
+   sideloaded data and its hash populated. In the concrete case of `SSTable`
+   this means that `evalIngestSSTable` creates an essentially empty proposal
+   (perhaps accounting for an MVCC stats delta).
+1.  On its way into Raft, the
+   `SideloadedData` bytes are then written to disk and stripped from the
+   proposal. On disk, the payload is stored in the `Store`'s directory,
+   accessible via its log index, using the following scheme:
+
+   ```
+   <storeDir>/sideloaded_proposals/<rangeID>/<logIndex>
+   ```
+
+   where the file contains the raw sideloaded data, e.g. an `SSTable` that will
+   populate `(storagebase.RaftCommand).SideloadedData`.
+1. Whenever the content of a sideloaded proposal is required, a `raftpb.Entry`
+   is reconstituted from the corresponding file, while verifying the checksum in
+   `SideloadedSha512`. A failure of either operation is treated as fatal (a
+   `ReplicaCorruptionError`). Note that restoring an entry is expensive: load
+   the payload from disk, unmarshal the `RaftCommand`, compute the checksum and
+   compare it to that stored in `RaftCommand`, put the payload into the
+   `RaftCommand`, marshal the `RaftCommand`. The Raft entries cache should help
+   mitigate this cost, though we should watch the overhead closely to check
+   whether we can perhaps eagerly populate the cache when proposing.
 1. When such an entry is sent to the follower over the network
-   (`sendRaftMessage`), the original proposal is sent (that is, the data
-   inlined). Note that this could happen via `append` or via the snapshotting
-   mechanism (`sendSnapshot` or rather its child `iterateEntries`), which sends
-   a part of the Raft log along with the snapshot.
-1. When a sideloaded entry is applied to the state machine, the corresponding
-   file is hard-linked into its RocksDB directory and, from there, ingested
-   by RocksDB. That way, even if RocksDB decided to remove the file, it would
-   still be available to Raft due to the way hardlinks work.
-   TODO: windows and other systems? Would we need to special-case anything?
-   We could fall-back to the simpler proposal in those cases and simply copy.
+   (`sendRaftMessage`), the original proposal is sent (via the mechanism above).
+   Note that this could happen via `append` or via the snapshotting mechanism
+   (`sendSnapshot` or rather its child `iterateEntries`), which sends a part of
+   the Raft log along with the snapshot.
+1. Apply-time side effects have access to the payload, and can make use of it
+   under the contract that they do not alter the on-disk file. For the SSTable
+   use case, when a sideloaded entry is applied to the state machine, the
+   corresponding file is hard-linked into its RocksDB directory and, from there,
+   ingested by RocksDB. That way, even if RocksDB decided to remove the file, it
+   would still be available to Raft due to the way hardlinks work.
 1. When Raft log truncation runs and truncates the log up to and including index
-   `i`, then any sideloaded files for such indexes in the temp dir (all of which
+   `i`, then any sideloaded files for such indexes on disk (all of which
    must at that point be hardlinked into RocksDB already) are unlinked.
-1. The sideloaded data must be included in checksumming, consistency checks,
-   etc.
 
-# Detailed design
+## Determining whether a `raftpb.Entry` is sideloaded
 
 The principal difficulty is sniffing sideloadable proposals from a
-`(raftpb.Entry).Bytes` byte slice. This is necessary since sideloading happens
-at that fairly low level, and unmarshalling every single message squarely in the
-hot write path is clearly not an option. Instead, we make use of the fact that
-`(raftpb.Entry).Bytes` equals `encodeRaftCommand(p.idKey, data)`, which
-essentially prepends the data slice with a version byte and the idKey.
+`(raftpb.Entry).Data` byte slice. This is necessary since sideloading happens at
+that fairly low level, and unmarshalling every single message squarely in the
+hot write path is clearly not an option. `(raftpb.Entry).Data` equals
+`encodeRaftCommand(p.idKey, data)`, where `data` is a marshaled
+`storagebase.RaftCommand`, resulting in
 
-We propose to encode the information that this proposal should be sideloaded in
-the version byte. Naively, this breaks migrations: while decoding Raft commands,
-the version byte is checked and on mismatch, a panic ensues. There are two ways
-out:
+```
+(raftpb.Entry).Data = append(raftCommandEncodingVersion, idKey, data)
+```
 
-1. We don't provide a migration path. A different version is only sent for
-   sideloadable proposals, which implies use of BACKUP-RESTORE, and we simply
-   mandate that no such commands may be issued on a mixed cluster (or in
-   temporal proximity to a rolling upgrade). However, with a little trickery we
-   can do better:
-1. For historical reasons, we already ignore the 7th bit of the Raft command
-   version[1] when decoding it. Thus, if we repurpose that bit, we can even run
-   BACKUP-RESTORE on mixed clusters (though obviously old versions that don't
-   support the respective Raft command would still fail, so it's not generally a
-   great idea).
+We can't hide information in `data` as we would have to unmarshal it too often.
+Thus, we have two choices left: to either shorten `idKey` and use one of its
+bits, or to use the raft command version.
 
-Either way, we propose to flag sideloadable commands in this manner. Armed with
-that, `(*Replica).append` and the other methods above can assure that there is
-no externally visible change to the way Raft proposals are handled, and we can
-drop sideloaded proposals directly on disk, where they are accessible via their
-log index.
+We can't naively change `raftCommandVersion` because there is no migration path
+there - nodes receiving Raft messages with a different version simply panic, and
+even a stop-the-world upgrade can not be carried out in a safe manner.
 
-Next, when applying a sideloaded proposal, we synthesize a side effect which
-recovers the file's location from the log position, and performs a suitable
-action, which must be inferred from the file. If the feature is restricted to
-handle the SSTable ingestion required for `RESTORE`, it will simply treat the
-file as a SSTable, hard link it into the RocksDB directory, and ingest it there.
+However, for historical reasons we ignore the high bit of `raftCommandVersion`
+in the version check, and it can be repurposed to flag a command for
+sideloading. A node which does not understand this will simply ignore the bit
+and not sideload the proposal, which is acceptable as sideloading is a
+performance optimization only.
 
-That leaves describing how SSTable ingestion commands are proposed: They will
-arrive at the Replica in a regular command, with the SSTable in a byte slice.
-Since we envision the payload to be *only* the SSTable (i.e. not the marshalled
-command containing that table), we must special-case this command.
+Armed with that, `(*Replica).append` and the other methods above can assure that
+there is no externally visible change to the way Raft proposals are handled, and
+we can drop sideloaded proposals directly on disk, where they are accessible via
+their log index.
 
-To this end, we add a new `SSTable []byte` field to `ProposalData` which is read
-in `defaultSubmitProposalLocked` and, if set, triggers the special handling.
+TODO: use cmdID instead? Or can we do something else entirely?
 
-TODO: when applying the chunks one after another, the range isn't in a valid
-state. For example, MVCCStats don't match up, etc. Maybe ok? Could set
-`MVCCStats.ContainsEstimates=true`. Alternative: let last SSTable pull the
-trigger, link them at the same time. More complex - what if trigger never shows
-up? When are these files GC'ed? Can no more be tied to truncation. Probably
-non-issue - if backup fails, range never "used". Could some queue pick it up and
-panic, though? Or we could compute MVCCStats on the side and send for each
-chunk. Either way, none of these problems are new with this proposal.
+## Migration story
+
+The feature will initially only be used for SSTable ingestion, which remains
+behind a feature flag. An upgrade is carried out as follows:
+
+1. rolling cluster restart to new version
+1. enable the feature flag
+1. restore now uses SSTable ingestion
+
+A downgrade is slightly less stable but should work out OK in practice:
+
+1. disable the feature flag
+1. wait until it's clear that no SSTable ingestions are active anywhere (i.e.
+   any such proposals have been applied by all replicas affected by them)
+1. rolling cluster restart to old version.
+1. in the unlikely event of a node crashing, upgrade that node again and back to
+   the first step
 
 # Drawbacks
 
@@ -142,7 +158,7 @@ On the downside, the write amplification is now 2x.
 
 # Unresolved questions
 
-## RocksDB may alter the file
+## Investigate: Could RocksDB alter the file?
 
 If we are aiming high and want 1x write amplification, then we do not want to
 copy the file to RocksDB; we want to hard-link it there. However, RocksDB may
@@ -164,13 +180,22 @@ that a file is only deleted after all referencing hardlinks have been. However,
 it seems that once we detect these systems reliably (conservatively), we can
 always fall back to making an extra copy instead of a hard link.
 
-## Useful generalization?
+## Usefulness of generalization
 
-If multiple use of sideloading is envisioned, additional information has to be
-hidden in the file. For example, sideloadable payloads could be cut into sevaral
-parts, one of which dictates what kind of payload this is. It's probably best to
-think hard about whether there's any other use for this; probably not, not even
-for snapshots.
+Sideloading could be useful for bulk INSERTs (non-RESTORE data loading) and
+DeleteRange, or more generally any proposal that's large enough to profit from
+reduced write amplification compared to what we have today. However, moving the
+raft log out of rocksdb likely already addresses that suitably.
 
+## Deleting sideloaded files when tail of log is replaced
+
+The unstable part of the Raft log may be overwritten. This means that an entry
+that already holds a sideloaded file may be overwritten with another entry
+(which in turn may or may not be sideloaded). This means that either we must be
+able to overwrite files on disk, or we must make sure that whenever `append()`
+overwrites an existing part of the log, any associated on-disk payloads are
+removed.
+
+Either option seems feasible.
 
 [1]: https://github.com/cockroachdb/cockroach/pull/9459/files#diff-2967750a9f426e20041d924947ff1d46R707
