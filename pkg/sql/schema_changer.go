@@ -457,12 +457,12 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 					// it will be better to run the backfill of a unique index
 					// twice: once in the DELETE_ONLY state to confirm that
 					// the index can indeed be created, and subsequently in the
-					// WRITE_ONLY state to fill in the missing elements of the
+					// DELETE_AND_WRITE_ONLY state to fill in the missing elements of the
 					// index (INSERT and UPDATE that happened in the interim).
-					desc.Mutations[i].State = sqlbase.DescriptorMutation_WRITE_ONLY
+					desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY
 					modified = true
 
-				case sqlbase.DescriptorMutation_WRITE_ONLY:
+				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
 					// The state change has already moved forward.
 				}
 
@@ -471,7 +471,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 				case sqlbase.DescriptorMutation_DELETE_ONLY:
 					// The state change has already moved forward.
 
-				case sqlbase.DescriptorMutation_WRITE_ONLY:
+				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
 					desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_ONLY
 					modified = true
 				}

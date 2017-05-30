@@ -165,9 +165,10 @@ func MakeRowInserter(
 	checkFKs bool,
 ) (RowInserter, error) {
 	indexes := tableDesc.Indexes
-	// Also include the secondary indexes in mutation state WRITE_ONLY.
+	// Also include the secondary indexes in mutation state
+	// DELETE_AND_WRITE_ONLY.
 	for _, m := range tableDesc.Mutations {
-		if m.State == DescriptorMutation_WRITE_ONLY {
+		if m.State == DescriptorMutation_DELETE_AND_WRITE_ONLY {
 			if index := m.GetIndex(); index != nil {
 				indexes = append(indexes, *index)
 			}
@@ -443,7 +444,7 @@ func MakeRowUpdater(
 					}
 					deleteOnlyIndex[len(indexes)-1] = struct{}{}
 
-				case DescriptorMutation_WRITE_ONLY:
+				case DescriptorMutation_DELETE_AND_WRITE_ONLY:
 				}
 			}
 		}

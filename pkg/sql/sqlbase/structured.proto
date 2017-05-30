@@ -323,8 +323,8 @@ message DescriptorMutation {
     //
     // When adding a descriptor, all descriptor related data
     // (column default or index data) can only be backfilled once
-    // all nodes have transitioned into the WRITE_ONLY state.
-    WRITE_ONLY = 2;
+    // all nodes have transitioned into the DELETE_AND_WRITE_ONLY state.
+    DELETE_AND_WRITE_ONLY = 2;
   }
   optional State state = 3 [(gogoproto.nullable) = false];
 
