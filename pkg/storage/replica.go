@@ -900,11 +900,32 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// We're still the leader.
 
+	// We need to check if the replica is being destroyed and if so, close the
+	// quota pool and unblock ongoing quota acquisition goroutines (if any).
+	//
+	// TODO(irfansharif): There is still a potential problem here that leaves
+	// clients hanging if the replica gets destroyed but this code path is
+	// never taken. Moving quota pool draining to every point where a
+	// replica can get destroyed is an option, alternatively we can clear
+	// our leader status and close the proposalQuota whenever the replica is
+	// destroyed.
+	if r.mu.destroyed != nil {
+		r.mu.proposalQuota.close()
+		r.mu.proposalQuota = nil
+		r.mu.quotaReleaseQueue = nil
+		r.mu.commandSizes = nil
+		return
+	}
+
 	// TODO(peter): Can we avoid retrieving the Raft status on every invocation
 	// in order to avoid the associated allocation? Tracking the progress
 	// ourselves via looking at MsgAppResp messages would be overkill. Perhaps
 	// another accessor on RawNode.
 	status := r.raftStatusRLocked()
+	if status == nil {
+		log.Fatal(ctx, "leader with nil RaftStatus")
+	}
+
 	// Find the minimum index that active followers have acknowledged.
 	minIndex := status.Commit
 
