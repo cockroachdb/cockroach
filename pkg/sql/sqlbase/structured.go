@@ -1544,13 +1544,13 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 
 // GetIndexMutationCapabilities returns:
 // 1. Whether the index is a mutation
-// 2. if so, is it in state WRITE_ONLY
+// 2. if so, is it in state DELETE_AND_WRITE_ONLY
 func (desc *TableDescriptor) GetIndexMutationCapabilities(id IndexID) (bool, bool) {
 	for _, mutation := range desc.Mutations {
 		if mutationIndex := mutation.GetIndex(); mutationIndex != nil {
 			if mutationIndex.ID == id {
 				return true,
-					mutation.State == DescriptorMutation_WRITE_ONLY
+					mutation.State == DescriptorMutation_DELETE_AND_WRITE_ONLY
 			}
 		}
 	}
@@ -1619,7 +1619,7 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 		m.State = DescriptorMutation_DELETE_ONLY
 
 	case DescriptorMutation_DROP:
-		m.State = DescriptorMutation_WRITE_ONLY
+		m.State = DescriptorMutation_DELETE_AND_WRITE_ONLY
 	}
 	m.MutationID = desc.NextMutationID
 	desc.Mutations = append(desc.Mutations, m)
