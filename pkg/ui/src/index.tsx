@@ -23,19 +23,24 @@ import {
 } from "src/util/constants";
 
 import { store, history } from "src/redux/state";
-import Layout from "src/containers/layout";
-import { DatabaseTablesList, DatabaseGrantsList } from "src/containers/databases/databases";
-import TableDetails from "src/containers/databases/tableDetails";
-import Nodes from "src/containers/nodes";
-import NodesOverview from "src/containers/nodesOverview";
-import NodeOverview from "src/containers/nodeOverview";
-import NodeGraphs from "src/containers/nodeGraphs";
-import NodeLogs from "src/containers/nodeLogs";
-import { EventPage } from "src/containers/events";
-import QueryPlan from "src/containers/queryPlan";
-import Raft from "src/containers/raft";
-import RaftRanges from "src/containers/raftRanges";
-import ClusterViz from "src/containers/clusterViz";
+import Layout from "src/views/app/containers/layout";
+
+import Nodes from "src/views/cluster/containers/nodes";
+
+import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/containers/databases";
+import TableDetails from "src/views/databases/containers/tableDetails";
+
+import NodesOverview from "src/views/cluster/containers/nodesOverview";
+import NodeOverview from "src/views/cluster/containers/nodeOverview";
+import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
+import NodeLogs from "src/views/cluster/containers/nodeLogs";
+import { EventPage } from "src/views/cluster/containers/events";
+
+import QueryPlan from "src/views/devtools/containers/queryPlan";
+import Raft from "src/views/devtools/containers/raft";
+import RaftRanges from "src/views/devtools/containers/raftRanges";
+import ClusterViz from "src/views/devtools/containers/clusterViz";
+
 import { alertDataSync } from "src/redux/alerts";
 
 ReactDOM.render(
