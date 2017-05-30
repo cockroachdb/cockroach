@@ -24,6 +24,8 @@ import (
 // updated automatically when the corresponding cluster-wide setting
 // of type "string" is updated.
 type StringSetting struct {
+	settingBase
+
 	defaultValue string
 	v            atomic.Value
 	validateFn   func(string) error
@@ -59,7 +61,11 @@ func (s *StringSetting) set(v string) error {
 	if err := s.Validate(v); err != nil {
 		return err
 	}
-	s.v.Store(v)
+	oldVal := s.v.Load()
+	if oldVal != v {
+		s.v.Store(v)
+		s.runChangeCallbacks()
+	}
 	return nil
 }
 

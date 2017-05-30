@@ -471,3 +471,85 @@ func TestHide(t *testing.T) {
 		t.Errorf("expected 'sekretz' to be hidden")
 	}
 }
+
+func TestChangeCallbacks(t *testing.T) {
+	// Reset settings to default.
+	u := settings.MakeUpdater()
+	u.Done()
+
+	var changed string
+	boolTA.AddChangeCallback(func() { changed = changed + "b" })
+	strFooA.AddChangeCallback(func() { changed = changed + "s" })
+	i1A.AddChangeCallback(func() { changed = changed + "i" })
+	fA.AddChangeCallback(func() { changed = changed + "f" })
+	dA.AddChangeCallback(func() { changed = changed + "d" })
+	eA.AddChangeCallback(func() { changed = changed + "e" })
+
+	get := func() string {
+		res := changed
+		changed = ""
+		return res
+	}
+
+	u = settings.MakeUpdater()
+	if err := u.Set("bool.t", settings.EncodeBool(false), "b"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set("str.foo", "baz", "s"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set("i.1", settings.EncodeInt(1), "i"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set("f", settings.EncodeFloat(3.1), "f"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set("d", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set("e", settings.EncodeInt(2), "e"); err != nil {
+		t.Fatal(err)
+	}
+	u.Done()
+
+	if expected, actual := "bsifde", get(); expected != actual {
+		t.Errorf("expected callbacks for '%s', got '%s'", expected, actual)
+	}
+
+	// Update them again to the same values, verify there are no callbacks.
+	u = settings.MakeUpdater()
+	if err := u.Set("bool.t", settings.EncodeBool(false), "b"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set("str.foo", "baz", "s"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set("i.1", settings.EncodeInt(1), "i"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set("f", settings.EncodeFloat(3.1), "f"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set("d", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set("e", settings.EncodeInt(2), "e"); err != nil {
+		t.Fatal(err)
+	}
+	u.Done()
+
+	// Reset to defaults.
+	u = settings.MakeUpdater()
+	u.Done()
+	// The order in which the defaults are set is arbitrary
+	if actual := get(); len(actual) != len("bsifde") {
+		t.Errorf("expected callbacks for 'bsifde', got '%s'", actual)
+	}
+
+	// Reset to defaults again.
+	u = settings.MakeUpdater()
+	u.Done()
+	if expected, actual := "", get(); expected != actual {
+		t.Errorf("expected callbacks for '%s', got '%s'", expected, actual)
+	}
+}

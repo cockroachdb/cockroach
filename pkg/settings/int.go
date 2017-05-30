@@ -24,6 +24,8 @@ import (
 // updated automatically when the corresponding cluster-wide setting
 // of type "int" is updated.
 type IntSetting struct {
+	settingBase
+
 	defaultValue int64
 	v            int64
 	validateFn   func(int64) error
@@ -59,7 +61,10 @@ func (i *IntSetting) set(v int64) error {
 	if err := i.Validate(v); err != nil {
 		return err
 	}
-	atomic.StoreInt64(&i.v, v)
+	oldVal := atomic.SwapInt64(&i.v, v)
+	if oldVal != v {
+		i.runChangeCallbacks()
+	}
 	return nil
 }
 
