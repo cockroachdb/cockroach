@@ -67,6 +67,8 @@ func setupMVCCData(
 	exists := true
 	if _, err := os.Stat(loc); os.IsNotExist(err) {
 		exists = false
+	} else if err != nil {
+		b.Fatal(err)
 	}
 
 	eng := emk(b, loc)
@@ -527,32 +529,41 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 	const rangeBytes = 512 * 1024
 	numKeys := rangeBytes / (overhead + valueBytes)
 	eng, dir := setupMVCCData(emk, 1, numKeys, valueBytes, b)
-	defer eng.Close()
+	eng.Close()
 
 	b.SetBytes(rangeBytes)
 	b.StopTimer()
 	b.ResetTimer()
 
+	locDirty := dir + "_dirty"
+
 	for i := 0; i < b.N; i++ {
-		locDirty := dir + "_dirty"
 		if err := os.RemoveAll(locDirty); err != nil {
 			b.Fatal(err)
 		}
 		if err := copyDir(dir, locDirty); err != nil {
 			b.Fatal(err)
 		}
-		dupEng := emk(b, locDirty)
+		func() {
+			eng := emk(b, locDirty)
+			defer eng.Close()
 
-		b.StartTimer()
-		_, _, _, err := MVCCDeleteRange(context.Background(), dupEng,
-			&enginepb.MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, math.MaxInt64,
-			hlc.MaxTimestamp, nil, false)
-		if err != nil {
-			b.Fatal(err)
-		}
-		b.StopTimer()
-
-		dupEng.Close()
+			b.StartTimer()
+			if _, _, _, err := MVCCDeleteRange(
+				context.Background(),
+				eng,
+				&enginepb.MVCCStats{},
+				roachpb.KeyMin,
+				roachpb.KeyMax,
+				math.MaxInt64,
+				hlc.MaxTimestamp,
+				nil,
+				false,
+			); err != nil {
+				b.Fatal(err)
+			}
+			b.StopTimer()
+		}()
 	}
 }
 
