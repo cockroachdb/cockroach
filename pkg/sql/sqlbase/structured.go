@@ -1202,7 +1202,7 @@ func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 		typ = encoding.Float
 	case ColumnType_INTERVAL:
 		typ = encoding.Duration
-	case ColumnType_STRING, ColumnType_BYTES, ColumnType_COLLATEDSTRING, ColumnType_NAME:
+	case ColumnType_STRING, ColumnType_BYTES, ColumnType_COLLATEDSTRING, ColumnType_NAME, ColumnType_UUID:
 		// STRINGs are counted as runes, so this isn't totally correct, but this
 		// seems better than always assuming the maximum rune width.
 		typ, size = encoding.Bytes, int(col.Type.Width)
@@ -1503,6 +1503,21 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
 }
 
+// GetIndexMutationCapabilities returns:
+// 1. Whether the index is a mutation
+// 2. if so, is it in state WRITE_ONLY
+func (desc *TableDescriptor) GetIndexMutationCapabilities(id IndexID) (bool, bool) {
+	for _, mutation := range desc.Mutations {
+		if mutationIndex := mutation.GetIndex(); mutationIndex != nil {
+			if mutationIndex.ID == id {
+				return true,
+					mutation.State == DescriptorMutation_WRITE_ONLY
+			}
+		}
+	}
+	return false, false
+}
+
 // IsInterleaved returns true if any part of this this table is interleaved with
 // another table's data.
 func (desc *TableDescriptor) IsInterleaved() bool {
@@ -1760,6 +1775,8 @@ func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 		ctyp.Kind = ColumnType_TIMESTAMPTZ
 	case parser.TypeInterval:
 		ctyp.Kind = ColumnType_INTERVAL
+	case parser.TypeUUID:
+		ctyp.Kind = ColumnType_UUID
 	case parser.TypeOid:
 		ctyp.Kind = ColumnType_OID
 	case parser.TypeNull:
@@ -1803,6 +1820,8 @@ func (c *ColumnType) ToDatumType() parser.Type {
 		return parser.TypeTimestampTZ
 	case ColumnType_INTERVAL:
 		return parser.TypeInterval
+	case ColumnType_UUID:
+		return parser.TypeUUID
 	case ColumnType_COLLATEDSTRING:
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")

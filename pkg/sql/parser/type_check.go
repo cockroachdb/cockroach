@@ -117,12 +117,8 @@ func (expr *AndExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error
 // TypeCheck implements the Expr interface.
 func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	ops := BinOps[expr.Operator]
-	overloads := make([]overloadImpl, len(ops))
-	for i := range ops {
-		overloads[i] = ops[i]
-	}
 
-	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, desired, overloads, expr.Left, expr.Right)
+	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, desired, ops, expr.Left, expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -376,11 +372,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		return nil, err
 	}
 
-	overloads := make([]overloadImpl, len(def.Definition))
-	for i, d := range def.Definition {
-		overloads[i] = d
-	}
-	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, desired, overloads, expr.Exprs...)
+	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, expr.Exprs...)
 	if err != nil {
 		return nil, fmt.Errorf("%s(): %v", def.Name, err)
 	} else if fn == nil {
@@ -611,12 +603,8 @@ func (expr *Subquery) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error)
 // TypeCheck implements the Expr interface.
 func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	ops := UnaryOps[expr.Operator]
-	overloads := make([]overloadImpl, len(ops))
-	for i := range ops {
-		overloads[i] = ops[i]
-	}
 
-	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, desired, overloads, expr.Expr)
+	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, desired, ops, expr.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -777,6 +765,10 @@ func (d *DCollatedString) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) {
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
 func (d *DBytes) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DUuid) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
@@ -978,11 +970,7 @@ func typeCheckComparisonOp(
 		return typedLeft, typedRight, fn, nil
 	}
 
-	overloads := make([]overloadImpl, len(ops))
-	for i := range ops {
-		overloads[i] = ops[i]
-	}
-	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, TypeAny, overloads, foldedLeft, foldedRight)
+	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, TypeAny, ops, foldedLeft, foldedRight)
 	if err != nil {
 		return nil, nil, CmpOp{}, err
 	}

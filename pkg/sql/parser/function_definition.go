@@ -32,21 +32,22 @@ type FunctionDefinition struct {
 	// Set e.g. for aggregate functions.
 	HasOverloadsNeedingRepeatedEvaluation bool
 	// Definition is the set of overloads for this function name.
-	Definition []Builtin
+	Definition []overloadImpl
 }
 
 func newFunctionDefinition(name string, def []Builtin) *FunctionDefinition {
 	hasRowDependentOverloads := false
-	for _, d := range def {
+	overloads := make([]overloadImpl, len(def))
+	for i, d := range def {
+		overloads[i] = d
 		if d.needsRepeatedEvaluation {
 			hasRowDependentOverloads = true
-			break
 		}
 	}
 	return &FunctionDefinition{
 		Name: name,
 		HasOverloadsNeedingRepeatedEvaluation: hasRowDependentOverloads,
-		Definition:                            def,
+		Definition:                            overloads,
 	}
 }
 

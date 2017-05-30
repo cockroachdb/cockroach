@@ -32,9 +32,24 @@ const (
 	// it may be aborted by conflicting txns.
 	DefaultHeartbeatInterval = 1 * time.Second
 
-	// DefaultSendNextTimeout is the duration to wait before trying
-	// another replica to send a KV batch.
-	DefaultSendNextTimeout = 500 * time.Millisecond
+	// DefaultSendNextTimeout is the duration to wait before trying another
+	// replica to send a KV batch.
+	//
+	// TODO(peter): The SendNextTimeout mechanism is intended to lower tail
+	// latencies by performing "speculative retries". In order to do so, the
+	// timeout needs to by very low, but it can't be too low or we add
+	// unnecessary network traffic and increase the likelihood of ambiguous
+	// results. The SendNextTimeout mechanism has been the source of several bugs
+	// and it is questionable about whether it is still necessary given that we
+	// shut down the connection on heartbeat timeouts.
+	//
+	//   https://github.com/cockroachdb/cockroach/issues/15687
+	//   https://github.com/cockroachdb/cockroach/issues/16119
+	//
+	// In advance of removing the SendNextTimeout mechanism completely, we're
+	// setting the value very high and will be paying attention to tail
+	// latencies.
+	DefaultSendNextTimeout = 10 * time.Minute
 
 	// DefaultPendingRPCTimeout is the duration to wait for outstanding RPCs
 	// after receiving an error.

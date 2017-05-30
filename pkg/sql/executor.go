@@ -1369,26 +1369,38 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{PGTag: s.StatementTag()}, nil
 	}
 
-	// Create a new planner from the Session to execute the statement.
-	planner := session.newPlanner(e, txnState.txn)
-	planner.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
-	planner.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
-	planner.semaCtx.Placeholders.Assign(pinfo)
-	planner.avoidCachedDescriptors = avoidCachedDescriptors
-	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	var p *planner
+	runInParallel := parallelize && !implicitTxn
+	if runInParallel {
+		// Create a new planner from the Session to execute the statement, since
+		// we're executing in parallel.
+		p = session.newPlanner(e, txnState.txn)
+	} else {
+		// We're not executing in parallel. We can use the cached planner on the
+		// session.
+		p = &session.planner
+		session.resetPlanner(p, e, txnState.txn)
+	}
+	p.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
+	p.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
+	p.semaCtx.Placeholders.Assign(pinfo)
+	p.avoidCachedDescriptors = avoidCachedDescriptors
+	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
 	var result Result
-	if parallelize && !implicitTxn {
+	if runInParallel {
 		// Only run statements asynchronously through the parallelize queue if the
 		// statements are parallelized and we're in a transaction. Parallelized
 		// statements outside of a transaction are run synchronously with mocked
 		// results, which has the same effect as running asynchronously but
 		// immediately blocking.
-		result, err = e.execStmtInParallel(stmt, planner)
+		result, err = e.execStmtInParallel(stmt, p)
 	} else {
-		planner.autoCommit = implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-		result, err = e.execStmt(stmt, planner,
+		p.autoCommit = implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
+		result, err = e.execStmt(stmt, p,
 			automaticRetryCount, parallelize /* mockResults */)
+		// Zeroing the cached planner allows the GC to clean up any memory hanging
+		// off the planner, which we're finished using at this point.
 	}
 
 	if err != nil {
@@ -1814,6 +1826,7 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeTimestamp:
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
+	case parser.TypeUUID:
 	case parser.TypeStringArray:
 	case parser.TypeNameArray:
 	case parser.TypeIntArray:

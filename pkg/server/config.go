@@ -17,6 +17,7 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -24,6 +25,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -229,7 +232,7 @@ func (cfg Config) HistogramWindowInterval() time.Duration {
 
 // GetTotalMemory returns either the total system memory or if possible the
 // cgroups available memory.
-func GetTotalMemory() (int64, error) {
+func GetTotalMemory(ctx context.Context) (int64, error) {
 	totalMem, err := func() (int64, error) {
 		mem := gosigar.Mem{}
 		if err := mem.Get(); err != nil {
@@ -257,36 +260,27 @@ func GetTotalMemory() (int64, error) {
 
 	var buf []byte
 	if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
-		if log.V(1) {
-			log.Infof(context.TODO(), "can't read available memory from cgroups (%s), using system memory %s instead", err,
-				humanizeutil.IBytes(totalMem))
-		}
+		log.Infof(ctx, "can't read available memory from cgroups (%s), using system memory %s instead", err,
+			humanizeutil.IBytes(totalMem))
 		return checkTotal(totalMem)
 	}
 
 	cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
 	if err != nil {
-		if log.V(1) {
-			log.Infof(context.TODO(), "can't parse available memory from cgroups (%s), using system memory %s instead", err,
-				humanizeutil.IBytes(totalMem))
-		}
+		log.Infof(ctx, "can't parse available memory from cgroups (%s), using system memory %s instead", err,
+			humanizeutil.IBytes(totalMem))
 		return checkTotal(totalMem)
 	}
 
 	if cgAvlMem == 0 || cgAvlMem > math.MaxInt64 {
-		if log.V(1) {
-			log.Infof(context.TODO(), "available memory from cgroups (%s) is unsupported, using system memory %s instead",
-				humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
-
-		}
+		log.Infof(ctx, "available memory from cgroups (%s) is unsupported, using system memory %s instead",
+			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 		return checkTotal(totalMem)
 	}
 
 	if totalMem > 0 && int64(cgAvlMem) > totalMem {
-		if log.V(1) {
-			log.Infof(context.TODO(), "available memory from cgroups (%s) exceeds system memory %s, using system memory",
-				humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
-		}
+		log.Infof(ctx, "available memory from cgroups (%s) exceeds system memory %s, using system memory",
+			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 		return checkTotal(totalMem)
 	}
 
@@ -348,6 +342,45 @@ func MakeConfig() Config {
 	return cfg
 }
 
+// String implements the fmt.Stringer interface.
+func (cfg *Config) String() string {
+	var buf bytes.Buffer
+
+	w := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+	fmt.Fprintln(w, "max offset\t", cfg.MaxOffset)
+	fmt.Fprintln(w, "cache size\t", humanizeutil.IBytes(cfg.CacheSize))
+	fmt.Fprintln(w, "SQL memory pool size\t", humanizeutil.IBytes(cfg.SQLMemoryPoolSize))
+	fmt.Fprintln(w, "scan interval\t", cfg.ScanInterval)
+	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)
+	fmt.Fprintln(w, "consistency check interval\t", cfg.ConsistencyCheckInterval)
+	fmt.Fprintln(w, "metrics sample interval\t", cfg.MetricsSampleInterval)
+	fmt.Fprintln(w, "time until store dead\t", cfg.TimeUntilStoreDead)
+	fmt.Fprintln(w, "send next timeout\t", cfg.SendNextTimeout)
+	fmt.Fprintln(w, "pending RPC timeout\t", cfg.PendingRPCTimeout)
+	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
+	fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
+	if cfg.ListeningURLFile != "" {
+		fmt.Fprintln(w, "listening URL file\t", cfg.ListeningURLFile)
+	}
+	if cfg.PIDFile != "" {
+		fmt.Fprintln(w, "PID file\t", cfg.PIDFile)
+	}
+	_ = w.Flush()
+
+	return buf.String()
+}
+
+// Report logs an overview of the server configuration parameters via
+// the given context.
+func (cfg *Config) Report(ctx context.Context) {
+	if memSize, err := GetTotalMemory(ctx); err != nil {
+		log.Infof(ctx, "unable to retrieve system total memory: %v", err)
+	} else {
+		log.Infof(ctx, "system total memory: %s", humanizeutil.IBytes(memSize))
+	}
+	log.Info(ctx, "server configuration:\n", cfg)
+}
+
 // Engines is a container of engines, allowing convenient closing.
 type Engines []engine.Engine
 
@@ -368,7 +401,7 @@ func (e *Engines) Close() {
 }
 
 // CreateEngines creates Engines based on the specs in cfg.Stores.
-func (cfg *Config) CreateEngines() (Engines, error) {
+func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	engines := Engines(nil)
 	defer engines.Close()
 
@@ -377,6 +410,9 @@ func (cfg *Config) CreateEngines() (Engines, error) {
 	}
 	cfg.enginesCreated = true
 
+	var details []string
+
+	details = append(details, fmt.Sprintf("RocksDB cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
 	cache := engine.NewRocksDBCache(cfg.CacheSize)
 	defer cache.Release()
 
@@ -393,11 +429,11 @@ func (cfg *Config) CreateEngines() (Engines, error) {
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
 		cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck
-	for _, spec := range cfg.Stores.Specs {
+	for i, spec := range cfg.Stores.Specs {
 		var sizeInBytes = spec.SizeInBytes
 		if spec.InMemory {
 			if spec.SizePercent > 0 {
-				sysMem, err := GetTotalMemory()
+				sysMem, err := GetTotalMemory(ctx)
 				if err != nil {
 					return Engines{}, errors.Errorf("could not retrieve system memory")
 				}
@@ -407,6 +443,8 @@ func (cfg *Config) CreateEngines() (Engines, error) {
 				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
+			details = append(details, fmt.Sprintf("store %d: in-memory, size %s",
+				i, humanizeutil.IBytes(sizeInBytes)))
 			engines = append(engines, engine.NewInMem(spec.Attributes, sizeInBytes))
 		} else {
 			if spec.SizePercent > 0 {
@@ -421,6 +459,8 @@ func (cfg *Config) CreateEngines() (Engines, error) {
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
+			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
+				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 			eng, err := engine.NewRocksDB(
 				spec.Attributes,
 				spec.Path,
@@ -435,10 +475,10 @@ func (cfg *Config) CreateEngines() (Engines, error) {
 		}
 	}
 
-	if len(engines) == 1 {
-		log.Infof(context.TODO(), "1 storage engine initialized")
-	} else {
-		log.Infof(context.TODO(), "%d storage engines initialized", len(engines))
+	log.Infof(ctx, "%d storage engine%s initialized",
+		len(engines), util.Pluralize(int64(len(engines))))
+	for _, s := range details {
+		log.Info(ctx, s)
 	}
 	enginesCopy := engines
 	engines = nil

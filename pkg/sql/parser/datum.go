@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var (
@@ -198,6 +199,26 @@ func ParseDBool(s string) (*DBool, error) {
 		return nil, makeParseError(s, TypeBool, err)
 	}
 	return MakeDBool(DBool(b)), nil
+}
+
+// ParseDUuidFromString parses and returns the *DUuid Datum value represented
+// by the provided input string, or an error.
+func ParseDUuidFromString(s string) (*DUuid, error) {
+	uv, err := uuid.FromString(s)
+	if err != nil {
+		return nil, makeParseError(s, TypeUUID, err)
+	}
+	return NewDUuid(DUuid{uv}), nil
+}
+
+// ParseDUuidFromBytes parses and returns the *DUuid Datum value represented
+// by the provided input bytes, or an error.
+func ParseDUuidFromBytes(b []byte) (*DUuid, error) {
+	uv, err := uuid.FromBytes(b)
+	if err != nil {
+		return nil, makeParseError(string(b), TypeUUID, err)
+	}
+	return NewDUuid(DUuid{uv}), nil
 }
 
 // GetBool gets DBool or an error (also treats NULL as false, not an error).
@@ -945,6 +966,90 @@ func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
 // Size implements the Datum interface.
 func (d *DBytes) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
+}
+
+// DUuid is the UUID Datum.
+type DUuid struct {
+	uuid.UUID
+}
+
+// NewDUuid is a helper routine to create a *DUuid initialized from its
+// argument.
+func NewDUuid(d DUuid) *DUuid {
+	return &d
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DUuid) ResolvedType() Type {
+	return TypeUUID
+}
+
+// Compare implements the Datum interface.
+func (d *DUuid) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(*DUuid)
+	if !ok {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	return bytes.Compare(d.GetBytes(), v.GetBytes())
+}
+
+func (d DUuid) equal(other *DUuid) bool {
+	return bytes.Equal(d.GetBytes(), other.GetBytes())
+}
+
+// Prev implements the Datum interface.
+func (d *DUuid) Prev() (Datum, bool) {
+	i := d.ToUint128()
+	u := uuid.FromUint128(i.Sub(1))
+	return NewDUuid(DUuid{u}), true
+}
+
+// Next implements the Datum interface.
+func (d *DUuid) Next() (Datum, bool) {
+	i := d.ToUint128()
+	u := uuid.FromUint128(i.Add(1))
+	return NewDUuid(DUuid{u}), true
+}
+
+// IsMax implements the Datum interface.
+func (d *DUuid) IsMax() bool {
+	return d.equal(dMaxUUID)
+}
+
+// IsMin implements the Datum interface.
+func (d *DUuid) IsMin() bool {
+	return d.equal(dMinUUID)
+}
+
+var dMinUUID = NewDUuid(DUuid{uuid.UUID{}})
+var dMaxUUID = NewDUuid(DUuid{uuid.UUID{UUID: [16]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}}})
+
+// min implements the Datum interface.
+func (*DUuid) min() (Datum, bool) {
+	return dMinUUID, true
+}
+
+// max implements the Datum interface.
+func (*DUuid) max() (Datum, bool) {
+	return dMaxUUID, true
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DUuid) AmbiguousFormat() bool { return false }
+
+// Format implements the NodeFormatter interface.
+func (d *DUuid) Format(buf *bytes.Buffer, f FmtFlags) {
+	encodeSQLString(buf, d.UUID.String())
+}
+
+// Size implements the Datum interface.
+func (d *DUuid) Size() uintptr {
+	return unsafe.Sizeof(*d)
 }
 
 // DDate is the date Datum represented as the number of days after
