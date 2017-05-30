@@ -1135,6 +1135,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
+			LeftType:  TypeUUID,
+			RightType: TypeUUID,
+			fn:        cmpOpScalarEQFn,
+		},
+		CmpOp{
 			LeftType:  TypeOid,
 			RightType: TypeOid,
 			fn:        cmpOpScalarEQFn,
@@ -1265,6 +1270,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
+			LeftType:  TypeUUID,
+			RightType: TypeUUID,
+			fn:        cmpOpScalarLTFn,
+		},
+		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1390,6 +1400,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
+			LeftType:  TypeUUID,
+			RightType: TypeUUID,
+			fn:        cmpOpScalarLEFn,
+		},
+		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1410,6 +1425,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(TypeTimestamp),
 		makeEvalTupleIn(TypeTimestampTZ),
 		makeEvalTupleIn(TypeInterval),
+		makeEvalTupleIn(TypeUUID),
 		makeEvalTupleIn(TypeTuple),
 	},
 
@@ -2226,6 +2242,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			// of the duration (e.g. "5s") and not of the interval itself (e.g.
 			// "INTERVAL '5s'").
 			s = t.ValueAsString()
+		case *DUuid:
+			s = t.UUID.String()
 		case *DString:
 			s = string(*t)
 		case *DCollatedString:
@@ -2263,7 +2281,21 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return NewDBytes(DBytes(*t)), nil
 		case *DCollatedString:
 			return NewDBytes(DBytes(t.Contents)), nil
+		case *DUuid:
+			return NewDBytes(DBytes(t.GetBytes())), nil
 		case *DBytes:
+			return d, nil
+		}
+
+	case *UUIDColType:
+		switch t := d.(type) {
+		case *DString:
+			return ParseDUuidFromString(string(*t))
+		case *DCollatedString:
+			return ParseDUuidFromString(t.Contents)
+		case *DBytes:
+			return ParseDUuidFromBytes([]byte(*t))
+		case *DUuid:
 			return d, nil
 		}
 
@@ -2783,6 +2815,11 @@ func (t *DBool) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DBytes) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DUuid) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

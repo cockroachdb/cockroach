@@ -49,6 +49,7 @@ func (*DateColType) columnType()           {}
 func (*TimestampColType) columnType()      {}
 func (*TimestampTZColType) columnType()    {}
 func (*IntervalColType) columnType()       {}
+func (*UUIDColType) columnType()           {}
 func (*StringColType) columnType()         {}
 func (*NameColType) columnType()           {}
 func (*BytesColType) columnType()          {}
@@ -66,6 +67,7 @@ func (*DateColType) castTargetType()           {}
 func (*TimestampColType) castTargetType()      {}
 func (*TimestampTZColType) castTargetType()    {}
 func (*IntervalColType) castTargetType()       {}
+func (*UUIDColType) castTargetType()           {}
 func (*StringColType) castTargetType()         {}
 func (*NameColType) castTargetType()           {}
 func (*BytesColType) castTargetType()          {}
@@ -278,6 +280,18 @@ func (node *IntervalColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("INTERVAL")
 }
 
+// Pre-allocated immutable uuid column type.
+var uuidColTypeUUID = &UUIDColType{}
+
+// UUIDColType represents a UUID type.
+type UUIDColType struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *UUIDColType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("UUID")
+}
+
 // Pre-allocated immutable string column types.
 var (
 	stringColTypeChar    = &StringColType{Name: "CHAR"}
@@ -461,6 +475,7 @@ func (node *DateColType) String() string           { return AsString(node) }
 func (node *TimestampColType) String() string      { return AsString(node) }
 func (node *TimestampTZColType) String() string    { return AsString(node) }
 func (node *IntervalColType) String() string       { return AsString(node) }
+func (node *UUIDColType) String() string           { return AsString(node) }
 func (node *StringColType) String() string         { return AsString(node) }
 func (node *NameColType) String() string           { return AsString(node) }
 func (node *BytesColType) String() string          { return AsString(node) }
@@ -488,6 +503,8 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		return timestampTzColTypeTimestampWithTZ, nil
 	case TypeInterval:
 		return intervalColTypeInterval, nil
+	case TypeUUID:
+		return uuidColTypeUUID, nil
 	case TypeDate:
 		return dateColTypeDate, nil
 	case TypeString:
@@ -547,6 +564,8 @@ func CastTargetToDatumType(t CastTargetType) Type {
 		return TypeTimestampTZ
 	case *IntervalColType:
 		return TypeInterval
+	case *UUIDColType:
+		return TypeUUID
 	case *CollatedStringColType:
 		return TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
