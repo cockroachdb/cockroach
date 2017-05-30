@@ -30,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/lightstep/lightstep-tracer-go"
 	basictracer "github.com/opentracing/basictracer-go"
@@ -59,6 +60,12 @@ const (
 	fieldNameSampled = prefixTracerState + "sampled"
 )
 
+var enableNetTrace = settings.RegisterBoolSetting(
+	"trace.debug.enable",
+	"if set, traces for recent requests can be seen in the /debug page",
+	false,
+)
+
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
 //
 //  - forwarding events to x/net/trace instances
@@ -74,8 +81,6 @@ const (
 // lightstep disabled) because of its recording capability (snowball
 // tracing needs to work in all cases).
 type Tracer struct {
-	// If set, we set up an x/net/trace for each span.
-	netTrace bool
 	// If set, we are using a lightstep tracer for most operations.
 	lightstep opentracing.Tracer
 
@@ -86,20 +91,12 @@ type Tracer struct {
 
 var _ opentracing.Tracer = &Tracer{}
 
-func newTracer(netTrace bool, lightstep opentracing.Tracer) *Tracer {
+func newTracer(lightstep opentracing.Tracer) *Tracer {
 	t := &Tracer{
-		netTrace:  netTrace,
 		lightstep: lightstep,
 	}
 	t.noopSpan.tracer = t
 	return t
-}
-
-// isNoop returns if this is a noop tracer, which means that span events don't
-// go anywhere, unless they are being recorded. Such a tracer is still capable
-// of snowball tracing.
-func (t *Tracer) isNoop() bool {
-	return !t.netTrace && t.lightstep == nil
 }
 
 // lightstepExtractIDsCarrier is used as a carrier for getLightstepSpanIDs.
@@ -156,20 +153,21 @@ func (recordableOption) Apply(*opentracing.StartSpanOptions) {}
 func (t *Tracer) StartSpan(
 	operationName string, opts ...opentracing.StartSpanOption,
 ) opentracing.Span {
-	if t.isNoop() {
-		// Fast paths to avoid the allocation of StartSpanOptions below when tracing
-		// is disabled: if we have no options or a single SpanReference (the common
-		// case) with a noop context, return a noop span now.
-		switch len(opts) {
-		case 0:
-			return &t.noopSpan
-		case 1:
-			if o, ok := opts[0].(opentracing.SpanReference); ok {
-				if _, noopCtx := o.ReferencedContext.(noopSpanContext); noopCtx {
-					return &t.noopSpan
-				}
+	// Fast paths to avoid the allocation of StartSpanOptions below when tracing
+	// is disabled: if we have no options or a single SpanReference (the common
+	// case) with a noop context, return a noop span now.
+	if len(opts) == 1 && t.lightstep == nil {
+		if o, ok := opts[0].(opentracing.SpanReference); ok {
+			if _, noopCtx := o.ReferencedContext.(noopSpanContext); noopCtx {
+				return &t.noopSpan
 			}
 		}
+	}
+
+	netTrace := enableNetTrace.Get()
+
+	if len(opts) == 0 && !netTrace && t.lightstep == nil {
+		return &t.noopSpan
 	}
 
 	var sso opentracing.StartSpanOptions
@@ -212,7 +210,7 @@ func (t *Tracer) StartSpan(
 	// If tracing is disabled, the Recordable option wasn't passed, and we're not
 	// part of a recording or snowball trace, avoid overhead and return a noop
 	// span.
-	if !recordable && recordingGroup == nil && t.isNoop() {
+	if !recordable && recordingGroup == nil && t.lightstep == nil && !netTrace {
 		return &t.noopSpan
 	}
 
@@ -280,7 +278,7 @@ func (t *Tracer) StartSpan(
 		s.enableRecording(recordingGroup)
 	}
 
-	if t.netTrace {
+	if netTrace {
 		s.netTr = trace.New("tracing", operationName)
 		s.netTr.SetMaxEvents(maxLogsPerSpan)
 	}
@@ -299,7 +297,7 @@ func (t *Tracer) StartSpan(
 		s.SetTag(k, v)
 	}
 
-	if t.netTrace || t.lightstep != nil {
+	if netTrace || t.lightstep != nil {
 		// Copy baggage items to tags so they show up in the Lightstep UI or x/net/trace.
 		for k, v := range s.mu.Baggage {
 			s.SetTag(k, v)
@@ -449,16 +447,10 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, opentracing
 }
 
 var lightstepToken = envutil.EnvOrDefaultString("COCKROACH_LIGHTSTEP_TOKEN", "")
-var enableTracing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_TRACING", false)
 
 // NewTracer creates a Tracer which records to the net/trace
 // endpoint.
 func NewTracer() opentracing.Tracer {
-	if !enableTracing {
-		// Create a tracer that drops all events unless we enable
-		// recording on a span.
-		return newTracer(false /* netTrace */, nil /* lightstep */)
-	}
 	var lsTr opentracing.Tracer
 	if lightstepToken != "" {
 		lsTr = lightstep.NewTracer(lightstep.Options{
@@ -467,7 +459,7 @@ func NewTracer() opentracing.Tracer {
 			UseGRPC:        true,
 		})
 	}
-	return newTracer(true /* netTrace */, lsTr)
+	return newTracer(lsTr)
 }
 
 // EnsureContext checks whether the given context.Context contains a Span. If
@@ -482,24 +474,6 @@ func EnsureContext(
 		return opentracing.ContextWithSpan(ctx, sp), sp.Finish
 	}
 	return ctx, func() {}
-}
-
-// Disable is for benchmarking use and causes all future tracers to deal in
-// no-ops. Calling the returned closure undoes this effect. There is no
-// synchronization, so no moving parts are allowed while Disable and the
-// closure are called.
-func Disable() func() {
-	return SetEnabled(false)
-}
-
-// SetEnabled enables or disables tracing. Returns a function that restores
-// the previous setting.
-func SetEnabled(enabled bool) func() {
-	orig := enableTracing
-	enableTracing = enabled
-	return func() {
-		enableTracing = orig
-	}
 }
 
 func init() {

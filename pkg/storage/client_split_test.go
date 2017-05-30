@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func adminSplitArgs(key, splitKey roachpb.Key) *roachpb.AdminSplitRequest {
@@ -1436,7 +1435,6 @@ func TestLeaderAfterSplit(t *testing.T) {
 }
 
 func BenchmarkStoreRangeSplit(b *testing.B) {
-	defer tracing.Disable()()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	stopper := stop.NewStopper()

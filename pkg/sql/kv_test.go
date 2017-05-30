@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type kvInterface interface {
@@ -54,8 +53,10 @@ type kvNative struct {
 }
 
 func newKVNative(b *testing.B) kvInterface {
-	enableTracing := tracing.Disable()
-	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	if _, err := db.Exec(`SET CLUSTER SETTING trace.debug.enable = false`); err != nil {
+		b.Fatal(err)
+	}
 
 	// TestServer.KVClient() returns the TxnCoordSender wrapped client. But that
 	// isn't a fair comparison with SQL as we want these client requests to be
@@ -71,7 +72,6 @@ func newKVNative(b *testing.B) kvInterface {
 		db: client.NewDB(client.NewSender(conn), rpcContext.LocalClock),
 		doneFn: func() {
 			s.Stopper().Stop(context.TODO())
-			enableTracing()
 		},
 	}
 }
@@ -164,10 +164,11 @@ type kvSQL struct {
 }
 
 func newKVSQL(b *testing.B) kvInterface {
-	enableTracing := tracing.Disable()
-	s, db, _ := serverutils.StartServer(
-		b, base.TestServerArgs{UseDatabase: "bench"})
+	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "bench"})
 
+	if _, err := db.Exec(`SET CLUSTER SETTING trace.debug.enable = false`); err != nil {
+		b.Fatal(err)
+	}
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bench`); err != nil {
 		b.Fatal(err)
 	}
@@ -176,7 +177,6 @@ func newKVSQL(b *testing.B) kvInterface {
 	kv.db = db
 	kv.doneFn = func() {
 		s.Stopper().Stop(context.TODO())
-		enableTracing()
 	}
 	return kv
 }

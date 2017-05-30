@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func rowsToStrings(rows *gosql.Rows) [][]string {
@@ -94,11 +93,15 @@ func TestExplainTrace(t *testing.T) {
 			name = "TracingOn"
 		}
 		t.Run(name, func(t *testing.T) {
-			defer tracing.SetEnabled(enableTr)()
-
 			const numNodes = 4
 			cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{})
 			defer cluster.Stopper().Stop(context.TODO())
+
+			if _, err := cluster.ServerConn(0).Exec(
+				fmt.Sprintf(`SET CLUSTER SETTING trace.debug.enable = %t;`, enableTr),
+			); err != nil {
+				t.Fatal(err)
+			}
 
 			if _, err := cluster.ServerConn(0).Exec(`
 				CREATE DATABASE test;

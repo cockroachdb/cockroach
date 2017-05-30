@@ -127,7 +127,7 @@ func checkRawSpans(t *testing.T, rawSpans []basictracer.RawSpan, expected string
 }
 
 func TestTracerRecording(t *testing.T) {
-	tr := newTracer(false /* netTrace */, nil /* lightstep */)
+	tr := newTracer(nil /* lightstep */)
 
 	noop1 := tr.StartSpan("noop")
 	if !IsNoopSpan(noop1) {
@@ -221,8 +221,8 @@ func TestTracerRecording(t *testing.T) {
 }
 
 func TestTracerInjectExtract(t *testing.T) {
-	tr := newTracer(false /* netTrace */, nil /* lightstep */)
-	tr2 := newTracer(false /* netTrace */, nil /* lightstep */)
+	tr := newTracer(nil /* lightstep */)
+	tr2 := newTracer(nil /* lightstep */)
 
 	// Verify that noop spans become noop spans on the remote side.
 
