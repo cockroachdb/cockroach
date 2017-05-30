@@ -273,7 +273,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 			t.Fatal(err)
 		}
 		// The expected end state.
-		expectedState := sqlbase.DescriptorMutation_WRITE_ONLY
+		expectedState := sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY
 		if direction == sqlbase.DescriptorMutation_DROP {
 			expectedState = sqlbase.DescriptorMutation_DELETE_ONLY
 		}
