@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type kvInterface interface {
@@ -41,7 +40,6 @@ type kvWriteBatch struct {
 }
 
 func newKVWriteBatch(b *testing.B) kvInterface {
-	enableTracing := tracing.Disable()
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
 
 	// TestServer.KVClient() returns the TxnCoordSender wrapped client. But that
@@ -58,7 +56,6 @@ func newKVWriteBatch(b *testing.B) kvInterface {
 		db: client.NewDB(client.NewSender(conn), rpcContext.LocalClock),
 		doneFn: func() {
 			s.Stopper().Stop(context.TODO())
-			enableTracing()
 		},
 	}
 }
