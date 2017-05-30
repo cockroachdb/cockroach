@@ -70,3 +70,10 @@ func TestingSetByteSize(s **ByteSizeSetting, v int64) func() {
 		*s = saved
 	}
 }
+
+// OnChange registers a callback to be called when the setting changes.
+// This overrides the `common`` impl to return the concrete impl type.
+func (b *ByteSizeSetting) OnChange(fn func()) *ByteSizeSetting {
+	b.common.OnChange(fn)
+	return b
+}

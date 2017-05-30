@@ -61,7 +61,12 @@ func (f *FloatSetting) set(v float64) error {
 	if err := f.Validate(v); err != nil {
 		return err
 	}
-	atomic.StoreUint64(&f.v, math.Float64bits(v))
+	bits := math.Float64bits(v)
+	if atomic.LoadUint64(&f.v) == bits {
+		return nil
+	}
+	atomic.StoreUint64(&f.v, bits)
+	f.changed()
 	return nil
 }
 
@@ -115,4 +120,11 @@ func TestingSetFloat(s **FloatSetting, v float64) func() {
 	return func() {
 		*s = saved
 	}
+}
+
+// OnChange registers a callback to be called when the setting changes.
+// This overrides the `common`` impl to return the concrete impl type.
+func (f *FloatSetting) OnChange(fn func()) *FloatSetting {
+	f.common.OnChange(fn)
+	return f
 }

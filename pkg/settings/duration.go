@@ -61,7 +61,11 @@ func (d *DurationSetting) set(v time.Duration) error {
 	if err := d.Validate(v); err != nil {
 		return err
 	}
+	if v == d.Get() {
+		return nil
+	}
 	atomic.StoreInt64(&d.v, int64(v))
+	d.changed()
 	return nil
 }
 
@@ -119,4 +123,11 @@ func TestingSetDuration(s **DurationSetting, v time.Duration) func() {
 // only.
 func TestingDuration(v time.Duration) *DurationSetting {
 	return &DurationSetting{v: int64(v)}
+}
+
+// OnChange registers a callback to be called when the setting changes.
+// This overrides the `common`` impl to return the concrete impl type.
+func (d *DurationSetting) OnChange(fn func()) *DurationSetting {
+	d.common.OnChange(fn)
+	return d
 }

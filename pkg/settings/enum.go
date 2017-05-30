@@ -119,3 +119,10 @@ func TestingSetEnum(s **EnumSetting, i int64) func() {
 		*s = saved
 	}
 }
+
+// OnChange registers a callback to be called when the setting changes.
+// This overrides the `common`` impl to return the concrete impl type.
+func (e *EnumSetting) OnChange(fn func()) *EnumSetting {
+	e.common.OnChange(fn)
+	return e
+}

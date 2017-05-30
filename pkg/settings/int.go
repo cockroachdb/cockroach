@@ -60,7 +60,11 @@ func (i *IntSetting) set(v int64) error {
 	if err := i.Validate(v); err != nil {
 		return err
 	}
+	if i.Get() == v {
+		return nil
+	}
 	atomic.StoreInt64(&i.v, v)
+	i.changed()
 	return nil
 }
 
@@ -101,4 +105,11 @@ func TestingSetInt(s **IntSetting, v int64) func() {
 	return func() {
 		*s = saved
 	}
+}
+
+// OnChange registers a callback to be called when the setting changes.
+// This overrides the `common`` impl to return the concrete impl type.
+func (i *IntSetting) OnChange(fn func()) *IntSetting {
+	i.common.OnChange(fn)
+	return i
 }

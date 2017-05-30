@@ -44,11 +44,15 @@ func (*BoolSetting) Typ() string {
 }
 
 func (b *BoolSetting) set(v bool) {
+	if v == b.Get() {
+		return
+	}
 	if v {
 		atomic.StoreInt32(&b.v, 1)
 	} else {
 		atomic.StoreInt32(&b.v, 0)
 	}
+	b.changed()
 }
 
 func (b *BoolSetting) setToDefault() {
@@ -79,4 +83,11 @@ func TestingSetBool(s **BoolSetting, v bool) func() {
 	return func() {
 		*s = saved
 	}
+}
+
+// OnChange registers a callback to be called when the setting changes.
+// This overrides the `common`` impl to return the concrete impl type.
+func (b *BoolSetting) OnChange(fn func()) *BoolSetting {
+	b.common.OnChange(fn)
+	return b
 }
