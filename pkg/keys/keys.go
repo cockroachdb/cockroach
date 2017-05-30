@@ -199,7 +199,10 @@ func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeStatsKey()
 }
 
-// RangeLastGCKey returns a system-local key for the last GC.
+// RangeLastGCKey returns a system-local key for last used GC threshold on the
+// user keyspace. Reads and writes <= this timestamp will not be served.
+//
+// TODO(tschottdorf): should be renamed to RangeGCThresholdKey.
 func RangeLastGCKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeLastGCKey()
 }
