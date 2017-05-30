@@ -52,6 +52,8 @@ message ColumnType {
     // transferred through distsql streams.
     NULL = 13;
 
+    UUID = 14;
+
     // Array and vector types.
     //
     // TODO(cuongdo): Fix this before allowing persistence of array/vector types

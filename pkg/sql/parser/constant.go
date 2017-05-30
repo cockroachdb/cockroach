@@ -368,9 +368,10 @@ var (
 		TypeTimestamp,
 		TypeTimestampTZ,
 		TypeInterval,
+		TypeUUID,
 	}
-	strValAvailBytesString = []Type{TypeBytes, TypeString}
-	strValAvailBytes       = []Type{TypeBytes}
+	strValAvailBytesString = []Type{TypeBytes, TypeString, TypeUUID}
+	strValAvailBytes       = []Type{TypeBytes, TypeUUID}
 )
 
 // AvailableTypes implements the Constant interface.
@@ -434,6 +435,11 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 		return ParseDTimestampTZ(expr.s, ctx.getLocation(), time.Microsecond)
 	case TypeInterval:
 		return ParseDInterval(expr.s)
+	case TypeUUID:
+		if expr.bytesEsc {
+			return ParseDUuidFromBytes([]byte(expr.s))
+		}
+		return ParseDUuidFromString(expr.s)
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}

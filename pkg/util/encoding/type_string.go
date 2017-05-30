@@ -5,18 +5,18 @@ package encoding
 import "fmt"
 
 const (
-	_Type_name_0 = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalse"
+	_Type_name_0 = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUID"
 	_Type_name_1 = "SentinelType"
 )
 
 var (
-	_Type_index_0 = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68}
+	_Type_index_0 = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72}
 	_Type_index_1 = [...]uint8{0, 12}
 )
 
 func (i Type) String() string {
 	switch {
-	case 0 <= i && i <= 11:
+	case 0 <= i && i <= 12:
 		return _Type_name_0[_Type_index_0[i]:_Type_index_0[i+1]]
 	case i == 15:
 		return _Type_name_1

@@ -38,6 +38,7 @@ const java = `
 set -e
 cat > main.java << 'EOF'
 import java.sql.*;
+import java.util.UUID;
 
 public class main {
 	public static void main(String[] args) throws Exception {
@@ -153,6 +154,16 @@ public class main {
 		stmt = conn.prepareStatement("UPDATE str SET s = ?");
 		stmt.setString(1, "hello");
 		stmt.execute();
+
+		UUID uuid = UUID.randomUUID();
+		stmt = conn.prepareStatement("SELECT ?");
+		stmt.setObject(1, uuid);
+		rs = stmt.executeQuery();
+		rs.next();
+		UUID returnedUuid = (UUID) rs.getObject(1);
+		if (!returnedUuid.equals(uuid)) {
+			throw new Exception("expected " + uuid + " but got " + returnedUuid);
+		}
 	}
 }
 EOF
