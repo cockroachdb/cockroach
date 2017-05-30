@@ -22,12 +22,18 @@ type Setting interface {
 	String() string
 
 	Description() string
+	setDescription(desc string)
 	Hidden() bool
 }
 
 type common struct {
 	description string
 	hidden      bool
+	onChange    func()
+}
+
+func (i *common) setDescription(s string) {
+	i.description = s
 }
 
 func (i common) Description() string {
@@ -37,6 +43,12 @@ func (i common) Hidden() bool {
 	return i.hidden
 }
 
+func (i common) changed() {
+	if i.onChange != nil {
+		i.onChange()
+	}
+}
+
 // Hide prevents a setting from showing up in SHOW ALL CLUSTER SETTINGS. It can
 // still be used with SET and SHOW if the exact setting name is known. Use Hide
 // for in-development features and other settings that should not be
@@ -44,6 +56,12 @@ func (i common) Hidden() bool {
 func (i *common) Hide() {
 	i.hidden = true
 }
+
+// OnChange installs a callback to be called when a setting's value changes.
+// `fn` should avoid doing long-running or blocking work as it is called on the
+// goroutine which handles all settings updates.
+func (i *common) OnChange(fn func()) {
+	i.onChange = fn
 }
 
 type numericSetting interface {
