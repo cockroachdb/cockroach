@@ -312,6 +312,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	serverCfg.Report(startCtx)
+
 	// Run the rest of the startup process in the background to avoid preventing
 	// proper handling of signals if we get stuck on something during
 	// initialization (#10138).
