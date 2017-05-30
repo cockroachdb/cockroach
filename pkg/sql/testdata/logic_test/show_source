@@ -68,6 +68,8 @@ sql.metrics.statement_details.threshold            0s             d     minmum e
 sql.trace.log_statement_execute                    false          b     set to true to enable logging of executed statements
 sql.trace.session_eventlog.enabled                 false          b     set to true to enable session tracing
 sql.trace.txn.enable_threshold                     0s             d     duration beyond which all transactions are traced (set to 0 to disable)
+trace.debug.enable                                 false          b     if set, traces for recent requests can be seen in the /debug page
+
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
