@@ -320,6 +320,12 @@ func main() {
 					targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
 				}
 
+				// Stat the binary. Info is needed for archive headers.
+				binaryInfo, err := binary.Stat()
+				if err != nil {
+					log.Fatal(err)
+				}
+
 				for _, releaseVersionStr := range releaseVersionStrs {
 					archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
 					targetArchiveBase := fmt.Sprintf("%s.%s", archiveBase, targetSuffix)
@@ -328,7 +334,15 @@ func main() {
 					if hasExe {
 						targetArchive = targetArchiveBase + ".zip"
 						zw := zip.NewWriter(&body)
-						zfw, err := zw.Create(filepath.Join(targetArchiveBase, "cockroach.exe"))
+
+						// Set the zip header from the file info. Overwrite name.
+						zipHeader, err := zip.FileInfoHeader(binaryInfo)
+						if err != nil {
+							log.Fatal(err)
+						}
+						zipHeader.Name = filepath.Join(targetArchiveBase, "cockroach.exe")
+
+						zfw, err := zw.CreateHeader(zipHeader)
 						if err != nil {
 							log.Fatal(err)
 						}
@@ -342,17 +356,17 @@ func main() {
 						targetArchive = targetArchiveBase + ".tgz"
 						gzw := gzip.NewWriter(&body)
 						tw := tar.NewWriter(gzw)
-						binaryInfo, err := binary.Stat()
+
+						// Set the tar header from the file info. Overwrite name.
+						tarHeader, err := tar.FileInfoHeader(binaryInfo, "")
 						if err != nil {
 							log.Fatal(err)
 						}
-						if err := tw.WriteHeader(&tar.Header{
-							Name: filepath.Join(targetArchiveBase, "cockroach"),
-							Mode: 0755,
-							Size: binaryInfo.Size(),
-						}); err != nil {
+						tarHeader.Name = filepath.Join(targetArchiveBase, "cockroach")
+						if err := tw.WriteHeader(tarHeader); err != nil {
 							log.Fatal(err)
 						}
+
 						if _, err := io.Copy(tw, binary); err != nil {
 							log.Fatal(err)
 						}
