@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func bankStatementBuf(numAccounts int) *bytes.Buffer {
@@ -37,10 +36,10 @@ func BenchmarkClusterBackup(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	defer tracing.Disable()()
 
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanupFn()
+	sqlDB.Exec(`SET CLUSTER SETTING trace.debug.enable = false`)
 	sqlDB.Exec(`DROP TABLE bench.bank`)
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
@@ -71,10 +70,10 @@ func BenchmarkClusterRestore(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	defer tracing.Disable()()
 
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
+	sqlDB.Exec(`SET CLUSTER SETTING trace.debug.enable = false`)
 	sqlDB.Exec(`DROP TABLE bench.bank`)
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
@@ -92,10 +91,10 @@ func BenchmarkLoadRestore(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	defer tracing.Disable()()
 
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
+	sqlDB.Exec(`SET CLUSTER SETTING trace.debug.enable = false`)
 	sqlDB.Exec(`DROP TABLE bench.bank`)
 
 	buf := bankStatementBuf(b.N)
@@ -138,12 +137,11 @@ func BenchmarkLoadSQL(b *testing.B) {
 }
 
 func runEmptyIncrementalBackup(b *testing.B) {
-	defer tracing.Disable()()
-
 	const numStatements = 100000
 
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanupFn()
+	sqlDB.Exec(`SET CLUSTER SETTING trace.debug.enable = false`)
 
 	restoreDir := filepath.Join(dir, "restore")
 	fullDir := filepath.Join(dir, "full")

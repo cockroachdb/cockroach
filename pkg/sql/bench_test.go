@@ -37,14 +37,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	defer tracing.Disable()()
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{UseDatabase: "bench"})
 	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := db.Exec(`SET CLUSTER SETTING trace.debug.enable = false`); err != nil {
+		b.Fatal(err)
+	}
 
 	if _, err := db.Exec(`CREATE DATABASE bench`); err != nil {
 		b.Fatal(err)
@@ -54,7 +56,6 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 }
 
 func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	defer tracing.Disable()()
 	tc := testcluster.StartTestCluster(b, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
@@ -62,6 +63,9 @@ func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB
 				UseDatabase: "bench",
 			},
 		})
+	if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING trace.debug.enable = false`); err != nil {
+		b.Fatal(err)
+	}
 	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {
 		b.Fatal(err)
 	}
