@@ -348,6 +348,17 @@ func NewRocksDB(
 	return r, nil
 }
 
+func NewRocksDBWithFlags(
+	attrs roachpb.Attributes, dir string, cache RocksDBCache, maxSize int64, maxOpenFiles int, flags []string,
+) (*RocksDB, error) {
+	r, err := NewRocksDB(attrs, dir, cache, maxSize, maxOpenFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	return r, err
+}
+
 func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) (*RocksDB, error) {
 	r := &RocksDB{
 		attrs: attrs,
@@ -373,7 +384,7 @@ func (r *RocksDB) String() string {
 	return fmt.Sprintf("%s=%s", r.attrs.Attrs, r.dir)
 }
 
-func (r *RocksDB) open() error {
+func (r *RocksDB) openWithOptions(options C.DBOptions) error {
 	var ver storageVersion
 	if len(r.dir) != 0 {
 		log.Infof(context.TODO(), "opening rocksdb instance at %q", r.dir)
@@ -398,19 +409,7 @@ func (r *RocksDB) open() error {
 		ver = versionCurrent
 	}
 
-	blockSize := envutil.EnvOrDefaultBytes("COCKROACH_ROCKSDB_BLOCK_SIZE", defaultBlockSize)
-	walTTL := envutil.EnvOrDefaultDuration("COCKROACH_ROCKSDB_WAL_TTL", 0).Seconds()
-
-	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
-		C.DBOptions{
-			cache:             r.cache.cache,
-			block_size:        C.uint64_t(blockSize),
-			wal_ttl_seconds:   C.uint64_t(walTTL),
-			use_direct_writes: C.bool(useDirectWrites),
-			logging_enabled:   C.bool(log.V(3)),
-			num_cpu:           C.int(runtime.NumCPU()),
-			max_open_files:    C.int(r.maxOpenFiles),
-		})
+	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)), options)
 	if err := statusToError(status); err != nil {
 		return errors.Errorf("could not open rocksdb instance: %s", err)
 	}
@@ -430,6 +429,24 @@ func (r *RocksDB) open() error {
 		<-r.deallocated
 	}()
 	return nil
+}
+
+func (r *RocksDB) open() error {
+
+	blockSize := envutil.EnvOrDefaultBytes("COCKROACH_ROCKSDB_BLOCK_SIZE", defaultBlockSize)
+	walTTL := envutil.EnvOrDefaultDuration("COCKROACH_ROCKSDB_WAL_TTL", 0).Seconds()
+
+	options := C.DBOptions{
+		cache:             r.cache.cache,
+		block_size:        C.uint64_t(blockSize),
+		wal_ttl_seconds:   C.uint64_t(walTTL),
+		use_direct_writes: C.bool(useDirectWrites),
+		logging_enabled:   C.bool(log.V(3)),
+		num_cpu:           C.int(runtime.NumCPU()),
+		max_open_files:    C.int(r.maxOpenFiles),
+	}
+
+	return r.openWithOptions(options)
 }
 
 // Close closes the database by deallocating the underlying handle.
