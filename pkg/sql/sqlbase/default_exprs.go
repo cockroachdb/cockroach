@@ -101,10 +101,7 @@ func ProcessDefaultColumns(
 	// Also add any column in a mutation that is WRITE_ONLY and has
 	// a DEFAULT expression.
 	for _, m := range tableDesc.Mutations {
-		if m.State != DescriptorMutation_WRITE_ONLY {
-			continue
-		}
-		if col := m.GetColumn(); col != nil {
+		if col := m.GetColumn(); col != nil && m.State == DescriptorMutation_WRITE_ONLY {
 			addIfDefault(*col)
 		}
 	}
