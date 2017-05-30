@@ -91,7 +91,8 @@ func (p *planner) Insert(
 	// columns receiving a default value.
 	numInputColumns := len(cols)
 
-	cols, defaultExprs, err := ProcessDefaultColumns(cols, en.tableDesc, &p.parser, &p.evalCtx)
+	cols, defaultExprs, err :=
+		sqlbase.ProcessDefaultColumns(cols, en.tableDesc, &p.parser, &p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -221,48 +222,6 @@ func (p *planner) Insert(
 	}
 
 	return in, nil
-}
-
-// ProcessDefaultColumns adds columns with DEFAULT to cols if not present
-// and returns the defaultExprs for cols.
-func ProcessDefaultColumns(
-	cols []sqlbase.ColumnDescriptor,
-	tableDesc *sqlbase.TableDescriptor,
-	parse *parser.Parser,
-	evalCtx *parser.EvalContext,
-) ([]sqlbase.ColumnDescriptor, []parser.TypedExpr, error) {
-	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(cols))
-	for _, col := range cols {
-		colIDSet[col.ID] = struct{}{}
-	}
-
-	// Add the column if it has a DEFAULT expression.
-	addIfDefault := func(col sqlbase.ColumnDescriptor) {
-		if col.DefaultExpr != nil {
-			if _, ok := colIDSet[col.ID]; !ok {
-				colIDSet[col.ID] = struct{}{}
-				cols = append(cols, col)
-			}
-		}
-	}
-
-	// Add any column that has a DEFAULT expression.
-	for _, col := range tableDesc.Columns {
-		addIfDefault(col)
-	}
-	// Also add any column in a mutation that is WRITE_ONLY and has
-	// a DEFAULT expression.
-	for _, m := range tableDesc.Mutations {
-		if m.State != sqlbase.DescriptorMutation_WRITE_ONLY {
-			continue
-		}
-		if col := m.GetColumn(); col != nil {
-			addIfDefault(*col)
-		}
-	}
-
-	defaultExprs, err := sqlbase.MakeDefaultExprs(cols, parse, evalCtx)
-	return cols, defaultExprs, err
 }
 
 func (n *insertNode) Start(ctx context.Context) error {

@@ -163,7 +163,8 @@ func Load(
 			if err != nil {
 				return BackupDescriptor{}, errors.Wrap(err, "make row inserter")
 			}
-			cols, defaultExprs, err = sql.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &parse, &evalCtx)
+			cols, defaultExprs, err =
+				sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &parse, &evalCtx)
 			if err != nil {
 				return BackupDescriptor{}, errors.Wrap(err, "process default columns")
 			}
