@@ -20,6 +20,30 @@ type Setting interface {
 	// Typ returns the short (1 char) string denoting the type of setting.
 	Typ() string
 	String() string
+
+	Description() string
+	Hidden() bool
+}
+
+type common struct {
+	description string
+	hidden      bool
+}
+
+func (i common) Description() string {
+	return i.description
+}
+func (i common) Hidden() bool {
+	return i.hidden
+}
+
+// Hide prevents a setting from showing up in SHOW ALL CLUSTER SETTINGS. It can
+// still be used with SET and SHOW if the exact setting name is known. Use Hide
+// for in-development features and other settings that should not be
+// user-visible.
+func (i *common) Hide() {
+	i.hidden = true
+}
 }
 
 type numericSetting interface {

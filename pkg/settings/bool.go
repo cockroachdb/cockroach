@@ -24,6 +24,7 @@ import (
 type BoolSetting struct {
 	defaultValue bool
 	v            int32
+	common
 }
 
 var _ Setting = &BoolSetting{}

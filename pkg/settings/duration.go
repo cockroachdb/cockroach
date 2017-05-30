@@ -28,6 +28,7 @@ type DurationSetting struct {
 	defaultValue time.Duration
 	v            int64
 	validateFn   func(time.Duration) error
+	common
 }
 
 var _ Setting = &DurationSetting{}

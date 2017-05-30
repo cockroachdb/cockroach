@@ -153,12 +153,12 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 		}
 		populate = func(ctx context.Context, v *valuesNode) error {
 			for _, k := range settings.Keys() {
-				setting, desc, _ := settings.Lookup(k)
+				setting, _ := settings.Lookup(k)
 				if _, err := v.rows.AddRow(ctx, parser.Datums{
 					parser.NewDString(k),
 					parser.NewDString(setting.String()),
 					parser.NewDString(setting.Typ()),
-					parser.NewDString(desc),
+					parser.NewDString(setting.Description()),
 				}); err != nil {
 					return err
 				}
@@ -167,7 +167,7 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 		}
 
 	default:
-		val, _, ok := settings.Lookup(name)
+		val, ok := settings.Lookup(name)
 		if !ok {
 			return nil, errors.Errorf("unknown setting: %q", name)
 		}

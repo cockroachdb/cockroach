@@ -27,7 +27,7 @@ import (
 //
 // Registry should never be mutated after init (except in tests), as it is read
 // concurrently by different callers.
-var registry = map[string]wrappedSetting{}
+var registry = map[string]Setting{}
 
 // frozen becomes non-zero once the registry is "live".
 // This must be accessed atomically because test clusters spawn multiple
@@ -52,38 +52,14 @@ func register(key, desc string, s Setting) {
 		panic(fmt.Sprintf("setting already defined: %s", key))
 	}
 	s.setToDefault()
-	registry[key] = wrappedSetting{description: desc, setting: s}
-}
-
-// Hide prevents a setting from showing up in SHOW ALL CLUSTER SETTINGS. It can
-// still be used with SET and SHOW if the exact setting name is known. Use Hide
-// for in-development features and other settings that should not be
-// user-visible.
-func Hide(key string) {
-	assertNotFrozen(key)
-	s, ok := registry[key]
-	if !ok {
-		panic(fmt.Sprintf("setting not found: %s", key))
-	}
-	s.hidden = true
 	registry[key] = s
-}
-
-// Value holds the (parsed, typed) value of a setting.
-// raw settings are stored in system.settings as human-readable strings, but are
-// cached internally after parsing in these appropriately typed fields (which is
-// basically a poor-man's union, without boxing).
-type wrappedSetting struct {
-	description string
-	hidden      bool
-	setting     Setting
 }
 
 // Keys returns a sorted string array with all the known keys.
 func Keys() (res []string) {
 	res = make([]string, 0, len(registry))
 	for k := range registry {
-		if registry[k].hidden {
+		if registry[k].Hidden() {
 			continue
 		}
 		res = append(res, k)
@@ -93,10 +69,10 @@ func Keys() (res []string) {
 }
 
 // Lookup returns a Setting by name along with its description.
-func Lookup(name string) (Setting, string, bool) {
+func Lookup(name string) (Setting, bool) {
 	v, ok := registry[name]
 	if !ok {
-		return nil, "", false
+		return nil, false
 	}
-	return v.setting, v.description, true
+	return v, true
 }

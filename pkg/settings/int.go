@@ -27,6 +27,7 @@ type IntSetting struct {
 	defaultValue int64
 	v            int64
 	validateFn   func(int64) error
+	common
 }
 
 var _ Setting = &IntSetting{}
