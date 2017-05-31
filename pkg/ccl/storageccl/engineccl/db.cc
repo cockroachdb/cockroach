@@ -21,7 +21,7 @@ extern "C" {
 const DBStatus kSuccess = { NULL, 0 };
 
 DBStatus DBBatchReprVerify(
-  DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats
+  DBSlice& repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats
 ) {
   const rocksdb::Comparator* kComparator = CockroachComparator();
 
