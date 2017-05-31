@@ -285,7 +285,7 @@ type subquerySpanCollector struct {
 }
 
 func (v *subquerySpanCollector) subqueryNode(ctx context.Context, sq *subquery) error {
-	reads, writes, err := sq.plan.Spans(ctx)
+	reads, writes, err := collectSpans(ctx, sq.plan)
 	if err != nil {
 		return err
 	}

@@ -19,7 +19,6 @@ package sql
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -72,10 +71,6 @@ type hookFnNode struct {
 func (*hookFnNode) Ordering() orderingInfo  { return orderingInfo{} }
 func (*hookFnNode) MarkDebug(_ explainMode) {}
 func (*hookFnNode) Close(context.Context)   {}
-
-func (*hookFnNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 func (f *hookFnNode) Start(context.Context) error {
 	var err error
