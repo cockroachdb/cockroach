@@ -68,14 +68,16 @@ func TestDebugRemote(t *testing.T) {
 				t.Fatalf("expected \"%s\", but found %v", c.expectedErr, err)
 			}
 
-			resp, err := cluster.HTTPClient.Get(l.URL(ctx, 0) + "/debug/")
-			if err != nil {
-				t.Fatal(err)
-			}
-			resp.Body.Close()
+			for i, url := range []string{"/debug/", "/debug/pprof", "/debug/requests"} {
+				resp, err := cluster.HTTPClient.Get(l.URL(ctx, 0) + url)
+				if err != nil {
+					t.Fatalf("%d: %v", i, err)
+				}
+				resp.Body.Close()
 
-			if c.status != resp.StatusCode {
-				t.Fatalf("expected %d, but got %d", c.status, resp.StatusCode)
+				if c.status != resp.StatusCode {
+					t.Fatalf("%d: expected %d, but got %d", i, c.status, resp.StatusCode)
+				}
 			}
 		})
 	}
