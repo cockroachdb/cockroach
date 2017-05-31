@@ -289,7 +289,7 @@ func (a *spanBasedDependencyAnalyzer) analyzePlan(ctx context.Context, p planNod
 		return a
 	}
 
-	readSpans, writeSpans, err := p.Spans(ctx)
+	readSpans, writeSpans, err := collectSpans(ctx, p)
 	if err != nil {
 		panic(err)
 	}

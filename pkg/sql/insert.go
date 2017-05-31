@@ -21,7 +21,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -492,7 +491,3 @@ func (n *insertNode) DebugValues() debugValues {
 }
 
 func (n *insertNode) Ordering() orderingInfo { return orderingInfo{} }
-
-func (n *insertNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	return n.run.collectSpans(ctx)
-}

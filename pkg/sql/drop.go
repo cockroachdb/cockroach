@@ -216,10 +216,6 @@ func (*dropDatabaseNode) Values() parser.Datums              { return parser.Dat
 func (*dropDatabaseNode) DebugValues() debugValues           { return debugValues{} }
 func (*dropDatabaseNode) MarkDebug(mode explainMode)         {}
 
-func (*dropDatabaseNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
-
 type dropIndexNode struct {
 	p        *planner
 	n        *parser.DropIndex
@@ -412,10 +408,6 @@ func (*dropIndexNode) Values() parser.Datums              { return parser.Datums
 func (*dropIndexNode) DebugValues() debugValues           { return debugValues{} }
 func (*dropIndexNode) MarkDebug(mode explainMode)         {}
 
-func (*dropIndexNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
-
 type dropViewNode struct {
 	p  *planner
 	n  *parser.DropView
@@ -524,10 +516,6 @@ func (*dropViewNode) Ordering() orderingInfo             { return orderingInfo{}
 func (*dropViewNode) Values() parser.Datums              { return parser.Datums{} }
 func (*dropViewNode) DebugValues() debugValues           { return debugValues{} }
 func (*dropViewNode) MarkDebug(mode explainMode)         {}
-
-func (*dropViewNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 type dropTableNode struct {
 	p  *planner
@@ -766,10 +754,6 @@ func (*dropTableNode) Ordering() orderingInfo             { return orderingInfo{
 func (*dropTableNode) Values() parser.Datums              { return parser.Datums{} }
 func (*dropTableNode) DebugValues() debugValues           { return debugValues{} }
 func (*dropTableNode) MarkDebug(mode explainMode)         {}
-
-func (*dropTableNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE

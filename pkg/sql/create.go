@@ -28,7 +28,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -124,10 +123,6 @@ func (*createDatabaseNode) Ordering() orderingInfo             { return ordering
 func (*createDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
 func (*createDatabaseNode) DebugValues() debugValues           { return debugValues{} }
 func (*createDatabaseNode) MarkDebug(mode explainMode)         {}
-
-func (*createDatabaseNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 type createIndexNode struct {
 	p         *planner
@@ -243,10 +238,6 @@ func (*createIndexNode) Values() parser.Datums              { return parser.Datu
 func (*createIndexNode) DebugValues() debugValues           { return debugValues{} }
 func (*createIndexNode) MarkDebug(mode explainMode)         {}
 
-func (*createIndexNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
-
 type createUserNode struct {
 	p        *planner
 	n        *parser.CreateUser
@@ -349,10 +340,6 @@ func (*createUserNode) Ordering() orderingInfo             { return orderingInfo
 func (*createUserNode) Values() parser.Datums              { return parser.Datums{} }
 func (*createUserNode) DebugValues() debugValues           { return debugValues{} }
 func (*createUserNode) MarkDebug(mode explainMode)         {}
-
-func (*createUserNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 type createViewNode struct {
 	p           *planner
@@ -530,10 +517,6 @@ func (*createViewNode) Ordering() orderingInfo             { return orderingInfo
 func (*createViewNode) Values() parser.Datums              { return parser.Datums{} }
 func (*createViewNode) DebugValues() debugValues           { return debugValues{} }
 func (*createViewNode) MarkDebug(mode explainMode)         {}
-
-func (*createViewNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 type createTableNode struct {
 	p          *planner
@@ -765,10 +748,6 @@ func (*createTableNode) Ordering() orderingInfo             { return orderingInf
 func (*createTableNode) Values() parser.Datums              { return parser.Datums{} }
 func (*createTableNode) DebugValues() debugValues           { return debugValues{} }
 func (*createTableNode) MarkDebug(mode explainMode)         {}
-
-func (*createTableNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 type indexMatch bool
 
