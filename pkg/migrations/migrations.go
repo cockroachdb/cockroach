@@ -340,29 +340,20 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	return err
 }
 
-// TODO(a-robinson): Write unit test for this.
 func createJobsTable(ctx context.Context, r runner) error {
-	// We install the table at the KV layer so that we can choose a known ID in
-	// the reserved ID space. (The SQL layer doesn't allow this.)
-	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		b := txn.NewBatch()
-		desc := sqlbase.JobsTable
-		b.CPut(sqlbase.MakeNameMetadataKey(desc.GetParentID(), desc.GetName()), desc.GetID(), nil)
-		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
-		if err := txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
-		return txn.Run(ctx, b)
-	})
+	return createSystemTable(ctx, r, sqlbase.JobsTable)
+}
+
+func createSettingsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.SettingsTable)
 }
 
 // TODO(a-robinson): Write unit test for this.
-func createSettingsTable(ctx context.Context, r runner) error {
+func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
-	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		desc := sqlbase.SettingsTable
 		b.CPut(sqlbase.MakeNameMetadataKey(desc.GetParentID(), desc.GetName()), desc.GetID(), nil)
 		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -370,6 +361,14 @@ func createSettingsTable(ctx context.Context, r runner) error {
 		}
 		return txn.Run(ctx, b)
 	})
+	if err != nil {
+		// CPuts only provide idempotent inserts if we ignore the errors that arise
+		// when the condition isn't met.
+		if _, ok := err.(*roachpb.ConditionFailedError); ok {
+			return nil
+		}
+	}
+	return err
 }
 
 var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
