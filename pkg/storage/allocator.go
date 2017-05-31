@@ -227,12 +227,24 @@ func (a *Allocator) ComputeAction(
 		// Adjust the priority by the number of dead replicas the range has.
 		quorum := computeQuorum(len(desc.Replicas))
 		if lr := len(liveReplicas); lr >= quorum {
-			priority := removeDeadReplicaPriority + float64(quorum-lr)
-			if log.V(3) {
-				log.Infof(ctx, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
-					len(deadReplicas), liveReplicas, quorum, priority)
+			// Only allow removal of a dead replica if we have a suitable allocation
+			// target that we can up-replicate to. This isn't necessarily the target
+			// we'll up-replicate to, just an indication that such a target exists.
+			_, err := a.AllocateTarget(
+				ctx,
+				zone.Constraints,
+				liveReplicas,
+				desc.RangeID,
+				true, /* relaxConstraints */
+			)
+			if err == nil {
+				priority := removeDeadReplicaPriority + float64(quorum-lr)
+				if log.V(3) {
+					log.Infof(ctx, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
+						len(deadReplicas), liveReplicas, quorum, priority)
+				}
+				return AllocatorRemoveDead, priority
 			}
-			return AllocatorRemoveDead, priority
 		}
 	}
 	if have > need {
