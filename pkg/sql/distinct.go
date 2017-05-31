@@ -62,8 +62,7 @@ func (n *distinctNode) Start(ctx context.Context) error {
 	return n.plan.Start(ctx)
 }
 
-func (n *distinctNode) Columns() sqlbase.ResultColumns { return n.plan.Columns() }
-func (n *distinctNode) Values() parser.Datums          { return n.plan.Values() }
+func (n *distinctNode) Values() parser.Datums { return n.plan.Values() }
 
 func (n *distinctNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {

@@ -49,7 +49,7 @@ type ordinalityNode struct {
 
 func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	src := ds.plan
-	srcColumns := src.Columns()
+	srcColumns := planColumns(src)
 
 	res := &ordinalityNode{
 		source:   src,
@@ -101,7 +101,6 @@ func (o *ordinalityNode) Next(ctx context.Context) (bool, error) {
 func (o *ordinalityNode) Values() parser.Datums           { return o.row }
 func (o *ordinalityNode) DebugValues() debugValues        { return o.source.DebugValues() }
 func (o *ordinalityNode) MarkDebug(mode explainMode)      { o.source.MarkDebug(mode) }
-func (o *ordinalityNode) Columns() sqlbase.ResultColumns  { return o.columns }
 func (o *ordinalityNode) Start(ctx context.Context) error { return o.source.Start(ctx) }
 func (o *ordinalityNode) Close(ctx context.Context)       { o.source.Close(ctx) }
 

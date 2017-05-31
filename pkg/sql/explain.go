@@ -246,8 +246,6 @@ var debugColumns = sqlbase.ResultColumns{
 	{Name: "Disposition", Typ: parser.TypeString},
 }
 
-func (*explainDebugNode) Columns() sqlbase.ResultColumns { return debugColumns }
-
 func (n *explainDebugNode) Start(ctx context.Context) error        { return n.plan.Start(ctx) }
 func (n *explainDebugNode) Next(ctx context.Context) (bool, error) { return n.plan.Next(ctx) }
 func (n *explainDebugNode) Close(ctx context.Context)              { n.plan.Close(ctx) }
@@ -296,8 +294,6 @@ var explainDistSQLColumns = sqlbase.ResultColumns{
 	{Name: "URL", Typ: parser.TypeString},
 	{Name: "JSON", Typ: parser.TypeString},
 }
-
-func (*explainDistSQLNode) Columns() sqlbase.ResultColumns { return explainDistSQLColumns }
 
 func (n *explainDistSQLNode) Start(ctx context.Context) error {
 	// Trigger limit propagation.

@@ -71,7 +71,7 @@ func (p *planner) orderBy(
 
 	// We grab a copy of columns here because we might add new render targets
 	// below. This is the set of columns requested by the query.
-	columns := n.Columns()
+	columns := planColumns(n)
 	numOriginalCols := len(columns)
 	if s != nil {
 		numOriginalCols = s.numOriginalCols
@@ -250,10 +250,6 @@ func (p *planner) colIndex(numOriginalCols int, expr parser.Expr, context string
 	return int(ord), nil
 }
 
-func (n *sortNode) Columns() sqlbase.ResultColumns {
-	return n.columns
-}
-
 func (n *sortNode) Values() parser.Datums {
 	// If an ordering expression was used the number of columns in each row might
 	// differ from the number of columns requested, so trim the result.
@@ -289,7 +285,7 @@ func (n *sortNode) Next(ctx context.Context) (bool, error) {
 			n.needSort = false
 			break
 		} else if n.sortStrategy == nil {
-			v := n.p.newContainerValuesNode(n.plan.Columns(), 0)
+			v := n.p.newContainerValuesNode(planColumns(n.plan), 0)
 			v.ordering = n.ordering
 			n.sortStrategy = newSortAllStrategy(v)
 		}

@@ -20,7 +20,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // emptyNode is a planNode with no columns and either no rows (default) or a single row with empty
@@ -31,8 +30,6 @@ import (
 type emptyNode struct {
 	results bool
 }
-
-func (*emptyNode) Columns() sqlbase.ResultColumns { return nil }
 
 func (*emptyNode) Values() parser.Datums       { return nil }
 func (*emptyNode) Start(context.Context) error { return nil }

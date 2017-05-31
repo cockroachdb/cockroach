@@ -1201,7 +1201,7 @@ ColLoop:
 // of a plan that corresponds to a given planNode. If planToSreamColMap is nil,
 // a 1-1 mapping is assumed.
 func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.ColumnType {
-	nodeColumns := node.Columns()
+	nodeColumns := planColumns(node)
 	if planToStreamColMap == nil {
 		// No remapping.
 		types := make([]sqlbase.ColumnType, len(nodeColumns))
@@ -1546,7 +1546,7 @@ func (dsp *distSQLPlanner) createPlanForDistinct(
 		}
 	}
 	var distinctColumns []uint32
-	for i := range n.Columns() {
+	for i := range planColumns(n) {
 		if plan.planToStreamColMap[i] != -1 {
 			distinctColumns = append(distinctColumns, uint32(plan.planToStreamColMap[i]))
 		}

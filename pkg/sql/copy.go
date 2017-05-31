@@ -53,8 +53,6 @@ type copyNode struct {
 	rowsMemAcc    WrappableMemoryAccount
 }
 
-func (n *copyNode) Columns() sqlbase.ResultColumns { return n.resultColumns }
-
 func (*copyNode) Values() parser.Datums              { return nil }
 func (*copyNode) MarkDebug(_ explainMode)            {}
 func (*copyNode) Next(context.Context) (bool, error) { return false, nil }

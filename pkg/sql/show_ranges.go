@@ -152,8 +152,6 @@ func (n *showRangesNode) Close(_ context.Context) {
 	n.descriptorKVs = nil
 }
 
-func (*showRangesNode) Columns() sqlbase.ResultColumns { return showRangesColumns }
-
 func (*showRangesNode) MarkDebug(_ explainMode)  {}
 func (*showRangesNode) DebugValues() debugValues { panic("unimplemented") }
 
