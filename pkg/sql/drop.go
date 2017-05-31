@@ -289,85 +289,83 @@ func (p *planner) dropIndexByName(
 	behavior parser.DropBehavior,
 	stmt string,
 ) error {
-	status, i, err := tableDesc.FindIndexByName(idxName)
+	idx, err := tableDesc.FindIndexByName(idxName)
 	if err != nil {
-		if ifExists {
+		if ifExists || err == sqlbase.ErrIndexBeingDropped {
 			// Noop.
 			return nil
 		}
 		// Index does not exist, but we want it to: error out.
 		return err
 	}
+
 	// Queue the mutation.
 	var droppedViews []string
-	switch status {
-	case sqlbase.DescriptorActive:
-		idx := tableDesc.Indexes[i]
-
-		if idx.ForeignKey.IsSet() {
-			if behavior != parser.DropCascade {
-				return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
-			}
-			if err := p.removeFKBackReference(ctx, tableDesc, idx); err != nil {
-				return err
-			}
+	if idx.ForeignKey.IsSet() {
+		if behavior != parser.DropCascade {
+			return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 		}
-		if len(idx.Interleave.Ancestors) > 0 {
-			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
-				return err
-			}
+		if err := p.removeFKBackReference(ctx, tableDesc, idx); err != nil {
+			return err
 		}
+	}
 
-		for _, ref := range idx.ReferencedBy {
-			fetched, err := p.canRemoveFK(ctx, idx.Name, ref, behavior)
+	if len(idx.Interleave.Ancestors) > 0 {
+		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
+			return err
+		}
+	}
+
+	for _, ref := range idx.ReferencedBy {
+		fetched, err := p.canRemoveFK(ctx, idx.Name, ref, behavior)
+		if err != nil {
+			return err
+		}
+		if err := p.removeFK(ctx, ref, fetched); err != nil {
+			return err
+		}
+	}
+	for _, ref := range idx.InterleavedBy {
+		if err := p.removeInterleave(ctx, ref); err != nil {
+			return err
+		}
+	}
+
+	for _, tableRef := range tableDesc.DependedOnBy {
+		if tableRef.IndexID == idx.ID {
+			// Ensure that we have DROP privilege on all dependent views
+			err := p.canRemoveDependentViewGeneric(
+				ctx, "index", idx.Name, tableDesc.ParentID, tableRef, behavior)
 			if err != nil {
 				return err
 			}
-			if err := p.removeFK(ctx, ref, fetched); err != nil {
+			viewDesc, err := p.getViewDescForCascade(
+				ctx, "index", idx.Name, tableDesc.ParentID, tableRef.ID, behavior,
+			)
+			if err != nil {
 				return err
 			}
-		}
-		for _, ref := range idx.InterleavedBy {
-			if err := p.removeInterleave(ctx, ref); err != nil {
+			cascadedViews, err := p.removeDependentView(ctx, tableDesc, viewDesc)
+			if err != nil {
 				return err
 			}
-		}
-
-		for _, tableRef := range tableDesc.DependedOnBy {
-			if tableRef.IndexID == idx.ID {
-				// Ensure that we have DROP privilege on all dependent views
-				err := p.canRemoveDependentViewGeneric(
-					ctx, "index", idx.Name, tableDesc.ParentID, tableRef, behavior)
-				if err != nil {
-					return err
-				}
-				viewDesc, err := p.getViewDescForCascade(
-					ctx, "index", idx.Name, tableDesc.ParentID, tableRef.ID, behavior,
-				)
-				if err != nil {
-					return err
-				}
-				cascadedViews, err := p.removeDependentView(ctx, tableDesc, viewDesc)
-				if err != nil {
-					return err
-				}
-				droppedViews = append(droppedViews, viewDesc.Name)
-				droppedViews = append(droppedViews, cascadedViews...)
-			}
-		}
-
-		tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
-		tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
-
-	case sqlbase.DescriptorIncomplete:
-		switch tableDesc.Mutations[i].Direction {
-		case sqlbase.DescriptorMutation_ADD:
-			return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
-
-		case sqlbase.DescriptorMutation_DROP:
-			return nil
+			droppedViews = append(droppedViews, viewDesc.Name)
+			droppedViews = append(droppedViews, cascadedViews...)
 		}
 	}
+	found := false
+	for i := range tableDesc.Indexes {
+		if tableDesc.Indexes[i].ID == idx.ID {
+			tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
+			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
+	}
+
 	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}

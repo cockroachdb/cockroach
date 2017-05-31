@@ -134,12 +134,9 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err
 				}
-				status, i, err := n.tableDesc.FindIndexByName(d.Name)
-				if err == nil {
-					if status == sqlbase.DescriptorIncomplete &&
-						n.tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_DROP {
-						return fmt.Errorf("index %q being dropped, try again later", d.Name)
-					}
+				_, err := n.tableDesc.FindIndexByName(d.Name)
+				if err == sqlbase.ErrIndexBeingDropped {
+					return fmt.Errorf("index %q being dropped, try again later", d.Name)
 				}
 				n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD)
 

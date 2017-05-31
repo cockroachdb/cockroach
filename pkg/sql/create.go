@@ -158,17 +158,11 @@ func (p *planner) CreateIndex(ctx context.Context, n *parser.CreateIndex) (planN
 }
 
 func (n *createIndexNode) Start(ctx context.Context) error {
-	status, i, err := n.tableDesc.FindIndexByName(n.n.Name)
+	_, err := n.tableDesc.FindIndexByName(n.n.Name)
+	if err == sqlbase.ErrIndexBeingDropped {
+		return fmt.Errorf("index %q being dropped, try again later", string(n.n.Name))
+	}
 	if err == nil {
-		if status == sqlbase.DescriptorIncomplete {
-			switch n.tableDesc.Mutations[i].Direction {
-			case sqlbase.DescriptorMutation_DROP:
-				return fmt.Errorf("index %q being dropped, try again later", string(n.n.Name))
-
-			case sqlbase.DescriptorMutation_ADD:
-				// Noop, will fail in AllocateIDs below.
-			}
-		}
 		if n.n.IfNotExists {
 			return nil
 		}

@@ -616,14 +616,14 @@ func (p *planner) findTableContainingIndex(
 		if err != nil {
 			return nil, err
 		}
-		status, _, _ := tableDesc.FindIndexByNormalizedName(normName)
-		if status != sqlbase.DescriptorAbsent {
-			if result != nil {
-				return nil, fmt.Errorf("index name %q is ambiguous (found in %s and %s)",
-					normName, tn.String(), result.String())
-			}
-			result = tn
+		if _, err = tableDesc.FindIndexByName(idxName); err != nil {
+			continue
 		}
+		if result != nil {
+			return nil, fmt.Errorf("index name %q is ambiguous (found in %s and %s)",
+				normName, tn.String(), result.String())
+		}
+		result = tn
 	}
 	if result == nil {
 		return nil, fmt.Errorf("index %q does not exist", normName)
@@ -658,6 +658,7 @@ func (p *planner) expandIndexName(
 // (primary index) or table-with-index. Only one of table and tableWithIndex can
 // be set.  This is useful for statements that have both table and index
 // variants (like `ALTER TABLE/INDEX ... SPLIT AT ...`).
+// It can return indexes that are being rolled out.
 func (p *planner) getTableAndIndex(
 	ctx context.Context,
 	table *parser.NormalizableTableName,
@@ -688,19 +689,14 @@ func (p *planner) getTableAndIndex(
 	}
 
 	// Determine which index to use.
-	var index *sqlbase.IndexDescriptor
+	var index sqlbase.IndexDescriptor
 	if tableWithIndex == nil {
-		index = &tableDesc.PrimaryIndex
+		index = tableDesc.PrimaryIndex
 	} else {
-		normIdxName := tableWithIndex.Index.Normalize()
-		status, i, err := tableDesc.FindIndexByNormalizedName(normIdxName)
+		index, err = tableDesc.FindIndexByName(tableWithIndex.Index)
 		if err != nil {
 			return nil, nil, err
 		}
-		if status != sqlbase.DescriptorActive {
-			return nil, nil, errors.Errorf("unknown index %s", normIdxName)
-		}
-		index = &tableDesc.Indexes[i]
 	}
-	return tableDesc, index, nil
+	return tableDesc, &index, nil
 }

@@ -108,6 +108,9 @@ var ErrMissingColumns = errors.New("table must contain at least 1 column")
 // ErrMissingPrimaryKey indicates a table with no primary key.
 var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
 
+// ErrIndexBeingDropped indicates an index is being dropped.
+var ErrIndexBeingDropped = errors.New("index is being dropped")
+
 func validateName(name, typ string) error {
 	if len(name) == 0 {
 		return fmt.Errorf("empty %s name", typ)
@@ -206,7 +209,7 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 	name := baseName
 
 	exists := func(name string) bool {
-		_, _, err := tableDesc.FindIndexByNormalizedName(name)
+		_, err := tableDesc.findIndexByNormalizedName(name)
 		return err == nil
 	}
 	for i := 1; exists(name); i++ {
@@ -1496,30 +1499,49 @@ func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescripto
 	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
 }
 
-// FindIndexByNormalizedName finds the index with the specified name. It returns
-// DescriptorStatus for the index, and an index into either the indexes
-// (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindIndexByNormalizedName(
-	normName string,
-) (DescriptorStatus, int, error) {
+// findIndexByNormalizedName finds the index with the specified name.
+func (desc *TableDescriptor) findIndexByNormalizedName(normName string) (IndexDescriptor, error) {
 	for i, idx := range desc.Indexes {
 		if parser.ReNormalizeName(idx.Name) == normName {
-			return DescriptorActive, i, nil
+			return desc.Indexes[i], nil
 		}
 	}
-	for i, m := range desc.Mutations {
+	for _, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil {
 			if parser.ReNormalizeName(idx.Name) == normName {
-				return DescriptorIncomplete, i, nil
+				if m.Direction == DescriptorMutation_DROP {
+					return *idx, ErrIndexBeingDropped
+				}
+				return *idx, nil
 			}
 		}
 	}
-	return DescriptorAbsent, -1, fmt.Errorf("index %q does not exist", normName)
+	return IndexDescriptor{}, fmt.Errorf("index %q does not exist", normName)
 }
 
-// FindIndexByName calls FindIndexByNormalizedName on a normalized argument.
-func (desc *TableDescriptor) FindIndexByName(name parser.Name) (DescriptorStatus, int, error) {
-	return desc.FindIndexByNormalizedName(name.Normalize())
+// FindIndexByName finds the index with the specified name in the active
+// list or the mutations list. An index being dropped is returned with
+// an error: ErrIndexBeingDropped.
+func (desc *TableDescriptor) FindIndexByName(name parser.Name) (IndexDescriptor, error) {
+	return desc.findIndexByNormalizedName(name.Normalize())
+}
+
+// RenameIndexDescriptor renames an index descriptor.
+func (desc *TableDescriptor) RenameIndexDescriptor(index IndexDescriptor, name string) {
+	id := index.ID
+	for i := range desc.Indexes {
+		if desc.Indexes[i].ID == id {
+			desc.Indexes[i].Name = name
+			return
+		}
+	}
+	for _, m := range desc.Mutations {
+		if idx := m.GetIndex(); idx != nil && idx.ID == id {
+			idx.Name = name
+			return
+		}
+	}
+	panic(fmt.Sprintf("index with id = %d does not exist", id))
 }
 
 // FindIndexByID finds an index (active or inactive) with the specified ID.

@@ -264,7 +264,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 	}
 
 	normIdxName := n.Index.Index.Normalize()
-	status, i, err := tableDesc.FindIndexByNormalizedName(normIdxName)
+	idx, err := tableDesc.FindIndexByName(n.Index.Index)
 	if err != nil {
 		if n.IfExists {
 			// Noop.
@@ -279,7 +279,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 	}
 
 	for _, tableRef := range tableDesc.DependedOnBy {
-		if tableRef.IndexID != tableDesc.Indexes[i].ID {
+		if tableRef.IndexID != idx.ID {
 			continue
 		}
 		return nil, p.dependentViewRenameError(
@@ -296,15 +296,11 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 		return &emptyNode{}, nil
 	}
 
-	if _, _, err := tableDesc.FindIndexByNormalizedName(normNewIdxName); err == nil {
+	if _, err := tableDesc.FindIndexByName(n.NewName); err == nil {
 		return nil, fmt.Errorf("index name %q already exists", n.NewName)
 	}
 
-	if status == sqlbase.DescriptorActive {
-		tableDesc.Indexes[i].Name = normNewIdxName
-	} else {
-		tableDesc.Mutations[i].GetIndex().Name = normNewIdxName
-	}
+	tableDesc.RenameIndexDescriptor(idx, normNewIdxName)
 
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err

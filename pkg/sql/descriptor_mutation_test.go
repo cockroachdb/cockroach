@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -347,12 +348,18 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 // descriptor to the DB.
 func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMutation) {
 	tableDesc := mt.tableDesc
-	_, i, err := tableDesc.FindIndexByNormalizedName(index)
+	name := parser.Name(index)
+	idx, err := tableDesc.FindIndexByName(name)
 	if err != nil {
 		mt.Fatal(err)
 	}
-	idx := tableDesc.Indexes[i]
-	tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+	for i := range tableDesc.Indexes {
+		if idx.ID == tableDesc.Indexes[i].ID {
+			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+			break
+		}
+	}
+
 	m.Descriptor_ = &sqlbase.DescriptorMutation_Index{Index: &idx}
 	mt.writeMutation(m)
 }
