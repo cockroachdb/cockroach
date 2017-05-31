@@ -75,6 +75,10 @@ const (
 	// certificatesDebugEndpoint lists the certificates on a node.
 	certificatesDebugEndpoint = "/debug/certificates"
 
+	// problemRangesDebugEndpoint exposes an html page with a list of all ranges
+	// that are experiencing problems.
+	networkDebugEndpoint = "/debug/network"
+
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
 )
