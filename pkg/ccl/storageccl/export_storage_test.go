@@ -29,8 +29,6 @@ import (
 
 func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 	ctx := context.TODO()
-	dir, dirCleanup := testutils.TempDir(t)
-	defer dirCleanup()
 
 	// Setup a sink for the given args.
 	s, err := MakeExportStorage(ctx, args)
@@ -69,6 +67,8 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 		}
 	})
 
+	// The azure driver makes us chunk files that are greater than 4mb, so make
+	// sure that files larger than that work on all the providers.
 	t.Run("8mb-tempfile", func(t *testing.T) {
 		const size = 1024 * 1024 * 8 // 8MiB
 		testingContent := make([]byte, size)
@@ -77,28 +77,12 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 		}
 		testingFilename := "testing-123"
 
-		temp, err := MakeExportFileTmpWriter(ctx, dir, s, testingFilename)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// Write something to the local file specified by our sink.
-		t.Logf("writing %d bytes to %s", len(testingContent), temp.LocalFile())
-		reopened, err := os.Create(temp.LocalFile())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer reopened.Close()
-		if _, err := reopened.Write(testingContent); err != nil {
-			t.Fatal(err)
-		}
-		reopened.Close()
-
-		if err := temp.Finish(ctx); err != nil {
+		// Write some random data (random so it doesn't compress).
+		if err := s.WriteFile(ctx, testingFilename, bytes.NewReader(testingContent)); err != nil {
 			t.Fatal(err)
 		}
 
-		t.Logf("verifying content of %s", testingFilename)
-		// Attempt to read (or fetch) the result.
+		// Attempt to read (or fetch) it back.
 		res, err := s.ReadFile(ctx, testingFilename)
 		if err != nil {
 			t.Fatalf("Could not get reader for %s: %+v", testingFilename, err)

@@ -326,27 +326,24 @@ func writeSST(
 ) error {
 	filename := fmt.Sprintf("load-%d.sst", rand.Int63())
 	log.Info(ctx, "writesst ", filename)
-	sstFile, err := storageccl.MakeExportFileTmpWriter(ctx, tempPrefix, base, filename)
+
+	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
 		return err
 	}
-	defer sstFile.Close(ctx)
-
-	sst := engine.MakeRocksDBSstFileWriter()
-	if err := sst.Open(sstFile.LocalFile()); err != nil {
-		return err
-	}
+	defer sst.Close()
 	for _, kv := range kvs {
 		kv.Key.Timestamp = ts
 		if err := sst.Add(kv); err != nil {
 			return err
 		}
 	}
-	if err := sst.Close(); err != nil {
+	sstContents, err := sst.Finish()
+	if err != nil {
 		return err
 	}
 
-	if err := sstFile.Finish(ctx); err != nil {
+	if err := base.WriteFile(ctx, filename, bytes.NewReader(sstContents)); err != nil {
 		return err
 	}
 

@@ -27,7 +27,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -521,101 +520,5 @@ func (s *azureStorage) Delete(_ context.Context, basename string) error {
 }
 
 func (s *azureStorage) Close() error {
-	return nil
-}
-
-// ExportFileWriter provides a local path, to a file or pipe, that can be
-// written to before calling Finish() to store the written content to an
-// ExportStorage. This caters to non-Go clients (like RocksDB) that want to open
-// and write to a file, rather than just use an Go io.Reader/io.Writer
-// interface.
-type ExportFileWriter interface {
-	// LocalFile returns the path to a local path to which a caller should write.
-	LocalFile() string
-
-	// Finish indicates that no further writes to the local file are expected and
-	// that the implementation should store the content (copy it, upload, etc) if
-	// that has not already been done in a streaming fashion (e.g. via a pipe).
-	Finish(ctx context.Context) error
-
-	// Close removes any temporary files or resources that were made on behalf
-	// of this writer. If `Finish` has not been called, any writes to
-	// `LocalFile` will be lost. Implementations of `Close` are required to be
-	// idempotent and should log any errors.
-	Close(ctx context.Context)
-}
-
-// tmpWriter uses local temp files to implement an ExportFileWriter.
-type tmpWriter struct {
-	store   ExportStorage
-	tmpfile *os.File
-	name    string
-}
-
-var _ ExportFileWriter = &tmpWriter{}
-
-// MakeExportFileTmpWriter returns an ExportFileWriter backed by a tempfile.
-func MakeExportFileTmpWriter(
-	_ context.Context, tempPrefix string, store ExportStorage, name string,
-) (ExportFileWriter, error) {
-	// the special-case that allows local stores to rename rather than copy works
-	// only if we alloc the tempfile on same device, so we force dest prefix here.
-	if loc, ok := store.(*localFileStorage); ok {
-		if err := os.MkdirAll(loc.base, 0755); err != nil {
-			return nil, errors.Wrap(err, "creating local file dest")
-		}
-		f, err := ioutil.TempFile(loc.base, name)
-		if err != nil {
-			return nil, err
-		}
-		return &localTmpWriter{tmpWriter{tmpfile: f}, filepath.Join(loc.base, name)}, nil
-	}
-
-	if tempPrefix == "" {
-		return nil, errors.New("must provide tempdir path")
-	}
-	f, err := ioutil.TempFile(tempPrefix, name)
-	if err != nil {
-		return nil, err
-	}
-	return &tmpWriter{store: store, tmpfile: f, name: name}, nil
-}
-
-// LocalFile returns the local temp file.
-func (e *tmpWriter) LocalFile() string {
-	return e.tmpfile.Name()
-}
-
-// Finish uploads the content of the tmpfile using the store's WriteFile.
-func (e *tmpWriter) Finish(ctx context.Context) error {
-	return e.store.WriteFile(ctx, e.name, e.tmpfile)
-}
-
-func (e *tmpWriter) Close(ctx context.Context) {
-	if e.tmpfile != nil {
-		if err := errors.Wrap(e.tmpfile.Close(), "closing tempfile"); err != nil {
-			log.Warningf(ctx, "%+v", err)
-		}
-		if err := errors.Wrap(os.Remove(e.tmpfile.Name()), "cleaning up tmpfile"); err != nil {
-			log.Warningf(ctx, "%+v", err)
-		}
-		e.tmpfile = nil
-	}
-}
-
-// localTmpWriter overrides the usual Finish to just rename.
-type localTmpWriter struct {
-	tmpWriter
-	dest string
-}
-
-// Finish uploads the content of the tmpfile using the store's WriteFile.
-func (l *localTmpWriter) Finish(ctx context.Context) error {
-	if err := os.Rename(l.tmpfile.Name(), l.dest); err != nil {
-		return err
-	}
-	// prevent the usual Close()'s deletion.
-	l.tmpfile.Close()
-	l.tmpfile = nil
 	return nil
 }
