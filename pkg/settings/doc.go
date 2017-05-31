@@ -45,5 +45,15 @@ like respecting an opt-*out* setting, we can default to `false` (opted out) and
 then use a migration to write an explicit `true`: in practice you'd still expect
 to read `true` unless a preference is expressed, but in the rare cases where you
 read a default, you don't risk ignoring an expressed opt-out.
+
+Ideally, when passing configuration into some structure or subsystem, e.g.
+a rate limit into a client or something, passing a `*FooSetting rather than a
+`Foo` and waiting to call `.Get()` until the value is actually used ensures
+observing the latest value.
+
+Existing/off-the-shelf systems generally will not be defined in terms of our
+settings, but if they can either be swapped at runtime or expose some `setFoo`
+method, that can be used in conjunction with an change callback registered via
+OnChange.
 */
 package settings

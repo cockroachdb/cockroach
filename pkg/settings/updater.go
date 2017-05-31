@@ -63,11 +63,11 @@ func (u Updater) Set(key, rawValue, vt string) error {
 	}
 	u[key] = struct{}{}
 
-	if expected := d.setting.Typ(); vt != expected {
+	if expected := d.Typ(); vt != expected {
 		return errors.Errorf("setting '%s' defined as type %s, not %s", key, expected, vt)
 	}
 
-	switch setting := d.setting.(type) {
+	switch setting := d.(type) {
 	case *StringSetting:
 		return setting.set(rawValue)
 	case *BoolSetting:
@@ -109,7 +109,7 @@ func (u Updater) Set(key, rawValue, vt string) error {
 func (u Updater) Done() {
 	for k, v := range registry {
 		if _, ok := u[k]; !ok {
-			v.setting.setToDefault()
+			v.setToDefault()
 		}
 	}
 }

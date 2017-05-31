@@ -27,6 +27,7 @@ type StringSetting struct {
 	defaultValue string
 	v            atomic.Value
 	validateFn   func(string) error
+	common
 }
 
 var _ Setting = &StringSetting{}
@@ -42,7 +43,11 @@ func (*StringSetting) Typ() string {
 
 // Get retrieves the string value in the setting.
 func (s *StringSetting) Get() string {
-	return s.v.Load().(string)
+	loaded := s.v.Load()
+	if loaded == nil {
+		return ""
+	}
+	return loaded.(string)
 }
 
 // Validate that a value conforms with the validation function.
@@ -59,7 +64,11 @@ func (s *StringSetting) set(v string) error {
 	if err := s.Validate(v); err != nil {
 		return err
 	}
+	if s.Get() == v {
+		return nil
+	}
 	s.v.Store(v)
+	s.changed()
 	return nil
 }
 
@@ -104,4 +113,11 @@ func TestingSetString(s **StringSetting, v string) func() {
 	return func() {
 		*s = saved
 	}
+}
+
+// OnChange registers a callback to be called when the setting changes.
+// This overrides the `common`` impl to return the concrete impl type.
+func (s *StringSetting) OnChange(fn func()) *StringSetting {
+	s.setOnChange(fn)
+	return s
 }

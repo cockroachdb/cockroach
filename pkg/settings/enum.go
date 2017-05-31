@@ -119,3 +119,9 @@ func TestingSetEnum(s **EnumSetting, i int64) func() {
 		*s = saved
 	}
 }
+
+// OnChange registers a callback to be called when the setting changes.
+func (e *EnumSetting) OnChange(fn func()) *EnumSetting {
+	e.setOnChange(fn)
+	return e
+}

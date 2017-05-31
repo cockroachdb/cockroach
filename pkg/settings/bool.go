@@ -22,8 +22,9 @@ import (
 // updated automatically when the corresponding cluster-wide setting
 // of type "bool" is updated.
 type BoolSetting struct {
-	defaultValue bool
+	common
 	v            int32
+	defaultValue bool
 }
 
 var _ Setting = &BoolSetting{}
@@ -43,10 +44,12 @@ func (*BoolSetting) Typ() string {
 }
 
 func (b *BoolSetting) set(v bool) {
+	vInt := int32(0)
 	if v {
-		atomic.StoreInt32(&b.v, 1)
-	} else {
-		atomic.StoreInt32(&b.v, 0)
+		vInt = 1
+	}
+	if atomic.SwapInt32(&b.v, vInt) != vInt {
+		b.changed()
 	}
 }
 
@@ -78,4 +81,10 @@ func TestingSetBool(s **BoolSetting, v bool) func() {
 	return func() {
 		*s = saved
 	}
+}
+
+// OnChange registers a callback to be called when the setting changes.
+func (b *BoolSetting) OnChange(fn func()) *BoolSetting {
+	b.setOnChange(fn)
+	return b
 }

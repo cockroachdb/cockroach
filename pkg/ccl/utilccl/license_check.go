@@ -15,9 +15,8 @@ import (
 
 // EnterpriseEnabled is temporary, until #14114 is implemented.
 var EnterpriseEnabled = func() *settings.BoolSetting {
-	name := "enterprise.enabled"
-	s := settings.RegisterBoolSetting(name, "set to true to enable Enterprise features", false)
-	settings.Hide(name)
+	s := settings.RegisterBoolSetting("enterprise.enabled", "set to true to enable Enterprise features", false)
+	s.Hide()
 	return s
 }()
 

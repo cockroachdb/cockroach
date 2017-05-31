@@ -25,6 +25,7 @@ import (
 // updated automatically when the corresponding cluster-wide setting
 // of type "float" is updated.
 type FloatSetting struct {
+	common
 	defaultValue float64
 	v            uint64
 	validateFn   func(float64) error
@@ -60,7 +61,9 @@ func (f *FloatSetting) set(v float64) error {
 	if err := f.Validate(v); err != nil {
 		return err
 	}
-	atomic.StoreUint64(&f.v, math.Float64bits(v))
+	if bits := math.Float64bits(v); atomic.SwapUint64(&f.v, bits) != bits {
+		f.changed()
+	}
 	return nil
 }
 
@@ -114,4 +117,10 @@ func TestingSetFloat(s **FloatSetting, v float64) func() {
 	return func() {
 		*s = saved
 	}
+}
+
+// OnChange registers a callback to be called when the setting changes.
+func (f *FloatSetting) OnChange(fn func()) *FloatSetting {
+	f.common.setOnChange(fn)
+	return f
 }

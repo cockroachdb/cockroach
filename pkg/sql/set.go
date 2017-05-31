@@ -96,7 +96,7 @@ func (p *planner) setClusterSetting(
 	if err := p.RequireSuperUser("SET CLUSTER SETTING"); err != nil {
 		return nil, err
 	}
-	typ, _, ok := settings.Lookup(name)
+	typ, ok := settings.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
 	}
