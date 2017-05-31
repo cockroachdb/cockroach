@@ -9,10 +9,9 @@
 package storageccl
 
 import (
+	"bytes"
 	"crypto/sha512"
 	"fmt"
-	"io"
-	"os"
 
 	"golang.org/x/net/context"
 
@@ -92,26 +91,11 @@ func evalExport(
 	}
 	defer exportStore.Close()
 
-	filename := fmt.Sprintf("%d.sst", parser.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
-	temp, err := MakeExportFileTmpWriter(ctx, cArgs.EvalCtx.GetTempPrefix(), exportStore, filename)
+	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
 		return storage.EvalResult{}, err
 	}
-	localPath := temp.LocalFile()
-	defer temp.Close(ctx)
-
-	sst := engine.MakeRocksDBSstFileWriter()
-	if err := sst.Open(localPath); err != nil {
-		return storage.EvalResult{}, err
-	}
-	defer func() {
-		// Close is idempotent, so it's safe to call it again in the success
-		// path. If the sstable was empty, ignore the error because empty
-		// sstables are not allowed.
-		if err := sst.Close(); sst.DataSize > 0 && err != nil {
-			log.Warningf(ctx, "could not close sst writer %s: %+v", localPath, err)
-		}
-	}()
+	defer sst.Close()
 
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
@@ -137,19 +121,21 @@ func evalExport(
 		reply.Files = []roachpb.ExportResponse_File{}
 		return storage.EvalResult{}, nil
 	}
-
-	if err := sst.Close(); err != nil {
-		return storage.EvalResult{}, err
-	}
 	size := sst.DataSize
 
-	// Compute the checksum before we upload and remove the local file.
-	checksum, err := sha512ChecksumFile(localPath)
+	sstContents, err := sst.Finish()
 	if err != nil {
 		return storage.EvalResult{}, err
 	}
 
-	if err := temp.Finish(ctx); err != nil {
+	// Compute the checksum before we upload and remove the local file.
+	checksum, err := sha512ChecksumData(sstContents)
+	if err != nil {
+		return storage.EvalResult{}, err
+	}
+
+	filename := fmt.Sprintf("%d.sst", parser.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
+	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(sstContents)); err != nil {
 		return storage.EvalResult{}, err
 	}
 
@@ -167,19 +153,6 @@ func sha512ChecksumData(data []byte) ([]byte, error) {
 	h := sha512.New()
 	if _, err := h.Write(data); err != nil {
 		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
-	}
-	return h.Sum(nil), nil
-}
-
-func sha512ChecksumFile(path string) ([]byte, error) {
-	h := sha512.New()
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	if _, err := io.Copy(h, f); err != nil {
-		return nil, err
 	}
 	return h.Sum(nil), nil
 }

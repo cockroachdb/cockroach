@@ -5147,6 +5147,11 @@ func (r *Replica) GetTempPrefix() string {
 	return r.store.GetTempPrefix()
 }
 
+// TODO(dan): This is likely to be used by upcoming projects (IngestExternalFile
+// and/or DistSQL external storage). Delete it if that doesn't happen and delete
+// this line if it does.
+var _ = (*Replica).GetTempPrefix
+
 // GetLeaseHistory returns the lease history stored on this replica.
 func (r *Replica) GetLeaseHistory() []roachpb.Lease {
 	if r.leaseHistory == nil {
