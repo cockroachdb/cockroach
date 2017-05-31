@@ -307,11 +307,6 @@ func (n *groupNode) Columns() sqlbase.ResultColumns {
 	return n.columns
 }
 
-func (n *groupNode) Ordering() orderingInfo {
-	// TODO(dt): aggregate buckets are returned un-ordered for now.
-	return orderingInfo{}
-}
-
 func (n *groupNode) Values() parser.Datums {
 	return n.values
 }

@@ -150,7 +150,6 @@ func (n *limitNode) evalLimit() error {
 
 func (n *limitNode) Columns() sqlbase.ResultColumns { return n.plan.Columns() }
 func (n *limitNode) Values() parser.Datums          { return n.plan.Values() }
-func (n *limitNode) Ordering() orderingInfo         { return n.plan.Ordering() }
 
 func (n *limitNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {

@@ -64,7 +64,6 @@ func (n *distinctNode) Start(ctx context.Context) error {
 
 func (n *distinctNode) Columns() sqlbase.ResultColumns { return n.plan.Columns() }
 func (n *distinctNode) Values() parser.Datums          { return n.plan.Values() }
-func (n *distinctNode) Ordering() orderingInfo         { return n.plan.Ordering() }
 
 func (n *distinctNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {

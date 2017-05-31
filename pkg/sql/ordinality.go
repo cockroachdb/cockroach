@@ -53,7 +53,7 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 
 	res := &ordinalityNode{
 		source:   src,
-		ordering: src.Ordering(),
+		ordering: planOrdering(src),
 		row:      make(parser.Datums, len(srcColumns)+1),
 		curCnt:   1,
 	}
@@ -98,7 +98,6 @@ func (o *ordinalityNode) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (o *ordinalityNode) Ordering() orderingInfo          { return o.ordering }
 func (o *ordinalityNode) Values() parser.Datums           { return o.row }
 func (o *ordinalityNode) DebugValues() debugValues        { return o.source.DebugValues() }
 func (o *ordinalityNode) MarkDebug(mode explainMode)      { o.source.MarkDebug(mode) }
@@ -129,7 +128,7 @@ func (o *ordinalityNode) optimizeOrdering() {
 	// We are going to "optimize" the ordering. We had an ordering
 	// initially from the source, but expand() may have caused it to
 	// change. So here retrieve the ordering of the source again.
-	origOrdering := o.source.Ordering()
+	origOrdering := planOrdering(o.source)
 
 	if len(origOrdering.ordering) > 0 {
 		// TODO(knz/radu): we basically have two simultaneous orderings.

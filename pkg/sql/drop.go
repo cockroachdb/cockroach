@@ -211,10 +211,10 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 func (*dropDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
 func (*dropDatabaseNode) Close(context.Context)              {}
 func (*dropDatabaseNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
-func (*dropDatabaseNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (*dropDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
-func (*dropDatabaseNode) DebugValues() debugValues           { return debugValues{} }
-func (*dropDatabaseNode) MarkDebug(mode explainMode)         {}
+
+func (*dropDatabaseNode) Values() parser.Datums      { return parser.Datums{} }
+func (*dropDatabaseNode) DebugValues() debugValues   { return debugValues{} }
+func (*dropDatabaseNode) MarkDebug(mode explainMode) {}
 
 type dropIndexNode struct {
 	p        *planner
@@ -403,10 +403,10 @@ func (p *planner) dropIndexByName(
 func (*dropIndexNode) Next(context.Context) (bool, error) { return false, nil }
 func (*dropIndexNode) Close(context.Context)              {}
 func (*dropIndexNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
-func (*dropIndexNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (*dropIndexNode) Values() parser.Datums              { return parser.Datums{} }
-func (*dropIndexNode) DebugValues() debugValues           { return debugValues{} }
-func (*dropIndexNode) MarkDebug(mode explainMode)         {}
+
+func (*dropIndexNode) Values() parser.Datums      { return parser.Datums{} }
+func (*dropIndexNode) DebugValues() debugValues   { return debugValues{} }
+func (*dropIndexNode) MarkDebug(mode explainMode) {}
 
 type dropViewNode struct {
 	p  *planner
@@ -512,10 +512,10 @@ func (n *dropViewNode) Start(ctx context.Context) error {
 func (*dropViewNode) Next(context.Context) (bool, error) { return false, nil }
 func (*dropViewNode) Close(context.Context)              {}
 func (*dropViewNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
-func (*dropViewNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (*dropViewNode) Values() parser.Datums              { return parser.Datums{} }
-func (*dropViewNode) DebugValues() debugValues           { return debugValues{} }
-func (*dropViewNode) MarkDebug(mode explainMode)         {}
+
+func (*dropViewNode) Values() parser.Datums      { return parser.Datums{} }
+func (*dropViewNode) DebugValues() debugValues   { return debugValues{} }
+func (*dropViewNode) MarkDebug(mode explainMode) {}
 
 type dropTableNode struct {
 	p  *planner
@@ -750,10 +750,10 @@ func (n *dropTableNode) Start(ctx context.Context) error {
 func (*dropTableNode) Next(context.Context) (bool, error) { return false, nil }
 func (*dropTableNode) Close(context.Context)              {}
 func (*dropTableNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
-func (*dropTableNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (*dropTableNode) Values() parser.Datums              { return parser.Datums{} }
-func (*dropTableNode) DebugValues() debugValues           { return debugValues{} }
-func (*dropTableNode) MarkDebug(mode explainMode)         {}
+
+func (*dropTableNode) Values() parser.Datums      { return parser.Datums{} }
+func (*dropTableNode) DebugValues() debugValues   { return debugValues{} }
+func (*dropTableNode) MarkDebug(mode explainMode) {}
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE
@@ -1139,7 +1139,6 @@ func (n *dropUserNode) Start(ctx context.Context) error {
 func (*dropUserNode) Next(context.Context) (bool, error) { return false, nil }
 func (*dropUserNode) Close(context.Context)              {}
 func (*dropUserNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
-func (*dropUserNode) Ordering() orderingInfo             { return orderingInfo{} }
 func (*dropUserNode) Values() parser.Datums              { return parser.Datums{} }
 func (*dropUserNode) DebugValues() debugValues           { return debugValues{} }
 func (*dropUserNode) MarkDebug(mode explainMode)         {}
