@@ -17,6 +17,7 @@ package log
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 
 	raven "github.com/getsentry/raven-go"
@@ -87,9 +88,16 @@ func ReportPanic(ctx context.Context, r interface{}, depth int) {
 	// at least somewhat helpful in telling us where crashes are coming from.
 	// We capture the full stacktrace below, so we only need the short file and
 	// line here help uniquely identify the error.
-	file, line, _ := caller.Lookup(depth + 3)
+	// Some exceptions, like a runtime.Error, are assumed to be fine as-is.
 
-	reportable := fmt.Sprintf("%s %s:%d", format(r), filepath.Base(file), line)
+	var reportable interface{}
+	switch r.(type) {
+	case runtime.Error:
+		reportable = r
+	default:
+		file, line, _ := caller.Lookup(depth + 3)
+		reportable = fmt.Sprintf("%s %s:%d", format(r), filepath.Base(file), line)
+	}
 	sendCrashReport(ctx, reportable, depth+3)
 
 	// Ensure that the logs are flushed before letting a panic
