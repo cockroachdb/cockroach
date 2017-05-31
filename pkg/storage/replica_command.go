@@ -1371,20 +1371,29 @@ func evalHeartbeatTxn(
 func declareKeysGC(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
+	// Intentionally don't call DefaultDeclareKeys: the key range in the header
+	// is usually the whole range (pending resolution of #7880).
 	gcr := req.(*roachpb.GCRequest)
 	for _, key := range gcr.Keys {
 		spans.Add(SpanReadWrite, roachpb.Span{Key: key.Key})
 	}
-	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
-	spans.Add(SpanReadWrite, roachpb.Span{
-		// TODO(bdarnell): since this must be checked by all
-		// reads, this should be factored out into a separate
-		// waiter which blocks only those reads far enough in the
-		// past to be affected by the in-flight GCRequest (i.e.
-		// normally none). This means this key would be special
-		// cased and not tracked by the command queue.
-		Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID),
-	})
+	// Be smart here about blocking on the threshold keys. The GC queue can send an empty
+	// request first to bump the thresholds, and then another one that actually does work
+	// but can avoid declaring these keys below.
+	if gcr.Threshold != (hlc.Timestamp{}) {
+		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+	}
+	if gcr.TxnSpanGCThreshold != (hlc.Timestamp{}) {
+		spans.Add(SpanReadWrite, roachpb.Span{
+			// TODO(bdarnell): since this must be checked by all
+			// reads, this should be factored out into a separate
+			// waiter which blocks only those reads far enough in the
+			// past to be affected by the in-flight GCRequest (i.e.
+			// normally none). This means this key would be special
+			// cased and not tracked by the command queue.
+			Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID),
+		})
+	}
 	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
@@ -1418,29 +1427,48 @@ func evalGC(
 		return EvalResult{}, err
 	}
 
-	newThreshold, err := cArgs.EvalCtx.GCThreshold()
-	if err != nil {
-		return EvalResult{}, err
-	}
-	newTxnSpanGCThreshold, err := cArgs.EvalCtx.TxnSpanGCThreshold()
-	if err != nil {
-		return EvalResult{}, err
-	}
 	// Protect against multiple GC requests arriving out of order; we track
 	// the maximum timestamps.
-	newThreshold.Forward(args.Threshold)
-	newTxnSpanGCThreshold.Forward(args.TxnSpanGCThreshold)
 
-	var pd EvalResult
-	pd.Replicated.State.GCThreshold = newThreshold
-	pd.Replicated.State.TxnSpanGCThreshold = newTxnSpanGCThreshold
-
-	if err := cArgs.EvalCtx.stateLoader().setGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
-		return EvalResult{}, err
+	var newThreshold hlc.Timestamp
+	if args.Threshold != (hlc.Timestamp{}) {
+		oldThreshold, err := cArgs.EvalCtx.GCThreshold()
+		if err != nil {
+			return EvalResult{}, err
+		}
+		newThreshold = oldThreshold
+		newThreshold.Forward(args.Threshold)
 	}
 
-	if err := cArgs.EvalCtx.stateLoader().setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
-		return EvalResult{}, err
+	var newTxnSpanGCThreshold hlc.Timestamp
+	if args.TxnSpanGCThreshold != (hlc.Timestamp{}) {
+		oldTxnSpanGCThreshold, err := cArgs.EvalCtx.TxnSpanGCThreshold()
+		if err != nil {
+			return EvalResult{}, err
+		}
+		newTxnSpanGCThreshold = oldTxnSpanGCThreshold
+		newTxnSpanGCThreshold.Forward(args.TxnSpanGCThreshold)
+	}
+
+	var pd EvalResult
+	stateLoader := makeReplicaStateLoader(cArgs.EvalCtx.RangeID())
+
+	// Don't write these keys unless we have to. We also don't declare these
+	// keys unless we have to (to allow the GC queue to batch requests more
+	// efficiently), and we must honor what we declare.
+
+	if newThreshold != (hlc.Timestamp{}) {
+		pd.Replicated.State.GCThreshold = newThreshold
+		if err := stateLoader.setGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
+			return EvalResult{}, err
+		}
+	}
+
+	if newTxnSpanGCThreshold != (hlc.Timestamp{}) {
+		pd.Replicated.State.TxnSpanGCThreshold = newTxnSpanGCThreshold
+		if err := stateLoader.setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
+			return EvalResult{}, err
+		}
 	}
 
 	return pd, nil

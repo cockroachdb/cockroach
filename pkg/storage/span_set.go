@@ -52,6 +52,16 @@ type SpanSet struct {
 	spans [numSpanAccess][numSpanScope][]roachpb.Span
 }
 
+func (ss *SpanSet) len() int {
+	var count int
+	for i := SpanAccess(0); i < numSpanAccess; i++ {
+		for j := spanScope(0); j < numSpanScope; j++ {
+			count += len(ss.getSpans(i, j))
+		}
+	}
+	return count
+}
+
 // reserve space for N additional keys.
 func (ss *SpanSet) reserve(access SpanAccess, scope spanScope, n int) {
 	existing := ss.spans[access][scope]
