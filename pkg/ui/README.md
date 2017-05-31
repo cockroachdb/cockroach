@@ -49,6 +49,10 @@ do this will result in wasted time waiting for CI. We commit this generated file
 so that CockroachDB can be compiled with minimal [non-go
 dependencies](#dependencies).
 
+If you get cryptic TypeScript compile/lint failures upon running `make` that seem
+completely unrelated to your changes, try removing `yarn.installed` and
+`node_modules` before re-running `make` (do NOT run `yarn install` directly).
+
 Be sure to also commit modifications resulting from dependency changes, like
 updates to `package.json` and `yarn.lock`.
 
