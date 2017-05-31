@@ -186,8 +186,15 @@ func (rf *RowFetcher) StartScan(
 		// The limitHint is a row limit, but each row could be made up of more
 		// than one key.
 		firstBatchLimit = limitHint * int64(rf.desc.KeysPerRow(rf.index.ID))
-		// We need an extra key to make sure we form the last row.
-		firstBatchLimit++
+		// Check for overflow using this value. If overflow occurs, we ignore
+		// the limit.
+		const overflowProtection = 1000000000
+		if firstBatchLimit > overflowProtection {
+			firstBatchLimit = 0
+		} else {
+			// We need an extra key to make sure we form the last row.
+			firstBatchLimit++
+		}
 	}
 
 	var err error
