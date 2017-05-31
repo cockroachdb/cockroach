@@ -243,8 +243,6 @@ var digitNames = []string{"zero", "one", "two", "three", "four", "five", "six", 
 
 // Builtins contains the built-in functions indexed by name.
 var Builtins = map[string][]Builtin{
-	// Keep the list of functions sorted.
-
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
 	"length": {
 		stringBuiltin1(func(s string) (Datum, error) {
