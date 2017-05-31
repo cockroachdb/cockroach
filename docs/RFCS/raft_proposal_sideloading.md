@@ -36,8 +36,8 @@ on Raft for simplicity, but the naive approach of sending a (chunked)
 Instead, `RESTORE` sends small (initially ~2MB) SSTables which are to be linked
 directly into RocksDB. This eliminates the latter point above. However, it does
 not address the former, and this is what this RFC is about: achieving the
-optimal write amplification of 1, with the simpler alternative discussed at the
-end incurring an extra copy, for a write amplification of 2.
+optimal write amplification of 1 or 2 (the latter amounting to dodging some
+technical difficulties discussed at the end).
 
 Note also that housing the Raft log outside of RocksDB only addresses the former
 point if it results in a SSTable being stored inside of the RocksDB directory,
@@ -57,10 +57,11 @@ The mechanism proposed here is the following:
 1.  On its way into Raft, the
    `SideloadedData` bytes are then written to disk and stripped from the
    proposal. On disk, the payload is stored in the `Store`'s directory,
-   accessible via its log index, using the following scheme:
+   accessible via its log index, using the following scheme (for an explanation
+   on why this scheme was chosen, see later sections):
 
    ```
-   <storeDir>/sideloaded_proposals/<rangeID>/<logIndex>
+   <storeDir>/sideloaded_proposals/<rangeID>.<replicaID>/<logIndex>.<term>
    ```
 
    where the file contains the raw sideloaded data, e.g. an `SSTable` that will
@@ -85,9 +86,6 @@ The mechanism proposed here is the following:
    corresponding file is hard-linked into its RocksDB directory and, from there,
    ingested by RocksDB. That way, even if RocksDB decided to remove the file, it
    would still be available to Raft due to the way hardlinks work.
-1. When Raft log truncation runs and truncates the log up to and including index
-   `i`, then any sideloaded files for such indexes on disk (all of which
-   must at that point be hardlinked into RocksDB already) are unlinked.
 
 ## Determining whether a `raftpb.Entry` is sideloaded
 
@@ -102,19 +100,9 @@ hot write path is clearly not an option. `(raftpb.Entry).Data` equals
 (raftpb.Entry).Data = append(raftCommandEncodingVersion, idKey, data)
 ```
 
-We can't hide information in `data` as we would have to unmarshal it too often.
-Thus, we have two choices left: to either shorten `idKey` and use one of its
-bits, or to use the raft command version.
-
-We can't naively change `raftCommandVersion` because there is no migration path
-there - nodes receiving Raft messages with a different version simply panic, and
-even a stop-the-world upgrade can not be carried out in a safe manner.
-
-However, for historical reasons we ignore the high bit of `raftCommandVersion`
-in the version check, and it can be repurposed to flag a command for
-sideloading. A node which does not understand this will simply ignore the bit
-and not sideload the proposal, which is acceptable as sideloading is a
-performance optimization only.
+We can't hide information in `data` as we would have to unmarshal it too often,
+and so we make the idiomatic choice: Sideloaded Raft proposals are sent using a
+new `raftCommandEncodingVersion`. See the next section for migrations.
 
 Armed with that, `(*Replica).append` and the other methods above can assure that
 there is no externally visible change to the way Raft proposals are handled, and
@@ -141,20 +129,102 @@ A downgrade is slightly less stable but should work out OK in practice:
 1. in the unlikely event of a node crashing, upgrade that node again and back to
    the first step
 
+Due to the feature flag, rolling updates are possible as usual.
+
+## Details on file creation and removal
+
+There are three procedures that need to mutate sideloaded files. These are, in
+increasing difficulty, replica GC, log truncation, and `append()`. The main
+objectives here are making sure that we move the bulk of disk I/O outside of
+critical locks, and that all files are eventually cleaned up.
+
+### Replica GC
+
+When a Replica is garbage collected, we know that if it is ever recreated, then
+it will be at a higher `ReplicaID`. For that reason, the sideloaded proposals
+are disambiguated by `ReplicaID`; we can postpone cleanup of these files until
+we don't hold any locks. During node startup, we check for sideloaded proposals
+that do not correspond to a Replica of their Store and remove them.
+
+Concretely,
+
+- after GC'ing the Replica, Replica GC wholesale removes the directory
+  `<storeDir>/sideloaded_proposals/<rangeID>.<replicaID>` after releasing all
+  locks.
+- on node startup, after all Replicas have been instantiated but before
+  receiving traffic, delete those directories which do not correspond to a live
+  replica. Assert that there is no directory for a replicaID larger than what we
+  have instantiated.
+
+### Log truncation
+
+Similarly to Replica GC, once the log is truncated to some new first index `i`,
+we know that no older sideloaded data is ever going to be loaded again, and we
+can lazily and without any locks unlink all files for which `term <=
+currentTerm` *or* `index < i`.
+
+### append()
+
+This is the interesting one. `append()` is called by Raft when it wants us to
+store new entries into the log.
+
+Once we commit the corresponding RocksDB batch, any sideloaded payloads must be
+on disk as well, or an ill-timed crash would lead to log entries which are
+acknowledged but have no payload associated to them, a situation impossible to
+recover from (OK, not impossible since we crash before sending a message out to
+the lease holder - we could remove the message from the log again at node
+startup, but it's a bad idea). So we have to make sure that all sideloaded
+payloads are written to disk before the batch passed to `append()` is committed,
+and that obsolete payloads are removed *after*.
+
+Initially, we will write the files directly in `append()` which means they are
+all on disk when the batch commits, but they are written under the `raftMu` and
+`replicaMu` locks, which is not ideal. However, it should be relatively easy to
+optimize it by eagerly creating the files much earlier outside of the lock; this
+is made possible since we disambiguate by term, and once a payload for a given
+index and term has been written, it will not be changed in that term.
+
+An interesting subcase arises when Raft wants us to **replace** our tail of the
+log, which would then have a term bump associated with it. In particular, we may
+need to replace a sideloaded entry with a different higher-term sideloaded
+entry. Thanks to disambiguation by term, both payloads can exist side by side,
+and we can write first the higher-term payload and then remove the replaced once.
+
+We must tolerate a file with a higher term than we know existing, though its
+existence should be short-lived as our Replica should learn about that higher
+term shortly.
+
+In summary, what we do is:
+
+- write the new payloads as early as possible; initially in `append()` but
+  theoretically before acquiring any locks.
+- tolerate existing files - they are identical (as a `(term,index)` can be
+  assigned only one log entry). Note how this encourages the write-early
+  optimization.
+- remove outdated payloads as late as possible; initially after `append()`'s
+  batch commits, later after releasing any locks.
+
+## Details on reconstituting a `raftpb.Entry`
+
+Whenever a `raftpb.Entry` is required for transmission to a follower, we have to
+reconstitute it (i.e. inline the payload). This is straightforward, though a bit
+expensive.
+
+- check the RaftCommandVersion (can be sniffed from the `Data` slice); if it's
+  not a sideloaded entry, do nothing. Otherwise:
+- decode the command, unmarshal the contained `cmd storagebase.RaftCommand`
+- load the on-disk payload into `cmd.SideloadedData` (term, replicaID and log
+  index are known at this point) and compare its sha512 with
+  `cmd.SideloadedSha`, failing on mismatch.
+- marshal and encode the command into a new `raftpb.Entry`, using the new raft
+  command version only if the SSTable ingestion feature flag is active (old
+  version otherwise).
+
 # Drawbacks
 
 There is some overlap with the project to move the Raft log out of RocksDB.
 However, the end goal of that is not necessarily compatible with this RFC, and
 the changes proposed here are agnostic of changes in the Raft log backend.
-
-# Alternatives
-
-The alternative is not linking the sideloaded SSTable into RocksDB; instead,
-it is copied there wholesale. The only difference is that we don't have to
-worry about the feasability of hard linking as much, and we also avoid the
-problem (discussed below) of RocksDB mutating the file.
-
-On the downside, the write amplification is now 2x.
 
 # Unresolved questions
 
