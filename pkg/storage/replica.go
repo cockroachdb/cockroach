@@ -1551,7 +1551,9 @@ func (r *Replica) State() storagebase.RangeInfo {
 	ri.NumPending = uint64(len(r.mu.proposals))
 	ri.RaftLogSize = r.mu.raftLogSize
 	ri.NumDropped = uint64(r.mu.droppedMessages)
-	ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
+	if r.mu.proposalQuota != nil {
+		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
+	}
 
 	return ri
 }
