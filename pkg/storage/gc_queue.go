@@ -553,25 +553,38 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 		info.updateMetrics(gcq.store.metrics)
 	}()
 
-	var ba roachpb.BatchRequest
-	var gcArgs roachpb.GCRequest
-	// TODO(tschottdorf): This is one of these instances in which we want
-	// to be more careful that the request ends up on the correct Replica,
-	// and we might have to worry about mixing range-local and global keys
-	// in a batch which might end up spanning Ranges by the time it executes.
-	gcArgs.Key = desc.StartKey.AsRawKey()
-	gcArgs.EndKey = desc.EndKey.AsRawKey()
-	gcArgs.Keys = gcKeys
-	gcArgs.Threshold = info.Threshold
-	gcArgs.TxnSpanGCThreshold = info.TxnSpanGCThreshold
+	batches := func() []roachpb.GCRequest {
+		var template roachpb.GCRequest
+		template.Key = desc.StartKey.AsRawKey()
+		template.EndKey = desc.EndKey.AsRawKey()
 
-	// Technically not needed since we're talking directly to the Range.
-	ba.RangeID = desc.RangeID
-	ba.Timestamp = now
-	ba.Add(&gcArgs)
-	if _, pErr := repl.Send(ctx, ba); pErr != nil {
-		log.ErrEvent(ctx, pErr.String())
-		return pErr.GoError()
+		gc1 := template
+		gc1.Threshold = info.Threshold
+		gc1.TxnSpanGCThreshold = info.TxnSpanGCThreshold
+
+		gc2 := template
+		gc2.Keys = gcKeys
+
+		return []roachpb.GCRequest{gc1, gc2}
+	}()
+
+	for i, gcArgs := range batches {
+		var ba roachpb.BatchRequest
+
+		// Technically not needed since we're talking directly to the Range.
+		ba.RangeID = desc.RangeID
+		ba.Timestamp = now
+
+		// TODO(tschottdorf): This is one of these instances in which we want
+		// to be more careful that the request ends up on the correct Replica,
+		// and we might have to worry about mixing range-local and global keys
+		// in a batch which might end up spanning Ranges by the time it executes.
+		ba.Add(&gcArgs)
+		log.Eventf(ctx, "sending batch %d of %d", i, len(batches))
+		if _, pErr := repl.Send(ctx, ba); pErr != nil {
+			log.ErrEvent(ctx, pErr.String())
+			return pErr.GoError()
+		}
 	}
 
 	log.Eventf(ctx, "done GC'ing, new score is %s", makeGCQueueScore(ctx, repl, repl.store.Clock().Now(), sysCfg))
