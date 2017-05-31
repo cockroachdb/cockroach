@@ -251,7 +251,7 @@ func (p *planner) getSources(
 	case 0:
 		plan := &emptyNode{results: true}
 		return planDataSource{
-			info: newSourceInfoForSingleTable(anonymousTable, plan.Columns()),
+			info: newSourceInfoForSingleTable(anonymousTable, planColumns(plan)),
 			plan: plan,
 		}, nil
 
@@ -348,7 +348,7 @@ func (p *planner) getDataSource(
 			return planDataSource{}, err
 		}
 		return planDataSource{
-			info: newSourceInfoForSingleTable(anonymousTable, plan.Columns()),
+			info: newSourceInfoForSingleTable(anonymousTable, planColumns(plan)),
 			plan: plan,
 		}, nil
 
@@ -358,7 +358,7 @@ func (p *planner) getDataSource(
 			return planDataSource{}, err
 		}
 		return planDataSource{
-			info: newSourceInfoForSingleTable(anonymousTable, plan.Columns()),
+			info: newSourceInfoForSingleTable(anonymousTable, planColumns(plan)),
 			plan: plan,
 		}, nil
 
@@ -537,7 +537,7 @@ func (p *planner) getPlanForDesc(
 	}
 
 	return planDataSource{
-		info: newSourceInfoForSingleTable(*tn, scan.Columns()),
+		info: newSourceInfoForSingleTable(*tn, planColumns(scan)),
 		plan: scan,
 	}, nil
 }
@@ -591,7 +591,7 @@ func (p *planner) getSubqueryPlan(
 		return planDataSource{}, err
 	}
 	if len(cols) == 0 {
-		cols = plan.Columns()
+		cols = planColumns(plan)
 	}
 	return planDataSource{
 		info: newSourceInfoForSingleTable(tn, cols),
@@ -607,7 +607,7 @@ func (p *planner) getGeneratorPlan(
 		return planDataSource{}, err
 	}
 	return planDataSource{
-		info: newSourceInfoForSingleTable(anonymousTable, plan.Columns()),
+		info: newSourceInfoForSingleTable(anonymousTable, planColumns(plan)),
 		plan: plan,
 	}, nil
 }

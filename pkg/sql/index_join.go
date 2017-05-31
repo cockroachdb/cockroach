@@ -210,10 +210,6 @@ func (p *planner) makeIndexJoin(
 	return node, indexScan
 }
 
-func (n *indexJoinNode) Columns() sqlbase.ResultColumns {
-	return n.table.Columns()
-}
-
 func (n *indexJoinNode) Values() parser.Datums {
 	return n.table.Values()
 }

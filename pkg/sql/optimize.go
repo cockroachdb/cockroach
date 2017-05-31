@@ -84,7 +84,7 @@ func (i *subqueryInitializer) subqueryNode(ctx context.Context, sq *subquery) er
 			sq.plan = &limitNode{p: i.p, plan: sq.plan, countExpr: parser.NewDInt(numRows)}
 		}
 
-		needed := make([]bool, len(sq.plan.Columns()))
+		needed := make([]bool, len(planColumns(sq.plan)))
 		if sq.execMode != execModeExists {
 			// EXISTS does not need values; the rest does.
 			for i := range needed {
