@@ -105,10 +105,6 @@ func (p *planner) Scan() *scanNode {
 	return &scanNode{p: p}
 }
 
-func (n *scanNode) Columns() sqlbase.ResultColumns {
-	return n.resultColumns
-}
-
 func (n *scanNode) Values() parser.Datums {
 	return n.row
 }

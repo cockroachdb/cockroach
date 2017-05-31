@@ -197,7 +197,5 @@ func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (*showFingerprintsNode) Columns() sqlbase.ResultColumns { return showFingerprintsColumns }
-
 func (*showFingerprintsNode) MarkDebug(_ explainMode)  {}
 func (*showFingerprintsNode) DebugValues() debugValues { return debugValues{} }

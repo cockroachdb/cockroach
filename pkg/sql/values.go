@@ -154,10 +154,6 @@ func (n *valuesNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *valuesNode) Columns() sqlbase.ResultColumns {
-	return n.columns
-}
-
 func (n *valuesNode) Values() parser.Datums {
 	return n.rows.At(n.nextRow - 1)
 }

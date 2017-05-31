@@ -501,7 +501,7 @@ func (e *Executor) Prepare(
 		return prepared, nil
 	}
 	defer plan.Close(session.Ctx())
-	prepared.Columns = plan.Columns()
+	prepared.Columns = planColumns(plan)
 	for _, c := range prepared.Columns {
 		if err := checkResultType(c.Typ); err != nil {
 			return nil, err
@@ -1660,7 +1660,7 @@ func makeRes(stmt Statement, planner *planner, plan planNode) (Result, error) {
 		Type:  stmt.AST.StatementType(),
 	}
 	if result.Type == parser.Rows {
-		result.Columns = plan.Columns()
+		result.Columns = planColumns(plan)
 		for _, c := range result.Columns {
 			if err := checkResultType(c.Typ); err != nil {
 				return Result{}, err

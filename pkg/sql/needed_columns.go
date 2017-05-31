@@ -136,7 +136,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.columns, needed)
 
 	case *sortNode:
-		sourceNeeded := make([]bool, len(n.plan.Columns()))
+		sourceNeeded := make([]bool, len(planColumns(n.plan)))
 		copy(sourceNeeded[:len(needed)], needed)
 
 		// All the ordering columns are also needed.
@@ -210,7 +210,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 
 // allColumns returns true for every column produced by the plan.
 func allColumns(plan planNode) []bool {
-	needed := make([]bool, len(plan.Columns()))
+	needed := make([]bool, len(planColumns(plan)))
 	for i := range needed {
 		needed[i] = true
 	}

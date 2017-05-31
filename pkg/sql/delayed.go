@@ -42,8 +42,6 @@ func (d *delayedNode) Close(ctx context.Context) {
 	}
 }
 
-func (d *delayedNode) Columns() sqlbase.ResultColumns { return d.columns }
-
 func (d *delayedNode) MarkDebug(_ explainMode)                {}
 func (d *delayedNode) Start(ctx context.Context) error        { return d.plan.Start(ctx) }
 func (d *delayedNode) Next(ctx context.Context) (bool, error) { return d.plan.Next(ctx) }

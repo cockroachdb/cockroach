@@ -266,7 +266,7 @@ func (p *planner) makeJoin(
 
 	n.buffer = &RowBuffer{
 		RowContainer: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(n.Columns()), 0,
+			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
 		),
 	}
 
@@ -275,7 +275,7 @@ func (p *planner) makeJoin(
 		buckets: make(map[string]*bucket),
 		rowContainer: sqlbase.NewRowContainer(
 			p.session.TxnState.makeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(n.right.plan.Columns()),
+			sqlbase.ColTypeInfoFromResCols(planColumns(n.right.plan)),
 			0,
 		),
 	}
@@ -285,9 +285,6 @@ func (p *planner) makeJoin(
 		plan: n,
 	}, nil
 }
-
-// Columns implements the planNode interface.
-func (n *joinNode) Columns() sqlbase.ResultColumns { return n.columns }
 
 // Ordering implements the planNode interface.
 
@@ -322,13 +319,13 @@ func (n *joinNode) Start(ctx context.Context) error {
 	// If needed, pre-allocate left and right rows of NULL tuples for when the
 	// join predicate fails to match.
 	if n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter {
-		n.emptyRight = make(parser.Datums, len(n.right.plan.Columns()))
+		n.emptyRight = make(parser.Datums, len(planColumns(n.right.plan)))
 		for i := range n.emptyRight {
 			n.emptyRight[i] = parser.DNull
 		}
 	}
 	if n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter {
-		n.emptyLeft = make(parser.Datums, len(n.left.plan.Columns()))
+		n.emptyLeft = make(parser.Datums, len(planColumns(n.left.plan)))
 		for i := range n.emptyLeft {
 			n.emptyLeft[i] = parser.DNull
 		}
