@@ -860,6 +860,12 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if r.mu.replicaID == 0 {
+		// The replica's was created from preemptive snapshot and has not been
+		// added to the Raft group.
+		return
+	}
+
 	if r.mu.leaderID != lastLeaderID {
 		if r.mu.replicaID == r.mu.leaderID {
 			// We're becoming the leader.
