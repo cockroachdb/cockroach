@@ -158,10 +158,6 @@ func (n *valuesNode) Columns() sqlbase.ResultColumns {
 	return n.columns
 }
 
-func (*valuesNode) Ordering() orderingInfo {
-	return orderingInfo{}
-}
-
 func (n *valuesNode) Values() parser.Datums {
 	return n.rows.At(n.nextRow - 1)
 }

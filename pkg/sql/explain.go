@@ -246,8 +246,8 @@ var debugColumns = sqlbase.ResultColumns{
 	{Name: "Disposition", Typ: parser.TypeString},
 }
 
-func (*explainDebugNode) Columns() sqlbase.ResultColumns           { return debugColumns }
-func (*explainDebugNode) Ordering() orderingInfo                   { return orderingInfo{} }
+func (*explainDebugNode) Columns() sqlbase.ResultColumns { return debugColumns }
+
 func (n *explainDebugNode) Start(ctx context.Context) error        { return n.plan.Start(ctx) }
 func (n *explainDebugNode) Next(ctx context.Context) (bool, error) { return n.plan.Next(ctx) }
 func (n *explainDebugNode) Close(ctx context.Context)              { n.plan.Close(ctx) }
@@ -287,7 +287,6 @@ type explainDistSQLNode struct {
 	done bool
 }
 
-func (*explainDistSQLNode) Ordering() orderingInfo   { return orderingInfo{} }
 func (*explainDistSQLNode) MarkDebug(_ explainMode)  {}
 func (*explainDistSQLNode) DebugValues() debugValues { return debugValues{} }
 func (*explainDistSQLNode) Close(context.Context)    {}

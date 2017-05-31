@@ -218,7 +218,7 @@ func (s *subquery) subqueryTupleOrdering() (bool, encoding.Direction) {
 	}
 
 	// Check Ascending direction.
-	order := s.plan.Ordering()
+	order := planOrdering(s.plan)
 	match := order.computeMatch(desired)
 	if match == len(desired) {
 		return true, encoding.Ascending

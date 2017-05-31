@@ -109,10 +109,6 @@ func (n *scanNode) Columns() sqlbase.ResultColumns {
 	return n.resultColumns
 }
 
-func (n *scanNode) Ordering() orderingInfo {
-	return n.ordering
-}
-
 func (n *scanNode) Values() parser.Datums {
 	return n.row
 }
