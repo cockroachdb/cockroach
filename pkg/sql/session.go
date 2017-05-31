@@ -666,7 +666,7 @@ func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 	if r := tracing.GetRecording(ts.sp); r != nil {
 		durThreshold := traceTxnThreshold.Get()
 		if sampledFor7881 || (durThreshold > 0 && timeutil.Since(ts.sqlTimestamp) >= durThreshold) {
-			dump := tracing.FormatRawSpans(r)
+			dump := tracing.FormatRecordedSpans(r)
 			if len(dump) > 0 {
 				log.Infof(sessionCtx, "SQL trace:\n%s", dump)
 			}

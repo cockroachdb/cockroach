@@ -33,12 +33,12 @@ EXPLAIN (DEBUG,METADATA) SELECT 1
 RowIdx  Key  Value  Disposition
 0       NULL NULL   ROW
 
-query TTITTITTT colnames
-EXPLAIN (TRACE) SELECT 1
+query TITTITTT colnames
+SELECT "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition" FROM [EXPLAIN (TRACE) SELECT 1]
 ----
-Cumulative Time  Duration  Span Pos  Operation      Event              RowIdx  Key   Value  Disposition
-0.000ms                    1                                           0       NULL  NULL   t
-0.000ms                    0         explain trace  tracing completed  0       NULL         NULL
+Duration  Span Pos  Operation      Event              RowIdx  Key   Value  Disposition
+          1                                           0       NULL  NULL   t
+          0         explain trace  tracing completed  0       NULL         NULL
 
 query ITTTTT colnames
 EXPLAIN (TYPES) SELECT 1

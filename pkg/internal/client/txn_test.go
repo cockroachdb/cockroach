@@ -66,7 +66,7 @@ func TestTxnSnowballTrace(t *testing.T) {
 	log.Event(ctx, "txn complete")
 	sp.Finish()
 	collectedSpans := tracing.GetRecording(sp)
-	dump := tracing.FormatRawSpans(collectedSpans)
+	dump := tracing.FormatRecordedSpans(collectedSpans)
 	// dump:
 	//    0.105ms      0.000ms    event:inside txn
 	//    0.275ms      0.171ms    event:client.Txn did AutoCommit. err: <nil>

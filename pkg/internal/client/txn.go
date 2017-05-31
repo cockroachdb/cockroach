@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -920,7 +921,13 @@ func (txn *Txn) send(
 			panic(roachpb.ErrorUnexpectedlySet(txn.db.sender, br))
 		}
 		if len(br.CollectedSpans) != 0 {
-			if err := tracing.IngestRemoteSpans(ctx, br.CollectedSpans); err != nil {
+			span := opentracing.SpanFromContext(ctx)
+			if span == nil {
+				return nil, roachpb.NewErrorf(
+					"trying to ingest remote spans but there is no recording span set up",
+				)
+			}
+			if err := tracing.ImportRemoteSpans(span, br.CollectedSpans); err != nil {
 				return nil, roachpb.NewErrorf("error ingesting remote spans: %s", err)
 			}
 		}
