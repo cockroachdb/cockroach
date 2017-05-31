@@ -21,7 +21,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -279,10 +278,6 @@ func (e *explainPlanNode) Ordering() orderingInfo                 { return e.res
 func (e *explainPlanNode) Values() parser.Datums                  { return e.results.Values() }
 func (e *explainPlanNode) DebugValues() debugValues               { return debugValues{} }
 func (e *explainPlanNode) MarkDebug(mode explainMode)             {}
-
-func (e *explainPlanNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return e.plan.Spans(ctx)
-}
 
 func (e *explainPlanNode) Start(ctx context.Context) error {
 	// Note that we don't call start on e.plan. That's on purpose, Start() can

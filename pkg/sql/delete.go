@@ -21,7 +21,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -236,7 +235,3 @@ func (d *deleteNode) DebugValues() debugValues {
 }
 
 func (d *deleteNode) Ordering() orderingInfo { return orderingInfo{} }
-
-func (d *deleteNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	return d.run.collectSpans(ctx)
-}

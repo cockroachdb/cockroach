@@ -105,7 +105,7 @@ func (r *editNodeRun) startEditNode(ctx context.Context, en *editNodeBase) error
 }
 
 func (r *editNodeRun) collectSpans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	scanReads, scanWrites, err := r.rows.Spans(ctx)
+	scanReads, scanWrites, err := collectSpans(ctx, r.rows)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -535,7 +535,3 @@ func (u *updateNode) DebugValues() debugValues {
 }
 
 func (u *updateNode) Ordering() orderingInfo { return orderingInfo{} }
-
-func (u *updateNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	return u.run.collectSpans(ctx)
-}

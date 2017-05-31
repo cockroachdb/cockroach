@@ -156,9 +156,6 @@ func (*showRangesNode) Columns() sqlbase.ResultColumns { return showRangesColumn
 func (*showRangesNode) Ordering() orderingInfo         { return orderingInfo{} }
 func (*showRangesNode) MarkDebug(_ explainMode)        {}
 func (*showRangesNode) DebugValues() debugValues       { panic("unimplemented") }
-func (*showRangesNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 // scanMetaKVs returns the meta KVs for the ranges that touch the given span.
 func scanMetaKVs(

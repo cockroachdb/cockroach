@@ -25,7 +25,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -251,7 +250,3 @@ func (*explainTraceNode) Columns() sqlbase.ResultColumns { return traceColumnsWi
 func (*explainTraceNode) Ordering() orderingInfo         { return orderingInfo{} }
 func (*explainTraceNode) MarkDebug(_ explainMode)        {}
 func (*explainTraceNode) DebugValues() debugValues       { return debugValues{} }
-
-func (n *explainTraceNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return n.plan.Spans(ctx)
-}
