@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"time"
 
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -142,6 +142,7 @@ func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 		// After the call to hijackTxnContext, the current and future invocations of
 		// explainTraceNode.Next() need to use n.tracingCtx instead of the method
 		// argument.
+		n.lastTS = timeutil.Now()
 	}
 	for !n.exhausted && len(n.rows) <= 1 {
 		var vals debugValues
@@ -173,8 +174,8 @@ func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 		}
 		if len(recording) == 0 {
 			if !n.exhausted {
-				err := tracing.ImportRemoteSpans(n.recordingSp, []basictracer.RawSpan{{
-					Logs: []opentracing.LogRecord{{Timestamp: n.lastTS}},
+				err := tracing.ImportRemoteSpans(n.recordingSp, []tracing.RecordedSpan{{
+					Logs: []tracing.RecordedSpan_LogRecord{{Time: n.lastTS.UnixNano()}},
 				}})
 				if err != nil {
 					return false, err
@@ -185,33 +186,34 @@ func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 		}
 
 		// Iterate through once to determine earliest timestamp.
-		var earliest time.Time
 		for _, sp := range recording {
 			for _, entry := range sp.Logs {
-				if n.earliest.IsZero() || entry.Timestamp.Before(earliest) {
-					n.earliest = entry.Timestamp
+				entryTime := time.Unix(0, entry.Time)
+				if n.earliest.IsZero() || entryTime.Before(n.earliest) {
+					n.earliest = entryTime
 				}
 			}
 		}
 
 		for _, sp := range recording {
 			for i, entry := range sp.Logs {
-				commulativeDuration := fmt.Sprintf("%.3fms", entry.Timestamp.Sub(n.earliest).Seconds()*1000)
+				entryTime := time.Unix(0, entry.Time)
+				commulativeDuration := fmt.Sprintf("%.3fms", entryTime.Sub(n.earliest).Seconds()*1000)
 				var duration string
 				if i > 0 {
-					duration = fmt.Sprintf("%.3fms", entry.Timestamp.Sub(n.lastTS).Seconds()*1000)
+					duration = fmt.Sprintf("%.3fms", entryTime.Sub(n.lastTS).Seconds()*1000)
 				}
 				// Extract the message of the event, which is either in an "event" or
 				// "error" field.
 				var msg string
 				for _, f := range entry.Fields {
-					key := f.Key()
+					key := f.Key
 					if key == "event" {
-						msg = fmt.Sprint(f.Value())
+						msg = f.Value
 						break
 					}
 					if key == "error" {
-						msg = fmt.Sprint("error:", f.Value())
+						msg = fmt.Sprint("error:", f.Value)
 						break
 					}
 				}
@@ -224,8 +226,8 @@ func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 				}, vals.AsRow()...)
 
 				// Timestamp is added for sorting, but will be removed after sort.
-				n.rows = append(n.rows, append(cols, parser.MakeDTimestamp(entry.Timestamp, time.Nanosecond)))
-				n.lastTS, n.lastPos = entry.Timestamp, i
+				n.rows = append(n.rows, append(cols, parser.MakeDTimestamp(entryTime, time.Nanosecond)))
+				n.lastTS, n.lastPos = entryTime, i
 			}
 		}
 		// Clear the logs that have been accumulated so far, so that we'll associate

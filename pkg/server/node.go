@@ -939,17 +939,13 @@ func (n *Node) setupSpanForIncomingRPC(
 			return
 		}
 		if remoteTrace {
-			// If this is a "snowball trace", we'll need to encode all the recorded
+			// If this is a "snowball trace", we'll need to return all the recorded
 			// spans in the BatchResponse at the end of the request.
 			// We don't want to do this if the operation is on the same host, in which
 			// case everything is already part of the same recording.
-			for _, rawSpan := range tracing.GetRecording(sp) {
-				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
-				if err == nil {
-					br.CollectedSpans = append(br.CollectedSpans, encSp)
-				} else {
-					log.Warning(ctx, err)
-				}
+			rec := tracing.GetRecording(sp)
+			if rec != nil {
+				br.CollectedSpans = append(br.CollectedSpans, rec...)
 			}
 		}
 	}

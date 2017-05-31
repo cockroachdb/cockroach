@@ -25,7 +25,6 @@ import (
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
@@ -166,7 +165,7 @@ func StopRecording(os opentracing.Span) {
 // recording enabled. This can be called while spans that are part of the
 // record are still open; it can run concurrently with operations on those
 // spans.
-func GetRecording(os opentracing.Span) []basictracer.RawSpan {
+func GetRecording(os opentracing.Span) []RecordedSpan {
 	if IsNoopSpan(os) {
 		return nil
 	}
@@ -183,10 +182,10 @@ func GetRecording(os opentracing.Span) []basictracer.RawSpan {
 	return group.getSpans()
 }
 
-// ImportRemoteSpans adds raw span data to the recording of the given span;
-// these spans will be part of the result of GetRecording.
-// Used to import recorded traces from other nodes.
-func ImportRemoteSpans(os opentracing.Span, rawSpans []basictracer.RawSpan) error {
+// ImportRemoteSpans adds RecordedSpan data to the recording of the given span;
+// these spans will be part of the result of GetRecording. Used to import
+// recorded traces from other nodes.
+func ImportRemoteSpans(os opentracing.Span, remoteSpans []RecordedSpan) error {
 	s := os.(*span)
 	s.mu.Lock()
 	group := s.mu.recordingGroup
@@ -195,7 +194,7 @@ func ImportRemoteSpans(os opentracing.Span, rawSpans []basictracer.RawSpan) erro
 		return errors.New("adding Raw Spans to a span that isn't recording")
 	}
 	group.Lock()
-	group.rawSpans = append(group.rawSpans, rawSpans...)
+	group.remoteSpans = append(group.remoteSpans, remoteSpans...)
 	group.Unlock()
 	return nil
 }
@@ -395,9 +394,9 @@ func (s *span) Log(data opentracing.LogData) {
 type spanGroup struct {
 	syncutil.Mutex
 	spans []*span
-	// rawSpans stores spans obtained from another host that we want to associate
+	// remoteSpans stores spans obtained from another host that we want to associate
 	// with the record for this group.
-	rawSpans []basictracer.RawSpan
+	remoteSpans []RecordedSpan
 }
 
 func (ss *spanGroup) addSpan(s *span) {
@@ -406,55 +405,58 @@ func (ss *spanGroup) addSpan(s *span) {
 	ss.Unlock()
 }
 
-func (ss *spanGroup) getSpans() []basictracer.RawSpan {
+func (ss *spanGroup) getSpans() []RecordedSpan {
 	ss.Lock()
 	spans := ss.spans
-	rawSpans := ss.rawSpans
+	remoteSpans := ss.remoteSpans
 	ss.Unlock()
 
-	result := make([]basictracer.RawSpan, 0, len(spans)+len(rawSpans))
+	result := make([]RecordedSpan, 0, len(spans)+len(remoteSpans))
 	for _, s := range spans {
 		s.mu.Lock()
-		rs := basictracer.RawSpan{
-			Context: basictracer.SpanContext{
-				TraceID: s.TraceID,
-				SpanID:  s.SpanID,
-			},
+		rs := RecordedSpan{
+			TraceID:      s.TraceID,
+			SpanID:       s.SpanID,
 			ParentSpanID: s.parentSpanID,
 			Operation:    s.operation,
-			Start:        s.startTime,
-			Duration:     s.mu.duration,
-		}
-		if rs.Duration < 0 {
-			// Span not finished yet; set duration as if it finished just now.
-			rs.Duration = time.Since(s.startTime)
+			StartTime:    s.startTime.UnixNano(),
+			Duration:     int64(s.mu.duration),
 		}
 
 		if len(s.mu.Baggage) > 0 {
-			rs.Context.Baggage = make(map[string]string)
+			rs.Baggage = make(map[string]string)
 			for k, v := range s.mu.Baggage {
-				rs.Context.Baggage[k] = v
+				rs.Baggage[k] = v
 			}
 		}
 		if len(s.mu.tags) > 0 {
-			rs.Tags = make(opentracing.Tags)
+			rs.Tags = make(map[string]string)
 			for k, v := range s.mu.tags {
-				rs.Tags[k] = v
+				// We encode the tag values as strings.
+				rs.Tags[k] = fmt.Sprint(v)
 			}
 		}
-		// It's safe to return the same slice as long as the caller doesn't modify
-		// the spans. Limit its capacity just in case.
-		rs.Logs = s.mu.recordedLogs[:len(s.mu.recordedLogs):len(s.mu.recordedLogs)]
+		rs.Logs = make([]RecordedSpan_LogRecord, len(s.mu.recordedLogs))
+		for i, r := range s.mu.recordedLogs {
+			rs.Logs[i].Time = r.Timestamp.UnixNano()
+			rs.Logs[i].Fields = make([]RecordedSpan_LogRecord_Field, len(r.Fields))
+			for j, f := range r.Fields {
+				rs.Logs[i].Fields[j] = RecordedSpan_LogRecord_Field{
+					Key:   f.Key(),
+					Value: fmt.Sprint(f.Value()),
+				}
+			}
+		}
 		s.mu.Unlock()
 		result = append(result, rs)
 	}
-	return append(result, rawSpans...)
+	return append(result, remoteSpans...)
 }
 
 func (ss *spanGroup) clearLogs() {
 	ss.Lock()
 	spans := ss.spans
-	ss.rawSpans = nil
+	ss.remoteSpans = nil
 	ss.Unlock()
 
 	for _, s := range spans {

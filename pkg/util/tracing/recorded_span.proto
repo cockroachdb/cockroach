@@ -1,0 +1,48 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Radu Berinde (radu@cockroachlabs.com)
+
+syntax = "proto3";
+package cockroach.util.tracing;
+option go_package = "tracing";
+
+import "gogoproto/gogo.proto";
+
+// RecordedSpan is a span that is part of a recording. It can be transferred
+// over the wire for snowball tracing.
+message RecordedSpan {
+  uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
+  uint64 span_id = 2 [(gogoproto.customname) = "SpanID"];
+  uint64 parent_span_id = 3 [(gogoproto.customname) = "ParentSpanID"];
+  string operation = 4;
+  map<string, string> baggage = 5;
+  map<string, string> tags = 6;
+  // Time when the span was started as (UnixNano).
+  int64 start_time = 7;
+  // Duration in nanoseconds; -1 if the span is not finished.
+  int64 duration = 8;
+
+  message LogRecord {
+    // Time of the log record (as UnixNano). 
+    int64 time = 1;
+
+    message Field {
+      string key = 1;
+      string value = 2;
+    }
+    repeated Field fields = 2 [(gogoproto.nullable) = false];
+  }
+  repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
+}
