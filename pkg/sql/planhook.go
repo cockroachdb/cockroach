@@ -77,9 +77,7 @@ func (f *hookFnNode) Start(context.Context) error {
 	f.resIdx = -1
 	return err
 }
-func (f *hookFnNode) Columns() sqlbase.ResultColumns {
-	return f.header
-}
+
 func (f *hookFnNode) Next(context.Context) (bool, error) {
 	if f.res == nil {
 		return false, nil

@@ -457,10 +457,6 @@ type windowNode struct {
 	explain explainMode
 }
 
-func (n *windowNode) Columns() sqlbase.ResultColumns {
-	return n.values.Columns()
-}
-
 func (n *windowNode) Values() parser.Datums {
 	return n.values.Values()
 }
