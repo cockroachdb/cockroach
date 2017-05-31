@@ -96,10 +96,6 @@ type renderNode struct {
 	noCopy util.NoCopy
 }
 
-func (r *renderNode) Columns() sqlbase.ResultColumns {
-	return r.columns
-}
-
 func (r *renderNode) Values() parser.Datums {
 	return r.row
 }

@@ -64,10 +64,11 @@ func (p *planner) UnionClause(
 		return nil, err
 	}
 
-	leftColumns := left.Columns()
-	rightColumns := right.Columns()
+	leftColumns := planColumns(left)
+	rightColumns := planColumns(right)
 	if len(leftColumns) != len(rightColumns) {
-		return nil, fmt.Errorf("each %v query must have the same number of columns: %d vs %d", n.Type, len(left.Columns()), len(right.Columns()))
+		return nil, fmt.Errorf("each %v query must have the same number of columns: %d vs %d",
+			n.Type, len(leftColumns), len(rightColumns))
 	}
 	for i := 0; i < len(leftColumns); i++ {
 		l := leftColumns[i]
@@ -139,8 +140,6 @@ type unionNode struct {
 	explain     explainMode
 	debugVals   debugValues
 }
-
-func (n *unionNode) Columns() sqlbase.ResultColumns { return n.left.Columns() }
 
 func (n *unionNode) Values() parser.Datums {
 	switch {

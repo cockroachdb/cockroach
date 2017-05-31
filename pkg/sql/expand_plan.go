@@ -227,7 +227,7 @@ func doExpandPlan(
 
 		ordering := planOrdering(n.plan)
 		if !ordering.isEmpty() {
-			n.columnsInOrder = make([]bool, len(n.plan.Columns()))
+			n.columnsInOrder = make([]bool, len(planColumns(n.plan)))
 			for colIdx := range ordering.exactMatchCols {
 				n.columnsInOrder[colIdx] = true
 			}
@@ -316,7 +316,7 @@ func expandRenderNode(
 
 	// Elide the render node if it renders its source as-is.
 
-	sourceCols := r.source.plan.Columns()
+	sourceCols := planColumns(r.source.plan)
 	if len(r.columns) == len(sourceCols) && r.source.info.viewDesc == nil {
 		// 1) we don't drop renderNodes which also interface to a view, because
 		// CREATE VIEW needs it.
@@ -503,7 +503,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		}
 
 		if !n.needSort {
-			if len(n.columns) < len(n.plan.Columns()) {
+			if len(n.columns) < len(planColumns(n.plan)) {
 				// No sorting required, but we have to strip off the extra render
 				// expressions we added. So keep the sort node.
 				// TODO(radu): replace with a renderNode

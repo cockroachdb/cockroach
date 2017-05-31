@@ -21,7 +21,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -84,15 +83,9 @@ var _ planMaker = &planner{}
 // - setLimitHint()                (limit_hint.go)
 // - collectSpans()                (plan_spans.go)
 // - planOrdering()                (plan_ordering.go)
+// - planColumns()                 (plan_columns.go)
 //
 type planNode interface {
-	// Columns returns the column names and types. The length of the
-	// returned slice is guaranteed to be equal to the length of the
-	// tuple returned by Values().
-	//
-	// Available after newPlan().
-	Columns() sqlbase.ResultColumns
-
 	// MarkDebug puts the node in a special debugging mode, which allows
 	// DebugValues to be used. This should be called after Start() and
 	// before the first call to Next() since it may need to recurse into
@@ -170,7 +163,6 @@ var _ planNode = &explainDebugNode{}
 var _ planNode = &explainDistSQLNode{}
 var _ planNode = &explainPlanNode{}
 var _ planNode = &explainTraceNode{}
-var _ planNode = &hookFnNode{}
 var _ planNode = &filterNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &hookFnNode{}

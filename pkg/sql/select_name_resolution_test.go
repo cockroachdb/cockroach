@@ -34,9 +34,10 @@ func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *renderNode {
 	sel := &renderNode{planner: p}
 	sel.source.plan = scan
 	testName := parser.TableName{TableName: parser.Name(desc.Name), DatabaseName: parser.Name("test")}
-	sel.source.info = newSourceInfoForSingleTable(testName, scan.Columns())
+	cols := planColumns(scan)
+	sel.source.info = newSourceInfoForSingleTable(testName, cols)
 	sel.sourceInfo = multiSourceInfo{sel.source.info}
-	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, len(scan.Columns()))
+	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, len(cols))
 
 	return sel
 }

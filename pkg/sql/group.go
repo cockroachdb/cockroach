@@ -304,10 +304,6 @@ type groupNode struct {
 	explain explainMode
 }
 
-func (n *groupNode) Columns() sqlbase.ResultColumns {
-	return n.columns
-}
-
 func (n *groupNode) Values() parser.Datums {
 	return n.values
 }

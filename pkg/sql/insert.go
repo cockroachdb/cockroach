@@ -124,7 +124,7 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	if expressions := len(rows.Columns()); expressions > numInputColumns {
+	if expressions := len(planColumns(rows)); expressions > numInputColumns {
 		return nil, fmt.Errorf("INSERT error: table %s has %d columns but %d values were supplied", n.Table, numInputColumns, expressions)
 	}
 
@@ -468,10 +468,6 @@ func fillDefaults(
 		}
 	}
 	return ret
-}
-
-func (n *insertNode) Columns() sqlbase.ResultColumns {
-	return n.rh.columns
 }
 
 func (n *insertNode) Values() parser.Datums {

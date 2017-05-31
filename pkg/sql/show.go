@@ -568,7 +568,7 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 			if err != nil {
 				return nil, err
 			}
-			for i, col := range sourcePlan.Columns() {
+			for i, col := range planColumns(sourcePlan) {
 				if col.Name != desc.Columns[i].Name {
 					customColNames = true
 					break

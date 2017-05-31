@@ -214,10 +214,6 @@ func (d *deleteNode) fastDelete(ctx context.Context, scan *scanNode) error {
 	return nil
 }
 
-func (d *deleteNode) Columns() sqlbase.ResultColumns {
-	return d.rh.columns
-}
-
 func (d *deleteNode) Values() parser.Datums {
 	return d.run.resultRow
 }

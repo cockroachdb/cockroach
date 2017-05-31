@@ -74,7 +74,7 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 		return nil, err
 	}
 
-	cols := rows.Columns()
+	cols := planColumns(rows)
 	if len(cols) == 0 {
 		return nil, errors.Errorf("no columns in SPLIT AT data")
 	}
@@ -144,17 +144,15 @@ func (n *splitNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
 }
 
-func (*splitNode) Columns() sqlbase.ResultColumns {
-	return sqlbase.ResultColumns{
-		{
-			Name: "key",
-			Typ:  parser.TypeBytes,
-		},
-		{
-			Name: "pretty",
-			Typ:  parser.TypeString,
-		},
-	}
+var splitNodeColumns = sqlbase.ResultColumns{
+	{
+		Name: "key",
+		Typ:  parser.TypeBytes,
+	},
+	{
+		Name: "pretty",
+		Typ:  parser.TypeString,
+	},
 }
 
 func (*splitNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
@@ -189,7 +187,7 @@ func (p *planner) Relocate(ctx context.Context, n *parser.Relocate) (planNode, e
 		return nil, err
 	}
 
-	cols := rows.Columns()
+	cols := planColumns(rows)
 	if len(cols) < 2 {
 		return nil, errors.Errorf("less than two columns in TESTING_RELOCATE data")
 	}
@@ -329,17 +327,15 @@ func (n *relocateNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
 }
 
-func (*relocateNode) Columns() sqlbase.ResultColumns {
-	return sqlbase.ResultColumns{
-		{
-			Name: "key",
-			Typ:  parser.TypeBytes,
-		},
-		{
-			Name: "pretty",
-			Typ:  parser.TypeString,
-		},
-	}
+var relocateNodeColumns = sqlbase.ResultColumns{
+	{
+		Name: "key",
+		Typ:  parser.TypeBytes,
+	},
+	{
+		Name: "pretty",
+		Typ:  parser.TypeString,
+	},
 }
 
 func (*relocateNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
@@ -457,21 +453,19 @@ func (n *scatterNode) Next(ctx context.Context) (bool, error) {
 	return hasNext, nil
 }
 
-func (*scatterNode) Columns() sqlbase.ResultColumns {
-	return sqlbase.ResultColumns{
-		{
-			Name: "key",
-			Typ:  parser.TypeBytes,
-		},
-		{
-			Name: "pretty",
-			Typ:  parser.TypeString,
-		},
-		{
-			Name: "error",
-			Typ:  parser.TypeString,
-		},
-	}
+var scatterNodeColumns = sqlbase.ResultColumns{
+	{
+		Name: "key",
+		Typ:  parser.TypeBytes,
+	},
+	{
+		Name: "pretty",
+		Typ:  parser.TypeString,
+	},
+	{
+		Name: "error",
+		Typ:  parser.TypeString,
+	},
 }
 
 func (n *scatterNode) Values() parser.Datums {
