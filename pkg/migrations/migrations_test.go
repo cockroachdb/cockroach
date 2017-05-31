@@ -23,13 +23,17 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -417,5 +421,84 @@ func TestLeaseExpiration(t *testing.T) {
 	backwardCompatibleMigrations = []migrationDescriptor{waitForExitMigration}
 	if err := mgr.EnsureMigrations(context.Background()); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestCreateSystemTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	jobsDesc := sqlbase.JobsTable
+	jobsNameKey := sqlbase.MakeNameMetadataKey(jobsDesc.GetParentID(), jobsDesc.GetName())
+	jobsDescKey := sqlbase.MakeDescMetadataKey(jobsDesc.GetID())
+	jobsDescVal := sqlbase.WrapDescriptor(&jobsDesc)
+	settingsDesc := sqlbase.SettingsTable
+	settingsNameKey := sqlbase.MakeNameMetadataKey(settingsDesc.GetParentID(), settingsDesc.GetName())
+	settingsDescKey := sqlbase.MakeDescMetadataKey(settingsDesc.GetID())
+	settingsDescVal := sqlbase.WrapDescriptor(&settingsDesc)
+
+	// Start up a test server without running the system.jobs migration.
+	backwardCompatibleMigrations = []migrationDescriptor{
+		{
+			name:   "create system.settings table",
+			workFn: createSettingsTable,
+		},
+	}
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Verify that the system.jobs keys were not written, but the system.settings
+	// keys were. This verifies that the migration system table migrations work.
+	if kv, err := kvDB.Get(ctx, jobsNameKey); err != nil {
+		t.Error(err)
+	} else if kv.Exists() {
+		t.Errorf("expected %q not to exist, got %v", jobsNameKey, kv)
+	}
+	if kv, err := kvDB.Get(ctx, jobsDescKey); err != nil {
+		t.Error(err)
+	} else if kv.Exists() {
+		t.Errorf("expected %q not to exist, got %v", jobsDescKey, kv)
+	}
+	if kv, err := kvDB.Get(ctx, settingsNameKey); err != nil {
+		t.Error(err)
+	} else if !kv.Exists() {
+		t.Errorf("expected %q to exist, got that it doesn't exist", settingsNameKey)
+	}
+	var descriptor sqlbase.Descriptor
+	if err := kvDB.GetProto(ctx, settingsDescKey, &descriptor); err != nil {
+		t.Error(err)
+	} else if !proto.Equal(settingsDescVal, &descriptor) {
+		t.Errorf("expected %v for key %q, got %v", settingsDescVal, settingsDescKey, descriptor)
+	}
+
+	// Run the system.jobs migration outside the context of a migration manager
+	// such that its work gets done but the key indicating it's been completed
+	// doesn't get written.
+	if err := createJobsTable(ctx, runner{db: kvDB}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the appropriate keys were written.
+	if kv, err := kvDB.Get(ctx, jobsNameKey); err != nil {
+		t.Error(err)
+	} else if !kv.Exists() {
+		t.Errorf("expected %q to exist, got that it doesn't exist", jobsNameKey)
+	}
+	if err := kvDB.GetProto(ctx, jobsDescKey, &descriptor); err != nil {
+		t.Error(err)
+	} else if !proto.Equal(jobsDescVal, &descriptor) {
+		t.Errorf("expected %v for key %q, got %v", jobsDescVal, jobsDescKey, descriptor)
+	}
+
+	// Finally, try running both migrations and make sure they still succeed.
+	// This verifies the idempotency of the migration, since the system.jobs
+	// migration will get rerun here.
+	mgr := NewManager(s.Stopper(), kvDB, nil, s.Clock(), nil, "clientID")
+	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
+		name:   "create system.jobs table",
+		workFn: createJobsTable,
+	})
+	if err := mgr.EnsureMigrations(ctx); err != nil {
+		t.Fatal(err)
 	}
 }
