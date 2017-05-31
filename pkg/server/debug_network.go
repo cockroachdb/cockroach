@@ -16,12 +16,17 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"html/template"
 	"math"
 	"net/http"
+	"regexp"
 	"sort"
+	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -51,14 +56,50 @@ func (s *statusServer) handleDebugNetwork(w http.ResponseWriter, r *http.Request
 	ctx := s.AnnotateCtx(r.Context())
 	w.Header().Add("Content-type", "text/html")
 
-	resp, err := s.Nodes(ctx, &serverpb.NodesRequest{})
-	if err != nil {
-		http.Error(w, "could not retrieve node statuses", http.StatusInternalServerError)
-	}
+	nodeIDsString := r.URL.Query().Get("node_ids")
+	requestedNodeIDs := make(map[roachpb.NodeID]struct{})
 
 	data := debugNetwork{
 		DeadNodes: make(map[roachpb.NodeID]debugNetworkDeadNode),
 	}
+	if len(nodeIDsString) > 0 {
+		var nodeFilter bytes.Buffer
+		nodeFilter.WriteString("Only nodes: ")
+		for i, nodeIDString := range strings.Split(nodeIDsString, ",") {
+			nodeID, _, err := s.parseNodeID(nodeIDString)
+			if err != nil {
+				http.Error(w, errors.Wrapf(err,
+					"could not parse node_ids parameter, it must be a comma separated list of node ids: %s",
+					nodeIDsString,
+				).Error(), http.StatusBadRequest)
+				return
+			}
+			requestedNodeIDs[nodeID] = struct{}{}
+			if i > 0 {
+				nodeFilter.WriteString(",")
+			}
+			nodeFilter.WriteString(nodeID.String())
+		}
+		data.Filters = append(data.Filters, nodeFilter.String())
+	}
+	localityString := r.URL.Query().Get("locality")
+	var localityRegex *regexp.Regexp
+	if len(localityString) > 0 {
+		var err error
+		localityRegex, err = regexp.Compile(localityString)
+		if err != nil {
+			http.Error(w, errors.Wrapf(err, "could not compile regex for locality parameter: %s",
+				localityString).Error(), http.StatusBadRequest)
+		}
+		data.Filters = append(data.Filters, fmt.Sprintf("Locality Regex: %s", localityString))
+	}
+
+	resp, err := s.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		http.Error(w, "could not retrieve node statuses", http.StatusInternalServerError)
+		return
+	}
+
 	var mostRecentUpdatedAt time.Time
 	type nodeIDItem struct {
 		id       roachpb.NodeID
@@ -71,6 +112,18 @@ func (s *statusServer) handleDebugNetwork(w http.ResponseWriter, r *http.Request
 		nodeStatuses[nodeStatus.Desc.NodeID] = nodeStatus
 		if updatedAt := time.Unix(0, nodeStatus.UpdatedAt); updatedAt.After(mostRecentUpdatedAt) {
 			mostRecentUpdatedAt = updatedAt
+		}
+		if len(requestedNodeIDs) > 0 {
+			// If a subset of nodes have been requested, skip all those that are not
+			// in that list.
+			if _, ok := requestedNodeIDs[nodeStatus.Desc.NodeID]; !ok {
+				continue
+			}
+		}
+		if localityRegex != nil {
+			if !localityRegex.MatchString(nodeStatus.Desc.Locality.String()) {
+				continue
+			}
 		}
 		nodeIDs = append(nodeIDs, nodeIDItem{
 			id:       nodeStatus.Desc.NodeID,
@@ -269,6 +322,7 @@ type debugNetwork struct {
 	Latencies     [][]*debugRangeOutput
 	Legend        [][]*debugRangeOutput
 	DeadNodes     map[roachpb.NodeID]debugNetworkDeadNode
+	Filters       []string
 }
 
 const debugNetworkTemplate = `
@@ -371,24 +425,37 @@ const debugNetworkTemplate = `
       }
       .list-row:first-of-type .list-cell {
         font-weight: 900;
-        color: #ffffff;
+        color: white;
         border: none;
       }
       .list-row:first-of-type .list-cell.no-connection {
         background-color: #ea6153;
       }
-      .list-cell:first-of-type .list-cell.failure {
+      .failure-cell {
+        padding: 6px 12px;
+        display: table-cell;
+        height: 20px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        border-width: 1px 1px 0 0;
+        border-color: rgba(0, 0, 0, 0.1);
+        border-style: solid;
+        font-weight: 900;
         color: black;
         background-color: white;
-      }
-      .list-cell.failure {
-        color: black;
       }
     </STYLE>
   </HEAD>
   <BODY>
     <DIV CLASS="wrapper">
       <H1>Network Diagnostics</H1>
+      {{- if $.Filters}}
+        <H2>Filters</H2>
+        {{- range $_, $filter := $.Filters}}
+          <DIV>• {{$filter}}</DIV>
+        {{- end}}
+      {{- end}}
       <H2>Latencies</H2>
       <DIV CLASS="table">
         {{- range $_, $row := $.Latencies}}
@@ -457,10 +524,10 @@ const debugNetworkTemplate = `
       {{- end}}
       {{- if $.Failures }}
         <H2>Failures</H2>
-        <DIV CLASS="list-table">
+        <DIV CLASS="table">
           {{- range $_, $f := $.Failures}}
-            <DIV CLASS="list-row">
-              <DIV CLASS="list-cell failure">n{{$f}}</DIV>
+            <DIV CLASS="row">
+              <DIV CLASS="failure-cell">{{$f}}</DIV>
             </DIV>
           {{- end}}
         </DIV>
