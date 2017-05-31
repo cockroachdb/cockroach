@@ -533,5 +533,3 @@ func (u *updateNode) MarkDebug(mode explainMode) {
 func (u *updateNode) DebugValues() debugValues {
 	return u.run.rows.DebugValues()
 }
-
-func (u *updateNode) Ordering() orderingInfo { return orderingInfo{} }

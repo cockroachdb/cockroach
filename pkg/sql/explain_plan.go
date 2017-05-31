@@ -122,7 +122,7 @@ func (p *planner) populateExplain(
 		if e.showMetadata {
 			if plan != nil {
 				row = append(row, parser.NewDString(formatColumns(plan.Columns(), e.showTypes)))
-				row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
+				row = append(row, parser.NewDString(planOrdering(plan).AsString(plan.Columns())))
 			} else {
 				row = append(row, emptyString, emptyString)
 			}
@@ -154,7 +154,7 @@ func planToString(ctx context.Context, plan planNode) string {
 			} else {
 				fmt.Fprintf(&buf, "%d %s%s %s %s %s\n", level, name, field, description,
 					formatColumns(plan.Columns(), true),
-					plan.Ordering().AsString(plan.Columns()),
+					planOrdering(plan).AsString(plan.Columns()),
 				)
 			}
 		},
@@ -274,7 +274,6 @@ type explainPlanNode struct {
 
 func (e *explainPlanNode) Next(ctx context.Context) (bool, error) { return e.results.Next(ctx) }
 func (e *explainPlanNode) Columns() sqlbase.ResultColumns         { return e.results.Columns() }
-func (e *explainPlanNode) Ordering() orderingInfo                 { return e.results.Ordering() }
 func (e *explainPlanNode) Values() parser.Datums                  { return e.results.Values() }
 func (e *explainPlanNode) DebugValues() debugValues               { return debugValues{} }
 func (e *explainPlanNode) MarkDebug(mode explainMode)             {}

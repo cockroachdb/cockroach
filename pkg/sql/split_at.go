@@ -157,7 +157,6 @@ func (*splitNode) Columns() sqlbase.ResultColumns {
 	}
 }
 
-func (*splitNode) Ordering() orderingInfo   { return orderingInfo{} }
 func (*splitNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
 func (*splitNode) DebugValues() debugValues { panic("unimplemented") }
 
@@ -343,7 +342,6 @@ func (*relocateNode) Columns() sqlbase.ResultColumns {
 	}
 }
 
-func (*relocateNode) Ordering() orderingInfo   { return orderingInfo{} }
 func (*relocateNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
 func (*relocateNode) DebugValues() debugValues { panic("unimplemented") }
 
@@ -491,6 +489,6 @@ func (n *scatterNode) Values() parser.Datums {
 }
 
 func (*scatterNode) Close(ctx context.Context) {}
-func (*scatterNode) Ordering() orderingInfo    { return orderingInfo{} }
-func (*scatterNode) MarkDebug(_ explainMode)   { panic("unimplemented") }
-func (*scatterNode) DebugValues() debugValues  { panic("unimplemented") }
+
+func (*scatterNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
+func (*scatterNode) DebugValues() debugValues { panic("unimplemented") }

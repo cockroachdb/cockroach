@@ -461,11 +461,6 @@ func (n *windowNode) Columns() sqlbase.ResultColumns {
 	return n.values.Columns()
 }
 
-func (n *windowNode) Ordering() orderingInfo {
-	// Window partitions are returned un-ordered.
-	return orderingInfo{}
-}
-
 func (n *windowNode) Values() parser.Datums {
 	return n.values.Values()
 }

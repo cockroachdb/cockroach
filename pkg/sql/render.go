@@ -100,10 +100,6 @@ func (r *renderNode) Columns() sqlbase.ResultColumns {
 	return r.columns
 }
 
-func (r *renderNode) Ordering() orderingInfo {
-	return r.ordering
-}
-
 func (r *renderNode) Values() parser.Datums {
 	return r.row
 }

@@ -119,10 +119,10 @@ func (n *createDatabaseNode) Start(ctx context.Context) error {
 func (*createDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
 func (*createDatabaseNode) Close(context.Context)              {}
 func (*createDatabaseNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
-func (*createDatabaseNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (*createDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
-func (*createDatabaseNode) DebugValues() debugValues           { return debugValues{} }
-func (*createDatabaseNode) MarkDebug(mode explainMode)         {}
+
+func (*createDatabaseNode) Values() parser.Datums      { return parser.Datums{} }
+func (*createDatabaseNode) DebugValues() debugValues   { return debugValues{} }
+func (*createDatabaseNode) MarkDebug(mode explainMode) {}
 
 type createIndexNode struct {
 	p         *planner
@@ -233,10 +233,10 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 func (*createIndexNode) Next(context.Context) (bool, error) { return false, nil }
 func (*createIndexNode) Close(context.Context)              {}
 func (*createIndexNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
-func (*createIndexNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (*createIndexNode) Values() parser.Datums              { return parser.Datums{} }
-func (*createIndexNode) DebugValues() debugValues           { return debugValues{} }
-func (*createIndexNode) MarkDebug(mode explainMode)         {}
+
+func (*createIndexNode) Values() parser.Datums      { return parser.Datums{} }
+func (*createIndexNode) DebugValues() debugValues   { return debugValues{} }
+func (*createIndexNode) MarkDebug(mode explainMode) {}
 
 type createUserNode struct {
 	p        *planner
@@ -336,10 +336,10 @@ func (n *createUserNode) Start(ctx context.Context) error {
 func (*createUserNode) Next(context.Context) (bool, error) { return false, nil }
 func (*createUserNode) Close(context.Context)              {}
 func (*createUserNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
-func (*createUserNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (*createUserNode) Values() parser.Datums              { return parser.Datums{} }
-func (*createUserNode) DebugValues() debugValues           { return debugValues{} }
-func (*createUserNode) MarkDebug(mode explainMode)         {}
+
+func (*createUserNode) Values() parser.Datums      { return parser.Datums{} }
+func (*createUserNode) DebugValues() debugValues   { return debugValues{} }
+func (*createUserNode) MarkDebug(mode explainMode) {}
 
 type createViewNode struct {
 	p           *planner
@@ -513,10 +513,10 @@ func (n *createViewNode) Close(ctx context.Context) {
 
 func (*createViewNode) Next(context.Context) (bool, error) { return false, nil }
 func (*createViewNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
-func (*createViewNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (*createViewNode) Values() parser.Datums              { return parser.Datums{} }
-func (*createViewNode) DebugValues() debugValues           { return debugValues{} }
-func (*createViewNode) MarkDebug(mode explainMode)         {}
+
+func (*createViewNode) Values() parser.Datums      { return parser.Datums{} }
+func (*createViewNode) DebugValues() debugValues   { return debugValues{} }
+func (*createViewNode) MarkDebug(mode explainMode) {}
 
 type createTableNode struct {
 	p          *planner
@@ -744,10 +744,10 @@ func (n *createTableNode) Close(ctx context.Context) {
 
 func (*createTableNode) Next(context.Context) (bool, error) { return false, nil }
 func (*createTableNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
-func (*createTableNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (*createTableNode) Values() parser.Datums              { return parser.Datums{} }
-func (*createTableNode) DebugValues() debugValues           { return debugValues{} }
-func (*createTableNode) MarkDebug(mode explainMode)         {}
+
+func (*createTableNode) Values() parser.Datums      { return parser.Datums{} }
+func (*createTableNode) DebugValues() debugValues   { return debugValues{} }
+func (*createTableNode) MarkDebug(mode explainMode) {}
 
 type indexMatch bool
 
