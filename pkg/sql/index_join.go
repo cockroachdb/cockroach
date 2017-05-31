@@ -214,10 +214,6 @@ func (n *indexJoinNode) Columns() sqlbase.ResultColumns {
 	return n.table.Columns()
 }
 
-func (n *indexJoinNode) Ordering() orderingInfo {
-	return n.index.Ordering()
-}
-
 func (n *indexJoinNode) Values() parser.Datums {
 	return n.table.Values()
 }

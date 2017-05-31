@@ -290,7 +290,6 @@ func (p *planner) makeJoin(
 func (n *joinNode) Columns() sqlbase.ResultColumns { return n.columns }
 
 // Ordering implements the planNode interface.
-func (n *joinNode) Ordering() orderingInfo { return orderingInfo{} }
 
 // MarkDebug implements the planNode interface.
 func (n *joinNode) MarkDebug(mode explainMode) {

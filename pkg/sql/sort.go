@@ -254,63 +254,6 @@ func (n *sortNode) Columns() sqlbase.ResultColumns {
 	return n.columns
 }
 
-func (n *sortNode) Ordering() orderingInfo {
-	if n == nil {
-		return orderingInfo{}
-	}
-
-	underlying := n.plan.Ordering()
-
-	var ord orderingInfo
-	if n.needSort {
-		// We will sort and can guarantee the desired ordering.
-		ord.ordering = make(sqlbase.ColumnOrdering, 0, len(n.ordering))
-		for _, o := range n.ordering {
-			// Skip any exact match columns.
-			if _, ok := underlying.exactMatchCols[o.ColIdx]; !ok {
-				ord.ordering = append(ord.ordering, o)
-			}
-		}
-	} else {
-		// If we aren't sorting, the underlying plan's ordering can be more specific
-		// than the sortNode's ordering, so we want to use that. E.g:
-		//   CREATE INDEX foo ON t (a, b);
-		//   SELECT a, b, c FROM t ORDER BY a;
-		// We want to use (a, b) instead of just (a).
-		ord.ordering = underlying.ordering
-	}
-
-	// Preserve exact match columns.
-	if len(underlying.exactMatchCols) != 0 {
-		ord.exactMatchCols = make(map[int]struct{})
-		for c := range underlying.exactMatchCols {
-			// Skip columns not in the output.
-			if c < len(n.columns) {
-				ord.exactMatchCols[c] = struct{}{}
-			}
-		}
-	}
-
-	// Remove all the columns after the first one that's not present in
-	// the result columns.
-	for i, o := range ord.ordering {
-		if o.ColIdx >= len(n.columns) {
-			// If something is ordered by columns A, then B, then C, if I
-			// don't have column B I can't say it's ordered by columns A,
-			// then C. Example:
-			// A | B | C          A | C
-			// ---------          -----
-			// 1 | 1 | 2   --->   1 | 2
-			// 1 | 2 | 1          1 | 1
-			// 1 | 2 | 3          1 | 3
-			// So we need to break the orderingInfo here.
-			ord.ordering = ord.ordering[:i]
-			break
-		}
-	}
-	return ord
-}
-
 func (n *sortNode) Values() parser.Datums {
 	// If an ordering expression was used the number of columns in each row might
 	// differ from the number of columns requested, so trim the result.

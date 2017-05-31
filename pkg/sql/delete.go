@@ -233,5 +233,3 @@ func (d *deleteNode) MarkDebug(mode explainMode) {
 func (d *deleteNode) DebugValues() debugValues {
 	return d.run.rows.DebugValues()
 }
-
-func (d *deleteNode) Ordering() orderingInfo { return orderingInfo{} }

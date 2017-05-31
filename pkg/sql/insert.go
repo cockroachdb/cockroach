@@ -485,5 +485,3 @@ func (n *insertNode) MarkDebug(mode explainMode) {
 func (n *insertNode) DebugValues() debugValues {
 	return n.run.rows.DebugValues()
 }
-
-func (n *insertNode) Ordering() orderingInfo { return orderingInfo{} }

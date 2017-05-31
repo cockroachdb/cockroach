@@ -738,7 +738,7 @@ func (dsp *distSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 // reflect the sort node.
 func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 
-	matchLen := n.plan.Ordering().computeMatch(n.ordering)
+	matchLen := planOrdering(n.plan).computeMatch(n.ordering)
 
 	if matchLen < len(n.ordering) {
 		// Sorting is needed; we add a stage of sorting processors.
@@ -884,7 +884,7 @@ func (dsp *distSQLPlanner) addAggregators(
 		// We can't do local aggregation, but we can do local distinct processing
 		// to reduce streaming duplicates, and aggregate on the final node.
 
-		ordering := dsp.convertOrdering(n.plan.Ordering().ordering, p.planToStreamColMap).Columns
+		ordering := dsp.convertOrdering(planOrdering(n.plan).ordering, p.planToStreamColMap).Columns
 		orderedColsMap := make(map[uint32]struct{})
 		for _, ord := range ordering {
 			orderedColsMap[ord.ColIdx] = struct{}{}
@@ -1178,7 +1178,7 @@ ColLoop:
 			distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
 			getTypesForPlanResult(n, plan.planToStreamColMap),
-			dsp.convertOrdering(n.Ordering().ordering, plan.planToStreamColMap),
+			dsp.convertOrdering(planOrdering(n).ordering, plan.planToStreamColMap),
 		)
 	} else {
 		// Use a single join reader (if there is a single stream, on that node; if

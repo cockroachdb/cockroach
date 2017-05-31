@@ -68,7 +68,6 @@ type hookFnNode struct {
 	resIdx int
 }
 
-func (*hookFnNode) Ordering() orderingInfo  { return orderingInfo{} }
 func (*hookFnNode) MarkDebug(_ explainMode) {}
 func (*hookFnNode) Close(context.Context)   {}
 

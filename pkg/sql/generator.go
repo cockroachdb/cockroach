@@ -131,7 +131,6 @@ func (n *valueGenerator) DebugValues() debugValues {
 	}
 }
 
-func (n *valueGenerator) Ordering() orderingInfo         { return orderingInfo{} }
 func (n *valueGenerator) Values() parser.Datums          { return n.gen.Values() }
 func (n *valueGenerator) MarkDebug(_ explainMode)        {}
 func (n *valueGenerator) Columns() sqlbase.ResultColumns { return n.columns }
