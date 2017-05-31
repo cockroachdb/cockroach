@@ -18,8 +18,6 @@ package sql
 
 import (
 	"container/heap"
-	"fmt"
-	"strconv"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -40,9 +38,6 @@ type sortNode struct {
 	needSort     bool
 	sortStrategy sortingStrategy
 	valueIter    valueIterator
-
-	explain   explainMode
-	debugVals debugValues
 }
 
 // orderBy constructs a sortNode based on the ORDER BY clause.
@@ -256,21 +251,6 @@ func (n *sortNode) Values() parser.Datums {
 	return n.valueIter.Values()[:len(n.columns)]
 }
 
-func (n *sortNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-	n.plan.MarkDebug(mode)
-}
-
-func (n *sortNode) DebugValues() debugValues {
-	if n.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
-	}
-	return n.debugVals
-}
-
 func (n *sortNode) Start(ctx context.Context) error {
 	return n.plan.Start(ctx)
 }
@@ -306,37 +286,16 @@ func (n *sortNode) Next(ctx context.Context) (bool, error) {
 			break
 		}
 
-		if n.explain == explainDebug {
-			n.debugVals = n.plan.DebugValues()
-			if n.debugVals.output != debugValueRow {
-				// Pass through non-row debug values.
-				return true, nil
-			}
-		}
-
 		values := n.plan.Values()
 		if err := n.sortStrategy.Add(ctx, values); err != nil {
 			return false, err
-		}
-
-		if n.explain == explainDebug {
-			// Emit a "buffered" row.
-			n.debugVals.output = debugValueBuffered
-			return true, nil
 		}
 	}
 
 	if n.valueIter == nil {
 		n.valueIter = n.plan
 	}
-	next, err := n.valueIter.Next(ctx)
-	if !next {
-		return false, err
-	}
-	if n.explain == explainDebug {
-		n.debugVals = n.valueIter.DebugValues()
-	}
-	return true, nil
+	return n.valueIter.Next(ctx)
 }
 
 func (n *sortNode) Close(ctx context.Context) {
@@ -355,7 +314,6 @@ func (n *sortNode) Close(ctx context.Context) {
 type valueIterator interface {
 	Next(ctx context.Context) (bool, error)
 	Values() parser.Datums
-	DebugValues() debugValues
 	Close(ctx context.Context)
 }
 
@@ -404,10 +362,6 @@ func (ss *sortAllStrategy) Values() parser.Datums {
 	return ss.vNode.Values()
 }
 
-func (ss *sortAllStrategy) DebugValues() debugValues {
-	return ss.vNode.DebugValues()
-}
-
 func (ss *sortAllStrategy) Close(ctx context.Context) {
 	ss.vNode.Close(ctx)
 }
@@ -454,15 +408,6 @@ func (ss *iterativeSortStrategy) Next(context.Context) (bool, error) {
 
 func (ss *iterativeSortStrategy) Values() parser.Datums {
 	return ss.lastVal
-}
-
-func (ss *iterativeSortStrategy) DebugValues() debugValues {
-	return debugValues{
-		rowIdx: ss.nextRowIdx - 1,
-		key:    strconv.Itoa(ss.nextRowIdx - 1),
-		value:  ss.lastVal.String(),
-		output: debugValueRow,
-	}
 }
 
 func (ss *iterativeSortStrategy) Close(ctx context.Context) {
@@ -534,10 +479,6 @@ func (ss *sortTopKStrategy) Next(ctx context.Context) (bool, error) {
 
 func (ss *sortTopKStrategy) Values() parser.Datums {
 	return ss.vNode.Values()
-}
-
-func (ss *sortTopKStrategy) DebugValues() debugValues {
-	return ss.vNode.DebugValues()
 }
 
 func (ss *sortTopKStrategy) Close(ctx context.Context) {

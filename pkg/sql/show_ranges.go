@@ -152,9 +152,6 @@ func (n *showRangesNode) Close(_ context.Context) {
 	n.descriptorKVs = nil
 }
 
-func (*showRangesNode) MarkDebug(_ explainMode)  {}
-func (*showRangesNode) DebugValues() debugValues { panic("unimplemented") }
-
 // scanMetaKVs returns the meta KVs for the ranges that touch the given span.
 func scanMetaKVs(
 	ctx context.Context, txn *client.Txn, span roachpb.Span,

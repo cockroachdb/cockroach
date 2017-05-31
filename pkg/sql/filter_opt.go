@@ -285,11 +285,6 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
-	case *explainDebugNode:
-		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
-			return plan, extraFilter, err
-		}
-
 	case *explainDistSQLNode:
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
@@ -300,11 +295,6 @@ func (p *planner) propagateFilters(
 			if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 				return plan, extraFilter, err
 			}
-		}
-
-	case *explainTraceNode:
-		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
-			return plan, extraFilter, err
 		}
 
 	case *splitNode:

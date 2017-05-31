@@ -43,9 +43,6 @@ type valueGenerator struct {
 
 	// columns is the signature of this generator.
 	columns sqlbase.ResultColumns
-
-	// rowCount is used for DebugValues() only.
-	rowCount int
 }
 
 // makeGenerator creates a valueGenerator instance that wraps a call to a
@@ -110,26 +107,11 @@ func (n *valueGenerator) Start(context.Context) error {
 	return nil
 }
 
-func (n *valueGenerator) Next(context.Context) (bool, error) {
-	n.rowCount++
-	return n.gen.Next()
-}
+func (n *valueGenerator) Next(context.Context) (bool, error) { return n.gen.Next() }
+func (n *valueGenerator) Values() parser.Datums              { return n.gen.Values() }
 
 func (n *valueGenerator) Close(context.Context) {
 	if n.gen != nil {
 		n.gen.Close()
 	}
 }
-
-func (n *valueGenerator) DebugValues() debugValues {
-	row := n.gen.Values()
-	return debugValues{
-		rowIdx: n.rowCount,
-		key:    fmt.Sprintf("%d", n.rowCount),
-		value:  row.String(),
-		output: debugValueRow,
-	}
-}
-
-func (n *valueGenerator) Values() parser.Datums   { return n.gen.Values() }
-func (n *valueGenerator) MarkDebug(_ explainMode) {}

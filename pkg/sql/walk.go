@@ -158,9 +158,6 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *filterNode:
 		subplans := v.expr(name, "filter", -1, n.filter, nil)
-		if n.explain != explainNone && v.observer.attr != nil {
-			v.observer.attr(name, "mode", explainStrings[n.explain])
-		}
 		v.subqueries(name, subplans)
 		v.visit(n.source.plan)
 
@@ -367,17 +364,11 @@ func (v *planVisitor) visit(plan planNode) {
 			v.visit(n.plan)
 		}
 
-	case *explainDebugNode:
-		v.visit(n.plan)
-
 	case *explainDistSQLNode:
 		v.visit(n.plan)
 
 	case *ordinalityNode:
 		v.visit(n.source)
-
-	case *explainTraceNode:
-		v.visit(n.plan)
 
 	case *explainPlanNode:
 		if v.observer.attr != nil {
@@ -507,10 +498,8 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropViewNode{}):         "drop view",
 	reflect.TypeOf(&dropUserNode{}):         "drop user",
 	reflect.TypeOf(&emptyNode{}):            "empty",
-	reflect.TypeOf(&explainDebugNode{}):     "explain debug",
 	reflect.TypeOf(&explainDistSQLNode{}):   "explain dist_sql",
 	reflect.TypeOf(&explainPlanNode{}):      "explain plan",
-	reflect.TypeOf(&explainTraceNode{}):     "explain trace",
 	reflect.TypeOf(&filterNode{}):           "filter",
 	reflect.TypeOf(&groupNode{}):            "group",
 	reflect.TypeOf(&hookFnNode{}):           "plugin",

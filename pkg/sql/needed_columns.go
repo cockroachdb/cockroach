@@ -35,13 +35,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *createViewNode:
 		setNeededColumns(n.sourcePlan, allColumns(n.sourcePlan))
 
-	case *explainDebugNode:
-		setNeededColumns(n.plan, allColumns(n.plan))
-
 	case *explainDistSQLNode:
-		setNeededColumns(n.plan, allColumns(n.plan))
-
-	case *explainTraceNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
 
 	case *explainPlanNode:

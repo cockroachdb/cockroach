@@ -63,12 +63,8 @@ func planColumns(plan planNode) sqlbase.ResultColumns {
 		// Nodes with a fixed schema.
 	case *emptyNode:
 		return noColumns
-	case *explainDebugNode:
-		return debugColumns
 	case *explainDistSQLNode:
 		return explainDistSQLColumns
-	case *explainTraceNode:
-		return traceColumnsWithTS
 	case *relocateNode:
 		return relocateNodeColumns
 	case *scatterNode:

@@ -299,38 +299,10 @@ type groupNode struct {
 	desiredOrdering sqlbase.ColumnOrdering
 	needOnlyOneRow  bool
 	gotOneRow       bool
-
-	explain explainMode
 }
 
 func (n *groupNode) Values() parser.Datums {
 	return n.values
-}
-
-func (n *groupNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-	n.plan.MarkDebug(mode)
-}
-
-func (n *groupNode) DebugValues() debugValues {
-	if n.populated {
-		return debugValues{
-			rowIdx: 0,
-			key:    "",
-			value:  n.values.String(),
-			output: debugValueRow,
-		}
-	}
-
-	// We are emitting a "buffered" row.
-	vals := n.plan.DebugValues()
-	if vals.output == debugValueRow {
-		vals.output = debugValueBuffered
-	}
-	return vals
 }
 
 func (n *groupNode) Start(ctx context.Context) error {
@@ -355,10 +327,6 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 			n.populated = true
 			n.setupOutput()
 			break
-		}
-		if n.explain == explainDebug && n.plan.DebugValues().output != debugValueRow {
-			// Pass through non-row debug values.
-			return true, nil
 		}
 
 		// Add row to bucket.
@@ -392,11 +360,6 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 		scratch = bucket[:0]
 
 		n.gotOneRow = true
-
-		if n.explain == explainDebug {
-			// Emit a "buffered" row.
-			return true, nil
-		}
 	}
 
 	if len(n.buckets) == 0 {

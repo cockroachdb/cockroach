@@ -196,6 +196,3 @@ func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
 	n.rowIdx++
 	return true, nil
 }
-
-func (*showFingerprintsNode) MarkDebug(_ explainMode)  {}
-func (*showFingerprintsNode) DebugValues() debugValues { return debugValues{} }

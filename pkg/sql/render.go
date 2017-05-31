@@ -77,9 +77,6 @@ type renderNode struct {
 	// modified by index selection.
 	ordering orderingInfo
 
-	// explain supports EXPLAIN(DEBUG).
-	explain explainMode
-
 	// The current source row, with one value per source column.
 	// populated by Next(), used by renderRow().
 	curSourceRow parser.Datums
@@ -100,18 +97,6 @@ func (r *renderNode) Values() parser.Datums {
 	return r.row
 }
 
-func (r *renderNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	r.explain = mode
-	r.source.plan.MarkDebug(mode)
-}
-
-func (r *renderNode) DebugValues() debugValues {
-	return r.source.plan.DebugValues()
-}
-
 func (r *renderNode) Start(ctx context.Context) error {
 	return r.source.plan.Start(ctx)
 }
@@ -121,13 +106,7 @@ func (r *renderNode) Next(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	if r.explain == explainDebug && r.source.plan.DebugValues().output != debugValueRow {
-		// Pass through non-row debug values.
-		return true, nil
-	}
-
-	row := r.source.plan.Values()
-	r.curSourceRow = row
+	r.curSourceRow = r.source.plan.Values()
 
 	err := r.renderRow()
 	return err == nil, err

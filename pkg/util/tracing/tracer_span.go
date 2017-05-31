@@ -231,27 +231,6 @@ func ImportRemoteSpans(os opentracing.Span, remoteSpans []RecordedSpan) error {
 	return nil
 }
 
-// ClearRecordedLogs removes all logs (events) from the spans in the recording.
-// This can be used to retrieve logs iteratively:
-//    r1 := GetRecording(sp)
-//    ClearRecordedLogs(sp)
-//    // do more stuff, which triggers more events..
-//    r2 := GetRecording(sp)  // contains the new events.
-//
-// TODO(radu): this API is inherently racy - we lose any events that may have
-// happened between GetRecording and ClearRecordedLogs. This could be fixed (by
-// integrating the two) but this is only temporary (it is used by the current
-// current EXPLAIN (TRACE) implementation which is about to change).
-func ClearRecordedLogs(os opentracing.Span) {
-	s := os.(*span)
-	s.mu.Lock()
-	group := s.mu.recordingGroup
-	s.mu.Unlock()
-	if group != nil {
-		group.clearLogs()
-	}
-}
-
 // IsNoopSpan returns true if events for this span are just dropped. This is the
 // case when tracing is disable and we're not recording.
 func IsNoopSpan(s opentracing.Span) bool {

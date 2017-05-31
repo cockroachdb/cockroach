@@ -155,9 +155,6 @@ var splitNodeColumns = sqlbase.ResultColumns{
 	},
 }
 
-func (*splitNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
-func (*splitNode) DebugValues() debugValues { panic("unimplemented") }
-
 // Relocate moves ranges to specific stores
 // (`ALTER TABLE/INDEX ... TESTING_RELOCATE ...` statement)
 // Privileges: INSERT on table.
@@ -339,9 +336,6 @@ var relocateNodeColumns = sqlbase.ResultColumns{
 	},
 }
 
-func (*relocateNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
-func (*relocateNode) DebugValues() debugValues { panic("unimplemented") }
-
 // Scatter moves ranges to random stores
 // (`ALTER TABLE/INDEX ... SCATTER ...` statement)
 // Privileges: INSERT on table.
@@ -484,6 +478,3 @@ func (n *scatterNode) Values() parser.Datums {
 }
 
 func (*scatterNode) Close(ctx context.Context) {}
-
-func (*scatterNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
-func (*scatterNode) DebugValues() debugValues { panic("unimplemented") }

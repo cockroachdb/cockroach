@@ -570,22 +570,6 @@ func (s *Session) Ctx() context.Context {
 	return s.context
 }
 
-// hijackCtx changes the current transaction's context to the provided one and
-// returns a cleanup function to be used to restore the original context when
-// the hijack is no longer needed.
-// TODO(andrei): delete this when EXPLAIN(TRACE) goes away
-func (s *Session) hijackCtx(ctx context.Context) func() {
-	if s.TxnState.State != Open {
-		// This hijacking is dubious to begin with. Let's at least assert it's being
-		// done when the TxnState is in an expected state. In particular, if the
-		// state would be NoTxn, then we'd need to hijack session.Ctx instead of the
-		// txnState's context.
-		log.Fatalf(ctx, "can only hijack while a SQL txn is Open. txnState: %+v",
-			&s.TxnState)
-	}
-	return s.TxnState.hijackCtx(ctx)
-}
-
 func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.session = s
 	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
@@ -983,18 +967,6 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 		// Note that TransactionAborted is also a retriable error, handled here;
 		// in this case cleanup for the txn has been done for us under the hood.
 		ts.State = RestartWait
-	}
-}
-
-// hijackCtx changes the transaction's context to the provided one and returns a
-// cleanup function to be used to restore the original context when the hijack
-// is no longer needed.
-// TODO(andrei): delete this when EXPLAIN(TRACE) goes away.
-func (ts *txnState) hijackCtx(ctx context.Context) func() {
-	origCtx := ts.Ctx
-	ts.Ctx = ctx
-	return func() {
-		ts.Ctx = origCtx
 	}
 }
 

@@ -263,10 +263,6 @@ func (n *insertNode) Next(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	if n.run.explain == explainDebug {
-		return true, nil
-	}
-
 	rowVals, err := GenerateInsertRow(n.defaultExprs, n.insertColIDtoRowIndex, n.insertCols, n.p.evalCtx, n.tableDesc, n.run.rows.Values())
 	if err != nil {
 		return false, err
@@ -468,16 +464,4 @@ func fillDefaults(
 
 func (n *insertNode) Values() parser.Datums {
 	return n.run.resultRow
-}
-
-func (n *insertNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.run.explain = mode
-	n.run.rows.MarkDebug(mode)
-}
-
-func (n *insertNode) DebugValues() debugValues {
-	return n.run.rows.DebugValues()
 }

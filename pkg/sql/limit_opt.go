@@ -142,11 +142,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 		}
 	case *createViewNode:
 		setUnlimited(n.sourcePlan)
-	case *explainDebugNode:
-		setUnlimited(n.plan)
 	case *explainDistSQLNode:
-		setUnlimited(n.plan)
-	case *explainTraceNode:
 		setUnlimited(n.plan)
 	case *explainPlanNode:
 		if n.expanded {

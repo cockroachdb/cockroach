@@ -87,14 +87,6 @@ var _ planMaker = &planner{}
 // - planColumns()                 (plan_columns.go)
 //
 type planNode interface {
-	// MarkDebug puts the node in a special debugging mode, which allows
-	// DebugValues to be used. This should be called after Start() and
-	// before the first call to Next() since it may need to recurse into
-	// sub-nodes created by Start().
-	//
-	// Available after optimizePlan().
-	MarkDebug(mode explainMode)
-
 	// Start begins the processing of the query/statement and starts
 	// performing side effects for data-modifying statements. Returns an
 	// error if initial processing fails.
@@ -119,16 +111,6 @@ type planNode interface {
 	//
 	// Available after Next().
 	Values() parser.Datums
-
-	// DebugValues returns a set of debug values, valid until the next call to
-	// Next(). This is only available for nodes that have been put in a special
-	// "explainDebug" mode (using MarkDebug). When the output field in the
-	// result is debugValueRow, a set of values is also available through
-	// Values().
-	//
-	// Available after Next() and MarkDebug(explainDebug), see
-	// explain.go.
-	DebugValues() debugValues
 
 	// Close terminates the planNode execution and releases its resources.
 	// This method should be called if the node has been used in any way (any
@@ -160,10 +142,8 @@ var _ planNode = &dropIndexNode{}
 var _ planNode = &dropTableNode{}
 var _ planNode = &dropViewNode{}
 var _ planNode = &emptyNode{}
-var _ planNode = &explainDebugNode{}
 var _ planNode = &explainDistSQLNode{}
 var _ planNode = &explainPlanNode{}
-var _ planNode = &explainTraceNode{}
 var _ planNode = &filterNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &hookFnNode{}

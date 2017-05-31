@@ -68,8 +68,7 @@ type hookFnNode struct {
 	resIdx int
 }
 
-func (*hookFnNode) MarkDebug(_ explainMode) {}
-func (*hookFnNode) Close(context.Context)   {}
+func (*hookFnNode) Close(context.Context) {}
 
 func (f *hookFnNode) Start(context.Context) error {
 	var err error
@@ -86,12 +85,3 @@ func (f *hookFnNode) Next(context.Context) (bool, error) {
 	return f.resIdx < len(f.res), nil
 }
 func (f *hookFnNode) Values() parser.Datums { return f.res[f.resIdx] }
-
-func (*hookFnNode) DebugValues() debugValues {
-	return debugValues{
-		rowIdx: 0,
-		key:    "",
-		value:  parser.DNull.String(),
-		output: debugValueRow,
-	}
-}

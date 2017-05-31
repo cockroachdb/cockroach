@@ -71,25 +71,11 @@ func doExpandPlan(
 	case *createViewNode:
 		n.sourcePlan, err = doExpandPlan(ctx, p, noParams, n.sourcePlan)
 
-	case *explainDebugNode:
-		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
-		if err != nil {
-			return plan, err
-		}
-		n.plan.MarkDebug(explainDebug)
-
 	case *explainDistSQLNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 		if err != nil {
 			return plan, err
 		}
-
-	case *explainTraceNode:
-		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
-		if err != nil {
-			return plan, err
-		}
-		n.plan.MarkDebug(explainDebug)
 
 	case *explainPlanNode:
 		if n.expanded {
@@ -422,13 +408,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 	case *createViewNode:
 		n.sourcePlan = simplifyOrderings(n.sourcePlan, nil)
 
-	case *explainDebugNode:
-		n.plan = simplifyOrderings(n.plan, nil)
-
 	case *explainDistSQLNode:
-		n.plan = simplifyOrderings(n.plan, nil)
-
-	case *explainTraceNode:
 		n.plan = simplifyOrderings(n.plan, nil)
 
 	case *explainPlanNode:

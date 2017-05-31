@@ -501,24 +501,3 @@ func EnsureContext(
 	}
 	return ctx, func() {}
 }
-
-// StartSnowballTrace takes in a context and returns a derived one with a
-// "snowball span" in it. The caller takes ownership of this span from the
-// returned context and is in charge of Finish()ing it. The span has recording
-// enabled.
-//
-// TODO(andrei): remove this method once EXPLAIN(TRACE) is gone.
-func StartSnowballTrace(
-	ctx context.Context, tracer opentracing.Tracer, opName string,
-) (context.Context, opentracing.Span, error) {
-	var span opentracing.Span
-	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
-		span = parentSpan.Tracer().StartSpan(
-			opName, opentracing.ChildOf(parentSpan.Context()), Recordable,
-		)
-	} else {
-		span = tracer.StartSpan(opName, Recordable)
-	}
-	StartRecording(span, SnowballRecording)
-	return opentracing.ContextWithSpan(ctx, span), span, nil
-}

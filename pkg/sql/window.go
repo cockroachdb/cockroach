@@ -453,33 +453,10 @@ type windowNode struct {
 	aggContainer windowNodeAggContainer
 
 	windowsAcc WrappableMemoryAccount
-
-	explain explainMode
 }
 
 func (n *windowNode) Values() parser.Datums {
 	return n.values.Values()
-}
-
-func (n *windowNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-	n.plan.MarkDebug(mode)
-}
-
-func (n *windowNode) DebugValues() debugValues {
-	if n.populated {
-		return n.values.DebugValues()
-	}
-
-	// We are emitting a "buffered" row.
-	vals := n.plan.DebugValues()
-	if vals.output == debugValueRow {
-		vals.output = debugValueBuffered
-	}
-	return vals
 }
 
 func (n *windowNode) Start(ctx context.Context) error { return n.plan.Start(ctx) }
@@ -500,19 +477,10 @@ func (n *windowNode) Next(ctx context.Context) (bool, error) {
 			}
 			break
 		}
-		if n.explain == explainDebug && n.plan.DebugValues().output != debugValueRow {
-			// Pass through non-row debug values.
-			return true, nil
-		}
 
 		values := n.plan.Values()
 		if _, err := n.wrappedRenderVals.AddRow(ctx, values); err != nil {
 			return false, err
-		}
-
-		if n.explain == explainDebug {
-			// Emit a "buffered" row.
-			return true, nil
 		}
 	}
 

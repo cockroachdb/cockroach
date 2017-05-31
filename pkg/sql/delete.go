@@ -17,8 +17,6 @@
 package sql
 
 import (
-	"fmt"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -108,23 +106,18 @@ func (d *deleteNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	if d.run.explain != explainDebug {
-		// Check if we can avoid doing a round-trip to read the values and just
-		// "fast-path" skip to deleting the key ranges without reading them first.
-		// TODO(dt): We could probably be smarter when presented with an index-join,
-		// but this goes away anyway once we push-down more of SQL.
-		//
-		// (When explain == explainDebug, we use the slow path so that
-		// each debugVal gets a chance to be reported via Next().)
-		maybeScan := d.run.rows
-		if sel, ok := maybeScan.(*renderNode); ok {
-			maybeScan = sel.source.plan
-		}
-		if scan, ok := maybeScan.(*scanNode); ok && canDeleteWithoutScan(ctx, d.n, scan, &d.tw) {
-			d.run.fastPath = true
-			err := d.fastDelete(ctx, scan)
-			return err
-		}
+	// Check if we can avoid doing a round-trip to read the values and just
+	// "fast-path" skip to deleting the key ranges without reading them first.
+	// TODO(dt): We could probably be smarter when presented with an index-join,
+	// but this goes away anyway once we push-down more of SQL.
+	maybeScan := d.run.rows
+	if sel, ok := maybeScan.(*renderNode); ok {
+		maybeScan = sel.source.plan
+	}
+	if scan, ok := maybeScan.(*scanNode); ok && canDeleteWithoutScan(ctx, d.n, scan, &d.tw) {
+		d.run.fastPath = true
+		err := d.fastDelete(ctx, scan)
+		return err
 	}
 
 	return d.run.tw.init(d.p.txn)
@@ -149,10 +142,6 @@ func (d *deleteNode) Next(ctx context.Context) (bool, error) {
 			err = d.tw.finalize(ctx)
 		}
 		return false, err
-	}
-
-	if d.run.explain == explainDebug {
-		return true, nil
 	}
 
 	rowVals := d.run.rows.Values()
@@ -216,16 +205,4 @@ func (d *deleteNode) fastDelete(ctx context.Context, scan *scanNode) error {
 
 func (d *deleteNode) Values() parser.Datums {
 	return d.run.resultRow
-}
-
-func (d *deleteNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	d.run.explain = mode
-	d.run.rows.MarkDebug(mode)
-}
-
-func (d *deleteNode) DebugValues() debugValues {
-	return d.run.rows.DebugValues()
 }
