@@ -247,6 +247,6 @@ func (n *explainTraceNode) Values() parser.Datums {
 }
 
 func (*explainTraceNode) Columns() sqlbase.ResultColumns { return traceColumnsWithTS }
-func (*explainTraceNode) Ordering() orderingInfo         { return orderingInfo{} }
-func (*explainTraceNode) MarkDebug(_ explainMode)        {}
-func (*explainTraceNode) DebugValues() debugValues       { return debugValues{} }
+
+func (*explainTraceNode) MarkDebug(_ explainMode)  {}
+func (*explainTraceNode) DebugValues() debugValues { return debugValues{} }

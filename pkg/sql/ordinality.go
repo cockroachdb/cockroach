@@ -52,7 +52,7 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 
 	res := &ordinalityNode{
 		source:   src,
-		ordering: src.Ordering(),
+		ordering: planOrdering(src),
 		row:      make(parser.Datums, len(srcColumns)+1),
 		curCnt:   1,
 	}
@@ -97,7 +97,6 @@ func (o *ordinalityNode) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (o *ordinalityNode) Ordering() orderingInfo          { return o.ordering }
 func (o *ordinalityNode) Values() parser.Datums           { return o.row }
 func (o *ordinalityNode) DebugValues() debugValues        { return o.source.DebugValues() }
 func (o *ordinalityNode) MarkDebug(mode explainMode)      { o.source.MarkDebug(mode) }

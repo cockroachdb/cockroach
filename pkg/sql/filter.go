@@ -111,4 +111,3 @@ func (f *filterNode) Close(ctx context.Context) {
 }
 func (f *filterNode) Values() parser.Datums          { return f.source.plan.Values() }
 func (f *filterNode) Columns() sqlbase.ResultColumns { return f.source.plan.Columns() }
-func (f *filterNode) Ordering() orderingInfo         { return f.source.plan.Ordering() }

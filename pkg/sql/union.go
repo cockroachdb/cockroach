@@ -141,7 +141,6 @@ type unionNode struct {
 }
 
 func (n *unionNode) Columns() sqlbase.ResultColumns { return n.left.Columns() }
-func (n *unionNode) Ordering() orderingInfo         { return orderingInfo{} }
 
 func (n *unionNode) Values() parser.Datums {
 	switch {

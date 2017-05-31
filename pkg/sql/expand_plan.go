@@ -152,7 +152,7 @@ func doExpandPlan(
 		// We are going to "optimize" the ordering. We had an ordering
 		// initially from the source, but expand() may have caused it to
 		// change. So here retrieve the ordering of the source again.
-		origOrdering := n.source.Ordering()
+		origOrdering := planOrdering(n.source)
 
 		if len(origOrdering.ordering) > 0 {
 			// TODO(knz/radu): we basically have two simultaneous orderings.
@@ -191,7 +191,7 @@ func doExpandPlan(
 		n.plan, err = doExpandPlan(ctx, p, params, n.plan)
 
 		if len(n.desiredOrdering) > 0 {
-			match := n.plan.Ordering().computeMatch(n.desiredOrdering)
+			match := planOrdering(n.plan).computeMatch(n.desiredOrdering)
 			if match == len(n.desiredOrdering) {
 				// We have a single MIN/MAX function and the underlying plan's
 				// ordering matches the function. We only need to retrieve one row.
@@ -214,7 +214,7 @@ func doExpandPlan(
 
 		// Check to see if the requested ordering is compatible with the existing
 		// ordering.
-		match := n.plan.Ordering().computeMatch(n.ordering)
+		match := planOrdering(n.plan).computeMatch(n.ordering)
 		n.needSort = (match < len(n.ordering))
 
 	case *distinctNode:
@@ -225,7 +225,7 @@ func doExpandPlan(
 			return plan, err
 		}
 
-		ordering := n.plan.Ordering()
+		ordering := planOrdering(n.plan)
 		if !ordering.isEmpty() {
 			n.columnsInOrder = make([]bool, len(n.plan.Columns()))
 			for colIdx := range ordering.exactMatchCols {
@@ -348,7 +348,7 @@ func expandRenderNode(
 		}
 	}
 
-	r.computeOrdering(r.source.plan.Ordering())
+	r.computeOrdering(planOrdering(r.source.plan))
 	return r, nil
 }
 
@@ -481,7 +481,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 			// the sort (and save memory), at least for DistSQL.
 			n.plan = simplifyOrderings(n.plan, n.ordering)
 		} else {
-			exactMatchCols := n.plan.Ordering().exactMatchCols
+			exactMatchCols := planOrdering(n.plan).exactMatchCols
 			// Normally we would pass n.ordering; but n.ordering could be a prefix of
 			// the useful ordering. Check for this, ignoring any exact match columns.
 			sortOrder := make(sqlbase.ColumnOrdering, 0, len(n.ordering))
@@ -517,7 +517,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 	case *distinctNode:
 		// distinctNode uses whatever order the underlying node presents (regardless
 		// of any ordering requirement on distinctNode itself).
-		n.plan = simplifyOrderings(n.plan, n.plan.Ordering().ordering)
+		n.plan = simplifyOrderings(n.plan, planOrdering(n.plan).ordering)
 
 	case *scanNode:
 		n.ordering.trim(usefulOrdering)
@@ -528,7 +528,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		// TODO(radu): in some cases there may be multiple possible n.orderings for
 		// a given source plan ordering; we should pass usefulOrdering to help make
 		// that choice (#13709).
-		n.computeOrdering(n.source.plan.Ordering())
+		n.computeOrdering(planOrdering(n.source.plan))
 
 	case *delayedNode:
 		n.plan = simplifyOrderings(n.plan, usefulOrdering)

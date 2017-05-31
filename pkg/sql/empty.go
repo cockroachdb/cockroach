@@ -33,11 +33,11 @@ type emptyNode struct {
 }
 
 func (*emptyNode) Columns() sqlbase.ResultColumns { return nil }
-func (*emptyNode) Ordering() orderingInfo         { return orderingInfo{} }
-func (*emptyNode) Values() parser.Datums          { return nil }
-func (*emptyNode) Start(context.Context) error    { return nil }
-func (*emptyNode) MarkDebug(_ explainMode)        {}
-func (*emptyNode) Close(context.Context)          {}
+
+func (*emptyNode) Values() parser.Datums       { return nil }
+func (*emptyNode) Start(context.Context) error { return nil }
+func (*emptyNode) MarkDebug(_ explainMode)     {}
+func (*emptyNode) Close(context.Context)       {}
 
 func (e *emptyNode) DebugValues() debugValues {
 	return debugValues{
