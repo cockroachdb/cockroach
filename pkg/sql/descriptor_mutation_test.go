@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -98,12 +99,17 @@ func (mt mutationTest) makeMutationsActive() {
 // writeColumnMutation adds column as a mutation and writes the
 // descriptor to the DB.
 func (mt mutationTest) writeColumnMutation(column string, m sqlbase.DescriptorMutation) {
-	_, i, err := mt.tableDesc.FindColumnByNormalizedName(column)
+	name := parser.Name(column)
+	col, _, err := mt.tableDesc.FindColumnByName(name)
 	if err != nil {
 		mt.Fatal(err)
 	}
-	col := mt.tableDesc.Columns[i]
-	mt.tableDesc.Columns = append(mt.tableDesc.Columns[:i], mt.tableDesc.Columns[i+1:]...)
+	for i := range mt.tableDesc.Columns {
+		if col.ID == mt.tableDesc.Columns[i].ID {
+			mt.tableDesc.Columns = append(mt.tableDesc.Columns[:i], mt.tableDesc.Columns[i+1:]...)
+			break
+		}
+	}
 	m.Descriptor_ = &sqlbase.DescriptorMutation_Column{Column: &col}
 	mt.writeMutation(m)
 }
@@ -347,12 +353,18 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 // descriptor to the DB.
 func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMutation) {
 	tableDesc := mt.tableDesc
-	_, i, err := tableDesc.FindIndexByNormalizedName(index)
+	name := parser.Name(index)
+	idx, _, err := tableDesc.FindIndexByName(name)
 	if err != nil {
 		mt.Fatal(err)
 	}
-	idx := tableDesc.Indexes[i]
-	tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+	for i := range tableDesc.Indexes {
+		if idx.ID == tableDesc.Indexes[i].ID {
+			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+			break
+		}
+	}
+
 	m.Descriptor_ = &sqlbase.DescriptorMutation_Index{Index: &idx}
 	mt.writeMutation(m)
 }
@@ -865,8 +877,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 
 	// Try to change column defaults while column is under mutation.
 	mt.writeColumnMutation("e", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN e SET DEFAULT 'a'`); !testutils.IsError(
-		err, `column "e" in the middle of being added`) {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN e SET DEFAULT 'a'`); err != nil {
 		t.Fatal(err)
 	}
 	mt.makeMutationsActive()

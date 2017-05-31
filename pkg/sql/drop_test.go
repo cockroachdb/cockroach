@@ -261,14 +261,11 @@ func TestDropIndex(t *testing.T) {
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 
-	status, i, err := tableDesc.FindIndexByName("foo")
+	idx, _, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != sqlbase.DescriptorActive {
-		t.Fatal("Index 'foo' is not active.")
-	}
-	indexSpan := tableDesc.IndexSpan(tableDesc.Indexes[i].ID)
+	indexSpan := tableDesc.IndexSpan(idx.ID)
 
 	checkKeyCount(t, kvDB, indexSpan, numRows)
 	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
