@@ -1,5 +1,5 @@
-hash: 1761d84fe439a296fab45493e0a64156f42349b8c4e0e9ba7c42d1854cac2e77
-updated: 2017-05-17T10:42:39.575779187-04:00
+hash: ed9efa1aeca5f09ddb183db3d56487d3d2ddd08b697ff8b6acfa0ae74830dbde
+updated: 2017-05-17T22:17:36.659304758-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -13,7 +13,7 @@ imports:
 - name: github.com/abourget/teamcity
   version: e241104394f91bf4e65048f9ea5d0c0f3c25b35e
 - name: github.com/aws/aws-sdk-go
-  version: fed27f4bd16c8c63d01003b978e5bc85fe727519
+  version: 0032dd29f2a063a66a9f4b44bf6664da3a5b71cc
   subpackages:
   - aws
   - aws/awserr
@@ -67,7 +67,7 @@ imports:
 - name: github.com/chzyer/readline
   version: 41eea22f717c616615e1e59aa06cf831f9901f35
 - name: github.com/client9/misspell
-  version: d06ddd376b273047dca6e16eeeb2a2a8f9791978
+  version: b5fc83876cd1bf9fbb4e39afa9e503c83edce3b5
   subpackages:
   - cmd/misspell
 - name: github.com/cockroachdb/apd
@@ -100,7 +100,7 @@ imports:
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/docker/distribution
-  version: 83f857ca120ce2b7d6dd61e788f8ed35db81180c
+  version: a528cc1fc338bd00036dbf1315a74c2ee458b094
   subpackages:
   - digestset
   - reference
@@ -246,6 +246,10 @@ imports:
   - runtime/internal
   - third_party/googleapis/google/api
   - utilities
+- name: github.com/grpc-ecosystem/grpc-opentracing
+  version: 6c130eed1e297e1aa4d415a50c90d0c81c52677e
+  subpackages:
+  - go/otgrpc
 - name: github.com/hashicorp/go-version
   version: 03c5bf6be031b6dd45afec16b1cf94fc8938bc77
 - name: github.com/ianlancetaylor/cgosymbolizer
@@ -277,10 +281,12 @@ imports:
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
-  version: 45076de666938f451972e097cc450db32882dfec
+  version: d9d2a958da1b2b4dd282e7685261942e20abd49c
   subpackages:
+  - basictracer
   - collectorpb
   - lightstep_thrift
+  - lightsteppb
   - thrift_0_9_2/lib/go/thrift
   - thrift_rpc
 - name: github.com/Masterminds/glide
@@ -414,7 +420,7 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: ad516a297a9f2a74ecc244861b298c94bdd28b9d
+  version: f047394b6d14284165300fd82dad67edb3a4d7f6
   subpackages:
   - google
   - internal
@@ -428,7 +434,7 @@ imports:
   - internal/stats
   - storage/benchfmt
 - name: golang.org/x/sync
-  version: 57af736625aaa69dfa099432bb67e0808eef3bcc
+  version: f52d1811a62927559de87708c8913c1650ce4f26
   subpackages:
   - errgroup
   - singleflight
@@ -504,7 +510,7 @@ imports:
   - socket
   - urlfetch
 - name: google.golang.org/genproto
-  version: 411e09b969b1170a9f0c467558eb4c4c110d9c77
+  version: bb3573be0c484136831138976d444b8754777aff
   subpackages:
   - googleapis/api/annotations
   - googleapis/iam/v1

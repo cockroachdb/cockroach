@@ -152,9 +152,6 @@ func (dsp *distSQLPlanner) Run(
 			Flow:        flowSpec,
 			EvalContext: evalCtxProto,
 		}
-		if err := distsqlrun.SetFlowRequestTrace(ctx, req); err != nil {
-			return err
-		}
 		runReq := runnerRequest{
 			ctx:         ctx,
 			rpcContext:  dsp.rpcContext,
@@ -193,9 +190,6 @@ func (dsp *distSQLPlanner) Run(
 		Txn:         *txn.Proto(),
 		Flow:        flows[thisNodeID],
 		EvalContext: evalCtxProto,
-	}
-	if err := distsqlrun.SetFlowRequestTrace(ctx, &localReq); err != nil {
-		return err
 	}
 	ctx, flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, &localReq, recv)
 	if err != nil {

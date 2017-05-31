@@ -22,7 +22,6 @@ import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/roachpb/errors.proto";
 import "cockroach/pkg/roachpb/metadata.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
-import "cockroach/pkg/util/tracing/span_context_carrier.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -961,6 +960,7 @@ message ResponseUnion {
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
 // information required for executing it.
 message Header {
+  reserved 7;
   // timestamp specifies time at which read or writes should be
   // performed. If the timestamp is set to zero value, its value
   // is initialized to the wall time of the receiving node.
@@ -993,8 +993,6 @@ message Header {
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
   optional ReadConsistencyType read_consistency = 6 [(gogoproto.nullable) = false];
-  // If set, the context of an active tracing span.
-  optional util.tracing.SpanContextCarrier trace_context = 7;
   // If set to a non-zero value, it limits the total number of keys touched
   // by span requests in the batch. Span requests are requests like
   // Scan, ReverseScan, and DelRange. If two requests touch the

@@ -7,11 +7,6 @@ import:
 # https://github.com/docker/docker/issues/29362
 - package: github.com/docker/docker
   version: 7248742ae7127347a52ab9d215451c213b7b59da
-# https://github.com/lightstep/lightstep-tracer-go/pull/73 removed support for
-# basictracer.Delegator. Revisit when
-# https://github.com/cockroachdb/cockroach/issues/9806 is fixed.
-- package: github.com/lightstep/lightstep-tracer-go
-  version: 45076de666938f451972e097cc450db32882dfec
 # We pin glide itself to prevent changes to glide's dependency resolution
 # algorithm from modifying our dependencies unexpectedly.
 - package: github.com/Masterminds/glide
