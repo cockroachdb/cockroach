@@ -909,6 +909,9 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								// deletion which would remove this schemaChanger.
 								delete(s.schemaChangers, tableID)
 							}
+						} else {
+							// We successfully executed the schema change. Delete it.
+							delete(s.schemaChangers, tableID)
 						}
 						// Advance the execAfter time so that this schema
 						// changer doesn't get called again for a while.
