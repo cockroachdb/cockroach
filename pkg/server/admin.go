@@ -955,14 +955,14 @@ func (s *adminServer) Settings(
 
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
 	for _, k := range keys {
-		v, desc, ok := settings.Lookup(k)
+		v, ok := settings.Lookup(k)
 		if !ok {
 			continue
 		}
 		resp.KeyValues[k] = serverpb.SettingsResponse_Value{
 			Type:        v.Typ(),
 			Value:       v.String(),
-			Description: desc,
+			Description: v.Description(),
 		}
 	}
 
