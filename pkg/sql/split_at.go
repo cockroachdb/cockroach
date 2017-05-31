@@ -160,9 +160,6 @@ func (*splitNode) Columns() sqlbase.ResultColumns {
 func (*splitNode) Ordering() orderingInfo   { return orderingInfo{} }
 func (*splitNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
 func (*splitNode) DebugValues() debugValues { panic("unimplemented") }
-func (*splitNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 // Relocate moves ranges to specific stores
 // (`ALTER TABLE/INDEX ... TESTING_RELOCATE ...` statement)
@@ -350,9 +347,6 @@ func (*relocateNode) Columns() sqlbase.ResultColumns {
 func (*relocateNode) Ordering() orderingInfo   { return orderingInfo{} }
 func (*relocateNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
 func (*relocateNode) DebugValues() debugValues { panic("unimplemented") }
-func (*relocateNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 // Scatter moves ranges to random stores
 // (`ALTER TABLE/INDEX ... SCATTER ...` statement)
@@ -501,6 +495,3 @@ func (*scatterNode) Close(ctx context.Context) {}
 func (*scatterNode) Ordering() orderingInfo    { return orderingInfo{} }
 func (*scatterNode) MarkDebug(_ explainMode)   { panic("unimplemented") }
 func (*scatterNode) DebugValues() debugValues  { panic("unimplemented") }
-func (*scatterNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
