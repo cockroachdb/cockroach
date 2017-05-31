@@ -67,37 +67,44 @@ var debugRemote = settings.RegisterValidatedStringSetting(
 // of go-metrics) to serve endpoints which access exported variables and pprof tools.
 func handleDebug(w http.ResponseWriter, r *http.Request) {
 	handler, _ := debugServeMux.Handler(r)
-	handler.ServeHTTP(w, r)
-}
-
-func init() {
-	// Tweak the authentication logic for the tracing endpoint. By default it's
-	// open for localhost only, but with Docker we want to get there from
-	// anywhere. We maintain the default behavior of only allowing access to
-	// sensitive logs from localhost.
-	//
-	// TODO(mberhault): properly secure this once we require client certs.
-	origAuthRequest := trace.AuthRequest
-	trace.AuthRequest = func(req *http.Request) (bool, bool) {
-		allow, sensitive := origAuthRequest(req)
-		switch strings.ToLower(debugRemote.Get()) {
-		case debugRemoteAny:
-			allow = true
-		case debugRemoteLocal:
-			break
-		default:
-			allow = false
-		}
-		return allow, sensitive
-	}
-
-	debugServeMux.HandleFunc(debugEndpoint, func(w http.ResponseWriter, r *http.Request) {
-		if any, _ := trace.AuthRequest(r); !any {
+	http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if any, _ := authRequest(r); !any {
 			http.Error(w, "not allowed (due to the 'server.remote_debugging.mode' setting)",
 				http.StatusForbidden)
 			return
 		}
+		handler.ServeHTTP(w, r)
+	}).ServeHTTP(w, r)
+}
 
+// traceAuthRequest is the original trace.AuthRequest, populated in init().
+var traceAuthRequest func(*http.Request) (bool, bool)
+
+// authRequest restricts access to /debug/*.
+func authRequest(r *http.Request) (allow, sensitive bool) {
+	allow, sensitive = traceAuthRequest(r)
+	switch strings.ToLower(debugRemote.Get()) {
+	case debugRemoteAny:
+		allow = true
+	case debugRemoteLocal:
+		break
+	default:
+		allow = false
+	}
+	return allow, sensitive
+}
+
+func init() {
+	traceAuthRequest = trace.AuthRequest
+
+	// Tweak the authentication logic for the tracing endpoint. By default it's
+	// open for localhost only, but we want it to behave according to our
+	// settings.
+	//
+	// TODO(mberhault): properly secure this once we require client certs.
+	trace.AuthRequest = authRequest
+
+	debugServeMux.HandleFunc(debugEndpoint, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != debugEndpoint {
 			http.Redirect(w, r, debugEndpoint, http.StatusMovedPermanently)
 			return
