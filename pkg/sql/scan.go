@@ -434,10 +434,6 @@ func (n *scanNode) computeOrdering(
 	return ordering
 }
 
-func (n *scanNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	return n.spans, nil, nil
-}
-
 // scanNode implements parser.IndexedVarContainer.
 var _ parser.IndexedVarContainer = &scanNode{}
 

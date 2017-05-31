@@ -22,7 +22,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -152,10 +151,6 @@ func (n *limitNode) evalLimit() error {
 func (n *limitNode) Columns() sqlbase.ResultColumns { return n.plan.Columns() }
 func (n *limitNode) Values() parser.Datums          { return n.plan.Values() }
 func (n *limitNode) Ordering() orderingInfo         { return n.plan.Ordering() }
-
-func (n *limitNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return n.plan.Spans(ctx)
-}
 
 func (n *limitNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
