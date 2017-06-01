@@ -460,10 +460,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 			serverStatusMu.Unlock()
 			if needToDrain {
 				if _, err := s.Drain(server.GracefulDrainModes); err != nil {
-					log.Warning(shutdownCtx, err)
+					// Don't use shutdownCtx because this is in a goroutine that may
+					// still be running after shutdownCtx's span has been finished.
+					log.Warning(context.Background(), err)
 				}
 			}
-			stopper.Stop(shutdownCtx)
+			stopper.Stop(context.Background())
 		}()
 	}
 
@@ -477,7 +479,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		for {
 			select {
 			case <-ticker.C:
-				log.Infof(shutdownCtx, "%d running tasks", stopper.NumTasks())
+				log.Infof(context.Background(), "%d running tasks", stopper.NumTasks())
 			case <-stopper.ShouldStop():
 				return
 			}
