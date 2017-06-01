@@ -474,7 +474,7 @@ func (r *Replica) withRaftGroupLocked(
 
 	if r.mu.internalRaftGroup == nil {
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
-			raft.Storage(r),
+			raft.Storage((*replicaRaftStorage)(r)),
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
 			r.store.cfg,

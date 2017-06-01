@@ -5164,7 +5164,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// We can still get what remains of the log.
 	tc.repl.mu.Lock()
-	entries, err := tc.repl.Entries(indexes[5], indexes[9], math.MaxUint64)
+	entries, err := tc.repl.raftEntriesLocked(indexes[5], indexes[9], math.MaxUint64)
 	tc.repl.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -5175,7 +5175,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// But any range that includes the truncated entries returns an error.
 	tc.repl.mu.Lock()
-	_, err = tc.repl.Entries(indexes[4], indexes[9], math.MaxUint64)
+	_, err = tc.repl.raftEntriesLocked(indexes[4], indexes[9], math.MaxUint64)
 	tc.repl.mu.Unlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
@@ -5183,7 +5183,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// The term of the last truncated entry is still available.
 	tc.repl.mu.Lock()
-	term, err := tc.repl.Term(indexes[4])
+	term, err := tc.repl.raftTermLocked(indexes[4])
 	tc.repl.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -5194,7 +5194,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// The terms of older entries are gone.
 	tc.repl.mu.Lock()
-	_, err = tc.repl.Term(indexes[3])
+	_, err = tc.repl.raftTermLocked(indexes[3])
 	tc.repl.mu.Unlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
@@ -5216,7 +5216,7 @@ func TestTruncateLog(t *testing.T) {
 
 	tc.repl.mu.Lock()
 	// The term of the last truncated entry is still available.
-	term, err = tc.repl.Term(indexes[4])
+	term, err = tc.repl.raftTermLocked(indexes[4])
 	tc.repl.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -6050,7 +6050,7 @@ func TestEntries(t *testing.T) {
 			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
 		}
 		repl.mu.Lock()
-		ents, err := repl.Entries(tc.lo, tc.hi, tc.maxBytes)
+		ents, err := repl.raftEntriesLocked(tc.lo, tc.hi, tc.maxBytes)
 		repl.mu.Unlock()
 		if tc.expError == nil && err != nil {
 			t.Errorf("%d: expected no error, got %s", i, err)
@@ -6066,7 +6066,7 @@ func TestEntries(t *testing.T) {
 
 	// Case 23: Lo must be less than or equal to hi.
 	repl.mu.Lock()
-	if _, err := repl.Entries(indexes[9], indexes[5], 0); err == nil {
+	if _, err := repl.raftEntriesLocked(indexes[9], indexes[5], 0); err == nil {
 		t.Errorf("23: error expected, got none")
 	}
 	repl.mu.Unlock()
@@ -6079,12 +6079,12 @@ func TestEntries(t *testing.T) {
 
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
-	if _, err := repl.Entries(indexes[5], indexes[9], 0); err == nil {
+	if _, err := repl.raftEntriesLocked(indexes[5], indexes[9], 0); err == nil {
 		t.Errorf("24: error expected, got none")
 	}
 
 	// Case 25: don't hit the gap due to maxBytes.
-	ents, err := repl.Entries(indexes[5], indexes[9], 1)
+	ents, err := repl.raftEntriesLocked(indexes[5], indexes[9], 1)
 	if err != nil {
 		t.Errorf("25: expected no error, got %s", err)
 	}
@@ -6093,7 +6093,7 @@ func TestEntries(t *testing.T) {
 	}
 
 	// Case 26: don't hit the gap due to truncation.
-	if _, err := repl.Entries(indexes[4], indexes[9], 0); err != raft.ErrCompacted {
+	if _, err := repl.raftEntriesLocked(indexes[4], indexes[9], 0); err != raft.ErrCompacted {
 		t.Errorf("26: expected error %s , got %s", raft.ErrCompacted, err)
 	}
 }
@@ -6133,7 +6133,7 @@ func TestTerm(t *testing.T) {
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
 
-	firstIndex, err := repl.FirstIndex()
+	firstIndex, err := repl.raftFirstIndexLocked()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -6142,20 +6142,20 @@ func TestTerm(t *testing.T) {
 	}
 
 	// Truncated logs should return an ErrCompacted error.
-	if _, err := tc.repl.Term(indexes[1]); err != raft.ErrCompacted {
+	if _, err := tc.repl.raftTermLocked(indexes[1]); err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
-	if _, err := tc.repl.Term(indexes[3]); err != raft.ErrCompacted {
+	if _, err := tc.repl.raftTermLocked(indexes[3]); err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 
 	// FirstIndex-1 should return the term of firstIndex.
-	firstIndexTerm, err := tc.repl.Term(firstIndex)
+	firstIndexTerm, err := tc.repl.raftTermLocked(firstIndex)
 	if err != nil {
 		t.Errorf("expect no error, got %s", err)
 	}
 
-	term, err := tc.repl.Term(indexes[4])
+	term, err := tc.repl.raftTermLocked(indexes[4])
 	if err != nil {
 		t.Errorf("expect no error, got %s", err)
 	}
@@ -6163,21 +6163,21 @@ func TestTerm(t *testing.T) {
 		t.Errorf("expected firstIndex-1's term:%d to equal that of firstIndex:%d", term, firstIndexTerm)
 	}
 
-	lastIndex, err := repl.LastIndex()
+	lastIndex, err := repl.raftLastIndexLocked()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Last index should return correctly.
-	if _, err := tc.repl.Term(lastIndex); err != nil {
+	if _, err := tc.repl.raftTermLocked(lastIndex); err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
 
 	// Terms for after the last index should return ErrUnavailable.
-	if _, err := tc.repl.Term(lastIndex + 1); err != raft.ErrUnavailable {
+	if _, err := tc.repl.raftTermLocked(lastIndex + 1); err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
-	if _, err := tc.repl.Term(indexes[9] + 1000); err != raft.ErrUnavailable {
+	if _, err := tc.repl.raftTermLocked(indexes[9] + 1000); err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
 }
@@ -6567,7 +6567,7 @@ func TestSyncSnapshot(t *testing.T) {
 	// With enough time in BlockingSnapshotDuration, we succeed on the
 	// first try.
 	tc.repl.mu.Lock()
-	snap, err := tc.repl.Snapshot()
+	snap, err := tc.repl.raftSnapshotLocked()
 	tc.repl.mu.Unlock()
 
 	if err != nil {

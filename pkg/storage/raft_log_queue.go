@@ -120,7 +120,7 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, int
 	if targetSize > raftLogMaxSize {
 		targetSize = raftLogMaxSize
 	}
-	firstIndex, err := r.FirstIndex()
+	firstIndex, err := r.raftFirstIndexLocked()
 	pendingSnapshotIndex := r.mu.pendingSnapshotIndex
 	lastIndex := r.mu.lastIndex
 	r.mu.Unlock()

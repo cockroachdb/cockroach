@@ -3068,7 +3068,7 @@ func (s *Store) processRaftRequest(
 		}
 		raftGroup, err := raft.NewRawNode(
 			newRaftConfig(
-				raft.Storage(r),
+				raft.Storage((*replicaRaftStorage)(r)),
 				preemptiveSnapshotRaftGroupID,
 				// We pass the "real" applied index here due to subtleties
 				// arising in the case in which Raft discards the snapshot:
