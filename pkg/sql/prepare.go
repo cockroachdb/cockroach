@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"unsafe"
 
 	"golang.org/x/net/context"
@@ -38,6 +39,40 @@ type PreparedStatement struct {
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
 
 	memAcc WrappableMemoryAccount
+}
+
+// Statement contains a statement with optional expected result columns.
+type Statement struct {
+	AST           parser.Statement
+	ExpectedTypes sqlbase.ResultColumns
+}
+
+func (s Statement) String() string {
+	return s.AST.String()
+}
+
+// StatementList is a list of statements.
+type StatementList []Statement
+
+// NewStatementList creates a StatementList from a parser.StatementList.
+func NewStatementList(stmts parser.StatementList) StatementList {
+	sl := make(StatementList, len(stmts))
+	for i, s := range stmts {
+		sl[i] = Statement{AST: s}
+	}
+	return sl
+}
+
+func (l StatementList) String() string { return parser.AsString(l) }
+
+// Format implements the NodeFormatter interface.
+func (l StatementList) Format(buf *bytes.Buffer, f parser.FmtFlags) {
+	for i, s := range l {
+		if i > 0 {
+			buf.WriteString("; ")
+		}
+		parser.FormatNode(buf, f, s.AST)
+	}
 }
 
 // PreparedStatements is a mapping of PreparedStatement names to their
@@ -80,7 +115,7 @@ func (ps PreparedStatements) NewFromString(
 	if err != nil {
 		return nil, err
 	}
-	return ps.New(e, name, stmts, len(query), placeholderHints)
+	return ps.New(e, name, NewStatementList(stmts), len(query), placeholderHints)
 }
 
 // New creates a new PreparedStatement with the provided name and corresponding
@@ -91,7 +126,7 @@ func (ps PreparedStatements) NewFromString(
 func (ps PreparedStatements) New(
 	e *Executor,
 	name string,
-	stmts parser.StatementList,
+	stmts StatementList,
 	queryLen int,
 	placeholderHints parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
