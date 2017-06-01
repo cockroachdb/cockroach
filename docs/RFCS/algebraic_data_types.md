@@ -1,21 +1,25 @@
-RFC: Go infrastructure for algebraic data types
-===============================================
+-   Feature Name: Go infrastructure for algebraic data types
+-   Status: draft
+-   Start Date: 2017-05-31
+-   Authors: David Eisenstat <eisen@cockroachlabs.com>, with much input
+    from Raphael Poss <knz@cockroachlabs.com> and Peter Mattis
+    <peter@cockroachlabs.com>. All errors and omissions are my own.
+-   RFC PR: [\#16240]
 
 Summary: this RFC explores the implementation of algebraic data types in
 Go. So far, we have a proposal for a low-level interface and some
 candidate implementations.
 
-Author: David Eisenstat <eisen@cockroachlabs.com>, with much input from
-Raphael Poss <knz@cockroachlabs.com> and Peter Mattis
-<peter@cockroachlabs.com>. All errors and omissions are my own.
+Note: this document is a literate Go program. To extract the Go samples
+from this document (for, e.g., comparing the assembly output):
 
-------------------------------------------------------------------------
+``` {.shell}
+sed -ne '/^```.*go/,/^```/{s/^```.*//
+p
+}' algebraic_data_types.md >algebraic_data_types.go
+```
 
-Context
--------
-
-Note: this document is a literate Go program. Here is the program
-header.
+Here is the program header.
 
 ``` {.go}
 package main
@@ -26,6 +30,9 @@ import (
     "unsafe"
 )
 ```
+
+Context
+-------
 
 The current pipeline for executing a SQL statement is:
 
@@ -86,11 +93,17 @@ for pattern matching. TODO(eisen): How?
 
 Functions that create new ADT references will need to take the allocator
 as an explicit argument. To partially address this need, we will add an
-allocator field to the existing context.
+allocator field to existing contexts as appropriate.
 
 ADT nodes will be serializable to and deserializable from protocol
 buffer messages. We will use `gogoproto` if we can, but it would not be
 hard to generate our own serialization and deserialization code.
+Abstract syntax tree (AST) nodes will be stored on disk, and we can
+write database migrations on the rare occasions that a
+backward-incompatible change is necessary. DistSQL will need to send
+intermediate representation (IR) nodes over the network, but we can use
+DistSQL version numbers to ensure interoperability. (AST nodes are a
+subset of all of the IR nodes, and this subset will be more stable.)
 
 Detailed interface design for the bottom layer
 ----------------------------------------------
@@ -98,10 +111,11 @@ Detailed interface design for the bottom layer
 The generated code defines a Go value type and reference type for each
 algebraic data type. These Go types define several methods: access,
 mutate, walk, serialize, and format. To allow safe aliasing, the
-reference type provides no mutators. Instead, there are methods to dump
-a reference to a value (`.V()`) and to allocate a new reference from a
-value (`.R()`). The value types have fluent update methods to allow
-mutation in an expression context.
+reference type provides no mutators (though there will be a hole for
+mutable types). Instead, there are methods to dump a reference to a
+value (`.V()`) and to allocate a new reference from a value (`.R()`).
+The value types have fluent update methods to allow mutation in an
+expression context.
 
 To prevent unexpected allocations, a linter detects Go code that takes
 the address of a value type.
@@ -241,15 +255,6 @@ For each design, we give a simplification of the Go type definition for
 `Pair`. We also give its `.R()` method, because that method may have
 unexpected compute overhead.
 
-To extract the Go samples from this document (for, e.g., comparing the
-assembly output):
-
-``` {.shell}
-sed -ne '/^```.*go/,/^```/{s/^```.*//
-p
-}' algebraic_data_types.md >algebraic_data_types.go
-```
-
 ### One Go type per ADT node type
 
 Pro: conventional. Con: allocation overhead – we must either allocate
@@ -278,7 +283,9 @@ func (x PairA) R(ref *PairA) *PairA {
 
 ### One common Go type for all ADT nodes with all possible attributes
 
-Pro: bulk allocations. Con: space overhead (!).
+Pro: bulk allocations. Con: space overhead (the current max size is
+close to 200, while the min is 40, and each arbitrary node will be
+larger than the current max).
 
 ``` {.go}
 type arb struct {
@@ -586,5 +593,6 @@ const (
 )
 ```
 
+  [\#16240]: https://github.com/cockroachdb/cockroach/pull/16240
   [separate RFC]: https://github.com/cockroachdb/cockroach/pull/10055
   [Clang]: https://clang.llvm.org/docs/LibASTMatchers.html
