@@ -20,8 +20,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"golang.org/x/net/context"
 
@@ -127,7 +129,7 @@ func checkRawSpans(t *testing.T, rawSpans []basictracer.RawSpan, expected string
 }
 
 func TestTracerRecording(t *testing.T) {
-	tr := newTracer(nil /* lightstep */)
+	tr := NewTracer()
 
 	noop1 := tr.StartSpan("noop")
 	if !IsNoopSpan(noop1) {
@@ -221,8 +223,8 @@ func TestTracerRecording(t *testing.T) {
 }
 
 func TestTracerInjectExtract(t *testing.T) {
-	tr := newTracer(nil /* lightstep */)
-	tr2 := newTracer(nil /* lightstep */)
+	tr := NewTracer()
+	tr2 := NewTracer()
 
 	// Verify that noop spans become noop spans on the remote side.
 
@@ -314,7 +316,8 @@ func TestTracerInjectExtract(t *testing.T) {
 }
 
 func TestLightstepContext(t *testing.T) {
-	lsTr := lightstep.NewTracer(lightstep.Options{
+	var lsTr opentracing.Tracer
+	lsTr = lightstep.NewTracer(lightstep.Options{
 		AccessToken: "invalid",
 		Collector: lightstep.Endpoint{
 			Host:      "127.0.0.1",
@@ -324,7 +327,8 @@ func TestLightstepContext(t *testing.T) {
 		MaxLogsPerSpan: maxLogsPerSpan,
 		UseGRPC:        true,
 	})
-	tr := newTracer(false /* netTrace */, lsTr)
+	atomic.StorePointer(&lightstepPtr, unsafe.Pointer(&lsTr))
+	tr := NewTracer()
 	s := tr.StartSpan("test")
 
 	const testBaggageKey = "test-baggage"
@@ -335,7 +339,7 @@ func TestLightstepContext(t *testing.T) {
 	if err := tr.Inject(s.Context(), opentracing.HTTPHeaders, carrier); err != nil {
 		t.Fatal(err)
 	}
-	traceID, spanID := tr.getLightstepSpanIDs(s.(*span).lightstep.Context())
+	traceID, spanID := getLightstepSpanIDs(lsTr, s.(*span).lightstep.Context())
 	if traceID == 0 || spanID == 0 {
 		t.Errorf("invalid trace/span IDs: %d %d", traceID, spanID)
 	}
@@ -350,7 +354,7 @@ func TestLightstepContext(t *testing.T) {
 	s2 := tr.StartSpan("child", opentracing.FollowsFrom(wireContext))
 	s2Ctx := s2.(*span).lightstep.Context()
 
-	traceID2, spanID2 := tr.getLightstepSpanIDs(s2Ctx)
+	traceID2, spanID2 := getLightstepSpanIDs(lsTr, s2Ctx)
 
 	if traceID2 != traceID || spanID2 == 0 {
 		t.Errorf("invalid child trace/span IDs: %d %d", traceID2, spanID2)
