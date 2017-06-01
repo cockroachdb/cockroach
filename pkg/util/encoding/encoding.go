@@ -183,7 +183,10 @@ func DecodeUint64Descending(b []byte) ([]byte, uint64, error) {
 	return leftover, ^v, err
 }
 
-const maxVarintSize = 9
+const (
+	maxVarintSize        = 9
+	maxBinaryUvarintSize = binary.MaxVarintLen64
+)
 
 // EncodeVarintAscending encodes the int64 value using a variable length
 // (length-prefixed) representation. The length is encoded as a single
@@ -905,7 +908,7 @@ func GetMultiVarintLen(b []byte, num int) (int, error) {
 func getMultiNonsortingVarintLen(b []byte, num int) (int, error) {
 	p := 0
 	for i := 0; i < num && p < len(b); i++ {
-		_, len, _, err := DecodeNonsortingVarint(b[p:])
+		_, len, _, err := DecodeNonsortingStdlibVarint(b[p:])
 		if err != nil {
 			return 0, err
 		}
@@ -1037,18 +1040,18 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 // encoded value.
 const NonsortingVarintMaxLen = binary.MaxVarintLen64
 
-// EncodeNonsortingVarint encodes an int value using encoding/binary, appends it
+// EncodeNonsortingStdlibVarint encodes an int value using encoding/binary, appends it
 // to the supplied buffer, and returns the final buffer.
-func EncodeNonsortingVarint(appendTo []byte, x int64) []byte {
+func EncodeNonsortingStdlibVarint(appendTo []byte, x int64) []byte {
 	// Fixed size array to allocate this on the stack.
 	var scratch [binary.MaxVarintLen64]byte
 	i := binary.PutVarint(scratch[:binary.MaxVarintLen64], x)
 	return append(appendTo, scratch[:i]...)
 }
 
-// DecodeNonsortingVarint decodes a value encoded by EncodeNonsortingVarint. It
+// DecodeNonsortingStdlibVarint decodes a value encoded by EncodeNonsortingVarint. It
 // returns the length of the encoded varint and value.
-func DecodeNonsortingVarint(b []byte) (remaining []byte, length int, value int64, err error) {
+func DecodeNonsortingStdlibVarint(b []byte) (remaining []byte, length int, value int64, err error) {
 	value, length = binary.Varint(b)
 	if length <= 0 {
 		return nil, 0, 0, fmt.Errorf("int64 varint decoding failed: %d", length)
@@ -1104,6 +1107,18 @@ func DecodeNonsortingUvarint(buf []byte) (remaining []byte, length int, value ui
 		}
 	}
 	return buf, 0, 0, nil
+}
+
+// DecodeNonsortingStdlibUvarint decodes a value encoded with binary.PutUvarint. It
+// returns the length of the encoded varint and value.
+func DecodeNonsortingStdlibUvarint(
+	buf []byte,
+) (remaining []byte, length int, value uint64, err error) {
+	i, n := binary.Uvarint(buf)
+	if n <= 0 {
+		return buf, 0, 0, errors.New("buffer too small")
+	}
+	return buf[n:], n, i, nil
 }
 
 // PeekLengthNonsortingUvarint returns the length of the value that starts at
@@ -1170,7 +1185,7 @@ func EncodeBoolValue(appendTo []byte, colID uint32, b bool) []byte {
 // returns the final buffer.
 func EncodeIntValue(appendTo []byte, colID uint32, i int64) []byte {
 	appendTo = encodeValueTag(appendTo, colID, Int)
-	return EncodeNonsortingVarint(appendTo, i)
+	return EncodeNonsortingStdlibVarint(appendTo, i)
 }
 
 const floatValueEncodedLength = uint64AscendingEncodedLength
@@ -1194,8 +1209,8 @@ func EncodeBytesValue(appendTo []byte, colID uint32, data []byte) []byte {
 // and returns the final buffer.
 func EncodeTimeValue(appendTo []byte, colID uint32, t time.Time) []byte {
 	appendTo = encodeValueTag(appendTo, colID, Time)
-	appendTo = EncodeNonsortingVarint(appendTo, t.Unix())
-	return EncodeNonsortingVarint(appendTo, int64(t.Nanosecond()))
+	appendTo = EncodeNonsortingStdlibVarint(appendTo, t.Unix())
+	return EncodeNonsortingStdlibVarint(appendTo, int64(t.Nanosecond()))
 }
 
 // EncodeDecimalValue encodes an apd.Decimal value, appends it to the supplied
@@ -1220,9 +1235,9 @@ func EncodeDecimalValue(appendTo []byte, colID uint32, d *apd.Decimal) []byte {
 // supplied buffer, and returns the final buffer.
 func EncodeDurationValue(appendTo []byte, colID uint32, d duration.Duration) []byte {
 	appendTo = encodeValueTag(appendTo, colID, Duration)
-	appendTo = EncodeNonsortingVarint(appendTo, d.Months)
-	appendTo = EncodeNonsortingVarint(appendTo, d.Days)
-	return EncodeNonsortingVarint(appendTo, d.Nanos)
+	appendTo = EncodeNonsortingStdlibVarint(appendTo, d.Months)
+	appendTo = EncodeNonsortingStdlibVarint(appendTo, d.Days)
+	return EncodeNonsortingStdlibVarint(appendTo, d.Nanos)
 }
 
 // DecodeValueTag decodes a value encoded by encodeValueTag, used as a prefix in
@@ -1294,7 +1309,7 @@ func DecodeIntValue(b []byte) (remaining []byte, i int64, err error) {
 	if err != nil {
 		return b, 0, err
 	}
-	b, _, i, err = DecodeNonsortingVarint(b)
+	b, _, i, err = DecodeNonsortingStdlibVarint(b)
 	return b, i, err
 }
 
@@ -1333,11 +1348,11 @@ func DecodeTimeValue(b []byte) (remaining []byte, t time.Time, err error) {
 		return b, time.Time{}, err
 	}
 	var sec, nsec int64
-	b, _, sec, err = DecodeNonsortingVarint(b)
+	b, _, sec, err = DecodeNonsortingStdlibVarint(b)
 	if err != nil {
 		return b, time.Time{}, err
 	}
-	b, _, nsec, err = DecodeNonsortingVarint(b)
+	b, _, nsec, err = DecodeNonsortingStdlibVarint(b)
 	if err != nil {
 		return b, time.Time{}, err
 	}
@@ -1351,7 +1366,7 @@ func DecodeDecimalValue(b []byte) (remaining []byte, d *apd.Decimal, err error) 
 		return b, nil, err
 	}
 	var i uint64
-	b, _, i, err = DecodeNonsortingUvarint(b)
+	b, _, i, err = DecodeNonsortingStdlibUvarint(b)
 	if err != nil {
 		return b, nil, err
 	}
@@ -1366,15 +1381,15 @@ func DecodeDurationValue(b []byte) (remaining []byte, d duration.Duration, err e
 		return b, duration.Duration{}, err
 	}
 	var months, days, nanos int64
-	b, _, months, err = DecodeNonsortingVarint(b)
+	b, _, months, err = DecodeNonsortingStdlibVarint(b)
 	if err != nil {
 		return b, duration.Duration{}, err
 	}
-	b, _, days, err = DecodeNonsortingVarint(b)
+	b, _, days, err = DecodeNonsortingStdlibVarint(b)
 	if err != nil {
 		return b, duration.Duration{}, err
 	}
-	b, _, nanos, err = DecodeNonsortingVarint(b)
+	b, _, nanos, err = DecodeNonsortingStdlibVarint(b)
 	if err != nil {
 		return b, duration.Duration{}, err
 	}
@@ -1420,12 +1435,15 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 	case True, False:
 		return typeOffset, dataOffset, nil
 	case Int:
-		_, n, _, err := DecodeNonsortingVarint(b)
+		_, n, _, err := DecodeNonsortingStdlibVarint(b)
 		return typeOffset, dataOffset + n, err
 	case Float:
 		return typeOffset, dataOffset + floatValueEncodedLength, nil
-	case Bytes, Decimal:
+	case Bytes:
 		_, n, i, err := DecodeNonsortingUvarint(b)
+		return typeOffset, dataOffset + n + int(i), err
+	case Decimal:
+		_, n, i, err := DecodeNonsortingStdlibUvarint(b)
 		return typeOffset, dataOffset + n + int(i), err
 	case Time:
 		n, err := getMultiNonsortingVarintLen(b, 2)
@@ -1458,7 +1476,7 @@ func UpperBoundValueEncodingSize(colID uint32, typ Type, size int) (int, bool) {
 		return 0, false
 	case Decimal:
 		if size > 0 {
-			return len(encodedTag) + maxVarintSize + upperBoundNonsortingDecimalUnscaledSize(size), true
+			return len(encodedTag) + maxBinaryUvarintSize + upperBoundNonsortingDecimalUnscaledSize(size), true
 		}
 		return 0, false
 	case Time:
