@@ -51,7 +51,7 @@ option in practice.
 
 ## RethinkDB
 
-As usual, they seem to be on the right track (but the might also be in a less
+As usual, they seem to be on the right track (but they might also be in a less
 complicated spot than we are):
 
 http://www.rethinkdb.com/docs/migration/
@@ -244,7 +244,7 @@ another.
 The complexity in the current migration is due to a new binary having to act
 exactly like an old binary until the version trigger is pulled. That almost
 translates to having all previous versions of the code base embedded in it, and
-being able to switch atomically (atually even worse, atomically on each
+being able to switch atomically (actually even worse, atomically on each
 Replica). Allowing each binary to just be itself early on sounds much less
 involved.
 

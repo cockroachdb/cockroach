@@ -63,7 +63,7 @@ We pin many of our dependencies in `glide.yaml` to make it easier to update or a
 Glide always re-resolves everything when updating any dependency (to preserve correctness given
 potential changes in transitive requirements). Unfortunately it always picks the latest version of a
 dependency unless it has a direct or transitive pin, which means even when attempting to `update` or
-`get` even just one dependency, any other unreleated dependencies could unexpectedly change versions
+`get` even just one dependency, any other unrelated dependencies could unexpectedly change versions
 unless they are pinned.
 
 Thus for libraries where we care about what version we resolve -- e.g. if they affect stability, if we

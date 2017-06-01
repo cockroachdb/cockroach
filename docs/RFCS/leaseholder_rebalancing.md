@@ -126,7 +126,7 @@ giving us a range momentum metric. We then balance the range momentum
 metric across nodes. There are difficulties to making this work well
 with the primary one being that load (and thus momentum) can change
 rapidly and we want to avoid the system being overly sensitive to such
-changes. Transfering leaseholders is relatively inexpensive, but not
+changes. Transferring leaseholders is relatively inexpensive, but not
 free. Rebalancing a range is fairly heavyweight and can impose a
 systemic drain on system resources if done too frequently.
 
