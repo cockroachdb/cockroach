@@ -44,12 +44,12 @@ func TestParseTs(t *testing.T) {
 	}
 
 	for i, test := range parseTsTests {
-		parsed, err := parseTs(test.strTimestamp)
+		parsed, err := parser.ParseDTimestamp(test.strTimestamp, time.Nanosecond)
 		if err != nil {
 			t.Errorf("%d could not parse [%s]: %v", i, test.strTimestamp, err)
 			continue
 		}
-		if !parsed.Equal(test.expected) {
+		if !parsed.Time.Equal(test.expected) {
 			t.Errorf("%d parsing [%s] got [%s] expected [%s]", i, test.strTimestamp, parsed, test.expected)
 		}
 	}
@@ -60,7 +60,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 	ts := time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("UTC", 0))
 
 	parse := func(encoded []byte) time.Time {
-		decoded, err := parseTs(string(encoded))
+		decoded, err := parser.ParseDTimestamp(string(encoded), time.Nanosecond)
 		if err != nil {
 			t.Fatal(err)
 		}
