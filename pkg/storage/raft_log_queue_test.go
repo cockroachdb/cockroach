@@ -156,7 +156,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 
 	getIndexes := func() (uint64, uint64, uint64, error) {
 		r.mu.Lock()
-		firstIndex, err := r.FirstIndex()
+		firstIndex, err := r.raftFirstIndexLocked()
 		r.mu.Unlock()
 		if err != nil {
 			return 0, 0, 0, err

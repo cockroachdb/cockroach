@@ -36,7 +36,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-var _ raft.Storage = (*Replica)(nil)
+// replicaRaftStorage implements the raft.Storage interface.
+type replicaRaftStorage Replica
+
+var _ raft.Storage = (*replicaRaftStorage)(nil)
 
 // All calls to raft.RawNode require that both Replica.raftMu and
 // Replica.mu are held. All of the functions exposed via the
@@ -55,7 +58,7 @@ var _ raft.Storage = (*Replica)(nil)
 
 // InitialState implements the raft.Storage interface.
 // InitialState requires that r.mu is held.
-func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
 	hs, err := r.mu.stateLoader.loadHardState(ctx, r.store.Engine())
 	// For uninitialized ranges, membership is unknown at this point.
@@ -73,11 +76,16 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Passing maxBytes equal to zero disables size checking.
-func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
 	ctx := r.AnnotateCtx(context.TODO())
 	return entries(ctx, snap, r.RangeID, r.store.raftEntryCache, lo, hi, maxBytes)
+}
+
+// raftEntriesLocked requires that r.mu is held.
+func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+	return (*replicaRaftStorage)(r).Entries(lo, hi, maxBytes)
 }
 
 func entries(
@@ -196,11 +204,16 @@ func iterateEntries(
 }
 
 // Term implements the raft.Storage interface.
-func (r *Replica) Term(i uint64) (uint64, error) {
+func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
 	ctx := r.AnnotateCtx(context.TODO())
 	return term(ctx, snap, r.RangeID, r.store.raftEntryCache, i)
+}
+
+// raftTermLocked requires that r.mu is held.
+func (r *Replica) raftTermLocked(i uint64) (uint64, error) {
+	return (*replicaRaftStorage)(r).Term(i)
 }
 
 func term(
@@ -226,9 +239,13 @@ func term(
 }
 
 // LastIndex implements the raft.Storage interface.
-// LastIndex requires that r.mu is held.
-func (r *Replica) LastIndex() (uint64, error) {
+func (r *replicaRaftStorage) LastIndex() (uint64, error) {
 	return r.mu.lastIndex, nil
+}
+
+// raftLastIndexLocked requires that r.mu is held.
+func (r *Replica) raftLastIndexLocked() (uint64, error) {
+	return (*replicaRaftStorage)(r).LastIndex()
 }
 
 // raftTruncatedStateLocked returns metadata about the log that preceded the
@@ -252,29 +269,33 @@ func (r *Replica) raftTruncatedStateLocked(
 }
 
 // FirstIndex implements the raft.Storage interface.
-// FirstIndex requires that r.mu is held.
-func (r *Replica) FirstIndex() (uint64, error) {
+func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	ts, err := r.raftTruncatedStateLocked(ctx)
+	ts, err := (*Replica)(r).raftTruncatedStateLocked(ctx)
 	if err != nil {
 		return 0, err
 	}
 	return ts.Index + 1, nil
 }
 
-// GetFirstIndex is the same function as FirstIndex but it requires
+// raftFirstIndexLocked requires that r.mu is held.
+func (r *Replica) raftFirstIndexLocked() (uint64, error) {
+	return (*replicaRaftStorage)(r).FirstIndex()
+}
+
+// GetFirstIndex is the same function as raftFirstIndexLocked but it requires
 // that r.mu is not held.
 func (r *Replica) GetFirstIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.FirstIndex()
+	return r.raftFirstIndexLocked()
 }
 
 // Snapshot implements the raft.Storage interface. Snapshot requires that
 // r.mu is held. Note that the returned snapshot is a placeholder and
 // does not contain any of the replica data. The snapshot is actually generated
 // (and sent) by the Raft snapshot queue.
-func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
+func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
 	r.mu.AssertHeld()
 	appliedIndex := r.mu.state.RaftAppliedIndex
 	term, err := r.Term(appliedIndex)
@@ -287,6 +308,11 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 			Term:  term,
 		},
 	}, nil
+}
+
+// raftSnapshotLocked requires that r.mu is held.
+func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
+	return (*replicaRaftStorage)(r).Snapshot()
 }
 
 // GetSnapshot returns a snapshot of the replica appropriate for sending to a
