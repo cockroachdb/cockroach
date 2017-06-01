@@ -9,7 +9,7 @@ export BUILDER_HIDE_GOPATH_SRC=1
 
 build/teamcity-publish-s3-binaries.sh "$@"
 
-if [ "$TC_BUILD_BRANCH" != master ]; then
+if [ "$TC_BUILD_BRANCH" != *alpha* ] && [ "$TEAMCITY_BUILDCONF_NAME" == 'Publish Releases' ]; then
 	image=docker.io/cockroachdb/cockroach
 
 	cp cockroach-linux-2.6.32-gnu-amd64 build/deploy/cockroach
