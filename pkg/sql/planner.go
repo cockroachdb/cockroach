@@ -179,7 +179,7 @@ func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (p
 		return nil, err
 	}
 	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
-	return p.makePlan(ctx, stmt)
+	return p.makePlan(ctx, Statement{AST: stmt})
 }
 
 // QueryRow implements the parser.EvalPlanner interface.

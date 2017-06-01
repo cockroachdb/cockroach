@@ -82,7 +82,7 @@ func (s stmtKey) flags() string {
 }
 
 func (a *appStats) recordStatement(
-	stmt parser.Statement,
+	stmt Statement,
 	distSQLUsed bool,
 	automaticRetryCount int,
 	numRows int,
@@ -99,7 +99,7 @@ func (a *appStats) recordStatement(
 
 	// Some statements like SET, SHOW etc are not useful to collect
 	// stats about. Ignore them.
-	if _, ok := stmt.(parser.HiddenFromStats); ok {
+	if _, ok := stmt.AST.(parser.HiddenFromStats); ok {
 		return
 	}
 
@@ -108,7 +108,7 @@ func (a *appStats) recordStatement(
 	// that we use separate buckets for the different situations.
 	var buf bytes.Buffer
 
-	parser.FormatNode(&buf, parser.FmtHideConstants, stmt)
+	parser.FormatNode(&buf, parser.FmtHideConstants, stmt.AST)
 
 	// Get the statistics object.
 	s := a.getStatsForStmt(stmtKey{stmt: buf.String(), failed: err != nil, distSQLUsed: distSQLUsed})

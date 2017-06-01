@@ -71,7 +71,7 @@ type phaseTimes [sessionNumPhases]time.Time
 // - err is the error encountered, if any.
 func (e *Executor) recordStatementSummary(
 	planner *planner,
-	stmt parser.Statement,
+	stmt Statement,
 	distSQLUsed bool,
 	automaticRetryCount int,
 	result Result,
@@ -107,7 +107,7 @@ func (e *Executor) recordStatementSummary(
 
 	if automaticRetryCount == 0 {
 		if distSQLUsed {
-			if _, ok := stmt.(*parser.Select); ok {
+			if _, ok := stmt.AST.(*parser.Select); ok {
 				e.DistSQLSelectCount.Inc(1)
 			}
 			e.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())

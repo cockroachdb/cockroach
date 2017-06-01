@@ -824,7 +824,10 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 
 	tracing.AnnotateTrace()
 
-	results := c.executor.ExecutePreparedStatement(c.session, stmt, pinfo)
+	results, err := c.executor.ExecutePreparedStatement(c.session, stmt, pinfo)
+	if err != nil {
+		return c.sendError(err)
+	}
 	return c.finishExecute(results, portalMeta.outFormats, false, int(limit))
 }
 
