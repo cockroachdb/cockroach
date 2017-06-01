@@ -141,7 +141,7 @@ var (
 // to the internal state after this call.
 func (s *Session) ProcessCopyData(
 	ctx context.Context, data string, msg copyMsg,
-) (parser.StatementList, error) {
+) (StatementList, error) {
 	cf := s.copyFrom
 	buf := cf.buf
 
@@ -154,7 +154,7 @@ func (s *Session) ProcessCopyData(
 		if buf.Len() > 0 {
 			err = cf.addRow(ctx, buf.Bytes())
 		}
-		return parser.StatementList{CopyDataBlock{Done: true}}, err
+		return StatementList{{AST: CopyDataBlock{Done: true}}}, err
 	default:
 		return nil, fmt.Errorf("expected copy command")
 	}
@@ -181,7 +181,7 @@ func (s *Session) ProcessCopyData(
 			return nil, err
 		}
 	}
-	return parser.StatementList{CopyDataBlock{}}, nil
+	return StatementList{{AST: CopyDataBlock{}}}, nil
 }
 
 func (n *copyNode) addRow(ctx context.Context, line []byte) error {

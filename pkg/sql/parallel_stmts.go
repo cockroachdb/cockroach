@@ -341,12 +341,12 @@ func (a *spanBasedDependencyAnalyzer) Clear(p planNode) {
 // parallelized. This means that its results should be mocked out, and that
 // it should be run asynchronously and in parallel with other statements that
 // are independent.
-func IsStmtParallelized(stmt parser.Statement) bool {
+func IsStmtParallelized(stmt Statement) bool {
 	parallelizedRetClause := func(ret parser.ReturningClause) bool {
 		_, ok := ret.(*parser.ReturningNothing)
 		return ok
 	}
-	switch s := stmt.(type) {
+	switch s := stmt.AST.(type) {
 	case *parser.Delete:
 		return parallelizedRetClause(s.Returning)
 	case *parser.Insert:
