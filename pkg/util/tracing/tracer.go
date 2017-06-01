@@ -23,14 +23,15 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/lightstep/lightstep-tracer-go"
+	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -60,6 +61,45 @@ var enableNetTrace = settings.RegisterBoolSetting(
 	false,
 )
 
+var lightstepToken = settings.RegisterStringSetting(
+	"trace.lightstep.token",
+	"if set, traces go to Lightstep using this token",
+	"",
+)
+
+// We don't call OnChange inline above because it causes an "initialization
+// loop" compile error.
+var _ = lightstepToken.OnChange(updateLightstep)
+
+// Atomic pointer of type *opentracing.Tracer which itself points to a lightstep
+// tracer. We don't use sync.Value because we can't set it to nil.
+var lightstepPtr unsafe.Pointer
+
+func updateLightstep() {
+	token := lightstepToken.Get()
+	if token == "" {
+		// TODO(radu): if we had a lightstep tracer allocated, its background task
+		// will live on.
+		// Filed https://github.com/lightstep/lightstep-tracer-go/issues/82.
+		atomic.StorePointer(&lightstepPtr, nil)
+	} else {
+		lsTr := lightstep.NewTracer(lightstep.Options{
+			AccessToken:    token,
+			MaxLogsPerSpan: maxLogsPerSpan,
+			UseGRPC:        true,
+		})
+		atomic.StorePointer(&lightstepPtr, unsafe.Pointer(&lsTr))
+	}
+}
+
+func getLightstep() opentracing.Tracer {
+	ptr := atomic.LoadPointer(&lightstepPtr)
+	if ptr == nil {
+		return nil
+	}
+	return *(*opentracing.Tracer)(ptr)
+}
+
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
 //
 //  - forwarding events to x/net/trace instances
@@ -74,10 +114,11 @@ var enableNetTrace = settings.RegisterBoolSetting(
 // Even when tracing is disabled, we still use this Tracer (with x/net/trace and
 // lightstep disabled) because of its recording capability (snowball
 // tracing needs to work in all cases).
+//
+// Tracer is currently stateless so we could have a single instance; however,
+// this won't be the case if the cluster settings move away from using global
+// state.
 type Tracer struct {
-	// If set, we are using a lightstep tracer for most operations.
-	lightstep opentracing.Tracer
-
 	// Preallocated noopSpan, used to avoid creating spans when we are not using
 	// x/net/trace or lightstep and we are not recording.
 	noopSpan noopSpan
@@ -85,10 +126,10 @@ type Tracer struct {
 
 var _ opentracing.Tracer = &Tracer{}
 
-func newTracer(lightstep opentracing.Tracer) *Tracer {
-	t := &Tracer{
-		lightstep: lightstep,
-	}
+// NewTracer creates a Tracer. The cluster settings control whether
+// we trace to net/trace and/or lightstep.
+func NewTracer() opentracing.Tracer {
+	t := &Tracer{}
 	t.noopSpan.tracer = t
 	return t
 }
@@ -118,12 +159,12 @@ func (l *lightstepExtractIDsCarrier) Set(key, val string) {
 }
 
 // getLightstepSpanIDs extracts the TraceID and SpanID from a lightstep context.
-func (t *Tracer) getLightstepSpanIDs(
-	spanCtx opentracing.SpanContext,
+func getLightstepSpanIDs(
+	lightstep opentracing.Tracer, spanCtx opentracing.SpanContext,
 ) (traceID uint64, spanID uint64) {
 	// Retrieve the trace metadata from lightstep.
 	var carrier lightstepExtractIDsCarrier
-	if err := t.lightstep.Inject(spanCtx, opentracing.TextMap, &carrier); err != nil {
+	if err := lightstep.Inject(spanCtx, opentracing.TextMap, &carrier); err != nil {
 		panic(fmt.Sprintf("error injecting lightstep context %s", err))
 	}
 	if carrier.traceID == 0 || carrier.spanID == 0 {
@@ -150,7 +191,7 @@ func (t *Tracer) StartSpan(
 	// Fast paths to avoid the allocation of StartSpanOptions below when tracing
 	// is disabled: if we have no options or a single SpanReference (the common
 	// case) with a noop context, return a noop span now.
-	if len(opts) == 1 && t.lightstep == nil {
+	if len(opts) == 1 {
 		if o, ok := opts[0].(opentracing.SpanReference); ok {
 			if _, noopCtx := o.ReferencedContext.(noopSpanContext); noopCtx {
 				return &t.noopSpan
@@ -159,8 +200,9 @@ func (t *Tracer) StartSpan(
 	}
 
 	netTrace := enableNetTrace.Get()
+	lsTr := getLightstep()
 
-	if len(opts) == 0 && !netTrace && t.lightstep == nil {
+	if len(opts) == 0 && !netTrace && lsTr == nil {
 		return &t.noopSpan
 	}
 
@@ -200,11 +242,16 @@ func (t *Tracer) StartSpan(
 		// TODO(radu): can we do something for multiple references?
 		break
 	}
+	if hasParent && parentCtx.lightstep == nil {
+		// If a lightstep tracer was configured, don't use it if the parent span
+		// isn't using it.
+		lsTr = nil
+	}
 
 	// If tracing is disabled, the Recordable option wasn't passed, and we're not
 	// part of a recording or snowball trace, avoid overhead and return a noop
 	// span.
-	if !recordable && recordingGroup == nil && t.lightstep == nil && !netTrace {
+	if !recordable && recordingGroup == nil && lsTr == nil && !netTrace {
 		return &t.noopSpan
 	}
 
@@ -221,7 +268,7 @@ func (t *Tracer) StartSpan(
 	// If we are using lightstep, we create a new lightstep span and use the
 	// metadata (TraceID, SpanID, Baggage) from that span. Otherwise, we generate
 	// our own IDs.
-	if t.lightstep != nil {
+	if lsTr != nil {
 		// Create the shadow lightstep span.
 		var lsOpts []opentracing.StartSpanOption
 		// Replicate the options, using the lightstep context in the reference.
@@ -240,8 +287,8 @@ func (t *Tracer) StartSpan(
 				ReferencedContext: parentCtx.lightstep,
 			})
 		}
-		s.lightstep = t.lightstep.StartSpan(operationName, lsOpts...)
-		s.TraceID, s.SpanID = t.getLightstepSpanIDs(s.lightstep.Context())
+		s.lightstep = lsTr.StartSpan(operationName, lsOpts...)
+		s.TraceID, s.SpanID = getLightstepSpanIDs(s.lightstep.Tracer(), s.lightstep.Context())
 		if hasParent && s.TraceID != parentCtx.TraceID {
 			panic(fmt.Sprintf(
 				"TraceID doesn't match between parent (%d) and child (%d) spans",
@@ -291,7 +338,7 @@ func (t *Tracer) StartSpan(
 		s.SetTag(k, v)
 	}
 
-	if netTrace || t.lightstep != nil {
+	if netTrace || lsTr != nil {
 		// Copy baggage items to tags so they show up in the Lightstep UI or x/net/trace.
 		for k, v := range s.mu.Baggage {
 			s.SetTag(k, v)
@@ -384,10 +431,10 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.S
 		return noopSpanContext{}, nil
 	}
 
-	if t.lightstep != nil {
+	if lightstep := getLightstep(); lightstep != nil {
 		// Extract the lightstep context. For this to work, our key-value "schema"
-		// must match lighstep's exactly (otherwise we get an error here).
-		sc.lightstep, err = t.lightstep.Extract(format, carrier)
+		// must match lightstep's exactly (otherwise we get an error here).
+		sc.lightstep, err = lightstep.Extract(format, carrier)
 		if err != nil {
 			return noopSpanContext{}, err
 		}
@@ -438,22 +485,6 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, opentracing
 	}
 	newSpan := span.Tracer().StartSpan(opName, opentracing.ChildOf(span.Context()))
 	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
-}
-
-var lightstepToken = envutil.EnvOrDefaultString("COCKROACH_LIGHTSTEP_TOKEN", "")
-
-// NewTracer creates a Tracer which records to the net/trace
-// endpoint.
-func NewTracer() opentracing.Tracer {
-	var lsTr opentracing.Tracer
-	if lightstepToken != "" {
-		lsTr = lightstep.NewTracer(lightstep.Options{
-			AccessToken:    lightstepToken,
-			MaxLogsPerSpan: maxLogsPerSpan,
-			UseGRPC:        true,
-		})
-	}
-	return newTracer(lsTr)
 }
 
 // EnsureContext checks whether the given context.Context contains a Span. If
