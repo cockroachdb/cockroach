@@ -425,7 +425,7 @@ func (e *Executor) getDatabaseCache() *databaseCache {
 // nil if there are no results). An error is returned if there is more than
 // one statement in the statement list.
 func (e *Executor) Prepare(
-	stmts parser.StatementList, session *Session, pinfo parser.PlaceholderTypes,
+	stmts StatementList, session *Session, pinfo parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	session.resetForBatch(e)
 	sessionEventf(session, "preparing: %s", stmts)
@@ -442,7 +442,7 @@ func (e *Executor) Prepare(
 	default:
 		return nil, errWrongNumberOfPreparedStatements(len(stmts))
 	}
-	stmt := stmts[0]
+	stmt := stmts[0].AST
 	prepared.Statement = stmt
 	if err := pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
 		return nil, err
@@ -551,11 +551,11 @@ func (e *Executor) ExecuteStatements(
 // ExecutePreparedStatement executes the given statement and returns a response.
 func (e *Executor) ExecutePreparedStatement(
 	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
-) StatementResults {
+) (StatementResults, error) {
 
-	var stmts parser.StatementList
+	var stmts StatementList
 	if stmt.Statement != nil {
-		stmts = parser.StatementList{stmt.Statement}
+		stmts = StatementList{{AST: stmt.Statement}}
 	}
 
 	defer logIfPanicking(session.Ctx(), stmts.String())
@@ -576,9 +576,30 @@ func (e *Executor) ExecutePreparedStatement(
 		session.phaseTimes[sessionEndParse] = now
 	}
 
+	return e.execPrepared(session, stmt, pinfo)
+}
+
+// execPrepared executes a prepared statement. It returns an error if there
+// is more than 1 result or the returned types differ from the prepared
+// return types.
+func (e *Executor) execPrepared(
+	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
+) (StatementResults, error) {
+	var stmts StatementList
+	if stmt.Statement != nil {
+		stmts = StatementList{{
+			AST:           stmt.Statement,
+			ExpectedTypes: stmt.Columns,
+		}}
+	}
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execParsed(session, stmts, pinfo, copyMsgNone)
+	results := e.execParsed(session, stmts, pinfo, copyMsgNone)
+	if len(results.ResultList) > 1 {
+		results.Close(session.Ctx())
+		return StatementResults{}, errWrongNumberOfPreparedStatements(len(results.ResultList))
+	}
+	return results, nil
 }
 
 // CopyData adds data to the COPY buffer and executes if there are enough rows.
@@ -613,7 +634,7 @@ func (session *Session) CopyEnd(ctx context.Context) {
 func (e *Executor) execRequest(
 	session *Session, sql string, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
 ) StatementResults {
-	var stmts parser.StatementList
+	var stmts StatementList
 	var err error
 	txnState := &session.TxnState
 
@@ -627,7 +648,9 @@ func (e *Executor) execRequest(
 	} else if copymsg != copyMsgNone {
 		err = fmt.Errorf("unexpected copy command")
 	} else {
-		stmts, err = parser.Parse(sql)
+		var sl parser.StatementList
+		sl, err = parser.Parse(sql)
+		stmts = NewStatementList(sl)
 	}
 	session.phaseTimes[sessionEndParse] = timeutil.Now()
 
@@ -654,7 +677,7 @@ func (e *Executor) execRequest(
 }
 
 func (e *Executor) execParsed(
-	session *Session, stmts parser.StatementList, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
+	session *Session, stmts StatementList, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
 ) StatementResults {
 	var res StatementResults
 	var avoidCachedDescriptors bool
@@ -684,13 +707,13 @@ func (e *Executor) execParsed(
 		// a transaction).
 		if !inTxn {
 			// Detect implicit transactions.
-			if _, isBegin := stmts[0].(*parser.BeginTransaction); !isBegin {
+			if _, isBegin := stmts[0].AST.(*parser.BeginTransaction); !isBegin {
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[:1]
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
 				var err error
-				protoTS, err = isAsOf(session, stmtsToExec[0], e.cfg.Clock.Now())
+				protoTS, err = isAsOf(session, stmtsToExec[0].AST, e.cfg.Clock.Now())
 				if err != nil {
 					res.ResultList = append(res.ResultList, Result{Err: err})
 					return res
@@ -719,7 +742,7 @@ func (e *Executor) execParsed(
 			panic("we failed to initialize a txn")
 		}
 		// Now actually run some statements.
-		var remainingStmts parser.StatementList
+		var remainingStmts StatementList
 		var results []Result
 		origState := txnState.State
 
@@ -742,6 +765,7 @@ func (e *Executor) execParsed(
 				// Some results were produced by a previous attempt. Discard them.
 				ResultList(results).Close(ctx)
 			}
+
 			results, remainingStmts, err = runTxnAttempt(
 				e, session, stmtsToExec, pinfo, origState, opt,
 				avoidCachedDescriptors, automaticRetryCount)
@@ -750,7 +774,7 @@ func (e *Executor) execParsed(
 			if err == nil && txnState.State == Aborted {
 				doWarn := true
 				if len(stmtsToExec) > 0 {
-					if _, ok := stmtsToExec[0].(*parser.ShowTransactionStatus); ok {
+					if _, ok := stmtsToExec[0].AST.(*parser.ShowTransactionStatus); ok {
 						doWarn = false
 					}
 				}
@@ -915,13 +939,13 @@ func countRowsAffected(ctx context.Context, p planNode) (int, error) {
 func runTxnAttempt(
 	e *Executor,
 	session *Session,
-	stmts parser.StatementList,
+	stmts StatementList,
 	pinfo *parser.PlaceholderInfo,
 	origState TxnStateEnum,
 	opt *client.TxnExecOptions,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
-) ([]Result, parser.StatementList, error) {
+) ([]Result, StatementList, error) {
 
 	// Ignore the state that might have been set by a previous try of this
 	// closure. By putting these modifications to txnState behind the
@@ -983,13 +1007,13 @@ func runTxnAttempt(
 //    after converting it adequately.
 func (e *Executor) execStmtsInCurrentTxn(
 	session *Session,
-	stmts parser.StatementList,
+	stmts StatementList,
 	pinfo *parser.PlaceholderInfo,
 	implicitTxn bool,
 	txnBeginning bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
-) ([]Result, parser.StatementList, error) {
+) ([]Result, StatementList, error) {
 	var results []Result
 
 	txnState := &session.TxnState
@@ -1020,7 +1044,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		var err error
 		// Run SHOW TRANSACTION STATUS in a separate code path so it is
 		// always guaranteed to execute regardless of the current transaction state.
-		if _, ok := stmt.(*parser.ShowTransactionStatus); ok {
+		if _, ok := stmt.AST.(*parser.ShowTransactionStatus); ok {
 			res, err = runShowTransactionState(session, implicitTxn)
 		} else {
 			switch txnState.State {
@@ -1096,13 +1120,13 @@ func runShowTransactionState(session *Session, implicitTxn bool) (Result, error)
 // - COMMIT / ROLLBACK: aborts the current transaction.
 // - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
 //   allowing it to be retried.
-func (e *Executor) execStmtInAbortedTxn(session *Session, stmt parser.Statement) (Result, error) {
+func (e *Executor) execStmtInAbortedTxn(session *Session, stmt Statement) (Result, error) {
 	txnState := &session.TxnState
 	if txnState.State != Aborted && txnState.State != RestartWait {
 		panic("execStmtInAbortedTxn called outside of an aborted txn")
 	}
 	// TODO(andrei/cuongdo): Figure out what statements to count here.
-	switch s := stmt.(type) {
+	switch s := stmt.AST.(type) {
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if txnState.State == RestartWait {
 			return rollbackSQLTransaction(txnState), nil
@@ -1158,15 +1182,13 @@ func (e *Executor) execStmtInAbortedTxn(session *Session, stmt parser.Statement)
 // execStmtInCommitWaitTxn executes a statement in a txn that's in state
 // CommitWait.
 // Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
-func (e *Executor) execStmtInCommitWaitTxn(
-	session *Session, stmt parser.Statement,
-) (Result, error) {
+func (e *Executor) execStmtInCommitWaitTxn(session *Session, stmt Statement) (Result, error) {
 	txnState := &session.TxnState
 	if txnState.State != CommitWait {
 		panic("execStmtInCommitWaitTxn called outside of an aborted txn")
 	}
 	e.updateStmtCounts(stmt)
-	switch stmt.(type) {
+	switch stmt.AST.(type) {
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		// Reset the state to allow new transactions to start.
 		result := Result{PGTag: (*parser.CommitTransaction)(nil).StatementTag()}
@@ -1219,7 +1241,7 @@ func sessionEventf(session *Session, format string, args ...interface{}) {
 // - an error, if any. In case of error, the result returned also reflects this error.
 func (e *Executor) execStmtInOpenTxn(
 	session *Session,
-	stmt parser.Statement,
+	stmt Statement,
 	pinfo *parser.PlaceholderInfo,
 	implicitTxn bool,
 	firstInTxn bool,
@@ -1251,7 +1273,7 @@ func (e *Executor) execStmtInOpenTxn(
 	// execution. If neither of these cases are true, we need to synchronize
 	// parallel execution by letting it drain before we can begin executing ourselves.
 	parallelize := IsStmtParallelized(stmt)
-	_, independentFromParallelStmts := stmt.(parser.IndependentFromParallelizedPriors)
+	_, independentFromParallelStmts := stmt.AST.(parser.IndependentFromParallelizedPriors)
 	if !(parallelize || independentFromParallelStmts) {
 		if err := session.parallelizeQueue.Wait(); err != nil {
 			return Result{}, err
@@ -1262,7 +1284,7 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{}, errNoTransactionInProgress
 	}
 
-	switch s := stmt.(type) {
+	switch s := stmt.AST.(type) {
 	case *parser.BeginTransaction:
 		if !firstInTxn {
 			return Result{}, errTransactionInProgress
@@ -1317,7 +1339,7 @@ func (e *Executor) execStmtInOpenTxn(
 		for i, t := range s.Types {
 			typeHints[strconv.Itoa(i+1)] = parser.CastTargetToDatumType(t)
 		}
-		_, err := session.PreparedStatements.New(e, name, parser.StatementList{s.Statement}, len(s.Statement.String()), typeHints)
+		_, err := session.PreparedStatements.New(e, name, StatementList{{AST: s.Statement}}, len(s.Statement.String()), typeHints)
 		return Result{}, err
 	case *parser.Execute:
 		name := s.Name.String()
@@ -1344,14 +1366,15 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 			qArgs[idx] = typedExpr
 		}
-		results := e.execParsed(session, parser.StatementList{prepared.Statement},
-			&parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes},
-			copyMsgNone)
-		if results.Empty {
-			return Result{}, nil
+		results, err := e.execPrepared(session, prepared,
+			&parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
+		if err != nil {
+			return Result{}, err
 		}
-		if len(results.ResultList) > 1 {
-			return Result{}, errWrongNumberOfPreparedStatements(len(results.ResultList))
+		// No need to check if len(results.ResultList) > 1 because execPrepared
+		// returns an error in that case.
+		if len(results.ResultList) == 0 {
+			return Result{}, nil
 		}
 		return results.ResultList[0], nil
 
@@ -1428,8 +1451,8 @@ func (e *Executor) execStmtInOpenTxn(
 
 // stmtAllowedInImplicitTxn returns whether the statement is allowed in an
 // implicit transaction or not.
-func stmtAllowedInImplicitTxn(stmt parser.Statement) bool {
-	switch stmt.(type) {
+func stmtAllowedInImplicitTxn(stmt Statement) bool {
+	switch stmt.AST.(type) {
 	case *parser.CommitTransaction:
 	case *parser.ReleaseSavepoint:
 	case *parser.RollbackTransaction:
@@ -1612,10 +1635,10 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 }
 
 // makeRes creates an empty result set for the given statement and plan.
-func makeRes(stmt parser.Statement, planner *planner, plan planNode) (Result, error) {
+func makeRes(stmt Statement, planner *planner, plan planNode) (Result, error) {
 	result := Result{
-		PGTag: stmt.StatementTag(),
-		Type:  stmt.StatementType(),
+		PGTag: stmt.AST.StatementTag(),
+		Type:  stmt.AST.StatementType(),
 	}
 	if result.Type == parser.Rows {
 		result.Columns = plan.Columns()
@@ -1635,7 +1658,7 @@ func makeRes(stmt parser.Statement, planner *planner, plan planNode) (Result, er
 // If mockResults is set, these results will be replaced by the "zero value" of the
 // statement's result type, identical to the mock results returned by execStmtInParallel.
 func (e *Executor) execStmt(
-	stmt parser.Statement, planner *planner, automaticRetryCount int, mockResults bool,
+	stmt Statement, planner *planner, automaticRetryCount int, mockResults bool,
 ) (Result, error) {
 	session := planner.session
 
@@ -1689,7 +1712,7 @@ func (e *Executor) execStmt(
 //
 // TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
 // queries, so this method can only be used with classical SQL.
-func (e *Executor) execStmtInParallel(stmt parser.Statement, planner *planner) (Result, error) {
+func (e *Executor) execStmtInParallel(stmt Statement, planner *planner) (Result, error) {
 	session := planner.session
 	ctx := session.Ctx()
 
@@ -1723,9 +1746,9 @@ func (e *Executor) execStmtInParallel(stmt parser.Statement, planner *planner) (
 
 // updateStmtCounts updates metrics for the number of times the different types of SQL
 // statements have been received by this node.
-func (e *Executor) updateStmtCounts(stmt parser.Statement) {
+func (e *Executor) updateStmtCounts(stmt Statement) {
 	e.QueryCount.Inc(1)
-	switch stmt.(type) {
+	switch stmt.AST.(type) {
 	case *parser.BeginTransaction:
 		e.TxnBeginCount.Inc(1)
 	case *parser.Select:
@@ -1741,7 +1764,7 @@ func (e *Executor) updateStmtCounts(stmt parser.Statement) {
 	case *parser.RollbackTransaction:
 		e.TxnRollbackCount.Inc(1)
 	default:
-		if stmt.StatementType() == parser.DDL {
+		if stmt.AST.StatementType() == parser.DDL {
 			e.DdlCount.Inc(1)
 		} else {
 			e.MiscCount.Inc(1)

@@ -54,3 +54,19 @@ func ResultColumnsFromColDescs(colDescs []ColumnDescriptor) ResultColumns {
 	}
 	return cols
 }
+
+// TypesEqual returns whether the length and types of r matches other.
+func (r ResultColumns) TypesEqual(other ResultColumns) bool {
+	if len(r) != len(other) {
+		return false
+	}
+	for i, c := range r {
+		if c.Typ == parser.TypeNull || other[i].Typ == parser.TypeNull {
+			continue
+		}
+		if !c.Typ.Equivalent(other[i].Typ) {
+			return false
+		}
+	}
+	return true
+}
