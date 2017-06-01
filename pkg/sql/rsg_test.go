@@ -62,7 +62,7 @@ func verifyFormat(sql string) error {
 	}
 	formattedFormattedSQL := parser.AsStringWithFlags(formattedStmts, parser.FmtSimpleWithPasswords)
 	if formattedSQL != formattedFormattedSQL {
-		return errors.Errorf("Parse followed by Format is not idempotent: %q != %q", formattedSQL, formattedFormattedSQL)
+		return errors.Errorf("Parse followed by Format is not idempotent: %q -> %q != %q", sql, formattedSQL, formattedFormattedSQL)
 	}
 	// TODO(eisen): ensure that the reconstituted SQL not only parses but also has
 	// the same meaning as the original.
