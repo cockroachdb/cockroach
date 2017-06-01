@@ -5,7 +5,7 @@ export BUILDER_HIDE_GOPATH_SRC=1
 
 mkdir -p artifacts
 
-build/builder.sh go install ./vendor/github.com/Masterminds/glide ./pkg/cmd/github-pull-request-make
+build/builder.sh go install ./vendor/github.com/golang/dep/cmd/dep ./pkg/cmd/github-pull-request-make
 
 # Run checkdeps.
 build/builder.sh env \
