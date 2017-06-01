@@ -6,4 +6,4 @@
 
 package interval
 
-const Mode = TD234
+const LLRBMode = TD234

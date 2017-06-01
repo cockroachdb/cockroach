@@ -6,5 +6,5 @@
 
 package interval
 
-// Mode .
-const Mode = BU23
+// LLRBMode .
+const LLRBMode = BU23

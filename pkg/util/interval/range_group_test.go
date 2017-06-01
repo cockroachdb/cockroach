@@ -697,14 +697,14 @@ func testRangeGroupStringer(t *testing.T, rg RangeGroup) {
 		},
 		{
 			rngs: []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
-			str:  "[[01-05)]",
+			str:  "[{01-05}]",
 		},
 		{
 			rngs: []Range{
 				{Start: []byte{0x01}, End: []byte{0x05}},
 				{Start: []byte{0x09}, End: []byte{0xff}},
 			},
-			str: "[[01-05) [09-ff)]",
+			str: "[{01-05} {09-ff}]",
 		},
 		{
 			rngs: []Range{
@@ -712,7 +712,7 @@ func testRangeGroupStringer(t *testing.T, rg RangeGroup) {
 				{Start: []byte{0x09}, End: []byte{0xf0}},
 				{Start: []byte{0xf1}, End: []byte{0xff}},
 			},
-			str: "[[01-05) [09-f0) [f1-ff)]",
+			str: "[{01-05} {09-f0} {f1-ff}]",
 		},
 	}
 
