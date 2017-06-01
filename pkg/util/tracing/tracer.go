@@ -19,8 +19,6 @@
 package tracing
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -32,11 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/lightstep/lightstep-tracer-go"
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
-	otext "github.com/opentracing/opentracing-go/ext"
-	otlog "github.com/opentracing/opentracing-go/log"
-	"github.com/pkg/errors"
 )
 
 // Snowball is set as Baggage on traces which are used for snowball tracing.
@@ -502,88 +496,6 @@ func SetEnabled(enabled bool) func() {
 	}
 }
 
-func init() {
-	// The grpc-opentracing interceptors use SpanKindEnum as tag values.
-	gob.Register(otext.SpanKindEnum(""))
-}
-
-// EncodeRawSpan encodes a raw span into bytes, using the given dest slice
-// as a buffer.
-func EncodeRawSpan(rawSpan *basictracer.RawSpan, dest []byte) ([]byte, error) {
-	// This is not a greatly efficient (but convenient) use of gob.
-	buf := bytes.NewBuffer(dest[:0])
-	e := gob.NewEncoder(buf)
-	var err error
-
-	encode := func(arg interface{}) {
-		if err == nil {
-			err = e.Encode(arg)
-		}
-	}
-
-	// We cannot use gob for the Logs (because Field doesn't export the necessary
-	// fields). We use it for the other fields.
-	encode(rawSpan.Context)
-	encode(rawSpan.ParentSpanID)
-	encode(rawSpan.Operation)
-	encode(rawSpan.Start)
-	encode(rawSpan.Duration)
-	encode(rawSpan.Tags)
-
-	// Encode the number of LogRecords, then the records.
-	encode(int32(len(rawSpan.Logs)))
-	for _, lr := range rawSpan.Logs {
-		encode(lr.Timestamp)
-		// Encode the number of Fields.
-		encode(int32(len(lr.Fields)))
-		for _, f := range lr.Fields {
-			encode(f.Key())
-			// Encode the field value as a string.
-			encode(fmt.Sprint(f.Value()))
-		}
-	}
-
-	return buf.Bytes(), err
-}
-
-// DecodeRawSpan unmarshals into the given RawSpan.
-func DecodeRawSpan(enc []byte, dest *basictracer.RawSpan) error {
-	d := gob.NewDecoder(bytes.NewBuffer(enc))
-	var err error
-	decode := func(arg interface{}) {
-		if err == nil {
-			err = d.Decode(arg)
-		}
-	}
-
-	decode(&dest.Context)
-	decode(&dest.ParentSpanID)
-	decode(&dest.Operation)
-	decode(&dest.Start)
-	decode(&dest.Duration)
-	decode(&dest.Tags)
-
-	var numLogs int32
-	decode(&numLogs)
-	dest.Logs = make([]opentracing.LogRecord, numLogs)
-	for i := range dest.Logs {
-		lr := &dest.Logs[i]
-		decode(&lr.Timestamp)
-
-		var numFields int32
-		decode(&numFields)
-		lr.Fields = make([]otlog.Field, numFields)
-		for j := range lr.Fields {
-			var key, val string
-			decode(&key)
-			decode(&val)
-			lr.Fields[j] = otlog.String(key, val)
-		}
-	}
-
-	return err
-}
-
 // StartSnowballTrace takes in a context and returns a derived one with a
 // "snowball span" in it. The caller takes ownership of this span from the
 // returned context and is in charge of Finish()ing it. The span has recording
@@ -602,21 +514,4 @@ func StartSnowballTrace(
 	StartRecording(span)
 	span.SetBaggageItem(Snowball, "1")
 	return opentracing.ContextWithSpan(ctx, span), span, nil
-}
-
-// IngestRemoteSpans takes a bunch of encoded spans and adds them to the record
-// for the span in the context. The context is expected to contain a span for
-// which recording is enabled.
-func IngestRemoteSpans(ctx context.Context, remoteSpans [][]byte) error {
-	span := opentracing.SpanFromContext(ctx)
-	if span == nil {
-		return errors.Errorf("trying to ingest remote spans but there is no recording span set up")
-	}
-	rawSpans := make([]basictracer.RawSpan, len(remoteSpans))
-	for i, encSp := range remoteSpans {
-		if err := DecodeRawSpan(encSp, &rawSpans[i]); err != nil {
-			return err
-		}
-	}
-	return ImportRemoteSpans(span, rawSpans)
 }
