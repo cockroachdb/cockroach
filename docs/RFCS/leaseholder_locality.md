@@ -95,7 +95,7 @@ potentially try to skip adding the `gateway_node_id` field to each
 `BatchRequest` and just rely on the source IP address. That would work in most
 cases, but could break down when nodes are communicating with each other via a
 load balancer or proxy, without saving much (adding an int to each
-`BatchRequest` should have a negligable effect on request size).
+`BatchRequest` should have a negligible effect on request size).
 
 We could alternatively include all the locality tags from the source node in
 each request, which would eliminate the need to look up the locality of each

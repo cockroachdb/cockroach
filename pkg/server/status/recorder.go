@@ -294,7 +294,7 @@ func (mr *MetricsRecorder) getLatencies(ctx context.Context) map[roachpb.NodeID]
 	return latencies
 }
 
-// GetStatusSummary returns a status summary messages for the node. The summary
+// GetStatusSummary returns a status summary message for the node. The summary
 // includes the recent values of metrics for both the node and all of its
 // component stores.
 func (mr *MetricsRecorder) GetStatusSummary(ctx context.Context) *NodeStatus {
