@@ -4,4 +4,4 @@ pkg/sql/parser/sql.go -diff
 pkg/ui/src/js/protos.* -diff
 pkg/ui/generated/* -diff
 pkg/ui/yarn.lock -merge
-glide.lock -merge
+Gopkg.toml -merge

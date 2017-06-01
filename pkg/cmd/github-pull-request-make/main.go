@@ -188,14 +188,14 @@ func main() {
 
 	if target == "checkdeps" {
 		var vendorChanged bool
-		for _, path := range []string{"glide.lock", "vendor"} {
+		for _, path := range []string{"Gopkg.lock", "vendor"} {
 			if strings.Contains(diff, fmt.Sprintf("\n--- a/%[1]s\n+++ b/%[1]s\n", path)) {
 				vendorChanged = true
 				break
 			}
 		}
 		if vendorChanged {
-			cmd := exec.Command("glide", "install")
+			cmd := exec.Command("dep", "ensure")
 			cmd.Dir = crdb.Dir
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
