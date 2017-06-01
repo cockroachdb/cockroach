@@ -324,7 +324,7 @@ func planNodeForQuery(
 		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
 	}
 	stmt := stmts[0]
-	plan, err := p.makePlan(context.TODO(), stmt)
+	plan, err := p.makePlan(context.TODO(), Statement{AST: stmt})
 	if err != nil {
 		t.Fatal(err)
 	}

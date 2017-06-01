@@ -54,3 +54,23 @@ func ResultColumnsFromColDescs(colDescs []ColumnDescriptor) ResultColumns {
 	}
 	return cols
 }
+
+// TypesEqual returns whether the length and types of r matches other. If
+// a type in other is NULL, it is considered equal.
+func (r ResultColumns) TypesEqual(other ResultColumns) bool {
+	if len(r) != len(other) {
+		return false
+	}
+	for i, c := range r {
+		// NULLs are considered equal because some types of queries (SELECT CASE,
+		// for example) can change their output types between a type and NULL based
+		// on input.
+		if other[i].Typ == parser.TypeNull {
+			continue
+		}
+		if !c.Typ.Equivalent(other[i].Typ) {
+			return false
+		}
+	}
+	return true
+}

@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -56,7 +57,7 @@ type planMaker interface {
 	// must start by calling Start() first and then iterating using
 	// Next() and Values() in order to retrieve matching
 	// rows.
-	makePlan(ctx context.Context, stmt parser.Statement) (planNode, error)
+	makePlan(ctx context.Context, stmt Statement) (planNode, error)
 
 	// prepare does the same checks as makePlan but skips building some
 	// data structures necessary for execution, based on the assumption
@@ -214,10 +215,16 @@ var _ planNode = &windowNode{}
 var _ planNodeFastPath = &deleteNode{}
 
 // makePlan implements the Planner interface.
-func (p *planner) makePlan(ctx context.Context, stmt parser.Statement) (planNode, error) {
-	plan, err := p.newPlan(ctx, stmt, nil)
+func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error) {
+	plan, err := p.newPlan(ctx, stmt.AST, nil)
 	if err != nil {
 		return nil, err
+	}
+	if stmt.ExpectedTypes != nil {
+		if !stmt.ExpectedTypes.TypesEqual(plan.Columns()) {
+			return nil, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+				"cached plan must not change result type")
+		}
 	}
 	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
 		return nil, err
