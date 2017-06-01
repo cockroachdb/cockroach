@@ -98,7 +98,7 @@ func TestExplainTrace(t *testing.T) {
 			defer cluster.Stopper().Stop(context.TODO())
 
 			if _, err := cluster.ServerConn(0).Exec(
-				fmt.Sprintf(`SET CLUSTER SETTING trace.debug.enable = %t;`, enableTr),
+				fmt.Sprintf(`SET CLUSTER SETTING trace.debug.enable = %t`, enableTr),
 			); err != nil {
 				t.Fatal(err)
 			}
