@@ -37,6 +37,39 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+func TestRebalanceWhileSplitting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set the gossip stores interval lower to speed up rebalancing. With the
+	// default of 5s we have to wait ~5s for the rebalancing to start.
+	if err := os.Setenv("COCKROACH_GOSSIP_STORES_INTERVAL", "100ms"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Unsetenv("COCKROACH_GOSSIP_STORES_INTERVAL"); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	const numNodes = 5
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+	)
+	defer tc.Stopper().Stop()
+
+	const newRanges = 5
+	for i := 0; i < newRanges; i++ {
+		tableID := keys.MaxReservedDescID + i + 1
+		splitKey := keys.MakeRowSentinelKey(keys.MakeTablePrefix(uint32(tableID)))
+		for {
+			if _, _, err := tc.SplitRange(splitKey); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+}
+
 func TestReplicateQueueRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
