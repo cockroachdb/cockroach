@@ -1,0 +1,106 @@
+
+## Gopkg.toml example (these lines may be deleted)
+
+## "metadata" defines metadata about the project that could be used by other independent
+## systems. The metadata defined here will be ignored by dep.
+# [metadata]
+# key1 = "value that convey data to other systems"
+# system1-data = "value that is used by a system"
+# system2-data = "value that is used by another system"
+
+## "required" lists a set of packages (not projects) that must be included in
+## Gopkg.lock. This list is merged with the set of packages imported by the current
+## project. Use it when your project needs a package it doesn't explicitly import -
+## including "main" packages.
+# required = ["github.com/user/thing/cmd/thing"]
+
+## "ignored" lists a set of packages (not projects) that are ignored when
+## dep statically analyzes source code. Ignored packages can be in this project,
+## or in a dependency.
+# ignored = ["github.com/user/project/badpkg"]
+
+## Constraints are rules for how directly imported projects
+## may be incorporated into the depgraph. They are respected by
+## dep whether coming from the Gopkg.toml of the current project or a dependency.
+# [[constraint]]
+## Required: the root import path of the project being constrained.
+# name = "github.com/user/project"
+#
+## Recommended: the version constraint to enforce for the project.
+## Only one of "branch", "version" or "revision" can be specified.
+# version = "1.0.0"
+# branch = "master"
+# revision = "abc123"
+#
+## Optional: an alternate location (URL or import path) for the project's source.
+# source = "https://github.com/myfork/package.git"
+#
+## "metadata" defines metadata about the dependency or override that could be used
+## by other independent systems. The metadata defined here will be ignored by dep.
+# [metadata]
+# key1 = "value that convey data to other systems"
+# system1-data = "value that is used by a system"
+# system2-data = "value that is used by another system"
+
+## Overrides have the same structure as [[constraint]], but supersede all
+## [[constraint]] declarations from all projects. Only [[override]] from
+## the current project's are applied.
+##
+## Overrides are a sledgehammer. Use them only as a last resort.
+# [[override]]
+## Required: the root import path of the project being constrained.
+# name = "github.com/user/project"
+#
+## Optional: specifying a version constraint override will cause all other
+## constraints on this project to be ignored; only the overridden constraint
+## need be satisfied.
+## Again, only one of "branch", "version" or "revision" can be specified.
+# version = "1.0.0"
+# branch = "master"
+# revision = "abc123"
+#
+## Optional: specifying an alternate source location as an override will
+## enforce that the alternate location is used for that project, regardless of
+## what source location any dependent projects specify.
+# source = "https://github.com/myfork/package.git"
+
+
+required = [
+ "github.com/golang/dep/cmd/dep",
+ "github.com/client9/misspell/cmd/misspell",
+ "github.com/cockroachdb/crlfmt",
+ "github.com/cockroachdb/stress",
+ "github.com/golang/lint/golint",
+ "github.com/google/pprof",
+ "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway",
+ "github.com/jteeuwen/go-bindata/go-bindata",
+ "github.com/kisielk/errcheck",
+ "github.com/mattn/goveralls",
+ "github.com/mdempsky/unconvert",
+ "github.com/mibk/dupl",
+ "github.com/wadey/gocovmerge",
+ "golang.org/x/perf/cmd/benchstat",
+ "golang.org/x/tools/cmd/goimports",
+ "golang.org/x/tools/cmd/goyacc",
+ "golang.org/x/tools/cmd/stringer",
+]
+
+# https://github.com/cockroachdb/raven-go/pulls/1 avoids banned go/build import.
+[[constraint]]
+  name = "github.com/getsentry/raven-go"
+  revision = "aa4f14680cc759ef40791558d93c90c6f629c10f"
+  source = "https://github.com/cockroachdb/raven-go"
+
+# The collation tables must never change.
+[[constraint]]
+  name = "golang.org/x/text"
+  revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
+
+# https://github.com/docker/docker/issues/29362
+[[constraint]]
+  name = "github.com/docker/docker"
+  revision = "7248742ae7127347a52ab9d215451c213b7b59da"
+
+[[constraint]]
+  name = "github.com/Azure/azure-sdk-for-go"
+  revision = "8dd1f3ff407c300cff0a4bfedd969111ca5a7903"

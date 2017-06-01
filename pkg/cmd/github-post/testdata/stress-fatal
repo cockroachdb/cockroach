@@ -209,7 +209,6 @@ github.com/cockroachdb/cockroach/pkg/cmd/ncpus
 github.com/cockroachdb/cockroach/pkg/cmd/returncheck
 github.com/cockroachdb/cockroach/vendor/github.com/client9/misspell/cmd/misspell
 github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/crlfmt
-github.com/cockroachdb/cockroach/vendor/github.com/Masterminds/glide
 github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/stress
 github.com/cockroachdb/cockroach/vendor/github.com/golang/lint/golint
 github.com/cockroachdb/cockroach/vendor/github.com/google/pprof
