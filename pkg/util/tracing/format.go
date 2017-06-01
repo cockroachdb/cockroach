@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 )
@@ -47,13 +46,13 @@ func (l traceLogs) Swap(i, j int) {
 	l[i], l[j] = l[j], l[i]
 }
 
-// FormatRawSpans formats the given spans for human consumption, showing the
+// FormatRecordedSpans formats the given spans for human consumption, showing the
 // relationship using nesting and times as both relative to the previous event
 // and cumulative.
-func FormatRawSpans(spans []basictracer.RawSpan) string {
-	m := make(map[uint64]*basictracer.RawSpan)
+func FormatRecordedSpans(spans []RecordedSpan) string {
+	m := make(map[uint64]*RecordedSpan)
 	for i, sp := range spans {
-		m[sp.Context.SpanID] = &spans[i]
+		m[sp.SpanID] = &spans[i]
 	}
 
 	var depth func(uint64) int
@@ -69,19 +68,35 @@ func FormatRawSpans(spans []basictracer.RawSpan) string {
 	var start time.Time
 	for _, sp := range spans {
 		if sp.ParentSpanID == 0 {
-			start = sp.Start
+			start = sp.StartTime
 		}
 		d := depth(sp.ParentSpanID)
-		// Issue a log with the operation name.
-		logs = append(logs, traceLogData{
-			LogRecord: opentracing.LogRecord{
-				Timestamp: sp.Start,
-				Fields:    []otlog.Field{otlog.String("event", sp.Operation)},
-			},
-			depth: d,
-		})
-		for _, e := range sp.Logs {
-			logs = append(logs, traceLogData{LogRecord: e, depth: d})
+		// Issue a log with the operation name. Include any tags.
+		lr := opentracing.LogRecord{
+			Timestamp: sp.StartTime,
+			Fields:    []otlog.Field{otlog.String("operation", sp.Operation)},
+		}
+		if len(sp.Tags) > 0 {
+			tags := make([]string, 0, len(sp.Tags))
+			for k := range sp.Tags {
+				tags = append(tags, k)
+			}
+			sort.Strings(tags)
+			for _, k := range tags {
+				lr.Fields = append(lr.Fields, otlog.String(k, sp.Tags[k]))
+			}
+		}
+		logs = append(logs, traceLogData{LogRecord: lr, depth: d})
+		for _, l := range sp.Logs {
+			lr := opentracing.LogRecord{
+				Timestamp: l.Time,
+				Fields:    make([]otlog.Field, len(l.Fields)),
+			}
+			for i, f := range l.Fields {
+				lr.Fields[i] = otlog.String(f.Key, f.Value)
+			}
+
+			logs = append(logs, traceLogData{LogRecord: lr, depth: d})
 		}
 	}
 	sort.Sort(logs)

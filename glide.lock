@@ -346,10 +346,6 @@ imports:
   version: a0225b3f23b5ce0cbec6d7a66a968f8a59eca9c4
 - name: github.com/opencontainers/go-digest
   version: eaa60544f31ccf3b0653b1a118b76d33418ff41b
-- name: github.com/opentracing/basictracer-go
-  version: 1b32af207119a14b1b231d451df3ed04a72efebf
-  subpackages:
-  - wire
 - name: github.com/opentracing/opentracing-go
   version: eaaf4e1eeb7a5373b38e70901270c83577dc6fb9
   subpackages:
@@ -553,3 +549,7 @@ imports:
 testImports:
 - name: github.com/go-sql-driver/mysql
   version: 382e13d099fcf5f5994290892ab258fbebbdc5e3
+- name: github.com/opentracing/basictracer-go
+  version: 1b32af207119a14b1b231d451df3ed04a72efebf
+  subpackages:
+  - wire

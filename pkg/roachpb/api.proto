@@ -23,6 +23,7 @@ import "cockroach/pkg/roachpb/errors.proto";
 import "cockroach/pkg/roachpb/metadata.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";
+import "cockroach/pkg/util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
@@ -1037,6 +1038,7 @@ message BatchResponse {
   option (gogoproto.goproto_stringer) = false;
 
   message Header {
+    reserved 4;
     // error is non-nil if an error occurred.
     optional Error error = 1;
     // timestamp is set only for non-transactional responses and denotes the
@@ -1047,12 +1049,12 @@ message BatchResponse {
     // transaction. The transaction timestamp and/or priority may have
     // been updated, depending on the outcome of the request.
     optional Transaction txn = 3;
-    // collected_spans is a binary representation of the trace spans
-    // generated during the execution of this request.
-    repeated bytes collected_spans = 4;
     // now is the current time at the node sending the response,
     // which can be used by the receiver to update its local HLC.
     optional util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
+    // collected_spans stores trace spans recorded during the execution of this
+    // request.
+    repeated util.tracing.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
   }
   optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];

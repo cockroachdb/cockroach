@@ -21,72 +21,20 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 )
 
-func TestEncodeDecodeRawSpan(t *testing.T) {
-	s := basictracer.RawSpan{
-		Context: basictracer.SpanContext{
-			TraceID: 1,
-			SpanID:  2,
-			Sampled: true,
-			Baggage: make(map[string]string),
-		},
-		ParentSpanID: 13,
-		Operation:    "testop",
-		Start:        time.Now(),
-		Duration:     15 * time.Millisecond,
-		Tags:         make(map[string]interface{}),
-		Logs: []opentracing.LogRecord{
-			{
-				Timestamp: time.Now().Add(2 * time.Millisecond),
-			},
-			{
-				Timestamp: time.Now().Add(5 * time.Millisecond),
-				Fields: []otlog.Field{
-					otlog.Int("f1", 3),
-					otlog.String("f2", "f2Val"),
-				},
-			},
-		},
-	}
-	s.Context.Baggage["bag"] = "bagVal"
-	s.Tags["tag"] = 5
-
-	enc, err := EncodeRawSpan(&s, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var d basictracer.RawSpan
-	if err = DecodeRawSpan(enc, &d); err != nil {
-		t.Fatal(err)
-	}
-	// We cannot use DeepEqual because we encode all log fields as strings. So
-	// e.g. the "f1" field above is now a string, not an int. The string
-	// representations must match though.
-	sStr := fmt.Sprint(s)
-	dStr := fmt.Sprint(d)
-	if sStr != dStr {
-		t.Errorf("initial span: '%s', after encode/decode: '%s'", sStr, dStr)
-	}
-}
-
-func checkRawSpans(t *testing.T, rawSpans []basictracer.RawSpan, expected string) {
+func checkRecordedSpans(t *testing.T, recSpans []RecordedSpan, expected string) {
 	expected = strings.TrimSpace(expected)
 	var rows []string
 	row := func(format string, args ...interface{}) {
 		rows = append(rows, fmt.Sprintf(format, args...))
 	}
 
-	for _, rs := range rawSpans {
+	for _, rs := range recSpans {
 		row("span %s:", rs.Operation)
 		if len(rs.Tags) > 0 {
 			var tags []string
@@ -99,7 +47,7 @@ func checkRawSpans(t *testing.T, rawSpans []basictracer.RawSpan, expected string
 		for _, l := range rs.Logs {
 			msg := ""
 			for _, f := range l.Fields {
-				msg = msg + fmt.Sprintf("  %s: %v", f.Key(), f.Value())
+				msg = msg + fmt.Sprintf("  %s: %v", f.Key, f.Value)
 			}
 			row("%s", msg)
 		}
@@ -163,14 +111,14 @@ func TestTracerRecording(t *testing.T) {
 	}
 	s2.LogKV("x", 3)
 
-	checkRawSpans(t, GetRecording(s1), `
+	checkRecordedSpans(t, GetRecording(s1), `
 	  span a:
       x: 2
 	  span b:
       x: 3
 	`)
 
-	checkRawSpans(t, GetRecording(s2), `
+	checkRecordedSpans(t, GetRecording(s2), `
 	  span a:
       x: 2
 	  span b:
@@ -183,7 +131,7 @@ func TestTracerRecording(t *testing.T) {
 
 	s2.Finish()
 
-	checkRawSpans(t, GetRecording(s1), `
+	checkRecordedSpans(t, GetRecording(s1), `
 	  span a:
       x: 2
 	  span b:
@@ -193,7 +141,7 @@ func TestTracerRecording(t *testing.T) {
       x: 4
 	`)
 	s3.Finish()
-	checkRawSpans(t, GetRecording(s1), `
+	checkRecordedSpans(t, GetRecording(s1), `
 	  span a:
       x: 2
 	  span b:
@@ -204,10 +152,10 @@ func TestTracerRecording(t *testing.T) {
 	`)
 	StopRecording(s1)
 	s1.LogKV("x", 100)
-	checkRawSpans(t, GetRecording(s1), ``)
+	checkRecordedSpans(t, GetRecording(s1), ``)
 	// The child span is still recording.
 	s3.LogKV("x", 5)
-	checkRawSpans(t, GetRecording(s3), `
+	checkRecordedSpans(t, GetRecording(s3), `
 	  span a:
       x: 2
 	  span b:
@@ -280,32 +228,21 @@ func TestTracerInjectExtract(t *testing.T) {
 
 	// Verify that recording was started automatically.
 	rec := GetRecording(s2)
-	checkRawSpans(t, rec, `
+	checkRecordedSpans(t, rec, `
 	  span remote op:
 	    x: 1
 	`)
 
-	checkRawSpans(t, GetRecording(s1), `
+	checkRecordedSpans(t, GetRecording(s1), `
 	  span a:
 		  tags: sb=1
 	`)
 
-	// Encode spans as if we are sending them over the wire.
-	var encSpans [][]byte
-	for i := range rec {
-		enc, err := EncodeRawSpan(&rec[i], nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		encSpans = append(encSpans, enc)
-	}
-
-	ctx := opentracing.ContextWithSpan(context.Background(), s1)
-	if err := IngestRemoteSpans(ctx, encSpans); err != nil {
+	if err := ImportRemoteSpans(s1, rec); err != nil {
 		t.Fatal(err)
 	}
 
-	checkRawSpans(t, GetRecording(s1), `
+	checkRecordedSpans(t, GetRecording(s1), `
 	  span a:
 		  tags: sb=1
 		span remote op:
