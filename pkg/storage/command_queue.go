@@ -139,8 +139,8 @@ func (c *cmd) String() string {
 // typically contain many spans, but are spatially disjoint.
 func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 	cq := &CommandQueue{
-		reads:                interval.Tree{Overlapper: interval.Range.OverlapExclusive},
-		writes:               interval.Tree{Overlapper: interval.Range.OverlapExclusive},
+		reads:                interval.NewTree(interval.ExclusiveOverlapper),
+		writes:               interval.NewTree(interval.ExclusiveOverlapper),
 		wRg:                  interval.NewRangeTree(),
 		rwRg:                 interval.NewRangeTree(),
 		coveringOptimization: coveringOptimization,
@@ -610,11 +610,11 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 	}
 }
 
-func (cq *CommandQueue) tree(c *cmd) *interval.Tree {
+func (cq *CommandQueue) tree(c *cmd) interval.Tree {
 	if c.readOnly {
-		return &cq.reads
+		return cq.reads
 	}
-	return &cq.writes
+	return cq.writes
 }
 
 func (cq *CommandQueue) nextID() int64 {

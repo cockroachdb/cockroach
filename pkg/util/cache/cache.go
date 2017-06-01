@@ -496,7 +496,7 @@ func (ic *IntervalCache) MakeKey(start, end []byte) IntervalKey {
 
 // Implementation of cacheStore interface.
 func (ic *IntervalCache) init() {
-	ic.tree = interval.Tree{Overlapper: interval.Range.OverlapExclusive}
+	ic.tree = interval.NewTree(interval.ExclusiveOverlapper)
 }
 
 func (ic *IntervalCache) get(key interface{}) *Entry {
