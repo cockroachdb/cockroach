@@ -267,6 +267,7 @@ var keywords = map[string]int{
 	"UNKNOWN":                   UNKNOWN,
 	"UPDATE":                    UPDATE,
 	"UPSERT":                    UPSERT,
+	"USE":                       USE,
 	"USER":                      USER,
 	"USERS":                     USERS,
 	"USING":                     USING,
