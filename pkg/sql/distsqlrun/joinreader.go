@@ -17,6 +17,7 @@
 package distsqlrun
 
 import (
+	"math"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -153,7 +154,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 			})
 		}
 
-		err := jr.fetcher.StartScan(ctx, txn, spans, false /* no batch limits */, 0)
+		err := jr.fetcher.StartScan(ctx, txn, spans, false /* no batch limits */, math.MaxInt64)
 		if err != nil {
 			log.Errorf(ctx, "scan error: %s", err)
 			return err

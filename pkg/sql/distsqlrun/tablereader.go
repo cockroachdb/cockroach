@@ -18,6 +18,7 @@ package distsqlrun
 
 import (
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -55,8 +56,9 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 	tr := &tableReader{
-		flowCtx: flowCtx,
-		tableID: spec.Table.ID,
+		flowCtx:   flowCtx,
+		tableID:   spec.Table.ID,
+		limitHint: math.MaxInt64,
 	}
 
 	// We ignore any limits that are higher than this value to avoid any
@@ -87,7 +89,7 @@ func newTableReader(
 		tr.limitHint = spec.LimitHint + rowChannelBufSize + 1
 	}
 
-	if post.Filter.Expr != "" {
+	if post.Filter.Expr != "" && tr.limitHint != math.MaxInt64 {
 		// We have a filter so we will likely need to read more rows.
 		tr.limitHint *= 2
 	}

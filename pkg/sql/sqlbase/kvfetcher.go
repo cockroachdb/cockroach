@@ -20,6 +20,7 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -122,9 +123,9 @@ func (f *kvFetcher) getRangesInfo() []roachpb.RangeInfo {
 // getBatchSize returns the max size of the next batch.
 func (f *kvFetcher) getBatchSize() int64 {
 	if !f.useBatchLimit {
-		return 0
+		return math.MaxInt64
 	}
-	if f.firstBatchLimit == 0 || f.firstBatchLimit >= kvBatchSize {
+	if f.firstBatchLimit >= kvBatchSize {
 		return kvBatchSize
 	}
 
@@ -176,7 +177,7 @@ func makeKVFetcher(
 	firstBatchLimit int64,
 	returnRangeInfo bool,
 ) (kvFetcher, error) {
-	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
+	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != math.MaxInt64) {
 		return kvFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
 			firstBatchLimit, useBatchLimit)
 	}

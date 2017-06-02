@@ -20,6 +20,7 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -182,19 +183,18 @@ func (rf *RowFetcher) StartScan(
 	// batches get larger to avoid making things too slow (e.g. in case we have
 	// a very restrictive filter and actually have to retrieve a lot of rows).
 	firstBatchLimit := limitHint
-	if firstBatchLimit != 0 {
-		// The limitHint is a row limit, but each row could be made up of more
-		// than one key.
-		firstBatchLimit = limitHint * int64(rf.desc.KeysPerRow(rf.index.ID))
-		// Check for overflow using this value. If overflow occurs, we ignore
-		// the limit.
-		const overflowProtection = 1000000000
-		if firstBatchLimit > overflowProtection {
-			firstBatchLimit = 0
+	if limitHint != math.MaxInt64 {
+		kprSize := int64(rf.desc.KeysPerRow(rf.index.ID))
+		if limitHint >= math.MaxInt64/kprSize-1 {
+			// Overflow: keep the hint limited.
+			firstBatchLimit = math.MaxInt64 - 1
 		} else {
-			// We need an extra key to make sure we form the last row.
-			firstBatchLimit++
+			// The limitHint is a row limit, but each row could be made up of more
+			// than one key.
+			firstBatchLimit = limitHint * kprSize
 		}
+		// We need an extra key to make sure we form the last row.
+		firstBatchLimit++
 	}
 
 	var err error

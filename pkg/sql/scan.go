@@ -174,8 +174,8 @@ func (n *scanNode) limitHint() int64 {
 		// Like above, read a multiple of the limit when the limit is "soft".
 		limitHint = n.softLimit * 2
 	} else {
-		// If there is no limit, rowFetcher expects a 0.
-		limitHint = 0
+		// No limit.
+		limitHint = math.MaxInt64
 	}
 	return limitHint
 }
