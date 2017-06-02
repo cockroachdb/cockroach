@@ -438,6 +438,19 @@ type grpcGatewayServer interface {
 	) error
 }
 
+// ListenError is returned from Start when we fail to start listening on either
+// the main Cockroach port or the HTTP port, so that the CLI can instruct the
+// user on what might have gone wrong.
+type ListenError struct {
+	err  error
+	Addr string
+}
+
+// Error implements the error interface.
+func (le ListenError) Error() string {
+	return le.err.Error()
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context.
 //
@@ -481,7 +494,10 @@ func (s *Server) Start(ctx context.Context) error {
 
 	ln, err := net.Listen("tcp", s.cfg.Addr)
 	if err != nil {
-		return err
+		return ListenError{
+			Addr: s.cfg.Addr,
+			err:  err,
+		}
 	}
 	log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
 	unresolvedListenAddr, err := officialAddr(s.cfg.Addr, ln.Addr())
@@ -507,7 +523,10 @@ func (s *Server) Start(ctx context.Context) error {
 
 	httpLn, err := net.Listen("tcp", s.cfg.HTTPAddr)
 	if err != nil {
-		return err
+		return ListenError{
+			Addr: s.cfg.HTTPAddr,
+			err:  err,
+		}
 	}
 	unresolvedHTTPAddr, err := officialAddr(s.cfg.HTTPAddr, httpLn.Addr())
 	if err != nil {
