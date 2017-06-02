@@ -2613,9 +2613,6 @@ func (r *Replica) adminSplitWithDescriptor(
 			if err != nil {
 				return reply, false, roachpb.NewErrorf("unable to determine split key: %s", err)
 			}
-		} else if !r.ContainsKey(foundSplitKey) {
-			return reply, false,
-				roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
 		}
 		if foundSplitKey == nil {
 			return reply, false, nil
@@ -2625,6 +2622,11 @@ func (r *Replica) adminSplitWithDescriptor(
 		if err != nil {
 			return reply, false, roachpb.NewErrorf("cannot split range at key %s: %v",
 				args.SplitKey, err)
+		}
+
+		if !containsKey(*desc, foundSplitKey) {
+			return reply, false,
+				roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
 		}
 
 		splitKey, err = keys.Addr(foundSplitKey)
