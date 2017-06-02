@@ -1,0 +1,31 @@
+group 'com.cockroachlabs'
+version '1.0'
+
+apply plugin: 'java'
+apply plugin: 'application'
+
+mainClassName = 'com.cockroachlabs.Application'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Necessary for Hibernate.
+    compile 'org.hibernate:hibernate-core:5.2.4.Final'
+    compile 'org.postgresql:postgresql:9.4.1208'
+
+    // Necessary for web application.
+    compile 'org.glassfish.jersey.core:jersey-server:2.25'
+    compile 'org.glassfish.jersey.containers:jersey-container-netty-http:2.25'
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.8.5'
+    compile 'com.beust:jcommander:1.7'
+
+    testCompile group: 'junit', name: 'junit', version: '4.11'
+}
+
+run {
+    if (project.hasProperty("appArgs")) {
+        args Eval.me(appArgs)
+    }
+}

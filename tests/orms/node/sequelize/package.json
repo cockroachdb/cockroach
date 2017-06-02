@@ -1,0 +1,13 @@
+{
+  "name": "sequelize-cockroachdb-test",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./app.js"
+  },
+  "dependencies": {
+    "body-parser": "~1.15.2",
+    "express": "~4.14.0",
+    "sequelize-cockroachdb": "^1.0.0"
+  }
+}
