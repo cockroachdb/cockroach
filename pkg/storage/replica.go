@@ -2747,25 +2747,6 @@ func (r *Replica) propose(
 		return nil, nil, noop, err
 	}
 
-	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
-		for index, union := range ba.Requests {
-			filterArgs := storagebase.FilterArgs{
-				Ctx:   ctx,
-				CmdID: idKey,
-				Index: index,
-				Sid:   r.store.StoreID(),
-				Req:   union.GetInner(),
-				Hdr:   ba.Header,
-			}
-			if pErr := filter(filterArgs); pErr != nil {
-				ch := make(chan proposalResult, 1)
-				ch <- proposalResult{Err: pErr}
-				close(ch)
-				return ch, func() bool { return false }, noop, nil
-			}
-		}
-	}
-
 	// submitProposalLocked calls withRaftGroupLocked which requires that
 	// raftMu is held. In order to maintain our lock ordering we need to lock
 	// Replica.raftMu here before locking Replica.mu.
@@ -2792,6 +2773,25 @@ func (r *Replica) propose(
 			r.mu.proposalQuota.add(int64(proposal.command.Size()))
 		}
 		r.mu.Unlock()
+	}
+
+	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
+		for index, union := range ba.Requests {
+			filterArgs := storagebase.FilterArgs{
+				Ctx:   ctx,
+				CmdID: idKey,
+				Index: index,
+				Sid:   r.store.StoreID(),
+				Req:   union.GetInner(),
+				Hdr:   ba.Header,
+			}
+			if pErr := filter(filterArgs); pErr != nil {
+				ch := make(chan proposalResult, 1)
+				ch <- proposalResult{Err: pErr}
+				close(ch)
+				return ch, func() bool { return false }, undoQuotaAcquisition, nil
+			}
+		}
 	}
 
 	// NB: We need to check Replica.mu.destroyed again in case the Replica has
@@ -3186,6 +3186,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				// they're all initialized.
 				if cmdSize, ok := r.mu.commandSizes[commandID]; ok {
 					r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, cmdSize)
+					delete(r.mu.commandSizes, commandID)
 				}
 			}
 			r.mu.Unlock()
@@ -3216,6 +3217,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if r.mu.replicaID == r.mu.leaderID {
 				if cmdSize, ok := r.mu.commandSizes[commandID]; ok {
 					r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, cmdSize)
+					delete(r.mu.commandSizes, commandID)
 				}
 			}
 			r.mu.Unlock()
