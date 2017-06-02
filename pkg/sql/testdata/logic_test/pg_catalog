@@ -1117,3 +1117,11 @@ JOIN pg_type t ON t.typinput = p.oid
 WHERE t.typname = '_int4'
 ----
 2590763490  array_in  array_in
+
+
+## #16285
+## int2vectors should be 0-indexed
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_index WHERE indkey[0] IS NULL;
+----
+0
