@@ -293,6 +293,59 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	}
 }
 
+// TestEnsureSafeSplitKeyOutOfBounds is a regression test for an issue
+// fixed in #16291. A key that was initially within the bounds of a
+// range becomes out of bounds when passed through EnsureSafeSplitKey.
+// This was eventually detected, but it happened so late in the split
+// processes that we had no choice but to panic. Since #16291, this
+// condition is properly validated at the start of the split process
+// and returns an error cleanly.
+func TestEnsureSafeSplitKeyOutOfBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+
+	// Carefully construct keys with the desired properties: key2 is
+	// greater than key1, but the order reverses when EnsureSafeSplitKey
+	// is called.
+	var key1, key2 roachpb.Key
+	key1 = encoding.EncodeUvarintAscending(key1, keys.MaxReservedDescID+1)
+	key1 = encoding.EncodeUvarintAscending(key1, 1)
+	key1 = keys.MakeRowSentinelKey(key1)
+	key2 = encoding.EncodeUvarintAscending(key2, keys.MaxReservedDescID+1)
+	key2 = encoding.EncodeUvarintAscending(key2, 2)
+	key2 = encoding.EncodeUvarintAscending(key2, 1)
+
+	// Make sure the keys sort in the expected ways.
+	if key1.Compare(key2) >= 0 {
+		t.Fatalf("expected %s < %s", key1, key2)
+	}
+	var eKey1, eKey2 roachpb.Key
+	var err error
+	if eKey1, err = keys.EnsureSafeSplitKey(key1); err != nil {
+		t.Fatal(err)
+	}
+	if eKey2, err = keys.EnsureSafeSplitKey(key2); err != nil {
+		t.Fatal(err)
+	}
+	if eKey1.Compare(eKey2) <= 0 {
+		t.Fatalf("expected %s > %s", eKey1, eKey2)
+	}
+
+	args := adminSplitArgs(key1, key1)
+	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], args); pErr != nil {
+		t.Fatal(pErr)
+	}
+	args = adminSplitArgs(key2, key2)
+	_, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], args)
+	if !testutils.IsPError(pErr, "requested split key.*changed to.*by EnsureSafeSplitKey") {
+		t.Fatalf("unexpected error: %s", pErr)
+	}
+}
+
 // TestStoreRangeSplitConcurrent verifies that concurrent range splits
 // of the same range are executed serially, and all but the first fail
 // because the split key is invalid after the first split succeeds.
