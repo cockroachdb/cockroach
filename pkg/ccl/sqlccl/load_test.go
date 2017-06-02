@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestImportChunking(t *testing.T) {
@@ -61,7 +60,6 @@ func BenchmarkImport(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	defer tracing.Disable()()
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
 

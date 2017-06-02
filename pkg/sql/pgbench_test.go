@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // Tests a batch of queries very similar to those that that PGBench runs
@@ -113,7 +112,6 @@ func execPgbench(b *testing.B, pgURL url.URL) {
 
 func BenchmarkPgbenchExec(b *testing.B) {
 	b.Run("Cockroach", func(b *testing.B) {
-		defer tracing.Disable()()
 		s, _, _ := serverutils.StartServer(b, base.TestServerArgs{Insecure: true})
 		defer s.Stopper().Stop(context.TODO())
 
