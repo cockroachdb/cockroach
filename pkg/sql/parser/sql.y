@@ -1591,6 +1591,10 @@ show_stmt:
   {
     $$.val = &Show{Name: $2}
   }
+| SHOW BACKUP string_or_placeholder
+  {
+    $$.val = &ShowBackup{Path: $3.expr()}
+  }
 | SHOW CLUSTER SETTING any_name
   {
     $$.val = &Show{Name: $4.unresolvedName().String(), ClusterSetting: true}

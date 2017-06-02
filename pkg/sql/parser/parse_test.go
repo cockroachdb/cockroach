@@ -667,6 +667,7 @@ func TestParse(t *testing.T) {
 
 		{`BACKUP foo TO 'bar'`},
 		{`BACKUP foo.foo, baz.baz TO 'bar'`},
+		{`SHOW BACKUP 'bar'`},
 		{`BACKUP foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
 		{`BACKUP foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'`},
 		{`BACKUP DATABASE foo TO 'bar'`},
