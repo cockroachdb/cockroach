@@ -2602,8 +2602,9 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Event(ctx, "split begins")
 	var splitKey roachpb.RKey
 	{
-		foundSplitKey := args.SplitKey
-		if len(foundSplitKey) == 0 {
+		var foundSplitKey roachpb.Key
+		if len(args.SplitKey) == 0 {
+			// Find a key to split by size.
 			snap := r.store.NewSnapshot()
 			defer snap.Close()
 			var err error
@@ -2613,18 +2614,39 @@ func (r *Replica) adminSplitWithDescriptor(
 			if err != nil {
 				return reply, false, roachpb.NewErrorf("unable to determine split key: %s", err)
 			}
-		} else if !r.ContainsKey(foundSplitKey) {
-			return reply, false,
-				roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
-		}
-		if foundSplitKey == nil {
-			return reply, false, nil
+			if foundSplitKey == nil {
+				// No suitable split key could be found.
+				return reply, false, nil
+			}
+		} else {
+			// Split at requested key. If it's out of this range's bounds,
+			// return an error for the client to try again on the correct
+			// range.
+			if !containsKey(*desc, args.SplitKey) {
+				return reply, false,
+					roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
+			}
+			foundSplitKey = args.SplitKey
 		}
 
+		// Ensure the key falls between rows, not within one.
 		foundSplitKey, err := keys.EnsureSafeSplitKey(foundSplitKey)
 		if err != nil {
 			return reply, false, roachpb.NewErrorf("cannot split range at key %s: %v",
 				args.SplitKey, err)
+		}
+
+		// EnsureSafeSplitKey could have changed the key, so we must
+		// revalidate. But this time we must not return a
+		// RangeKeyMismatchError, because that would result in infinite
+		// retries (the client would retry with the original key, which
+		// would be sent back to this range again). Treat these keys as
+		// invalid split points.
+		if !containsKey(*desc, foundSplitKey) {
+			return reply, false,
+				roachpb.NewErrorf(
+					"requested split key %s changed to %s by EnsureSafeSplitKey, out of bounds of %s",
+					args.SplitKey, foundSplitKey, r)
 		}
 
 		splitKey, err = keys.Addr(foundSplitKey)
