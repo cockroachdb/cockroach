@@ -481,7 +481,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	ln, err := net.Listen("tcp", s.cfg.Addr)
 	if err != nil {
-		return err
+		return errors.Errorf("%s, use --port <port> to set the port", err)
 	}
 	log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
 	unresolvedListenAddr, err := officialAddr(s.cfg.Addr, ln.Addr())
@@ -507,7 +507,10 @@ func (s *Server) Start(ctx context.Context) error {
 
 	httpLn, err := net.Listen("tcp", s.cfg.HTTPAddr)
 	if err != nil {
-		return err
+		return errors.Errorf(
+			"unable to start admin ui: %s, use --http-port <port> to set the admin ui port",
+			err,
+		)
 	}
 	unresolvedHTTPAddr, err := officialAddr(s.cfg.HTTPAddr, httpLn.Addr())
 	if err != nil {
