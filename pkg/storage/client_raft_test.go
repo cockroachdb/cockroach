@@ -1775,6 +1775,16 @@ func TestQuotaPool(t *testing.T) {
 		t.Fatalf("didn't observe the expected quota acquisition, available: %d", curQuota)
 	}
 
+	testutils.SucceedsSoonDepth(1, t, func() error {
+		if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 1 {
+			return errors.Errorf("expected 1 queued quota release, found: %d", qLen)
+		}
+		if cLen := leaderRepl.CommandSizesLen(); cLen != 0 {
+			return errors.Errorf("expected zero-length command sizes map, found %d", cLen)
+		}
+		return nil
+	})
+
 	ch := make(chan *roachpb.Error, 1)
 	go func() {
 		_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
@@ -1786,6 +1796,12 @@ func TestQuotaPool(t *testing.T) {
 	testutils.SucceedsSoonDepth(1, t, func() error {
 		if curQuota := leaderRepl.QuotaAvailable(); curQuota != quota {
 			return errors.Errorf("expected available quota %d, got %d", quota, curQuota)
+		}
+		if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 0 {
+			return errors.Errorf("expected no queued quota releases, found: %d", qLen)
+		}
+		if cLen := leaderRepl.CommandSizesLen(); cLen != 0 {
+			return errors.Errorf("expected zero-length command sizes map, found %d", cLen)
 		}
 		return nil
 	})

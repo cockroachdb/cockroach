@@ -280,6 +280,18 @@ func (r *Replica) QuotaAvailable() int64 {
 	return r.mu.proposalQuota.approximateQuota()
 }
 
+func (r *Replica) QuotaReleaseQueueLen() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.mu.quotaReleaseQueue)
+}
+
+func (r *Replica) CommandSizesLen() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.mu.commandSizes)
+}
+
 // GetTimestampCacheLowWater returns the timestamp cache low water mark.
 func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	r.store.tsCacheMu.Lock()
