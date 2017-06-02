@@ -408,6 +408,15 @@ func (*ShowCreateView) hiddenFromStats()                   {}
 func (*ShowCreateView) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
+func (*ShowBackup) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowBackup) StatementTag() string { return "SHOW BACKUP" }
+
+func (*ShowBackup) hiddenFromStats()                   {}
+func (*ShowBackup) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
 func (*ShowDatabases) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -574,6 +583,7 @@ func (n *SetDefaultIsolation) String() string      { return AsString(n) }
 func (n *SetTimeZone) String() string              { return AsString(n) }
 func (n *SetTransaction) String() string           { return AsString(n) }
 func (n *Show) String() string                     { return AsString(n) }
+func (n *ShowBackup) String() string               { return AsString(n) }
 func (n *ShowColumns) String() string              { return AsString(n) }
 func (n *ShowCreateTable) String() string          { return AsString(n) }
 func (n *ShowCreateView) String() string           { return AsString(n) }

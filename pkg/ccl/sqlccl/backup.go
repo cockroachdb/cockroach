@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"sort"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -468,9 +469,11 @@ func backupPlanHook(
 	if !ok {
 		return nil, nil, nil
 	}
+
 	if err := utilccl.CheckEnterpriseEnabled("BACKUP"); err != nil {
 		return nil, nil, err
 	}
+
 	if err := p.RequireSuperUser("BACKUP"); err != nil {
 		return nil, nil, err
 	}
@@ -559,6 +562,72 @@ func backupPlanHook(
 	return fn, header, nil
 }
 
+func showBackupPlanHook(
+	baseCtx context.Context, stmt parser.Statement, p sql.PlanHookState,
+) (func() ([]parser.Datums, error), sqlbase.ResultColumns, error) {
+	backup, ok := stmt.(*parser.ShowBackup)
+	if !ok {
+		return nil, nil, nil
+	}
+
+	if err := utilccl.CheckEnterpriseEnabled("SHOW BACKUP"); err != nil {
+		return nil, nil, err
+	}
+
+	if err := p.RequireSuperUser("SHOW BACKUP"); err != nil {
+		return nil, nil, err
+	}
+
+	toFn, err := p.TypeAsString(backup.Path, "SHOW BACKUP")
+	if err != nil {
+		return nil, nil, err
+	}
+	header := sqlbase.ResultColumns{
+		{Name: "database", Typ: parser.TypeString},
+		{Name: "table", Typ: parser.TypeString},
+		{Name: "start_time", Typ: parser.TypeTimestamp},
+		{Name: "end_time", Typ: parser.TypeTimestamp},
+	}
+	fn := func() ([]parser.Datums, error) {
+		// TODO(dan): Move this span into sql.
+		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
+		defer tracing.FinishSpan(span)
+
+		str, err := toFn()
+		if err != nil {
+			return nil, err
+		}
+		desc, err := readBackupDescriptor(ctx, str)
+		if err != nil {
+			return nil, err
+		}
+		var ret []parser.Datums
+		descs := make(map[sqlbase.ID]string)
+		for _, descriptor := range desc.Descriptors {
+			if database := descriptor.GetDatabase(); database != nil {
+				if _, ok := descs[database.ID]; !ok {
+					descs[database.ID] = database.Name
+				}
+			}
+		}
+		for _, descriptor := range desc.Descriptors {
+			if table := descriptor.GetTable(); table != nil {
+				dbName := descs[table.ParentID]
+				temp := parser.Datums{
+					parser.NewDString(dbName),
+					parser.NewDString(table.Name),
+					parser.MakeDTimestamp(time.Unix(0, desc.StartTime.WallTime), time.Second),
+					parser.MakeDTimestamp(time.Unix(0, desc.EndTime.WallTime), time.Second),
+				}
+				ret = append(ret, temp)
+			}
+		}
+		return ret, nil
+	}
+	return fn, header, nil
+}
+
 func init() {
 	sql.AddPlanHook(backupPlanHook)
+	sql.AddPlanHook(showBackupPlanHook)
 }
