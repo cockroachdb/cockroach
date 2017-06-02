@@ -1,0 +1,4 @@
+---
+exclude_paths:
+  - vendor/
+  - '*.pb.*'
