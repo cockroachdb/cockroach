@@ -392,6 +392,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <Statement> transaction_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
+%type <Statement> use_stmt
 
 %type <[]string> opt_incremental
 %type <KVOption> kv_option
@@ -687,7 +688,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
-%token <str>   UPDATE UPSERT USER USERS USING UUID
+%token <str>   UPDATE UPSERT USE USER USERS USING UUID
 
 %token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
 
@@ -825,6 +826,7 @@ stmt:
 | reset_stmt
 | truncate_stmt
 | update_stmt
+| use_stmt
 | /* EMPTY */
   {
     $$.val = Statement(nil)
@@ -1373,6 +1375,15 @@ reset_stmt:
   {
     $$.val = &Set{Name: $2.unresolvedName(), SetMode: SetModeReset}
   }
+
+// USE is the MSSQL/MySQL equivalent of SET DATABASE. Alias it for convenience.
+use_stmt:
+  USE var_value
+  {
+    /* SKIP DOC */
+    $$.val = &Set{Name: UnresolvedName{Name("database")}, Values: Exprs{$2.expr()}}
+  }
+
 
 // SET name TO 'var_value'
 // SET TIME ZONE 'var_value'
@@ -5330,6 +5341,7 @@ unreserved_keyword:
 | UNKNOWN
 | UPDATE
 | UPSERT
+| USE
 | USERS
 | VALID
 | VALIDATE
