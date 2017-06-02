@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func bankStatementBuf(numAccounts int) *bytes.Buffer {
@@ -37,7 +36,6 @@ func BenchmarkClusterBackup(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	defer tracing.Disable()()
 
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanupFn()
@@ -71,7 +69,6 @@ func BenchmarkClusterRestore(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	defer tracing.Disable()()
 
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
@@ -92,7 +89,6 @@ func BenchmarkLoadRestore(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	defer tracing.Disable()()
 
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
@@ -138,8 +134,6 @@ func BenchmarkLoadSQL(b *testing.B) {
 }
 
 func runEmptyIncrementalBackup(b *testing.B) {
-	defer tracing.Disable()()
-
 	const numStatements = 100000
 
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
