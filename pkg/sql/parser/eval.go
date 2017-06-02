@@ -25,6 +25,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -2486,6 +2487,11 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 	// Index into the DArray, using 1-indexing.
 	arr := MustBeDArray(d)
+
+	// INT2VECTOR uses 0-indexing.
+	if w, ok := d.(*DOidWrapper); ok && w.Oid == oid.T_int2vector {
+		subscriptIdx++
+	}
 	if subscriptIdx < 1 || subscriptIdx > arr.Len() {
 		return DNull, nil
 	}
