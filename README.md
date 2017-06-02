@@ -44,13 +44,16 @@ For guidance on installation, development, deployment, and administration, see o
 
 1. [Install CockroachDB](https://www.cockroachlabs.com/docs/install-cockroachdb.html).
 
-1. [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html) and talk to it via the [built-in SQL client](https://www.cockroachlabs.com/docs/use-the-built-in-sql-client.html).
+1. [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html)
+   and talk to it via the [built-in SQL client](https://www.cockroachlabs.com/docs/use-the-built-in-sql-client.html).
 
-1. [Secure the cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html) with TLS encryption.
+1. [Learn more about CockroachDB SQL](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html).
 
-1. [Learn about CockroachDB SQL](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html).
+1. Use a PostgreSQL-compatible driver or ORM to
+   [build an app with CockroachDB](https://www.cockroachlabs.com/docs/build-an-app-with-cockroachdb.html).
 
-1. [Explore core features](https://www.cockroachlabs.com/docs/demo-data-replication.html), such as data replication and fault tolerance and recovery.
+1. [Explore core features](https://www.cockroachlabs.com/docs/demo-data-replication.html),
+   such as data replication, automatic rebalancing, and fault tolerance and recovery.
 
 ## Client Drivers
 
@@ -70,14 +73,18 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 
 ## Need Help?
 
-- [CockroachDB Forum](https://forum.cockroachlabs.com/) - Ask
-  questions, find answers, and help other users.
+- [Troubleshooting documentation](https://www.cockroachlabs.com/docs/troubleshooting-overview.html) -
+  Learn how to troubleshoot common errors, cluster and node setup, and SQL query behavior,
+  and how to use debug and error logs.
 
-- [Join us on Gitter](https://gitter.im/cockroachdb/cockroach) - This
-  is the most immediate way to connect with CockroachDB engineers.
+- [CockroachDB Forum](https://forum.cockroachlabs.com/) and
+  [Stack Overflow](https://stackoverflow.com/questions/tagged/cockroachdb) - Ask questions,
+  find answers, and help other users.
 
-- For filing bugs, suggesting improvements, or requesting new
-  features, help us out by
+- [Join us on Gitter](https://gitter.im/cockroachdb/cockroach) - This is the most immediate
+  way to connect with CockroachDB engineers.
+
+- For filing bugs, suggesting improvements, or requesting new features, help us out by
   [opening an issue](https://github.com/cockroachdb/cockroach/issues/new).
 
 ## Contributing
