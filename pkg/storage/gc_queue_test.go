@@ -889,3 +889,98 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 		return nil
 	})
 }
+
+func TestChunkGCRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	desc := &roachpb.RangeDescriptor{}
+	info := &GCInfo{}
+	var gcKeys1 []roachpb.GCRequest_GCKey
+	for i := 0; i < gcChunkKeySize/1000; i++ {
+		var gcKey roachpb.GCRequest_GCKey
+		gcKey.Key = roachpb.Key(fmt.Sprintf("%0100d", i))
+		gcKeys1 = append(gcKeys1, gcKey)
+	}
+	batches := chunkGCRequest(desc, info, gcKeys1)
+
+	// We expect two batches: The initial state-adjusting batch that is always emitted, and an unbroken batch of our keys.
+	if act, exp := len(batches), 2; act != exp {
+		t.Fatalf("expected %d batches, but got %d", exp, act)
+	}
+
+	var size int
+	for _, key := range batches[1].Keys {
+		size += len(key.Key)
+	}
+	if size > gcChunkKeySize {
+		t.Fatalf("expected GC Request's batch size smaller than %v, but got %v", gcChunkKeySize, size)
+	}
+
+	var gcKeys2 []roachpb.GCRequest_GCKey
+	for i := 0; i < gcChunkKeySize; i++ {
+		var gcKey roachpb.GCRequest_GCKey
+		gcKey.Key = roachpb.Key(fmt.Sprintf("%0100d", i))
+		gcKeys2 = append(gcKeys2, gcKey)
+	}
+	batches = chunkGCRequest(desc, info, gcKeys2)
+
+	// Now we expect there to be at least three batches since our key batch should have split.
+	if act, exp := len(batches), 3; act < 3 {
+		t.Fatalf("expected at least %d batches, but got %v", exp, act)
+	}
+
+	size = 0
+	var base int
+	var sum int
+	for i, batch := range batches[1:] {
+		for _, key := range batch.Keys {
+			size += len(key.Key)
+		}
+		sum += len(batch.Keys)
+		if i == 0 {
+			base = size
+		}
+		if i > 0 && i < len(batches[1:])-1 {
+			if size != base {
+				t.Fatalf("expected GC Request's batch size equal to base : %d, but got : %d", base, size)
+			}
+		}
+		if size > gcChunkKeySize {
+			t.Fatalf("expected GC Request's batch size smaller than %v, but got %v", gcChunkKeySize, size)
+		}
+		size = 0
+	}
+	if exp := len(gcKeys2); sum != exp {
+		t.Fatalf("expected total GC Request's key size is %d, but got %d", exp, sum)
+	}
+
+	var gcKeys3 []roachpb.GCRequest_GCKey
+	for i := 0; i < gcChunkKeySize/100*2-1; i++ {
+		var gcKey roachpb.GCRequest_GCKey
+		gcKey.Key = roachpb.Key(fmt.Sprintf("%0100d", i))
+		gcKeys3 = append(gcKeys3, gcKey)
+	}
+	batches = chunkGCRequest(desc, info, gcKeys3)
+
+	// Now we expect there to be three batches.
+	if act, exp := len(batches), 3; act != 3 {
+		t.Fatalf("expected %d batches, but got %v", exp, act)
+	}
+	size = 0
+	batch1 := batches[1]
+	for _, key := range batch1.Keys {
+		size += len(key.Key)
+	}
+	if size != gcChunkKeySize {
+		t.Fatalf("expected GC Request's batch size equal to %v, but got %v", gcChunkKeySize, size)
+	}
+
+	size = 0
+	batch2 := batches[2]
+	for _, key := range batch2.Keys {
+		size += len(key.Key)
+	}
+	if size >= gcChunkKeySize {
+		t.Fatalf("expected GC Request's batch size smaller than %v, but got %v", gcChunkKeySize, size)
+	}
+}
