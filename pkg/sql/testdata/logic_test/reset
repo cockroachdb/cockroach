@@ -37,3 +37,6 @@ query T
 SHOW search_path
 ----
 pg_catalog
+
+statement ok
+RESET client_encoding; RESET NAMES
