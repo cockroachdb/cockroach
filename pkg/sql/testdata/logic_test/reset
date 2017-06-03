@@ -1,4 +1,4 @@
-statement error unknown variable: "FOO"
+statement error unknown variable: "foo"
 RESET FOO
 
 statement ok
@@ -17,7 +17,7 @@ SHOW SEARCH_PATH
 ----
 pg_catalog
 
-statement error variable "SERVER_VERSION" cannot be reset
+statement error variable "server_version" cannot be reset
 RESET SERVER_VERSION
 
 # Lower case
@@ -37,3 +37,6 @@ query T
 SHOW search_path
 ----
 pg_catalog
+
+statement ok
+RESET client_encoding; RESET NAMES
