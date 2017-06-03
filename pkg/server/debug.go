@@ -150,6 +150,10 @@ func init() {
         </td>
       </tr>
       <tr>
+        <td>nodes status</td>
+        <td><a href="/debug/nodes">nodes</a></td>
+      </tr>
+      <tr>
         <td>range status</td>
         <td><a href="/debug/range?id=1">range</a></td>
       </tr>
