@@ -74,6 +74,9 @@ const (
 	// gcTaskLimit is the maximum number of concurrent goroutines
 	// that will be created by GC.
 	gcTaskLimit = 25
+
+	// gcChunkKeySize is the defalut size(256KB) for GCRequst's batch key size.
+	gcChunkKeySize = 256 * 1000
 )
 
 // gcQueue manages a queue of replicas slated to be scanned in their
@@ -528,6 +531,41 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 	return gcq.processImpl(ctx, repl, sysCfg, now)
 }
 
+// chunkGCRequest used to chunk the huge GCRequest to small batches.
+func chunkGCRequest(
+	desc *roachpb.RangeDescriptor, info *GCInfo, gcKeys []roachpb.GCRequest_GCKey,
+) []roachpb.GCRequest {
+	var template roachpb.GCRequest
+	var ret []roachpb.GCRequest
+	template.Key = desc.StartKey.AsRawKey()
+	template.EndKey = desc.EndKey.AsRawKey()
+
+	gc1 := template
+	gc1.Threshold = info.Threshold
+	gc1.TxnSpanGCThreshold = info.TxnSpanGCThreshold
+
+	ret = append(ret, gc1)
+
+	size := 0
+	idx := 0
+	for i, key := range gcKeys {
+		size += len(key.Key)
+		if size >= gcChunkKeySize {
+			gc2 := template
+			gc2.Keys = gcKeys[idx : i+1]
+			ret = append(ret, gc2)
+			idx = i + 1
+			size = 0
+		}
+	}
+	if idx < len(gcKeys) {
+		gc2 := template
+		gc2.Keys = gcKeys[idx:]
+		ret = append(ret, gc2)
+	}
+	return ret
+}
+
 func (gcq *gcQueue) processImpl(
 	ctx context.Context, repl *Replica, sysCfg config.SystemConfig, now hlc.Timestamp,
 ) error {
@@ -559,20 +597,7 @@ func (gcq *gcQueue) processImpl(
 		info.updateMetrics(gcq.store.metrics)
 	}()
 
-	batches := func() []roachpb.GCRequest {
-		var template roachpb.GCRequest
-		template.Key = desc.StartKey.AsRawKey()
-		template.EndKey = desc.EndKey.AsRawKey()
-
-		gc1 := template
-		gc1.Threshold = info.Threshold
-		gc1.TxnSpanGCThreshold = info.TxnSpanGCThreshold
-
-		gc2 := template
-		gc2.Keys = gcKeys
-
-		return []roachpb.GCRequest{gc1, gc2}
-	}()
+	batches := chunkGCRequest(desc, &info, gcKeys)
 
 	for i, gcArgs := range batches {
 		var ba roachpb.BatchRequest

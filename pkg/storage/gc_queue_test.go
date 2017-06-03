@@ -889,3 +889,23 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 		return nil
 	})
 }
+
+func TestChunkGCRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	desc := &roachpb.RangeDescriptor{}
+	info := &GCInfo{}
+	var gcKeys []roachpb.GCRequest_GCKey
+	for i := 0; i < 100; i++ {
+		var gcKey roachpb.GCRequest_GCKey
+		gcKey.Key = roachpb.Key(fmt.Sprintf("%020d", i))
+		gcKeys = append(gcKeys, gcKey)
+	}
+	batches := chunkGCRequest(desc, info, gcKeys)
+	for _, batche := range batches[1:] {
+		size := len(batche.Keys)
+		if size > gcChunkKeySize {
+			t.Fatalf("expected GC Request's batch size smaller than %v, but got %v", gcChunkKeySize, size)
+		}
+	}
+}
