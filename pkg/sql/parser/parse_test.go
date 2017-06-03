@@ -944,6 +944,17 @@ func TestParse2(t *testing.T) {
 			`RESTORE DATABASE foo FROM 'bar'`},
 
 		{`SHOW ALL CLUSTER SETTINGS`, `SHOW CLUSTER SETTING all`},
+
+		{`USE foo`, `SET database = 'foo'`},
+
+		{`SET NAMES foo`, `SET client_encoding = 'foo'`},
+		{`SET NAMES 'foo'`, `SET client_encoding = 'foo'`},
+		{`SET NAMES DEFAULT`, `RESET client_encoding`},
+		{`SET NAMES`, `RESET client_encoding`},
+
+		{`SHOW NAMES`, `SHOW client_encoding`},
+
+		{`RESET NAMES`, `RESET client_encoding`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
