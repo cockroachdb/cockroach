@@ -561,6 +561,7 @@ func (gcq *gcQueue) processImpl(
 
 	batches := func() []roachpb.GCRequest {
 		var template roachpb.GCRequest
+		var ret []roachpb.GCRequest
 		template.Key = desc.StartKey.AsRawKey()
 		template.EndKey = desc.EndKey.AsRawKey()
 
@@ -568,10 +569,25 @@ func (gcq *gcQueue) processImpl(
 		gc1.Threshold = info.Threshold
 		gc1.TxnSpanGCThreshold = info.TxnSpanGCThreshold
 
-		gc2 := template
-		gc2.Keys = gcKeys
+		ret = append(ret, gc1)
 
-		return []roachpb.GCRequest{gc1, gc2}
+		size := 0
+		idx := 0
+		for i, key := range gcKeys {
+			size += len(key.Key)
+			if size >= 256*1000 {
+				gc2 := template
+				gc2.Keys = gcKeys[idx : i+1]
+				ret = append(ret, gc2)
+				idx = i + 1
+				size = 0
+			}
+		}
+		gc2 := template
+		gc2.Keys = gcKeys[idx:]
+		ret = append(ret, gc2)
+
+		return ret
 	}()
 
 	for i, gcArgs := range batches {
