@@ -889,3 +889,59 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 		return nil
 	})
 }
+
+func TestChunkGCRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	desc := &roachpb.RangeDescriptor{}
+	info := &GCInfo{}
+	var gcKeys1 []roachpb.GCRequest_GCKey
+	for i := 0; i < 256; i++ {
+		var gcKey roachpb.GCRequest_GCKey
+		gcKey.Key = roachpb.Key(fmt.Sprintf("%0100d", i))
+		gcKeys1 = append(gcKeys1, gcKey)
+	}
+	batches := chunkGCRequest(desc, info, gcKeys1)
+	if len(batches)-1 != 1 {
+		t.Fatalf("expected GC Request's chunked batches' length is one, but got %v", len(batches)-1)
+	}
+	size := 0
+	for _, key := range batches[1].Keys {
+		size += len(key.Key)
+	}
+	if size > gcChunkKeySize {
+		t.Fatalf("expected GC Request's batch size is smaller than %v, but got %v", gcChunkKeySize, size)
+	}
+
+	var gcKeys2 []roachpb.GCRequest_GCKey
+	for i := 0; i < 256*1000; i++ {
+		var gcKey roachpb.GCRequest_GCKey
+		gcKey.Key = roachpb.Key(fmt.Sprintf("%0100d", i))
+		gcKeys2 = append(gcKeys2, gcKey)
+	}
+
+	batches = chunkGCRequest(desc, info, gcKeys2)
+	if len(batches)-1 <= 1 {
+		t.Fatalf("expected GC Request's chunked batches' length is bigger than one, but got %v", len(batches)-1)
+	}
+	size = 0
+	base, cur := 0, 0
+	for i, batch := range batches[1:] {
+		for _, key := range batch.Keys {
+			size += len(key.Key)
+		}
+		if i == 0 {
+			base = size
+		}
+		if i > 0 && i < len(batches[1:])-1 {
+			cur = size
+			if cur != base {
+				t.Fatalf("expected GC Request's batch size is equal to base : %d, but got : %d", base, cur)
+			}
+		}
+		if size > gcChunkKeySize {
+			t.Fatalf("expected GC Request's batch size smaller than %v, but got %v", gcChunkKeySize, size)
+		}
+		size = 0
+	}
+}
