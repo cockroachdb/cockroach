@@ -440,7 +440,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %type <IsolationLevel> iso_level
 %type <UserPriority> user_priority
-%type <empty> opt_encoding
+%type <empty> opt_default
 
 %type <TableDefs> opt_table_elem_list table_elem_list
 %type <*InterleaveDef> opt_interleave
@@ -500,7 +500,8 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <NameList> opt_conf_expr
 %type <*OnConflict> on_conflict
 
-%type <Statement>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list set_exprs_internal
+%type <Statement>  generic_set set_rest set_rest_more transaction_mode_list
+%type <Statement>  opt_transaction_mode_list set_exprs_internal set_name
 
 %type <NameList> opt_storing
 %type <*ColumnTableDef> column_def
@@ -1371,9 +1372,26 @@ grantee_list:
 
 // RESET name
 reset_stmt:
-  RESET var_name
+  RESET IDENT
   {
-    $$.val = &Set{Name: $2.unresolvedName(), SetMode: SetModeReset}
+    $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
+  }
+| RESET DATABASE
+  {
+    /* SKIP DOC */
+    $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
+  }
+| RESET SESSION_USER
+  {
+    /* SKIP DOC */
+    $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
+  }
+// SET NAMES is the SQL standard syntax for SET client_encoding.
+// See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
+| RESET NAMES
+  {
+    /* SKIP DOC */
+    $$.val = &Set{Name: UnresolvedName{Name("client_encoding")}, SetMode: SetModeReset}
   }
 
 // USE is the MSSQL/MySQL equivalent of SET DATABASE. Alias it for convenience.
@@ -1476,7 +1494,23 @@ set_rest_more:
     /* SKIP DOC */
     $$.val = &SetTimeZone{Value: $3.expr()}
   }
-| NAMES opt_encoding { return unimplemented(sqllex, "set names") }
+| set_name
+
+// SET NAMES is the SQL standard syntax for SET client_encoding.
+// See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
+set_name:
+  NAMES var_value
+  {
+    /* SKIP DOC */
+    $$.val = &Set{Name: UnresolvedName{Name("client_encoding")}, Values: Exprs{$2.expr()}}
+  }
+| NAMES opt_default
+  {
+    /* SKIP DOC */
+    $$.val = &Set{Name: UnresolvedName{Name("client_encoding")}, SetMode: SetModeReset}
+  }
+
+opt_default: DEFAULT {} | /* EMPTY */ {}
 
 var_name:
   any_name
@@ -1584,11 +1618,6 @@ zone_value:
     $$.val = &StrVal{s: $1}
   }
 
-opt_encoding:
-  SCONST { return unimplemented(sqllex, "opt_encoding") }
-| DEFAULT { return unimplemented(sqllex, "opt_encoding") }
-| /* EMPTY */ {}
-
 non_reserved_word_or_sconst:
   non_reserved_word
 | SCONST
@@ -1596,6 +1625,23 @@ non_reserved_word_or_sconst:
 show_stmt:
   SHOW IDENT
   {
+    $$.val = &Show{Name: $2}
+  }
+// SET NAMES is the SQL standard syntax for SET client_encoding.
+// See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
+| SHOW NAMES
+  {
+    /* SKIP DOC */
+    $$.val = &Show{Name: "client_encoding"}
+  }
+| SHOW SESSION_USER
+  {
+    /* SKIP DOC */
+    $$.val = &Show{Name: $2}
+  }
+| SHOW DATABASE
+  {
+    /* SKIP DOC */
     $$.val = &Show{Name: $2}
   }
 | SHOW ALL
@@ -1617,16 +1663,6 @@ show_stmt:
 | SHOW ALL CLUSTER SETTINGS
   {
     $$.val = &Show{Name: "all", ClusterSetting: true}
-  }
-| SHOW SESSION_USER
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: $2}
-  }
-| SHOW DATABASE
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: $2}
   }
 | SHOW COLUMNS FROM var_name
   {

@@ -269,6 +269,7 @@ var varGen = map[string]sessionVar{
 			}
 			return nil
 		},
+		Reset: func(*planner) error { return nil },
 	},
 }
 
