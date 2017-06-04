@@ -98,13 +98,8 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.resultColumns, n.valNeededForCol)
 
 	case *distinctNode:
-		sourceNeeded := make([]bool, len(n.plan.Columns()))
-		copy(sourceNeeded, needed)
-		// All the sorting columns are also needed.
-		for i, o := range n.columnsInOrder {
-			sourceNeeded[i] = sourceNeeded[i] || o
-		}
-		setNeededColumns(n.plan, sourceNeeded)
+		// Distinct needs values for every input column.
+		setNeededColumns(n.plan, allColumns(n.plan))
 
 	case *filterNode:
 		// Detect which columns from the source are needed in addition to
