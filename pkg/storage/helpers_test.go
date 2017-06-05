@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -230,6 +231,30 @@ func (r *Replica) ReplicaIDLocked() roachpb.ReplicaID {
 
 func (r *Replica) DescLocked() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
+}
+
+// GetGCThreshold returns the range's GCThreshold, acquiring a replica lock in
+// the process.
+func (r *Replica) GetGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.state.GCThreshold
+}
+
+// GetTxnSpanGCThreshold returns the range's TxnSpanGCThreshold, acquiring a replica lock in
+// the process.
+func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.state.TxnSpanGCThreshold
+}
+
+func (r *Replica) AssertState(ctx context.Context, reader engine.Reader) {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.assertStateLocked(ctx, reader)
 }
 
 func (r *Replica) RaftLock() {

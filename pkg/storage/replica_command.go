@@ -3073,8 +3073,24 @@ func splitTrigger(
 		rightLease := leftLease
 		rightLease.Replica = replica
 
+		gcThreshold, err := makeReplicaStateLoader(rec.RangeID()).loadGCThreshold(ctx, rec.Engine())
+		if err != nil {
+			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load GCThreshold")
+		}
+		if (gcThreshold == hlc.Timestamp{}) {
+			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
+		}
+
+		txnSpanGCThreshold, err := makeReplicaStateLoader(rec.RangeID()).loadTxnSpanGCThreshold(ctx, rec.Engine())
+		if err != nil {
+			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load TxnSpanGCThreshold")
+		}
+		if (txnSpanGCThreshold == hlc.Timestamp{}) {
+			log.VEventf(ctx, 1, "LHS's TxnSpanGCThreshold of split is not set")
+		}
+
 		rightMS, err = writeInitialState(
-			ctx, batch, rightMS, split.RightDesc, oldHS, rightLease,
+			ctx, batch, rightMS, split.RightDesc, oldHS, rightLease, gcThreshold, txnSpanGCThreshold,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial state")
