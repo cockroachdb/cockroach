@@ -70,6 +70,7 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           false,
+			needsSystemConfig:    false,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.RaftLogQueueSuccesses,
 			failures:             store.metrics.RaftLogQueueFailures,
