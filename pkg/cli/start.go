@@ -42,6 +42,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -357,6 +358,15 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 
 			if err := s.Start(startCtx); err != nil {
+				if le, ok := err.(server.ListenError); ok {
+					const errorPrefix = "consider changing the port via --"
+					if le.Addr == serverCfg.Addr {
+						err = errors.Wrap(err, errorPrefix+cliflags.ServerPort.Name)
+					} else if le.Addr == serverCfg.HTTPAddr {
+						err = errors.Wrap(err, errorPrefix+cliflags.ServerHTTPPort.Name)
+					}
+				}
+
 				return errors.Wrap(err, "cockroach server exited with error")
 			}
 
