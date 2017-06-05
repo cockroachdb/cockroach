@@ -60,6 +60,10 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		v.foundDependentVars = true
 	case *parser.AllColumnsSelector:
 		v.foundDependentVars = true
+	case *parser.StarDatum:
+		// StarDatum is inserted into expressions by count(*).
+		// When it is present, the "value" changes every row.
+		v.foundDependentVars = true
 
 	case *parser.IndexedVar:
 		// If the indexed var is a standalone ordinal reference, ensure it

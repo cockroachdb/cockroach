@@ -251,7 +251,7 @@ EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 0  group                                       ("count(*)", "k + v")
 0          aggregate 0  count(*)
 0          aggregate 1  test.kv.k + test.kv.v
-1  render                                      ("k + v", "*")                  ="*"
+1  render                                      ("k + v", "*")
 1          render 0     test.kv.k + test.kv.v
 1          render 1     *
 2  scan                                        (k, v, w[omitted], s[omitted])
@@ -280,7 +280,7 @@ EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 1          aggregate 0  count(*)
 1          aggregate 1  test.kv.k
 1          aggregate 2  test.kv.v
-2  render                           (k, v, "*")                     ="*"
+2  render                           (k, v, "*")
 2          render 0     test.kv.k
 2          render 1     test.kv.v
 2          render 2     *
@@ -1101,7 +1101,7 @@ EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
 0  group                                                                                   ("count(*) FILTER (WHERE k > 5)" int)
 0          aggregate 0  (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
-1  render                                                                                  (v int, "*" int, "k > 5" bool)                                 ="*"
+1  render                                                                                  (v int, "*" int, "k > 5" bool)
 1          render 0     (v)[int]
 1          render 1     (*)[int]
 1          render 2     ((k)[int] > (5)[int])[bool]

@@ -621,7 +621,7 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
 			// or invalid indexed var; ignore.
 			continue
 		}
-		if !hasRowDependentValues {
+		if !hasRowDependentValues && !r.columns[col].Omitted {
 			r.ordering.addExactMatchColumn(col)
 		}
 	}

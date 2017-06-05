@@ -12,7 +12,7 @@ query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s)
 ----
 0  render       ("1")         ="1"
-1  render       (s[omitted])  =s
+1  render       (s[omitted])
 2  nullrow      ()
 
 # Propagation through CREATE TABLE.
@@ -21,7 +21,7 @@ EXPLAIN (METADATA) CREATE TABLE t AS SELECT 1 FROM (SELECT 2 AS s)
 ----
 0  create table      ()
 1  render            ("1")         ="1"
-2  render            (s[omitted])  =s
+2  render            (s[omitted])
 3  nullrow           ()
 
 # Propagation through LIMIT.
@@ -30,15 +30,15 @@ EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s) LIMIT 1
 ----
 0  limit        ("1")         ="1"
 1  render       ("1")         ="1"
-2  render       (s[omitted])  =s
+2  render       (s[omitted])
 3  nullrow      ()
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s LIMIT 1)
 ----
 0  render       ("1")         ="1"
-1  limit        (s[omitted])  =s
-2  render       (s[omitted])  =s
+1  limit        (s[omitted])
+2  render       (s[omitted])
 3  nullrow      ()
 
 # Propagation through UNION.
@@ -57,9 +57,9 @@ EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s UNION ALL SELECT 2 AS s)
 ----
 0  render       ("1")         ="1"
 1  append       (s[omitted])
-2  render       (s[omitted])  =s
+2  render       (s[omitted])
 3  nullrow      ()
-2  render       (s[omitted])  =s
+2  render       (s[omitted])
 3  nullrow      ()
 
 # Propagation through WITH ORDINALITY.
@@ -67,8 +67,8 @@ query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s) WITH ORDINALITY
 ----
 0  render          ("1")                       ="1"
-1  ordinality      (s[omitted], "ordinality")  =s,+"ordinality",unique
-2  render          (s[omitted])                =s
+1  ordinality      (s[omitted], "ordinality")  +"ordinality",unique
+2  render          (s[omitted])
 3  nullrow         ()
 
 # Propagation through sort, when the sorting column is in the results.
@@ -76,7 +76,7 @@ query ITTTTT
 EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y) ORDER BY x
 ----
 0  render       (x)              =x
-1  render       (x, y[omitted])  =x,=y
+1  render       (x, y[omitted])  =x
 2  nullrow      ()
 
 # Propagation through sort, when the sorting column is not in the results.
@@ -86,7 +86,7 @@ EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y, 3 AS z) ORDER BY y
 0  nosort              (x)                 =x
 0           order  +y
 1  render              (x, y)              =x,=y
-2  render              (x, y, z[omitted])  =x,=y,=z
+2  render              (x, y, z[omitted])  =x,=y
 3  nullrow             ()
 
 # Propagation to sub-queries.
@@ -97,7 +97,7 @@ EXPLAIN (METADATA) SELECT 1 = (SELECT 2 AS x FROM (SELECT 3 AS s)) AS y
 0           subqueries  1
 1  limit                   (x)           =x
 2  render                  (x)           =x
-3  render                  (s[omitted])  =s
+3  render                  (s[omitted])
 4  nullrow                 ()
 1  nullrow                 ()
 
@@ -130,7 +130,7 @@ EXPLAIN (METADATA) INSERT INTO kv(k, v) SELECT 1, 2 FROM (SELECT 3 AS x, 4 AS y)
 0  insert                   ()
 0           into  kv(k, v)
 1  render                   ("1", "2")                ="1",="2"
-2  render                   (x[omitted], y[omitted])  =x,=y
+2  render                   (x[omitted], y[omitted])
 3  nullrow                  ()
 
 # Propagation through DELETE.
@@ -151,10 +151,10 @@ EXPLAIN (VERBOSE) SELECT x FROM (SELECT 1 AS x, y FROM (SELECT 2 AS y))
 ----
 0  render                   (x)              =x
 0           render 0  x
-1  render                   (x, y[omitted])  =x,=y
+1  render                   (x, y[omitted])  =x
 1           render 0  1
 1           render 1  NULL
-2  render                   (y[omitted])     =y
+2  render                   (y[omitted])
 2           render 0  NULL
 3  nullrow                  ()
 
@@ -166,3 +166,20 @@ EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT k+1 AS x, v-2 AS y FROM kv)
 1  scan                          (k[omitted], v[omitted])
 1          table     kv@primary
 1          spans     ALL
+
+statement ok
+CREATE TABLE a ("name" string, age int);
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT "name", age FROM a);
+----
+0  group                             ("count(*)")
+0          aggregate 0  count(*)
+1  render                            ("*")
+1          render 0     *
+2  render                            ("name"[omitted], age[omitted])
+2          render 0     NULL
+2          render 1     NULL
+3  scan                              ("name"[omitted], age[omitted], rowid[hidden,omitted])
+3          table        a@primary
+3          spans        ALL
