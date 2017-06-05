@@ -149,7 +149,7 @@ imports:
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/getsentry/raven-go
-  version: aa4f14680cc759ef40791558d93c90c6f629c10f
+  version: 221b2b44fb33f84ed3ea13f3aed62ff48c85636b
   repo: https://github.com/cockroachdb/raven-go
 - name: github.com/ghemawat/stream
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
