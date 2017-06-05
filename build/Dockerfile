@@ -104,8 +104,8 @@ RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
 # BEGIN https://github.com/docker-library/golang/blob/master/1.8/alpine/Dockerfile
 
 COPY parallelbuilds-go1.8.patch /
-RUN curl -fsSL https://storage.googleapis.com/golang/go1.8.1.src.tar.gz -o golang.tar.gz \
- && echo '33daf4c03f86120fdfdc66bddf6bfff4661c7ca11c5da473e537f4d69b470e57  golang.tar.gz' | sha256sum -c - \
+RUN curl -fsSL https://storage.googleapis.com/golang/go1.8.3.src.tar.gz -o golang.tar.gz \
+ && echo '5f5dea2447e7dcfdc50fa6b94c512e58bfba5673c039259fd843f68829d99fa6  golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
