@@ -248,30 +248,31 @@ func (r rangeInfoSlice) Less(i, j int) bool {
 	return r[i].SourceStoreID < r[j].SourceStoreID
 }
 
-type debugRangeOutput struct {
-	Class string
-	Title string
-	Value string
+type debugOutput struct {
+	Class  string
+	Title  string
+	Value  string
+	Values []string
 }
 
 type debugLeaseDetail struct {
-	Replica         debugRangeOutput
-	Epoch           debugRangeOutput
-	ProposedTS      debugRangeOutput
-	ProposedTSDelta debugRangeOutput
-	Expiration      debugRangeOutput
-	Start           debugRangeOutput
-	StartDelta      debugRangeOutput
+	Replica         debugOutput
+	Epoch           debugOutput
+	ProposedTS      debugOutput
+	ProposedTSDelta debugOutput
+	Expiration      debugOutput
+	Start           debugOutput
+	StartDelta      debugOutput
 }
 
 type debugRangeLogEvent struct {
 	RowClass     string
-	Timestamp    debugRangeOutput
-	StoreID      debugRangeOutput
-	EventType    debugRangeOutput
-	RangeID      debugRangeOutput
-	OtherRangeID debugRangeOutput
-	Info         debugRangeOutput
+	Timestamp    debugOutput
+	StoreID      debugOutput
+	EventType    debugOutput
+	RangeID      debugOutput
+	OtherRangeID debugOutput
+	Info         debugOutput
 }
 
 type debugRangeData struct {
@@ -285,7 +286,7 @@ type debugRangeData struct {
 	ReplicaIDs        replicaIDSlice
 	StoreIDs          roachpb.StoreIDSlice
 	HeaderKeys        []string
-	Results           map[string]map[roachpb.StoreID]*debugRangeOutput
+	Results           map[string]map[roachpb.StoreID]*debugOutput
 	HeaderFakeStoreID roachpb.StoreID
 	LeaseHistory      []debugLeaseDetail
 	LeaseEpoch        bool // true if epoch based, false if expiration based
@@ -303,8 +304,8 @@ func (d *debugRangeData) postProcessing() {
 
 	addHeader := func(header string) {
 		d.HeaderKeys = append(d.HeaderKeys, header)
-		d.Results[header] = make(map[roachpb.StoreID]*debugRangeOutput)
-		d.Results[header][d.HeaderFakeStoreID] = &debugRangeOutput{
+		d.Results[header] = make(map[roachpb.StoreID]*debugOutput)
+		d.Results[header][d.HeaderFakeStoreID] = &debugOutput{
 			Title: header,
 			Value: header,
 		}
@@ -319,23 +320,23 @@ func (d *debugRangeData) postProcessing() {
 		return fmt.Sprintf("Replica %d", repID)
 	}
 
-	convertBytes := func(bytes, count int64) *debugRangeOutput {
-		return &debugRangeOutput{
+	convertBytes := func(bytes, count int64) *debugOutput {
+		return &debugOutput{
 			Title: fmt.Sprintf("%d bytes / %d", bytes, count),
 			Value: fmt.Sprintf("%d bytes / %d", bytes, count),
 		}
 	}
 
-	outputSameTitleValue := func(value string) *debugRangeOutput {
-		return &debugRangeOutput{Title: value, Value: value}
+	outputSameTitleValue := func(value string) *debugOutput {
+		return &debugOutput{Title: value, Value: value}
 	}
 
-	outputSameTitleValueWithClass := func(value, class string) *debugRangeOutput {
-		return &debugRangeOutput{Title: value, Value: value, Class: class}
+	outputSameTitleValueWithClass := func(value, class string) *debugOutput {
+		return &debugOutput{Title: value, Value: value, Class: class}
 	}
 
 	// Prepare the replica output.
-	d.Results = make(map[string]map[roachpb.StoreID]*debugRangeOutput)
+	d.Results = make(map[string]map[roachpb.StoreID]*debugOutput)
 
 	// Add all headers except for the replicas, this is the order they will be
 	// displayed in.
@@ -375,15 +376,15 @@ func (d *debugRangeData) postProcessing() {
 	for _, repID := range d.ReplicaIDs {
 		repHeader := replicaHeader(repID)
 		d.HeaderKeys = append(d.HeaderKeys, repHeader)
-		d.Results[repHeader] = make(map[roachpb.StoreID]*debugRangeOutput)
-		d.Results[repHeader][d.HeaderFakeStoreID] = &debugRangeOutput{
+		d.Results[repHeader] = make(map[roachpb.StoreID]*debugOutput)
+		d.Results[repHeader][d.HeaderFakeStoreID] = &debugOutput{
 			Title: repHeader,
 			Value: repHeader,
 		}
 
 		// Fill all stores with an empty output for all replicas.
 		for _, info := range d.rangeInfos {
-			d.Results[repHeader][info.SourceStoreID] = &debugRangeOutput{
+			d.Results[repHeader][info.SourceStoreID] = &debugOutput{
 				Value: debugRangeValueEmpty,
 			}
 		}
@@ -463,7 +464,7 @@ func (d *debugRangeData) postProcessing() {
 		}
 		d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID] = outputSameTitleValue(epoch)
 		start := convertTimestamp(info.State.Lease.Start)
-		d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID] = &debugRangeOutput{
+		d.Results[debugRangeHeaderLeaseStart][info.SourceStoreID] = &debugOutput{
 			Title: fmt.Sprintf("%s\n%s", start, info.State.Lease.Start),
 			Value: start,
 		}
@@ -473,7 +474,7 @@ func (d *debugRangeData) postProcessing() {
 		} else {
 			expiration = convertTimestamp(info.State.Lease.Expiration)
 		}
-		d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID] = &debugRangeOutput{
+		d.Results[debugRangeHeaderLeaseExpiration][info.SourceStoreID] = &debugOutput{
 			Title: fmt.Sprintf("%s\n%s", expiration, info.State.Lease.Expiration),
 			Value: expiration,
 		}
@@ -540,23 +541,23 @@ func (d *debugRangeData) postProcessing() {
 		// MVCC stats.
 		stats := info.State.ReplicaState.Stats
 		if stats.LastUpdateNanos > 0 {
-			d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID] = &debugRangeOutput{
+			d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID] = &debugOutput{
 				Title: fmt.Sprintf("%d\n%s", stats.LastUpdateNanos, time.Unix(0, stats.LastUpdateNanos)),
 				Value: time.Unix(0, stats.LastUpdateNanos).String(),
 			}
 		} else {
-			d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID] = &debugRangeOutput{
+			d.Results[debugRangeHeaderMVCCLastUpdate][info.SourceStoreID] = &debugOutput{
 				Title: debugRangeValueEmpty,
 				Value: debugRangeValueEmpty,
 			}
 		}
 		intentAge := time.Duration(stats.IntentAge)
-		d.Results[debugRangeHeaderMVCCIntentAge][info.SourceStoreID] = &debugRangeOutput{
+		d.Results[debugRangeHeaderMVCCIntentAge][info.SourceStoreID] = &debugOutput{
 			Title: fmt.Sprintf("%dns", stats.IntentAge),
 			Value: intentAge.String(),
 		}
 		gcBytesAge := time.Duration(stats.GCBytesAge)
-		d.Results[debugRangeHeaderMVCCGCBytesAge][info.SourceStoreID] = &debugRangeOutput{
+		d.Results[debugRangeHeaderMVCCGCBytesAge][info.SourceStoreID] = &debugOutput{
 			Title: fmt.Sprintf("%dns", stats.GCBytesAge),
 			Value: gcBytesAge.String(),
 		}
@@ -731,9 +732,9 @@ func (d *debugRangeData) postProcessing() {
 
 	if d.rangeLogResp != nil {
 		for _, event := range d.rangeLogResp.Events {
-			var otherRangeID debugRangeOutput
+			var otherRangeID debugOutput
 			if event.OtherRangeID != 0 {
-				otherRangeID = debugRangeOutput{
+				otherRangeID = debugOutput{
 					Value: event.OtherRangeID.String(),
 					Title: fmt.Sprintf("r%d", event.OtherRangeID),
 				}
@@ -767,7 +768,7 @@ func (d *debugRangeData) postProcessing() {
 			d.RangeLog = append(d.RangeLog, debugRangeLogEvent{
 				Timestamp: *outputSameTitleValue(event.Timestamp.String()),
 				EventType: *outputSameTitleValue(event.EventType.String()),
-				RangeID: debugRangeOutput{
+				RangeID: debugOutput{
 					Value: event.RangeID.String(),
 					Title: fmt.Sprintf("r%d", event.RangeID),
 				},
