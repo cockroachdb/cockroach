@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -617,7 +618,7 @@ func Restore(
 	uris []string,
 	targets parser.TargetList,
 	opt parser.KVOptions,
-	jobLogger *sql.JobLogger,
+	jobLogger *jobs.JobLogger,
 ) (dataSize int64, err error) {
 
 	db := *p.ExecCfg().DB
@@ -855,10 +856,10 @@ func restorePlanHook(
 		if err != nil {
 			return nil, err
 		}
-		jobLogger := sql.NewJobLogger(p.ExecCfg().DB, p.LeaseMgr(), sql.JobRecord{
+		jobLogger := jobs.NewJobLogger(p.ExecCfg().DB, sql.InternalExecutor{LeaseManager: p.LeaseMgr()}, jobs.JobRecord{
 			Description: description,
 			Username:    p.User(),
-			Details:     sql.RestoreJobDetails{},
+			Details:     jobs.RestoreJobDetails{},
 		})
 		dataSize, err := Restore(
 			ctx,
@@ -882,7 +883,7 @@ func restorePlanHook(
 		// infrastructure to stream responses.
 		ret := []parser.Datums{{
 			parser.NewDInt(parser.DInt(*jobLogger.JobID())),
-			parser.NewDString(string(sql.JobStatusSucceeded)),
+			parser.NewDString(string(jobs.JobStatusSucceeded)),
 			parser.NewDFloat(parser.DFloat(1.0)),
 			parser.NewDInt(parser.DInt(dataSize)),
 		}}

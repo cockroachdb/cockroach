@@ -15,8 +15,8 @@
 // Author: Nikhil Benesch (nikhil.benesch@gmail.com)
 
 syntax = "proto3";
-package cockroach.sql;
-option go_package = "sql";
+package cockroach.sql.jobs;
+option go_package = "jobs";
 
 import "gogoproto/gogo.proto";
 
