@@ -1387,7 +1387,7 @@ func BenchmarkEncodeNonsortingVarint(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		bytes = EncodeNonsortingVarint(bytes, rng.Int63())
+		bytes = EncodeNonsortingStdlibVarint(bytes, rng.Int63())
 	}
 }
 
@@ -1395,12 +1395,12 @@ func BenchmarkDecodeNonsortingVarint(b *testing.B) {
 	buf := make([]byte, 0, b.N*NonsortingVarintMaxLen)
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < b.N; i++ {
-		buf = EncodeNonsortingVarint(buf, rng.Int63())
+		buf = EncodeNonsortingStdlibVarint(buf, rng.Int63())
 	}
 	var err error
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		buf, _, _, err = DecodeNonsortingVarint(buf)
+		buf, _, _, err = DecodeNonsortingStdlibVarint(buf)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1749,7 +1749,7 @@ func TestUpperBoundValueEncodingSize(t *testing.T) {
 		{colID: 0, typ: Int, width: 100, size: 10},
 		{colID: 0, typ: Float, size: 9},
 		{colID: 0, typ: Decimal, size: -1},
-		{colID: 0, typ: Decimal, width: 100, size: 68},
+		{colID: 0, typ: Decimal, width: 100, size: 69},
 		{colID: 0, typ: Time, size: 19},
 		{colID: 0, typ: Duration, size: 28},
 		{colID: 0, typ: Bytes, size: -1},
