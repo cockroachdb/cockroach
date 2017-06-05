@@ -749,3 +749,24 @@ ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a(b_id)
 
 statement ok
 DROP TABLE a;
+
+# Check that removing self-ref FK correctly removed backref too, #16070.
+statement ok
+CREATE TABLE employee (
+   id INT PRIMARY KEY,
+   manager INT,
+   UNIQUE (manager)
+);
+
+statement ok
+ALTER TABLE employee
+   ADD CONSTRAINT emp_emp
+   FOREIGN KEY (manager)
+   REFERENCES employee;
+
+statement ok
+ALTER TABLE employee
+   DROP CONSTRAINT emp_emp;
+
+statement ok
+SHOW CREATE TABLE employee;
