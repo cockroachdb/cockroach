@@ -803,4 +803,6 @@ func TestStyle(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("TestURLLiveness", func(t *testing.T) { testURLLiveness(t, pkg) })
 }
