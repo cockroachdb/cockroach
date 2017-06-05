@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -241,7 +242,8 @@ func (p *planner) validateForeignKey(
 			}
 			pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], values[0][i]))
 		}
-		return errors.Errorf("foreign key violation: %q row %s has no match in %q",
+		return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+			"foreign key violation: %q row %s has no match in %q",
 			srcTable.Name, pairs.String(), targetTable.Name)
 	}
 	return nil

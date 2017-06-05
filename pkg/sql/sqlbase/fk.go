@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // TableLookupsByID maps table IDs to looked up descriptors or, for tables that
@@ -137,7 +138,9 @@ func (fks fkInsertHelper) checkIdx(ctx context.Context, idx IndexID, row parser.
 			for i, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				fkValues[i] = row[fk.ids[colID]]
 			}
-			return fmt.Errorf("foreign key violation: value %s not found in %s@%s %s", fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen])
+			return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+				"foreign key violation: value %s not found in %s@%s %s",
+				fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen])
 		}
 	}
 	return nil
@@ -194,14 +197,16 @@ func (fks fkDeleteHelper) checkIdx(ctx context.Context, idx IndexID, row parser.
 		}
 		if found != nil {
 			if row == nil {
-				return fmt.Errorf("foreign key violation: non-empty columns %s referenced in table %q",
+				return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+					"foreign key violation: non-empty columns %s referenced in table %q",
 					fk.writeIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 			}
 			fkValues := make(parser.Datums, fk.prefixLen)
 			for i, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				fkValues[i] = row[fk.ids[colID]]
 			}
-			return fmt.Errorf("foreign key violation: values %v in columns %s referenced in table %q",
+			return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+				"foreign key violation: values %v in columns %s referenced in table %q",
 				fkValues, fk.writeIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 		}
 
