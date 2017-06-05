@@ -1,0 +1,29 @@
+# LogicTest: default distsql
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))
+
+statement ok
+INSERT INTO t VALUES (1, 1, 1), (2, 4, 8), (3, 9, 27), (4, 16, 94), (5, 25, 125), (6, 36, 216)
+
+# Verify we don't incorrectly impose a hard limit at the index scan level.
+query III
+SELECT * FROM t WHERE v > 4 AND w > 30 ORDER BY v LIMIT 2
+----
+4 16 94
+5 25 125
+
+# There must be no limit at the index scan level.
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE v > 4 AND w > 30 ORDER BY v LIMIT 2
+----
+Level  Type        Field   Description  Columns                      Ordering
+0      limit                            (k, v, w)                    +v
+0                  count   2
+1      index-join                       (k, v, w)                    +v
+2      scan                             (k, v[omitted], w[omitted])  +v
+2                  table   t@t_v_idx
+2                  spans   /5-
+2      scan                             (k, v, w)
+2                  table   t@primary
+2                  filter  w > 30
