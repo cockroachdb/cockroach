@@ -978,6 +978,9 @@ func (c *v3Conn) sendResponse(
 				for i, col := range row {
 					fmtCode := formatText
 					if formatCodes != nil {
+						if i >= len(formatCodes) {
+							return c.sendError(errors.New("number of results changed"))
+						}
 						fmtCode = formatCodes[i]
 					}
 					switch fmtCode {
