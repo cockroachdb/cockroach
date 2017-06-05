@@ -46,20 +46,21 @@ var debugNodesHeaders = []struct {
 }{
 	{"Node", false},        // 0
 	{"Address", false},     // 1
-	{"Locality", false},    // 2
-	{"Attributes", false},  // 3
-	{"Environment", false}, // 4
-	{"Arguments", false},   // 5
-	{"Tag", true},          // 6
-	{"Revision", true},     // 7
-	{"Time", true},         // 8
-	{"Type", true},         // 9
-	{"Platform", true},     // 10
-	{"Go Version", true},   // 11
-	{"CGO", true},          // 12
-	{"Distribution", true}, // 13
-	{"Started at", false},  // 14
-	{"Updated at", false},  // 15
+	{"IP", false},          // 2
+	{"Locality", false},    // 3
+	{"Attributes", false},  // 4
+	{"Environment", false}, // 5
+	{"Arguments", false},   // 6
+	{"Tag", true},          // 7
+	{"Revision", true},     // 8
+	{"Time", true},         // 9
+	{"Type", true},         // 10
+	{"Platform", true},     // 11
+	{"Go Version", true},   // 12
+	{"CGO", true},          // 13
+	{"Distribution", true}, // 14
+	{"Started at", false},  // 15
+	{"Updated at", false},  // 16
 }
 
 // Returns an HTML page displaying information about nodes status.
@@ -200,28 +201,35 @@ func (s *statusServer) handleDebugNodes(w http.ResponseWriter, r *http.Request) 
 
 		addOutput(0, fmt.Sprintf("n%d", nodeID))
 		addOutput(1, nodeStatus.Desc.Address.String())
-		addOutput(2, nodeStatus.Desc.Locality.String())
-		addOutputs(3, nodeStatus.Desc.Attrs.Attrs)
+		netAddr, err := nodeStatus.Desc.Address.Resolve()
+		if err != nil {
+			data.Failures = append(data.Failures, fmt.Sprintf("could not resolve ip for n%d", nodeID))
+			addOutput(2, "")
+		} else {
+			addOutput(2, netAddr.String())
+		}
+		addOutput(3, nodeStatus.Desc.Locality.String())
+		addOutputs(4, nodeStatus.Desc.Attrs.Attrs)
 		var safeEnv []string
 		for _, env := range nodeStatus.Env {
 			if environmentRegexp.MatchString(env) {
 				safeEnv = append(safeEnv, env)
 			}
 		}
-		addOutputs(4, safeEnv)
-		addOutputs(5, nodeStatus.Args)
-		addOutput(6, nodeStatus.BuildInfo.Tag)
-		addOutput(7, nodeStatus.BuildInfo.Revision)
-		addOutput(8, nodeStatus.BuildInfo.Time)
-		addOutput(9, nodeStatus.BuildInfo.Type)
-		addOutput(10, nodeStatus.BuildInfo.Platform)
-		addOutput(11, nodeStatus.BuildInfo.GoVersion)
-		addOutput(12, nodeStatus.BuildInfo.CgoCompiler)
-		addOutput(13, nodeStatus.BuildInfo.Distribution)
+		addOutputs(5, safeEnv)
+		addOutputs(6, nodeStatus.Args)
+		addOutput(7, nodeStatus.BuildInfo.Tag)
+		addOutput(8, nodeStatus.BuildInfo.Revision)
+		addOutput(9, nodeStatus.BuildInfo.Time)
+		addOutput(10, nodeStatus.BuildInfo.Type)
+		addOutput(11, nodeStatus.BuildInfo.Platform)
+		addOutput(12, nodeStatus.BuildInfo.GoVersion)
+		addOutput(13, nodeStatus.BuildInfo.CgoCompiler)
+		addOutput(14, nodeStatus.BuildInfo.Distribution)
 		startedAt := time.Unix(0, nodeStatus.StartedAt).String()
-		addOutputWithTitle(14, startedAt, fmt.Sprintf("%d\n%s", nodeStatus.StartedAt, startedAt))
+		addOutputWithTitle(15, startedAt, fmt.Sprintf("%d\n%s", nodeStatus.StartedAt, startedAt))
 		updatedAt := time.Unix(0, nodeStatus.UpdatedAt).String()
-		addOutputWithTitle(15, updatedAt, fmt.Sprintf("%d\n%s", nodeStatus.UpdatedAt, updatedAt))
+		addOutputWithTitle(16, updatedAt, fmt.Sprintf("%d\n%s", nodeStatus.UpdatedAt, updatedAt))
 	}
 
 	// Check for values that don't all match
