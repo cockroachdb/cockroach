@@ -4,10 +4,12 @@ import { createSelector } from "reselect";
 
 import { findChildrenOfType } from "src/util/find";
 import {
-  MetricsDataComponentProps, Axis, AxisProps, ConfigureLineChart, InitLineChart,
-  updateLinkedGuidelines,
-} from "src/views/shared/components/graphs";
-import { Metric, MetricProps } from "src/views/shared/components/metric";
+  ConfigureLineChart, InitLineChart, updateLinkedGuidelines,
+} from "src/views/cluster/util/graphs";
+import {
+  Metric, MetricProps, Axis, AxisProps,
+} from "src/views/shared/components/metricQuery";
+import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
 
 interface LineGraphProps extends MetricsDataComponentProps {
@@ -86,7 +88,9 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         return;
       }
 
-      ConfigureLineChart(this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, false);
+      ConfigureLineChart(
+        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, false,
+      );
     }
   }
 

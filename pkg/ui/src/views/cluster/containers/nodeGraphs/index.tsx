@@ -16,9 +16,8 @@ import {
   SummaryBar, SummaryLabel, SummaryStat, SummaryStatMessage, SummaryStatBreakdown, SummaryMetricStat,
 } from "src/views/shared/components/summaryBar";
 import Alerts from "src/views/shared/containers/alerts";
-import { Axis, AxisUnits } from "src/views/shared/components/graphs";
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import { Metric } from "src/views/shared/components/metric";
+import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 import { EventBox } from "src/views/cluster/containers/events";
 import { Bytes } from "src/util/format";
 import { NanoToMilli } from "src/util/convert";
