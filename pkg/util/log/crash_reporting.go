@@ -174,6 +174,10 @@ func sendCrashReport(ctx context.Context, r interface{}, depth int) {
 
 	ex := raven.NewException(err, raven.NewStacktrace(depth+1, contextLines, crdbPaths))
 	packet := raven.NewPacket(err.Error(), ex)
+	// Avoid leaking the machine's hostname by injecting the literal "<redacted>".
+	// Otherwise, raven.Client.Capture will see an empty ServerName field and
+	// automatically fill in the machine's hostname.
+	packet.ServerName = "<redacted>"
 	eventID, ch := raven.DefaultClient.Capture(packet, nil /* tags */)
 	<-ch
 	Shout(ctx, Severity_ERROR, "Reported as error "+eventID)
