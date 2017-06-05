@@ -111,6 +111,9 @@ var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
 // ErrIndexBeingDropped indicates an index is being dropped.
 var ErrIndexBeingDropped = errors.New("index is being dropped")
 
+// ErrColumnBeingDropped indicates a column is being dropped.
+var ErrColumnBeingDropped = errors.New("column is being dropped")
+
 func validateName(name, typ string) error {
 	if len(name) == 0 {
 		return fmt.Errorf("empty %s name", typ)
@@ -678,15 +681,9 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 			index.ExtraColumnIDs = extraColumnIDs
 
 			for _, colName := range index.StoreColumnNames {
-				status, i, err := desc.FindColumnByNormalizedName(parser.ReNormalizeName(colName))
-				if err != nil {
+				col, err := desc.findColumnByNormalizedName(parser.ReNormalizeName(colName))
+				if err != nil && err != ErrColumnBeingDropped {
 					return err
-				}
-				var col *ColumnDescriptor
-				if status == DescriptorActive {
-					col = &desc.Columns[i]
-				} else {
-					col = desc.Mutations[i].GetColumn()
 				}
 				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
 					continue
@@ -1375,8 +1372,12 @@ func (desc *TableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 	}
 }
 
-// RenameColumnNormalized updates all references to a column name in indexes and families.
-func (desc *TableDescriptor) RenameColumnNormalized(colID ColumnID, newColName string) {
+// RenameColumnDescriptor updates all references to a column name in
+// a table descriptor including indexes and families.
+func (desc *TableDescriptor) RenameColumnDescriptor(column ColumnDescriptor, newColName string) {
+	colID := column.ID
+	column.Name = newColName
+	desc.UpdateColumnDescriptor(column)
 	for i := range desc.Families {
 		for j := range desc.Families[i].ColumnIDs {
 			if desc.Families[i].ColumnIDs[j] == colID {
@@ -1419,30 +1420,48 @@ func (desc *TableDescriptor) FindActiveColumnsByNames(
 	return cols, nil
 }
 
-// FindColumnByNormalizedName finds the column with the specified name. It returns
-// DescriptorStatus for the column, and an index into either the columns
-// (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindColumnByNormalizedName(
-	normName string,
-) (DescriptorStatus, int, error) {
+// findColumnByNormalizedName finds the column with the specified name.
+func (desc *TableDescriptor) findColumnByNormalizedName(normName string) (ColumnDescriptor, error) {
 	for i, c := range desc.Columns {
 		if parser.ReNormalizeName(c.Name) == normName {
-			return DescriptorActive, i, nil
+			return desc.Columns[i], nil
 		}
 	}
-	for i, m := range desc.Mutations {
+	for _, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
 			if parser.ReNormalizeName(c.Name) == normName {
-				return DescriptorIncomplete, i, nil
+				if m.Direction == DescriptorMutation_DROP {
+					return *c, ErrColumnBeingDropped
+				}
+				return *c, nil
 			}
 		}
 	}
-	return DescriptorAbsent, -1, fmt.Errorf("column %q does not exist", normName)
+	return ColumnDescriptor{}, fmt.Errorf("column %q does not exist", normName)
 }
 
-// FindColumnByName calls FindColumnByNormalizedName with a normalized argument.
-func (desc *TableDescriptor) FindColumnByName(name parser.Name) (DescriptorStatus, int, error) {
-	return desc.FindColumnByNormalizedName(name.Normalize())
+// FindColumnByName finds the column with the specified name. It returns
+// an active column or a column from the mutation list.
+func (desc *TableDescriptor) FindColumnByName(name parser.Name) (ColumnDescriptor, error) {
+	return desc.findColumnByNormalizedName(name.Normalize())
+}
+
+// UpdateColumnDescriptor updates an existing column descriptor.
+func (desc *TableDescriptor) UpdateColumnDescriptor(column ColumnDescriptor) {
+	for i := range desc.Columns {
+		if desc.Columns[i].ID == column.ID {
+			desc.Columns[i] = column
+			return
+		}
+	}
+	for i, m := range desc.Mutations {
+		if col := m.GetColumn(); col != nil && col.ID == column.ID {
+			desc.Mutations[i].Descriptor_ = &DescriptorMutation_Column{Column: &column}
+			return
+		}
+	}
+
+	panic(fmt.Sprintf("column %q does not exist", column.Name))
 }
 
 // FindActiveColumnByNormalizedName finds an active column with the specified normalized name.

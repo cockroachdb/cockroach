@@ -99,12 +99,17 @@ func (mt mutationTest) makeMutationsActive() {
 // writeColumnMutation adds column as a mutation and writes the
 // descriptor to the DB.
 func (mt mutationTest) writeColumnMutation(column string, m sqlbase.DescriptorMutation) {
-	_, i, err := mt.tableDesc.FindColumnByNormalizedName(column)
+	name := parser.Name(column)
+	col, err := mt.tableDesc.FindColumnByName(name)
 	if err != nil {
 		mt.Fatal(err)
 	}
-	col := mt.tableDesc.Columns[i]
-	mt.tableDesc.Columns = append(mt.tableDesc.Columns[:i], mt.tableDesc.Columns[i+1:]...)
+	for i := range mt.tableDesc.Columns {
+		if col.ID == mt.tableDesc.Columns[i].ID {
+			mt.tableDesc.Columns = append(mt.tableDesc.Columns[:i], mt.tableDesc.Columns[i+1:]...)
+			break
+		}
+	}
 	m.Descriptor_ = &sqlbase.DescriptorMutation_Column{Column: &col}
 	mt.writeMutation(m)
 }

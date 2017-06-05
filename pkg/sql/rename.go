@@ -349,22 +349,16 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 	normNewColName := n.NewName.Normalize()
 	normColName := n.Name.Normalize()
 
-	status, i, err := tableDesc.FindColumnByNormalizedName(normColName)
+	col, err := tableDesc.FindColumnByName(n.Name)
 	// n.IfExists only applies to table, no need to check here.
 	if err != nil {
 		return nil, err
-	}
-	var column *sqlbase.ColumnDescriptor
-	if status == sqlbase.DescriptorActive {
-		column = &tableDesc.Columns[i]
-	} else {
-		column = tableDesc.Mutations[i].GetColumn()
 	}
 
 	for _, tableRef := range tableDesc.DependedOnBy {
 		found := false
 		for _, colID := range tableRef.ColumnIDs {
-			if colID == column.ID {
+			if colID == col.ID {
 				found = true
 			}
 		}
@@ -379,7 +373,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 		return &emptyNode{}, nil
 	}
 
-	if _, _, err := tableDesc.FindColumnByNormalizedName(normNewColName); err == nil {
+	if _, err := tableDesc.FindColumnByName(n.NewName); err == nil {
 		return nil, fmt.Errorf("column name %q already exists", string(n.NewName))
 	}
 
@@ -418,8 +412,8 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 		}
 	}
 	// Rename the column in the indexes.
-	tableDesc.RenameColumnNormalized(column.ID, normNewColName)
-	column.Name = normNewColName
+	tableDesc.RenameColumnDescriptor(col, normNewColName)
+
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err
 	}
