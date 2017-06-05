@@ -166,6 +166,13 @@ type queueConfig struct {
 	// needsLease controls whether this queue requires the range lease to
 	// operate on a replica.
 	needsLease bool
+	// needsSystemConfig controls whether this queue requires a valid copy of the
+	// system config to operate on a replica. Not all queues require it, and it's
+	// unsafe for certain queues to wait on it. For example, a raft snapshot may
+	// be needed in order to make it possible for the system config to become
+	// available (as observed in #16268), so the raft snapshot queue can't
+	// require the system config to already be available.
+	needsSystemConfig bool
 	// acceptsUnsplitRanges controls whether this queue can process ranges that
 	// need to be split due to zone config settings. Ranges are checked before
 	// calling queueImpl.shouldQueue and queueImpl.process.
@@ -247,6 +254,11 @@ func newBaseQueue(
 	ambient := store.cfg.AmbientCtx
 	ambient.AddLogTag(name, nil)
 
+	if !cfg.acceptsUnsplitRanges && !cfg.needsSystemConfig {
+		log.Fatalf(ambient.AnnotateCtx(context.Background()),
+			"misconfigured queue: acceptsUnsplitRanges=false requires needsSystemConfig=true; got %+v", cfg)
+	}
+
 	bq := baseQueue{
 		AmbientContext: ambient,
 		name:           name,
@@ -317,9 +329,20 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
 // not be added, as the replica with the lowest priority will be
 // dropped.
 func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
-	// Load the system config.
-	cfg, cfgOk := bq.gossip.GetSystemConfig()
-	requiresSplit := cfgOk && bq.requiresSplit(cfg, repl)
+	ctx := repl.AnnotateCtx(bq.AnnotateCtx(context.TODO()))
+
+	// Load the system config if it's needed.
+	var cfg config.SystemConfig
+	var cfgOk bool
+	if bq.needsSystemConfig {
+		cfg, cfgOk = bq.gossip.GetSystemConfig()
+		if !cfgOk {
+			if log.V(1) {
+				log.Infof(ctx, "no system config available. skipping")
+			}
+			return
+		}
+	}
 
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
@@ -332,16 +355,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 		return
 	}
 
-	ctx := repl.AnnotateCtx(bq.AnnotateCtx(context.TODO()))
-
-	if !cfgOk {
-		if log.V(1) {
-			log.Infof(ctx, "no system config available. skipping")
-		}
-		return
-	}
-
-	if requiresSplit {
+	if cfgOk && bq.requiresSplit(cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(1) {
@@ -543,16 +557,20 @@ func (bq *baseQueue) processReplica(
 	bq.processMu.Lock()
 	defer bq.processMu.Unlock()
 
-	// Load the system config.
-	cfg, ok := bq.gossip.GetSystemConfig()
-	if !ok {
-		if log.V(1) {
-			log.Infof(queueCtx, "no system config available, skipping")
+	// Load the system config if it's needed.
+	var cfg config.SystemConfig
+	var cfgOk bool
+	if bq.needsSystemConfig {
+		cfg, cfgOk = bq.gossip.GetSystemConfig()
+		if !cfgOk {
+			if log.V(1) {
+				log.Infof(queueCtx, "no system config available. skipping")
+			}
+			return nil
 		}
-		return nil
 	}
 
-	if bq.requiresSplit(cfg, repl) {
+	if cfgOk && bq.requiresSplit(cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(3) {

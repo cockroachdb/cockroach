@@ -45,6 +45,7 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
+			needsSystemConfig:    false,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.ConsistencyQueueSuccesses,
 			failures:             store.metrics.ConsistencyQueueFailures,

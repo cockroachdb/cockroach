@@ -26,10 +26,12 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -79,6 +81,10 @@ func (tq *testQueueImpl) purgatoryChan() <-chan struct{} {
 func makeTestBaseQueue(
 	name string, impl queueImpl, store *Store, gossip *gossip.Gossip, cfg queueConfig,
 ) *baseQueue {
+	if !cfg.acceptsUnsplitRanges {
+		// Needed in order to pass the validation in newBaseQueue.
+		cfg.needsSystemConfig = true
+	}
 	cfg.successes = metric.NewCounter(metric.Metadata{Name: "processed"})
 	cfg.failures = metric.NewCounter(metric.Metadata{Name: "failures"})
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
@@ -403,6 +409,83 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	if pc := testQueue.getProcessed(); pc > 0 {
 		t.Errorf("expected processed count of 0; got %d", pc)
 	}
+}
+
+// TestNeedsSystemConfig verifies that queues that don't need the system config
+// are able to process replicas when the system config isn't available.
+func TestNeedsSystemConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	queueFnCalled := 0
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (bool, float64) {
+			queueFnCalled++
+			return true, 1.0
+		},
+	}
+
+	// Use a gossip instance that won't have the system config available in it.
+	// bqNeedsSysCfg will not add the replica or process it without a system config.
+	rpcContext := rpc.NewContext(tc.store.cfg.AmbientCtx, &base.Config{Insecure: true}, tc.store.cfg.Clock, stopper)
+	emptyGossip := gossip.NewTest(
+		tc.gossip.NodeID.Get(), rpcContext, rpc.NewServer(rpcContext), stopper, tc.store.Registry())
+	bqNeedsSysCfg := makeTestBaseQueue("test", testQueue, tc.store, emptyGossip, queueConfig{
+		needsSystemConfig:    true,
+		acceptsUnsplitRanges: true,
+		maxSize:              1,
+	})
+
+	mc := hlc.NewManualClock(123)
+	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	bqNeedsSysCfg.Start(clock, stopper)
+
+	bqNeedsSysCfg.MaybeAdd(r, hlc.Timestamp{})
+	if queueFnCalled != 0 {
+		t.Fatalf("expected shouldQueueFn not to be called without valid system config, got %d calls", queueFnCalled)
+	}
+
+	// Manually add a replica and ensure that the process method doesn't get run.
+	if added, err := bqNeedsSysCfg.Add(r, 1.0); err != nil || !added {
+		t.Fatalf("expected Add to succeed: %t, %s", added, err)
+	}
+	// Make sure the queue has actually run through a few times
+	for i := 0; i < cap(bqNeedsSysCfg.incoming)+1; i++ {
+		bqNeedsSysCfg.incoming <- struct{}{}
+	}
+	if pc := testQueue.getProcessed(); pc > 0 {
+		t.Errorf("expected processed count of 0 for queue that needs system config; got %d", pc)
+	}
+
+	// Now check that a queue which doesn't require the system config can
+	// successfully add and process a replica.
+	bqNoSysCfg := makeTestBaseQueue("test", testQueue, tc.store, emptyGossip, queueConfig{
+		needsSystemConfig:    false,
+		acceptsUnsplitRanges: true,
+		maxSize:              1,
+	})
+	bqNoSysCfg.Start(clock, stopper)
+	bqNoSysCfg.MaybeAdd(r, hlc.Timestamp{})
+	if queueFnCalled != 1 {
+		t.Fatalf("expected shouldQueueFn to be called even without valid system config, got %d calls", queueFnCalled)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != 1 {
+			return errors.Errorf("expected 1 processed replica even without system config; got %d", pc)
+		}
+		if v := bqNoSysCfg.successes.Count(); v != 1 {
+			return errors.Errorf("expected 1 processed replica even without system config; got %d", v)
+		}
+		return nil
+	})
 }
 
 // TestAcceptsUnsplitRanges verifies that ranges that need to split are properly

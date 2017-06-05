@@ -111,6 +111,7 @@ func newReplicateQueue(
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
+			needsSystemConfig:    true,
 			acceptsUnsplitRanges: store.TestingKnobs().ReplicateQueueAcceptsUnsplit,
 			successes:            store.metrics.ReplicateQueueSuccesses,
 			failures:             store.metrics.ReplicateQueueFailures,
