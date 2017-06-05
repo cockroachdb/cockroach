@@ -52,6 +52,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
+			needsSystemConfig:    true,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.SplitQueueSuccesses,
 			failures:             store.metrics.SplitQueueFailures,
