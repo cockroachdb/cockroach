@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -138,7 +140,8 @@ func TestSplitOrExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			exprs := splitOrExpr(evalCtx, expr, nil)
@@ -163,7 +166,8 @@ func TestSplitAndExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			exprs := splitAndExpr(evalCtx, expr, nil)
@@ -284,8 +288,12 @@ func TestSimplifyExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
+			// We need to manually close this memory account because we're doing the
+			// evals ourselves here.
+			defer evalCtx.ActiveMemAcc.Close(context.Background())
 			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr, equiv := simplifyExpr(evalCtx, expr)
 			if s := expr.String(); d.expected != s {
@@ -324,7 +332,8 @@ func TestSimplifyNotExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
@@ -360,7 +369,8 @@ func TestSimplifyAndExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
@@ -564,7 +574,8 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
@@ -615,7 +626,8 @@ func TestSimplifyOrExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, _ := simplifyExpr(evalCtx, expr1)
@@ -789,7 +801,8 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := &parser.EvalContext{}
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)

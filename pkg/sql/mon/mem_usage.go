@@ -609,3 +609,9 @@ func (mm *MemoryMonitor) adjustBudget(ctx context.Context) {
 		mm.pool.ShrinkAccount(ctx, &mm.mu.curBudget, mm.mu.curBudget.curAllocated-neededBytes)
 	}
 }
+
+// GetCurrentAllocationForTesting returns the number of bytes that have
+// currently been allocated in the MemoryMonitor. Intended for use in testing.
+func (mm *MemoryMonitor) GetCurrentAllocationForTesting() int64 {
+	return mm.mu.curAllocated
+}

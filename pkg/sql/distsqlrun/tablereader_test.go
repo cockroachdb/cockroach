@@ -119,8 +119,10 @@ func TestTableReader(t *testing.T) {
 		ts := c.spec
 		ts.Table = *td
 
+		evalCtx := parser.MakeTestingEvalContext()
+		defer evalCtx.Stop(context.Background())
 		flowCtx := FlowCtx{
-			evalCtx:  parser.EvalContext{},
+			evalCtx:  evalCtx,
 			txnProto: &roachpb.Transaction{},
 			// Pass a DB without a TxnCoordSender.
 			remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),
@@ -185,8 +187,10 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		evalCtx:  parser.EvalContext{},
+		evalCtx:  evalCtx,
 		txnProto: &roachpb.Transaction{},
 		// Pass a DB without a TxnCoordSender.
 		remoteTxnDB: client.NewDB(tc.Server(0).DistSender(), tc.Server(0).Clock()),

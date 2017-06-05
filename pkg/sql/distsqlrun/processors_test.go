@@ -237,7 +237,9 @@ func TestPostProcess(t *testing.T) {
 			outBuf := &RowBuffer{}
 
 			var out procOutputHelper
-			if err := out.init(&tc.post, inBuf.Types(), &parser.EvalContext{}, outBuf); err != nil {
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
+			if err := out.init(&tc.post, inBuf.Types(), evalCtx, outBuf); err != nil {
 				t.Fatal(err)
 			}
 

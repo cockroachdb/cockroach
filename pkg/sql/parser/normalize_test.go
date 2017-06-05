@@ -16,8 +16,13 @@
 
 package parser
 
-import "testing"
-import "github.com/cockroachdb/cockroach/pkg/util/leaktest"
+import (
+	"testing"
+
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+)
 
 func TestReNormalizeName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -191,7 +196,9 @@ func TestNormalizeExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		rOrig := typedExpr.String()
-		ctx := &EvalContext{}
+		ctx := NewTestingEvalContext()
+		defer ctx.Mon.Stop(context.Background())
+		defer ctx.ActiveMemAcc.Close(context.Background())
 		r, err := ctx.NormalizeExpr(typedExpr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
