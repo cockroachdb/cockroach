@@ -44,16 +44,18 @@ const (
 	TestTimeUntilStoreDeadOff = 24 * time.Hour
 )
 
+// declinedReservationsTimeout needs to be non-zero to prevent useless retries
+// in the replicateQueue.process() retry loop.
 var declinedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
 	"server.declined_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a reservation was declined",
-	5*time.Second,
+	1*time.Second,
 )
 
 var failedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
 	"server.failed_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
-	0,
+	5*time.Second,
 )
 
 type nodeStatus int
