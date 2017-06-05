@@ -15,7 +15,9 @@
 package log
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -151,6 +153,14 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	})
 }
 
+var serverName = func() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "redacted"
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(hostname)))
+}()
+
 var crdbPaths = []string{"github.com/cockroachdb/cockroach"}
 
 func sendCrashReport(ctx context.Context, r interface{}, depth int) {
@@ -174,6 +184,7 @@ func sendCrashReport(ctx context.Context, r interface{}, depth int) {
 
 	ex := raven.NewException(err, raven.NewStacktrace(depth+1, contextLines, crdbPaths))
 	packet := raven.NewPacket(err.Error(), ex)
+	packet.ServerName = serverName
 	eventID, ch := raven.DefaultClient.Capture(packet, nil /* tags */)
 	<-ch
 	Shout(ctx, Severity_ERROR, "Reported as error "+eventID)
