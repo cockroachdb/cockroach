@@ -57,8 +57,8 @@ kv.raft_log.synchronize                            true           b     set to t
 kv.snapshot_rebalance.max_rate                     2.0 MiB        z     the rate limit (bytes/sec) to use for rebalance snapshots
 kv.snapshot_recovery.max_rate                      8.0 MiB        z     the rate limit (bytes/sec) to use for recovery snapshots
 kv.transaction.max_intents                         100000         i     maximum number of write intents allowed for a KV transaction
-server.declined_reservation_timeout                5s             d     the amount of time to consider the store throttled for up-replication after a reservation was declined
-server.failed_reservation_timeout                  0s             d     the amount of time to consider the store throttled for up-replication after a failed reservation call
+server.declined_reservation_timeout                1s             d     the amount of time to consider the store throttled for up-replication after a reservation was declined
+server.failed_reservation_timeout                  5s             d     the amount of time to consider the store throttled for up-replication after a failed reservation call
 server.remote_debugging.mode                       local          s     set to enable remote debugging, localhost-only or disable (any, local, off)
 server.time_until_store_dead                       5m0s           d     the time after which if there is no new gossiped information about a store, it is considered dead
 sql.defaults.distsql                               1              e     Default distributed SQL execution mode [off = 0, auto = 1, on = 2]
