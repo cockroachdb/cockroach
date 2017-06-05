@@ -47,7 +47,7 @@ const (
 	debugNetworkClassStddevMinus1 = " stddev-minus-1"
 	debugNetworkClassStddevMinus2 = " stddev-minus-2"
 
-	oldStoreCutoff = time.Minute
+	oldNodeCutoff = time.Minute
 )
 
 // Returns an HTML page displaying information about networking issues between
@@ -133,7 +133,7 @@ func (s *statusServer) handleDebugNetwork(w http.ResponseWriter, r *http.Request
 	}
 
 	// Find all outdated connections.
-	cutoff := mostRecentUpdatedAt.Add(-oldStoreCutoff)
+	cutoff := mostRecentUpdatedAt.Add(-oldNodeCutoff)
 	for nodeID, nodeStatus := range nodeStatuses {
 		if updatedAt := time.Unix(0, nodeStatus.UpdatedAt); updatedAt.Before(cutoff) {
 			data.DeadNodes[nodeID] = debugNetworkDeadNode{
@@ -179,9 +179,9 @@ func (s *statusServer) handleDebugNetwork(w http.ResponseWriter, r *http.Request
 		return nodeIDs[i].locality < nodeIDs[j].locality
 	})
 
-	data.Latencies = make([][]*debugRangeOutput, len(nodeIDs)+1)
-	data.Latencies[0] = make([]*debugRangeOutput, len(nodeIDs)+1)
-	data.Latencies[0][0] = &debugRangeOutput{Class: debugNetworkClassSpacer}
+	data.Latencies = make([][]*debugOutput, len(nodeIDs)+1)
+	data.Latencies[0] = make([]*debugOutput, len(nodeIDs)+1)
+	data.Latencies[0][0] = &debugOutput{Class: debugNetworkClassSpacer}
 	for i, item := range nodeIDs {
 		nodeID := item.id
 		var nodeHeaderClass string
@@ -190,14 +190,14 @@ func (s *statusServer) handleDebugNetwork(w http.ResponseWriter, r *http.Request
 			nodeHeaderClass = debugNetworkClassDead
 		}
 		// Add the top header.
-		data.Latencies[0][i+1] = &debugRangeOutput{
+		data.Latencies[0][i+1] = &debugOutput{
 			Value: fmt.Sprintf("n%d", nodeID),
 			Title: fmt.Sprintf("n%d\n%s\n%s", nodeID, item.address, item.locality),
 			Class: nodeHeaderClass + debugNetworkClassHeaderTop,
 		}
 		// Create the row and add the left header.
-		data.Latencies[i+1] = make([]*debugRangeOutput, len(nodeIDs)+1)
-		data.Latencies[i+1][0] = &debugRangeOutput{
+		data.Latencies[i+1] = make([]*debugOutput, len(nodeIDs)+1)
+		data.Latencies[i+1][0] = &debugOutput{
 			Value: fmt.Sprintf("n%d", nodeID),
 			Title: fmt.Sprintf("n%d\n%s\n%s", nodeID, item.address, item.locality),
 			Class: nodeHeaderClass + debugNetworkClassHeaderLeft,
@@ -212,7 +212,7 @@ func (s *statusServer) handleDebugNetwork(w http.ResponseWriter, r *http.Request
 			otherNodeID := otherItem.id
 			// Self latency
 			if nodeID == otherNodeID {
-				data.Latencies[i+1][j+1] = &debugRangeOutput{
+				data.Latencies[i+1][j+1] = &debugOutput{
 					Title: fmt.Sprintf("n%d -> n%d\n", nodeID, otherNodeID),
 					Class: debugNetworkClassSelf,
 				}
@@ -240,7 +240,7 @@ func (s *statusServer) handleDebugNetwork(w http.ResponseWriter, r *http.Request
 					class = debugNetworkClassStddevEven
 				}
 				ms := float64(lat) / float64(time.Millisecond)
-				data.Latencies[i+1][j+1] = &debugRangeOutput{
+				data.Latencies[i+1][j+1] = &debugOutput{
 					Value: fmt.Sprintf("%.1fms", ms),
 					Title: fmt.Sprintf("n%d -> n%d\n%fms", nodeID, otherNodeID, ms),
 					Class: class,
@@ -248,7 +248,7 @@ func (s *statusServer) handleDebugNetwork(w http.ResponseWriter, r *http.Request
 				continue
 			}
 			// No Connection
-			data.Latencies[i+1][j+1] = &debugRangeOutput{
+			data.Latencies[i+1][j+1] = &debugOutput{
 				Value: "X",
 				Title: fmt.Sprintf("n%d -> n%d\nno connection", nodeID, otherNodeID),
 				Class: debugNetworkClassNoConnection,
@@ -268,22 +268,22 @@ func (s *statusServer) handleDebugNetwork(w http.ResponseWriter, r *http.Request
 	}
 
 	// Add in the legend.
-	data.Legend = make([][]*debugRangeOutput, 2)
-	data.Legend[0] = []*debugRangeOutput{
+	data.Legend = make([][]*debugOutput, 2)
+	data.Legend[0] = []*debugOutput{
 		{Class: debugNetworkClassHeaderTop, Value: "< -2 stddev"},
 		{Class: debugNetworkClassHeaderTop, Value: "< -1 stddev"},
 		{Class: debugNetworkClassHeaderTop, Value: "mean"},
 		{Class: debugNetworkClassHeaderTop, Value: "> +1 stddev"},
 		{Class: debugNetworkClassHeaderTop, Value: "> +2 stddev"},
 	}
-	createLegendOutput := func(lat float64, class string) *debugRangeOutput {
-		return &debugRangeOutput{
+	createLegendOutput := func(lat float64, class string) *debugOutput {
+		return &debugOutput{
 			Class: class,
 			Value: fmt.Sprintf("%.2fms", lat/float64(time.Millisecond)),
 			Title: fmt.Sprintf("%fms", lat/float64(time.Millisecond)),
 		}
 	}
-	data.Legend[1] = []*debugRangeOutput{
+	data.Legend[1] = []*debugOutput{
 		createLegendOutput(stddevMinus2, debugNetworkClassStddevMinus2),
 		createLegendOutput(stddevMinus1, debugNetworkClassStddevMinus1),
 		createLegendOutput(mean, debugNetworkClassStddevEven),
@@ -319,8 +319,8 @@ type debugNetworkDeadNode struct {
 type debugNetwork struct {
 	Failures      []string
 	NoConnections []debugNetworkNoConnection
-	Latencies     [][]*debugRangeOutput
-	Legend        [][]*debugRangeOutput
+	Latencies     [][]*debugOutput
+	Legend        [][]*debugOutput
 	DeadNodes     map[roachpb.NodeID]debugNetworkDeadNode
 	Filters       []string
 }
