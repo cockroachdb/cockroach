@@ -642,7 +642,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// functionality.
 	// TODO(marc): when cookie-based authentication exists,
 	// apply it for all web endpoints.
-	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
+	s.mux.Handle(debugEndpoint, authorizedHandler(http.HandlerFunc(handleDebug)))
 
 	// Filter the gossip bootstrap resolvers based on the listen and
 	// advertise addresses.
@@ -847,11 +847,11 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(statusPrefix, gwMux)
 	s.mux.Handle("/health", gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
-	s.mux.Handle(rangeDebugEndpoint, http.HandlerFunc(s.status.handleDebugRange))
-	s.mux.Handle(problemRangesDebugEndpoint, http.HandlerFunc(s.status.handleProblemRanges))
-	s.mux.Handle(certificatesDebugEndpoint, http.HandlerFunc(s.status.handleDebugCertificates))
-	s.mux.Handle(networkDebugEndpoint, http.HandlerFunc(s.status.handleDebugNetwork))
-	s.mux.Handle(nodesDebugEndpoint, http.HandlerFunc(s.status.handleDebugNodes))
+	s.mux.Handle(rangeDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugRange)))
+	s.mux.Handle(problemRangesDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleProblemRanges)))
+	s.mux.Handle(certificatesDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugCertificates)))
+	s.mux.Handle(networkDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugNetwork)))
+	s.mux.Handle(nodesDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugNodes)))
 	log.Event(ctx, "added http endpoints")
 
 	// Before serving SQL requests, we have to make sure the database is
