@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -293,7 +294,7 @@ CREATE TABLE crdb_internal.jobs (
 
 		for _, r := range rows {
 			id, status, created, bytes := r[0], r[1], r[2], r[3]
-			payload, err := unmarshalJobPayload(bytes)
+			payload, err := jobs.UnmarshalJobPayload(bytes)
 			if err != nil {
 				return err
 			}
@@ -312,7 +313,7 @@ CREATE TABLE crdb_internal.jobs (
 			}
 			if err := addRow(
 				id,
-				parser.NewDString(payload.typ()),
+				parser.NewDString(payload.Typ()),
 				parser.NewDString(payload.Description),
 				parser.NewDString(payload.Username),
 				descriptorIDs,

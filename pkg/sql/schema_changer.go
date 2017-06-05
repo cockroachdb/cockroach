@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -62,7 +63,7 @@ type SchemaChanger struct {
 	execAfter      time.Time
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *distSQLPlanner
-	jobLogger      *JobLogger
+	jobLogger      *jobs.JobLogger
 }
 
 func (sc *SchemaChanger) truncateAndDropTable(
@@ -353,7 +354,7 @@ func (sc *SchemaChanger) exec(ctx context.Context, evalCtx parser.EvalContext) e
 	foundJobID := false
 	for _, g := range tableDesc.MutationJobs {
 		if g.MutationID == sc.mutationID {
-			jl, err := GetJobLogger(ctx, &sc.db, sc.leaseMgr, g.JobID)
+			jl, err := jobs.GetJobLogger(ctx, &sc.db, InternalExecutor{LeaseManager: sc.leaseMgr}, g.JobID)
 			if err != nil {
 				return err
 			}
@@ -644,7 +645,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				// Create a roll back job.
 				job := sc.jobLogger.Job
 				job.Description = "ROLL BACK " + job.Description
-				jobLogger := NewJobLogger(&sc.db, sc.leaseMgr, job)
+				jobLogger := jobs.NewJobLogger(&sc.db, InternalExecutor{LeaseManager: sc.leaseMgr}, job)
 				if err := jobLogger.Created(ctx); err != nil {
 					return err
 				}

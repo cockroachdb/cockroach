@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -359,9 +359,9 @@ func backupAndRestore(
 }
 
 func verifySystemJob(
-	db *sqlutils.SQLRunner, offset int, expectedType string, expected sql.JobRecord,
+	db *sqlutils.SQLRunner, offset int, expectedType string, expected jobs.JobRecord,
 ) error {
-	var actual sql.JobRecord
+	var actual jobs.JobRecord
 	var rawDescriptorIDs pq.Int64Array
 	var actualType string
 	var statusString string
@@ -388,7 +388,7 @@ func verifySystemJob(
 			offset, strings.Join(pretty.Diff(e, a), "\n"))
 	}
 
-	if e, a := sql.JobStatusSucceeded, sql.JobStatus(statusString); e != a {
+	if e, a := jobs.JobStatusSucceeded, jobs.JobStatus(statusString); e != a {
 		return errors.Errorf("job %d: expected status %v, got %v", offset, e, a)
 	}
 	if e, a := expectedType, actualType; e != a {
@@ -504,7 +504,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := verifySystemJob(sqlDB, 1, sql.JobTypeBackup, sql.JobRecord{
+		if err := verifySystemJob(sqlDB, 1, jobs.JobTypeBackup, jobs.JobRecord{
 			Username: security.RootUser,
 			Description: fmt.Sprintf(
 				`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s'`,
@@ -543,7 +543,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := verifySystemJob(sqlDB, 2, sql.JobTypeRestore, sql.JobRecord{
+		if err := verifySystemJob(sqlDB, 2, jobs.JobTypeRestore, jobs.JobRecord{
 			Username: security.RootUser,
 			Description: fmt.Sprintf(
 				`RESTORE bench.* FROM '%s', '%s' WITH OPTIONS ('into_db'='bench2')`,
