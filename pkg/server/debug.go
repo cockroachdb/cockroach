@@ -62,18 +62,24 @@ var debugRemote = settings.RegisterValidatedStringSetting(
 	},
 )
 
+// authorizedHandler is a middleware http handler that checks that the caller
+// is authorized to access the handler.
+func authorizedHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if any, _ := authRequest(r); !any {
+			http.Error(w, "not allowed (due to the 'server.remote_debugging.mode' setting)",
+				http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // handleDebug passes requests with the debugPathPrefix onto the default
 // serve mux, which is preconfigured (by import of net/http/pprof and registration
 // of go-metrics) to serve endpoints which access exported variables and pprof tools.
 func handleDebug(w http.ResponseWriter, r *http.Request) {
-
-	if any, _ := authRequest(r); !any {
-		http.Error(w, "not allowed (due to the 'server.remote_debugging.mode' setting)",
-			http.StatusForbidden)
-		return
-	}
 	handler, _ := debugServeMux.Handler(r)
-
 	handler.ServeHTTP(w, r)
 }
 
