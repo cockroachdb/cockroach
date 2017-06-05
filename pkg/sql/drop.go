@@ -879,9 +879,16 @@ func (p *planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.Tabl
 func (p *planner) removeFKBackReference(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
-	t, err := sqlbase.GetTableDescFromID(ctx, p.txn, idx.ForeignKey.Table)
-	if err != nil {
-		return errors.Errorf("error resolving referenced table ID %d: %v", idx.ForeignKey.Table, err)
+	var t *sqlbase.TableDescriptor
+	// We don't want to lookup/edit a second copy of the same table.
+	if tableDesc.ID == idx.ForeignKey.Table {
+		t = tableDesc
+	} else {
+		lookup, err := sqlbase.GetTableDescFromID(ctx, p.txn, idx.ForeignKey.Table)
+		if err != nil {
+			return errors.Errorf("error resolving referenced table ID %d: %v", idx.ForeignKey.Table, err)
+		}
+		t = lookup
 	}
 	if t.Dropped() {
 		// The referenced table is being dropped. No need to modify it further.
