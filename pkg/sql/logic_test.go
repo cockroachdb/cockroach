@@ -652,7 +652,7 @@ func (t *logicTest) setup(
 		ServerArgs: base.TestServerArgs{
 			// Specify a fixed memory limit (some test cases verify OOM conditions; we
 			// don't want those to take long on large machines).
-			SQLMemoryPoolSize: 128 * 1024 * 1024,
+			SQLMemoryPoolSize: 192 * 1024 * 1024,
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					WaitForGossipUpdate:   true,

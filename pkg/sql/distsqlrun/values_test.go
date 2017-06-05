@@ -96,7 +96,8 @@ func TestValues(t *testing.T) {
 						t.Fatalf("incorrect number of rows %d, expected %d", len(res), numRows)
 					}
 
-					evalCtx := &parser.EvalContext{}
+					evalCtx := parser.NewTestingEvalContext()
+					defer evalCtx.Stop(context.Background())
 					for i := 0; i < numRows; i++ {
 						if len(res[i]) != numCols {
 							t.Fatalf("row %d incorrect length %d, expected %d", i, len(res[i]), numCols)

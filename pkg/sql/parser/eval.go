@@ -1759,6 +1759,11 @@ type EvalContext struct {
 	collationEnv CollationEnvironment
 
 	Mon *mon.MemoryMonitor
+
+	// ActiveMemAcc is the account to which values are allocated during
+	// evaluation. It can change over the course of evaluation, such as on a
+	// per-row basis.
+	ActiveMemAcc *mon.BoundAccount
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
@@ -1774,11 +1779,25 @@ func MakeTestingEvalContext() EvalContext {
 	monitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = &monitor
 	ctx.Ctx = context.Background
+	acc := monitor.MakeBoundAccount()
+	ctx.ActiveMemAcc = &acc
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
 	ctx.SetClusterTimestamp(hlc.Timestamp{WallTime: now.Unix()})
 	return ctx
+}
+
+// NewTestingEvalContext is a convenience version of MakeTestingEvalContext
+// that returns a pointer.
+func NewTestingEvalContext() *EvalContext {
+	ctx := MakeTestingEvalContext()
+	return &ctx
+}
+
+// Stop closes out the EvalContext and must be called once it is no longer in use.
+func (ctx *EvalContext) Stop(c context.Context) {
+	ctx.Mon.Stop(c)
 }
 
 // GetStmtTimestamp retrieves the current statement timestamp as per
@@ -2605,7 +2624,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		if _, ok := err.(*roachpb.HandledRetryableTxnError); ok {
 			return nil, err
 		}
-		return nil, fmt.Errorf("%s(): %v", expr.Func, err)
+		return nil, pgerror.AnnotateError(fmt.Sprintf("%s():", expr.Func), err)
 	}
 	return res, nil
 }
