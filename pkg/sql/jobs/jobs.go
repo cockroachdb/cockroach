@@ -14,7 +14,7 @@
 //
 // Author: Nikhil Benesch (nikhil.benesch@gmail.com)
 
-package sql
+package jobs
 
 import (
 	"time"
@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,7 +40,7 @@ import (
 // database, however, even when calling e.g. Started or Succeeded.
 type JobLogger struct {
 	db    *client.DB
-	ex    InternalExecutor
+	ex    sqlutil.InternalExecutor
 	jobID *int64
 	Job   JobRecord
 }
@@ -72,10 +73,10 @@ const (
 )
 
 // NewJobLogger creates a new JobLogger.
-func NewJobLogger(db *client.DB, leaseMgr *LeaseManager, job JobRecord) JobLogger {
+func NewJobLogger(db *client.DB, ex sqlutil.InternalExecutor, job JobRecord) JobLogger {
 	return JobLogger{
 		db:  db,
-		ex:  InternalExecutor{LeaseManager: leaseMgr},
+		ex:  ex,
 		Job: job,
 	}
 }
@@ -83,11 +84,11 @@ func NewJobLogger(db *client.DB, leaseMgr *LeaseManager, job JobRecord) JobLogge
 // GetJobLogger creates a new JobLogger initialized from a previously created
 // job id.
 func GetJobLogger(
-	ctx context.Context, db *client.DB, leaseMgr *LeaseManager, jobID int64,
+	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor, jobID int64,
 ) (*JobLogger, error) {
 	jl := &JobLogger{
 		db:    db,
-		ex:    InternalExecutor{LeaseManager: leaseMgr},
+		ex:    ex,
 		jobID: &jobID,
 	}
 	if err := jl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -247,7 +248,7 @@ func (jl *JobLogger) retrieveJobPayload(ctx context.Context, txn *client.Txn) (*
 		return nil, err
 	}
 
-	return unmarshalJobPayload(row[0])
+	return UnmarshalJobPayload(row[0])
 }
 
 func (jl *JobLogger) updateJobRecord(
@@ -296,7 +297,8 @@ const (
 	JobTypeSchemaChange string = "SCHEMA CHANGE"
 )
 
-func (jp *JobPayload) typ() string {
+// Typ returns the payload's job type.
+func (jp *JobPayload) Typ() string {
 	switch jp.Details.(type) {
 	case *JobPayload_Backup:
 		return JobTypeBackup
@@ -305,11 +307,13 @@ func (jp *JobPayload) typ() string {
 	case *JobPayload_SchemaChange:
 		return JobTypeSchemaChange
 	default:
-		panic("JobPayload.typ called on a payload with an unknown details type")
+		panic("JobPayload.Typ called on a payload with an unknown details type")
 	}
 }
 
-func unmarshalJobPayload(datum parser.Datum) (*JobPayload, error) {
+// UnmarshalJobPayload unmarshals and returns the JobPayload encoded in the
+// input datum, which should be a DBytes.
+func UnmarshalJobPayload(datum parser.Datum) (*JobPayload, error) {
 	payload := &JobPayload{}
 	bytes, ok := datum.(*parser.DBytes)
 	if !ok {

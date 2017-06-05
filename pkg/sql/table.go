@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -445,13 +446,13 @@ func (p *planner) createSchemaChangeJob(
 	if err != nil {
 		return sqlbase.InvalidMutationID, err
 	}
-	jobRecord := JobRecord{
+	jobRecord := jobs.JobRecord{
 		Description:   stmt,
 		Username:      p.User(),
 		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
-		Details:       SchemaChangeJobDetails{},
+		Details:       jobs.SchemaChangeJobDetails{},
 	}
-	jobLogger := NewJobLogger(p.ExecCfg().DB, p.session.leases.leaseMgr, jobRecord)
+	jobLogger := jobs.NewJobLogger(p.ExecCfg().DB, InternalExecutor{LeaseManager: p.session.leases.leaseMgr}, jobRecord)
 	// TODO(jordan): thread the client transaction into jobLogger.Created.
 	if err := jobLogger.Created(ctx); err != nil {
 		return sqlbase.InvalidMutationID, nil
