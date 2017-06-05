@@ -58,16 +58,23 @@ ALERT ClusterDiskLow
 
 # Zero SQL qps.
 ALERT ZeroSQLQps
-  IF sql_conns > 0 and rate(sql_query_count[5m]) == 0.0
+  IF sql_conns{job="cockroach"} > 0 and rate(sql_query_count{job="cockroach"}[5m]) == 0.0
   FOR 10m
   ANNOTATIONS {
     summary = "Instance {{ $labels.instance }} has SQL connections but no queries",
   }
 
-# Prometheus disk getting full..
-ALERT PrometheusDiskLow
-  IF node_filesystem_free{cluster="prometheus",mountpoint="/mnt/data"} / node_filesystem_size{cluster="prometheus",mountpoint="/mnt/data"} < 0.2
-  FOR 10m
+# Certificate expiration. Alerts are per node.
+ALERT CACertificateExpiresSoon
+  IF (security_certificate_expiration_ca{job="cockroach"} > 0) and (security_certificate_expiration_ca{job="cockroach"} - time()) < 86400 * 366
+  LABELS { frequency = "daily" }
   ANNOTATIONS {
-    summary = "Prometheus storage is almost full: {{ $value }} fraction free"
+    summary = "CA certificate for {{ $labels.instance }} expires in less than a year",
+  }
+
+ALERT NodeCertificateExpiresSoon
+  IF (security_certificate_expiration_node{job="cockroach"} > 0) and (security_certificate_expiration_node{job="cockroach"} - time()) < 86400 * 183
+  LABELS { frequency = "daily" }
+  ANNOTATIONS {
+    summary = "Node certificate for {{ $labels.instance }} expires in less than six months",
   }
