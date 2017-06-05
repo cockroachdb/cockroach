@@ -232,6 +232,22 @@ func (r *Replica) DescLocked() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
 }
 
+// GetGCThreshold returns the range's GCThreshold, acquiring a replica lock in
+// the process.
+func (r *Replica) GetGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.state.GCThreshold
+}
+
+// GetTxnSpanGCThreshold returns the range's TxnSpanGCThreshold, acquiring a replica lock in
+// the process.
+func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.state.TxnSpanGCThreshold
+}
+
 func (r *Replica) RaftLock() {
 	r.raftMu.Lock()
 }

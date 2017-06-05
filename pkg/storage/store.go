@@ -1850,6 +1850,11 @@ func splitPostApply(
 	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
 	rightLease := *rightRng.mu.state.Lease
 	rightReplicaID := rightRng.mu.replicaID
+
+	// Copy the GCThreshold and TxnSpanGCThreshold from the LHS.
+	rightRng.mu.state.GCThreshold = r.mu.state.GCThreshold
+	rightRng.mu.state.TxnSpanGCThreshold = r.mu.state.TxnSpanGCThreshold
+
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
 	log.Event(ctx, "copied timestamp cache")
