@@ -1357,6 +1357,63 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	}
 }
 
+func TestStoreSplitGCThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
+
+	leftKey := roachpb.Key("a")
+	splitKey := roachpb.Key("b")
+	rightKey := roachpb.Key("c")
+	content := []byte("test")
+
+	pArgs := putArgs(leftKey, content)
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	pArgs = putArgs(rightKey, content)
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	specifiedGCThreshold := hlc.Timestamp{
+		WallTime: 2E9,
+	}
+	specifiedTxnSpanGCThreshold := hlc.Timestamp{
+		WallTime: 3E9,
+	}
+	gcArgs := &roachpb.GCRequest{
+		Span: roachpb.Span{
+			Key:    roachpb.Key(leftKey),
+			EndKey: roachpb.Key(rightKey),
+		},
+		Threshold:          specifiedGCThreshold,
+		TxnSpanGCThreshold: specifiedTxnSpanGCThreshold,
+	}
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), gcArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	args := adminSplitArgs(roachpb.KeyMin, splitKey)
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	repl := store.LookupReplica(roachpb.RKey(splitKey), nil)
+	gcThreshold := repl.GetGCThreshold()
+	txnSpanGCThreshold := repl.GetTxnSpanGCThreshold()
+
+	if !reflect.DeepEqual(gcThreshold, specifiedGCThreshold) {
+		t.Fatalf("expected RHS's GCThreshold is equal to %v, but got %v", specifiedGCThreshold, gcThreshold)
+	}
+	if !reflect.DeepEqual(txnSpanGCThreshold, specifiedTxnSpanGCThreshold) {
+		t.Fatalf("expected RHS's TxnSpanGCThreshold is equal to %v, but got %v", specifiedTxnSpanGCThreshold, txnSpanGCThreshold)
+	}
+}
+
 // TestStoreRangeSplitRaceUninitializedRHS reproduces #7600 (before it was
 // fixed). While splits are happening, we simulate incoming messages for the
 // right-hand side to trigger a race between the creation of the proper replica

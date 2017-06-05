@@ -1380,6 +1380,22 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
 }
 
+// GetGCThreshold returns the range's GCThreshold, acquiring a replica lock in
+// the process.
+func (r *Replica) GetGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.state.GCThreshold
+}
+
+// GetTxnSpanGCThreshold returns the range's TxnSpanGCThreshold, acquiring a replica lock in
+// the process.
+func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.state.TxnSpanGCThreshold
+}
+
 // NodeID returns the ID of the node this replica belongs to.
 func (r *Replica) NodeID() roachpb.NodeID {
 	return r.store.nodeDesc.NodeID
