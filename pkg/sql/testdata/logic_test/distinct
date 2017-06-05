@@ -31,6 +31,15 @@ SELECT DISTINCT y, z FROM xyz
 3 5
 2 9
 
+query I rowsort
+SELECT y FROM (SELECT DISTINCT y, z FROM xyz)
+----
+2
+5
+2
+3
+2
+
 # TODO(vivek): Use the secondary index. Use distinct in index selection.
 query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz
@@ -181,3 +190,8 @@ SELECT DISTINCT (y,z) FROM xyz
 (3,5)
 (2,9)
 (2,)
+
+query I
+SELECT COUNT(*) FROM (SELECT DISTINCT y FROM xyz)
+----
+3
