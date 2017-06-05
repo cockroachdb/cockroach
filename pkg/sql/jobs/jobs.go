@@ -43,6 +43,7 @@ type JobLogger struct {
 	ex    sqlutil.InternalExecutor
 	jobID *int64
 	Job   JobRecord
+	txn   *client.Txn
 }
 
 // JobDetails is a marker interface for job details proto structs.
@@ -91,7 +92,7 @@ func GetJobLogger(
 		ex:    ex,
 		jobID: &jobID,
 	}
-	if err := jl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		payload, err := jl.retrieveJobPayload(ctx, txn)
 		if err != nil {
 			return err
@@ -114,6 +115,28 @@ func GetJobLogger(
 		return nil, err
 	}
 	return jl, nil
+}
+
+func (jl *JobLogger) runInTxn(
+	ctx context.Context, retryable func(context.Context, *client.Txn) error,
+) error {
+	if jl.txn != nil {
+		defer func() { jl.txn = nil }()
+		return jl.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true, AssignTimestampImmediately: true},
+			func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
+				return retryable(ctx, txn)
+			})
+	}
+	return jl.db.Txn(ctx, retryable)
+}
+
+// WithTxn sets the transaction that this JobLogger will use for its next
+// operation. If the transaction is nil, the JobLogger will create a one-off
+// transaction instead. If you use WithTxn, this JobLogger will no longer be
+// threadsafe.
+func (jl *JobLogger) WithTxn(txn *client.Txn) *JobLogger {
+	jl.txn = txn
+	return jl
 }
 
 // JobID returns the ID of the job that this JobLogger is currently tracking.
@@ -223,7 +246,7 @@ func (jl *JobLogger) insertJobRecord(ctx context.Context, payload *JobPayload) e
 	}
 
 	var row parser.Datums
-	if err := jl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		payload.ModifiedMicros = jobTimestamp(txn.Proto().OrigTimestamp.GoTime())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
@@ -258,7 +281,7 @@ func (jl *JobLogger) updateJobRecord(
 		return errors.New("JobLogger cannot update job: job not created")
 	}
 
-	return jl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		payload, err := jl.retrieveJobPayload(ctx, txn)
 		if err != nil {
 			return err
