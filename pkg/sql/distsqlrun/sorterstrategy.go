@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/dgraph-io/badger/badger"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
@@ -288,7 +289,7 @@ func (ss *sortAllStrategy) sortExternal(s *sorter) error {
 
 func (ss *sortAllStrategy) sortBadger(s *sorter) error {
 	fmt.Println("running badger sort")
-	/*path := "badger_bench"
+	path := "badger_bench"
 	opts := badger.DefaultOptions
 	opts.Dir = path
 	b, err := badger.NewKV(&badger.DefaultOptions)
@@ -299,7 +300,75 @@ func (ss *sortAllStrategy) sortBadger(s *sorter) error {
 		b.Close()
 		os.RemoveAll(path)
 		os.Mkdir(path, 0700)
-	}()*/
+	}()
+
+	start := time.Now()
+	nextRowTime := start
+	for {
+		readTime := time.Now()
+		row, err := s.input.NextRow()
+		if err != nil {
+			return err
+		}
+		nextRowTime = nextRowTime.Add(time.Since(readTime))
+		if row == nil {
+			break
+		}
+		var key roachpb.Key
+		for _, val := range row {
+			// Assume ascending. Note that the comparator isn't set.
+			key, err = val.Encode(&ss.rows.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, key)
+			if err != nil {
+				return err
+			}
+		}
+		entries := []*badger.Entry{
+			&badger.Entry{
+				Key:   key,
+				Value: make([]byte, 0),
+			},
+		}
+		b.BatchSet(entries)
+	}
+
+	fmt.Println("badger writing and sorting took", time.Since(start))
+	fmt.Println("time spent getting the next row", nextRowTime.Sub(start))
+
+	// Explicitly unset tuning for reading. In a real scenario we would
+	// probably make use of the prefetch size (set dynamically?) and set
+	// FetchValues to false when we aren't using the storage solution as an
+	// on-disk map.
+	i := b.NewIterator(badger.IteratorOptions{
+		PrefetchSize: 0,
+		FetchValues:  true,
+		Reverse:      false,
+	})
+	defer i.Close()
+
+	types := s.input.src.Types()
+	start = time.Now()
+	justEmit := start
+	for i.Rewind(); i.Valid(); i.Next() {
+		key := i.Item().Key()
+		row := make([]sqlbase.EncDatum, len(types))
+		for i, t := range types {
+			row[i], key, err = sqlbase.EncDatumFromBuffer(t, sqlbase.DatumEncoding_ASCENDING_KEY, key)
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+		}
+		lilt := time.Now()
+		consumerStatus, err := s.out.emitRow(context.TODO(), row)
+		if err != nil || consumerStatus != NeedMoreRows {
+			return err
+		}
+		justEmit = justEmit.Add(time.Since(lilt))
+	}
+
+	fmt.Println("badger read and emit stage", time.Since(start))
+	fmt.Println("badger time in just emit", justEmit.Sub(start))
+
 	return nil
 }
 

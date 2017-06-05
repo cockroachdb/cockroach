@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/dgraph-io/badger/badger"
 )
 
 const testCacheSize = 1 << 30 // 1 GB
@@ -596,4 +597,31 @@ func TestRocksDBTimeBound(t *testing.T) {
 	if sst.TsMax == nil || *sst.TsMax != maxTimestamp {
 		t.Fatalf("got max %v expected %v", sst.TsMax, maxTimestamp)
 	}
+}
+
+func TestBadgerTime(t *testing.T) {
+	path := "badger_bench"
+	opts := badger.DefaultOptions
+	opts.Dir = path
+	b, err := badger.NewKV(&badger.DefaultOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		b.Close()
+		os.RemoveAll(path)
+		os.Mkdir(path, 0700)
+	}()
+
+	start := time.Now()
+	for i := 0; i < 100000; i++ {
+		entries := []*badger.Entry{
+			&badger.Entry{
+				Key:   []byte(fmt.Sprintf("key%d", i)),
+				Value: make([]byte, 0),
+			},
+		}
+		b.BatchSet(entries)
+	}
+	t.Log("whole thing took", time.Since(start))
 }
