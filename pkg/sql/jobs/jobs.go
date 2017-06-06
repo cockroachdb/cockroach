@@ -17,6 +17,7 @@
 package jobs
 
 import (
+	"fmt"
 	"time"
 
 	"golang.org/x/net/context"
@@ -72,6 +73,29 @@ const (
 	// JobStatusSucceeded is for jobs that have successfully completed.
 	JobStatusSucceeded JobStatus = "succeeded"
 )
+
+// DuplicateOperationError is returned by JobLogger operations if they have
+// already been performed, such as if a transaction that runs Create on a
+// JobLogger gets retried.
+type DuplicateOperationError struct {
+	msg   string
+	jobID *int64
+}
+
+func newDuplicateOperationError(msg string, jobID *int64) DuplicateOperationError {
+	return DuplicateOperationError{msg: msg, jobID: jobID}
+}
+
+func (e DuplicateOperationError) Error() string {
+	return fmt.Sprintf(e.msg, e.jobID)
+}
+
+// IsDuplicateOperationError returns true if the input error was caused by a
+// duplicate operation.
+func IsDuplicateOperationError(err error) bool {
+	_, ok := err.(DuplicateOperationError)
+	return ok
+}
 
 // NewJobLogger creates a new JobLogger.
 func NewJobLogger(db *client.DB, ex sqlutil.InternalExecutor, job JobRecord) JobLogger {
@@ -171,7 +195,7 @@ func (jl *JobLogger) Created(ctx context.Context) error {
 func (jl *JobLogger) Started(ctx context.Context) error {
 	return jl.updateJobRecord(ctx, JobStatusRunning, func(payload *JobPayload) (bool, error) {
 		if payload.StartedMicros != 0 {
-			return false, errors.Errorf("JobLogger: job %d already started", jl.jobID)
+			return false, newDuplicateOperationError("JobLogger: job %d already started", jl.jobID)
 		}
 		payload.StartedMicros = jobTimestamp(timeutil.Now())
 		return true, nil
@@ -215,7 +239,7 @@ func (jl *JobLogger) Failed(ctx context.Context, err error) {
 	}
 	internalErr := jl.updateJobRecord(ctx, JobStatusFailed, func(payload *JobPayload) (bool, error) {
 		if payload.FinishedMicros != 0 {
-			return false, errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+			return false, newDuplicateOperationError("JobLogger: job %d already finished", jl.jobID)
 		}
 		payload.Error = err.Error()
 		payload.FinishedMicros = jobTimestamp(timeutil.Now())
@@ -232,7 +256,7 @@ func (jl *JobLogger) Failed(ctx context.Context, err error) {
 func (jl *JobLogger) Succeeded(ctx context.Context) error {
 	return jl.updateJobRecord(ctx, JobStatusSucceeded, func(payload *JobPayload) (bool, error) {
 		if payload.FinishedMicros != 0 {
-			return false, errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+			return false, newDuplicateOperationError("JobLogger: job %d already finished", jl.jobID)
 		}
 		payload.FinishedMicros = jobTimestamp(timeutil.Now())
 		payload.FractionCompleted = 1.0
@@ -242,7 +266,7 @@ func (jl *JobLogger) Succeeded(ctx context.Context) error {
 
 func (jl *JobLogger) insertJobRecord(ctx context.Context, payload *JobPayload) error {
 	if jl.jobID != nil {
-		return errors.Errorf("JobLogger cannot create job: job %d already created", jl.jobID)
+		return newDuplicateOperationError("JobLogger cannot create job: job %d already created", jl.jobID)
 	}
 
 	var row parser.Datums
