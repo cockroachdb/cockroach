@@ -274,6 +274,8 @@ func init() {
 		varFlag(f, sqlSize, cliflags.SQLMem)
 	}
 
+	varFlag(initCmd.Flags(), &serverCfg.JoinList, cliflags.Join)
+
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// All certs commands need the certificate directory.
@@ -316,6 +318,7 @@ func init() {
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
+	clientCmds = append(clientCmds, initCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		stringFlag(f, &clientConnHost, cliflags.ClientHost, "")

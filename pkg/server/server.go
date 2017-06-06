@@ -106,6 +106,7 @@ type Server struct {
 	registry           *metric.Registry
 	recorder           *status.MetricsRecorder
 	runtime            status.RuntimeStatSampler
+	init               *initServer
 	admin              *adminServer
 	status             *statusServer
 	tsDB               *ts.DB
@@ -341,6 +342,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 
+	s.init = newInitServer(s)
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
@@ -451,6 +453,21 @@ type ListenError struct {
 	Addr string
 }
 
+func (s *Server) isAnyStoreBootstrapped(ctx context.Context) (bool, error) {
+	for _, e := range s.engines {
+		if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
+			// NotBootstrappedError is expected.
+			if _, ok := err.(*storage.NotBootstrappedError); !ok {
+				return false, err
+			}
+		} else {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context.
 //
@@ -518,8 +535,24 @@ func (s *Server) Start(ctx context.Context) error {
 	// if we wouldn't otherwise reach the point where we start serving on it.
 	var serveOnMux sync.Once
 	m := cmux.New(ln)
+
+	// Direct all requests to the Init listener until we're ready to accept connections.
+	readyToServe := int32(0)
+	initL := m.Match(func(_ io.Reader) bool {
+		return atomic.LoadInt32(&readyToServe) == 0
+	})
+	s.init.serve(ctx, initL)
+
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
+
+	workersCtx := s.AnnotateCtx(context.Background())
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		// TODO(adamgee): Can I nuke serveOnMux now?
+		serveOnMux.Do(func() {
+			netutil.FatalIfUnexpected(m.Serve())
+		})
+	})
 
 	httpLn, err := net.Listen("tcp", s.cfg.HTTPAddr)
 	if err != nil {
@@ -533,8 +566,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	s.cfg.HTTPAddr = unresolvedHTTPAddr.String()
-
-	workersCtx := s.AnnotateCtx(context.Background())
 
 	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 		<-s.stopper.ShouldQuiesce()
@@ -565,7 +596,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
-		netutil.FatalIfUnexpected(anyL.Close())
+		netutil.FatalIfUnexpected(anyL.Close()) // TODO: Do we need to also close the other listeners?
 		<-s.stopper.ShouldStop()
 		s.grpc.Stop()
 		serveOnMux.Do(func() {
@@ -661,56 +692,56 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.stopper.AddCloser(&s.engines)
 
-	// We might have to sleep a bit to protect against this node producing non-
-	// monotonic timestamps. Before restarting, its clock might have been driven
-	// by other nodes' fast clocks, but when we restarted, we lost all this
-	// information. For example, a client might have written a value at a
-	// timestamp that's in the future of the restarted node's clock, and if we
-	// don't do something, the same client's read would not return the written
-	// value. So, we wait up to MaxOffset; we couldn't have served timestamps more
-	// than MaxOffset in the future (assuming that MaxOffset was not changed, see
-	// #9733).
-	//
-	// As an optimization for tests, we don't sleep if all the stores are brand
-	// new. In this case, the node will not serve anything anyway until it
-	// synchronizes with other nodes.
-	{
-		anyStoreBootstrapped := false
-		for _, e := range s.engines {
-			if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
-				// NotBootstrappedError is expected.
-				if _, ok := err.(*storage.NotBootstrappedError); !ok {
-					return err
-				}
-			} else {
-				anyStoreBootstrapped = true
-				break
-			}
+	if anyStoreBootstrapped, err := s.isAnyStoreBootstrapped(ctx); err != nil {
+		return err
+	} else if anyStoreBootstrapped {
+		// We might have to sleep a bit to protect against this node producing non-
+		// monotonic timestamps. Before restarting, its clock might have been driven
+		// by other nodes' fast clocks, but when we restarted, we lost all this
+		// information. For example, a client might have written a value at a
+		// timestamp that's in the future of the restarted node's clock, and if we
+		// don't do something, the same client's read would not return the written
+		// value. So, we wait up to MaxOffset; we couldn't have served timestamps more
+		// than MaxOffset in the future (assuming that MaxOffset was not changed, see
+		// #9733).
+		//
+		// As an optimization for tests, we don't sleep if all the stores are brand
+		// new. In this case, the node will not serve anything anyway until it
+		// synchronizes with other nodes.
+		sleepDuration := s.clock.MaxOffset() - timeutil.Since(startTime)
+		if sleepDuration > 0 {
+			log.Infof(ctx, "sleeping for %s to guarantee HLC monotonicity", sleepDuration)
+			time.Sleep(sleepDuration)
 		}
-		if anyStoreBootstrapped {
-			sleepDuration := s.clock.MaxOffset() - timeutil.Since(startTime)
-			if sleepDuration > 0 {
-				log.Infof(ctx, "sleeping for %s to guarantee HLC monotonicity", sleepDuration)
-				time.Sleep(sleepDuration)
-			}
+	} else if len(s.cfg.GossipBootstrapResolvers) == 0 {
+		// If the _unfiltered_ list of hosts from the --join flag is
+		// empty, then this node can bootstrap a new cluster. We disallow
+		// this if this node is being started with itself specified as a
+		// --join host, because that's too likely to be operator error.
+		if err = s.node.bootstrap(ctx, s.engines); err != nil {
+			return err
 		}
+		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
+	} else {
+		log.Info(ctx, "No stores bootstrapped and --join flag specified, starting Init Server.")
+		if err = s.init.awaitBootstrap(); err != nil {
+			return nil
+		}
+
+		log.Info(ctx, "Init Server returned, the cluster has been bootstrapped")
 	}
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
-	// init all the replicas.
+	// init all the replicas.  At this point *some* store has been bootstrapped.
 	err = s.node.start(
 		ctx,
 		unresolvedAdvertAddr,
 		s.engines,
 		s.cfg.NodeAttributes,
-		s.cfg.Locality,
-		// If the _unfiltered_ list of hosts from the --join flag is
-		// empty, then this node can bootstrap a new cluster. We disallow
-		// this if this node is being started with itself specified as a
-		// --join host, because that's too likely to be operator error.
-		len(s.cfg.GossipBootstrapResolvers) == 0, /* canBootstrap */
-	)
+		s.cfg.Locality)
+
 	if err != nil {
+		log.Error(ctx, "Node.start error: ", err)
 		return err
 	}
 	log.Event(ctx, "started node")
@@ -756,11 +787,11 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		serveOnMux.Do(func() {
-			netutil.FatalIfUnexpected(m.Serve())
-		})
-	})
+
+	// Set the readyToServe bit which removes the initL from cmux.
+	if !atomic.CompareAndSwapInt32(&readyToServe, 0, 1) {
+		return errors.New("Failed to set readyToServe bit")
+	}
 
 	if len(s.cfg.SocketFile) != 0 {
 		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)

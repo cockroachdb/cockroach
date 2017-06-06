@@ -80,10 +80,6 @@ var (
 		Help: "Number of batch KV requests that failed to execute on this node"}
 )
 
-// errNeedsBootstrap indicates the node should be used as the seed of
-// a new cluster.
-var errNeedsBootstrap = errors.New("node has no initialized stores and no instructions for joining an existing cluster")
-
 // errCannotJoinSelf indicates that a node was started with no initialized
 // stores but --join specifying itself; there's no way to make forward
 // progress in this state.
@@ -358,44 +354,34 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 	}
 }
 
+func (n *Node) bootstrap(ctx context.Context, engines []engine.Engine) error {
+	n.initialBoot = true
+	// This node has no initialized stores and no way to connect to
+	// an existing cluster, so we bootstrap it.
+	clusterID, err := bootstrapCluster(n.storeCfg, engines, n.txnMetrics)
+	if err != nil {
+		return err
+	}
+	
+	log.Infof(ctx, "**** cluster %s has been created", clusterID)
+	return nil
+}
+
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
-//
-// The canBootstrap parameter indicates whether this node is eligible
-// to bootstrap a new cluster. The -join flag must be empty.
 func (n *Node) start(
 	ctx context.Context,
 	addr net.Addr,
 	engines []engine.Engine,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
-	canBootstrap bool,
 ) error {
 	n.initDescriptor(addr, attrs, locality)
 
-	// Initialize stores, including bootstrapping new ones.
-	if err := n.initStores(ctx, engines, n.stopper, false); err != nil {
-		if err == errNeedsBootstrap {
-			if !canBootstrap {
-				return errCannotJoinSelf
-			}
-			n.initialBoot = true
-			// This node has no initialized stores and no way to connect to
-			// an existing cluster, so we bootstrap it.
-			clusterID, err := bootstrapCluster(n.storeCfg, engines, n.txnMetrics)
-			if err != nil {
-				return err
-			}
-			log.Infof(ctx, "**** cluster %s has been created", clusterID)
-			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", addr)
-			// After bootstrapping, try again to initialize the stores.
-			if err := n.initStores(ctx, engines, n.stopper, true); err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
+	// Initialize stores.
+	if err := n.initStores(ctx, engines, n.stopper); err != nil {
+		return err
 	}
 
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
@@ -435,8 +421,7 @@ func (n *Node) SetDraining(drain bool) error {
 // bootstraps list for initialization once the cluster and node IDs
 // have been determined.
 func (n *Node) initStores(
-	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper, bootstrapped bool,
-) error {
+	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper) error {
 	var bootstraps []*storage.Store
 
 	if len(engines) == 0 {
@@ -445,9 +430,6 @@ func (n *Node) initStores(
 	for _, e := range engines {
 		s := storage.NewStore(n.storeCfg, e, &n.Descriptor)
 		log.Eventf(ctx, "created store for engine: %s", e)
-		if bootstrapped {
-			s.NotifyBootstrapped()
-		}
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(ctx, stopper); err != nil {
@@ -467,12 +449,6 @@ func (n *Node) initStores(
 		}
 		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
 		n.addStore(s)
-	}
-
-	// If there are no initialized stores and no gossip resolvers,
-	// bootstrap this node as the seed of a new cluster.
-	if n.stores.GetStoreCount() == 0 && len(n.storeCfg.Gossip.GetResolvers()) == 0 {
-		return errNeedsBootstrap
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.
