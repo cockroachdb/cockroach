@@ -196,19 +196,18 @@ func MakeRowInserter(
 	return ri, nil
 }
 
-// insertCPutFn is used by insertRow when conflicts should be respected.
-// logValue is used for pretty printing.
+// insertCPutFn is used by insertRow when conflicts (i.e. the key already exists)
+// should generate errors.
 func insertCPutFn(ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value) {
 	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
 	// client.Batch wrapper instead of inlining it everywhere.
 	if log.V(2) {
 		log.InfofDepth(ctx, 1, "CPut %s -> %s", *key, value.PrettyPrint())
 	}
-	b.CPut(key, value, nil)
+	b.CPut(key, value, nil /* expValue */)
 }
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
-// logValue is used for pretty printing.
 func insertPutFn(ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value) {
 	if log.V(2) {
 		log.InfofDepth(ctx, 1, "Put %s -> %s", *key, value.PrettyPrint())
