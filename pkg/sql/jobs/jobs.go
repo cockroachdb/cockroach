@@ -171,7 +171,8 @@ func (jl *JobLogger) Created(ctx context.Context) error {
 func (jl *JobLogger) Started(ctx context.Context) error {
 	return jl.updateJobRecord(ctx, JobStatusRunning, func(payload *JobPayload) (bool, error) {
 		if payload.StartedMicros != 0 {
-			return false, errors.Errorf("JobLogger: job %d already started", jl.jobID)
+			// Already started - do nothing.
+			return false, nil
 		}
 		payload.StartedMicros = jobTimestamp(timeutil.Now())
 		return true, nil
@@ -215,7 +216,8 @@ func (jl *JobLogger) Failed(ctx context.Context, err error) {
 	}
 	internalErr := jl.updateJobRecord(ctx, JobStatusFailed, func(payload *JobPayload) (bool, error) {
 		if payload.FinishedMicros != 0 {
-			return false, errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+			// Already finished - do nothing.
+			return false, nil
 		}
 		payload.Error = err.Error()
 		payload.FinishedMicros = jobTimestamp(timeutil.Now())
@@ -232,7 +234,8 @@ func (jl *JobLogger) Failed(ctx context.Context, err error) {
 func (jl *JobLogger) Succeeded(ctx context.Context) error {
 	return jl.updateJobRecord(ctx, JobStatusSucceeded, func(payload *JobPayload) (bool, error) {
 		if payload.FinishedMicros != 0 {
-			return false, errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+			// Already finished - do nothing.
+			return false, nil
 		}
 		payload.FinishedMicros = jobTimestamp(timeutil.Now())
 		payload.FractionCompleted = 1.0
@@ -242,7 +245,8 @@ func (jl *JobLogger) Succeeded(ctx context.Context) error {
 
 func (jl *JobLogger) insertJobRecord(ctx context.Context, payload *JobPayload) error {
 	if jl.jobID != nil {
-		return errors.Errorf("JobLogger cannot create job: job %d already created", jl.jobID)
+		// Already created - do nothing.
+		return nil
 	}
 
 	var row parser.Datums

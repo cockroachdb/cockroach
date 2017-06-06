@@ -302,27 +302,27 @@ func TestJobLogger(t *testing.T) {
 		}
 	})
 
-	t.Run("same state transition twice fails", func(t *testing.T) {
+	t.Run("same state transition twice succeeds silently", func(t *testing.T) {
 		logger := jobs.NewJobLogger(kvDB, sql.InternalExecutor{LeaseManager: s.LeaseManager().(*sql.LeaseManager)}, jobs.JobRecord{
 			Details: jobs.BackupJobDetails{},
 		})
 		if err := logger.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Created(ctx); !testutils.IsError(err, `job \d+ already created`) {
-			t.Fatalf("expected 'job already created' error, but got %v", err)
+		if err := logger.Created(ctx); err != nil {
+			t.Fatal(err)
 		}
 		if err := logger.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Started(ctx); !testutils.IsError(err, `job \d+ already started`) {
-			t.Fatalf("expected 'job already started' error, but got %v", err)
+		if err := logger.Started(ctx); err != nil {
+			t.Fatal(err)
 		}
 		if err := logger.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Succeeded(ctx); !testutils.IsError(err, `job \d+ already finished`) {
-			t.Fatalf("expected 'job already finished' error, but got %v", err)
+		if err := logger.Succeeded(ctx); err != nil {
+			t.Fatal(err)
 		}
 	})
 
