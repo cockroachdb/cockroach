@@ -1,7 +1,7 @@
-- Feature Name: Remove node
+- Feature Name: Decommissioning a node
 - Status: draft
 - Start Date: 2017-06-05
-- Authors: Neeral Dodhia (neeral@users.noreply.github.com)
+- Authors: Neeral Dodhia (neeral.dodhia@rubrik.com)
 - RFC PR: (PR # after acceptance of initial draft)
 - Cockroach Issue: 6198
 
@@ -25,23 +25,21 @@ The following scenarios are considered:
 High-level process:
 1. Marks that it is being decommissioned.
 1. Node does not renew its leases causing all them to be transferred.
-1. All replicas for each replica set are up-replicated.
-1. All replicas deleted from the node.
+1. Change allocator to treat decommissioned nodes like dead nodes with the exception that we will down-replicate even if there is no target for up-replication.
+   1. All replicas for each replica set are up-replicated.
+   1. All replicas deleted from the node.
 1. If node is restarted, it exits with error on encountering marker.
 
 Lower-level changes:
-- Add `Decommissioned`, a boolean field, to StoreIdent. The StoreIdent is persisted to disk.
-- When a node bootstraps, it checks the StoreIdents for each of its stores. If any of the StoreIdents have `Decommissioned` set to True, then kill the process with an appropriate error message like 'Attempted to start a decommissioned node. Please wipe stores and retry'.
-- Through the gossip network, all nodes are informed that node is being removed via update to StoreDescriptor message.
-- Prevent any new ranges being allocated to target node
-- Transfer leases away from target node
+- Add `Decommissioned`, a boolean field, to `StoreIdent`. The `StoreIdent` is persisted to disk.
+- When a node bootstraps, it checks the `StoreIdent`s for each of its stores. If any of the StoreIdents have `Decommissioned` set to True, then kill the process with an appropriate error message like "Attempted to start a decommissioned node. Please wipe stores and retry".
+- Through the gossip network, all nodes are informed that node is being removed via updated `StoreDescriptor` message.
+- Prevent any new ranges being allocated to target node.
+- Transfer leases away from target node.
 - Leaseholder of ranges with replicas on target node trigger up-replication.
 
 ### Difference in process when target is alive vs dead
-If the node being removed is dead, and so, unreachable, its leases and data would already have been transferred to other nodes. The only action required is placing a marker preventing it from rejoining the cluster.
-
-Testing:
-- unit test sets `Decommissioned` before bootstrap and then confirms bootstrap fails
+If the node being removed is dead, and so, unreachable, its leases and data would already have been transferred to other nodes. The only thing to do is preventing it from rejoining the cluster if it were to become available. This would require blacklisting that node and would be fairly complex: this will not be attempted.
 
 ## Temporary removal
 No changes required. The existing CockroachDb process, described below, is sufficient.
@@ -53,6 +51,5 @@ After a node is detected as unavailable for more than `COCKROACH_TIME_UNTIL_STOR
 During a temporary removal, `COCKROACH_TIME_UNTIL_STORE_DEAD` could be updated to to the length of the downtime to avoid unecessary movement of ranges. However, it is difficult to predict the length of downtime. This is an optimisation which can be implemented later.
 
 # Unresolved questions
-- Interface for initiating removal of a node. One suggestion is adding `node remove <node-id>` to the CLI.
+- Interface for initiating removal of a node. One suggestion is adding `node decommission <node-id>` to the CLI. The operation should be asynchronous (vs blocking). If it is blocking and it takes a long time to complete, connection might timeout if no response was sent to the client.
 - Removing multiple nodes concurrently
-- The operation should be asynchronous (vs blocking). If it is blocking and it takes a long time to complete, connection might timeout if no response was sent to the client.
