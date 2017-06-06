@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
@@ -90,7 +89,6 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.Sys
 	// First handle case of splitting due to zone config maps.
 	desc := r.Desc()
 	if splitKey := sysCfg.ComputeSplitKey(desc.StartKey, desc.EndKey); splitKey != nil {
-		log.Infof(ctx, "splitting at key %v", splitKey)
 		if _, _, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{
@@ -109,7 +107,6 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.Sys
 	size := r.GetMVCCStats().Total()
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && float64(size)/float64(maxBytes) > 1 {
-		log.Infof(ctx, "splitting size=%d max=%d", size, maxBytes)
 		if _, validSplitKey, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{},
