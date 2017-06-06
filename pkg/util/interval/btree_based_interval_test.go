@@ -146,10 +146,8 @@ func (n *node) describe(buf *bytes.Buffer) {
 }
 
 func (n *node) isKeyInRange(t *testing.T, min, max Comparable) bool {
-	t.Logf("%v, min: %v, max: %v", n, min, max)
 	for _, i := range n.items {
 		start := i.Range().Start
-		t.Log(i.Range())
 		if min != nil && start.Compare(min) < 0 {
 			return false
 		}
@@ -279,7 +277,6 @@ func checkWithLen(t *testing.T, tree *btree, l int) {
 }
 
 func check(t *testing.T, tree *btree) {
-	t.Logf("tree: %s", tree.describe())
 	if !tree.isLeafSameDepth(t) {
 		t.Error("Not all the leaves have the same depth as the tree height")
 	}
@@ -476,8 +473,7 @@ func TestBTree(t *testing.T) {
 			t.Fatalf("expected intervals %v, got %v", expected, halfSlice)
 		}
 
-		for i, item := range perm(treeSize) {
-			t.Logf("i: %d", i)
+		for _, item := range perm(treeSize) {
 			if err := tree.Delete(item, false); err != nil {
 				t.Fatalf("delete error: %s", err)
 			}
