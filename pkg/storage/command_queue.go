@@ -53,12 +53,13 @@ import (
 //
 // CommandQueue is not thread safe.
 type CommandQueue struct {
-	reads     interval.Tree
-	writes    interval.Tree
-	idAlloc   int64
-	wRg, rwRg interval.RangeGroup // avoids allocating in getWait
-	oHeap     overlapHeap         // avoids allocating in getWait
-	overlaps  []*cmd              // avoids allocating in getOverlaps
+	readsBuffer map[*cmd]bool
+	reads       interval.Tree
+	writes      interval.Tree
+	idAlloc     int64
+	wRg, rwRg   interval.RangeGroup // avoids allocating in getWait
+	oHeap       overlapHeap         // avoids allocating in getWait
+	overlaps    []*cmd              // avoids allocating in getOverlaps
 
 	coveringOptimization bool // if true, use covering span optimization
 
@@ -139,6 +140,7 @@ func (c *cmd) String() string {
 // typically contain many spans, but are spatially disjoint.
 func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 	cq := &CommandQueue{
+		readsBuffer:          make(map[*cmd]bool),
 		reads:                interval.NewTree(interval.ExclusiveOverlapper),
 		writes:               interval.NewTree(interval.ExclusiveOverlapper),
 		wRg:                  interval.NewRangeTree(),
@@ -212,8 +214,7 @@ func (cq *CommandQueue) expand(c *cmd, isInserted bool) bool {
 }
 
 // getWait returns a slice of the pending channels of executing
-// commands which overlap the specified key ranges. The caller should
-// call wg.Wait() to fetch the required wait channels. The caller
+// commands which overlap the specified key ranges. The caller
 // should then invoke add() to add the keys to the command queue and
 // then wait for confirmation that all gating commands have completed
 // or failed. readOnly is true if the requester is a read-only
@@ -415,6 +416,12 @@ func (cq *CommandQueue) getOverlaps(
 	readOnly bool, timestamp hlc.Timestamp, rng interval.Range,
 ) []*cmd {
 	if !readOnly {
+		// Upon a write cmd, flush out cmds from readsBuffer to the read interval
+		// tree.
+		for cmd := range cq.readsBuffer {
+			cq.insertIntoTree(cmd)
+			delete(cq.readsBuffer, cmd)
+		}
 		cq.reads.DoMatching(func(i interval.Interface) bool {
 			c := i.(*cmd)
 			// Writes only wait on equal or later reads (we always wait
@@ -553,7 +560,19 @@ func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roac
 		cq.localMetrics.writeCommands += int64(cmd.cmdCount())
 	}
 
-	if cq.coveringOptimization || len(spans) == 1 {
+	// Insert a readOnly command into the readsBuffer instead of mutating the
+	// interval tree.
+	if cmd.readOnly {
+		cq.readsBuffer[cmd] = true
+		return cmd
+	}
+
+	cq.insertIntoTree(cmd)
+	return cmd
+}
+
+func (cq *CommandQueue) insertIntoTree(cmd *cmd) {
+	if cq.coveringOptimization || len(cmd.children) == 0 {
 		tree := cq.tree(cmd)
 		if err := tree.Insert(cmd, false /* !fast */); err != nil {
 			panic(err)
@@ -561,7 +580,6 @@ func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roac
 	} else {
 		cq.expand(cmd, false /* !isInserted */)
 	}
-	return cmd
 }
 
 // remove is invoked to signal that the command associated with the
@@ -579,6 +597,12 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 		cq.localMetrics.readCommands -= int64(cmd.cmdCount())
 	} else {
 		cq.localMetrics.writeCommands -= int64(cmd.cmdCount())
+	}
+
+	// If cmd is still in the readsBuffer, just remove it from there and be done.
+	if cq.readsBuffer[cmd] {
+		delete(cq.readsBuffer, cmd)
+		return
 	}
 
 	tree := cq.tree(cmd)
