@@ -1,0 +1,44 @@
+# LogicTest: default distsql
+
+query I
+SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series LIMIT 5;
+----
+1
+2
+3
+4
+5
+
+query I
+SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series FETCH FIRST 5 ROWS ONLY;
+----
+1
+2
+3
+4
+5
+
+query I
+SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series FETCH FIRST ROW ONLY;
+----
+1
+
+query I
+SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series OFFSET 3 ROWS FETCH NEXT ROW ONLY;
+----
+4
+
+statement error syntax error
+SELECT generate_series FROM GENERATE_SERIES(1, 100) FETCH NEXT ROW ONLY LIMIT 3;
+
+statement error syntax error
+SELECT generate_series FROM GENERATE_SERIES(1, 100) LIMIT 3 FETCH NEXT ROW ONLY;
+
+statement error syntax error
+SELECT generate_series FROM GENERATE_SERIES(1, 100) FETCH NEXT 1 + 1 ROWS ONLY;
+
+query I
+SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series FETCH FIRST (1 + 1) ROWS ONLY;
+----
+1
+2

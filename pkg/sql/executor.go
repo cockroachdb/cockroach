@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -213,18 +214,23 @@ type Executor struct {
 	QueryCount       *metric.Counter
 
 	// System Config and mutex.
-	systemConfig   config.SystemConfig
-	databaseCache  *databaseCache
-	systemConfigMu syncutil.RWMutex
-	// This uses systemConfigMu in RLocker mode to not block
-	// execution of statements. So don't go on changing state after you've
-	// Wait()ed on it.
+	systemConfig config.SystemConfig
+	// databaseCache is updated with systemConfigMu held, but read atomically in
+	// order to avoid recursive locking. See WaitForGossipUpdate.
+	databaseCache    atomic.Value
+	systemConfigMu   syncutil.Mutex
 	systemConfigCond *sync.Cond
 
 	distSQLPlanner *distSQLPlanner
 
 	// Application-level SQL statistics
 	sqlStats sqlStats
+
+	// Attempts to use unimplemented features.
+	unimplementedErrors struct {
+		syncutil.Mutex
+		counts map[string]uint
+	}
 }
 
 // An ExecutorConfig encompasses the auxiliary objects and configuration
@@ -357,8 +363,8 @@ func (e *Executor) Start(
 		e.cfg.TestingKnobs.DistSQLPlannerKnobs,
 	)
 
-	e.databaseCache = newDatabaseCache(e.systemConfig)
-	e.systemConfigCond = sync.NewCond(e.systemConfigMu.RLocker())
+	e.databaseCache.Store(newDatabaseCache(e.systemConfig))
+	e.systemConfigCond = sync.NewCond(&e.systemConfigMu)
 
 	gossipUpdateC := e.cfg.Gossip.RegisterSystemConfigChannel()
 	e.stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -400,17 +406,17 @@ func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
 	defer e.systemConfigMu.Unlock()
 	e.systemConfig = cfg
 	// The database cache gets reset whenever the system config changes.
-	e.databaseCache = newDatabaseCache(cfg)
+	e.databaseCache.Store(newDatabaseCache(cfg))
 	e.systemConfigCond.Broadcast()
 }
 
 // getDatabaseCache returns a database cache with a copy of the latest
 // system config.
 func (e *Executor) getDatabaseCache() *databaseCache {
-	e.systemConfigMu.RLock()
-	defer e.systemConfigMu.RUnlock()
-	cache := e.databaseCache
-	return cache
+	if v := e.databaseCache.Load(); v != nil {
+		return v.(*databaseCache)
+	}
+	return nil
 }
 
 // Prepare returns the result types of the given statement. pinfo may
@@ -517,6 +523,26 @@ func (e *Executor) ExecuteStatements(
 
 	defer logIfPanicking(session.Ctx(), stmts)
 
+	// If the Executor wants config updates to be blocked, then block them so
+	// that session.testingVerifyMetadataFn can later be run on a known version
+	// of the system config. The point is to lock the system config so that no
+	// gossip updates sneak in under us. We're then able to assert that the
+	// verify callback only succeeds after a gossip update.
+	//
+	// This lock does not change semantics. Even outside of tests, the Executor
+	// uses static systemConfig for a user request, so locking the Executor's
+	// systemConfig cannot change the semantics of the SQL operation being
+	// performed under lock.
+	//
+	// NB: The locking here implies that ExecuteStatements cannot be
+	// called recursively. So don't do that and don't try to adjust this locking
+	// to allow this method to be called recursively (sync.{Mutex,RWMutex} do not
+	// allow that).
+	if e.cfg.TestingKnobs.WaitForGossipUpdate {
+		e.systemConfigCond.L.Lock()
+		defer e.systemConfigCond.L.Unlock()
+	}
+
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
 	return e.execRequest(session, stmts, pinfo, copyMsgNone)
@@ -533,6 +559,13 @@ func (e *Executor) ExecutePreparedStatement(
 	}
 
 	defer logIfPanicking(session.Ctx(), stmts.String())
+
+	// Block system config updates. For more details, see the comment in
+	// ExecuteStatements.
+	if e.cfg.TestingKnobs.WaitForGossipUpdate {
+		e.systemConfigCond.L.Lock()
+		defer e.systemConfigCond.L.Unlock()
+	}
 
 	{
 		// No parsing is taking place, but we need to set the parsing phase time
@@ -562,41 +595,6 @@ func (e *Executor) CopyDone(session *Session) StatementResults {
 func (session *Session) CopyEnd(ctx context.Context) {
 	session.copyFrom.Close(ctx)
 	session.copyFrom = nil
-}
-
-// blockConfigUpdates blocks any gossip updates to the system config
-// until the unlock function returned is called. Useful in tests.
-func (e *Executor) blockConfigUpdates() func() {
-	e.systemConfigCond.L.Lock()
-	return func() {
-		e.systemConfigCond.L.Unlock()
-	}
-}
-
-// blockConfigUpdatesMaybe will ask the Executor to block config updates,
-// so that checkTestingVerifyMetadataInitialOrDie() can later be run.
-// The point is to lock the system config so that no gossip updates sneak in
-// under us, so that we're able to assert that the verify callback only succeeds
-// after a gossip update.
-//
-// It returns an unblock function which can be called after
-// checkTestingVerifyMetadata{Initial}OrDie() has been called.
-//
-// This lock does not change semantics. Even outside of tests, the Executor uses
-// static systemConfig for a user request, so locking the Executor's
-// systemConfig cannot change the semantics of the SQL operation being performed
-// under lock.
-func (e *Executor) blockConfigUpdatesMaybe() func() {
-	if !e.cfg.TestingKnobs.WaitForGossipUpdate {
-		return func() {}
-	}
-	return e.blockConfigUpdates()
-}
-
-// waitForConfigUpdate blocks the caller until a new SystemConfig is received
-// via gossip. This can only be called after blockConfigUpdates().
-func (e *Executor) waitForConfigUpdate() {
-	e.systemConfigCond.Wait()
 }
 
 // execRequest executes the request in the provided Session.
@@ -634,6 +632,11 @@ func (e *Executor) execRequest(
 	session.phaseTimes[sessionEndParse] = timeutil.Now()
 
 	if err != nil {
+		if pgErr, ok := pgerror.GetPGCause(err); ok {
+			if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
+				e.recordUnimplementedFeature(pgErr.InternalCommand)
+			}
+		}
 		if log.V(2) || logStatementsExecuteEnabled.Get() {
 			log.Infof(session.Ctx(), "execRequest: error: %v", err)
 		}
@@ -661,9 +664,6 @@ func (e *Executor) execParsed(
 		res.Empty = true
 		return res
 	}
-
-	// If the Executor wants config updates to be blocked, then block them.
-	defer e.blockConfigUpdatesMaybe()()
 
 	for len(stmts) > 0 {
 		// Each iteration consumes a transaction's worth of statements.
@@ -837,24 +837,47 @@ func (e *Executor) execParsed(
 			txnState.finishSQLTxn(session.context)
 		}
 
+		// Verify that the metadata callback fails, if one was set. This is
+		// the precondition for validating that we need a gossip update for
+		// the callback to eventually succeed. Note that we are careful to
+		// check this just once per metadata callback (setting the callback
+		// clears session.verifyFnCheckedOnce).
+		if e.cfg.TestingKnobs.WaitForGossipUpdate {
+			if fn := session.testingVerifyMetadataFn; fn != nil && !session.verifyFnCheckedOnce {
+				if fn(e.systemConfig) == nil {
+					panic(fmt.Sprintf(
+						"expected %q (or the statements before them) to require a "+
+							"gossip update, but they did not", stmts))
+				}
+				session.verifyFnCheckedOnce = true
+			}
+		}
+
 		// If the txn is in any state but Open, exec the schema changes. They'll
 		// short-circuit themselves if the mutation that queued them has been
 		// rolled back from the table descriptor.
-		stmtsExecuted := stmts[:len(stmtsToExec)-len(remainingStmts)]
 		if txnState.State != Open {
-			session.checkTestingVerifyMetadataInitialOrDie(e, stmts)
-			session.checkTestingVerifyMetadataOrDie(e, stmtsExecuted)
+			// Verify that metadata callback eventually succeeds, if one was
+			// set.
+			if e.cfg.TestingKnobs.WaitForGossipUpdate {
+				if fn := session.testingVerifyMetadataFn; fn != nil {
+					if !session.verifyFnCheckedOnce {
+						panic("initial state of the condition to verify was not checked")
+					}
+
+					for fn(e.systemConfig) != nil {
+						e.systemConfigCond.Wait()
+					}
+
+					session.testingVerifyMetadataFn = nil
+				}
+			}
 
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
 			session.leases.releaseLeases(session.Ctx())
 			txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, session, res.ResultList)
-		} else {
-			// We're still in a txn, so we only check that the verifyMetadata callback
-			// fails the first time it's run. The gossip update that will make the
-			// callback succeed only happens when the txn is done.
-			session.checkTestingVerifyMetadataInitialOrDie(e, stmtsExecuted)
 		}
 
 		// Figure out what statements to run on the next iteration.
@@ -1321,7 +1344,9 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 			qArgs[idx] = typedExpr
 		}
-		results := e.ExecutePreparedStatement(session, prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes})
+		results := e.execParsed(session, parser.StatementList{prepared.Statement},
+			&parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes},
+			copyMsgNone)
 		if results.Empty {
 			return Result{}, nil
 		}
@@ -1344,26 +1369,38 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{PGTag: s.StatementTag()}, nil
 	}
 
-	// Create a new planner from the Session to execute the statement.
-	planner := session.newPlanner(e, txnState.txn)
-	planner.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
-	planner.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
-	planner.semaCtx.Placeholders.Assign(pinfo)
-	planner.avoidCachedDescriptors = avoidCachedDescriptors
-	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	var p *planner
+	runInParallel := parallelize && !implicitTxn
+	if runInParallel {
+		// Create a new planner from the Session to execute the statement, since
+		// we're executing in parallel.
+		p = session.newPlanner(e, txnState.txn)
+	} else {
+		// We're not executing in parallel. We can use the cached planner on the
+		// session.
+		p = &session.planner
+		session.resetPlanner(p, e, txnState.txn)
+	}
+	p.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
+	p.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
+	p.semaCtx.Placeholders.Assign(pinfo)
+	p.avoidCachedDescriptors = avoidCachedDescriptors
+	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
 	var result Result
-	if parallelize && !implicitTxn {
+	if runInParallel {
 		// Only run statements asynchronously through the parallelize queue if the
 		// statements are parallelized and we're in a transaction. Parallelized
 		// statements outside of a transaction are run synchronously with mocked
 		// results, which has the same effect as running asynchronously but
 		// immediately blocking.
-		result, err = e.execStmtInParallel(stmt, planner)
+		result, err = e.execStmtInParallel(stmt, p)
 	} else {
-		planner.autoCommit = implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-		result, err = e.execStmt(stmt, planner,
+		p.autoCommit = implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
+		result, err = e.execStmt(stmt, p,
 			automaticRetryCount, parallelize /* mockResults */)
+		// Zeroing the cached planner allows the GC to clean up any memory hanging
+		// off the planner, which we're finished using at this point.
 	}
 
 	if err != nil {
@@ -1789,6 +1826,7 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeTimestamp:
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
+	case parser.TypeUUID:
 	case parser.TypeStringArray:
 	case parser.TypeNameArray:
 	case parser.TypeIntArray:

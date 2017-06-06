@@ -172,6 +172,8 @@ type Config struct {
 	// Environment Variable: COCKROACH_SEND_NEXT_TIMEOUT
 	SendNextTimeout time.Duration
 
+	PendingRPCTimeout time.Duration
+
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
@@ -336,6 +338,7 @@ func MakeConfig() Config {
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
 		TimeUntilStoreDead:       timeUntilStoreDead,
 		SendNextTimeout:          base.DefaultSendNextTimeout,
+		PendingRPCTimeout:        base.DefaultPendingRPCTimeout,
 		EventLogEnabled:          defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},

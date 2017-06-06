@@ -225,12 +225,24 @@ func (a *Allocator) ComputeAction(
 		// Adjust the priority by the number of dead replicas the range has.
 		quorum := computeQuorum(len(desc.Replicas))
 		if lr := len(liveReplicas); lr >= quorum {
-			priority := removeDeadReplicaPriority + float64(quorum-lr)
-			if log.V(3) {
-				log.Infof(ctx, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
-					len(deadReplicas), liveReplicas, quorum, priority)
+			// Only allow removal of a dead replica if we have a suitable allocation
+			// target that we can up-replicate to. This isn't necessarily the target
+			// we'll up-replicate to, just an indication that such a target exists.
+			_, err := a.AllocateTarget(
+				ctx,
+				zone.Constraints,
+				liveReplicas,
+				desc.RangeID,
+				true, /* relaxConstraints */
+			)
+			if err == nil {
+				priority := removeDeadReplicaPriority + float64(quorum-lr)
+				if log.V(3) {
+					log.Infof(ctx, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
+						len(deadReplicas), liveReplicas, quorum, priority)
+				}
+				return AllocatorRemoveDead, priority
 			}
-			return AllocatorRemoveDead, priority
 		}
 	}
 	if have > need {
@@ -262,7 +274,7 @@ func (a *Allocator) AllocateTarget(
 	rangeID roachpb.RangeID,
 	relaxConstraints bool,
 ) (*roachpb.StoreDescriptor, error) {
-	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeID)
+	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeID, storeFilterThrottled)
 
 	candidates := allocateCandidates(
 		sl,
@@ -308,7 +320,7 @@ func (a Allocator) RemoveTarget(
 	for i, exist := range existing {
 		existingStoreIDs[i] = exist.StoreID
 	}
-	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0))
+	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
 	candidates := removeCandidates(
 		sl,
@@ -357,8 +369,8 @@ func (a Allocator) RebalanceTarget(
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	rangeID roachpb.RangeID,
-) (*roachpb.StoreDescriptor, error) {
-	sl, _, _ := a.storePool.getStoreList(rangeID)
+) *roachpb.StoreDescriptor {
+	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterThrottled)
 
 	existingCandidates, candidates := rebalanceCandidates(
 		ctx,
@@ -385,12 +397,12 @@ func (a Allocator) RebalanceTarget(
 	if len(existing) > 1 && len(existingCandidates) < newQuorum {
 		// Don't rebalance as we won't be able to make quorum after the rebalance
 		// until the new replica has been caught up.
-		return nil, nil
+		return nil
 	}
 
 	// No need to rebalance.
 	if len(existingCandidates) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	// Find all candidates that are better than the worst existing replica.
@@ -400,7 +412,7 @@ func (a Allocator) RebalanceTarget(
 		log.Infof(ctx, "rebalance candidates: %s\nexisting replicas: %s\ntarget: %s",
 			candidates, existingCandidates, target)
 	}
-	return target, nil
+	return target
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
@@ -416,7 +428,7 @@ func (a *Allocator) TransferLeaseTarget(
 	checkTransferLeaseSource bool,
 	checkCandidateFullness bool,
 ) roachpb.ReplicaDescriptor {
-	sl, _, _ := a.storePool.getStoreList(rangeID)
+	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
 	sl = sl.filter(constraints)
 
 	// Filter stores that are on nodes containing existing replicas, but leave
@@ -507,7 +519,7 @@ func (a *Allocator) ShouldTransferLease(
 	if !ok {
 		return false
 	}
-	sl, _, _ := a.storePool.getStoreList(rangeID)
+	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
 	sl = sl.filter(constraints)
 	if log.V(3) {
 		log.Infof(ctx, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)

@@ -21,7 +21,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"testing"
 )
 
@@ -85,11 +84,11 @@ UPDATE bench.bank
 }
 
 func BenchmarkBank(b *testing.B) {
-	for _, numAccounts := range []int{2, 4, 8, 32, 64} {
-		b.Run(strconv.Itoa(numAccounts), func(b *testing.B) {
-			forEachDB(b, func(b *testing.B, db *gosql.DB) {
+	forEachDB(b, func(b *testing.B, db *gosql.DB) {
+		for _, numAccounts := range []int{2, 4, 8, 32, 64} {
+			b.Run(fmt.Sprintf("numAccounts=%d", numAccounts), func(b *testing.B) {
 				runBenchmarkBank(b, db, numAccounts)
 			})
-		})
-	}
+		}
+	})
 }

@@ -266,25 +266,46 @@ func CreateClientPair(
 	// Generate certificates and keys.
 	clientKey, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
-		return errors.Errorf("could not generate new node key: %v", err)
+		return errors.Errorf("could not generate new client key: %v", err)
 	}
 
 	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user)
 	if err != nil {
-		return errors.Errorf("error creating node server certificate and key: %s", err)
+		return errors.Errorf("error creating client certificate and key: %s", err)
 	}
 
 	certPath := cm.ClientCertPath(user)
 	if err := writeCertificateToFile(certPath, clientCert, overwrite); err != nil {
-		return errors.Errorf("error writing node server certificate to %s: %v", certPath, err)
+		return errors.Errorf("error writing client certificate to %s: %v", certPath, err)
 	}
 	log.Infof(context.Background(), "Generated client certificate: %s", certPath)
 
 	keyPath := cm.ClientKeyPath(user)
 	if err := writeKeyToFile(keyPath, clientKey, overwrite); err != nil {
-		return errors.Errorf("error writing node server key to %s: %v", keyPath, err)
+		return errors.Errorf("error writing client key to %s: %v", keyPath, err)
 	}
 	log.Infof(context.Background(), "Generated client key: %s", keyPath)
 
 	return nil
+}
+
+// PEMContentsToX509 takes raw pem-encoded contents and attempts to parse into
+// x509.Certificate objects.
+func PEMContentsToX509(contents []byte) ([]*x509.Certificate, error) {
+	derCerts, err := PEMToCertificates(contents)
+	if err != nil {
+		return nil, err
+	}
+
+	certs := make([]*x509.Certificate, len(derCerts))
+	for i, c := range derCerts {
+		x509Cert, err := x509.ParseCertificate(c.Bytes)
+		if err != nil {
+			return nil, err
+		}
+
+		certs[i] = x509Cert
+	}
+
+	return certs, nil
 }

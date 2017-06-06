@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1044,7 +1045,7 @@ func addInterleave(
 	sessionDB string,
 ) error {
 	if interleave.DropBehavior != parser.DropDefault {
-		return util.UnimplementedWithIssueErrorf(
+		return pgerror.UnimplementedWithIssueErrorf(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
@@ -1267,10 +1268,10 @@ func MakeTableDesc(
 		if d, ok := def.(*parser.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
 				if _, ok := d.Type.(*parser.ArrayColType); ok {
-					return desc, util.UnimplementedWithIssueErrorf(2115, "ARRAY column types are unsupported")
+					return desc, pgerror.UnimplementedWithIssueErrorf(2115, "ARRAY column types are unsupported")
 				}
 				if _, ok := d.Type.(*parser.VectorColType); ok {
-					return desc, util.UnimplementedWithIssueErrorf(2115, "VECTOR column types are unsupported")
+					return desc, pgerror.UnimplementedWithIssueErrorf(2115, "VECTOR column types are unsupported")
 				}
 			}
 
@@ -1314,7 +1315,7 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.Interleave != nil {
-				return desc, util.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
+				return desc, pgerror.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *parser.UniqueConstraintTableDef:
 			idx := sqlbase.IndexDescriptor{
@@ -1335,7 +1336,7 @@ func MakeTableDesc(
 				}
 			}
 			if d.Interleave != nil {
-				return desc, util.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
+				return desc, pgerror.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 
 		case *parser.CheckConstraintTableDef, *parser.ForeignKeyConstraintTableDef, *parser.FamilyTableDef:

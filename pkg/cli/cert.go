@@ -19,6 +19,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -31,10 +32,11 @@ const defaultKeySize = 2048
 
 // We use 366 days on certificate lifetimes to at least match X years,
 // otherwise leap years risk putting us just under.
-const defaultCALifetime = 10 * 366 * 24 * time.Hour   // ten years
-const defaultCertLifetime = 10 * 366 * 24 * time.Hour // ten years
+const defaultCALifetime = 10 * 366 * 24 * time.Hour  // ten years
+const defaultCertLifetime = 5 * 366 * 24 * time.Hour // five years
 
 var keySize int
+var caCertificateLifetime time.Duration
 var certificateLifetime time.Duration
 var allowCAKeyReuse bool
 var overwriteFiles bool
@@ -62,7 +64,7 @@ func runCreateCACert(cmd *cobra.Command, args []string) error {
 			baseCfg.SSLCertsDir,
 			baseCfg.SSLCAKey,
 			keySize,
-			certificateLifetime,
+			caCertificateLifetime,
 			allowCAKeyReuse,
 			overwriteFiles),
 		"failed to generate CA cert and key")
@@ -82,6 +84,7 @@ At least one host should be passed in (either IP address or dns name).
 
 Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
 If "ca.crt" contains more than one certificate, the first is used.
+Creation fails if the CA expiration time is before the desired certificate expiration.
 `,
 	RunE: MaybeDecorateGRPCError(runCreateNodeCert),
 }
@@ -116,6 +119,7 @@ If --overwrite is true, any existing files are overwritten.
 
 Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
 If "ca.crt" contains more than one certificate, the first is used.
+Creation fails if the CA expiration time is before the desired certificate expiration.
 `,
 	RunE: MaybeDecorateGRPCError(runCreateClientCert),
 }
@@ -170,10 +174,10 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(os.Stdout, "Certificate directory: %s\n", baseCfg.SSLCertsDir)
 
-	certTableHeaders := []string{"Usage", "Certificate File", "Key File", "Notes", "Expires", "Error"}
+	certTableHeaders := []string{"Usage", "Certificate File", "Key File", "Expires", "Notes", "Error"}
 	var rows [][]string
 
-	addRow := func(ci *security.CertInfo, name string) {
+	addRow := func(ci *security.CertInfo, notes string) {
 		var errString string
 		if ci.Error != nil {
 			errString = ci.Error.Error()
@@ -182,22 +186,43 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 			ci.FileUsage.String(),
 			ci.Filename,
 			ci.KeyFilename,
-			name,
 			ci.ExpirationTime.Format("2006/01/02"),
+			notes,
 			errString,
 		})
 	}
 
-	if ca := cm.CACert(); ca != nil {
-		addRow(ca, "")
+	if cert := cm.CACert(); cert != nil {
+		var notes string
+		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
+			notes = fmt.Sprintf("num certs: %d", len(cert.ParsedCertificates))
+		}
+		addRow(cert, notes)
 	}
 
-	if node := cm.NodeCert(); node != nil {
-		addRow(node, "")
+	if cert := cm.NodeCert(); cert != nil {
+		var addresses []string
+		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
+			addresses = cert.ParsedCertificates[0].DNSNames
+			for _, ip := range cert.ParsedCertificates[0].IPAddresses {
+				addresses = append(addresses, ip.String())
+			}
+		} else {
+			addresses = append(addresses, "<unknown>")
+		}
+
+		addRow(cert, fmt.Sprintf("addresses: %s", strings.Join(addresses, ",")))
 	}
 
-	for name, cert := range cm.ClientCerts() {
-		addRow(cert, fmt.Sprintf("user=%s", name))
+	for _, cert := range cm.ClientCerts() {
+		var user string
+		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
+			user = cert.ParsedCertificates[0].Subject.CommonName
+		} else {
+			user = "<unknown>"
+		}
+
+		addRow(cert, fmt.Sprintf("user: %s", user))
 	}
 
 	return printQueryOutput(os.Stdout, certTableHeaders, newRowSliceIter(rows), "", cliCtx.tableDisplayFormat)

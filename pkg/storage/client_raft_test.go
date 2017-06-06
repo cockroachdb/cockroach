@@ -1678,6 +1678,123 @@ func TestReplicateRemoveAndAdd(t *testing.T) {
 	testReplicaAddRemove(t, false)
 }
 
+// TestQuotaPool verifies that writes get throttled in the case where we have
+// two fast moving replicas with sufficiently fast growing raft logs and a
+// slower replica catching up. By throttling write throughput we avoid having
+// to constantly catch up the slower node via snapshots. See #8659.
+func TestQuotaPool(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const quota = 10000
+	const numReplicas = 3
+	const rangeID = 1
+	sc := storage.TestStoreConfig(nil)
+	// Suppress timeout-based elections to avoid leadership changes in ways
+	// this test doesn't expect.
+	sc.RaftElectionTimeoutTicks = 100000
+	mtc := &multiTestContext{storeConfig: &sc}
+	mtc.Start(t, numReplicas)
+	defer mtc.Stop()
+
+	mtc.replicateRange(rangeID, 1, 2)
+
+	assertEqualLastIndex := func() error {
+		var expectedIndex uint64
+
+		for i, s := range mtc.stores {
+			repl, err := s.GetReplica(rangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			index, err := repl.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if i == 0 {
+				expectedIndex = index
+			} else if expectedIndex != index {
+				return fmt.Errorf("%s: expected lastIndex %d, but found %d", repl, expectedIndex, index)
+			}
+		}
+		return nil
+	}
+	testutils.SucceedsSoon(t, assertEqualLastIndex)
+
+	leaderRepl := mtc.getRaftLeader(rangeID)
+	leaderRepl.InitQuotaPool(quota)
+	followerRepl := func() *storage.Replica {
+		for _, store := range mtc.stores {
+			repl, err := store.GetReplica(rangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if repl == leaderRepl {
+				continue
+			}
+			return repl
+		}
+		return nil
+	}()
+	if followerRepl == nil {
+		t.Fatal("could not get a handle on a follower replica")
+	}
+
+	// We block the third replica effectively causing acquisition of quota
+	// without subsequent release.
+	//
+	// NB: See TestRaftBlockedReplica/#9914 for why we use a separate
+	// goroutine.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		followerRepl.RaftLock()
+		wg.Done()
+	}()
+	wg.Wait()
+
+	// In order to verify write throttling we insert a value 3/4th the size of
+	// total quota available in the system. This should effectively go through
+	// and block the subsequent insert of the same size. We check to see whether
+	// or not after this write has gone through by verifying that the total
+	// quota available has decreased as expected.
+	//
+	// Following this we unblock the 'slow' replica allowing it to catch up to
+	// the first write. This in turn releases quota back to the pool and the
+	// second write, previously blocked by virtue of there not being enough
+	// quota, is now free to proceed. We expect the final quota in the system
+	// to be the same as what we started with.
+	key := roachpb.Key("k")
+	value := bytes.Repeat([]byte("v"), (3*quota)/4)
+	_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if curQuota := leaderRepl.QuotaAvailable(); curQuota > quota/4 {
+		t.Fatalf("didn't observe the expected quota acquisition, available: %d", curQuota)
+	}
+
+	ch := make(chan *roachpb.Error, 1)
+	go func() {
+		_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
+		ch <- pErr
+	}()
+
+	followerRepl.RaftUnlock()
+
+	testutils.SucceedsSoonDepth(1, t, func() error {
+		if curQuota := leaderRepl.QuotaAvailable(); curQuota != quota {
+			return errors.Errorf("expected available quota %d, got %d", quota, curQuota)
+		}
+		return nil
+	})
+
+	if pErr := <-ch; pErr != nil {
+		t.Fatal(pErr)
+	}
+}
+
 // TestRaftHeartbeats verifies that coalesced heartbeats are correctly
 // suppressing elections in an idle cluster.
 func TestRaftHeartbeats(t *testing.T) {
@@ -2247,11 +2364,15 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	mtc := &multiTestContext{}
 	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
 	defer mtc.Stop()
-	mtc.Start(t, 3)
+	mtc.Start(t, 4)
 
-	// Replicate the range to all stores.
+	// Replicate the range to 2 more stores. Note that there are 4 stores in the
+	// cluster leaving an extra store available as a replication target once the
+	// replica on the dead node is removed.
 	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
-	mtc.replicateRange(replica.RangeID, 1, 2)
+	mtc.replicateRange(replica.RangeID, 1, 3)
+
+	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
 
 	for _, s := range mtc.stores {
 		if err := s.GossipStore(context.Background()); err != nil {
@@ -2274,7 +2395,14 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	maxTime := 5 * time.Second
 	maxTimeout := time.After(maxTime)
 
-	for len(getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas) > 2 {
+	for {
+		// Wait for the replica on the dead node to be removed and the replacement
+		// added.
+		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+		if len(curReplicas) == 3 && !reflect.DeepEqual(origReplicas, curReplicas) {
+			break
+		}
+
 		select {
 		case <-maxTimeout:
 			t.Fatalf("Failed to remove the dead replica within %s", maxTime)
@@ -2282,16 +2410,16 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 			mtc.manualClock.Increment(int64(tickerDur))
 
 			// Keep gossiping the alive stores.
-			if err := mtc.stores[0].GossipStore(context.Background()); err != nil {
-				t.Fatal(err)
-			}
-			if err := mtc.stores[1].GossipStore(context.Background()); err != nil {
-				t.Fatal(err)
+			for _, s := range mtc.stores[:3] {
+				if err := s.GossipStore(context.Background()); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			// Force the repair queues on all alive stores to run.
-			mtc.stores[0].ForceReplicationScanAndProcess()
-			mtc.stores[1].ForceReplicationScanAndProcess()
+			for _, s := range mtc.stores[:3] {
+				s.ForceReplicationScanAndProcess()
+			}
 		}
 	}
 }

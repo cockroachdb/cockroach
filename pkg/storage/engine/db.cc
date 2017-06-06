@@ -63,6 +63,7 @@ struct DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
   virtual DBIterator* NewIter(rocksdb::ReadOptions*) = 0;
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
+  virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents) = 0;
 
   DBSSTable* GetSSTables(int* n);
   DBString GetUserProperties();
@@ -103,6 +104,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
 };
 
 struct DBBatch : public DBEngine {
@@ -123,6 +125,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
 };
 
 struct DBWriteOnlyBatch : public DBEngine {
@@ -143,6 +146,7 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
 };
 
 struct DBSnapshot : public DBEngine {
@@ -165,6 +169,7 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
 };
 
 struct DBIterator {
@@ -1994,6 +1999,41 @@ DBStatus DBSnapshot::GetStats(DBStatsResult* stats) {
   return FmtStatus("unsupported");
 }
 
+// EnvWriteFile writes the given data as a new "file" in the given engine.
+DBStatus DBImpl::EnvWriteFile(DBSlice path, DBSlice contents) {
+  rocksdb::Status s;
+
+  const rocksdb::EnvOptions soptions;
+  rocksdb::unique_ptr<rocksdb::WritableFile> destfile;
+  s = this->rep->GetEnv()->NewWritableFile(ToString(path), &destfile, soptions);
+  if (!s.ok()) {
+    return ToDBStatus(s);
+  }
+
+  s = destfile->Append(ToSlice(contents));
+  if (!s.ok()) {
+    return ToDBStatus(s);
+  }
+
+  return kSuccess;
+}
+
+DBStatus DBBatch::EnvWriteFile(DBSlice path, DBSlice contents) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBWriteOnlyBatch::EnvWriteFile(DBSlice path, DBSlice contents) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBSnapshot::EnvWriteFile(DBSlice path, DBSlice contents) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents) {
+  return db->EnvWriteFile(path, contents);
+}
+
 DBIterator* DBNewIter(DBEngine* db, bool prefix) {
   rocksdb::ReadOptions opts;
   opts.prefix_same_as_start = prefix;
@@ -2283,7 +2323,7 @@ DBString DBGetUserProperties(DBEngine* db) {
   return db->GetUserProperties();
 }
 
-DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
+DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path) {
   const std::vector<std::string> paths = { ToString(path) };
   rocksdb::IngestExternalFileOptions ifo;
   ifo.move_files = false;

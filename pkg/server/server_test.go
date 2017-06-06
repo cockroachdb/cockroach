@@ -459,27 +459,6 @@ func TestOfficializeAddr(t *testing.T) {
 	}
 }
 
-func TestClusterStores(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := serverutils.StartTestCluster(t, 2, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
-
-	testutils.SucceedsSoon(t, func() error {
-		stores := tc.Server(0).(*TestServer).ClusterStores()
-		if len(stores) != 2 {
-			return errors.Errorf("expected 2 stores, got %v", stores)
-		}
-		n1 := tc.Server(0).NodeID()
-		n2 := tc.Server(1).NodeID()
-		s1 := stores[0].NodeID
-		s2 := stores[1].NodeID
-		if !(n1 == s1 && n2 == s2) && !(n1 == s2 && n2 == s1) {
-			return errors.Errorf("expected stores for nodes %d, %d, got %v", n1, n2, stores)
-		}
-		return nil
-	})
-}
-
 func TestListenURLFileCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

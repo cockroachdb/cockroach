@@ -23,9 +23,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 type insertNode struct {
@@ -72,7 +72,7 @@ func (p *planner) Insert(
 		}
 		// TODO(dan): Support RETURNING in UPSERTs.
 		if _, ok := n.Returning.(*parser.ReturningExprs); ok {
-			return nil, util.UnimplementedWithIssueErrorf(6637,
+			return nil, pgerror.UnimplementedWithIssueErrorf(6637,
 				"RETURNING is not supported with UPSERT")
 		}
 	}
@@ -416,7 +416,7 @@ func (p *planner) processColumns(
 		}
 
 		if len(c.Selector) > 0 {
-			return nil, util.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", n)
+			return nil, pgerror.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", n)
 		}
 
 		col, err := tableDesc.FindActiveColumnByName(c.ColumnName)

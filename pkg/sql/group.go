@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -585,7 +586,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 		if agg := t.GetAggregateConstructor(); agg != nil {
 			if len(t.Exprs) != 1 {
 				// TODO: #10495
-				v.err = errors.New("aggregate functions with multiple arguments are not supported yet")
+				v.err = pgerror.UnimplementedWithIssueErrorf(10495, "aggregate functions with multiple arguments are not supported yet")
 				return false, expr
 			}
 			argExpr := t.Exprs[0].(parser.TypedExpr)

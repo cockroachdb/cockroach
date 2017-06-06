@@ -195,11 +195,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
 	distSenderCfg := kv.DistSenderConfig{
-		AmbientCtx:      s.cfg.AmbientCtx,
-		Clock:           s.clock,
-		RPCContext:      s.rpcContext,
-		RPCRetryOptions: &retryOpts,
-		SendNextTimeout: s.cfg.SendNextTimeout,
+		AmbientCtx:        s.cfg.AmbientCtx,
+		Clock:             s.clock,
+		RPCContext:        s.rpcContext,
+		RPCRetryOptions:   &retryOpts,
+		SendNextTimeout:   s.cfg.SendNextTimeout,
+		PendingRPCTimeout: s.cfg.PendingRPCTimeout,
 	}
 	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
 	s.registry.AddMetricStruct(s.distSender.Metrics())
@@ -216,11 +217,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.db = client.NewDB(s.txnCoordSender, s.clock)
 
-	nlActive, nlRenewal := storage.NodeLivenessDurations(
+	active, renewal := storage.NodeLivenessDurations(
 		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))
-
 	s.nodeLiveness = storage.NewNodeLiveness(
-		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, nlActive, nlRenewal,
+		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, active, renewal,
 	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
@@ -337,9 +337,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, s.cfg.TimeSeriesServerConfig, s.stopper)
 
-	rlActive, rlRenewal := storage.RangeLeaseDurations(
-		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))
-
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
 		AmbientCtx:                     s.cfg.AmbientCtx,
@@ -362,8 +359,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			LeaseManager: s.leaseMgr,
 		},
 		LogRangeEvents:            s.cfg.EventLogEnabled,
-		RangeLeaseActiveDuration:  rlActive,
-		RangeLeaseRenewalDuration: rlRenewal,
+		RangeLeaseActiveDuration:  active,
+		RangeLeaseRenewalDuration: renewal,
 		TimeSeriesDataStore:       s.tsDB,
 
 		EnableEpochRangeLeases: true,
@@ -428,11 +425,6 @@ func (s *Server) NodeID() roachpb.NodeID {
 // Only intended to help print debugging info during server startup.
 func (s *Server) InitialBoot() bool {
 	return s.node.initialBoot
-}
-
-// ClusterStores returns a list of known stores in the cluster.
-func (s *Server) ClusterStores() []roachpb.ReplicationTarget {
-	return s.storePool.GetStores()
 }
 
 // grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC
@@ -843,6 +835,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	s.mux.Handle(rangeDebugEndpoint, http.HandlerFunc(s.status.handleDebugRange))
 	s.mux.Handle(problemRangesDebugEndpoint, http.HandlerFunc(s.status.handleProblemRanges))
+	s.mux.Handle(certificatesDebugEndpoint, http.HandlerFunc(s.status.handleDebugCertificates))
 	log.Event(ctx, "added http endpoints")
 
 	// Before serving SQL requests, we have to make sure the database is
