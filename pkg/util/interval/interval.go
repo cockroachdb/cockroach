@@ -37,8 +37,6 @@ type Range struct {
 	Start, End Comparable
 }
 
-var _ = Range{}.Equal
-
 // Equal returns whether the two ranges are equal.
 func (r Range) Equal(other Range) bool {
 	return r.Start.Equal(other.Start) && r.End.Equal(other.End)
@@ -86,8 +84,6 @@ type Interface interface {
 	ID() uintptr
 }
 
-var _ = Compare
-
 // Compare returns a value indicating the sort order relationship between a and b. The comparison is
 // performed lexicographically on (a.Range().Start, a.ID()) and (b.Range().Start, b.ID()) tuples
 // where Range().Start is more significant that ID().
@@ -115,8 +111,6 @@ func Compare(a, b Interface) int {
 	}
 }
 
-var _ = Equal
-
 // Equal returns a boolean indicating whethter the given Interfaces are equal to each other. If
 // "Equal(a, b) == true", "a.Range().End == b.Range().End" must hold. Otherwise, the interval tree
 // behavior is undefined. "Equal(a, b) == true" is equivalent to "Compare(a, b) == 0". But the
@@ -140,8 +134,6 @@ type Comparable []byte
 func (c Comparable) Compare(o Comparable) int {
 	return bytes.Compare(c, o)
 }
-
-var _ = Comparable(nil).Equal
 
 // Equal returns a boolean indicating if the given comparables are equal to
 // each other. Note that this has measurably better performance than
