@@ -18,6 +18,7 @@ package build
 
 import (
 	"fmt"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -51,9 +52,11 @@ var (
 	typ          string // Type of this build; <empty>, "release", or "musl"
 )
 
+var developmentVersionRegex = regexp.MustCompile(`^[a-f0-9]{9}(-dirty)?`)
+
 // IsRelease returns true if the binary was produced by a "release" build.
 func IsRelease() bool {
-	return strings.HasPrefix(typ, "release")
+	return strings.HasPrefix(typ, "release") && developmentVersionRegex.MatchString(tag)
 }
 
 // Short returns a pretty printed build and version summary.
