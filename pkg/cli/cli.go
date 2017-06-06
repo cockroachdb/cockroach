@@ -113,6 +113,7 @@ func init() {
 
 	cockroachCmd.AddCommand(
 		startCmd,
+		initCmd,
 		certCmd,
 		quitCmd,
 
