@@ -453,9 +453,10 @@ func (p *planner) createSchemaChangeJob(
 		Details:       jobs.SchemaChangeJobDetails{},
 	}
 	jobLogger := jobs.NewJobLogger(p.ExecCfg().DB, InternalExecutor{LeaseManager: p.session.leases.leaseMgr}, jobRecord)
-	// TODO(jordan): thread the client transaction into jobLogger.Created.
-	if err := jobLogger.Created(ctx); err != nil {
-		return sqlbase.InvalidMutationID, nil
+	if err := jobLogger.WithTxn(p.txn).Created(ctx); err != nil {
+		if !jobs.IsDuplicateOperationError(err) {
+			return sqlbase.InvalidMutationID, nil
+		}
 	}
 	tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
 		MutationID: mutationID, JobID: *jobLogger.JobID()})
