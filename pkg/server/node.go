@@ -375,7 +375,9 @@ func (n *Node) start(
 	n.initDescriptor(addr, attrs, locality)
 
 	// Initialize stores, including bootstrapping new ones.
+	log.Error(ctx, "initStores")
 	if err := n.initStores(ctx, engines, n.stopper, false); err != nil {
+		log.Error(ctx, "initStores return: ", err)
 		if err == errNeedsBootstrap {
 			if !canBootstrap {
 				return errCannotJoinSelf
