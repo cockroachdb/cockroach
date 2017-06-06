@@ -328,6 +328,47 @@ message SpanStatsResponse {
   cockroach.storage.engine.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
 }
 
+message ProblemRangesRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+message ProblemRangesResponse {
+  message Failures {
+    int32 node_id = 1 [
+      (gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+    string error_message = 2;
+  }
+  // If node_id is greater than 0, then this response is only representative of
+  // a single node's knowledge.
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  repeated Failures failures = 2 [(gogoproto.nullable) = false];
+  repeated int64 unavailable_range_ids = 3 [
+    (gogoproto.customname) = "UnavailableRangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 raft_leader_not_lease_holder_range_ids = 4 [
+    (gogoproto.customname) = "RaftLeaderNotLeaseHolderRangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 no_raft_leader_range_ids = 5 [
+    (gogoproto.customname) = "NoRaftLeaderRangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 no_lease_range_ids = 6 [
+    (gogoproto.customname) = "NoLeaseRangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 underreplicated_range_ids = 7 [
+    (gogoproto.customname) = "UnderreplicatedRangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+}
+
 service Status {
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
     option (google.api.http) = {
@@ -413,6 +454,11 @@ service Status {
   rpc Logs(LogsRequest) returns (LogEntriesResponse) {
     option (google.api.http) = {
       get: "/_status/logs/{node_id}"
+    };
+  }
+  rpc ProblemRanges(ProblemRangesRequest) returns (ProblemRangesResponse) {
+    option (google.api.http) = {
+      get: "/_status/problemranges"
     };
   }
 }
