@@ -38,29 +38,48 @@ const (
 	debugNodesClassHeaderWarning = " warning"
 )
 
-var environmentRegexp = regexp.MustCompile(`^(GO|COCKROACH_).*`)
+// This specifies the order in which these values are displayed.
+const (
+	debugNodesHeaderNode = iota
+	debugNodesHeaderAddress
+	debugNodesHeaderIP
+	debugNodesHeaderLocality
+	debugNodesHeaderAttributes
+	debugNodesHeaderEnvironment
+	debugNodesHeaderArguments
+	debugNodesHeaderTag
+	debugNodesHeaderRevision
+	debugNodesHeaderTime
+	debugNodesHeaderType
+	debugNodesHeaderPlatform
+	debugNodesHeaderGoVersion
+	debugNodesHeaderCGO
+	debugNodesHeaderDistribution
+	debugNodesHeaderStartedAt
+	debugNodesHeaderUpdatedAt
+)
 
 var debugNodesHeaders = []struct {
 	title string // This is displayed on the page.
 	check bool   // Show a warning if all values are not equal.
 }{
-	{"Node", false},        // 0
-	{"Address", false},     // 1
-	{"IP", false},          // 2
-	{"Locality", false},    // 3
-	{"Attributes", false},  // 4
-	{"Environment", false}, // 5
-	{"Arguments", false},   // 6
-	{"Tag", true},          // 7
-	{"Revision", true},     // 8
-	{"Time", true},         // 9
-	{"Type", true},         // 10
-	{"Platform", true},     // 11
-	{"Go Version", true},   // 12
-	{"CGO", true},          // 13
-	{"Distribution", true}, // 14
-	{"Started at", false},  // 15
-	{"Updated at", false},  // 16
+	debugNodesHeaderNode:         {"Node", false},
+	debugNodesHeaderAddress:      {"Address", false},
+	debugNodesHeaderIP:           {"IP", false},
+	debugNodesHeaderLocality:     {"Locality", false},
+	debugNodesHeaderAttributes:   {"Attributes", false},
+	debugNodesHeaderEnvironment:  {"Environment", false},
+	debugNodesHeaderArguments:    {"Arguments", false},
+	debugNodesHeaderTag:          {"Tag", true},
+	debugNodesHeaderRevision:     {"Revision", true},
+	debugNodesHeaderTime:         {"Time", true},
+	debugNodesHeaderType:         {"Type", true},
+	debugNodesHeaderPlatform:     {"Platform", true},
+	debugNodesHeaderGoVersion:    {"Go Version", true},
+	debugNodesHeaderCGO:          {"CGO", true},
+	debugNodesHeaderDistribution: {"Distribution", true},
+	debugNodesHeaderStartedAt:    {"Started at", false},
+	debugNodesHeaderUpdatedAt:    {"Updated at", false},
 }
 
 // Returns an HTML page displaying information about nodes status.
@@ -198,38 +217,31 @@ func (s *statusServer) handleDebugNodes(w http.ResponseWriter, r *http.Request) 
 				fmt.Sprintf("no node status available for n%d", nodeID))
 			continue
 		}
-
-		addOutput(0, fmt.Sprintf("n%d", nodeID))
-		addOutput(1, nodeStatus.Desc.Address.String())
+		addOutput(debugNodesHeaderNode, fmt.Sprintf("n%d", nodeID))
+		addOutput(debugNodesHeaderAddress, nodeStatus.Desc.Address.String())
 		netAddr, err := nodeStatus.Desc.Address.Resolve()
 		if err != nil {
 			data.Failures = append(data.Failures, fmt.Sprintf("could not resolve ip for n%d", nodeID))
-			addOutput(2, "")
+			addOutput(debugNodesHeaderIP, "")
 		} else {
-			addOutput(2, netAddr.String())
+			addOutput(debugNodesHeaderIP, netAddr.String())
 		}
-		addOutput(3, nodeStatus.Desc.Locality.String())
-		addOutputs(4, nodeStatus.Desc.Attrs.Attrs)
-		var safeEnv []string
-		for _, env := range nodeStatus.Env {
-			if environmentRegexp.MatchString(env) {
-				safeEnv = append(safeEnv, env)
-			}
-		}
-		addOutputs(5, safeEnv)
-		addOutputs(6, nodeStatus.Args)
-		addOutput(7, nodeStatus.BuildInfo.Tag)
-		addOutput(8, nodeStatus.BuildInfo.Revision)
-		addOutput(9, nodeStatus.BuildInfo.Time)
-		addOutput(10, nodeStatus.BuildInfo.Type)
-		addOutput(11, nodeStatus.BuildInfo.Platform)
-		addOutput(12, nodeStatus.BuildInfo.GoVersion)
-		addOutput(13, nodeStatus.BuildInfo.CgoCompiler)
-		addOutput(14, nodeStatus.BuildInfo.Distribution)
+		addOutput(debugNodesHeaderLocality, nodeStatus.Desc.Locality.String())
+		addOutputs(debugNodesHeaderAttributes, nodeStatus.Desc.Attrs.Attrs)
+		addOutputs(debugNodesHeaderEnvironment, nodeStatus.Env)
+		addOutputs(debugNodesHeaderArguments, nodeStatus.Args)
+		addOutput(debugNodesHeaderTag, nodeStatus.BuildInfo.Tag)
+		addOutput(debugNodesHeaderRevision, nodeStatus.BuildInfo.Revision)
+		addOutput(debugNodesHeaderTime, nodeStatus.BuildInfo.Time)
+		addOutput(debugNodesHeaderType, nodeStatus.BuildInfo.Type)
+		addOutput(debugNodesHeaderPlatform, nodeStatus.BuildInfo.Platform)
+		addOutput(debugNodesHeaderGoVersion, nodeStatus.BuildInfo.GoVersion)
+		addOutput(debugNodesHeaderCGO, nodeStatus.BuildInfo.CgoCompiler)
+		addOutput(debugNodesHeaderDistribution, nodeStatus.BuildInfo.Distribution)
 		startedAt := time.Unix(0, nodeStatus.StartedAt).String()
-		addOutputWithTitle(15, startedAt, fmt.Sprintf("%d\n%s", nodeStatus.StartedAt, startedAt))
+		addOutputWithTitle(debugNodesHeaderStartedAt, startedAt, fmt.Sprintf("%d\n%s", nodeStatus.StartedAt, startedAt))
 		updatedAt := time.Unix(0, nodeStatus.UpdatedAt).String()
-		addOutputWithTitle(16, updatedAt, fmt.Sprintf("%d\n%s", nodeStatus.UpdatedAt, updatedAt))
+		addOutputWithTitle(debugNodesHeaderUpdatedAt, updatedAt, fmt.Sprintf("%d\n%s", nodeStatus.UpdatedAt, updatedAt))
 	}
 
 	// Check for values that don't all match
