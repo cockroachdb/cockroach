@@ -74,6 +74,8 @@
 		ListSessionsResponse
 		SpanStatsRequest
 		SpanStatsResponse
+		ProblemRangesRequest
+		ProblemRangesResponse
 		PrettySpan
 */
 package serverpb
