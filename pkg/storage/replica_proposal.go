@@ -17,6 +17,10 @@
 package storage
 
 import (
+	"fmt"
+	"hash/crc32"
+	"io/ioutil"
+	"path/filepath"
 	"reflect"
 	"time"
 
@@ -27,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -267,6 +272,13 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Replicated.RaftLogDelta = nil
 
+	if p.Replicated.AddSSTable.Data == nil {
+		p.Replicated.AddSSTable.Data = q.Replicated.AddSSTable.Data
+	} else if q.Replicated.AddSSTable.Data != nil {
+		return errors.New("conflicting AddSSTable")
+	}
+	q.Replicated.AddSSTable.Data = nil
+
 	if q.Local.intents != nil {
 		if p.Local.intents == nil {
 			p.Local.intents = q.Local.intents
@@ -467,6 +479,39 @@ func (r *Replica) leasePostApply(
 	// Mark the new lease in the replica's lease history.
 	if r.leaseHistory != nil {
 		r.leaseHistory.add(newLease)
+	}
+}
+
+func (r *Replica) addSSTablePostApply(ctx context.Context, data []byte) {
+	var checksum []byte
+	{
+		hash := crc32.New(crc32.MakeTable(crc32.Castagnoli))
+		if _, err := hash.Write(data); err != nil {
+			panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
+		}
+		checksum = hash.Sum(nil)
+	}
+
+	// TODO(dan): Instead of a path based on checksum, use the one in the RFC:
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/raft_sstable_sideloading.md#detailed-design
+	var path string
+	var move bool
+	if inmem, ok := r.store.engine.(engine.InMem); ok {
+		path = fmt.Sprintf("%x", checksum)
+		move = false
+		if err := inmem.WriteFile(path, data); err != nil {
+			panic(err)
+		}
+	} else {
+		path = filepath.Join(r.store.engine.GetTempDir(), fmt.Sprintf("addsstable-%x", checksum))
+		move = true
+		if err := ioutil.WriteFile(path, data, 0600); err != nil {
+			panic(err)
+		}
+	}
+
+	if err := r.store.engine.IngestExternalFile(ctx, path, move); err != nil {
+		panic(err)
 	}
 }
 
@@ -687,6 +732,17 @@ func (r *Replica) handleReplicatedEvalResult(
 		if checkRaftLog {
 			r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 		}
+	}
+
+	if rResult.AddSSTable.Data != nil {
+		// TODO(dan): DANGER DANGER DANGER. ReplicatedEvalResult is for
+		// in-memory side effects. If there was a crash before this line, the
+		// database would be corrupted because the command would be marked as
+		// applied but the new sstable wouldn't be there. We need to figure out
+		// how to make this atomic with the commit of the batch including the
+		// new AppliedIndex.
+		r.addSSTablePostApply(ctx, rResult.AddSSTable.Data)
+		rResult.AddSSTable.Data = nil
 	}
 
 	if !reflect.DeepEqual(rResult, storagebase.ReplicatedEvalResult{}) {

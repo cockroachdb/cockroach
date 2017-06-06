@@ -85,6 +85,11 @@ message ReplicatedEvalResult {
   optional ChangeReplicas change_replicas = 12;
   optional int64 raft_log_delta = 13;
 
+  message AddSSTable {
+    optional bytes data = 1;
+  }
+  optional AddSSTable add_sstable = 16 [(gogoproto.nullable) = false, (gogoproto.customname) = "AddSSTable"];
+
   reserved 10001 to 10013;
 }
 

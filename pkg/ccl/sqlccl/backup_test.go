@@ -33,10 +33,12 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -230,7 +232,6 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
 	defer cleanupFn()
 
@@ -253,9 +254,22 @@ func TestBackupRestoreLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1000
-
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
+
+	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
+}
+
+func TestBackupRestoreAddSSTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer settings.TestingSetBool(&storageccl.AddSSTableEnabled, true)()
+	defer storage.TestingSetDisableSnapshotClearRange(true)()
+
+	const numAccounts = 1000
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+
 	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
 }
 
@@ -263,9 +277,9 @@ func TestBackupRestoreEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 0
-
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
+
 	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
 }
 

@@ -9,7 +9,6 @@
 package storageccl
 
 import (
-	"errors"
 	"fmt"
 
 	"golang.org/x/net/context"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -67,29 +67,11 @@ func evalWriteBatch(
 
 	// Check if there was data in the affected keyrange. If so, delete it (and
 	// adjust the MVCCStats) before applying the WriteBatch data.
-	iter := batch.NewIterator(false)
-	defer iter.Close()
-	iter.Seek(mvccStartKey)
-	if ok, err := iter.Valid(); err != nil {
-		return storage.EvalResult{}, err
-	} else if ok && iter.Key().Less(mvccEndKey) {
-		existingStats, err := iter.ComputeStats(mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
-		if err != nil {
-			return storage.EvalResult{}, err
-		}
-		// If this is a SpanSetIterator, we have to unwrap it because
-		// ClearIterRange needs a plain rocksdb iterator (and can't unwrap
-		// it itself because of import cycles).
-		// TODO(dan): Ideally, this would use `batch.ClearRange` but it doesn't
-		// yet work with read-write batches.
-		if ssi, ok := iter.(*storage.SpanSetIterator); ok {
-			iter = ssi.Iterator()
-		}
-		if err := batch.ClearIterRange(iter, mvccStartKey, mvccEndKey); err != nil {
-			return storage.EvalResult{}, err
-		}
-		ms.Subtract(existingStats)
+	existingStats, err := clearExistingData(batch, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+	if err != nil {
+		return storage.EvalResult{}, errors.Wrap(err, "clearing existing data")
 	}
+	ms.Subtract(existingStats)
 
 	if err := batch.ApplyBatchRepr(args.Data, false /* !sync */); err != nil {
 		return storage.EvalResult{}, err

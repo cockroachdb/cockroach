@@ -859,6 +859,18 @@ message AdminScatterResponse {
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
 }
 
+// AddSSTableRequest is arguments to the AddSSTable() method, to link a file
+// into the RocksDB log-structured merge-tree.
+message AddSSTableRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional bytes data = 2;
+}
+
+// AddSSTableResponse is the response to a AddSSTable() operation.
+message AddSSTableResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -908,6 +920,7 @@ message RequestUnion {
   optional ImportRequest import = 34;
   optional QueryTxnRequest query_txn = 33;
   optional AdminScatterRequest admin_scatter = 36;
+  optional AddSSTableRequest add_sstable = 37;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -956,6 +969,7 @@ message ResponseUnion {
   optional ImportResponse import = 34;
   optional QueryTxnResponse query_txn = 33;
   optional AdminScatterResponse admin_scatter = 36;
+  optional AddSSTableResponse add_sstable = 37;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

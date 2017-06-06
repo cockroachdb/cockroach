@@ -497,6 +497,9 @@ func (*ImportRequest) Method() Method { return Import }
 // Method implements the Request interface.
 func (*AdminScatterRequest) Method() Method { return AdminScatter }
 
+// Method implements the Request interface.
+func (*AddSSTableRequest) Method() Method { return AddSSTable }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -703,6 +706,12 @@ func (r *ImportRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *AdminScatterRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *AddSSTableRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -927,6 +936,7 @@ func (*WriteBatchRequest) flags() int               { return isWrite | isRange }
 func (*ExportRequest) flags() int                   { return isRead | isRange | updatesTSCache }
 func (*ImportRequest) flags() int                   { return isAdmin | isAlone }
 func (*AdminScatterRequest) flags() int             { return isAdmin | isAlone | isRange }
+func (*AddSSTableRequest) flags() int               { return isWrite | isAlone | isRange }
 
 // Keys returns credentials in an s3gof3r.Keys
 func (b *ExportStorage_S3) Keys() s3gof3r.Keys {

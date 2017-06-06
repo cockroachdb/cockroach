@@ -261,6 +261,7 @@ func (b *Batch) fillResults() error {
 			case *roachpb.WriteBatchRequest:
 			case *roachpb.ImportRequest:
 			case *roachpb.AdminScatterRequest:
+			case *roachpb.AddSSTableRequest:
 			}
 			// Fill up the resume span.
 			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
@@ -648,6 +649,27 @@ func (b *Batch) writeBatch(s, e interface{}, data []byte) {
 		Span:     span,
 		DataSpan: span,
 		Data:     data,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+// addSSTable is only exported on DB.
+func (b *Batch) addSSTable(s, e interface{}, data []byte) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	span := roachpb.Span{Key: begin, EndKey: end}
+	req := &roachpb.AddSSTableRequest{
+		Span: span,
+		Data: data,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
