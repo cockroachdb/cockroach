@@ -345,6 +345,116 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %}
 
+// NB: the %token definitions must come before the %type definitions in this
+// file to work around a bug in goyacc. See #16369 for more details.
+
+// Non-keyword token types.
+%token <str>   IDENT SCONST BCONST
+%token <*NumVal> ICONST FCONST
+%token <str>   PLACEHOLDER
+%token <str>   TYPECAST TYPEANNOTATE DOT_DOT
+%token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
+%token <str>   NOT_REGMATCH REGIMATCH NOT_REGIMATCH
+%token <str>   ERROR
+
+// If you want to make any keyword changes, update the keyword table in
+// src/include/parser/kwlist.h and add new keywords to the appropriate one of
+// the reserved-or-not-so-reserved keyword lists, below; search this file for
+// "Keyword category lists".
+
+// Ordinary key words in alphabetical order.
+%token <str>   ACTION ADD
+%token <str>   ALL ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
+%token <str>   ASYMMETRIC AT
+
+%token <str>   BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
+%token <str>   BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
+
+%token <str>   CASCADE CASE CAST CHAR
+%token <str>   CHARACTER CHARACTERISTICS CHECK
+%token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
+%token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
+%token <str>   COPY COVERING CREATE
+%token <str>   CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
+%token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
+%token <str>   CURRENT_USER CYCLE
+
+%token <str>   DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
+%token <str>   DEALLOCATE DEFERRABLE DELETE DESC
+%token <str>   DISTINCT DO DOUBLE DROP
+
+%token <str>   ELSE ENCODING END ESCAPE EXCEPT
+%token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPLAIN EXTRACT EXTRACT_DURATION
+
+%token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOORDIV FOLLOWING FOR
+%token <str>   FORCE_INDEX FOREIGN FROM FULL
+
+%token <str>   GRANT GRANTS GREATEST GROUP GROUPING
+
+%token <str>   HAVING HELP HIGH HOUR
+
+%token <str>   INCREMENTAL IF IFNULL ILIKE IN INTERLEAVE
+%token <str>   INDEX INDEXES INITIALLY
+%token <str>   INNER INSERT INT INT2VECTOR INT8 INT64 INTEGER
+%token <str>   INTERSECT INTERVAL INTO IS ISOLATION
+
+%token <str>   JOIN
+
+%token <str>   KEY KEYS
+
+%token <str>   LATERAL LC_CTYPE LC_COLLATE
+%token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOCAL
+%token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
+
+%token <str>   MATCH MINUTE MONTH
+
+%token <str>   NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
+%token <str>   NOT NOTHING NULL NULLIF
+%token <str>   NULLS NUMERIC
+
+%token <str>   OF OFF OFFSET OID ON ONLY OPTIONS OR
+%token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
+
+%token <str>   PARENT PARTIAL PARTITION PASSWORD PLACING POSITION
+%token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
+
+%token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
+%token <str>   REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
+%token <str>   RENAME REPEATABLE
+%token <str>   RELEASE RESET RESTORE RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
+%token <str>   ROW ROWS RSHIFT
+
+%token <str>   SAVEPOINT SCATTER SEARCH SECOND SELECT
+%token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SETTING SETTINGS SHOW
+%token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
+%token <str>   START STATUS STDIN STRICT STRING STORING SUBSTRING
+%token <str>   SYMMETRIC SYSTEM
+
+%token <str>   TABLE TABLES TEMPLATE TESTING_RANGES TESTING_RELOCATE TEXT THEN
+%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRANSACTION TREAT TRIM TRUE
+%token <str>   TRUNCATE TYPE
+
+%token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
+%token <str>   UPDATE UPSERT USE USER USERS USING UUID
+
+%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
+
+%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT
+
+%token <str>   YEAR
+
+%token <str>   ZONE
+
+// The grammar thinks these are keywords, but they are not in the kwlist.h list
+// and so can never be entered directly. The filter in parser.c creates these
+// tokens when required (based on looking one token ahead).
+//
+// NOT_LA exists so that productions such as NOT LIKE can be given the same
+// precedence as LIKE; otherwise they'd effectively have the same precedence as
+// NOT, at least with respect to their left-hand subexpression. WITH_LA is
+// needed to make the grammar LALR(1).
+%token     NOT_LA WITH_LA AS_LA
+
 %union {
   id             int
   pos            int
@@ -601,113 +711,6 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <NameList>       grantee_list for_grantee_clause
 %type <privilege.List> privileges privilege_list
 %type <privilege.Kind> privilege
-
-// Non-keyword token types.
-%token <str>   IDENT SCONST BCONST
-%token <*NumVal> ICONST FCONST
-%token <str>   PLACEHOLDER
-%token <str>   TYPECAST TYPEANNOTATE DOT_DOT
-%token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
-%token <str>   NOT_REGMATCH REGIMATCH NOT_REGIMATCH
-%token <str>   ERROR
-
-// If you want to make any keyword changes, update the keyword table in
-// src/include/parser/kwlist.h and add new keywords to the appropriate one of
-// the reserved-or-not-so-reserved keyword lists, below; search this file for
-// "Keyword category lists".
-
-// Ordinary key words in alphabetical order.
-%token <str>   ACTION ADD
-%token <str>   ALL ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str>   ASYMMETRIC AT
-
-%token <str>   BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
-%token <str>   BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
-
-%token <str>   CASCADE CASE CAST CHAR
-%token <str>   CHARACTER CHARACTERISTICS CHECK
-%token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
-%token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
-%token <str>   COPY COVERING CREATE
-%token <str>   CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
-%token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
-%token <str>   CURRENT_USER CYCLE
-
-%token <str>   DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
-%token <str>   DEALLOCATE DEFERRABLE DELETE DESC
-%token <str>   DISTINCT DO DOUBLE DROP
-
-%token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPLAIN EXTRACT EXTRACT_DURATION
-
-%token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOORDIV FOLLOWING FOR
-%token <str>   FORCE_INDEX FOREIGN FROM FULL
-
-%token <str>   GRANT GRANTS GREATEST GROUP GROUPING
-
-%token <str>   HAVING HELP HIGH HOUR
-
-%token <str>   INCREMENTAL IF IFNULL ILIKE IN INTERLEAVE
-%token <str>   INDEX INDEXES INITIALLY
-%token <str>   INNER INSERT INT INT2VECTOR INT8 INT64 INTEGER
-%token <str>   INTERSECT INTERVAL INTO IS ISOLATION
-
-%token <str>   JOIN
-
-%token <str>   KEY KEYS
-
-%token <str>   LATERAL LC_CTYPE LC_COLLATE
-%token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOCAL
-%token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
-
-%token <str>   MATCH MINUTE MONTH
-
-%token <str>   NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
-%token <str>   NOT NOTHING NULL NULLIF
-%token <str>   NULLS NUMERIC
-
-%token <str>   OF OFF OFFSET OID ON ONLY OPTIONS OR
-%token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
-
-%token <str>   PARENT PARTIAL PARTITION PASSWORD PLACING POSITION
-%token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
-
-%token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
-%token <str>   REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
-%token <str>   RENAME REPEATABLE
-%token <str>   RELEASE RESET RESTORE RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
-%token <str>   ROW ROWS RSHIFT
-
-%token <str>   SAVEPOINT SCATTER SEARCH SECOND SELECT
-%token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SETTING SETTINGS SHOW
-%token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
-%token <str>   START STATUS STDIN STRICT STRING STORING SUBSTRING
-%token <str>   SYMMETRIC SYSTEM
-
-%token <str>   TABLE TABLES TEMPLATE TESTING_RANGES TESTING_RELOCATE TEXT THEN
-%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRANSACTION TREAT TRIM TRUE
-%token <str>   TRUNCATE TYPE
-
-%token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
-%token <str>   UPDATE UPSERT USE USER USERS USING UUID
-
-%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
-
-%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT
-
-%token <str>   YEAR
-
-%token <str>   ZONE
-
-// The grammar thinks these are keywords, but they are not in the kwlist.h list
-// and so can never be entered directly. The filter in parser.c creates these
-// tokens when required (based on looking one token ahead).
-//
-// NOT_LA exists so that productions such as NOT LIKE can be given the same
-// precedence as LIKE; otherwise they'd effectively have the same precedence as
-// NOT, at least with respect to their left-hand subexpression. WITH_LA is
-// needed to make the grammar LALR(1).
-%token     NOT_LA WITH_LA AS_LA
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
