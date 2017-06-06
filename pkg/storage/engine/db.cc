@@ -2323,19 +2323,23 @@ DBString DBGetUserProperties(DBEngine* db) {
   return db->GetUserProperties();
 }
 
-DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path) {
+DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file) {
   const std::vector<std::string> paths = { ToString(path) };
-  rocksdb::IngestExternalFileOptions ifo;
-  ifo.move_files = false;
-  ifo.snapshot_consistency = true;
-  ifo.allow_global_seqno = false;
-  ifo.allow_blocking_flush = false;
-
-  rocksdb::Status status = db->rep->IngestExternalFile(
-      db->rep->DefaultColumnFamily(), paths, ifo);
+  rocksdb::IngestExternalFileOptions ingest_options;
+  ingest_options.move_files = move_file;
+  // TODO(dan): Switch snapshot_consistency back to true. The RocksDB in-memory
+  // env doesn't support NewRandomRWFile, which is used when a file is ingested
+  // while a snapshot is outstanding (it rewrites the sequence number in the
+  // ingested file to be greated than the snapshot's sequence number). Setting
+  // the option to false avoids this codepath during development. #16345.
+  ingest_options.snapshot_consistency = false;
+  ingest_options.allow_global_seqno = true;
+  ingest_options.allow_blocking_flush = false;
+  rocksdb::Status status = db->rep->IngestExternalFile(paths, ingest_options);
   if (!status.ok()) {
     return ToDBStatus(status);
   }
+
   return kSuccess;
 }
 

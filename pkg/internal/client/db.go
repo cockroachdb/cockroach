@@ -421,6 +421,23 @@ func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byt
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// ExperimentalAddSSTable links a file into the RocksDB log-structured
+// merge-tree. Existing data in the range is cleared.
+//
+// TODO(dan): DANGER DANGER DANGER. This command is in development. It should
+// NOT be used on any non-testing cluster as it may write data that is
+// incompatible with future versions of CockroachDB. It also has known
+// limitations involving corruption if a node crashes at the wrong time (see
+// addSSTablePostApply) and currently requires that RocksDB's DeleteRange
+// operation not be used.
+func (db *DB) ExperimentalAddSSTable(
+	ctx context.Context, begin, end interface{}, data []byte,
+) error {
+	b := &Batch{}
+	b.addSSTable(begin, end, data)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
