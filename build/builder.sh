@@ -32,6 +32,7 @@ if [ "${1-}" = "version" ]; then
   exit 0
 fi
 
+GOPATH=${GOPATH-$HOME/go}
 gopath0=${GOPATH%%:*}
 gocache=${GOCACHEPATH-$gopath0}
 
