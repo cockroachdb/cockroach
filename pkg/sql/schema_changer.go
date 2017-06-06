@@ -370,7 +370,7 @@ func (sc *SchemaChanger) exec(ctx context.Context, evalCtx parser.EvalContext) e
 	}
 
 	if err := sc.jobLogger.Started(ctx); err != nil {
-		if log.V(2) {
+		if !jobs.IsDuplicateOperationError(err) && log.V(2) {
 			log.Infof(ctx, "Failed to mark job %d as started: %v", *sc.jobLogger.JobID(), err)
 		}
 	}
@@ -543,9 +543,11 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 		}
 		return nil
 	}, func(txn *client.Txn) error {
-		if err := sc.jobLogger.Succeeded(ctx); err != nil {
-			log.Warningf(ctx, "schema change ignoring error while marking job %d as successful: %+v",
-				sc.jobLogger.JobID(), err)
+		if err := sc.jobLogger.WithTxn(txn).Succeeded(ctx); err != nil {
+			if !jobs.IsDuplicateOperationError(err) {
+				log.Warningf(ctx, "schema change ignoring error while marking job %d as successful: %+v",
+					sc.jobLogger.JobID(), err)
+			}
 		}
 		// Log "Finish Schema Change" event. Only the table ID and mutation ID
 		// are logged; this can be correlated with the DDL statement that
