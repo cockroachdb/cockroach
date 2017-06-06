@@ -613,3 +613,9 @@ query I
 SELECT COUNT(*) FROM kv WHERE k = 'savepoint'
 ----
 0
+
+statement ok
+BEGIN READ WRITE; COMMIT
+
+statement error unimplemented
+BEGIN READ ONLY; ROLLBACK
