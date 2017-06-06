@@ -751,14 +751,16 @@ func Restore(
 	// transfers, poor performance on SQL workloads, etc) as well as log spam
 	// about slow distsender requests. Rate limit them here, too.
 	//
-	// Use the number of nodes in the cluster as the number of outstanding
-	// Import requests for the rate limiting. TODO(dan): This is very
-	// conservative, see if we can bump it back up by rate limiting WriteBatch.
+	// Use twice the number of nodes in the cluster as the number of outstanding
+	// Import requests for the rate limiting. We don't do anything smart here
+	// about per-node limits, but this was picked to balance between Import
+	// requests sitting in distsender for a long time and all nodes having work
+	// to do.
 	//
 	// TODO(dan): Make this limiting per node.
 	//
 	// TODO(dan): See if there's some better solution than rate-limiting #14798.
-	maxConcurrentImports := clusterNodeCount(p.ExecCfg().Gossip)
+	maxConcurrentImports := clusterNodeCount(p.ExecCfg().Gossip) * 2
 	importsSem := make(chan struct{}, maxConcurrentImports)
 
 	mu := struct {
