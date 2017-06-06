@@ -17,7 +17,9 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
 	"time"
@@ -330,6 +332,12 @@ func mkSpan(start, end string) roachpb.Span {
 	return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
 }
 
+func randBytes(n int) []byte {
+	b := make([]byte, n)
+	rand.Read(b)
+	return b
+}
+
 // Reconstruct a set of commands that tickled a bug in interval.Tree. See
 // https://github.com/cockroachdb/cockroach/issues/6495 for details.
 func TestCommandQueueIssue6495(t *testing.T) {
@@ -555,7 +563,7 @@ func TestCommandQueueTimestampsEmpty(t *testing.T) {
 	}
 }
 
-func BenchmarkCommandQueueGetWait(b *testing.B) {
+func BenchmarkCommandQueueGetWaitAllReadOnly(b *testing.B) {
 	// Test read-only getWait performance for various number of command queue
 	// entries. See #13627 where a previous implementation of
 	// CommandQueue.getOverlaps had O(n) performance in this setup. Since reads
@@ -574,6 +582,41 @@ func BenchmarkCommandQueueGetWait(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				_ = cq.getWait(true, zeroTS, spans)
+			}
+		})
+	}
+}
+
+func BenchmarkCommandQueueReadWriteMix(b *testing.B) {
+	// Test performance with a mixture of reads and writes with a high number
+	// of reads per write.
+	// See #15544.
+	for _, readsPerWrite := range []int{1, 4, 16, 64, 128, 256} {
+		b.Run(fmt.Sprintf("%d", readsPerWrite), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				totalCmds := 1 << 10
+				liveCmdQueue := make(chan *cmd, 16)
+				cq := NewCommandQueue(true /* coveringOptimization */)
+				for j := 0; j < totalCmds; j++ {
+					a, b := randBytes(100), randBytes(100)
+					// Overwrite first byte so that we do not mix local and global ranges
+					a[0], b[0] = 'a', 'a'
+					if bytes.Compare(a, b) > 0 {
+						a, b = b, a
+					}
+					spans := []roachpb.Span{{
+						Key:    roachpb.Key(a),
+						EndKey: roachpb.Key(b),
+					}}
+					var cmd *cmd
+					readOnly := j%(readsPerWrite+1) != 0
+					_ = cq.getWait(readOnly, zeroTS, spans)
+					cmd = cq.add(readOnly, zeroTS, spans)
+					if len(liveCmdQueue) == cap(liveCmdQueue) {
+						cq.remove(<-liveCmdQueue)
+					}
+					liveCmdQueue <- cmd
+				}
 			}
 		})
 	}
