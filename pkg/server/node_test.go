@@ -151,9 +151,8 @@ func createAndStartTestNode(
 	locality roachpb.Locality,
 	t *testing.T,
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
-	canBootstrap := gossipBS == nil
 	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, locality, canBootstrap); err != nil {
+	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, locality); err != nil {
 		t.Fatal(err)
 	}
 	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
@@ -338,22 +337,6 @@ func TestNodeJoin(t *testing.T) {
 	})
 }
 
-// TestNodeJoinSelf verifies that an uninitialized node trying to join
-// itself will fail.
-func TestNodeJoinSelf(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
-	defer e.Close()
-	engines := []engine.Engine{e}
-	_, addr, _, node, stopper := createTestNode(util.TestAddr, engines, util.TestAddr, t)
-	defer stopper.Stop(context.TODO())
-	err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, roachpb.Locality{}, false)
-	if err != errCannotJoinSelf {
-		t.Fatalf("expected err %s; got %s", errCannotJoinSelf, err)
-	}
-}
-
 // TestCorruptedClusterID verifies that a node fails to start when a
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
@@ -381,7 +364,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	stopper.Stop(context.TODO())
 	if err := node.start(
-		context.Background(), serverAddr, engines, roachpb.Attributes{}, roachpb.Locality{}, true,
+		context.Background(), serverAddr, engines, roachpb.Attributes{}, roachpb.Locality{},
 	); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
