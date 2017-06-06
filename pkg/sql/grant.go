@@ -56,7 +56,7 @@ func (p *planner) changePrivileges(
 			if err := d.SetUpVersion(); err != nil {
 				return nil, err
 			}
-			p.notifySchemaChange(d.ID, sqlbase.InvalidMutationID)
+			p.notifySchemaChange(d, sqlbase.InvalidMutationID)
 		}
 	}
 

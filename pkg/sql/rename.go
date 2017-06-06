@@ -233,7 +233,7 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 		}
 		return nil, err
 	}
-	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
+	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 
 	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
@@ -316,7 +316,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 	if err := p.txn.Put(ctx, descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
-	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
+	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 	return &emptyNode{}, nil
 }
 
@@ -435,7 +435,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 	if err := p.txn.Put(ctx, descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
-	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
+	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 	return &emptyNode{}, nil
 }
 

@@ -278,6 +278,45 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) 
 	return columnIDs, dirs
 }
 
+// ColNamesString returns a string describing the column names and directions
+// in this index.
+func (desc *IndexDescriptor) ColNamesString() string {
+	var buf bytes.Buffer
+	for i, name := range desc.ColumnNames {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "%s %s", parser.Name(name), desc.ColumnDirections[i])
+	}
+	return buf.String()
+}
+
+var isUnique = map[bool]string{true: "UNIQUE "}
+
+// SQLString returns the SQL string describing this index. If non-empty,
+// "ON tableName" is included in the output in the correct place.
+func (desc *IndexDescriptor) SQLString(tableName string) string {
+	var storing string
+	if len(desc.StoreColumnNames) > 0 {
+		colNames := make(parser.NameList, len(desc.StoreColumnNames))
+		for i, n := range desc.StoreColumnNames {
+			colNames[i] = parser.Name(n)
+		}
+		storing = fmt.Sprintf(" STORING (%s)", parser.AsString(colNames))
+	}
+	var onTable string
+	if tableName != "" {
+		onTable = fmt.Sprintf("ON %s ", tableName)
+	}
+	return fmt.Sprintf("%sINDEX %s%s (%s)%s",
+		isUnique[desc.Unique],
+		onTable,
+		parser.AsString(parser.Name(desc.Name)),
+		desc.ColNamesString(),
+		storing,
+	)
+}
+
 // SetID implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id
@@ -1953,4 +1992,19 @@ func (desc TableDescriptor) GetDescMetadataKey() roachpb.Key {
 // GetNameMetadataKey returns the namespace key for the table.
 func (desc TableDescriptor) GetNameMetadataKey() roachpb.Key {
 	return MakeNameMetadataKey(desc.ParentID, desc.Name)
+}
+
+// SQLString returns the SQL statement describing the column.
+func (desc *ColumnDescriptor) SQLString() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%s %s", parser.AsString(parser.Name(desc.Name)), desc.Type.SQLString())
+	if desc.Nullable {
+		buf.WriteString(" NULL")
+	} else {
+		buf.WriteString(" NOT NULL")
+	}
+	if desc.DefaultExpr != nil {
+		fmt.Fprintf(&buf, " DEFAULT %s", *desc.DefaultExpr)
+	}
+	return buf.String()
 }

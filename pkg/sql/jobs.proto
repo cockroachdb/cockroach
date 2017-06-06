@@ -28,6 +28,10 @@ message RestoreJobDetails {
   // Intentionally empty.
 }
 
+message SchemaChangeJobDetails {
+  // Intentionally empty.
+}
+
 message JobPayload {
     string description = 1;
     string username = 2;
@@ -48,5 +52,6 @@ message JobPayload {
     oneof details {
         BackupJobDetails backup = 10;
         RestoreJobDetails restore = 11;
+        SchemaChangeJobDetails schemaChange = 12;
     }
 }

@@ -185,10 +185,6 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 
 	mutationIdx := len(n.tableDesc.Mutations)
 	n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD)
-	mutationID, err := n.tableDesc.FinalizeMutation()
-	if err != nil {
-		return err
-	}
 	if err := n.tableDesc.AllocateIDs(); err != nil {
 		return err
 	}
@@ -203,11 +199,11 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 		}
 	}
 
-	if err := n.p.txn.Put(
-		ctx,
-		sqlbase.MakeDescMetadataKey(n.tableDesc.GetID()),
-		sqlbase.WrapDescriptor(n.tableDesc),
-	); err != nil {
+	mutationID, err := n.p.createSchemaChangeJob(ctx, n.tableDesc, parser.AsString(n.n))
+	if err != nil {
+		return err
+	}
+	if err := n.p.writeTableDesc(ctx, n.tableDesc); err != nil {
 		return err
 	}
 
@@ -230,7 +226,7 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
-	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
+	n.p.notifySchemaChange(n.tableDesc, mutationID)
 
 	return nil
 }
@@ -492,7 +488,7 @@ func (n *createViewNode) Start(ctx context.Context) error {
 		}
 	}
 	if desc.Adding() {
-		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
+		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
 	if err := desc.Validate(ctx, n.p.txn); err != nil {
 		return err
@@ -678,7 +674,7 @@ func (n *createTableNode) Start(ctx context.Context) error {
 		}
 	}
 	if desc.Adding() {
-		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
+		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
 
 	for _, index := range desc.AllNonDropIndexes() {
@@ -1031,7 +1027,7 @@ func (p *planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.Tabl
 	if err := p.writeTableDesc(ctx, td); err != nil {
 		return err
 	}
-	p.notifySchemaChange(td.ID, sqlbase.InvalidMutationID)
+	p.notifySchemaChange(td, sqlbase.InvalidMutationID)
 	return nil
 }
 
