@@ -543,7 +543,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 		}
 		return nil
 	}, func(txn *client.Txn) error {
-		if err := sc.jobLogger.Succeeded(ctx); err != nil {
+		if err := sc.jobLogger.WithTxn(txn).Succeeded(ctx); err != nil {
 			log.Warningf(ctx, "schema change ignoring error while marking job %d as successful: %+v",
 				sc.jobLogger.JobID(), err)
 		}
