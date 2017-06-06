@@ -208,6 +208,8 @@ type TxnCoordSender struct {
 
 var _ client.Sender = &TxnCoordSender{}
 
+const defaultClientTimeout = 10 * time.Second
+
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance.
 // ctx is the base context and is used for logs and traces when there isn't a

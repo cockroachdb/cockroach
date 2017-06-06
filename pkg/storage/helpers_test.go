@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -254,6 +255,31 @@ func (r *Replica) GetLease() (roachpb.Lease, *roachpb.Lease) {
 	return r.getLease()
 }
 
+// SetQuotaPool allows the caller to set a replica's quota pool initialized to
+// a given quota. Additionally it initializes the replica's quota release queue
+// and its command sizes map. Only safe to call on the replica that is both
+// lease holder and raft leader.
+func (r *Replica) InitQuotaPool(quota int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
+	if r.mu.proposalQuota != nil {
+		r.mu.proposalQuota.close()
+	}
+	r.mu.proposalQuota = newQuotaPool(quota)
+	r.mu.quotaReleaseQueue = nil
+	r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
+}
+
+// QuotaAvailable returns the quota available in the replica's quota pool. Only
+// safe to call on the replica that is both lease holder and raft leader.
+func (r *Replica) QuotaAvailable() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.proposalQuota.approximateQuota()
+}
+
 // GetTimestampCacheLowWater returns the timestamp cache low water mark.
 func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	r.store.tsCacheMu.Lock()
@@ -293,9 +319,10 @@ func (r *Replica) HasQuorum() bool {
 	return len(liveReplicas) >= quorum
 }
 
-// GetStoreList is the same function as GetStoreList exposed for tests only.
+// GetStoreList exposes getStoreList for testing only, but with a hardcoded
+// storeFilter of storeFilterNone.
 func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
-	return sp.getStoreList(rangeID)
+	return sp.getStoreList(rangeID, storeFilterNone)
 }
 
 // Stores returns a copy of sl.stores.

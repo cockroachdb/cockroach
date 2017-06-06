@@ -30,12 +30,12 @@ func (pg *Error) Error() string {
 }
 
 // NewError creates an Error.
-func NewError(code string, msg string) error {
+func NewError(code string, msg string) *Error {
 	return NewErrorf(code, msg)
 }
 
 // NewErrorf creates an Error with a format string.
-func NewErrorf(code string, format string, args ...interface{}) error {
+func NewErrorf(code string, format string, args ...interface{}) *Error {
 	srcCtx := makeSrcCtx(1)
 	return &Error{
 		Message: fmt.Sprintf(format, args...),
@@ -60,4 +60,26 @@ func GetPGCause(err error) (*Error, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// UnimplementedWithIssueErrorf constructs an error with the formatted message
+// and a link to the passed issue. Recorded as "#<issue>" in tracking.
+func UnimplementedWithIssueErrorf(issue int, msg string, args ...interface{}) error {
+	feature := fmt.Sprintf("#%d", issue)
+	if len(args) > 0 {
+		msg = fmt.Sprintf(msg, args...)
+	}
+	msg = fmt.Sprintf(
+		"unimplemented: %s (see issue https://github.com/cockroachdb/cockroach/issues/%d)", msg, issue,
+	)
+	return Unimplemented(feature, msg)
+}
+
+// Unimplemented constructs an unimplemented feature error.
+//
+// `feature` is used for tracking, and is not included when the error printed.
+func Unimplemented(feature, msg string) error {
+	err := NewError(CodeFeatureNotSupportedError, msg)
+	err.InternalCommand = feature
+	return err
 }

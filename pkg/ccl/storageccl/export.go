@@ -163,6 +163,14 @@ func evalExport(
 	return storage.EvalResult{}, nil
 }
 
+func sha512ChecksumData(data []byte) ([]byte, error) {
+	h := sha512.New()
+	if _, err := h.Write(data); err != nil {
+		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
+	}
+	return h.Sum(nil), nil
+}
+
 func sha512ChecksumFile(path string) ([]byte, error) {
 	h := sha512.New()
 	f, err := os.Open(path)

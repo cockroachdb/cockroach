@@ -220,9 +220,9 @@ func (t *Tracer) StartSpan(
 
 	// Copy Baggage from parent context.
 	if hasParent && len(parentCtx.Baggage) > 0 {
-		s.Baggage = make(map[string]string, len(parentCtx.Baggage))
+		s.mu.Baggage = make(map[string]string, len(parentCtx.Baggage))
 		for k, v := range parentCtx.Baggage {
-			s.Baggage[k] = v
+			s.mu.Baggage[k] = v
 		}
 	}
 
@@ -239,9 +239,9 @@ func (t *Tracer) StartSpan(
 	if hasParent {
 		s.parentSpanID = parentCtx.SpanID
 		if l := len(parentCtx.Baggage); l > 0 {
-			s.Baggage = make(map[string]string, l)
+			s.mu.Baggage = make(map[string]string, l)
 			for k, v := range parentCtx.Baggage {
-				s.Baggage[k] = v
+				s.mu.Baggage[k] = v
 			}
 		}
 	}
@@ -252,7 +252,7 @@ func (t *Tracer) StartSpan(
 			s.SetTag(k, v)
 		}
 		// Copy baggage items to tags so they show up in the Lightstep UI or x/net/trace.
-		for k, v := range s.Baggage {
+		for k, v := range s.mu.Baggage {
 			s.SetTag(k, v)
 		}
 	}
@@ -319,8 +319,8 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.S
 		spanMeta: spanMeta{
 			TraceID: bc.TraceID,
 			SpanID:  bc.SpanID,
-			Baggage: bc.Baggage,
 		},
+		Baggage: bc.Baggage,
 	}, nil
 }
 

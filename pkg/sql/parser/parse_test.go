@@ -93,6 +93,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b SERIAL)`},
 		{`CREATE TABLE a (b SMALLSERIAL)`},
 		{`CREATE TABLE a (b BIGSERIAL)`},
+		{`CREATE TABLE a (b UUID)`},
 		{`CREATE TABLE a (b INT NULL)`},
 		{`CREATE TABLE a (b INT CONSTRAINT maybe NULL)`},
 		{`CREATE TABLE a (b INT NOT NULL)`},
@@ -812,6 +813,19 @@ func TestParse2(t *testing.T) {
 		// We allow OFFSET before LIMIT, but always output LIMIT first.
 		{`SELECT a FROM t OFFSET a LIMIT b`,
 			`SELECT a FROM t LIMIT b OFFSET a`},
+		// FETCH FIRST ... is alternative syntax for LIMIT.
+		{`SELECT a FROM t FETCH FIRST 3 ROWS ONLY`,
+			`SELECT a FROM t LIMIT 3`},
+		{`SELECT a FROM t FETCH NEXT 3 ROWS ONLY`,
+			`SELECT a FROM t LIMIT 3`},
+		{`SELECT a FROM t FETCH FIRST ROW ONLY`,
+			`SELECT a FROM t LIMIT 1`},
+		{`SELECT a FROM t FETCH FIRST (2 * a) ROWS ONLY`,
+			`SELECT a FROM t LIMIT 2 * a`},
+		{`SELECT a FROM t OFFSET b FETCH FIRST (2 * a) ROWS ONLY`,
+			`SELECT a FROM t LIMIT 2 * a OFFSET b`},
+		{`SELECT a FROM t FETCH FIRST (2 * a) ROWS ONLY OFFSET b`,
+			`SELECT a FROM t LIMIT 2 * a OFFSET b`},
 		// Double negation. See #1800.
 		{`SELECT *,-/* comment */-5`,
 			`SELECT *, - (- 5)`},

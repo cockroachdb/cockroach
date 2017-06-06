@@ -137,7 +137,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 
 	// Now try in the proper order.
 	if err := security.CreateCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey), 512, time.Hour*48, false, false,
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey), 512, time.Hour*96, false, false,
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
@@ -153,7 +153,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 func generateAllCerts(certsDir string) error {
 	if err := security.CreateCAPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, true, true,
+		512, time.Hour*96, true, true,
 	); err != nil {
 		return errors.Errorf("could not generate CA pair: %v", err)
 	}

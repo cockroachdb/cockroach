@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -75,15 +75,16 @@ func (UnaryOp) preferred() bool {
 func init() {
 	for op, overload := range UnaryOps {
 		for i, impl := range overload {
-			impl.types = ArgTypes{{"arg", impl.Typ}}
-			impl.retType = fixedReturnType(impl.ReturnType)
-			UnaryOps[op][i] = impl
+			casted := impl.(UnaryOp)
+			casted.types = ArgTypes{{"arg", casted.Typ}}
+			casted.retType = fixedReturnType(casted.ReturnType)
+			UnaryOps[op][i] = casted
 		}
 	}
 }
 
 // unaryOpOverload is an overloaded set of unary operator implementations.
-type unaryOpOverload []UnaryOp
+type unaryOpOverload []overloadImpl
 
 // UnaryOps contains the unary operations indexed by operation type.
 var UnaryOps = map[UnaryOperator]unaryOpOverload{
@@ -194,20 +195,22 @@ func (BinOp) preferred() bool {
 func init() {
 	for op, overload := range BinOps {
 		for i, impl := range overload {
-			impl.types = ArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
-			impl.retType = fixedReturnType(impl.ReturnType)
-			BinOps[op][i] = impl
+			casted := impl.(BinOp)
+			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
+			casted.retType = fixedReturnType(casted.ReturnType)
+			BinOps[op][i] = casted
 		}
 	}
 }
 
 // binOpOverload is an overloaded set of binary operator implementations.
-type binOpOverload []BinOp
+type binOpOverload []overloadImpl
 
 func (o binOpOverload) lookupImpl(left, right Type) (BinOp, bool) {
 	for _, fn := range o {
-		if fn.matchParams(left, right) {
-			return fn, true
+		casted := fn.(BinOp)
+		if casted.matchParams(left, right) {
+			return casted, true
 		}
 	}
 	return BinOp{}, false
@@ -993,19 +996,21 @@ func (CmpOp) preferred() bool {
 func init() {
 	for op, overload := range CmpOps {
 		for i, impl := range overload {
-			impl.types = ArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
-			CmpOps[op][i] = impl
+			casted := impl.(CmpOp)
+			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
+			CmpOps[op][i] = casted
 		}
 	}
 }
 
 // cmpOpOverload is an overloaded set of comparison operator implementations.
-type cmpOpOverload []CmpOp
+type cmpOpOverload []overloadImpl
 
 func (o cmpOpOverload) lookupImpl(left, right Type) (CmpOp, bool) {
 	for _, fn := range o {
-		if fn.matchParams(left, right) {
-			return fn, true
+		casted := fn.(CmpOp)
+		if casted.matchParams(left, right) {
+			return casted, true
 		}
 	}
 	return CmpOp{}, false
@@ -1127,6 +1132,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
+			fn:        cmpOpScalarEQFn,
+		},
+		CmpOp{
+			LeftType:  TypeUUID,
+			RightType: TypeUUID,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
@@ -1260,6 +1270,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
+			LeftType:  TypeUUID,
+			RightType: TypeUUID,
+			fn:        cmpOpScalarLTFn,
+		},
+		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1385,6 +1400,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
+			LeftType:  TypeUUID,
+			RightType: TypeUUID,
+			fn:        cmpOpScalarLEFn,
+		},
+		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1405,6 +1425,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(TypeTimestamp),
 		makeEvalTupleIn(TypeTimestampTZ),
 		makeEvalTupleIn(TypeInterval),
+		makeEvalTupleIn(TypeUUID),
 		makeEvalTupleIn(TypeTuple),
 	},
 
@@ -2221,6 +2242,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			// of the duration (e.g. "5s") and not of the interval itself (e.g.
 			// "INTERVAL '5s'").
 			s = t.ValueAsString()
+		case *DUuid:
+			s = t.UUID.String()
 		case *DString:
 			s = string(*t)
 		case *DCollatedString:
@@ -2258,7 +2281,21 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return NewDBytes(DBytes(*t)), nil
 		case *DCollatedString:
 			return NewDBytes(DBytes(t.Contents)), nil
+		case *DUuid:
+			return NewDBytes(DBytes(t.GetBytes())), nil
 		case *DBytes:
+			return d, nil
+		}
+
+	case *UUIDColType:
+		switch t := d.(type) {
+		case *DString:
+			return ParseDUuidFromString(string(*t))
+		case *DCollatedString:
+			return ParseDUuidFromString(t.Contents)
+		case *DBytes:
+			return ParseDUuidFromBytes([]byte(*t))
+		case *DUuid:
 			return d, nil
 		}
 
@@ -2423,10 +2460,10 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 	var subscriptIdx int
 	for i, t := range expr.Indirection {
 		if t.Slice {
-			return nil, util.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
+			return nil, pgerror.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
 		}
 		if i > 0 {
-			return nil, util.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
+			return nil, pgerror.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
 		}
 
 		d, err := t.Begin.(TypedExpr).Eval(ctx)
@@ -2778,6 +2815,11 @@ func (t *DBool) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DBytes) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DUuid) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

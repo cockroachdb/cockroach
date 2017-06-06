@@ -51,8 +51,9 @@ func newTemplate(commonName string, lifetime time.Duration) (*x509.Certificate, 
 		return nil, err
 	}
 
-	notBefore := timeutil.Now().Add(validFrom)
-	notAfter := notBefore.Add(lifetime)
+	now := timeutil.Now()
+	notBefore := now.Add(validFrom)
+	notAfter := now.Add(lifetime)
 
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
@@ -97,6 +98,20 @@ func GenerateCA(signer crypto.Signer, lifetime time.Duration) ([]byte, error) {
 	return certBytes, nil
 }
 
+func checkLifetimeAgainstCA(cert, ca *x509.Certificate) error {
+	if ca.NotAfter.After(cert.NotAfter) || ca.NotAfter.Equal(cert.NotAfter) {
+		return nil
+	}
+
+	now := timeutil.Now()
+	// Truncate the lifetime to round hours, the maximum "pretty" duration.
+	niceCALifetime := ca.NotAfter.Sub(now).Hours()
+	niceCertLifetime := cert.NotAfter.Sub(now).Hours()
+	return errors.Errorf("CA lifetime is %fh, shorter than the requested %fh. "+
+		"Renew CA certificate, or rerun with --lifetime=%dh for a shorter duration.",
+		niceCALifetime, niceCertLifetime, int64(niceCALifetime))
+}
+
 // GenerateServerCert generates a server certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the node public key, the certificate lifetime,
 // and the list of hosts/ip addresses this certificate applies to.
@@ -107,8 +122,14 @@ func GenerateServerCert(
 	lifetime time.Duration,
 	hosts []string,
 ) ([]byte, error) {
+	// Create template for user "NodeUser".
 	template, err := newTemplate(NodeUser, lifetime)
 	if err != nil {
+		return nil, err
+	}
+
+	// Don't issue certificates that outlast the CA cert.
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
 		return nil, err
 	}
 
@@ -148,8 +169,14 @@ func GenerateClientCert(
 		return nil, errors.Errorf("user cannot be empty")
 	}
 
+	// Create template for "user".
 	template, err := newTemplate(user, lifetime)
 	if err != nil {
+		return nil, err
+	}
+
+	// Don't issue certificates that outlast the CA cert.
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
 		return nil, err
 	}
 

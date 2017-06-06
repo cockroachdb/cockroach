@@ -515,16 +515,19 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(stopperContext(stopper))
 
-	if len(args) != 1 {
-		return errors.New("one argument required: dir")
-	}
-
 	var rangeID roachpb.RangeID
-	if len(args) == 2 {
+	switch len(args) {
+
+	}
+	switch len(args) {
+	case 2:
 		var err error
 		if rangeID, err = parseRangeID(args[1]); err != nil {
 			return err
 		}
+	case 1:
+	default:
+		return errors.New("arguments: dir [range_id]")
 	}
 
 	db, err := openStore(cmd, args[0], stopper)
