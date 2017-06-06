@@ -306,7 +306,7 @@ func (mr *MetricsRecorder) GetStatusSummary(ctx context.Context) *NodeStatus {
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning(context.TODO(), "attempt to generate status summary before NodeID allocation.")
+			log.Warning(ctx, "attempt to generate status summary before NodeID allocation.")
 		}
 		return nil
 	}
