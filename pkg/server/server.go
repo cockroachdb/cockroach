@@ -446,6 +446,21 @@ type ListenError struct {
 	Addr string
 }
 
+func (s *Server) isAnyStoreBootstrapped(ctx context.Context) (bool, error) {
+	for _, e := range s.engines {
+		if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
+			// NotBootstrappedError is expected.
+			if _, ok := err.(*storage.NotBootstrappedError); !ok {
+				return false, err
+			}
+		} else {
+			return true, nil
+		}
+	}
+	
+	return false, nil
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context.
 //
@@ -656,39 +671,36 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.stopper.AddCloser(&s.engines)
 
-	// We might have to sleep a bit to protect against this node producing non-
-	// monotonic timestamps. Before restarting, its clock might have been driven
-	// by other nodes' fast clocks, but when we restarted, we lost all this
-	// information. For example, a client might have written a value at a
-	// timestamp that's in the future of the restarted node's clock, and if we
-	// don't do something, the same client's read would not return the written
-	// value. So, we wait up to MaxOffset; we couldn't have served timestamps more
-	// than MaxOffset in the future (assuming that MaxOffset was not changed, see
-	// #9733).
-	//
-	// As an optimization for tests, we don't sleep if all the stores are brand
-	// new. In this case, the node will not serve anything anyway until it
-	// synchronizes with other nodes.
-	{
-		anyStoreBootstrapped := false
-		for _, e := range s.engines {
-			if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
-				// NotBootstrappedError is expected.
-				if _, ok := err.(*storage.NotBootstrappedError); !ok {
-					return err
-				}
-			} else {
-				anyStoreBootstrapped = true
-				break
-			}
+	if anyStoreBootstrapped, err := s.isAnyStoreBootstrapped(ctx); err != nil {
+		return err
+	} else if anyStoreBootstrapped {
+		// We might have to sleep a bit to protect against this node producing non-
+		// monotonic timestamps. Before restarting, its clock might have been driven
+		// by other nodes' fast clocks, but when we restarted, we lost all this
+		// information. For example, a client might have written a value at a
+		// timestamp that's in the future of the restarted node's clock, and if we
+		// don't do something, the same client's read would not return the written
+		// value. So, we wait up to MaxOffset; we couldn't have served timestamps more
+		// than MaxOffset in the future (assuming that MaxOffset was not changed, see
+		// #9733).
+		//
+		// As an optimization for tests, we don't sleep if all the stores are brand
+		// new. In this case, the node will not serve anything anyway until it
+		// synchronizes with other nodes.
+		sleepDuration := s.clock.MaxOffset() - timeutil.Since(startTime)
+		if sleepDuration > 0 {
+			log.Infof(ctx, "sleeping for %s to guarantee HLC monotonicity", sleepDuration)
+			time.Sleep(sleepDuration)
 		}
-		if anyStoreBootstrapped {
-			sleepDuration := s.clock.MaxOffset() - timeutil.Since(startTime)
-			if sleepDuration > 0 {
-				log.Infof(ctx, "sleeping for %s to guarantee HLC monotonicity", sleepDuration)
-				time.Sleep(sleepDuration)
-			}
-		}
+	} else if len(s.cfg.GossipBootstrapResolvers) == 0 {
+		// If the _unfiltered_ list of hosts from the --join flag is
+		// empty, then this node can bootstrap a new cluster. We disallow
+		// this if this node is being started with itself specified as a
+		// --join host, because that's too likely to be operator error.
+	} else {
+		log.Info(ctx, "No stores bootstrapped and --join flag specified, starting Init Server")
+		initServer := newInitServer(s)
+		initServer.RegisterService(s.grpc)
 	}
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
@@ -706,6 +718,7 @@ func (s *Server) Start(ctx context.Context) error {
 		len(s.cfg.GossipBootstrapResolvers) == 0, /* canBootstrap */
 	)
 	if err != nil {
+		log.Error(ctx, "Node.start error: ", err)
 		return err
 	}
 	log.Event(ctx, "started node")
