@@ -53,7 +53,7 @@ import (
 //
 // CommandQueue is not thread safe.
 type CommandQueue struct {
-	readsBuffer map[*cmd]bool
+	readsBuffer map[*cmd]*cmdArgs
 	reads       interval.Tree
 	writes      interval.Tree
 	idAlloc     int64
@@ -70,6 +70,12 @@ type CommandQueue struct {
 		writeCommands   int64
 		maxOverlapsSeen int64 // will be reset to 0 during metrics processing.
 	}
+}
+
+type cmdArgs struct {
+	readOnly  bool
+	timestamp hlc.Timestamp
+	spans     []roachpb.Span
 }
 
 type cmd struct {
@@ -141,7 +147,7 @@ func (c *cmd) String() string {
 // typically contain many spans, but are spatially disjoint.
 func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 	cq := &CommandQueue{
-		readsBuffer:          make(map[*cmd]bool),
+		readsBuffer:          make(map[*cmd]*cmdArgs),
 		reads:                interval.NewTree(interval.ExclusiveOverlapper),
 		writes:               interval.NewTree(interval.ExclusiveOverlapper),
 		wRg:                  interval.NewRangeTree(),
@@ -419,12 +425,13 @@ func (cq *CommandQueue) getOverlaps(
 	if !readOnly {
 		// Upon a write cmd, flush out cmds from readsBuffer to the read interval
 		// tree.
-		for cmd := range cq.readsBuffer {
+		for cmd, cmdArgs := range cq.readsBuffer {
 			cmd.buffered = false
+			cq.prepareCmd(cmd, cmdArgs)
 			cq.insertIntoTree(cmd)
 		}
 		// Allocate a new map (thereby deleting all previous entries)
-		cq.readsBuffer = make(map[*cmd]bool)
+		cq.readsBuffer = make(map[*cmd]*cmdArgs)
 
 		cq.reads.DoMatching(func(i interval.Interface) bool {
 			c := i.(*cmd)
@@ -489,22 +496,11 @@ func (o *overlapHeap) PopOverlap() *cmd {
 	return x.(*cmd)
 }
 
-// add adds commands to the queue which affect the specified key ranges. Ranges
-// without an end key affect only the start key. The returned interface is the
-// key for the command queue and must be re-supplied on subsequent invocation
-// of remove().
-//
-// Either all supplied spans must be range-global or range-local. Failure to
-// obey with this restriction results in a fatal error.
-//
-// Returns a nil `cmd` when no spans are given.
-//
-// add should be invoked after waiting on already-executing, overlapping
-// commands via the WaitGroup initialized through getWait().
-func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roachpb.Span) *cmd {
-	if len(spans) == 0 {
-		return nil
-	}
+func (cq *CommandQueue) prepareCmd(c *cmd, cmdArgs *cmdArgs) {
+	spans := cmdArgs.spans
+	timestamp := cmdArgs.timestamp
+	readOnly := cmdArgs.readOnly
+
 	prepareSpans(spans)
 
 	// Compute the min and max key that covers all of the spans.
@@ -531,25 +527,18 @@ func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roac
 		)
 	}
 
-	numCmds := 1
-	if len(spans) > 1 {
-		numCmds += len(spans)
-	}
-	cmds := make([]cmd, numCmds)
-
 	// Create the covering entry.
-	cmd := &cmds[0]
-	cmd.id = cq.nextID()
-	cmd.key = coveringSpan.AsRange()
-	cmd.readOnly = readOnly
-	cmd.timestamp = timestamp
-	cmd.expanded = false
+	c.id = cq.nextID()
+	c.key = coveringSpan.AsRange()
+	c.readOnly = readOnly
+	c.timestamp = timestamp
+	c.expanded = false
 
 	if len(spans) > 1 {
 		// Populate the covering entry's children.
-		cmd.children = cmds[1:]
+		c.children = make([]cmd, len(spans))
 		for i, span := range spans {
-			child := &cmd.children[i]
+			child := &c.children[i]
 			child.id = cq.nextID()
 			child.key = span.AsRange()
 			child.readOnly = readOnly
@@ -558,20 +547,41 @@ func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roac
 		}
 	}
 
-	if cmd.readOnly {
-		cq.localMetrics.readCommands += int64(cmd.cmdCount())
+	if readOnly {
+		cq.localMetrics.readCommands += int64(c.cmdCount())
 	} else {
-		cq.localMetrics.writeCommands += int64(cmd.cmdCount())
+		cq.localMetrics.writeCommands += int64(c.cmdCount())
+	}
+}
+
+// add adds commands to the queue which affect the specified key ranges. Ranges
+// without an end key affect only the start key. The returned interface is the
+// key for the command queue and must be re-supplied on subsequent invocation
+// of remove().
+//
+// Either all supplied spans must be range-global or range-local. Failure to
+// obey with this restriction results in a fatal error.
+//
+// Returns a nil `cmd` when no spans are given.
+//
+// add should be invoked after waiting on already-executing, overlapping
+// commands via the WaitGroup initialized through getWait().
+func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roachpb.Span) *cmd {
+	if len(spans) == 0 {
+		return nil
 	}
 
+	cmd := &cmd{}
+	cmdArgs := &cmdArgs{readOnly, timestamp, spans}
 	// Insert a readOnly command into the readsBuffer instead of mutating the
 	// interval tree.
 	if cmd.readOnly {
 		cmd.buffered = true
-		cq.readsBuffer[cmd] = true
+		cq.readsBuffer[cmd] = cmdArgs
 		return cmd
 	}
 
+	cq.prepareCmd(cmd, cmdArgs)
 	cq.insertIntoTree(cmd)
 	return cmd
 }
@@ -606,14 +616,13 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 
 	// If cmd is buffered, just remove it from readsBuffer and be done.
 	if cmd.buffered {
-		if !cq.readsBuffer[cmd] {
+		if _, ok := cq.readsBuffer[cmd]; !ok {
 			panic(fmt.Sprintf("buffered cmd %d not found in readsBuffer", cmd.id))
 		}
 		delete(cq.readsBuffer, cmd)
-		// Nobody can be waiting on a buffered read, but close its channel
-		// nevertheless for clarity.
-		if ch := cmd.pending; ch != nil {
-			close(ch)
+		// Nobody can be waiting on a buffered read, assert that its channel is nil
+		if cmd.pending != nil {
+			panic(fmt.Sprintf("buffered cmd %d has non-nil pending chan", cmd.id))
 		}
 		return
 	}
