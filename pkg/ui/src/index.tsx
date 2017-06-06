@@ -40,6 +40,7 @@ import QueryPlan from "src/views/devtools/containers/queryPlan";
 import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
 import ClusterViz from "src/views/devtools/containers/clusterViz";
+import ProblemRanges from "src/views/devtools/containers/problemRanges";
 
 import { alertDataSync } from "src/redux/alerts";
 
@@ -75,6 +76,9 @@ ReactDOM.render(
         </Route>
         <Route path="queryplan" component={ QueryPlan } />
         <Route path="clusterviz" component={ ClusterViz } />
+        <Route path="debug">
+          <Route path="problemranges" component={ ProblemRanges } />
+        </Route>
       </Route>
     </Router>
   </Provider>,

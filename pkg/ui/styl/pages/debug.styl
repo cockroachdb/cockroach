@@ -1,0 +1,54 @@
+$debug-table
+  margin 0 0 40px
+  display table
+  width 100%
+
+  &__row
+    display table-row
+    background-color $light-gray-2
+
+    &--header
+      font-weight 900
+      color white
+      border 0
+
+  &__cell
+    padding 6px 12px
+    display table-cell
+    height 20px
+    overflow hidden
+    text-overflow ellipsis
+    white-space nowrap
+    max-width 200px
+    border-width 1px 1px 0 0
+    border-color rgba(0, 0, 0, .1)
+    border-style solid
+
+    &--short
+      max-width 1px
+
+$debug-table-alternateing
+  alternating-background $light-gray-2 $lighter-gray
+
+.failure-table
+  @extend $debug-table
+
+  &__row
+    @extend $debug-table-alternateing
+
+    &&--header
+      background-color $secondary-red-3
+
+  &__cell
+    white-space normal
+
+
+.problems-table
+  @extend $debug-table
+
+  &__row
+    background-color white
+
+  &__cell
+    white-space normal
+

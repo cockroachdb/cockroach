@@ -853,7 +853,6 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle("/health", gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	s.mux.Handle(rangeDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugRange)))
-	s.mux.Handle(problemRangesDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleProblemRanges)))
 	s.mux.Handle(certificatesDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugCertificates)))
 	s.mux.Handle(networkDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugNetwork)))
 	s.mux.Handle(nodesDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugNodes)))
