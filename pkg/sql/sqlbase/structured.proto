@@ -413,7 +413,15 @@ message TableDescriptor {
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   // See comment above.
   optional bool up_version = 6 [(gogoproto.nullable) = false];
-  // Last modification time of the table descriptor.
+  // The timestamp of the last transaction that incremented the version of
+  // the table descriptor. Note that modifying the table descriptor and
+  // setting the up_version bit without incrementing the version does not
+  // change the modification_time. This time can be used as a time lower bound
+  // for a valid use of a table lease holding a particular version of
+  // a table descriptor, without worrying about the table descriptor being
+  // modified to queue up schema changes or write schema change checkpoints
+  // that do change the write timestamp of the table descriptor at the mvcc
+  // layer. Only incrementing the table version truly modifies it!
   optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
   repeated ColumnDescriptor columns = 8 [(gogoproto.nullable) = false];
   // next_column_id is used to ensure that deleted column ids are not reused.

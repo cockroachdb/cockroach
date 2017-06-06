@@ -497,26 +497,13 @@ func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		stmt, err := tx.Prepare(`INSERT INTO d.kv (k,v) VALUES ($1, $2);`)
-		if err != nil {
-			t.Fatal(err)
+		if _, err := tx.Prepare(`
+INSERT INTO d.kv (k,v) VALUES ($1, $2);
+			`); !testutils.IsError(err, "table \"d.kv\" does not exist") {
+			t.Fatalf("err = %v", err)
 		}
 
-		// INSERT works because it is using a cached descriptor that is leased.
-		res, err := stmt.Exec('c', 'd')
-		if err != nil {
-			t.Fatal(err)
-		}
-		stmt.Close()
-		affected, err := res.RowsAffected()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if affected != 1 {
-			t.Fatalf("unexpected number of rows affected: %d", affected)
-		}
-
-		if err := tx.Commit(); err != nil {
+		if err := tx.Rollback(); err != nil {
 			t.Fatal(err)
 		}
 	}

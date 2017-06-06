@@ -282,18 +282,24 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 
 	var txn client.Txn
 
-	if lc.removeLeaseIfExpiring(context.TODO(), &txn, nil) {
-		t.Error("expected false with nil input")
+	if version, ok := lc.removeLeaseIfExpiring(
+		context.TODO(), &txn, nil,
+	); !ok || version != sqlbase.InvalidDescriptorVersion {
+		t.Errorf("expected %v with a nil lease at version: %d", ok, version)
 	}
 
 	// Add a lease to the planner.
 	d := int64(LeaseDuration)
-	l1 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
+	const expectedVersion = 5
+	l1 := &LeaseState{
+		TableDescriptor: sqlbase.TableDescriptor{Version: expectedVersion},
+		expiration:      parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)},
+	}
 	lc.leases = append(lc.leases, l1)
 	et := hlc.Timestamp{WallTime: l1.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)
 
-	if lc.removeLeaseIfExpiring(context.TODO(), &txn, l1) {
+	if _, ok := lc.removeLeaseIfExpiring(context.TODO(), &txn, l1); ok {
 		t.Error("expected false with a non-expiring lease")
 	}
 	if d := *txn.GetDeadline(); d != et {
@@ -304,10 +310,15 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	mc.Increment(d + 1)
 
 	// Add another lease.
-	l2 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
+	l2 := &LeaseState{
+		TableDescriptor: sqlbase.TableDescriptor{Version: expectedVersion + 1},
+		expiration:      parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)},
+	}
 	lc.leases = append(lc.leases, l2)
-	if !lc.removeLeaseIfExpiring(context.TODO(), &txn, l1) {
-		t.Error("expected true with an expiring lease")
+	if version, ok := lc.removeLeaseIfExpiring(
+		context.TODO(), &txn, l1,
+	); !ok || version != expectedVersion {
+		t.Errorf("expected %v with an expiring lease at version: %d", ok, version)
 	}
 	et = hlc.Timestamp{WallTime: l2.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)

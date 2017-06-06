@@ -184,6 +184,8 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 		return nil
 	})
 
+	n.p.session.leases.addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true)
+
 	if err := n.p.txn.Run(ctx, b); err != nil {
 		return err
 	}

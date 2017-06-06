@@ -982,12 +982,14 @@ func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
 	return firstWriteIdx, nil
 }
 
-// UpdateStateOnRemoteRetryableErr updates the Txn, and the Transaction proto
+// UpdateStateOnRetryableErr updates the Txn, and the Transaction proto
 // inside it, in response to an error encountered when running a request through
 // the txn. If the error is not a RetryableTxnError, then this is a no-op. For a
 // retryable error, the Transaction proto is either initialized with the updated
 // proto from the error, or a new Transaction proto is initialized.
-func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr roachpb.Error) {
+// This needs to be called when a SQL statement hits a retryable error outside of the
+// TxnCoordSender, like in distSQL or retryable errors in SQL logic.
+func (txn *Txn) UpdateStateOnRetryableErr(ctx context.Context, pErr roachpb.Error) {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 
@@ -998,18 +1000,6 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr roachp
 		// DistSQL requests (like all SQL requests) are always supposed to be done
 		// in a transaction.
 		log.Fatalf(ctx, "unexpected retryable error with no txn ran through DistSQL: %s", pErr)
-	}
-
-	// Assert that the TxnCoordSender doesn't have any state for this transaction
-	// (and it shouldn't, since DistSQL isn't supposed to do any works in
-	// transaction that had performed writes and hence started being tracked). If
-	// the TxnCoordSender were to have state, it'd be a bad thing that we're not
-	// updating it.
-	// TODO(andrei): remove nil check once #15024 is merged.
-	if txnID := pErr.GetTxn().ID; txnID != nil {
-		if _, ok := txn.db.GetSender().(SenderWithDistSQLBackdoor).GetTxnState(*txnID); ok {
-			log.Fatalf(ctx, "unexpected state in TxnCoordSender for transaction in error: %s", pErr)
-		}
 	}
 
 	// Emulate the processing that the TxnCoordSender would have done on this

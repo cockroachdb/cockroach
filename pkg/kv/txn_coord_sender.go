@@ -853,6 +853,8 @@ func (tc *TxnCoordSender) updateState(
 					tc.metrics.RestartsSerializable.Inc(1)
 				case roachpb.RETRY_POSSIBLE_REPLAY:
 					tc.metrics.RestartsPossibleReplay.Inc(1)
+				case roachpb.RETRY_TABLE_FROM_FUTURE, roachpb.RETRY_TABLE_VERSION_CHANGE:
+					panic("illegal transaction retry error")
 				}
 			}
 			newTxn = roachpb.PrepareTransactionForRetry(ctx, pErr, ba.UserPriority)
@@ -970,16 +972,6 @@ func (tc *TxnCoordSender) updateState(
 	}
 
 	return pErr
-}
-
-// GetTxnState is part of the SenderWithDistSQLBackdoor interface.
-func (tc *TxnCoordSender) GetTxnState(txnID uuid.UUID) (roachpb.Transaction, bool) {
-	tc.txnMu.Lock()
-	defer tc.txnMu.Unlock()
-	if txnMeta, ok := tc.txnMu.txns[txnID]; ok {
-		return txnMeta.txn, true
-	}
-	return roachpb.Transaction{}, false
 }
 
 // TODO(tschottdorf): this method is somewhat awkward but unless we want to

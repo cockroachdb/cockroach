@@ -750,7 +750,15 @@ type TableDescriptor struct {
 	Version DescriptorVersion `protobuf:"varint,5,opt,name=version,casttype=DescriptorVersion" json:"version"`
 	// See comment above.
 	UpVersion bool `protobuf:"varint,6,opt,name=up_version,json=upVersion" json:"up_version"`
-	// Last modification time of the table descriptor.
+	// The timestamp of the last transaction that incremented the version of
+	// the table descriptor. Note that modifying the table descriptor and
+	// setting the up_version bit without incrementing the version does not
+	// change the modification_time. This time can be used as a time lower bound
+	// for a valid use of a table lease holding a particular version of
+	// a table descriptor, without worrying about the table descriptor being
+	// modified to queue up schema changes or write schema change checkpoints
+	// that do change the write timestamp of the table descriptor at the mvcc
+	// layer. Only incrementing the table version truly modifies it!
 	ModificationTime cockroach_util_hlc.Timestamp `protobuf:"bytes,7,opt,name=modification_time,json=modificationTime" json:"modification_time"`
 	Columns          []ColumnDescriptor           `protobuf:"bytes,8,rep,name=columns" json:"columns"`
 	// next_column_id is used to ensure that deleted column ids are not reused.

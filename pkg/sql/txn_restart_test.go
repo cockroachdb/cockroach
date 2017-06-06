@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1400,5 +1402,205 @@ func TestDistSQLRetryableError(t *testing.T) {
 
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Test that a transaction cannot use a table lease referencing a table
+// descriptor written after the transaction timestamp.
+func TestRetryTableFromFuture(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	retries := 0
+	modifySchema := func() {}
+	params.Knobs = base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			StatementFilter: func(ctx context.Context, stmt string, result *sql.Result) {
+				if strings.HasPrefix(stmt, `INSERT INTO d.kv(k, v) VALUES`) {
+					retries++
+				}
+			},
+		},
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+				RemoveOnceDereferenced: true,
+				LeaseAcquiringEvent: func(id sqlbase.ID) {
+					if id == 51 {
+						if modifySchema != nil {
+							modifySchema()
+						}
+					}
+				},
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE d;
+CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE d.read (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	modifySchema = func() {
+		modifySchema = nil
+		if _, err := sqlDB.Exec(`CREATE INDEX foo ON d.kv (v);`); err != nil {
+			t.Error(err)
+		}
+	}
+	retries = 0
+	if _, err := sqlDB.Exec(`INSERT INTO d.kv (k,v) VALUES ('a', 'b');`); err != nil {
+		t.Fatal(err)
+	}
+
+	if retries != 2 {
+		t.Fatalf("%d retries", retries)
+	}
+
+	// Test that a command that can't be retried automatically generates an error
+	// with the correct code.
+	modifySchema = func() {
+		modifySchema = nil
+		if _, err := sqlDB.Exec(`CREATE INDEX bar ON d.kv (v);`); err != nil {
+			t.Error(err)
+		}
+	}
+	retries = 0
+
+	for i := 0; i < 2; i++ {
+		tx, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Read from a dumb table so that a transaction ID is allocated the
+		// the transaction and we don't see "retryable error from another txn"
+		//
+		// TODO(vivek): Remove once we assign a Txn ID at the start of a
+		// transaction instead of in the TxnCoordinator.
+		rows, err := tx.Query(`SELECT * FROM d.read;`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+
+		_, err = tx.Exec(`INSERT INTO d.kv (k,v) VALUES ('c', 'd');`)
+
+		if i == 0 {
+			if !isRetryableErr(err) {
+				t.Fatalf("err = %v", err)
+			}
+
+			if err := tx.Rollback(); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if retries != 2 {
+		t.Fatalf("%d retries", retries)
+	}
+}
+
+// Test that a transaction cannot use two table leases for the same table
+// at different versions.
+func TestRetryTableVersionChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	// Set the minimum lease duration such that the next lease acquisition will
+	// require the lease to be reacquired.
+	savedLeaseDuration, savedMinLeaseDuration := sql.LeaseDuration, sql.MinLeaseDuration
+	defer func() {
+		sql.LeaseDuration, sql.MinLeaseDuration = savedLeaseDuration, savedMinLeaseDuration
+	}()
+	sql.MinLeaseDuration = 50 * time.Millisecond
+	sql.LeaseDuration = 2 * sql.MinLeaseDuration
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE d;
+CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	retried := false
+	for i := 0; i < 2; i++ {
+		tx, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		rows, err := tx.Query(`SELECT * FROM d.kv;`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+
+		// Increment the descriptor version.
+		if i == 0 {
+			func() {
+				leaseMgr := s.LeaseManager().(*sql.LeaseManager)
+				var version sqlbase.DescriptorVersion
+				id := sqlbase.ID(51)
+				ctx := context.TODO()
+				if _, err := leaseMgr.Publish(ctx, id, func(table *sqlbase.TableDescriptor) error {
+					// Publish nothing; only update the version.
+					version = table.Version
+					return nil
+				}, nil); err != nil {
+					t.Fatal(err)
+				}
+				// Grab a lease at the latest version so that we are confident
+				// that all future leases will be taken at the latest version.
+				lease, err := leaseMgr.Acquire(ctx, id, version+1)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := leaseMgr.Release(lease); err != nil {
+					t.Fatal(err)
+				}
+
+				time.Sleep(sql.MinLeaseDuration)
+			}()
+		}
+
+		rows, err = tx.Query(`SELECT * FROM d.kv;`)
+		if i == 0 {
+			if !isRetryableErr(err) {
+				t.Fatalf("err = %v", err)
+			}
+
+			if err := tx.Rollback(); err != nil {
+				t.Fatal(err)
+			}
+			retried = true
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if !retried {
+		t.Fatal("not retried")
 	}
 }
