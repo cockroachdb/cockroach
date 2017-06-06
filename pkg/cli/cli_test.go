@@ -1226,6 +1226,7 @@ func TestFlagUsage(t *testing.T) {
 
 Available Commands:
   start       start a node
+  init        TODO
   cert        create ca, node, and client certs
   quit        drain and shutdown node
 
