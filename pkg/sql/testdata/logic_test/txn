@@ -613,3 +613,9 @@ query I
 SELECT COUNT(*) FROM kv WHERE k = 'savepoint'
 ----
 0
+
+statement ok
+BEGIN READ WRITE; COMMIT
+
+statement error syntax error at or near "only"
+BEGIN READ ONLY; ROLLBACK
