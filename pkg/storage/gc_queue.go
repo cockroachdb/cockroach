@@ -101,6 +101,7 @@ func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
+			needsSystemConfig:    true,
 			acceptsUnsplitRanges: false,
 			successes:            store.metrics.GCQueueSuccesses,
 			failures:             store.metrics.GCQueueFailures,
