@@ -586,6 +586,8 @@ type Store struct {
 		// raft.
 		droppedPlaceholders int32
 	}
+
+	computeInitialMetrics sync.Once
 }
 
 var _ client.Sender = &Store{}
@@ -1545,12 +1547,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				return
 			}
 		})
-
-		// Run metrics computation up front to populate initial statistics.
-		if err = s.ComputeMetrics(ctx, -1); err != nil {
-			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
-		}
-		log.Event(ctx, "computed initial metrics")
 	}
 
 	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
@@ -1787,6 +1783,17 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.
 func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
+	s.computeInitialMetrics.Do(func() {
+		ctx := s.AnnotateCtx(context.Background())
+		// Metrics depend in part on the system config. Compute them as soon as we
+		// get the first system config, then periodically in the background
+		// (managed by the Node).
+		if err := s.ComputeMetrics(ctx, -1); err != nil {
+			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
+		}
+		log.Event(ctx, "computed initial metrics")
+	})
+
 	// For every range, update its MaxBytes and check if it needs to be split or
 	// merged.
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
