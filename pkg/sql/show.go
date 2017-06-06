@@ -412,33 +412,17 @@ func (p *planner) showCreateTable(
 			buf.WriteString(",")
 		}
 		buf.WriteString("\n\t")
-		fmt.Fprintf(&buf, "%s %s", quoteNames(col.Name), col.Type.SQLString())
-		if col.Nullable {
-			buf.WriteString(" NULL")
-		} else {
-			buf.WriteString(" NOT NULL")
-		}
-		if col.DefaultExpr != nil {
-			fmt.Fprintf(&buf, " DEFAULT %s", *col.DefaultExpr)
-		}
+		buf.WriteString(col.SQLString())
 		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
 			// Only set primary if the primary key is on a visible column (not rowid).
 			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
 				quoteNames(desc.PrimaryIndex.Name),
-				makeIndexColNames(desc.PrimaryIndex),
+				desc.PrimaryIndex.ColNamesString(),
 			)
 		}
 	}
 	buf.WriteString(primary)
 	for _, idx := range desc.Indexes {
-		var storing string
-		if len(idx.StoreColumnNames) > 0 {
-			storing = fmt.Sprintf(" STORING (%s)", quoteNames(idx.StoreColumnNames...))
-		}
-		interleave, err := p.showCreateInterleave(ctx, &idx)
-		if err != nil {
-			return "", err
-		}
 		if fk := idx.ForeignKey; fk.IsSet() {
 			fkTable, err := p.session.leases.getTableLeaseByID(ctx, p.txn, fk.Table)
 			if err != nil {
@@ -455,11 +439,12 @@ func (p *planner) showCreateTable(
 				quoteNames(fkIdx.ColumnNames...),
 			)
 		} else {
-			fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s%s",
-				isUnique[idx.Unique],
-				quoteNames(idx.Name),
-				makeIndexColNames(idx),
-				storing,
+			interleave, err := p.showCreateInterleave(ctx, &idx)
+			if err != nil {
+				return "", err
+			}
+			fmt.Fprintf(&buf, ",\n\t%s%s",
+				idx.SQLString(""),
 				interleave,
 			)
 		}
@@ -495,19 +480,6 @@ func (p *planner) showCreateTable(
 
 	return buf.String(), nil
 }
-
-func makeIndexColNames(d sqlbase.IndexDescriptor) string {
-	var buf bytes.Buffer
-	for i, name := range d.ColumnNames {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		fmt.Fprintf(&buf, "%s %s", parser.Name(name), d.ColumnDirections[i])
-	}
-	return buf.String()
-}
-
-var isUnique = map[bool]string{true: "UNIQUE "}
 
 // quoteName quotes and adds commas between names.
 func quoteNames(names ...string) string {
