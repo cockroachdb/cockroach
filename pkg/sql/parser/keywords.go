@@ -283,6 +283,7 @@ var keywords = map[string]int{
 	"WITH":              WITH,
 	"WITHIN":            WITHIN,
 	"WITHOUT":           WITHOUT,
+	"WRITE":             WRITE,
 	"YEAR":              YEAR,
 	"ZONE":              ZONE,
 }

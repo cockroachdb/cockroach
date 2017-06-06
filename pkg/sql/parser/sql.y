@@ -502,6 +502,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <*OnConflict> on_conflict
 
 %type <Statement>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list set_exprs_internal
+%type <empty> opt_read_write
 
 %type <NameList> opt_storing
 %type <*ColumnTableDef> column_def
@@ -693,7 +694,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
 
-%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT
+%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WRITE
 
 %token <str>   YEAR
 
@@ -2281,11 +2282,11 @@ savepoint_stmt:
 
 // BEGIN / START / COMMIT / END / ROLLBACK / ...
 transaction_stmt:
-  BEGIN opt_transaction opt_transaction_mode_list
+  BEGIN opt_transaction opt_transaction_mode_list opt_read_write
   {
     $$.val = $3.stmt()
   }
-| START TRANSACTION opt_transaction_mode_list
+| START TRANSACTION opt_transaction_mode_list opt_read_write
   {
     $$.val = $3.stmt()
   }
@@ -2305,6 +2306,11 @@ transaction_stmt:
       $$.val = &RollbackTransaction{}
     }
   }
+
+opt_read_write:
+  READ WRITE {}
+| READ ONLY { return unimplemented(sqllex) }
+| /* EMPTY */ {}
 
 opt_transaction:
   TRANSACTION {}
@@ -5310,6 +5316,7 @@ unreserved_keyword:
 | VARYING
 | WITHIN
 | WITHOUT
+| WRITE
 | YEAR
 | ZONE
 
