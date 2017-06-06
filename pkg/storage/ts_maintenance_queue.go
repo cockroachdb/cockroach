@@ -94,6 +94,7 @@ func newTimeSeriesMaintenanceQueue(
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
+			needsSystemConfig:    false,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.TimeSeriesMaintenanceQueueSuccesses,
 			failures:             store.metrics.TimeSeriesMaintenanceQueueFailures,
@@ -126,7 +127,7 @@ func (q *timeSeriesMaintenanceQueue) shouldQueue(
 }
 
 func (q *timeSeriesMaintenanceQueue) process(
-	ctx context.Context, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, repl *Replica, _ config.SystemConfig,
 ) error {
 	desc := repl.Desc()
 	snap := repl.store.Engine().NewSnapshot()
