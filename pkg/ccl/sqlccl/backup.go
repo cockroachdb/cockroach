@@ -205,27 +205,26 @@ func backupJobDescription(
 	backup *parser.Backup, to string, incrementalFrom []string,
 ) (string, error) {
 	b := parser.Backup{
-		AsOf:            backup.AsOf,
-		Options:         backup.Options,
-		Targets:         backup.Targets,
-		IncrementalFrom: make(parser.Exprs, len(incrementalFrom)),
+		AsOf:    backup.AsOf,
+		Options: backup.Options,
+		Targets: backup.Targets,
 	}
 
 	to, err := storageccl.SanitizeExportStorageURI(to)
 	if err != nil {
 		return "", err
 	}
-	backup.To = parser.NewDString(to)
+	b.To = parser.NewDString(to)
 
-	for i, from := range incrementalFrom {
+	for _, from := range incrementalFrom {
 		sanitizedFrom, err := storageccl.SanitizeExportStorageURI(from)
 		if err != nil {
 			return "", err
 		}
-		b.IncrementalFrom[i] = parser.NewDString(sanitizedFrom)
+		b.IncrementalFrom = append(b.IncrementalFrom, parser.NewDString(sanitizedFrom))
 	}
 
-	return backup.String(), nil
+	return b.String(), nil
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
