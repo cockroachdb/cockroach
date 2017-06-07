@@ -17,6 +17,8 @@
 package distsqlrun
 
 import (
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -57,6 +59,8 @@ func (jb *joinerBase) init(
 		jb.emptyRight[i].Datum = parser.DNull
 	}
 
+	jb.combinedRow = make(sqlbase.EncDatumRow, len(leftTypes)+len(rightTypes))
+
 	types := make([]sqlbase.ColumnType, 0, len(leftTypes)+len(rightTypes))
 	types = append(types, leftTypes...)
 	types = append(types, rightTypes...)
@@ -67,55 +71,56 @@ func (jb *joinerBase) init(
 	return jb.out.init(post, types, &flowCtx.evalCtx, output)
 }
 
-// render evaluates the provided on-condition and constructs a row with columns
-// from both rows as specified by the provided output columns. We expect left or
-// right to be nil if there was no explicit "join" match, the on condition is
-// then evaluated on a combinedRow with null values for the columns of the nil
-// row. render returns a nil row if no row is to be emitted (eg. if join type is
-// inner join and one of the given rows is nil). The returned boolean indicates
-// whether or not the returned row failed the on condition.
-func (jb *joinerBase) render(
-	lrow, rrow sqlbase.EncDatumRow,
-) (ret sqlbase.EncDatumRow, failedOnCond bool, err error) {
-	lnil := lrow == nil
-	rnil := rrow == nil
-	if lnil {
-		if jb.joinType == innerJoin || jb.joinType == leftOuter {
-			return nil, false, nil
-		}
-		lrow = jb.emptyLeft
-	}
-	if rnil {
-		if jb.joinType == innerJoin || jb.joinType == rightOuter {
-			return nil, false, nil
-		}
-		rrow = jb.emptyRight
-	}
-	if jb.combinedRow == nil {
-		// In the corner case where lrow, rrow are empty rows, we want a non-nil
-		// combined row (even if it is empty).
-		jb.combinedRow = make(sqlbase.EncDatumRow, len(lrow)+len(rrow))
+// renderUnmatchedRow creates a result row given an unmatched row on either
+// side. Only used for outer joins.
+func (jb *joinerBase) renderUnmatchedRow(
+	row sqlbase.EncDatumRow, leftSide bool,
+) sqlbase.EncDatumRow {
+	lrow, rrow := jb.emptyLeft, jb.emptyRight
+	if leftSide {
+		lrow = row
+	} else {
+		rrow = row
 	}
 	jb.combinedRow = append(jb.combinedRow[:0], lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
-	res, err := jb.onCond.evalFilter(jb.combinedRow)
-	if err != nil {
-		return nil, false, err
-	}
-	if !res && !rnil && !lnil {
-		// The on condition failed and we're trying to render a row that's been
-		// successfully equality joined already. In this case, we need to
-		// output a failed match row that contains just the left side, if we're
-		// required to by the join style.
-		if jb.joinType == innerJoin || jb.joinType == rightOuter {
-			// If we're doing an inner or right outer join, we shouldn't return
-			// a row: we don't want to output rows with NULL right sides. We
-			// still need to notify the caller that the on condition failed,
-			// though, because they'll want to render the corresponding right
-			// side row by itself later.
-			return nil, true, nil
+	return jb.combinedRow
+}
+
+// maybeEmitUnmatchedRow is used for rows that don't match anything in the other
+// table; we emit them if it's the right kind of outer join, otherwise we
+// discard them.
+//
+// Returns false if no more rows are needed (in which case the inputs and the
+// output has been properly closed).
+func (jb *joinerBase) maybeEmitUnmatchedRow(
+	ctx context.Context, row sqlbase.EncDatumRow, leftSide bool,
+) bool {
+	switch jb.joinType {
+	case innerJoin:
+		return true
+	case rightOuter:
+		if leftSide {
+			return true
 		}
-		jb.combinedRow = append(jb.combinedRow[:len(lrow)], jb.emptyRight...)
+	case leftOuter:
+		if !leftSide {
+			return true
+		}
 	}
-	return jb.combinedRow, !res, nil
+
+	renderedRow := jb.renderUnmatchedRow(row, leftSide)
+	return emitHelper(ctx, &jb.out, renderedRow, ProducerMetadata{}, jb.leftSource, jb.rightSource)
+}
+
+// render constructs a row with columns from both sides. The ON condition is
+// evaluated; if it fails, returns nil.
+func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
+	jb.combinedRow = append(jb.combinedRow[:0], lrow...)
+	jb.combinedRow = append(jb.combinedRow, rrow...)
+	res, err := jb.onCond.evalFilter(jb.combinedRow)
+	if !res || err != nil {
+		return nil, err
+	}
+	return jb.combinedRow, nil
 }

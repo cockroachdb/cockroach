@@ -28,74 +28,45 @@ import (
 // batches of rows that are the cross-product of matching groups from each
 // stream.
 type streamMerger struct {
-	left         streamGroupAccumulator
-	right        streamGroupAccumulator
-	datumAlloc   sqlbase.DatumAlloc
-	outputBuffer [][2]sqlbase.EncDatumRow
+	left       streamGroupAccumulator
+	right      streamGroupAccumulator
+	datumAlloc sqlbase.DatumAlloc
 }
 
-// computeBatch adds the cross-product of the next matching set of groups
-// from each of streams to the output buffer.
-func (sm *streamMerger) computeBatch() error {
-	sm.outputBuffer = sm.outputBuffer[:0]
-
+// NextBatch returns a set of rows from the left stream and a set of rows from
+// the right stream, all matching on the equality columns. One of the sets can
+// be empty.
+func (sm *streamMerger) NextBatch() ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRow, error) {
 	lrow, err := sm.left.peekAtCurrentGroup()
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	rrow, err := sm.right.peekAtCurrentGroup()
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if lrow == nil && rrow == nil {
-		return nil
+		return nil, nil, nil
 	}
 
 	cmp, err := CompareEncDatumRowForMerge(lrow, rrow, sm.left.ordering, sm.right.ordering, &sm.datumAlloc)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	if cmp != 0 {
-		// lrow < rrow or rrow == nil, accumulate set of rows "equal" to lrow
-		// and emit (lrow, nil) tuples.
-		src := &sm.left
-		if cmp > 0 {
-			src = &sm.right
-		}
-		group, err := src.advanceGroup()
+	var leftGroup, rightGroup []sqlbase.EncDatumRow
+	if cmp <= 0 {
+		leftGroup, err = sm.left.advanceGroup()
 		if err != nil {
-			return err
-		}
-		for _, r := range group {
-			var outputRow [2]sqlbase.EncDatumRow
-			if cmp < 0 {
-				outputRow[0] = r
-				outputRow[1] = nil
-			} else {
-				outputRow[0] = nil
-				outputRow[1] = r
-			}
-			sm.outputBuffer = append(sm.outputBuffer, outputRow)
-		}
-		return nil
-	}
-	// We found matching groups; we'll output the cross-product.
-	leftGroup, err := sm.left.advanceGroup()
-	if err != nil {
-		return err
-	}
-	rightGroup, err := sm.right.advanceGroup()
-	if err != nil {
-		return err
-	}
-	// TODO(andrei): if groups are large and we have a limit, we might want to
-	// stream through the leftGroup instead of accumulating it all.
-	for _, l := range leftGroup {
-		for _, r := range rightGroup {
-			sm.outputBuffer = append(sm.outputBuffer, [2]sqlbase.EncDatumRow{l, r})
+			return nil, nil, err
 		}
 	}
-	return nil
+	if cmp >= 0 {
+		rightGroup, err = sm.right.advanceGroup()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return leftGroup, rightGroup, nil
 }
 
 // CompareEncDatumRowForMerge EncDatumRow compares two EncDatumRows for merging.
@@ -146,13 +117,6 @@ func CompareEncDatumRowForMerge(
 		}
 	}
 	return 0, nil
-}
-
-func (sm *streamMerger) NextBatch() ([][2]sqlbase.EncDatumRow, error) {
-	if err := sm.computeBatch(); err != nil {
-		return nil, err
-	}
-	return sm.outputBuffer, nil
 }
 
 // makeStreamMerger creates a streamMerger, joining rows from leftSource with
