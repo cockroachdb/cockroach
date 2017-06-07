@@ -49,15 +49,16 @@ import (
 
 // Context defaults.
 const (
-	defaultCGroupMemPath            = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultCacheSize                = 512 << 20 // 512 MB
-	defaultSQLMemoryPoolSize        = 512 << 20 // 512 MB
-	defaultScanInterval             = 10 * time.Minute
-	defaultConsistencyCheckInterval = 24 * time.Hour
-	defaultScanMaxIdleTime          = 200 * time.Millisecond
-	defaultMetricsSampleInterval    = 10 * time.Second
-	defaultStorePath                = "cockroach-data"
-	defaultEventLogEnabled          = true
+	defaultCGroupMemPath                   = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	defaultCacheSize                       = 512 << 20 // 512 MB
+	defaultSQLMemoryPoolSize               = 512 << 20 // 512 MB
+	defaultScanInterval                    = 10 * time.Minute
+	defaultConsistencyCheckInterval        = 24 * time.Hour
+	defaultScanMaxIdleTime                 = 200 * time.Millisecond
+	defaultMetricsSampleInterval           = 10 * time.Second
+	defaultStorePath                       = "cockroach-data"
+	defaultQueryExecutionStoreRelativePath = "query-execution-data"
+	defaultEventLogEnabled                 = true
 
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
@@ -80,6 +81,9 @@ type Config struct {
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
+
+	// DistSQLLocalStore is specified to enable processing large queries.
+	DistSQLLocalStore base.StoreSpec
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -321,6 +325,13 @@ func MakeConfig() Config {
 	if err != nil {
 		panic(err)
 	}
+	distSQLLocalStore, err := base.NewStoreSpec(
+		fmt.Sprintf("%s/%s", defaultStorePath, defaultQueryExecutionStoreRelativePath),
+	)
+	if err != nil {
+		panic(err)
+	}
+
 	cfg := Config{
 		Config:                   new(base.Config),
 		MaxOffset:                base.DefaultMaxClockOffset,
@@ -337,6 +348,7 @@ func MakeConfig() Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
+		DistSQLLocalStore: distSQLLocalStore,
 	}
 	cfg.Config.InitDefaults()
 	return cfg
@@ -461,13 +473,15 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
-			eng, err := engine.NewRocksDB(
-				spec.Attributes,
-				spec.Path,
-				cache,
-				sizeInBytes,
-				openFileLimitPerStore,
-			)
+			rocksDBConfig := engine.RocksDBConfig{
+				Attrs:                   spec.Attributes,
+				Dir:                     spec.Path,
+				MaxSize:                 sizeInBytes,
+				MaxOpenFiles:            openFileLimitPerStore,
+				WarnLargeBatchThreshold: time.Duration(500000),
+			}
+
+			eng, err := engine.NewRocksDB(rocksDBConfig, cache)
 			if err != nil {
 				return Engines{}, err
 			}

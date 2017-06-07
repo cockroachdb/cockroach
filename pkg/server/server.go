@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -119,6 +120,58 @@ type Server struct {
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
+}
+
+// NewLocalStorage creates a new engine for DistSQL processors to use when the
+// working set is larger than can be stored in memory.
+func NewLocalStorage(ctx context.Context, storeCfg base.StoreSpec) engine.Engine {
+
+	if !storeCfg.InMemory {
+		// Removing existing contents might be slow. Instead we rename it to a new
+		// name, and spawn a goroutine to clean it up asynchronously.
+		deletionDir := fmt.Sprintf("%s/TO-DELETE", storeCfg.Path)
+		if err := os.Mkdir(deletionDir, 700); err != nil {
+			log.Warningf(ctx, "multiple existing temporary RocksDB locations marked for deletion exist. Reusing existing directory.")
+		}
+
+		if err := os.Rename(
+			fmt.Sprintf("%s/*", storeCfg.Path),
+			fmt.Sprintf("%s/", deletionDir),
+		); err != nil {
+			log.Warningf(ctx, "could not move existing temporary RocksDB directory to a location suitable for deletion. No external storage will be used, which will impact large query execution: %v", err)
+			// The location is not usable, as we can't be sure there aren't existing uncleaned up rows.
+			return nil
+		}
+
+		go func() {
+			if err := os.RemoveAll(deletionDir); err != nil {
+				log.Warningf(ctx, "could not clear RocksDB location for DistSQL execution: %v", err.Error())
+				// Even if this errors, this is safe since it's in the marked-for-deletion subdirectory.
+				return
+			}
+		}()
+
+	}
+
+	rocksDBCfg := engine.RocksDBConfig{
+		Attrs:        roachpb.Attributes{},
+		Dir:          storeCfg.Path,
+		MaxSize:      0,
+		MaxOpenFiles: engine.DefaultMaxOpenFiles,
+	}
+	var eng engine.Engine
+	if storeCfg.InMemory {
+		eng = engine.NewInMem(roachpb.Attributes{}, 0)
+	} else {
+		rocksDBCache := engine.NewRocksDBCache(0)
+		var err error
+		eng, err = engine.NewRocksDB(rocksDBCfg, rocksDBCache)
+		if err != nil {
+			log.Warningf(ctx, "could not instantiate RocksDB instance for DistSQL execution, queries larger than memory will fail: %v", err.Error())
+		}
+	}
+
+	return eng
 }
 
 // NewServer creates a Server from a server.Context.
@@ -276,6 +329,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetric(distSQLMetrics.CurBytesCount)
 	s.registry.AddMetric(distSQLMetrics.MaxBytesHist)
 
+	// Set up DistSQL Local Engine.
+	localEngine := NewLocalStorage(ctx, s.cfg.DistSQLLocalStore)
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		localEngine.Close()
+	})
+
 	// Set up the DistSQL server.
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
@@ -293,7 +353,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if s.cfg.TestingKnobs.DistSQL != nil {
 		distSQLCfg.TestingKnobs = *s.cfg.TestingKnobs.DistSQL.(*distsqlrun.TestingKnobs)
 	}
-	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
+
+	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg, localEngine)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// Set up admin memory metrics for use by admin SQL executors.
