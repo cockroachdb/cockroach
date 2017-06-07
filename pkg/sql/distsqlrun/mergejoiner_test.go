@@ -31,7 +31,7 @@ func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
-	v := [6]sqlbase.EncDatum{}
+	v := [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 	}
@@ -166,6 +166,70 @@ func TestMergeJoiner(t *testing.T) {
 				{v[1], v[1], v[4]},
 				{v[1], v[1], v[5]},
 				{v[1], v[1], v[4]},
+			},
+		},
+		{
+			spec: MergeJoinerSpec{
+				LeftOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				RightOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				Type:   JoinType_FULL_OUTER,
+				OnExpr: Expression{Expr: "@2 >= @4"},
+				// Implicit AND @1 = @3 constraint.
+			},
+			outCols: []uint32{0, 1, 3},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0], v[0]},
+					{v[0], v[0]},
+
+					{v[1], v[5]},
+
+					{v[2], v[0]},
+					{v[2], v[8]},
+
+					{v[3], v[5]},
+
+					{v[6], v[0]},
+				},
+				{
+					{v[0], v[5]},
+					{v[0], v[5]},
+
+					{v[1], v[0]},
+					{v[1], v[8]},
+
+					{v[2], v[5]},
+
+					{v[3], v[0]},
+					{v[3], v[0]},
+
+					{v[5], v[0]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[0], null},
+				{v[0], v[0], null},
+				{null, null, v[5]},
+				{null, null, v[5]},
+
+				{v[1], v[5], v[0]},
+				{null, null, v[8]},
+
+				{v[2], v[0], null},
+				{v[2], v[8], v[5]},
+
+				{v[3], v[5], v[0]},
+				{v[3], v[5], v[0]},
+
+				{null, null, v[0]},
+
+				{v[6], v[0], null},
 			},
 		},
 		{
