@@ -237,7 +237,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	ts := s.(*TestServer)
 	tds := db.GetSender()
 
-	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m"); err != nil {
+	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m", "m"); err != nil {
 		t.Fatal(err)
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
@@ -326,7 +326,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		tds := db.GetSender()
 
 		for _, sk := range tc.splitKeys {
-			if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), sk); err != nil {
+			if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), sk, sk); err != nil {
 				t.Fatal(err)
 			}
 		}

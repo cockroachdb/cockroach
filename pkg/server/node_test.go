@@ -653,7 +653,7 @@ func TestStatusSummaries(t *testing.T) {
 	// ========================================
 
 	// Split the range.
-	if err := ts.db.AdminSplit(context.TODO(), splitKey); err != nil {
+	if err := ts.db.AdminSplit(context.TODO(), splitKey, splitKey); err != nil {
 		t.Fatal(err)
 	}
 
