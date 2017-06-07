@@ -75,24 +75,13 @@ func (node *Set) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // SetTransaction represents a SET TRANSACTION statement.
 type SetTransaction struct {
-	Isolation    IsolationLevel
-	UserPriority UserPriority
+	Modes TransactionModes
 }
 
 // Format implements the NodeFormatter interface.
 func (node *SetTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
-	var sep string
 	buf.WriteString("SET TRANSACTION")
-	if node.Isolation != UnspecifiedIsolation {
-		buf.WriteString(" ISOLATION LEVEL ")
-		buf.WriteString(node.Isolation.String())
-		sep = ","
-	}
-	if node.UserPriority != UnspecifiedUserPriority {
-		buf.WriteString(sep)
-		buf.WriteString(" PRIORITY ")
-		buf.WriteString(node.UserPriority.String())
-	}
+	node.Modes.Format(buf, f)
 }
 
 // SetTimeZone represents a SET TIME ZONE statement.

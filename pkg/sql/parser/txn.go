@@ -19,6 +19,7 @@ package parser
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -71,23 +72,83 @@ func (up UserPriority) String() string {
 	return userPriorityNames[up]
 }
 
-// BeginTransaction represents a BEGIN statement
-type BeginTransaction struct {
-	Isolation    IsolationLevel
-	UserPriority UserPriority
+// ReadWriteMode holds the read write mode for a transaction.
+type ReadWriteMode int
+
+// ReadWriteMode values
+const (
+	UnspecifiedReadWriteMode ReadWriteMode = iota
+	ReadOnly
+	ReadWrite
+)
+
+var readWriteModeNames = [...]string{
+	UnspecifiedReadWriteMode: "UNSPECIFIED",
+	ReadOnly:                 "ONLY",
+	ReadWrite:                "WRITE",
+}
+
+func (ro ReadWriteMode) String() string {
+	if ro < 0 || ro > ReadWriteMode(len(readWriteModeNames)-1) {
+		return fmt.Sprintf("ReadWriteMode(%d)", ro)
+	}
+	return readWriteModeNames[ro]
+}
+
+// TransactionModes holds the transaction modes for a transaction.
+type TransactionModes struct {
+	Isolation     IsolationLevel
+	UserPriority  UserPriority
+	ReadWriteMode ReadWriteMode
 }
 
 // Format implements the NodeFormatter interface.
-func (node *BeginTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *TransactionModes) Format(buf *bytes.Buffer, f FmtFlags) {
 	var sep string
-	buf.WriteString("BEGIN TRANSACTION")
 	if node.Isolation != UnspecifiedIsolation {
 		fmt.Fprintf(buf, " ISOLATION LEVEL %s", node.Isolation)
 		sep = ","
 	}
 	if node.UserPriority != UnspecifiedUserPriority {
 		fmt.Fprintf(buf, "%s PRIORITY %s", sep, node.UserPriority)
+		sep = ","
 	}
+	if node.ReadWriteMode != UnspecifiedReadWriteMode {
+		fmt.Fprintf(buf, "%s READ %s", sep, node.ReadWriteMode)
+	}
+}
+
+func (node *TransactionModes) merge(other TransactionModes) error {
+	if other.Isolation != UnspecifiedIsolation {
+		if node.Isolation != UnspecifiedIsolation {
+			return errors.New("isolation level specified multiple times")
+		}
+		node.Isolation = other.Isolation
+	}
+	if other.UserPriority != UnspecifiedUserPriority {
+		if node.UserPriority != UnspecifiedUserPriority {
+			return errors.New("user priority specified multiple times")
+		}
+		node.UserPriority = other.UserPriority
+	}
+	if other.ReadWriteMode != UnspecifiedReadWriteMode {
+		if node.ReadWriteMode != UnspecifiedReadWriteMode {
+			return errors.New("read mode specified multiple times")
+		}
+		node.ReadWriteMode = other.ReadWriteMode
+	}
+	return nil
+}
+
+// BeginTransaction represents a BEGIN statement
+type BeginTransaction struct {
+	Modes TransactionModes
+}
+
+// Format implements the NodeFormatter interface.
+func (node *BeginTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("BEGIN TRANSACTION")
+	node.Modes.Format(buf, f)
 }
 
 // CommitTransaction represents a COMMIT statement.
