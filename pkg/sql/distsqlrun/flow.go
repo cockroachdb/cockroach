@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -113,14 +114,25 @@ type Flow struct {
 
 	doneFn func()
 
+	localStorage      engine.Engine
+	processorRegistry *uint64
+
 	status flowStatus
 }
 
-func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceiver) *Flow {
+func newFlow(
+	flowCtx FlowCtx,
+	flowReg *flowRegistry,
+	syncFlowConsumer RowReceiver,
+	processorRegistry *uint64,
+	localStorage engine.Engine,
+) *Flow {
 	f := &Flow{
-		FlowCtx:          flowCtx,
-		flowRegistry:     flowReg,
-		syncFlowConsumer: syncFlowConsumer,
+		FlowCtx:           flowCtx,
+		flowRegistry:      flowReg,
+		syncFlowConsumer:  syncFlowConsumer,
+		processorRegistry: processorRegistry,
+		localStorage:      localStorage,
 	}
 	f.status = FlowNotStarted
 	return f
@@ -231,7 +243,7 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 			return nil, err
 		}
 	}
-	return newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+	return f.newProcessor(&ps.Core, &ps.Post, inputs, outputs)
 }
 
 func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {

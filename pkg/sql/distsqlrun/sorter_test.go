@@ -191,7 +191,15 @@ func TestSorter(t *testing.T) {
 				evalCtx: evalCtx,
 			}
 
-			s, err := newSorter(&flowCtx, &c.spec, in, &c.post, out)
+			s, err := newSorter(
+				&flowCtx,
+				&c.spec,
+				in,
+				&c.post,
+				out,
+				nil, /* localStorage */
+				0,   /* localStoragePrefix */
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -249,7 +257,15 @@ func BenchmarkSortAll(b *testing.B) {
 			}
 		}
 		rowSource := NewRepeatableRowSource(types, input)
-		s, err := newSorter(&flowCtx, &spec, rowSource, &post, &RowDisposer{})
+		s, err := newSorter(
+			&flowCtx,
+			&spec,
+			rowSource,
+			&post,
+			&RowDisposer{},
+			nil, /* localStorage */
+			0,   /* localStoragePrefix */
+		)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -292,7 +308,13 @@ func BenchmarkSortLimit(b *testing.B) {
 
 	for _, limit := range []uint64{1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		s, err := newSorter(
-			&flowCtx, &spec, rowSource, &PostProcessSpec{Limit: limit}, &RowDisposer{},
+			&flowCtx,
+			&spec,
+			rowSource,
+			&PostProcessSpec{Limit: limit},
+			&RowDisposer{},
+			nil, /* localStorage */
+			0,   /* localStoragePrefix */
 		)
 		if err != nil {
 			b.Fatal(err)
