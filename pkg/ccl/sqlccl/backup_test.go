@@ -461,15 +461,32 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
 	defer cleanupFn()
 
-	dest := dir + "?secretCredentialsHere"
-	sanitizedDest := dir
+	sanitizedIncDir := dir + "/inc"
+	incDir := sanitizedIncDir + "?secretCredentialsHere"
+
+	sanitizedFullDir := dir + "/full"
+	fullDir := sanitizedFullDir + "?moarSecretsHere"
+
+	// First, create a full backup so that, below, we can test that incremental
+	// backups sanitize credentials in "INCREMENTAL FROM" URLs.
+	//
+	// NB: We don't bother making assertions about this full backup since there
+	// are no meaningful differences in how full and incremental backups report
+	// status to the system.jobs table. Since the incremental BACKUP syntax is a
+	// superset of the full BACKUP syntax, we'll cover everything by verifying the
+	// incremental backup below.
+
+	allowResponse = make(chan struct{})
+	// Closing the channel allows export responses to proceed immediately.
+	close(allowResponse)
+	sqlDB.Exec(`BACKUP DATABASE bench TO $1`, fullDir)
 
 	jobDone := make(chan error)
 
 	{
 		allowResponse = make(chan struct{})
 		go func() {
-			_, err := sqlDB.DB.Exec(`BACKUP DATABASE bench TO $1`, dest)
+			_, err := sqlDB.DB.Exec(`BACKUP DATABASE bench TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
 			jobDone <- err
 		}()
 
@@ -487,9 +504,12 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := verifySystemJob(sqlDB, 0, sql.JobTypeBackup, sql.JobRecord{
-			Username:    security.RootUser,
-			Description: fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, sanitizedDest),
+		if err := verifySystemJob(sqlDB, 1, sql.JobTypeBackup, sql.JobRecord{
+			Username: security.RootUser,
+			Description: fmt.Sprintf(
+				`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s'`,
+				sanitizedIncDir, sanitizedFullDir,
+			),
 			DescriptorIDs: sqlbase.IDs{
 				keys.DescriptorTableID,
 				keys.UsersTableID,
@@ -505,7 +525,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 		allowResponse = make(chan struct{})
 		go func() {
-			_, err := sqlDB.DB.Exec(`RESTORE bench.* FROM $1 WITH OPTIONS ('into_db'='bench2')`, dest)
+			_, err := sqlDB.DB.Exec(`RESTORE bench.* FROM $1, $2 WITH OPTIONS ('into_db'='bench2')`, fullDir, incDir)
 			jobDone <- err
 		}()
 
@@ -523,10 +543,11 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := verifySystemJob(sqlDB, 1, sql.JobTypeRestore, sql.JobRecord{
+		if err := verifySystemJob(sqlDB, 2, sql.JobTypeRestore, sql.JobRecord{
 			Username: security.RootUser,
 			Description: fmt.Sprintf(
-				`RESTORE bench.* FROM '%s' WITH OPTIONS ('into_db'='bench2')`, sanitizedDest,
+				`RESTORE bench.* FROM '%s', '%s' WITH OPTIONS ('into_db'='bench2')`,
+				sanitizedFullDir, sanitizedIncDir,
 			),
 			DescriptorIDs: sqlbase.IDs{
 				sqlbase.ID(databaseID + 1),
