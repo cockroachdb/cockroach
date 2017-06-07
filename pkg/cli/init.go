@@ -35,7 +35,6 @@ var initCmd = &cobra.Command{
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
-	fmt.Println("Hello")
 	c, stopper, err := getInitClient()
 	if err != nil {
 		return err
@@ -43,16 +42,16 @@ func runInit(cmd *cobra.Command, args []string) error {
 	ctx := stopperContext(stopper)
 	defer stopper.Stop(ctx)
 	
-	fmt.Println(cmd)
-	fmt.Println(args)
-	fmt.Println(c)
-
-	response, err := c.Bootstrap(ctx, &serverpb.BootstrapRequest{})
+	request := &serverpb.BootstrapRequest{}
+	fmt.Println("Request:", request)
+	log.Info(ctx, "Request: ", request)
+	response, err := c.Bootstrap(ctx, request)
 	if err != nil {
+		log.Error(ctx, err)
 		return err
 	}
-
-	log.Info(ctx, response)
+	fmt.Println("Response: ", response)
+	log.Info(ctx, "Response: ", response)
 	
 	return nil
 }

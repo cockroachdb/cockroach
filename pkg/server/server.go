@@ -585,6 +585,7 @@ func (s *Server) Start(ctx context.Context) error {
 	})
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		fmt.Println("Serve ", anyL)
 		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
 	})
 
@@ -697,10 +698,15 @@ func (s *Server) Start(ctx context.Context) error {
 		// empty, then this node can bootstrap a new cluster. We disallow
 		// this if this node is being started with itself specified as a
 		// --join host, because that's too likely to be operator error.
+		if err = s.node.bootstrap(ctx, s.engines); err != nil {
+			return err
+		}
+		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
-		log.Info(ctx, "No stores bootstrapped and --join flag specified, starting Init Server")
-		initServer := newInitServer(s)
-		initServer.RegisterService(s.grpc)
+		log.Info(ctx, "No stores bootstrapped and --join flag specified.  Starting Init Server and " +
+			"attempting to connect to gossip.")
+
+		newInitServer(s, &ln).startAndAwait(ctx)
 	}
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
@@ -710,13 +716,8 @@ func (s *Server) Start(ctx context.Context) error {
 		unresolvedAdvertAddr,
 		s.engines,
 		s.cfg.NodeAttributes,
-		s.cfg.Locality,
-		// If the _unfiltered_ list of hosts from the --join flag is
-		// empty, then this node can bootstrap a new cluster. We disallow
-		// this if this node is being started with itself specified as a
-		// --join host, because that's too likely to be operator error.
-		len(s.cfg.GossipBootstrapResolvers) == 0, /* canBootstrap */
-	)
+		s.cfg.Locality)
+	
 	if err != nil {
 		log.Error(ctx, "Node.start error: ", err)
 		return err

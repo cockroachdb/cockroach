@@ -358,44 +358,37 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 	}
 }
 
+func (n *Node) bootstrap(ctx context.Context, engines []engine.Engine) error {
+	n.initialBoot = true
+	// This node has no initialized stores and no way to connect to
+	// an existing cluster, so we bootstrap it.
+	clusterID, err := bootstrapCluster(n.storeCfg, engines, n.txnMetrics)
+	if err != nil {
+		return err
+	}
+	
+	log.Infof(ctx, "**** cluster %s has been created", clusterID)
+	// After bootstrapping, try again to initialize the stores.
+	return n.initStores(ctx, engines, n.stopper, true)
+}
+
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
-//
-// The canBootstrap parameter indicates whether this node is eligible
-// to bootstrap a new cluster. The -join flag must be empty.
 func (n *Node) start(
 	ctx context.Context,
 	addr net.Addr,
 	engines []engine.Engine,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
-	canBootstrap bool,
 ) error {
 	n.initDescriptor(addr, attrs, locality)
 
-	// Initialize stores, including bootstrapping new ones.
+	// Initialize stores.
 	log.Error(ctx, "initStores")
 	if err := n.initStores(ctx, engines, n.stopper, false); err != nil {
 		log.Error(ctx, "initStores return: ", err)
-		if err == errNeedsBootstrap {
-			if !canBootstrap {
-				return errCannotJoinSelf
-			}
-			n.initialBoot = true
-			// This node has no initialized stores and no way to connect to
-			// an existing cluster, so we bootstrap it.
-			clusterID, err := bootstrapCluster(n.storeCfg, engines, n.txnMetrics)
-			if err != nil {
-				return err
-			}
-			log.Infof(ctx, "**** cluster %s has been created", clusterID)
-			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", addr)
-			// After bootstrapping, try again to initialize the stores.
-			if err := n.initStores(ctx, engines, n.stopper, true); err != nil {
-				return err
-			}
-		} else {
+		if err != errNeedsBootstrap {
 			return err
 		}
 	}
@@ -471,6 +464,9 @@ func (n *Node) initStores(
 		n.addStore(s)
 	}
 
+	log.Info(ctx, "StoreCount: ", n.stores.GetStoreCount())
+	
+	// TODO(adam): This probably needs to move.
 	// If there are no initialized stores and no gossip resolvers,
 	// bootstrap this node as the seed of a new cluster.
 	if n.stores.GetStoreCount() == 0 && len(n.storeCfg.Gossip.GetResolvers()) == 0 {
