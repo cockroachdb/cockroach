@@ -27,11 +27,11 @@ import (
 
 func setupMVCCRocksDB(b testing.TB, loc string) Engine {
 	rocksdb, err := NewRocksDB(
-		roachpb.Attributes{},
-		loc,
+		RocksDBConfig{
+			DiskLocation: loc,
+			MaxOpenFiles: DefaultMaxOpenFiles,
+		},
 		RocksDBCache{},
-		0,
-		DefaultMaxOpenFiles,
 	)
 	if err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)

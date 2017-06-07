@@ -57,6 +57,7 @@ const (
 	defaultScanMaxIdleTime          = 200 * time.Millisecond
 	defaultMetricsSampleInterval    = 10 * time.Second
 	defaultStorePath                = "cockroach-data"
+	defaultQueryExecutionStorePath  = "cockroach-bikeshed-this-const"
 	defaultEventLogEnabled          = true
 
 	minimumNetworkFileDescriptors     = 256
@@ -80,6 +81,9 @@ type Config struct {
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
+
+	// DistSQLLocalStore is specified to enable processing large queries.
+	DistSQLLocalStore base.StoreSpec
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -321,6 +325,11 @@ func MakeConfig() Config {
 	if err != nil {
 		panic(err)
 	}
+	distSQLLocalStore, err := base.NewStoreSpec(defaultQueryExecutionStorePath)
+	if err != nil {
+		panic(err)
+	}
+
 	cfg := Config{
 		Config:                   new(base.Config),
 		MaxOffset:                base.DefaultMaxClockOffset,
@@ -337,6 +346,7 @@ func MakeConfig() Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
+		DistSQLLocalStore: distSQLLocalStore,
 	}
 	cfg.Config.InitDefaults()
 	return cfg
@@ -400,6 +410,10 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
+var useDirectWrites = envutil.EnvOrDefaultBool("COCKROACH_USE_DIRECT_WRITES", false)
+var walTTL = envutil.EnvOrDefaultDuration("COCKROACH_ROCKSDB_WAL_TTL", 0).Seconds()
+var blockSize = envutil.EnvOrDefaultBytes("COCKROACH_ROCKSDB_BLOCK_SIZE", engine.DefaultBlockSize)
+
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	engines := Engines(nil)
@@ -461,13 +475,19 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
-			eng, err := engine.NewRocksDB(
-				spec.Attributes,
-				spec.Path,
-				cache,
-				sizeInBytes,
-				openFileLimitPerStore,
-			)
+			rocksDBConfig := engine.RocksDBConfig{
+				Attrs:                   spec.Attributes,
+				DiskLocation:            spec.Path,
+				MaxSize:                 sizeInBytes,
+				MaxOpenFiles:            openFileLimitPerStore,
+				WarnLargeBatches:        true,
+				WarnLargeBatchThreshold: time.Duration(500000),
+				WALTTLInSeconds:         walTTL,
+				UseDirectWrites:         useDirectWrites,
+				BlockSize:               blockSize,
+			}
+
+			eng, err := engine.NewRocksDB(rocksDBConfig, cache)
 			if err != nil {
 				return Engines{}, err
 			}

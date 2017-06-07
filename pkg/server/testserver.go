@@ -64,6 +64,9 @@ func makeTestConfig() Config {
 	// Test servers start in secure mode by default.
 	cfg.Insecure = false
 
+	// Override the DistSQL local store with an in-memory store.
+	cfg.DistSQLLocalStore = base.DefaultTestStoreSpec
+
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetAssetLoader(securitytest.EmbeddedAssets)
 	// in their init to mock out the file system calls for calls to AssetFS,

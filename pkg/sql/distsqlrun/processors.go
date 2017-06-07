@@ -22,6 +22,8 @@ import (
 
 	"golang.org/x/net/context"
 
+	"sync/atomic"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -342,8 +344,7 @@ func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func newProcessor(
-	flowCtx *FlowCtx,
+func (f *Flow) newProcessor(
 	core *ProcessorCoreUnion,
 	post *PostProcessSpec,
 	inputs []RowSource,
@@ -353,57 +354,58 @@ func newProcessor(
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newNoopProcessor(flowCtx, inputs[0], post, outputs[0])
+		return newNoopProcessor(&f.FlowCtx, inputs[0], post, outputs[0])
 	}
 	if core.Values != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
-		return newValuesProcessor(flowCtx, core.Values, post, outputs[0])
+		return newValuesProcessor(&f.FlowCtx, core.Values, post, outputs[0])
 	}
 	if core.TableReader != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
-		return newTableReader(flowCtx, core.TableReader, post, outputs[0])
+		return newTableReader(&f.FlowCtx, core.TableReader, post, outputs[0])
 	}
 	if core.JoinReader != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newJoinReader(flowCtx, core.JoinReader, inputs[0], post, outputs[0])
+		return newJoinReader(&f.FlowCtx, core.JoinReader, inputs[0], post, outputs[0])
 	}
 	if core.Sorter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newSorter(flowCtx, core.Sorter, inputs[0], post, outputs[0])
+		newProcessorID := atomic.AddUint64(f.processorRegistry, 1)
+		return newSorter(&f.FlowCtx, core.Sorter, inputs[0], post, outputs[0], f.localStorage, newProcessorID)
 	}
 	if core.Distinct != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newDistinct(flowCtx, core.Distinct, inputs[0], post, outputs[0])
+		return newDistinct(&f.FlowCtx, core.Distinct, inputs[0], post, outputs[0])
 	}
 	if core.Aggregator != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newAggregator(flowCtx, core.Aggregator, inputs[0], post, outputs[0])
+		return newAggregator(&f.FlowCtx, core.Aggregator, inputs[0], post, outputs[0])
 	}
 	if core.MergeJoiner != nil {
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
 		return newMergeJoiner(
-			flowCtx, core.MergeJoiner, inputs[0], inputs[1], post, outputs[0],
+			&f.FlowCtx, core.MergeJoiner, inputs[0], inputs[1], post, outputs[0],
 		)
 	}
 	if core.HashJoiner != nil {
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
-		return newHashJoiner(flowCtx, core.HashJoiner, inputs[0], inputs[1], post, outputs[0])
+		return newHashJoiner(&f.FlowCtx, core.HashJoiner, inputs[0], inputs[1], post, outputs[0])
 	}
 	if core.Backfiller != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
@@ -411,16 +413,16 @@ func newProcessor(
 		}
 		switch core.Backfiller.Type {
 		case BackfillerSpec_Index:
-			return newIndexBackfiller(flowCtx, *core.Backfiller, post, outputs[0])
+			return newIndexBackfiller(&f.FlowCtx, *core.Backfiller, post, outputs[0])
 		case BackfillerSpec_Column:
-			return newColumnBackfiller(flowCtx, *core.Backfiller, post, outputs[0])
+			return newColumnBackfiller(&f.FlowCtx, *core.Backfiller, post, outputs[0])
 		}
 	}
 	if core.SetOp != nil {
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
-		return newAlgebraicSetOp(flowCtx, core.SetOp, inputs[0], inputs[1], post, outputs[0])
+		return newAlgebraicSetOp(&f.FlowCtx, core.SetOp, inputs[0], inputs[1], post, outputs[0])
 	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }

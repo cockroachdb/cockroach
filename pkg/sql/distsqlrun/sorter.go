@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -43,12 +44,24 @@ type sorter struct {
 	// procOutputHelper. 0 if the sorter should sort and push all the rows from
 	// the input.
 	count int64
+	// testingKnobForceDisk is used in testing to go directly to disk without
+	// needing to first run out of memory.
+	testingKnobForceDisk bool
+
+	localStorage       engine.Engine
+	localStoragePrefix uint64
 }
 
 var _ processor = &sorter{}
 
 func newSorter(
-	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	spec *SorterSpec,
+	input RowSource,
+	post *PostProcessSpec,
+	output RowReceiver,
+	localStorage engine.Engine,
+	localStoragePrefix uint64,
 ) (*sorter, error) {
 	count := int64(0)
 	if post.Limit != 0 {
@@ -57,12 +70,14 @@ func newSorter(
 		count = int64(post.Limit) + int64(post.Offset)
 	}
 	s := &sorter{
-		flowCtx:  flowCtx,
-		input:    MakeNoMetadataRowSource(input, output),
-		rawInput: input,
-		ordering: convertToColumnOrdering(spec.OutputOrdering),
-		matchLen: spec.OrderingMatchLen,
-		count:    count,
+		flowCtx:            flowCtx,
+		input:              MakeNoMetadataRowSource(input, output),
+		rawInput:           input,
+		ordering:           convertToColumnOrdering(spec.OutputOrdering),
+		matchLen:           spec.OrderingMatchLen,
+		count:              count,
+		localStorage:       localStorage,
+		localStoragePrefix: localStoragePrefix,
 	}
 	if err := s.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
 		return nil, err

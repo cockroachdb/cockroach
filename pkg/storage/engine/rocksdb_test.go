@@ -260,11 +260,11 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 	}
 
 	rocksdb, err := NewRocksDB(
-		roachpb.Attributes{},
-		dir,
+		RocksDBConfig{
+			DiskLocation: dir,
+			MaxOpenFiles: DefaultMaxOpenFiles,
+		},
 		RocksDBCache{},
-		0,
-		DefaultMaxOpenFiles,
 	)
 	if err == nil {
 		rocksdb.Close()
@@ -386,8 +386,13 @@ func TestConcurrentBatch(t *testing.T) {
 		}
 	}()
 
-	db, err := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{},
-		0, DefaultMaxOpenFiles)
+	db, err := NewRocksDB(
+		RocksDBConfig{
+			DiskLocation: dir,
+			MaxOpenFiles: DefaultMaxOpenFiles,
+		},
+		RocksDBCache{},
+	)
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
 	}
@@ -570,7 +575,13 @@ func TestRocksDBTimeBound(t *testing.T) {
 	dir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
 
-	rocksdb, err := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, 0, DefaultMaxOpenFiles)
+	rocksdb, err := NewRocksDB(
+		RocksDBConfig{
+			DiskLocation: dir,
+			MaxOpenFiles: DefaultMaxOpenFiles,
+		},
+		RocksDBCache{},
+	)
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
 	}

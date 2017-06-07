@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -98,16 +99,19 @@ type ServerConfig struct {
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	ServerConfig
-	flowRegistry  *flowRegistry
-	flowScheduler *flowScheduler
-	memMonitor    mon.MemoryMonitor
-	regexpCache   *parser.RegexpCache
+	flowRegistry      *flowRegistry
+	flowScheduler     *flowScheduler
+	memMonitor        mon.MemoryMonitor
+	regexpCache       *parser.RegexpCache
+	localStorage      engine.Engine
+	processorRegistry *uint64
 }
 
 var _ DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
-func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
+func NewServer(ctx context.Context, cfg ServerConfig, localStorage engine.Engine) *ServerImpl {
+	var processorRegistry uint64
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   parser.NewRegexpCache(512),
@@ -115,6 +119,8 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper),
 		memMonitor: mon.MakeMonitor("distsql",
 			cfg.Counter, cfg.Hist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
+		localStorage:      localStorage,
+		processorRegistry: &processorRegistry,
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 	return ds
@@ -203,7 +209,7 @@ func (ds *ServerImpl) setupFlow(
 
 	ctx = flowCtx.AnnotateCtx(ctx)
 
-	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
+	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, ds.processorRegistry, ds.localStorage)
 	flowCtx.AddLogTagStr("f", f.id.Short())
 	if err := f.setup(ctx, &req.Flow); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
