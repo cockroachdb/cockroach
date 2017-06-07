@@ -83,7 +83,10 @@ func prettyPrintKey(cKey C.DBKey) *C.char {
 }
 
 const (
-	defaultBlockSize = 32 << 10 // 32KB (rocksdb default is 4KB)
+	// defaultBlockSize configures the size of a black. When reading a key-value
+	// pair from a table file, RocksDB loads an entire block into memory. The
+	// RocksDB default is 4KB. This sets it to 32KB.
+	defaultBlockSize = 32 << 10
 
 	// DefaultMaxOpenFiles is the default value for rocksDB's max_open_files
 	// option.
@@ -239,9 +242,9 @@ func (s SSTableInfos) String() string {
 	return buf.String()
 }
 
-// ReadAmplification returns RocksDB's read amplification, which is the number
-// of level-0 sstables plus the number of levels, other than level 0, with at
-// least one sstable.
+// ReadAmplification returns RocksDB's worst case read amplification, which is
+// the number of level-0 sstables plus the number of levels, other than level 0,
+// with at least one sstable.
 //
 // This definition comes from here:
 // https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#level-style-compaction
@@ -287,16 +290,33 @@ func (c RocksDBCache) Release() {
 	}
 }
 
+// RocksDBConfig holds all configuration parameters and knobs used in setting
+// up a new RocksDB instance.
+type RocksDBConfig struct {
+	Attrs roachpb.Attributes
+	// Dir is the data directory for this store.
+	Dir string
+	// MaxSizeInBytes is used for calculating free space and making rebalancing
+	// decisions. Zero indicates that there is no maximum size.
+	MaxSizeInBytes int64
+	// MaxOpenFiles controls the maximum number of file descriptors RocksDB
+	// creates. If MaxOpenFiles is zero, this is set to DefaultMaxOpenFiles.
+	MaxOpenFiles int
+	// WarnLargeBatchThreshold controls if a log message is printed when a
+	// WriteBatch takes longer than WarnLargeBatchThreshold. If it is set to
+	// zero, no log messages are ever printed.
+	WarnLargeBatchThreshold time.Duration
+}
+
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb          *C.DBEngine
-	attrs        roachpb.Attributes // Attributes for this engine
-	dir          string             // The data directory
-	auxDir       string             // A path for storing auxiliary files (ideally under dir).
-	cache        RocksDBCache       // Shared cache.
-	maxSize      int64              // Used for calculating rebalancing and free space.
-	maxOpenFiles int                // The maximum number of open files this instance will use.
-	deallocated  chan struct{}      // Closed when the underlying handle is deallocated.
+	cfg   RocksDBConfig
+	rdb   *C.DBEngine
+	cache RocksDBCache // Shared cache.
+	// auxDir is used for storing auxiliary files. Ideally it is a subdirectory of Dir.
+	auxDir string
+	// deallocated is closed when the underlying handle is deallocated.
+	deallocated chan struct{}
 
 	commit struct {
 		syncutil.Mutex
@@ -317,23 +337,18 @@ var _ Engine = &RocksDB{}
 // from scratch.
 // The caller must call the engine's Close method when the engine is no longer
 // needed.
-func NewRocksDB(
-	attrs roachpb.Attributes, dir string, cache RocksDBCache, maxSize int64, maxOpenFiles int,
-) (*RocksDB, error) {
-	if dir == "" {
+func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
+	if cfg.Dir == "" {
 		panic("dir must be non-empty")
 	}
 
 	r := &RocksDB{
-		attrs:        attrs,
-		dir:          dir,
-		cache:        cache.ref(),
-		maxSize:      maxSize,
-		maxOpenFiles: maxOpenFiles,
-		deallocated:  make(chan struct{}),
+		cfg:         cfg,
+		cache:       cache.ref(),
+		deallocated: make(chan struct{}),
 	}
 
-	auxDir := filepath.Join(dir, "auxiliary")
+	auxDir := filepath.Join(cfg.Dir, "auxiliary")
 	if err := r.SetAuxiliaryDir(auxDir); err != nil {
 		return nil, err
 	}
@@ -344,12 +359,16 @@ func NewRocksDB(
 	return r, nil
 }
 
-func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) (*RocksDB, error) {
+func newMemRocksDB(
+	attrs roachpb.Attributes, cache RocksDBCache, maxSizeInBytes int64,
+) (*RocksDB, error) {
 	r := &RocksDB{
-		attrs: attrs,
+		cfg: RocksDBConfig{
+			Attrs:          attrs,
+			MaxSizeInBytes: maxSizeInBytes,
+		},
 		// dir: empty dir == "mem" RocksDB instance.
 		cache:       cache.ref(),
-		maxSize:     maxSize,
 		deallocated: make(chan struct{}),
 	}
 
@@ -366,17 +385,17 @@ func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) 
 
 // String formatter.
 func (r *RocksDB) String() string {
-	return fmt.Sprintf("%s=%s", r.attrs.Attrs, r.dir)
+	return fmt.Sprintf("%s=%s", r.Attrs(), r.cfg.Dir)
 }
 
 func (r *RocksDB) open() error {
 	var ver storageVersion
-	if len(r.dir) != 0 {
-		log.Infof(context.TODO(), "opening rocksdb instance at %q", r.dir)
+	if len(r.cfg.Dir) != 0 {
+		log.Infof(context.TODO(), "opening rocksdb instance at %q", r.cfg.Dir)
 
 		// Check the version number.
 		var err error
-		if ver, err = getVersion(r.dir); err != nil {
+		if ver, err = getVersion(r.cfg.Dir); err != nil {
 			return err
 		}
 		if ver < versionMinimum || ver > versionCurrent {
@@ -396,8 +415,12 @@ func (r *RocksDB) open() error {
 
 	blockSize := envutil.EnvOrDefaultBytes("COCKROACH_ROCKSDB_BLOCK_SIZE", defaultBlockSize)
 	walTTL := envutil.EnvOrDefaultDuration("COCKROACH_ROCKSDB_WAL_TTL", 0).Seconds()
+	maxOpenFiles := DefaultMaxOpenFiles
+	if r.cfg.MaxOpenFiles != 0 {
+		maxOpenFiles = r.cfg.MaxOpenFiles
+	}
 
-	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
+	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.cfg.Dir)),
 		C.DBOptions{
 			cache:             r.cache.cache,
 			block_size:        C.uint64_t(blockSize),
@@ -405,7 +428,7 @@ func (r *RocksDB) open() error {
 			use_direct_writes: C.bool(useDirectWrites),
 			logging_enabled:   C.bool(log.V(3)),
 			num_cpu:           C.int(runtime.NumCPU()),
-			max_open_files:    C.int(r.maxOpenFiles),
+			max_open_files:    C.int(maxOpenFiles),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Errorf("could not open rocksdb instance: %s", err)
@@ -413,7 +436,7 @@ func (r *RocksDB) open() error {
 
 	// Update or add the version file if needed.
 	if ver < versionCurrent {
-		if err := writeVersionFile(r.dir); err != nil {
+		if err := writeVersionFile(r.cfg.Dir); err != nil {
 			return err
 		}
 	}
@@ -434,12 +457,12 @@ func (r *RocksDB) Close() {
 		log.Errorf(context.TODO(), "closing unopened rocksdb instance")
 		return
 	}
-	if len(r.dir) == 0 {
+	if len(r.cfg.Dir) == 0 {
 		if log.V(1) {
 			log.Infof(context.TODO(), "closing in-memory rocksdb instance")
 		}
 	} else {
-		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.dir)
+		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.cfg.Dir)
 	}
 	if r.rdb != nil {
 		C.DBClose(r.rdb)
@@ -459,7 +482,7 @@ func (r *RocksDB) Closed() bool {
 // and potentially other labels to identify important attributes of
 // the engine.
 func (r *RocksDB) Attrs() roachpb.Attributes {
-	return r.attrs
+	return r.cfg.Attrs
 }
 
 // Put sets the given key to the value provided.
@@ -527,15 +550,15 @@ func (r *RocksDB) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)
 // Capacity queries the underlying file system for disk capacity information.
 func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	fileSystemUsage := gosigar.FileSystemUsage{}
-	dir := r.dir
+	dir := r.cfg.Dir
 	if dir == "" {
 		// This is an in-memory instance. Pretend we're empty since we
 		// don't know better and only use this for testing. Using any
 		// part of the actual file system here can throw off allocator
 		// rebalancing in a hard-to-trace manner. See #7050.
 		return roachpb.StoreCapacity{
-			Capacity:  r.maxSize,
-			Available: r.maxSize,
+			Capacity:  r.cfg.MaxSizeInBytes,
+			Available: r.cfg.MaxSizeInBytes,
 		}, nil
 	}
 	if err := fileSystemUsage.Get(dir); err != nil {
@@ -556,7 +579,7 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	// If no size limitation have been placed on the store size or if the
 	// limitation is greater than what's available, just return the actual
 	// totals.
-	if r.maxSize == 0 || r.maxSize >= fsuTotal || r.dir == "" {
+	if r.cfg.MaxSizeInBytes == 0 || r.cfg.MaxSizeInBytes >= fsuTotal || r.cfg.Dir == "" {
 		return roachpb.StoreCapacity{
 			Capacity:  fsuTotal,
 			Available: fsuAvail,
@@ -566,7 +589,7 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	// Find the total size of all the files in the r.dir and all its
 	// subdirectories.
 	var totalUsedBytes int64
-	if errOuter := filepath.Walk(r.dir, func(path string, info os.FileInfo, err error) error {
+	if errOuter := filepath.Walk(r.cfg.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -578,7 +601,7 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 		return roachpb.StoreCapacity{}, errOuter
 	}
 
-	available := r.maxSize - totalUsedBytes
+	available := r.cfg.MaxSizeInBytes - totalUsedBytes
 	if available > fsuAvail {
 		available = fsuAvail
 	}
@@ -587,7 +610,7 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	}
 
 	return roachpb.StoreCapacity{
-		Capacity:  r.maxSize,
+		Capacity:  r.cfg.MaxSizeInBytes,
 		Available: available,
 	}, nil
 }
@@ -599,7 +622,7 @@ func (r *RocksDB) Compact() error {
 
 // Destroy destroys the underlying filesystem data associated with the database.
 func (r *RocksDB) Destroy() error {
-	return statusToError(C.DBDestroy(goToCSlice([]byte(r.dir))))
+	return statusToError(C.DBDestroy(goToCSlice([]byte(r.cfg.Dir))))
 }
 
 // Flush causes RocksDB to write all in-memory data to disk immediately.
@@ -1341,10 +1364,10 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 		r.batch = nil
 	}
 
-	const batchCommitWarnThreshold = 500 * time.Millisecond
-	if elapsed := timeutil.Since(start); elapsed >= batchCommitWarnThreshold {
+	warnLargeBatches := r.parent.cfg.WarnLargeBatchThreshold > 0
+	if elapsed := timeutil.Since(start); warnLargeBatches && (elapsed >= r.parent.cfg.WarnLargeBatchThreshold) {
 		log.Warningf(context.TODO(), "batch [%d/%d/%d] commit took %s (>%s):\n%s",
-			count, size, r.flushes, elapsed, batchCommitWarnThreshold, debug.Stack())
+			count, size, r.flushes, elapsed, r.parent.cfg.WarnLargeBatchThreshold, debug.Stack())
 	}
 
 	return nil

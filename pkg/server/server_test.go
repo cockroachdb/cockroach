@@ -32,6 +32,10 @@ import (
 
 	"golang.org/x/net/context"
 
+	"path/filepath"
+
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

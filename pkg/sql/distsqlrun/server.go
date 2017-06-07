@@ -24,6 +24,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"sync/atomic"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -95,6 +98,16 @@ type ServerConfig struct {
 	ClusterID uuid.UUID
 }
 
+// ProcessorIDGenerator generates unique Processor IDs for each processor.
+type ProcessorIDGenerator struct {
+	nextID uint64
+}
+
+// NewID generates a new unique ID.
+func (p *ProcessorIDGenerator) NewID() uint64 {
+	return atomic.AddUint64(&p.nextID, 1)
+}
+
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	ServerConfig
@@ -102,12 +115,18 @@ type ServerImpl struct {
 	flowScheduler *flowScheduler
 	memMonitor    mon.MemoryMonitor
 	regexpCache   *parser.RegexpCache
+	// localStorage is used by some DistSQL processors to store working sets
+	// larger than memory.
+	localStorage engine.Engine
+	// processorIDGenerator is used to generate unique prefixes per processor so that
+	// each processor uses a nonoverlapping part of the localStorage keyspace.
+	processorIDGenerator *ProcessorIDGenerator
 }
 
 var _ DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
-func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
+func NewServer(ctx context.Context, cfg ServerConfig, localStorage engine.Engine) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   parser.NewRegexpCache(512),
@@ -115,6 +134,8 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper),
 		memMonitor: mon.MakeMonitor("distsql",
 			cfg.Counter, cfg.Hist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
+		localStorage:         localStorage,
+		processorIDGenerator: &ProcessorIDGenerator{},
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 	return ds
@@ -190,15 +211,17 @@ func (ds *ServerImpl) setupFlow(
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
 	flowCtx := FlowCtx{
-		AmbientContext: ds.AmbientContext,
-		id:             req.Flow.FlowID,
-		evalCtx:        evalCtx,
-		rpcCtx:         ds.RPCContext,
-		txnProto:       &req.Txn,
-		clientDB:       ds.DB,
-		remoteTxnDB:    ds.FlowDB,
-		testingKnobs:   ds.TestingKnobs,
-		nodeID:         nodeID,
+		AmbientContext:       ds.AmbientContext,
+		id:                   req.Flow.FlowID,
+		evalCtx:              evalCtx,
+		rpcCtx:               ds.RPCContext,
+		txnProto:             &req.Txn,
+		clientDB:             ds.DB,
+		remoteTxnDB:          ds.FlowDB,
+		testingKnobs:         ds.TestingKnobs,
+		nodeID:               nodeID,
+		processorIDGenerator: ds.processorIDGenerator,
+		localStorage:         ds.localStorage,
 	}
 
 	ctx = flowCtx.AnnotateCtx(ctx)

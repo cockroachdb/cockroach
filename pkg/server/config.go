@@ -33,6 +33,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"path/filepath"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -57,6 +59,7 @@ const (
 	defaultScanMaxIdleTime          = 200 * time.Millisecond
 	defaultMetricsSampleInterval    = 10 * time.Second
 	defaultStorePath                = "cockroach-data"
+	defaultTempStoreRelativePath    = "local"
 	defaultEventLogEnabled          = true
 
 	minimumNetworkFileDescriptors     = 256
@@ -80,6 +83,9 @@ type Config struct {
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
+
+	// TempStore is currently used to store local state when processing large queries.
+	TempStore base.StoreSpec
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -315,12 +321,24 @@ func SetOpenFileLimitForOneStore() (int, error) {
 	return setOpenFileLimit(1)
 }
 
+// MakeTempStoreSpecFromStoreSpec creates a spec for a temporary store under
+// the given StoreSpec's path.
+// TODO(arjun): Add a Cli flag to override this.
+func MakeTempStoreSpecFromStoreSpec(spec base.StoreSpec) (base.StoreSpec, error) {
+	return base.NewStoreSpec(filepath.Join(spec.Path, defaultTempStoreRelativePath))
+}
+
 // MakeConfig returns a Context with default values.
 func MakeConfig() Config {
 	storeSpec, err := base.NewStoreSpec(defaultStorePath)
 	if err != nil {
 		panic(err)
 	}
+	TempStore, err := MakeTempStoreSpecFromStoreSpec(storeSpec)
+	if err != nil {
+		panic(err)
+	}
+
 	cfg := Config{
 		Config:                   new(base.Config),
 		MaxOffset:                base.DefaultMaxClockOffset,
@@ -337,6 +355,7 @@ func MakeConfig() Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
+		TempStore: TempStore,
 	}
 	cfg.Config.InitDefaults()
 	return cfg
@@ -461,13 +480,15 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
-			eng, err := engine.NewRocksDB(
-				spec.Attributes,
-				spec.Path,
-				cache,
-				sizeInBytes,
-				openFileLimitPerStore,
-			)
+			rocksDBConfig := engine.RocksDBConfig{
+				Attrs:                   spec.Attributes,
+				Dir:                     spec.Path,
+				MaxSizeInBytes:          sizeInBytes,
+				MaxOpenFiles:            openFileLimitPerStore,
+				WarnLargeBatchThreshold: 500 * time.Millisecond,
+			}
+
+			eng, err := engine.NewRocksDB(rocksDBConfig, cache)
 			if err != nil {
 				return Engines{}, err
 			}
