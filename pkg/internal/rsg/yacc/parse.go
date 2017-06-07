@@ -137,7 +137,9 @@ func (t *Tree) parse() {
 func (t *Tree) parseProduction(p *ProductionNode) {
 	const context = "production"
 	t.expect(itemColon, context)
-	t.expect(itemNL, context)
+	if t.peek().typ == itemNL {
+		t.next()
+	}
 	expectExpr := true
 	for {
 		token := t.next()
@@ -177,7 +179,9 @@ func (t *Tree) parseExpression(e *ExpressionNode) {
 			e.Items = append(e.Items, Item{token.val, TypLiteral})
 		case itemExpr:
 			e.Command = token.val
-			t.expect(itemNL, context)
+			if t.peek().typ == itemNL {
+				t.next()
+			}
 			return
 		case itemPct, itemComment:
 			// ignore

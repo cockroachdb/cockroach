@@ -24,13 +24,9 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// TODO(mjibson): unskip these tests when we move to TeamCity (they fail on CircleCI)
-
 const sqlYPath = "../../../sql/parser/sql.y"
 
 func TestLex(t *testing.T) {
-	t.Skip("broken on CircleCI")
-
 	b, err := ioutil.ReadFile(sqlYPath)
 	if err != nil {
 		t.Fatal(err)
@@ -49,8 +45,6 @@ Loop:
 }
 
 func TestParse(t *testing.T) {
-	t.Skip("broken on CircleCI")
-
 	b, err := ioutil.ReadFile(sqlYPath)
 	if err != nil {
 		t.Fatal(err)
