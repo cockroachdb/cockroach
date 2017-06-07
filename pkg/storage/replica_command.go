@@ -3527,7 +3527,8 @@ func (r *Replica) changeReplicas(
 		// abort the replica add.
 		if nodeUsed {
 			if repDescIdx != -1 {
-				return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
+				log.Infof(ctx, "unable to add replica %v which is already present", repDesc)
+				return nil
 			}
 			return errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
 		}
@@ -3575,7 +3576,8 @@ func (r *Replica) changeReplicas(
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
 		if repDescIdx == -1 {
-			return errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
+			log.Infof(ctx, "unable to remove replica %v which is not present", repDesc)
+			return nil
 		}
 		updatedDesc.Replicas[repDescIdx] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
