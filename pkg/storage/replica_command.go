@@ -2628,12 +2628,12 @@ func (r *Replica) adminSplitWithDescriptor(
 				return reply, false, nil
 			}
 		} else {
-			// Split at requested key. If it's out of this range's bounds,
-			// return an error for the client to try again on the correct
-			// range.
-			if !containsKey(*desc, args.SplitKey) {
+			// If the key that routed this request to this range is now out of this
+			// range's bounds, return an error for the client to try again on the
+			// correct range.
+			if !containsKey(*desc, args.Span.Key) {
 				return reply, false,
-					roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
+					roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.Span.Key, args.Span.Key, desc))
 			}
 			foundSplitKey = args.SplitKey
 		}

@@ -366,10 +366,18 @@ func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 
 // AdminSplit splits the range at splitkey.
 //
-// key can be either a byte slice or a string.
-func (db *DB) AdminSplit(ctx context.Context, splitKey interface{}) error {
+// spanKey is a key within the range that should be split, and splitKey is the
+// key at which that range should be split. splitKey is not used exactly as
+// provided--it is first mutated by keys.EnsureSafeSplitKey. Accounting for
+// this mutation sometimes requires constructing a key that falls in a
+// different range, hence the separation between spanKey and splitKey. See
+// #16008 for details, and #16344 for the tracking issue to clean this mess up
+// properly.
+//
+// keys can be either a byte slice or a string.
+func (db *DB) AdminSplit(ctx context.Context, spanKey, splitKey interface{}) error {
 	b := &Batch{}
-	b.adminSplit(splitKey)
+	b.adminSplit(spanKey, splitKey)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

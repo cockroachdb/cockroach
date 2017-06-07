@@ -124,7 +124,7 @@ func (n *splitNode) Next(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	if err := n.p.session.execCfg.DB.AdminSplit(ctx, rowKey); err != nil {
+	if err := n.p.session.execCfg.DB.AdminSplit(ctx, rowKey, rowKey); err != nil {
 		return false, err
 	}
 
@@ -308,6 +308,7 @@ func (n *relocateNode) Next(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	rowKey = keys.MakeRowSentinelKey(rowKey)
 
 	rangeDesc, err := lookupRangeDescriptor(ctx, n.p.session.execCfg.DB, rowKey)
 	if err != nil {

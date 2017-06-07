@@ -375,7 +375,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 			// The only expected error from concurrent splits is the split key being
 			// outside the bounds for the range. Note that conflicting range
 			// descriptor errors are retried internally.
-			if !testutils.IsError(pErr.GoError(), "key range .* outside of bounds of range") {
+			if !testutils.IsError(pErr.GoError(), "requested split key .* out of bounds of") {
 				t.Fatalf("unexpected error: %v", pErr)
 			}
 			failureCount++
@@ -1860,6 +1860,9 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 		_, pErr := store.LookupReplica(roachpb.RKey(splitKey), nil).AdminSplit(
 			context.TODO(),
 			roachpb.AdminSplitRequest{
+				Span: roachpb.Span{
+					Key: splitKey,
+				},
 				SplitKey: splitKey,
 			},
 		)

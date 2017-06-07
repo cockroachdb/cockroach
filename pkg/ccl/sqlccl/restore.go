@@ -541,7 +541,7 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 		// EnsureSafeSplitKey for more context.
 		splitKey := append([]byte(nil), splitPoints[splitIdx]...)
 		splitKey = keys.MakeRowSentinelKey(splitKey)
-		if err := db.AdminSplit(ctx, splitKey); err != nil {
+		if err := db.AdminSplit(ctx, splitPoints[splitIdx], splitKey); err != nil {
 			return err
 		}
 

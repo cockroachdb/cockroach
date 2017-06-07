@@ -65,7 +65,7 @@ func TestLogSplits(t *testing.T) {
 	}
 
 	// Generate an explicit split event.
-	if err := kvDB.AdminSplit(context.TODO(), "splitkey"); err != nil {
+	if err := kvDB.AdminSplit(context.TODO(), "splitkey", "splitkey"); err != nil {
 		t.Fatal(err)
 	}
 

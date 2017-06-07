@@ -118,7 +118,7 @@ func runSplitRange(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer stopper.Stop(stopperContext(stopper))
-	return errors.Wrap(kvDB.AdminSplit(context.Background(), key), "split failed")
+	return errors.Wrap(kvDB.AdminSplit(context.Background(), key, key), "split failed")
 }
 
 var rangeCmds = []*cobra.Command{
