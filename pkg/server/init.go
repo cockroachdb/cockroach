@@ -17,30 +17,58 @@
 package server
 
 import (
+	"net"
+	
+	"golang.org/x/net/context"
+	
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"google.golang.org/grpc"
-	"golang.org/x/net/context"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 )
 
 type initServer struct {
-	server     *Server
+	server       *Server
+	ln           *net.Listener
+	bootstrapped chan struct{}
 }
 
-func newInitServer(s *Server) *initServer {
-	return &initServer{server: s}
+func newInitServer(s *Server, ln *net.Listener) *initServer {
+	return &initServer{server: s, ln: ln, bootstrapped: make(chan struct{})}
 }
 
-// RegisterService registers the GRPC service.
-func (s *initServer) RegisterService(g *grpc.Server) {
-	serverpb.RegisterInitServer(g, s)
+func (s *initServer) startAndAwait(ctx context.Context) {
+	serverpb.RegisterInitServer(s.server.grpc, s)
+	
+	s.server.stopper.RunWorker(ctx, func(context.Context) {
+		log.Info(ctx, "Starting dedicated grpc server for Init")
+		netutil.FatalIfUnexpected(s.server.grpc.Serve(*s.ln))
+	})
+
+	select {
+	case <- s.server.node.storeCfg.Gossip.Connected:
+		log.Info(ctx, "Gossip connected")
+	case <- s.bootstrapped:
+		log.Info(ctx, "Node bootstrapped")
+		// TODO(adam): Wait for stopper?
+	}
+
+	log.Info(ctx, "Stopping dedicated grpc server for Init")
+	s.server.grpc.GracefulStop()
+	log.Info(ctx, "grpc Stopped")
 }
 
 func (s *initServer) Bootstrap(
 	ctx context.Context,
 	request *serverpb.BootstrapRequest,
 ) (response *serverpb.BootstrapResponse, err error) {
-	log.Info(ctx, "Bootstrap")
+	log.Info(ctx, "Bootstrap", request)
+
+	if err := s.server.node.bootstrap(ctx, s.server.engines); err != nil {
+		log.Error(ctx, "Node bootstrap failed: ", err)
+		return &serverpb.BootstrapResponse{}, err
+	}
+	
+	s.bootstrapped <- struct{}{}
 	return &serverpb.BootstrapResponse{}, nil
 }
 
