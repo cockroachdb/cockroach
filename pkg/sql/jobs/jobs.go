@@ -156,7 +156,7 @@ func (jl *JobLogger) runInTxn(
 
 // WithTxn sets the transaction that this JobLogger will use for its next
 // operation. If the transaction is nil, the JobLogger will create a one-off
-// trasnaction instead.
+// transaction instead.
 func (jl *JobLogger) WithTxn(txn *client.Txn) *JobLogger {
 	jl.txn = txn
 	return jl
