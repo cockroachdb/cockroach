@@ -42,6 +42,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
+	"path/filepath"
+
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -59,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -122,6 +125,66 @@ type Server struct {
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
+}
+
+func cleanupLocalStorageDirs(ctx context.Context, path string, wg *sync.WaitGroup) error {
+	// Removing existing contents might be slow. Instead we rename it to a new
+	// name, and spawn a goroutine to clean it up asynchronously.
+	deletionDir, err := ioutil.TempDir(path, "TO-DELETE-")
+	if err != nil {
+		return err
+	}
+
+	filesToDelete, err := ioutil.ReadDir(path)
+	if err != nil {
+		return err
+	}
+
+	for _, fileToDelete := range filesToDelete {
+		toDeleteFull := filepath.Join(path, fileToDelete.Name())
+		if toDeleteFull != deletionDir {
+			if err := os.Rename(toDeleteFull, filepath.Join(deletionDir, fileToDelete.Name())); err != nil {
+				return err
+			}
+		}
+	}
+
+	wg.Add(1)
+	go func() {
+		if wg != nil {
+			defer wg.Done()
+		}
+		if err := os.RemoveAll(deletionDir); err != nil {
+			log.Warningf(ctx, "could not clear old TempStore files: %v", err.Error())
+			// Even if this errors, this is safe since it's in the marked-for-deletion subdirectory.
+			return
+		}
+	}()
+
+	return nil
+}
+
+// NewTempStore creates a new engine for DistSQL processors to use when the
+// working set is larger than can be stored in memory.
+func NewTempStore(ctx context.Context, storeCfg base.StoreSpec) (engine.Engine, error) {
+	if storeCfg.InMemory {
+		// TODO(arjun): Copy the size in a principled fashion from the main store
+		// after #16750 is addressed.
+		return engine.NewInMem(roachpb.Attributes{}, 0), nil
+	}
+
+	if err := cleanupLocalStorageDirs(ctx, storeCfg.Path, nil); err != nil {
+		return nil, err
+	}
+
+	rocksDBCfg := engine.RocksDBConfig{
+		Attrs:          roachpb.Attributes{},
+		Dir:            storeCfg.Path,
+		MaxSizeInBytes: 0,   // TODO(arjun): Revisit this.
+		MaxOpenFiles:   128, // TODO(arjun): Revisit this.
+	}
+	rocksDBCache := engine.NewRocksDBCache(0)
+	return engine.NewRocksDB(rocksDBCfg, rocksDBCache)
 }
 
 // NewServer creates a Server from a server.Context.
@@ -280,6 +343,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetric(distSQLMetrics.CurBytesCount)
 	s.registry.AddMetric(distSQLMetrics.MaxBytesHist)
 
+	// Set up DistSQL Local Engine.
+	localEngine, err := NewTempStore(ctx, s.cfg.TempStore)
+	if err != nil {
+		log.Warningf(ctx, "could not create temporary store. Queries with working set larger than memory will fail: %v", err)
+	} else {
+		s.stopper.AddCloser(localEngine)
+	}
+
 	// Set up the DistSQL server.
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
@@ -297,7 +368,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if s.cfg.TestingKnobs.DistSQL != nil {
 		distSQLCfg.TestingKnobs = *s.cfg.TestingKnobs.DistSQL.(*distsqlrun.TestingKnobs)
 	}
-	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
+
+	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg, localEngine)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// Set up admin memory metrics for use by admin SQL executors.

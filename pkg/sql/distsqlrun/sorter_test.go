@@ -291,9 +291,7 @@ func BenchmarkSortLimit(b *testing.B) {
 	rowSource := NewRepeatableRowSource(types, input)
 
 	for _, limit := range []uint64{1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		s, err := newSorter(
-			&flowCtx, &spec, rowSource, &PostProcessSpec{Limit: limit}, &RowDisposer{},
-		)
+		s, err := newSorter(&flowCtx, &spec, rowSource, &PostProcessSpec{Limit: limit}, &RowDisposer{})
 		if err != nil {
 			b.Fatal(err)
 		}
