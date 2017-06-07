@@ -674,7 +674,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		}
 		s.Manual.Increment(time.Second.Nanoseconds())
 		// Split range by keyB.
-		if err := s.DB.AdminSplit(context.TODO(), splitKey); err != nil {
+		if err := s.DB.AdminSplit(context.TODO(), splitKey, splitKey); err != nil {
 			t.Fatal(err)
 		}
 		// Wait till split complete.

@@ -92,6 +92,9 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.Sys
 		if _, _, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{
+				Span: roachpb.Span{
+					Key: splitKey.AsRawKey(),
+				},
 				SplitKey: splitKey.AsRawKey(),
 			},
 			desc,
