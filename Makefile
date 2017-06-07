@@ -133,7 +133,7 @@ endif
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
 
-COCKROACH := ./cockroach$(SUFFIX)$$($(XGO) env GOEXE)
+COCKROACH := ./cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
 
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
