@@ -33,9 +33,9 @@ import (
 type bucket struct {
 	// rows holds indices of rows into the hashJoiner's rows container.
 	rows []int
-	// seen is only used for outer joins; there is a entry for each row in `rows`
-	// indicating if that row had at least a matching row in the opposite stream
-	// ("matching" meaning that the ON condition passed).
+	// seen is only used for right-outer and full-outer joins; there is a entry
+	// for each row in `rows` indicating if that row had at least a matching row
+	// in the opposite stream ("matching" meaning that the ON condition passed).
 	seen []bool
 }
 
@@ -189,20 +189,11 @@ func (h *hashJoiner) buildPhase(ctx context.Context) (inputsDrained bool, _ erro
 
 		scratch = encoded[:0]
 
+		// A row that has a NULL in an equality column cannot match anything.
+		// Output it or throw it away.
 		if hasNull {
-			// A row that has a NULL in an equality column will not match anything.
-			// Output it or throw it away.
-			if h.joinType == rightOuter || h.joinType == fullOuter {
-				row, _, err := h.render(nil, rrow)
-				if err != nil {
-					return false, err
-				}
-				if row == nil {
-					continue
-				}
-				if !emitHelper(ctx, &h.out, row, ProducerMetadata{}, h.leftSource, h.rightSource) {
-					return true, nil
-				}
+			if !h.maybeEmitUnmatchedRow(ctx, rrow, false /* !leftSide */) {
+				return true, nil
 			}
 			continue
 		}
@@ -241,20 +232,6 @@ func (h *hashJoiner) buildPhase(ctx context.Context) (inputsDrained bool, _ erro
 func (h *hashJoiner) probePhase(ctx context.Context) error {
 	var scratch []byte
 
-	renderAndEmit := func(
-		lrow sqlbase.EncDatumRow, rrow sqlbase.EncDatumRow,
-	) (inputsDrained bool, failedOnCond bool, err error) {
-		row, failedOnCond, err := h.render(lrow, rrow)
-		if err != nil {
-			return false, false, err
-		}
-		if row != nil {
-			inputsDrained := !emitHelper(ctx, &h.out, row, ProducerMetadata{}, h.leftSource)
-			return inputsDrained, failedOnCond, nil
-		}
-		return false, failedOnCond, nil
-	}
-
 	for {
 		lrow, meta := h.leftSource.Next()
 		if !meta.Empty() {
@@ -272,42 +249,43 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 			break
 		}
 
-		encoded, hasNull, err := encodeColumnsOfRow(&h.datumAlloc, scratch, lrow, h.leftEqCols, false /* encodeNull */)
+		encoded, hasNull, err := encodeColumnsOfRow(
+			&h.datumAlloc, scratch, lrow, h.leftEqCols, false, /* encodeNull */
+		)
 		if err != nil {
 			return err
 		}
 		scratch = encoded[:0]
 
-		if hasNull {
-			// A row that has a NULL in an equality column will not match anything.
-			// Output it or throw it away.
-			if h.joinType == leftOuter || h.joinType == fullOuter {
-				inputsDrained, _, err := renderAndEmit(lrow, nil)
-				if inputsDrained || err != nil {
-					return err
+		matched := false
+
+		// A row that has a NULL in an equality column cannot match anything.
+		if !hasNull {
+			if b, ok := h.buckets[string(encoded)]; ok {
+				for i, rrowIdx := range b.rows {
+					rrow := h.rows.EncRow(rrowIdx)
+
+					renderedRow, err := h.render(lrow, rrow)
+					if err != nil {
+						return err
+					}
+					// If the ON condition failed, renderedRow is nil.
+					if renderedRow != nil {
+						matched = true
+						if b.seen != nil {
+							// Mark the right row as matched (for right/full outer join).
+							b.seen[i] = true
+						}
+						if !emitHelper(ctx, &h.out, renderedRow, ProducerMetadata{}, h.leftSource) {
+							return nil
+						}
+					}
 				}
 			}
-			continue
 		}
 
-		if b, ok := h.buckets[string(encoded)]; ok {
-			for i, rrowIdx := range b.rows {
-				rrow := h.rows.EncRow(rrowIdx)
-				inputsDrained, failedOnCond, err := renderAndEmit(lrow, rrow)
-
-				if inputsDrained || err != nil {
-					return err
-				}
-				if !failedOnCond && (h.joinType == rightOuter || h.joinType == fullOuter) {
-					b.seen[i] = true
-				}
-			}
-		} else {
-			if h.joinType == leftOuter || h.joinType == fullOuter {
-				if inputsDrained, _, err := renderAndEmit(lrow, nil); inputsDrained || err != nil {
-					return err
-				}
-			}
+		if !matched && !h.maybeEmitUnmatchedRow(ctx, lrow, true /* leftSide */) {
+			return nil
 		}
 	}
 
@@ -315,15 +293,13 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 		// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
 		for _, b := range h.buckets {
 			for i, seen := range b.seen {
-				if !seen {
-					rrow := h.rows.EncRow(b.rows[i])
-					if inputsDrained, _, err := renderAndEmit(nil, rrow); inputsDrained || err != nil {
-						return err
-					}
+				if !seen && !h.maybeEmitUnmatchedRow(ctx, h.rows.EncRow(b.rows[i]), false /*!leftSide */) {
+					return nil
 				}
 			}
 		}
 	}
+
 	h.out.close()
 	return nil
 }
