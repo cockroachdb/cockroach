@@ -296,6 +296,8 @@ func (c *RowContainer) PopFirst() {
 		c.deletedRows++
 		if c.deletedRows == c.rowsPerChunk {
 			c.deletedRows = 0
+			// Reset the pointer so the slice can be garbage collected.
+			c.chunks[0] = nil
 			c.chunks = c.chunks[1:]
 		}
 	}
@@ -315,4 +317,9 @@ func (c *RowContainer) Replace(ctx context.Context, i int, newRow parser.Datums)
 	}
 	copy(row, newRow)
 	return nil
+}
+
+// MemUsage returns the current accounted memory usage.
+func (c *RowContainer) MemUsage() int64 {
+	return c.memAcc.CurrentlyAllocated()
 }

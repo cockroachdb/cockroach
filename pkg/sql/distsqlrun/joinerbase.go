@@ -87,6 +87,25 @@ func (jb *joinerBase) renderUnmatchedRow(
 	return jb.combinedRow
 }
 
+// shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
+// NULLs for the columns of the other stream). This happens in FULL OUTER joins
+// and LEFT or RIGHT OUTER joins (depending on which stream).
+func shouldEmitUnmatchedRow(leftSide bool, joinType joinType) bool {
+	switch joinType {
+	case innerJoin:
+		return false
+	case rightOuter:
+		if leftSide {
+			return false
+		}
+	case leftOuter:
+		if !leftSide {
+			return false
+		}
+	}
+	return true
+}
+
 // maybeEmitUnmatchedRow is used for rows that don't match anything in the other
 // table; we emit them if it's called for given the type of join, otherwise we
 // discard them.
@@ -96,17 +115,8 @@ func (jb *joinerBase) renderUnmatchedRow(
 func (jb *joinerBase) maybeEmitUnmatchedRow(
 	ctx context.Context, row sqlbase.EncDatumRow, leftSide bool,
 ) bool {
-	switch jb.joinType {
-	case innerJoin:
+	if !shouldEmitUnmatchedRow(leftSide, jb.joinType) {
 		return true
-	case rightOuter:
-		if leftSide {
-			return true
-		}
-	case leftOuter:
-		if !leftSide {
-			return true
-		}
 	}
 
 	renderedRow := jb.renderUnmatchedRow(row, leftSide)
