@@ -1009,7 +1009,8 @@ func (s *Store) SetDraining(drain bool) {
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		wg.Add(1)
 		if err := s.stopper.RunLimitedAsyncTask(
-			r.AnnotateCtx(ctx), sem, true /* wait */, func(ctx context.Context) {
+			r.AnnotateCtx(ctx), "storage.Store: draining replica", sem, true, /* wait */
+			func(ctx context.Context) {
 				defer wg.Done()
 				var drainingLease roachpb.Lease
 				for {
@@ -1458,11 +1459,13 @@ func (s *Store) maybeGossipOnCapacityChange(ctx context.Context, cce capacityCha
 		atomic.StoreInt32(&s.gossipRangeCountdown, 0)
 		atomic.StoreInt32(&s.gossipLeaseCountdown, 0)
 		// Send using an async task because GossipStore needs the store mutex.
-		if err := s.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
-			if err := s.GossipStore(ctx); err != nil {
-				log.Warningf(ctx, "error gossiping on capacity change: %s", err)
-			}
-		}); err != nil {
+		if err := s.stopper.RunAsyncTask(
+			ctx, "storage.Store: gossip on capacity change",
+			func(ctx context.Context) {
+				if err := s.GossipStore(ctx); err != nil {
+					log.Warningf(ctx, "error gossiping on capacity change: %s", err)
+				}
+			}); err != nil {
 			log.Warningf(ctx, "unable to gossip on capacity change: %s", err)
 		}
 	}

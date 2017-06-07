@@ -774,9 +774,11 @@ func (t *tableState) removeLease(lease *LeaseState, m *LeaseManager) {
 	}
 
 	// Release to the store asynchronously, without the tableState lock.
-	if err := t.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
-		m.LeaseStore.Release(ctx, t.stopper, lease)
-	}); err != nil {
+	if err := t.stopper.RunAsyncTask(
+		ctx, "sql.tableState: releasing descriptor lease",
+		func(ctx context.Context) {
+			m.LeaseStore.Release(ctx, t.stopper, lease)
+		}); err != nil {
 		log.Warningf(ctx, "error: %s, not releasing lease: %q", err, lease)
 	}
 }
