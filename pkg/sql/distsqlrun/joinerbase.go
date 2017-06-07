@@ -71,13 +71,24 @@ func (jb *joinerBase) init(
 	return jb.out.init(post, types, &flowCtx.evalCtx, output)
 }
 
+type joinSide uint8
+
+const (
+	leftSide  joinSide = 0
+	rightSide joinSide = 1
+)
+
+func otherSide(s joinSide) joinSide {
+	return joinSide(1 - uint8(s))
+}
+
 // renderUnmatchedRow creates a result row given an unmatched row on either
 // side. Only used for outer joins.
 func (jb *joinerBase) renderUnmatchedRow(
-	row sqlbase.EncDatumRow, leftSide bool,
+	row sqlbase.EncDatumRow, side joinSide,
 ) sqlbase.EncDatumRow {
 	lrow, rrow := jb.emptyLeft, jb.emptyRight
-	if leftSide {
+	if side == leftSide {
 		lrow = row
 	} else {
 		rrow = row
@@ -87,30 +98,45 @@ func (jb *joinerBase) renderUnmatchedRow(
 	return jb.combinedRow
 }
 
+// shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
+// NULLs for the columns of the other stream). This happens in FULL OUTER joins
+// and LEFT or RIGHT OUTER joins (depending on which stream).
+func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
+	switch joinType {
+	case innerJoin:
+		return false
+	case rightOuter:
+		if side == leftSide {
+			return false
+		}
+	case leftOuter:
+		if side == rightSide {
+			return false
+		}
+	}
+	return true
+}
+
 // maybeEmitUnmatchedRow is used for rows that don't match anything in the other
 // table; we emit them if it's called for given the type of join, otherwise we
 // discard them.
 //
-// Returns false if no more rows are needed (in which case the inputs and the
-// output has been properly closed).
+// Returns false if no more rows are needed (in which case the inputs still need
+// to be drained and closed).
 func (jb *joinerBase) maybeEmitUnmatchedRow(
-	ctx context.Context, row sqlbase.EncDatumRow, leftSide bool,
+	ctx context.Context, row sqlbase.EncDatumRow, side joinSide,
 ) bool {
-	switch jb.joinType {
-	case innerJoin:
+	if !shouldEmitUnmatchedRow(side, jb.joinType) {
 		return true
-	case rightOuter:
-		if leftSide {
-			return true
-		}
-	case leftOuter:
-		if !leftSide {
-			return true
-		}
 	}
 
-	renderedRow := jb.renderUnmatchedRow(row, leftSide)
-	return emitHelper(ctx, &jb.out, renderedRow, ProducerMetadata{}, jb.leftSource, jb.rightSource)
+	renderedRow := jb.renderUnmatchedRow(row, side)
+	consumerStatus, err := jb.out.emitRow(ctx, renderedRow)
+	if err != nil {
+		jb.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+		return false
+	}
+	return consumerStatus == NeedMoreRows
 }
 
 // render constructs a row with columns from both sides. The ON condition is

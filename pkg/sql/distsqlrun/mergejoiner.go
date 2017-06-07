@@ -126,12 +126,12 @@ func (m *mergeJoiner) outputBatch(ctx context.Context) (bool, error) {
 				if matchedRight != nil {
 					matchedRight[rIdx] = true
 				}
-				if !emitHelper(ctx, &m.out, renderedRow, ProducerMetadata{}, m.leftSource, m.rightSource) {
+				if !emitHelper(ctx, &m.out, renderedRow, ProducerMetadata{}) {
 					return false, nil
 				}
 			}
 		}
-		if !matched && !m.maybeEmitUnmatchedRow(ctx, lrow, true /* leftSide */) {
+		if !matched && !m.maybeEmitUnmatchedRow(ctx, lrow, leftSide) {
 			return false, nil
 		}
 	}
@@ -139,7 +139,7 @@ func (m *mergeJoiner) outputBatch(ctx context.Context) (bool, error) {
 	if matchedRight != nil {
 		// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
 		for rIdx, rrow := range rightRows {
-			if !matchedRight[rIdx] && !m.maybeEmitUnmatchedRow(ctx, rrow, false /* !leftSide */) {
+			if !matchedRight[rIdx] && !m.maybeEmitUnmatchedRow(ctx, rrow, rightSide) {
 				return false, nil
 			}
 		}

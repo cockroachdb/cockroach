@@ -379,6 +379,12 @@ type MemoryAccount struct {
 	curAllocated int64
 }
 
+// CurrentlyAllocated returns the number of bytes currently allocated through
+// this account.
+func (acc MemoryAccount) CurrentlyAllocated() int64 {
+	return acc.curAllocated
+}
+
 // OpenAccount creates a new empty account.
 func (mm *MemoryMonitor) OpenAccount(_ *MemoryAccount) {
 	// TODO(knz): conditionally track accounts in the memory monitor
