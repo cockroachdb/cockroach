@@ -237,6 +237,7 @@ typedef struct {
 } DBStatsResult;
 
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats);
+DBString DBGetCompactionStats(DBEngine* db);
 
 typedef struct {
   int level;
