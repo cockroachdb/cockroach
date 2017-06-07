@@ -4142,8 +4142,9 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		readAmp := sstables.ReadAmplification()
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 		// Log this metric infrequently.
-		if tick%100 == 0 {
+		if tick%60 == 0 /* every 10m */ {
 			log.Infof(ctx, "sstables (read amplification = %d):\n%s", readAmp, sstables)
+			log.Info(ctx, rocksdb.GetCompactionStats())
 		}
 	}
 	return nil

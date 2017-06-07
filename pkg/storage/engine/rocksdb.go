@@ -829,6 +829,12 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 	}, nil
 }
 
+// GetCompactionStats returns the internal RocksDB compaction stats. See
+// https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#rocksdb-statistics.
+func (r *RocksDB) GetCompactionStats() string {
+	return cStringToGoString(C.DBGetCompactionStats(r.rdb))
+}
+
 type rocksDBSnapshot struct {
 	parent *RocksDB
 	handle *C.DBEngine
