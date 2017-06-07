@@ -119,12 +119,13 @@ func (s *Server) Query(
 	// a deadlock would occur because queries cannot complete until
 	// they have written their result to the "output" channel, which is
 	// processed later in the main function.
-	if err := s.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
+	if err := s.stopper.RunAsyncTask(ctx, "ts.Server: queries", func(ctx context.Context) {
 		for queryIdx, query := range request.Queries {
 			queryIdx := queryIdx
 			query := query
 			if err := s.stopper.RunLimitedAsyncTask(
 				ctx,
+				"ts.Server: query",
 				s.workerSem,
 				true, /* wait */
 				func(ctx context.Context) {
