@@ -73,26 +73,28 @@ func (s *statusServer) ProblemRanges(
 			continue
 		}
 		nodeID := nodeID
-		if err := s.stopper.RunAsyncTask(nodeCtx, func(ctx context.Context) {
-			status, err := s.dialNode(nodeID)
-			var rangesResponse *serverpb.RangesResponse
-			if err == nil {
-				req := &serverpb.RangesRequest{}
-				rangesResponse, err = status.Ranges(ctx, req)
-			}
-			response := nodeResponse{
-				nodeID: nodeID,
-				resp:   rangesResponse,
-				err:    err,
-			}
+		if err := s.stopper.RunAsyncTask(
+			nodeCtx, "server.statusServer: requesting remote ranges",
+			func(ctx context.Context) {
+				status, err := s.dialNode(nodeID)
+				var rangesResponse *serverpb.RangesResponse
+				if err == nil {
+					req := &serverpb.RangesRequest{}
+					rangesResponse, err = status.Ranges(ctx, req)
+				}
+				response := nodeResponse{
+					nodeID: nodeID,
+					resp:   rangesResponse,
+					err:    err,
+				}
 
-			select {
-			case responses <- response:
-				// Response processed.
-			case <-ctx.Done():
-				// Context completed, response no longer needed.
-			}
-		}); err != nil {
+				select {
+				case responses <- response:
+					// Response processed.
+				case <-ctx.Done():
+					// Context completed, response no longer needed.
+				}
+			}); err != nil {
 			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}
 	}

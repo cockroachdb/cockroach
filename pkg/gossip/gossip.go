@@ -1024,7 +1024,7 @@ func (g *Gossip) bootstrap() {
 		var bootstrapTimer timeutil.Timer
 		defer bootstrapTimer.Stop()
 		for {
-			if g.server.stopper.RunTask(ctx, func(ctx context.Context) {
+			if g.server.stopper.RunTask(ctx, "gossip.Gossip: bootstrap ", func(ctx context.Context) {
 				g.mu.Lock()
 				defer g.mu.Unlock()
 				haveClients := g.outgoing.len() > 0
