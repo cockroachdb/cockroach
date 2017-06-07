@@ -20,7 +20,7 @@ should be simple to perform.
 With Cassandra, there is a lot of operational complexity and difficulty with
 these operations. For example, if a node is down for longer than the GC period,
 all its tombstones are deleted; when it rejoins the cluster, it starts
-re-replicating previously deleted entries. CockroachDb does not suffer from this
+re-replicating previously deleted entries. CockroachDB does not suffer from this
 specific issue.
 
 # Detailed design
@@ -39,6 +39,10 @@ High-level process:
    up-replication.
    1. All replicas for each replica set are up-replicated.
    1. All replicas deleted from the node.
+1. Node tracks decommissioning status. It is completed when node has shed all of
+   its data and can safely be terminated.
+1. Node performs cosmetic cleanup to avoid showing this node as permanently dead
+   in the UI. 
 1. If node is restarted, it exits with error on encountering marker.
 
 Lower-level changes:
@@ -54,15 +58,17 @@ Lower-level changes:
 - Transfer leases away from target node.
 - Leaseholder of ranges with replicas on target node trigger up-replication.
 
-### Difference in process when target is alive vs dead
+### Target: alive vs dead
 If the node being removed is dead, and so, unreachable, its leases and data
-would already have been transferred to other nodes. The only thing to do is
-preventing it from rejoining the cluster if it were to become available. This
-would require blacklisting that node and would be fairly complex: this will not
-be attempted.
+would already have been transferred to other nodes. Preventing it from rejoining
+the cluster if it were to become available would require blacklisting and would
+be fairly complex: this will not be attempted. The cosmetic change to remove the
+the node from UI is the only required action. There should be no "gotchas":
+accidental cosmetic removal of a node that is actually live or coming back to
+have real consequences.
 
 ## Temporary removal
-No changes required. The existing CockroachDb process, described below, is
+No changes required. The existing CockroachDB process, described below, is
 sufficient.
 After a node is detected as unavailable for more than
 `COCKROACH_TIME_UNTIL_STORE_DEAD` (an env variable with default: 5 minutes), the
@@ -76,6 +82,16 @@ removing a node, we still want to do that. Although a node can have multiple
 stores, there can be at most one replica for each replica set (e.g. range) per
 node.
 
+## CLI
+To initiate the removal of a node: `node rm <node-id>`. This prompts for user
+confirmation. Passing `--yes` as a command-line flag will skip this prompt. The
+command is asynchronous and returns once the node has been marked as
+decommissioned. The user can poll `node ls` to determine when decommissioning is
+finished.
+
+It is possible to decommission several nodes concurrently by calling the node
+endpoint repeatedly.
+
 # Drawbacks
 
 # Alternatives
@@ -83,10 +99,10 @@ During a temporary removal, `COCKROACH_TIME_UNTIL_STORE_DEAD` could be updated
 to to the length of the downtime to avoid unecessary movement of ranges.
 However, it is difficult to predict the length of downtime. This is an
 optimisation which can be implemented later.
+ 
+If the operation were blocking and it took a long time to complete, the
+connection might timeout if no response was sent to the client.
 
 # Unresolved questions
-- Interface for initiating removal of a node. One suggestion is adding
-  `node decommission <node-id>` to the CLI. The operation should be asynchronous
-  (vs blocking). If it is blocking and it takes a long time to complete,
-  connection might timeout if no response was sent to the client.
-- Removing multiple nodes concurrently
+- Do we actually need to down-replicate on the target node? I don't think it is
+  worth the extra logic.
