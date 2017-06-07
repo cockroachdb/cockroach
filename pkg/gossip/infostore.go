@@ -284,21 +284,23 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 	// Run callbacks in a goroutine to avoid mutex reentry. We also guarantee
 	// callbacks are run in order such that if a key is updated twice in
 	// succession, the second callback will never be run before the first.
-	if err := is.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-		// Grab the callback mutex to serialize execution of the callbacks.
-		is.callbackMu.Lock()
-		defer is.callbackMu.Unlock()
+	if err := is.stopper.RunAsyncTask(
+		context.Background(), "gossip.infoStore: callback", func(_ context.Context,
+		) {
+			// Grab the callback mutex to serialize execution of the callbacks.
+			is.callbackMu.Lock()
+			defer is.callbackMu.Unlock()
 
-		// Grab and execute the list of work.
-		is.callbackWorkMu.Lock()
-		work := is.callbackWork
-		is.callbackWork = nil
-		is.callbackWorkMu.Unlock()
+			// Grab and execute the list of work.
+			is.callbackWorkMu.Lock()
+			work := is.callbackWork
+			is.callbackWork = nil
+			is.callbackWorkMu.Unlock()
 
-		for _, w := range work {
-			w()
-		}
-	}); err != nil {
+			for _, w := range work {
+				w()
+			}
+		}); err != nil {
 		ctx := is.AnnotateCtx(context.TODO())
 		log.Warning(ctx, err)
 	}

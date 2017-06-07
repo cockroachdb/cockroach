@@ -2150,50 +2150,51 @@ func (r *Replica) CheckConsistency(
 		}
 		wg.Add(1)
 		replica := replica // per-iteration copy
-		if err := r.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
-			ctx, cancel := context.WithTimeout(ctx, collectChecksumTimeout)
-			defer cancel()
-			defer wg.Done()
-			addr, err := r.store.cfg.Transport.resolver(replica.NodeID)
-			if err != nil {
-				log.Error(ctx, errors.Wrapf(err, "could not resolve node ID %d", replica.NodeID))
-				return
-			}
-			conn, err := r.store.cfg.Transport.rpcContext.GRPCDial(addr.String())
-			if err != nil {
-				log.Error(ctx,
-					errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr))
-				return
-			}
-			client := NewConsistencyClient(conn)
-			req := &CollectChecksumRequest{
-				StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
-				r.RangeID,
-				id,
-				c.checksum,
-			}
-			resp, err := client.CollectChecksum(ctx, req)
-			if err != nil {
-				log.Error(ctx, errors.Wrapf(err, "could not CollectChecksum from replica %s", replica))
-				return
-			}
-			if bytes.Equal(c.checksum, resp.Checksum) {
-				return
-			}
-			atomic.AddUint32(&inconsistencyCount, 1)
-			var buf bytes.Buffer
-			_, _ = fmt.Fprintf(&buf, "replica %s is inconsistent: expected checksum %x, got %x",
-				replica, c.checksum, resp.Checksum)
-			if c.snapshot != nil && resp.Snapshot != nil {
-				diff := diffRange(c.snapshot, resp.Snapshot)
-				if report := r.store.cfg.TestingKnobs.BadChecksumReportDiff; report != nil {
-					report(r.store.Ident, diff)
+		if err := r.store.Stopper().RunAsyncTask(ctx, "storage.Replica: checking consistency",
+			func(ctx context.Context) {
+				ctx, cancel := context.WithTimeout(ctx, collectChecksumTimeout)
+				defer cancel()
+				defer wg.Done()
+				addr, err := r.store.cfg.Transport.resolver(replica.NodeID)
+				if err != nil {
+					log.Error(ctx, errors.Wrapf(err, "could not resolve node ID %d", replica.NodeID))
+					return
 				}
-				buf.WriteByte('\n')
-				_, _ = diff.WriteTo(&buf)
-			}
-			log.Error(ctx, buf.String())
-		}); err != nil {
+				conn, err := r.store.cfg.Transport.rpcContext.GRPCDial(addr.String())
+				if err != nil {
+					log.Error(ctx,
+						errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr))
+					return
+				}
+				client := NewConsistencyClient(conn)
+				req := &CollectChecksumRequest{
+					StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
+					r.RangeID,
+					id,
+					c.checksum,
+				}
+				resp, err := client.CollectChecksum(ctx, req)
+				if err != nil {
+					log.Error(ctx, errors.Wrapf(err, "could not CollectChecksum from replica %s", replica))
+					return
+				}
+				if bytes.Equal(c.checksum, resp.Checksum) {
+					return
+				}
+				atomic.AddUint32(&inconsistencyCount, 1)
+				var buf bytes.Buffer
+				_, _ = fmt.Fprintf(&buf, "replica %s is inconsistent: expected checksum %x, got %x",
+					replica, c.checksum, resp.Checksum)
+				if c.snapshot != nil && resp.Snapshot != nil {
+					diff := diffRange(c.snapshot, resp.Snapshot)
+					if report := r.store.cfg.TestingKnobs.BadChecksumReportDiff; report != nil {
+						report(r.store.Ident, diff)
+					}
+					buf.WriteByte('\n')
+					_, _ = diff.WriteTo(&buf)
+				}
+				log.Error(ctx, buf.String())
+			}); err != nil {
 			log.Error(ctx, errors.Wrap(err, "could not run async CollectChecksum"))
 			wg.Done()
 		}
@@ -2211,7 +2212,7 @@ func (r *Replica) CheckConsistency(
 		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
 	} else {
 		if err := r.store.stopper.RunAsyncTask(
-			r.AnnotateCtx(context.Background()), func(ctx context.Context) {
+			r.AnnotateCtx(context.Background()), "storage.Replica: checking consistency (re-run)", func(ctx context.Context) {
 				log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
 					inconsistencyCount)
 				// Keep the request from crossing the local->global boundary.

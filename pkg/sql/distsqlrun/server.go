@@ -244,7 +244,7 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 	}
 	mbox.setFlowCtx(&f.FlowCtx)
 
-	if err := ds.Stopper.RunTask(ctx, func(ctx context.Context) {
+	if err := ds.Stopper.RunTask(ctx, "distsqlrun.ServerImpl: mailbox", func(ctx context.Context) {
 		f.waitGroup.Add(1)
 		mbox.start(ctx, &f.waitGroup)
 		f.Start(ctx, func() {})

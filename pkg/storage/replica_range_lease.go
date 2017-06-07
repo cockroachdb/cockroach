@@ -175,73 +175,75 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	status LeaseStatus,
 	leaseReq roachpb.Request,
 ) error {
-	return repl.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
-		ctx = repl.AnnotateCtx(ctx)
-		var pErr *roachpb.Error
+	return repl.store.Stopper().RunAsyncTask(
+		ctx, "storage.pendingLeaseRequest: requesting lease",
+		func(ctx context.Context) {
+			ctx = repl.AnnotateCtx(ctx)
+			var pErr *roachpb.Error
 
-		// If requesting an epoch-based lease & current state is expired,
-		// potentially heartbeat our own liveness or increment epoch of
-		// prior owner. Note we only do this if the previous lease was
-		// epoch-based.
-		if reqLease.Type() == roachpb.LeaseEpoch && status.state == leaseExpired &&
-			status.lease.Type() == roachpb.LeaseEpoch {
-			var err error
-			// If this replica is previous & next lease holder, manually heartbeat to become live.
-			if status.lease.OwnedBy(nextLeaseHolder.StoreID) &&
-				repl.store.StoreID() == nextLeaseHolder.StoreID {
-				if err = repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.liveness); err != nil {
-					log.Error(ctx, err)
+			// If requesting an epoch-based lease & current state is expired,
+			// potentially heartbeat our own liveness or increment epoch of
+			// prior owner. Note we only do this if the previous lease was
+			// epoch-based.
+			if reqLease.Type() == roachpb.LeaseEpoch && status.state == leaseExpired &&
+				status.lease.Type() == roachpb.LeaseEpoch {
+				var err error
+				// If this replica is previous & next lease holder, manually heartbeat to become live.
+				if status.lease.OwnedBy(nextLeaseHolder.StoreID) &&
+					repl.store.StoreID() == nextLeaseHolder.StoreID {
+					if err = repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.liveness); err != nil {
+						log.Error(ctx, err)
+					}
+				} else if status.liveness.Epoch == *status.lease.Epoch {
+					// If not owner, increment epoch if necessary to invalidate lease.
+					if err = repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.liveness); err != nil {
+						log.Error(ctx, err)
+					}
 				}
-			} else if status.liveness.Epoch == *status.lease.Epoch {
-				// If not owner, increment epoch if necessary to invalidate lease.
-				if err = repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.liveness); err != nil {
-					log.Error(ctx, err)
+				// Set error for propagation to all waiters below.
+				if err != nil {
+					pErr = roachpb.NewError(newNotLeaseHolderError(&status.lease, repl.store.StoreID(), repl.Desc()))
 				}
 			}
-			// Set error for propagation to all waiters below.
-			if err != nil {
-				pErr = roachpb.NewError(newNotLeaseHolderError(&status.lease, repl.store.StoreID(), repl.Desc()))
-			}
-		}
 
-		// Send the RequestLeaseRequest or TransferLeaseRequest and wait for the new
-		// lease to be applied.
-		if pErr == nil {
-			ba := roachpb.BatchRequest{}
-			ba.Timestamp = repl.store.Clock().Now()
-			ba.RangeID = repl.RangeID
-			ba.Add(leaseReq)
-			_, pErr = repl.Send(ctx, ba)
-			// TODO(a-robinson): Remove this check after it's gotten some mileage in
-			// on test clusters or we gain an understanding of #10940.
-			if txn := pErr.GetTxn(); txn != nil {
-				log.Fatalf(ctx, "unexpected non-nil transaction %v in error from LeaseRequest %+v: %+v", txn, leaseReq, pErr)
+			// Send the RequestLeaseRequest or TransferLeaseRequest and wait for the new
+			// lease to be applied.
+			if pErr == nil {
+				ba := roachpb.BatchRequest{}
+				ba.Timestamp = repl.store.Clock().Now()
+				ba.RangeID = repl.RangeID
+				ba.Add(leaseReq)
+				_, pErr = repl.Send(ctx, ba)
+				// TODO(a-robinson): Remove this check after it's gotten some mileage in
+				// on test clusters or we gain an understanding of #10940.
+				if txn := pErr.GetTxn(); txn != nil {
+					log.Fatalf(ctx, "unexpected non-nil transaction %v in error from LeaseRequest %+v: %+v", txn, leaseReq, pErr)
+				}
 			}
-		}
-		// We reset our state below regardless of whether we've gotten an error or
-		// not, but note that an error is ambiguous - there's no guarantee that the
-		// transfer will not still apply. That's OK, however, as the "in transfer"
-		// state maintained by the pendingLeaseRequest is not relied on for
-		// correctness (see repl.mu.minLeaseProposedTS), and resetting the state
-		// is beneficial as it'll allow the replica to attempt to transfer again or
-		// extend the existing lease in the future.
+			// We reset our state below regardless of whether we've gotten an error or
+			// not, but note that an error is ambiguous - there's no guarantee that the
+			// transfer will not still apply. That's OK, however, as the "in transfer"
+			// state maintained by the pendingLeaseRequest is not relied on for
+			// correctness (see repl.mu.minLeaseProposedTS), and resetting the state
+			// is beneficial as it'll allow the replica to attempt to transfer again or
+			// extend the existing lease in the future.
 
-		// Send result of lease to all waiter channels.
-		repl.mu.Lock()
-		defer repl.mu.Unlock()
-		for _, llChan := range p.llChans {
-			// Don't send the same transaction object twice; this can lead to races.
-			if pErr != nil {
-				pErrClone := *pErr
-				pErrClone.SetTxn(pErr.GetTxn())
-				llChan <- &pErrClone
-			} else {
-				llChan <- nil
+			// Send result of lease to all waiter channels.
+			repl.mu.Lock()
+			defer repl.mu.Unlock()
+			for _, llChan := range p.llChans {
+				// Don't send the same transaction object twice; this can lead to races.
+				if pErr != nil {
+					pErrClone := *pErr
+					pErrClone.SetTxn(pErr.GetTxn())
+					llChan <- &pErrClone
+				} else {
+					llChan <- nil
+				}
 			}
-		}
-		p.llChans = p.llChans[:0]
-		p.nextLease = roachpb.Lease{}
-	})
+			p.llChans = p.llChans[:0]
+			p.nextLease = roachpb.Lease{}
+		})
 }
 
 // JoinRequest adds one more waiter to the currently pending request.
