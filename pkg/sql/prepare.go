@@ -41,10 +41,11 @@ type PreparedStatement struct {
 	memAcc WrappableMemoryAccount
 }
 
-// Statement contains a statement with optional expected result columns.
+// Statement contains a statement with optional expected result columns and metadata.
 type Statement struct {
 	AST           parser.Statement
 	ExpectedTypes sqlbase.ResultColumns
+	queryHandle   queryHandle
 }
 
 func (s Statement) String() string {

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -85,6 +86,10 @@ const (
 
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
+
+	// maxConcurrentRequests is the maximum number of RPC fan-out requests
+	// that will be made at any point of time.
+	maxConcurrentRequests = 100
 )
 
 // Pattern for local used when determining the node ID.
@@ -99,15 +104,16 @@ type metricMarshaler interface {
 type statusServer struct {
 	log.AmbientContext
 
-	cfg          *base.Config
-	admin        *adminServer
-	db           *client.DB
-	gossip       *gossip.Gossip
-	metricSource metricMarshaler
-	nodeLiveness *storage.NodeLiveness
-	rpcCtx       *rpc.Context
-	stores       *storage.Stores
-	stopper      *stop.Stopper
+	cfg             *base.Config
+	admin           *adminServer
+	db              *client.DB
+	gossip          *gossip.Gossip
+	metricSource    metricMarshaler
+	nodeLiveness    *storage.NodeLiveness
+	rpcCtx          *rpc.Context
+	stores          *storage.Stores
+	stopper         *stop.Stopper
+	sessionRegistry *sql.SessionRegistry
 }
 
 // newStatusServer allocates and returns a statusServer.
@@ -122,19 +128,21 @@ func newStatusServer(
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 	stopper *stop.Stopper,
+	sessionRegistry *sql.SessionRegistry,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
-		AmbientContext: ambient,
-		cfg:            cfg,
-		admin:          adminServer,
-		db:             db,
-		gossip:         gossip,
-		metricSource:   metricSource,
-		nodeLiveness:   nodeLiveness,
-		rpcCtx:         rpcCtx,
-		stores:         stores,
-		stopper:        stopper,
+		AmbientContext:  ambient,
+		cfg:             cfg,
+		admin:           adminServer,
+		db:              db,
+		gossip:          gossip,
+		metricSource:    metricSource,
+		nodeLiveness:    nodeLiveness,
+		rpcCtx:          rpcCtx,
+		stores:          stores,
+		stopper:         stopper,
+		sessionRegistry: sessionRegistry,
 	}
 
 	return server
@@ -785,6 +793,106 @@ func (s *statusServer) Ranges(
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	return &output, nil
+}
+
+// ListLocalSessions returns a list of SQL sessions on this node.
+func (s *statusServer) ListLocalSessions(
+	ctx context.Context, req *serverpb.ListSessionsRequest,
+) (*serverpb.ListSessionsResponse, error) {
+	registry := s.sessionRegistry
+
+	sessions := registry.SerializeAll()
+	userSessions := make([]serverpb.Session, 0, len(sessions))
+
+	for _, session := range sessions {
+		if !(req.Username == security.RootUser || req.Username == session.Username) {
+			continue
+		}
+
+		session.NodeID = s.gossip.NodeID.Get()
+		userSessions = append(userSessions, session)
+	}
+
+	return &serverpb.ListSessionsResponse{Sessions: userSessions}, nil
+}
+
+// ListSessions returns a list of SQL sessions on all nodes in the cluster.
+func (s *statusServer) ListSessions(
+	ctx context.Context, req *serverpb.ListSessionsRequest,
+) (*serverpb.ListSessionsResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodes, err := s.Nodes(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := serverpb.ListSessionsResponse{
+		Sessions: make([]serverpb.Session, 0),
+		Errors:   make([]serverpb.ListSessionsError, 0),
+	}
+
+	// Issue LocalSessions requests in parallel.
+	// Semaphore that guarantees not more than maxConcurrentRequests requests at once.
+	sem := make(chan struct{}, maxConcurrentRequests)
+	numNodes := len(nodes.Nodes)
+
+	// Channel for session responses and errors.
+	sessionsChan := make(chan *serverpb.ListSessionsResponse, numNodes)
+	errorsChan := make(chan serverpb.ListSessionsError, numNodes)
+
+	getNodeSessions := func(ctx context.Context, nodeID roachpb.NodeID) {
+		rpcCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
+		defer cancel()
+
+		status, err := s.dialNode(nodeID)
+
+		if err != nil {
+			err = errors.Wrapf(err, "failed to dial into node %d", nodeID)
+			errorsChan <- serverpb.ListSessionsError{
+				NodeID:  nodeID,
+				Message: err.Error(),
+			}
+			return
+		}
+
+		sessions, err := status.ListLocalSessions(rpcCtx, req)
+
+		if err != nil {
+			err = errors.Wrapf(err, "failed to get sessions from node %d", nodeID)
+			errorsChan <- serverpb.ListSessionsError{
+				NodeID:  nodeID,
+				Message: err.Error(),
+			}
+			return
+		}
+
+		sessionsChan <- sessions
+	}
+
+	for _, node := range nodes.Nodes {
+		nodeID := node.Desc.NodeID
+		getNodeSessionsTask := func(ctx context.Context) {
+			getNodeSessions(ctx, nodeID)
+		}
+		err := s.stopper.RunLimitedAsyncTask(ctx, sem, true /* wait */, getNodeSessionsTask)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for numNodes > 0 {
+		select {
+		case sessions := <-sessionsChan:
+			resp.Sessions = append(resp.Sessions, sessions.Sessions...)
+		case err := <-errorsChan:
+			resp.Errors = append(resp.Errors, err)
+		case <-ctx.Done():
+			err := serverpb.ListSessionsError{Message: "ListSessions cancelled before completion"}
+			resp.Errors = append(resp.Errors, err)
+		}
+		numNodes--
+	}
+	return &resp, nil
 }
 
 // SpanStats requests the total statistics stored on a node for a given key

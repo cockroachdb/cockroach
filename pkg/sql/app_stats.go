@@ -157,11 +157,13 @@ type sqlStats struct {
 	apps map[string]*appStats
 }
 
-// resetApplicationName initializes both Session.ApplicationName and
+// resetApplicationName initializes both Session.mu.ApplicationName and
 // the cached pointer to per-application statistics. It is meant to be
 // used upon session initialization and upon SET APPLICATION_NAME.
 func (s *Session) resetApplicationName(appName string) {
-	s.ApplicationName = appName
+	s.mu.Lock()
+	s.mu.ApplicationName = appName
+	s.mu.Unlock()
 	if s.sqlStats != nil {
 		s.appStats = s.sqlStats.getStatsForApplication(appName)
 	}
