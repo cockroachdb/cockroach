@@ -28,24 +28,25 @@ func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error)
 	if p.txn == nil {
 		return nil, errors.Errorf("the server should have already created a transaction")
 	}
-	if err := p.setIsolationLevel(n.Isolation); err != nil {
-		return nil, err
-	}
-	if err := p.setUserPriority(n.UserPriority); err != nil {
-		return nil, err
-	}
-	return &emptyNode{}, nil
+	return &emptyNode{}, p.setTransactionModes(n.Modes)
 }
 
 // SetTransaction sets a transaction's isolation level
 func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, error) {
-	if err := p.setIsolationLevel(n.Isolation); err != nil {
-		return nil, err
+	return &emptyNode{}, p.setTransactionModes(n.Modes)
+}
+
+func (p *planner) setTransactionModes(modes parser.TransactionModes) error {
+	if err := p.setIsolationLevel(modes.Isolation); err != nil {
+		return err
 	}
-	if err := p.setUserPriority(n.UserPriority); err != nil {
-		return nil, err
+	if err := p.setUserPriority(modes.UserPriority); err != nil {
+		return err
 	}
-	return &emptyNode{}, nil
+	if err := p.setReadWriteMode(modes.ReadWriteMode); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
@@ -73,5 +74,18 @@ func (p *planner) setUserPriority(userPriority parser.UserPriority) error {
 		return p.txn.SetUserPriority(roachpb.MaxUserPriority)
 	default:
 		return errors.Errorf("unknown user priority: %s", userPriority)
+	}
+}
+
+func (p *planner) setReadWriteMode(readWriteMode parser.ReadWriteMode) error {
+	switch readWriteMode {
+	case parser.UnspecifiedReadWriteMode:
+		return nil
+	case parser.ReadOnly:
+		return errors.New("read only not supported")
+	case parser.ReadWrite:
+		return nil
+	default:
+		return errors.Errorf("unknown read mode: %s", readWriteMode)
 	}
 }

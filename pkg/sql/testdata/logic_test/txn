@@ -613,3 +613,29 @@ query I
 SELECT COUNT(*) FROM kv WHERE k = 'savepoint'
 ----
 0
+
+# Test READ ONLY/WRITE syntax.
+
+statement ok
+BEGIN
+
+statement error read mode specified multiple times
+SET TRANSACTION READ ONLY, READ WRITE
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN READ WRITE; COMMIT
+
+statement error read only not supported
+BEGIN READ ONLY
+
+statement error read mode specified multiple times
+BEGIN READ WRITE, READ ONLY
+
+statement error user priority specified multiple times
+BEGIN PRIORITY LOW, PRIORITY HIGH
+
+statement error isolation level specified multiple times
+BEGIN ISOLATION LEVEL SERIALIZABLE, ISOLATION LEVEL SERIALIZABLE
