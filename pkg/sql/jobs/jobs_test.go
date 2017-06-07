@@ -303,11 +303,7 @@ func TestJobLogger(t *testing.T) {
 	})
 
 	isDuplicateOperationError := func(err error, re string) bool {
-		switch err.(type) {
-		case jobs.DuplicateOperationError:
-			return testutils.IsError(err, re)
-		}
-		return false
+		return jobs.IsDuplicateOperationError(err) && testutils.IsError(err, re)
 	}
 
 	t.Run("same state transition twice fails", func(t *testing.T) {
