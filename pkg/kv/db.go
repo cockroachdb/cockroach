@@ -111,7 +111,7 @@ func (s *DBServer) Batch(
 	}
 
 	taskCtx := context.TODO()
-	err = s.stopper.RunTask(taskCtx, func(taskCtx context.Context) {
+	err = s.stopper.RunTask(taskCtx, "DBServer.Batch", func(taskCtx context.Context) {
 		var pErr *roachpb.Error
 		// TODO(wiz): This is required to be a different context from the one
 		// provided by grpc since it has to last for the entire transaction and not

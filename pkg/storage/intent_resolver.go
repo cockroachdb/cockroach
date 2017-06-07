@@ -254,7 +254,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 
 	for _, item := range intents {
 		err := stopper.RunLimitedAsyncTask(
-			ctx, ir.sem, false /* wait */, func(ctx context.Context) {
+			ctx, "intentResolver.processIntentsAsync", ir.sem, false /* wait */, func(ctx context.Context) {
 				ir.processIntents(ctx, r, item, now)
 			})
 		if err != nil {
@@ -431,7 +431,7 @@ func (ir *intentResolver) resolveIntents(
 			return ir.store.DB().Run(ctx, b)
 		}
 		if wait || ir.store.Stopper().RunLimitedAsyncTask(
-			ctx, ir.sem, true /* wait */, func(ctx context.Context) {
+			ctx, "intentResolve.resolveIntents", ir.sem, true /* wait */, func(ctx context.Context) {
 				if err := action(); err != nil {
 					log.Warningf(ctx, "unable to resolve external intents: %s", err)
 				}

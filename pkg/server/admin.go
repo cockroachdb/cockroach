@@ -598,30 +598,32 @@ func (s *adminServer) TableStats(
 	defer cancel()
 	for nodeID := range nodeIDs {
 		nodeID := nodeID
-		if err := s.server.stopper.RunAsyncTask(nodeCtx, func(ctx context.Context) {
-			var spanResponse *serverpb.SpanStatsResponse
-			client, err := s.server.status.dialNode(nodeID)
-			if err == nil {
-				req := serverpb.SpanStatsRequest{
-					StartKey: startKey,
-					EndKey:   endKey,
-					NodeID:   nodeID.String(),
+		if err := s.server.stopper.RunAsyncTask(
+			nodeCtx, "SpanStatsRequest call",
+			func(ctx context.Context) {
+				var spanResponse *serverpb.SpanStatsResponse
+				client, err := s.server.status.dialNode(nodeID)
+				if err == nil {
+					req := serverpb.SpanStatsRequest{
+						StartKey: startKey,
+						EndKey:   endKey,
+						NodeID:   nodeID.String(),
+					}
+					spanResponse, err = client.SpanStats(ctx, &req)
 				}
-				spanResponse, err = client.SpanStats(ctx, &req)
-			}
 
-			response := nodeResponse{
-				nodeID: nodeID,
-				resp:   spanResponse,
-				err:    err,
-			}
-			select {
-			case responses <- response:
-				// Response processed.
-			case <-ctx.Done():
-				// Context completed, response no longer needed.
-			}
-		}); err != nil {
+				response := nodeResponse{
+					nodeID: nodeID,
+					resp:   spanResponse,
+					err:    err,
+				}
+				select {
+				case responses <- response:
+					// Response processed.
+				case <-ctx.Done():
+					// Context completed, response no longer needed.
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}

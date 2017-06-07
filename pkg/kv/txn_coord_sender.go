@@ -708,7 +708,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 	// NB: use context.Background() here because we may be called when the
 	// caller's context has been cancelled.
 	ctx := tc.AnnotateCtx(context.Background())
-	if err := tc.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
+	if err := tc.stopper.RunAsyncTask(ctx, "TxnCoordSender.tryAsyncAbort", func(ctx context.Context) {
 		// Use the wrapped sender since the normal Sender does not allow
 		// clients to specify intents.
 		if _, pErr := tc.wrapped.Send(ctx, ba); pErr != nil {
@@ -943,9 +943,10 @@ func (tc *TxnCoordSender) updateState(
 				}
 				tc.txnMu.txns[txnID] = txnMeta
 
-				if err := tc.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
-					tc.heartbeatLoop(ctx, txnID)
-				}); err != nil {
+				if err := tc.stopper.RunAsyncTask(
+					ctx, "txn heartbeat loop", func(ctx context.Context) {
+						tc.heartbeatLoop(ctx, txnID)
+					}); err != nil {
 					// The system is already draining and we can't start the
 					// heartbeat. We refuse new transactions for now because
 					// they're likely not going to have all intents committed.

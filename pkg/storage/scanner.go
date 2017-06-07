@@ -277,19 +277,21 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				shouldStop = rs.waitAndProcess(ctx, start, clock, stopper, nil)
 			}
 
-			shouldStop = shouldStop || nil != stopper.RunTask(ctx, func(ctx context.Context) {
-				// Increment iteration count.
-				rs.mu.Lock()
-				defer rs.mu.Unlock()
-				rs.mu.scanCount++
-				rs.mu.total += timeutil.Since(start)
-				if log.V(6) {
-					log.Infof(ctx, "reset replica scan iteration")
-				}
+			shouldStop = shouldStop || nil != stopper.RunTask(
+				ctx, "replicaScanner.scanLoop",
+				func(ctx context.Context) {
+					// Increment iteration count.
+					rs.mu.Lock()
+					defer rs.mu.Unlock()
+					rs.mu.scanCount++
+					rs.mu.total += timeutil.Since(start)
+					if log.V(6) {
+						log.Infof(ctx, "reset replica scan iteration")
+					}
 
-				// Reset iteration and start time.
-				start = timeutil.Now()
-			})
+					// Reset iteration and start time.
+					start = timeutil.Now()
+				})
 			if shouldStop {
 				return
 			}

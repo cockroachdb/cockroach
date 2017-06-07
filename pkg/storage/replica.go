@@ -4674,24 +4674,26 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 	}
 	var hasLease bool
 	var pErr *roachpb.Error
-	if err := r.store.Stopper().RunTask(ctx, func(ctx context.Context) {
-		// Check for or obtain the lease, if none active.
-		_, pErr = r.redirectOnOrAcquireLease(ctx)
-		hasLease = pErr == nil
-		if pErr != nil {
-			switch e := pErr.GetDetail().(type) {
-			case *roachpb.NotLeaseHolderError:
-				// NotLeaseHolderError means there is an active lease, but only if
-				// the lease holder is set; otherwise, it's likely a timeout.
-				if e.LeaseHolder != nil {
-					pErr = nil
+	if err := r.store.Stopper().RunTask(
+		ctx, "Replica.getLeaseforGossip",
+		func(ctx context.Context) {
+			// Check for or obtain the lease, if none active.
+			_, pErr = r.redirectOnOrAcquireLease(ctx)
+			hasLease = pErr == nil
+			if pErr != nil {
+				switch e := pErr.GetDetail().(type) {
+				case *roachpb.NotLeaseHolderError:
+					// NotLeaseHolderError means there is an active lease, but only if
+					// the lease holder is set; otherwise, it's likely a timeout.
+					if e.LeaseHolder != nil {
+						pErr = nil
+					}
+				default:
+					// Any other error is worth being logged visibly.
+					log.Warningf(ctx, "could not acquire lease for range gossip: %s", e)
 				}
-			default:
-				// Any other error is worth being logged visibly.
-				log.Warningf(ctx, "could not acquire lease for range gossip: %s", e)
 			}
-		}
-	}); err != nil {
+		}); err != nil {
 		pErr = roachpb.NewError(err)
 	}
 	return hasLease, pErr

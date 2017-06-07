@@ -18,6 +18,7 @@ package storage
 
 import (
 	"container/heap"
+	"fmt"
 	"sync"
 	"time"
 
@@ -523,18 +524,20 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				var duration time.Duration
 				if repl != nil {
 					annotatedCtx := repl.AnnotateCtx(ctx)
-					if stopper.RunTask(annotatedCtx, func(annotatedCtx context.Context) {
-						start := timeutil.Now()
-						if err := bq.processReplica(annotatedCtx, repl, clock); err != nil {
-							// Maybe add failing replica to purgatory if the queue supports it.
-							bq.maybeAddToPurgatory(annotatedCtx, repl, err, clock, stopper)
-						}
-						duration = timeutil.Since(start)
-						if log.V(2) {
-							log.Infof(annotatedCtx, "done %s", duration)
-						}
-						bq.processingNanos.Inc(duration.Nanoseconds())
-					}) != nil {
+					if stopper.RunTask(
+						annotatedCtx, fmt.Sprintf("%s processReplica", bq.name),
+						func(annotatedCtx context.Context) {
+							start := timeutil.Now()
+							if err := bq.processReplica(annotatedCtx, repl, clock); err != nil {
+								// Maybe add failing replica to purgatory if the queue supports it.
+								bq.maybeAddToPurgatory(annotatedCtx, repl, err, clock, stopper)
+							}
+							duration = timeutil.Since(start)
+							if log.V(2) {
+								log.Infof(annotatedCtx, "done %s", duration)
+							}
+							bq.processingNanos.Inc(duration.Nanoseconds())
+						}) != nil {
 						return
 					}
 				}
@@ -706,11 +709,13 @@ func (bq *baseQueue) maybeAddToPurgatory(
 						return
 					}
 					annotatedCtx := repl.AnnotateCtx(ctx)
-					if stopper.RunTask(annotatedCtx, func(annotatedCtx context.Context) {
-						if err := bq.processReplica(annotatedCtx, repl, clock); err != nil {
-							bq.maybeAddToPurgatory(annotatedCtx, repl, err, clock, stopper)
-						}
-					}) != nil {
+					if stopper.RunTask(
+						annotatedCtx, fmt.Sprintf("%s purgatory processReplica", bq.name),
+						func(annotatedCtx context.Context) {
+							if err := bq.processReplica(annotatedCtx, repl, clock); err != nil {
+								bq.maybeAddToPurgatory(annotatedCtx, repl, err, clock, stopper)
+							}
+						}) != nil {
 						return
 					}
 				}

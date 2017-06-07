@@ -643,53 +643,55 @@ func (ptq *pushTxnQueue) startQueryPusherTxn(
 	pusher := push.req.PusherTxn.Clone()
 	push.mu.Unlock()
 
-	if err := ptq.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
-		// We use a backoff/retry here in case the pusher transaction
-		// doesn't yet exist.
-		for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-			var pErr *roachpb.Error
-			var updatedPusher *roachpb.Transaction
-			updatedPusher, waitingTxns, pErr = ptq.queryTxnStatus(
-				ctx, pusher.TxnMeta, true, waitingTxns, ptq.store.Clock().Now(),
-			)
-			if pErr != nil {
-				errCh <- pErr
-				return
-			} else if updatedPusher == nil {
-				// No pusher to query; the BeginTransaction hasn't yet created the
-				// pusher's record. Continue in order to backoff and retry.
-				continue
-			}
+	if err := ptq.store.Stopper().RunAsyncTask(
+		ctx, "pushTxnQueue.queryTxnStatus",
+		func(ctx context.Context) {
+			// We use a backoff/retry here in case the pusher transaction
+			// doesn't yet exist.
+			for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+				var pErr *roachpb.Error
+				var updatedPusher *roachpb.Transaction
+				updatedPusher, waitingTxns, pErr = ptq.queryTxnStatus(
+					ctx, pusher.TxnMeta, true, waitingTxns, ptq.store.Clock().Now(),
+				)
+				if pErr != nil {
+					errCh <- pErr
+					return
+				} else if updatedPusher == nil {
+					// No pusher to query; the BeginTransaction hasn't yet created the
+					// pusher's record. Continue in order to backoff and retry.
+					continue
+				}
 
-			// Update the pending pusher's set of dependents. These accumulate
-			// and are used to propagate the transitive set of dependencies for
-			// distributed deadlock detection.
-			push.mu.Lock()
-			if push.mu.dependents == nil {
-				push.mu.dependents = map[uuid.UUID]struct{}{}
-			}
-			for _, txnID := range waitingTxns {
-				push.mu.dependents[txnID] = struct{}{}
-			}
-			push.mu.Unlock()
+				// Update the pending pusher's set of dependents. These accumulate
+				// and are used to propagate the transitive set of dependencies for
+				// distributed deadlock detection.
+				push.mu.Lock()
+				if push.mu.dependents == nil {
+					push.mu.dependents = map[uuid.UUID]struct{}{}
+				}
+				for _, txnID := range waitingTxns {
+					push.mu.dependents[txnID] = struct{}{}
+				}
+				push.mu.Unlock()
 
-			// Send an update of the pusher txn.
-			pusher.Update(updatedPusher)
-			ch <- &pusher
+				// Send an update of the pusher txn.
+				pusher.Update(updatedPusher)
+				ch <- &pusher
 
-			// Wait for context cancellation or indication on readyCh that the
-			// push waiter requires another query of the pusher txn.
-			select {
-			case <-ctx.Done():
-				errCh <- roachpb.NewError(ctx.Err())
-				return
-			case <-readyCh:
+				// Wait for context cancellation or indication on readyCh that the
+				// push waiter requires another query of the pusher txn.
+				select {
+				case <-ctx.Done():
+					errCh <- roachpb.NewError(ctx.Err())
+					return
+				case <-readyCh:
+				}
+				// Reset the retry to query again immediately.
+				r.Reset()
 			}
-			// Reset the retry to query again immediately.
-			r.Reset()
-		}
-		errCh <- roachpb.NewError(ctx.Err())
-	}); err != nil {
+			errCh <- roachpb.NewError(ctx.Err())
+		}); err != nil {
 		errCh <- roachpb.NewError(err)
 	}
 	return ch, errCh

@@ -362,7 +362,7 @@ func (r *Replica) computeChecksumPostApply(
 	snap := r.store.NewSnapshot()
 
 	// Compute SHA asynchronously and store it in a map by UUID.
-	if err := stopper.RunAsyncTask(ctx, func(ctx context.Context) {
+	if err := stopper.RunAsyncTask(ctx, "computeChecksumPostApply", func(ctx context.Context) {
 		defer snap.Close()
 		var snapshot *roachpb.RaftSnapshotData
 		if args.Snapshot {
@@ -789,16 +789,18 @@ func (r *Replica) handleLocalEvalResult(
 		// blocks waiting for the lease acquisition to finish but it can't finish
 		// because we're not processing raft messages due to holding
 		// processRaftMu (and running on the processRaft goroutine).
-		if err := r.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
-			hasLease, pErr := r.getLeaseForGossip(ctx)
+		if err := r.store.Stopper().RunAsyncTask(
+			ctx, "Replica.handleLocalEvalResult gossipFirstRange",
+			func(ctx context.Context) {
+				hasLease, pErr := r.getLeaseForGossip(ctx)
 
-			if pErr != nil {
-				log.Infof(ctx, "unable to gossip first range; hasLease=%t, err=%s", hasLease, pErr)
-			} else if !hasLease {
-				return
-			}
-			r.gossipFirstRange(ctx)
-		}); err != nil {
+				if pErr != nil {
+					log.Infof(ctx, "unable to gossip first range; hasLease=%t, err=%s", hasLease, pErr)
+				} else if !hasLease {
+					return
+				}
+				r.gossipFirstRange(ctx)
+			}); err != nil {
 			log.Infof(ctx, "unable to gossip first range: %s", err)
 		}
 		lResult.gossipFirstRange = false

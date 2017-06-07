@@ -874,8 +874,9 @@ func (s *statusServer) ListSessions(
 		getNodeSessionsTask := func(ctx context.Context) {
 			getNodeSessions(ctx, nodeID)
 		}
-		err := s.stopper.RunLimitedAsyncTask(ctx, sem, true /* wait */, getNodeSessionsTask)
-		if err != nil {
+		if err := s.stopper.RunLimitedAsyncTask(
+			ctx, "statusServer.ListSessions", sem, true /* wait */, getNodeSessionsTask,
+		); err != nil {
 			return nil, err
 		}
 	}

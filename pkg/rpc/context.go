@@ -316,15 +316,16 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		}
 		meta.conn, meta.dialErr = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
 		if meta.dialErr == nil {
-			if err := ctx.Stopper.RunTask(ctx.masterCtx, func(masterCtx context.Context) {
-				ctx.Stopper.RunWorker(masterCtx, func(masterCtx context.Context) {
-					err := ctx.runHeartbeat(meta, target)
-					if err != nil && !grpcutil.IsClosedConnection(err) {
-						log.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
-					}
-					ctx.removeConn(target, meta)
-				})
-			}); err != nil {
+			if err := ctx.Stopper.RunTask(
+				ctx.masterCtx, "gRPC heartbeat", func(masterCtx context.Context) {
+					ctx.Stopper.RunWorker(masterCtx, func(masterCtx context.Context) {
+						err := ctx.runHeartbeat(meta, target)
+						if err != nil && !grpcutil.IsClosedConnection(err) {
+							log.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
+						}
+						ctx.removeConn(target, meta)
+					})
+				}); err != nil {
 				meta.dialErr = err
 				// removeConn and ctx's cleanup worker both lock ctx.conns. However,
 				// to avoid racing with meta's initialization, the cleanup worker

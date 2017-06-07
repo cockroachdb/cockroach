@@ -153,28 +153,30 @@ func (s *statusServer) handleDebugRange(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 		nodeID := nodeID
-		if err := s.stopper.RunAsyncTask(nodeCtx, func(ctx context.Context) {
-			status, err := s.dialNode(nodeID)
-			var rangesResponse *serverpb.RangesResponse
-			if err == nil {
-				req := &serverpb.RangesRequest{
-					RangeIDs: []roachpb.RangeID{roachpb.RangeID(rangeID)},
+		if err := s.stopper.RunAsyncTask(
+			nodeCtx, "RangesRequest call",
+			func(ctx context.Context) {
+				status, err := s.dialNode(nodeID)
+				var rangesResponse *serverpb.RangesResponse
+				if err == nil {
+					req := &serverpb.RangesRequest{
+						RangeIDs: []roachpb.RangeID{roachpb.RangeID(rangeID)},
+					}
+					rangesResponse, err = status.Ranges(ctx, req)
 				}
-				rangesResponse, err = status.Ranges(ctx, req)
-			}
-			response := nodeResponse{
-				nodeID: nodeID,
-				resp:   rangesResponse,
-				err:    err,
-			}
+				response := nodeResponse{
+					nodeID: nodeID,
+					resp:   rangesResponse,
+					err:    err,
+				}
 
-			select {
-			case responses <- response:
-				// Response processed.
-			case <-ctx.Done():
-				// Context completed, response no longer needed.
-			}
-		}); err != nil {
+				select {
+				case responses <- response:
+					// Response processed.
+				case <-ctx.Done():
+					// Context completed, response no longer needed.
+				}
+			}); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

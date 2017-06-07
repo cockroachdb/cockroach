@@ -2150,7 +2150,7 @@ func (r *Replica) CheckConsistency(
 		}
 		wg.Add(1)
 		replica := replica // per-iteration copy
-		if err := r.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
+		if err := r.store.Stopper().RunAsyncTask(ctx, "CheckConsistency", func(ctx context.Context) {
 			ctx, cancel := context.WithTimeout(ctx, collectChecksumTimeout)
 			defer cancel()
 			defer wg.Done()
@@ -2211,7 +2211,7 @@ func (r *Replica) CheckConsistency(
 		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
 	} else {
 		if err := r.store.stopper.RunAsyncTask(
-			r.AnnotateCtx(context.Background()), func(ctx context.Context) {
+			r.AnnotateCtx(context.Background()), "CheckConsistency re-run", func(ctx context.Context) {
 				log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
 					inconsistencyCount)
 				// Keep the request from crossing the local->global boundary.
