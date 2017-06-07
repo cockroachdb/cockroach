@@ -102,22 +102,46 @@ func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 // been dictated by the consumer saying that no more rows are needed) and close
 // the output.
 func (m *mergeJoiner) outputBatch(ctx context.Context) (bool, error) {
-	batch, err := m.streamMerger.NextBatch()
-	if err != nil || len(batch) == 0 {
-		return len(batch) != 0, err
+	leftRows, rightRows, err := m.streamMerger.NextBatch()
+	if err != nil {
+		return false, err
 	}
-	for _, rowPair := range batch {
-		row, _, err := m.render(rowPair[0], rowPair[1])
-		if err != nil {
-			return false, err
-		}
-		if row == nil {
-			continue
-		}
+	if leftRows == nil && rightRows == nil {
+		return false, nil
+	}
+	var matchedRight []bool
+	if m.joinType == fullOuter || m.joinType == rightOuter {
+		matchedRight = make([]bool, len(rightRows))
+	}
 
-		consumerStatus, err := m.out.emitRow(ctx, row)
-		if err != nil || consumerStatus != NeedMoreRows {
-			return false, err
+	for _, lrow := range leftRows {
+		matched := false
+		for rIdx, rrow := range rightRows {
+			renderedRow, err := m.render(lrow, rrow)
+			if err != nil {
+				return false, err
+			}
+			if renderedRow != nil {
+				matched = true
+				if matchedRight != nil {
+					matchedRight[rIdx] = true
+				}
+				if !emitHelper(ctx, &m.out, renderedRow, ProducerMetadata{}, m.leftSource, m.rightSource) {
+					return false, nil
+				}
+			}
+		}
+		if !matched && !m.maybeEmitUnmatchedRow(ctx, lrow, true /* leftSide */) {
+			return false, nil
+		}
+	}
+
+	if matchedRight != nil {
+		// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
+		for rIdx, rrow := range rightRows {
+			if !matchedRight[rIdx] && !m.maybeEmitUnmatchedRow(ctx, rrow, false /* !leftSide */) {
+				return false, nil
+			}
 		}
 	}
 	return true, nil

@@ -191,7 +191,7 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_RIGHT_OUTER,
-				// Implicit @1 = @3 constraint.
+				// Implicit @1 = @4 constraint.
 			},
 			outCols: []uint32{3, 1, 2},
 			inputs: []sqlbase.EncDatumRows{
@@ -283,25 +283,44 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_LEFT_OUTER,
-				OnExpr:         Expression{Expr: "@2 > 1"},
+				OnExpr:         Expression{Expr: "@3 = 9"},
 			},
 			outCols: []uint32{0, 1},
 			inputs: []sqlbase.EncDatumRows{
 				{
-					{v[0]},
-					{v[1]},
-					{v[2]},
-				},
-				{
 					{v[1]},
 					{v[2]},
 					{v[3]},
+					{v[5]},
+					{v[6]},
+					{v[7]},
+				},
+				{
+					{v[2], v[8]},
+					{v[3], v[9]},
+					{v[4], v[9]},
+
+					// Rows that match v[5].
+					{v[5], v[9]},
+					{v[5], v[9]},
+
+					// Rows that match v[6] but the ON condition fails.
+					{v[6], v[8]},
+					{v[6], v[8]},
+
+					// Rows that match v[7], ON condition fails for one.
+					{v[7], v[8]},
+					{v[7], v[9]},
 				},
 			},
 			expected: sqlbase.EncDatumRows{
-				{v[0], null},
 				{v[1], null},
-				{v[2], v[2]},
+				{v[2], null},
+				{v[3], v[3]},
+				{v[5], v[5]},
+				{v[5], v[5]},
+				{v[6], null},
+				{v[7], v[7]},
 			},
 		},
 		// Test that right outer joins work with filters as expected.
