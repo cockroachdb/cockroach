@@ -80,10 +80,6 @@ var (
 		Help: "Number of batch KV requests that failed to execute on this node"}
 )
 
-// errNeedsBootstrap indicates the node should be used as the seed of
-// a new cluster.
-var errNeedsBootstrap = errors.New("node has no initialized stores and no instructions for joining an existing cluster")
-
 // errCannotJoinSelf indicates that a node was started with no initialized
 // stores but --join specifying itself; there's no way to make forward
 // progress in this state.
@@ -368,8 +364,7 @@ func (n *Node) bootstrap(ctx context.Context, engines []engine.Engine) error {
 	}
 	
 	log.Infof(ctx, "**** cluster %s has been created", clusterID)
-	// After bootstrapping, try again to initialize the stores.
-	return n.initStores(ctx, engines, n.stopper, true)
+	return nil
 }
 
 // start starts the node by registering the storage instance for the
@@ -385,12 +380,8 @@ func (n *Node) start(
 	n.initDescriptor(addr, attrs, locality)
 
 	// Initialize stores.
-	log.Error(ctx, "initStores")
-	if err := n.initStores(ctx, engines, n.stopper, false); err != nil {
-		log.Error(ctx, "initStores return: ", err)
-		if err != errNeedsBootstrap {
-			return err
-		}
+	if err := n.initStores(ctx, engines, n.stopper); err != nil {
+		return err
 	}
 
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
@@ -430,8 +421,7 @@ func (n *Node) SetDraining(drain bool) error {
 // bootstraps list for initialization once the cluster and node IDs
 // have been determined.
 func (n *Node) initStores(
-	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper, bootstrapped bool,
-) error {
+	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper) error {
 	var bootstraps []*storage.Store
 
 	if len(engines) == 0 {
@@ -440,9 +430,6 @@ func (n *Node) initStores(
 	for _, e := range engines {
 		s := storage.NewStore(n.storeCfg, e, &n.Descriptor)
 		log.Eventf(ctx, "created store for engine: %s", e)
-		if bootstrapped {
-			s.NotifyBootstrapped()
-		}
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(ctx, stopper); err != nil {
@@ -462,15 +449,6 @@ func (n *Node) initStores(
 		}
 		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
 		n.addStore(s)
-	}
-
-	log.Info(ctx, "StoreCount: ", n.stores.GetStoreCount())
-	
-	// TODO(adam): This probably needs to move.
-	// If there are no initialized stores and no gossip resolvers,
-	// bootstrap this node as the seed of a new cluster.
-	if n.stores.GetStoreCount() == 0 && len(n.storeCfg.Gossip.GetResolvers()) == 0 {
-		return errNeedsBootstrap
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.
