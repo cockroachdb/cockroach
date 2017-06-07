@@ -183,6 +183,32 @@ func benchmarkIterOnBatch(b *testing.B, writes int) {
 	}
 }
 
+func benchmarkIterOnReadWriter(b *testing.B, writes int, f func (Engine) ReadWriter, closeReadWriter bool) {
+	engine := createTestEngine()
+	defer engine.Close()
+
+	for i := 0; i < writes; i++ {
+		if err := engine.Put(makeKey(i), []byte(strconv.Itoa(i))); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	readWriter := f(engine)
+	if closeReadWriter {
+		defer readWriter.Close()
+	}
+
+	r := rand.New(rand.NewSource(5))
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		key := makeKey(r.Intn(writes))
+		iter := readWriter.NewIterator(true)
+		iter.Seek(key)
+		iter.Close()
+	}
+}
+
 // TestRocksDBOpenWithVersions verifies the version checking in Open()
 // functions correctly.
 func TestRocksDBOpenWithVersions(t *testing.T) {
