@@ -283,6 +283,28 @@ func TestBackupRestoreEmpty(t *testing.T) {
 	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
 }
 
+// Regression test for #16008. In short, the way RESTORE constructed split keys
+// for tables with negative primary key data caused AdminSplit to fail.
+func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1000
+
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+
+	// Give half the accounts negative primary keys.
+	sqlDB.Exec(`UPDATE bench.bank SET id = $1 - id WHERE id > $1`, numAccounts/2)
+
+	// Resplit that half of the table space.
+	sqlDB.Exec(
+		`ALTER TABLE bench.bank SPLIT AT SELECT generate_series($1, 0, $2)`,
+		-numAccounts/2, numAccounts/backupRestoreDefaultRanges/2,
+	)
+
+	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
+}
+
 func backupAndRestore(
 	ctx context.Context, t *testing.T, sqlDB *sqlutils.SQLRunner, dest string, numAccounts int,
 ) {

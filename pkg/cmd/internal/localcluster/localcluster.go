@@ -297,7 +297,7 @@ func (c *Cluster) UpdateZoneConfig(rangeMinBytes, rangeMaxBytes int64) {
 
 // Split splits the range containing the split key at the specified split key.
 func (c *Cluster) Split(nodeIdx int, splitKey roachpb.Key) error {
-	return c.Clients[nodeIdx].AdminSplit(context.Background(), splitKey)
+	return c.Clients[nodeIdx].AdminSplit(context.Background(), splitKey, splitKey)
 }
 
 // TransferLease transfers the lease for the range containing key to a random

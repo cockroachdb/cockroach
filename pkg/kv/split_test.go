@@ -111,9 +111,10 @@ func TestRangeSplitMeta(t *testing.T) {
 		mustMeta(roachpb.RKey("K")), mustMeta(roachpb.RKey("H"))}
 
 	// Execute the consecutive splits.
-	for _, splitKey := range splitKeys {
+	for _, splitRKey := range splitKeys {
+		splitKey := roachpb.Key(splitRKey)
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if err := s.DB.AdminSplit(ctx, roachpb.Key(splitKey)); err != nil {
+		if err := s.DB.AdminSplit(ctx, splitKey, splitKey); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -159,7 +160,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 			<-txnChannel
 		}
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if pErr := s.DB.AdminSplit(context.TODO(), splitKey); pErr != nil {
+		if pErr := s.DB.AdminSplit(context.TODO(), splitKey, splitKey); pErr != nil {
 			t.Error(pErr)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -246,11 +247,11 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 
 	splitKey := roachpb.Key("aa")
 	log.Infof(ctx, "starting split at key %q...", splitKey)
-	if err := s.DB.AdminSplit(ctx, splitKey); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey, splitKey); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof(ctx, "split at key %q first time complete", splitKey)
-	if err := s.DB.AdminSplit(ctx, splitKey); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey, splitKey); err != nil {
 		t.Fatal(err)
 	}
 }

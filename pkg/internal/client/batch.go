@@ -577,18 +577,23 @@ func (b *Batch) adminMerge(key interface{}) {
 
 // adminSplit is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminSplit(splitKey interface{}) {
-	k, err := marshalKey(splitKey)
+func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}) {
+	spanKey, err := marshalKey(spanKeyIn)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	splitKey, err := marshalKey(splitKeyIn)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	req := &roachpb.AdminSplitRequest{
 		Span: roachpb.Span{
-			Key: k,
+			Key: spanKey,
 		},
 	}
-	req.SplitKey = k
+	req.SplitKey = splitKey
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
 }
