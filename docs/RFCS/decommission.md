@@ -9,8 +9,7 @@
 When a node will be removed from a cluster, mark the node as decommissioned. At
 all cost, no data can be lost.
 - Drain data from node if data availability (replica count) is reduced.
-- Prevent node from rejoining cluster if it is subsequently accidentally
-  restarted.
+- Prevent node from participating in cluster.
 
 # Motivation
 Clusters operations are fairly common in Rubrik's customers' cluster
@@ -31,41 +30,83 @@ The following scenarios are considered:
 1. A node will temporarily be down (e.g. for maintenance). 
 
 ## Permanent removal
-High-level process:
-1. Marks that it is being decommissioned.
-1. Node does not renew its leases causing all them to be transferred.
-1. Change allocator to treat decommissioned nodes like dead nodes with the
-   exception that we will down-replicate even if there is no target for
-   up-replication.
-   1. All replicas for each replica set are up-replicated.
-   1. All replicas deleted from the node.
-1. Node tracks decommissioning status. It is completed when node has shed all of
-   its data and can safely be terminated.
-1. Node performs cosmetic cleanup to avoid showing this node as permanently dead
-   in the UI. 
-1. If node is restarted, it exits with error on encountering marker.
 
-Lower-level changes:
-- Add `Decommissioned`, a boolean field, to `StoreIdent`. The `StoreIdent` is
-  persisted to disk.
-- When a node bootstraps, it checks the `StoreIdent`s for each of its stores. If
-  any of the StoreIdents have `Decommissioned` set to True, then kill the
-  process with an appropriate error message like "attempted to start a
-  decommissioned node".
-- Through the gossip network, all nodes are informed that node is being removed
-  via updated `StoreDescriptor` message.
-- Prevent any new ranges being allocated to target node.
-- Transfer leases away from target node.
-- Leaseholder of ranges with replicas on target node trigger up-replication.
+1. User executes `cockroach node decommission [<nodeID>]+` on any node. This
+   node is referred to as node A. The nodes specified in the CLI command are
+   referred to as target nodes. This command is asynchronous and returns with
+   list of node IDs, their status, replica count, draining and decommission
+   flags.
+1. Node A sets `Decommissioning` flag to `True` for all target nodes in the Node
+   Liveness table.
+1. After approximately 10 seconds, each target node discovers that the
+   `Decommissioning` flag has been set. The mechanism for discovery is the
+   heartbeat process which periodically updates its own entry in the Node
+   Liveness table.
+1. Each target node:
+   1. sets `Draining` flag in the Node Liveness table to `True`.
+   1. waits until draining has completed.
+1. At this point, every target node
+   1. is not holding any leases
+   1. is not accepting any new SQL connections
+   1. is not accepting new replicas (TODO check whether this is the case)
+1. Leaseholders, necessarily on non-target nodes, for ranges where a target node
+   is a member of the replica set:
+   1. up-replicate to a node not in decommissioning state
+      - If there are not any nodes available for up-replication, the process
+        stalls. This prevents data loss and ensures availability of all ranges.
+   1. down-replicate from target nodes.
+1. Wait for the replica count on each target node to reach 0. To be able to do
+   this for dead nodes, use meta ranges.
+1. The user idempotently executes the command from step 1. To measure
+   progress, track the replica count.
+1. User executes `cockroach quit --decommission --host=<hostname> --port=<port>`
+   for each target node. This explicitly shuts down the node. Otherwise, the
+   node remains up but is unable to participate in usual operations such as
+   having replicas. The `--decommission` flag causes it to wait until the
+   replica count on the specified node reaches 0 before initiating shutdown.
 
-### Target: alive vs dead
-If the node being removed is dead, and so, unreachable, its leases and data
-would already have been transferred to other nodes. Preventing it from rejoining
-the cluster if it were to become available would require blacklisting and would
-be fairly complex: this will not be attempted. The cosmetic change to remove the
-the node from UI is the only required action. There should be no "gotchas":
-accidental cosmetic removal of a node that is actually live or coming back to
-have real consequences.
+### Handling restarts
+When a node is restarted, it may reset its `Draining` flag but its
+`Decommissioned` flag remains. The above process resumes from the third step.
+Hence, if a node is restarted at any point after the `Decommissioned` flag is
+set, the decommissioning process will resume.
+
+A decommissioned node can be restarted and would rejoin the cluster. However,
+it would not participate in any activity. This is safe and, hence, there is no
+need to prevent a decommissioned node from restarting.
+
+When a node restarts, there is a small period when it can accept new replicas
+before reading the Node Liveness table. A decommissioned node could have
+reached a replica count of 0, then be restarted and accept new replicas. In this
+case, availability could be compromised if the node were shutdown immediately.
+However, the `--decommission` flag to the `quit` command ensures that shutdown
+is only initiated if replica count is 0.
+
+### Undo
+`cockroach node recommission [<nodeID>]+` sets the `Decommissioning` flag to 
+`False` for target nodes. Then, the user must restart each target node. When a
+node restarts, it resets its `Draining` flag. This will allow the node to
+participate like normal.
+Node restart is required because we cannot determine whether a node is in
+`Draining` because if was previously in `Decommissioning` or for another reason.
+
+## Dead nodes
+If a target node is dead (i.e. unreachable), it can be in one of the following
+states:
+1. It holds unexpired leases.
+1. It holds no leases; the replicas of ranges it has on-disk have not been
+   rebalanced to other nodes.
+1. It holds no leases; the replicas of ranges it has on-disk have been down-
+   replicated from it and up-replicated to other nodes.
+Regardless of which state the dead node has, it cannot set its `Draining` flag
+because it is dead. Instead, its leases will expire and will be taken by other
+nodes. After `COCKROACH_TIME_UNTIL_STORE_DEAD` elapses, the replicas of its
+ranges will actively be rebalanced. Wait for the replica count to reach 0 as per
+for live nodes.
+
+It is possible that a dead node becomes available and rejoins the cluster. It
+would discover the `Decommissioned` flag has been set and follow the
+decommissioning process.
 
 ## Temporary removal
 No changes required. The existing CockroachDB process, described below, is
@@ -74,25 +115,40 @@ After a node is detected as unavailable for more than
 `COCKROACH_TIME_UNTIL_STORE_DEAD` (an env variable with default: 5 minutes), the
 node is marked as incommunicado and the cluster decides that the node may not be
 coming back and moves the data elsewhere. Its leases would have been transferred
-to other nodes as soon as they weren't renewed. Ranges are up-replicated to
-other nodes and down-replicated (removed) from target node. Ranges are not
-down-replicated when there does not exist a target for up-replication because
-this causes more work if that node rejoins the cluster; however, when permanently
-removing a node, we still want to do that. Although a node can have multiple
-stores, there can be at most one replica for each replica set (e.g. range) per
-node.
+to other nodes as soon as they expired without being renewed. Ranges are
+up-replicated to other nodes and down-replicated (removed) from target node.
+Ranges are not down-replicated when there does not exist a target for
+up-replication because this causes more work if that node rejoins the cluster;
+however, when permanently removing a node, we still want to do that. Although a
+node can have multiple stores, there can be at most one replica for each replica
+set (e.g. range) per node.
 
 ## CLI
-To initiate the removal of a node: `node rm <node-id>`. This prompts for user
-confirmation. Passing `--yes` as a command-line flag will skip this prompt. The
-command is asynchronous and returns once the node has been marked as
-decommissioned. The user can poll `node ls` to determine when decommissioning is
-finished.
+Two new commands and one option will be added. These have been described above.
+The first two are asynchronous commands and `quit` is synchronous.
+- `node decommission [<nodeID>]+` prompts the user for confirmation. Passing
+   `--yes` as a command-line flag will skip this prompt. This returns a list of
+  all nodes, their statuses, replica count, decommissioning flag and draining
+  flag. If the number of nodes remaining after decommissioning is fewer than
+  required for a quorum, the command will return early without updating state.
+- `node recommission [<nodeID>]+` has similar semantics to `decommission`.
+- `quit --decommission`. This is synchronous to guarantee that availability of
+  a replica set of a range is not compromised.
 
-It is possible to decommission several nodes concurrently by calling the node
-endpoint repeatedly.
+It is possible to decommission several nodes by passing multiple nodeIDs on the
+command-line.
 
 # Drawbacks
+
+There is no atomic way to check that decommissioning a set of nodes will leave
+enough nodes for the cluster to be available. A race can occur: in a five-node
+cluster, two users can simultaneously request to decommission two different
+nodes each. The resulting state leaves two nodes in decommissioning state and
+only one live node. A quorum cannot be reached and so progress halts. In this
+scenario, the user can discover that too many nodes are in decommissioning state
+and choose which nodes to recommission.
+
+Recently dead nodes, that hold unexpired leases, may cause decommissioning to hang until `COCKROACH_TIME_UNTIL_STORE_DEAD` elapses.
 
 # Alternatives
 During a temporary removal, `COCKROACH_TIME_UNTIL_STORE_DEAD` could be updated
@@ -104,5 +160,6 @@ If the operation were blocking and it took a long time to complete, the
 connection might timeout if no response was sent to the client.
 
 # Unresolved questions
-- Do we actually need to down-replicate on the target node? I don't think it is
-  worth the extra logic.
+- No cosmetic change to the UI is required: we want to know which nodes are part
+  of the cluster regardless of whether they have been decommissioned. This helps
+  avoid forgetting to shut down a decommissioned node.
