@@ -180,6 +180,12 @@ type v3Conn struct {
 	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
 	doingExtendedQueryMessage, ignoreTillSync bool
 
+	// The above comment also holds for this boolean, which can be set to cause
+	// the backend to *not* send another ready for query message. This behavior
+	// is required when the backend is supposed to drop messages, such as when
+	// it gets extra data after an error happened during a COPY operation.
+	doNotSendReadyForQuery bool
+
 	metrics *ServerMetrics
 
 	sqlMemoryPool *mon.MemoryMonitor
@@ -372,7 +378,7 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 	c.rd = bufio.NewReader(c.conn)
 
 	for {
-		if !c.doingExtendedQueryMessage {
+		if !c.doingExtendedQueryMessage && !c.doNotSendReadyForQuery {
 			c.writeBuf.initMsg(serverMsgReady)
 			var txnStatus byte
 			switch c.session.TxnState.State {
@@ -405,6 +411,9 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 			if err := c.wr.Flush(); err != nil {
 				return err
 			}
+		}
+		if c.doNotSendReadyForQuery {
+			c.doNotSendReadyForQuery = false
 		}
 		typ, n, err := c.readBuf.readTypedMsg(c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
@@ -459,7 +468,13 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 			err = c.wr.Flush()
 
 		case clientMsgCopyData, clientMsgCopyDone, clientMsgCopyFail:
-			// The spec says to drop any extra of these messages.
+			// We don't want to send a ready for query message here - we're supposed
+			// to ignore these messages, per the protocol spec. This state will
+			// happen when an error occurs on the server-side during a copy
+			// operation: the server will send an error and a ready message back to
+			// the client, and must then ignore further copy messages. See
+			// https://github.com/postgres/postgres/blob/6e1dd2773eb60a6ab87b27b8d9391b756e904ac3/src/backend/tcop/postgres.c#L4295
+			c.doNotSendReadyForQuery = true
 
 		default:
 			return c.sendError(newUnrecognizedMsgTypeErr(typ))

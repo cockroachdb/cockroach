@@ -74,5 +74,14 @@ psql -d testdb -c "SELECT * FROM playground"  | grep brown
 # down the session.
 psql -d testdb -c "show application_name" | grep psql
 
+# Test that errors in COPY FROM STDIN don't screw up the connection
+# See #16393
+echo 'COPY playground (equip_id, type, color, location, install_date) FROM stdin;' > import.sql
+echo -e '3\trope\tgreen\teast\t2015-01-02' >> import.sql
+echo 'garbage' >> import.sql
+echo '\.' >> import.sql
+echo "SELECT 'hooray'" >> import.sql
+psql -d testdb < import.sql | grep hooray
+
 exit 0
 `
