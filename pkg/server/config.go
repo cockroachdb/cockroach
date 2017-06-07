@@ -33,6 +33,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"path/filepath"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -57,6 +59,7 @@ const (
 	defaultScanMaxIdleTime          = 200 * time.Millisecond
 	defaultMetricsSampleInterval    = 10 * time.Second
 	defaultStorePath                = "cockroach-data"
+	defaultLocalStoreRelativePath   = "local"
 	defaultEventLogEnabled          = true
 
 	minimumNetworkFileDescriptors     = 256
@@ -80,6 +83,9 @@ type Config struct {
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
+
+	// DistSQLLocalStore is specified to enable processing large queries.
+	LocalStore base.StoreSpec
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -321,6 +327,11 @@ func MakeConfig() Config {
 	if err != nil {
 		panic(err)
 	}
+	localStore, err := base.NewStoreSpec(filepath.Join(defaultStorePath, defaultLocalStoreRelativePath))
+	if err != nil {
+		panic(err)
+	}
+
 	cfg := Config{
 		Config:                   new(base.Config),
 		MaxOffset:                base.DefaultMaxClockOffset,
@@ -337,6 +348,7 @@ func MakeConfig() Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
+		LocalStore: localStore,
 	}
 	cfg.Config.InitDefaults()
 	return cfg
@@ -461,13 +473,15 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
-			eng, err := engine.NewRocksDB(
-				spec.Attributes,
-				spec.Path,
-				cache,
-				sizeInBytes,
-				openFileLimitPerStore,
-			)
+			rocksDBConfig := engine.RocksDBConfig{
+				Attrs:                   spec.Attributes,
+				Dir:                     spec.Path,
+				MaxSize:                 sizeInBytes,
+				MaxOpenFiles:            openFileLimitPerStore,
+				WarnLargeBatchThreshold: time.Duration(500 * time.Millisecond),
+			}
+
+			eng, err := engine.NewRocksDB(rocksDBConfig, cache)
 			if err != nil {
 				return Engines{}, err
 			}

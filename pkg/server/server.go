@@ -42,6 +42,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
+	"path/filepath"
+
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -58,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -119,6 +122,67 @@ type Server struct {
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
+}
+
+// cleanupLocalStorageDirs moves all contents
+func cleanupLocalStorageDirs(ctx context.Context, path string) bool {
+	// Removing existing contents might be slow. Instead we rename it to a new
+	// name, and spawn a goroutine to clean it up asynchronously.
+	deletionParentDir := filepath.Join(path, "TO-DELETE")
+	if err := os.MkdirAll(deletionParentDir, 0700); err != nil {
+		log.Warningf(ctx, "error encountered when creating deletion directory to remove existing local store: %v", err)
+		return false
+	}
+	deletionDir, err := ioutil.TempDir(deletionParentDir, "")
+	if err != nil {
+		log.Warningf(ctx, "error encountered when creating deletion temporary directory to remove existing local store: %v", err)
+		return false
+	}
+
+	if err := os.Rename(
+		fmt.Sprintf("%s/*", path),
+		fmt.Sprintf("%s/", deletionDir),
+	); err != nil {
+		log.Warningf(ctx, "could not move existing temporary RocksDB directory to a location suitable for deletion. No external storage will be used, which will impact large query execution: %v", err)
+		// The location is not usable, as we can't be sure there aren't existing uncleaned up rows.
+		return false
+	}
+
+	go func() {
+		if err := os.RemoveAll(deletionDir); err != nil {
+			log.Warningf(ctx, "could not clear RocksDB location for DistSQL execution: %v", err.Error())
+			// Even if this errors, this is safe since it's in the marked-for-deletion subdirectory.
+			return
+		}
+	}()
+
+	return true
+}
+
+// NewLocalStorage creates a new engine for DistSQL processors to use when the
+// working set is larger than can be stored in memory.
+func NewLocalStorage(ctx context.Context, storeCfg base.StoreSpec) engine.Engine {
+	if storeCfg.InMemory {
+		return engine.NewInMem(roachpb.Attributes{}, 0)
+	}
+
+	storageDirReady := cleanupLocalStorageDirs(ctx, storeCfg.Path)
+	if !storageDirReady {
+		return nil
+	}
+
+	rocksDBCfg := engine.RocksDBConfig{
+		Attrs:        roachpb.Attributes{},
+		Dir:          storeCfg.Path,
+		MaxSize:      0,
+		MaxOpenFiles: 128, // TODO(arjun): Revisit this.
+	}
+	rocksDBCache := engine.NewRocksDBCache(0)
+	eng, err := engine.NewRocksDB(rocksDBCfg, rocksDBCache)
+	if err != nil {
+		log.Warningf(ctx, "could not instantiate RocksDB instance for DistSQL execution, queries larger than memory will fail: %v", err.Error())
+	}
+	return eng
 }
 
 // NewServer creates a Server from a server.Context.
@@ -276,6 +340,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetric(distSQLMetrics.CurBytesCount)
 	s.registry.AddMetric(distSQLMetrics.MaxBytesHist)
 
+	// Set up DistSQL Local Engine.
+	localEngine := NewLocalStorage(ctx, s.cfg.LocalStore)
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		localEngine.Close()
+	})
+
 	// Set up the DistSQL server.
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
@@ -293,7 +364,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if s.cfg.TestingKnobs.DistSQL != nil {
 		distSQLCfg.TestingKnobs = *s.cfg.TestingKnobs.DistSQL.(*distsqlrun.TestingKnobs)
 	}
-	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
+
+	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg, localEngine)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// Set up admin memory metrics for use by admin SQL executors.
