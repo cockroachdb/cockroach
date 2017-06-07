@@ -303,6 +303,9 @@ func (u *sqlSymUnion) isoLevel() IsolationLevel {
 func (u *sqlSymUnion) userPriority() UserPriority {
     return u.val.(UserPriority)
 }
+func (u *sqlSymUnion) readOnly() ReadOnly {
+    return u.val.(ReadOnly)
+}
 func (u *sqlSymUnion) idxElem() IndexElem {
     return u.val.(IndexElem)
 }
@@ -341,6 +344,9 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
         return colType
     }
     return nil
+}
+func (u *sqlSymUnion) transactionModes() TransactionModes {
+    return u.val.(TransactionModes)
 }
 
 %}
@@ -441,7 +447,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
 
-%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT
+%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WRITE
 
 %token <str>   YEAR
 
@@ -533,6 +539,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %type <IsolationLevel> transaction_iso_level
 %type <UserPriority>  transaction_user_priority
+%type <ReadOnly> transaction_read_only
 
 %type <str>   name opt_name opt_name_parens opt_to_savepoint
 %type <str>   savepoint_name
@@ -552,6 +559,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %type <IsolationLevel> iso_level
 %type <UserPriority> user_priority
+%type <ReadOnly> read_only
 %type <empty> opt_default
 
 %type <TableDefs> opt_table_elem_list table_elem_list
@@ -612,8 +620,9 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <NameList> opt_conf_expr
 %type <*OnConflict> on_conflict
 
-%type <Statement>  generic_set set_rest set_rest_more transaction_mode_list
-%type <Statement>  opt_transaction_mode_list set_exprs_internal set_name
+%type <Statement>  generic_set set_rest set_rest_more
+%type <Statement>  begin_transaction set_exprs_internal set_name
+%type <TransactionModes> transaction_mode_list transaction_mode
 
 %type <NameList> opt_storing
 %type <*ColumnTableDef> column_def
@@ -1442,34 +1451,9 @@ set_exprs_internal:
 set_rest:
   TRANSACTION transaction_mode_list
   {
-    $$.val = $2.stmt()
+    $$.val = &SetTransaction{Modes: $2.transactionModes()}
   }
 | set_rest_more
-
-transaction_mode_list:
-  transaction_iso_level
-  {
-    $$.val = &SetTransaction{Isolation: $1.isoLevel(), UserPriority: UnspecifiedUserPriority}
-  }
-| transaction_user_priority
-  {
-    $$.val = &SetTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1.userPriority()}
-  }
-| transaction_iso_level ',' transaction_user_priority
-  {
-    $$.val = &SetTransaction{Isolation: $1.isoLevel(), UserPriority: $3.userPriority()}
-  }
-| transaction_user_priority ',' transaction_iso_level
-  {
-    $$.val = &SetTransaction{Isolation: $3.isoLevel(), UserPriority: $1.userPriority()}
-  }
-
-
-transaction_user_priority:
-  PRIORITY user_priority
-  {
-    $$.val = $2.userPriority()
-  }
 
 generic_set:
   var_name TO var_list
@@ -1572,6 +1556,16 @@ user_priority:
 | HIGH
   {
     $$.val = High
+  }
+
+read_only:
+  ONLY
+  {
+    $$.val = Only
+  }
+| WRITE
+  {
+    $$.val = Write
   }
 
 opt_boolean_or_string:
@@ -2365,11 +2359,11 @@ savepoint_stmt:
 
 // BEGIN / START / COMMIT / END / ROLLBACK / ...
 transaction_stmt:
-  BEGIN opt_transaction opt_transaction_mode_list
+  BEGIN opt_transaction begin_transaction
   {
     $$.val = $3.stmt()
   }
-| START TRANSACTION opt_transaction_mode_list
+| START TRANSACTION begin_transaction
   {
     $$.val = $3.stmt()
   }
@@ -2422,32 +2416,79 @@ savepoint_name:
     $$ = $1
   }
 
-opt_transaction_mode_list:
-  transaction_iso_level
+begin_transaction:
+  transaction_mode_list
   {
-    $$.val = &BeginTransaction{Isolation: $1.isoLevel(), UserPriority: UnspecifiedUserPriority}
-  }
-| transaction_user_priority
-  {
-    $$.val = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1.userPriority()}
-  }
-| transaction_iso_level ',' transaction_user_priority
-  {
-    $$.val = &BeginTransaction{Isolation: $1.isoLevel(), UserPriority: $3.userPriority()}
-  }
-| transaction_user_priority ',' transaction_iso_level
-  {
-    $$.val = &BeginTransaction{Isolation: $3.isoLevel(), UserPriority: $1.userPriority()}
+    $$.val = &BeginTransaction{Modes: $1.transactionModes()}
   }
 | /* EMPTY */
   {
-    $$.val = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: UnspecifiedUserPriority}
+    $$.val = &BeginTransaction{}
+  }
+
+transaction_mode_list:
+  transaction_mode
+  {
+    $$.val = $1.transactionModes()
+  }
+| transaction_mode_list ',' transaction_mode
+  {
+    a := $1.transactionModes()
+    b := $3.transactionModes()
+    if b.Isolation != UnspecifiedIsolation {
+      if a.Isolation != UnspecifiedIsolation {
+        sqllex.Error("isolation level specified multiple times")
+        return 1
+      }
+      a.Isolation = b.Isolation
+    }
+    if b.UserPriority != UnspecifiedUserPriority {
+      if a.UserPriority != UnspecifiedUserPriority {
+        sqllex.Error("user priority specified multiple times")
+        return 1
+      }
+      a.UserPriority = b.UserPriority
+    }
+    if b.ReadOnly != UnspecifiedReadOnly {
+      if a.ReadOnly != UnspecifiedReadOnly {
+        sqllex.Error("read mode specified multiple times")
+        return 1
+      }
+      a.ReadOnly = b.ReadOnly
+    }
+    $$.val = a
+  }
+
+transaction_mode:
+  transaction_iso_level
+  {
+    $$.val = TransactionModes{Isolation: $1.isoLevel()}
+  }
+| transaction_user_priority
+  {
+    $$.val = TransactionModes{UserPriority: $1.userPriority()}
+  }
+| transaction_read_only
+  {
+    $$.val = TransactionModes{ReadOnly: $1.readOnly()}
+  }
+
+transaction_user_priority:
+  PRIORITY user_priority
+  {
+    $$.val = $2.userPriority()
   }
 
 transaction_iso_level:
   ISOLATION LEVEL iso_level
   {
     $$.val = $3.isoLevel()
+  }
+
+transaction_read_only:
+  READ read_only
+  {
+    $$.val = $2.readOnly()
   }
 
 create_database_stmt:
@@ -5416,6 +5457,7 @@ unreserved_keyword:
 | VARYING
 | WITHIN
 | WITHOUT
+| WRITE
 | YEAR
 | ZONE
 

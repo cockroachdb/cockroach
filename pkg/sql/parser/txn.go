@@ -71,23 +71,60 @@ func (up UserPriority) String() string {
 	return userPriorityNames[up]
 }
 
-// BeginTransaction represents a BEGIN statement
-type BeginTransaction struct {
+// ReadOnly holds the read only setting for a transaction.
+type ReadOnly int
+
+// ReadOnly values
+const (
+	UnspecifiedReadOnly ReadOnly = iota
+	Only
+	Write
+)
+
+var readOnlyNames = [...]string{
+	UnspecifiedReadOnly: "UNSPECIFIED",
+	Only:                "ONLY",
+	Write:               "WRITE",
+}
+
+func (ro ReadOnly) String() string {
+	if ro < 0 || ro > ReadOnly(len(readOnlyNames)-1) {
+		return fmt.Sprintf("ReadOnly(%d)", ro)
+	}
+	return readOnlyNames[ro]
+}
+
+type TransactionModes struct {
 	Isolation    IsolationLevel
 	UserPriority UserPriority
+	ReadOnly     ReadOnly
 }
 
 // Format implements the NodeFormatter interface.
-func (node *BeginTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *TransactionModes) Format(buf *bytes.Buffer, f FmtFlags) {
 	var sep string
-	buf.WriteString("BEGIN TRANSACTION")
 	if node.Isolation != UnspecifiedIsolation {
 		fmt.Fprintf(buf, " ISOLATION LEVEL %s", node.Isolation)
 		sep = ","
 	}
 	if node.UserPriority != UnspecifiedUserPriority {
 		fmt.Fprintf(buf, "%s PRIORITY %s", sep, node.UserPriority)
+		sep = ","
 	}
+	if node.ReadOnly != UnspecifiedReadOnly {
+		fmt.Fprintf(buf, "%s READ %s", sep, node.ReadOnly)
+	}
+}
+
+// BeginTransaction represents a BEGIN statement
+type BeginTransaction struct {
+	Modes TransactionModes
+}
+
+// Format implements the NodeFormatter interface.
+func (node *BeginTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("BEGIN TRANSACTION")
+	node.Modes.Format(buf, f)
 }
 
 // CommitTransaction represents a COMMIT statement.
