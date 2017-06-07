@@ -537,6 +537,11 @@ message QueryTxnRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Transaction record to query.
   optional storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  // If true, the query will not return until there are changes to either the
+  // transaction status or priority -OR- to the set of dependent transactions.
+  optional bool wait_for_update = 3 [(gogoproto.nullable) = false];
+  // Set of known dependent transactions.
+  repeated bytes known_waiting_txns = 4 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 // A QueryTxnResponse is the return value from the QueryTxn() method.
