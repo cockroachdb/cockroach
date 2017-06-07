@@ -209,7 +209,11 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(p *planner) string { return p.session.ApplicationName },
+		Get: func(p *planner) string {
+			p.session.mu.RLock()
+			defer p.session.mu.RUnlock()
+			return p.session.mu.ApplicationName
+		},
 		Reset: func(p *planner) error {
 			p.session.resetApplicationName(p.session.defaults.applicationName)
 			return nil

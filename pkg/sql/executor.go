@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -238,16 +239,18 @@ type Executor struct {
 // All fields holding a pointer or an interface are required to create
 // a Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
-	AmbientCtx   log.AmbientContext
-	ClusterID    func() uuid.UUID
-	NodeID       *base.NodeIDContainer
-	DB           *client.DB
-	Gossip       *gossip.Gossip
-	DistSender   *kv.DistSender
-	RPCContext   *rpc.Context
-	LeaseManager *LeaseManager
-	Clock        *hlc.Clock
-	DistSQLSrv   *distsqlrun.ServerImpl
+	AmbientCtx      log.AmbientContext
+	ClusterID       func() uuid.UUID
+	NodeID          *base.NodeIDContainer
+	DB              *client.DB
+	Gossip          *gossip.Gossip
+	DistSender      *kv.DistSender
+	RPCContext      *rpc.Context
+	LeaseManager    *LeaseManager
+	Clock           *hlc.Clock
+	DistSQLSrv      *distsqlrun.ServerImpl
+	StatusServer    serverpb.StatusServer
+	SessionRegistry *SessionRegistry
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
@@ -454,14 +457,15 @@ func (e *Executor) Prepare(
 
 	// Prepare needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
-	txn := session.TxnState.txn
+	txn := session.TxnState.mu.txn
+
 	if txn == nil {
 		// The new txn need not be the same transaction used by statements following
 		// this prepare statement because it can only be used by prepare() to get a
 		// table lease that is eventually added to the session.
 		//
 		// TODO(vivek): perhaps we should be more consistent and update
-		// session.TxnState.txn, but more thought needs to be put into whether that
+		// session.TxnState.mu.txn, but more thought needs to be put into whether that
 		// is really needed.
 		txn = client.NewTxn(e.cfg.DB)
 		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
@@ -667,7 +671,7 @@ func (e *Executor) execRequest(
 		}
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
-		if txnState.txn != nil {
+		if txnState.mu.txn != nil {
 			// Rollback the txn.
 			txnState.updateStateAndCleanupOnErr(err, e)
 		}
@@ -732,9 +736,9 @@ func (e *Executor) execParsed(
 			txnState.autoRetry = true
 			txnState.sqlTimestamp = e.cfg.Clock.PhysicalTime()
 			if execOpt.AutoCommit {
-				txnState.txn.SetDebugName(sqlImplicitTxnName)
+				txnState.mu.txn.SetDebugName(sqlImplicitTxnName)
 			} else {
-				txnState.txn.SetDebugName(sqlTxnName)
+				txnState.mu.txn.SetDebugName(sqlTxnName)
 			}
 		} else {
 			txnState.autoRetry = false
@@ -752,14 +756,16 @@ func (e *Executor) execParsed(
 		automaticRetryCount := 0
 		txnClosure := func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			defer func() { automaticRetryCount++ }()
-			if txnState.State == Open && txnState.txn != txn {
+			if txnState.State == Open && txnState.mu.txn != txn {
 				panic(fmt.Sprintf("closure wasn't called in the txn we set up for it."+
-					"\ntxnState.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.txn, txn, txnState))
+					"\ntxnState.mu.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.mu.txn, txn, txnState))
 			}
-			txnState.txn = txn
+			txnState.mu.Lock()
+			txnState.mu.txn = txn
+			txnState.mu.Unlock()
 
 			if protoTS != nil {
-				txnState.txn.SetFixedTimestamp(*protoTS)
+				txnState.mu.txn.SetFixedTimestamp(*protoTS)
 			}
 
 			var err error
@@ -791,7 +797,7 @@ func (e *Executor) execParsed(
 			return err
 		}
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
-		txn := txnState.txn // this might be nil if the txn was already aborted.
+		txn := txnState.mu.txn // this might be nil if the txn was already aborted.
 		err := txn.Exec(session.Ctx(), execOpt, txnClosure)
 		if err != nil && len(results) > 0 {
 			// Set or override the error in the last result, if any.
@@ -813,10 +819,10 @@ func (e *Executor) execParsed(
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// TODO(andrei): Until #7881 fixed.
 				{
-					if txnState.txn != nil {
+					if txnState.mu.txn != nil {
 						log.Eventf(session.Ctx(), "executor got AutoCommitError: %s\n"+
 							"txn: %+v\nexecOpt.AutoRetry %t, execOpt.AutoCommit:%t, stmts %+v, remaining %+v",
-							aErr, txnState.txn.Proto(), execOpt.AutoRetry, execOpt.AutoCommit, stmts,
+							aErr, txnState.mu.txn.Proto(), execOpt.AutoRetry, execOpt.AutoCommit, stmts,
 							remainingStmts)
 					} else {
 						log.Errorf(session.Ctx(), "7881: AutoCommitError on nil txn: %s, "+
@@ -827,17 +833,17 @@ func (e *Executor) execParsed(
 				}
 				e.TxnAbortCount.Inc(1)
 				// TODO(andrei): Once 7881 is fixed, this should be
-				// txnState.txn.CleanupOnError().
+				// txnState.mu.txn.CleanupOnError().
 				txn.CleanupOnError(session.Ctx(), err)
 			}
 		}
 
 		// Sanity check about not leaving KV txns open on errors.
-		if err != nil && txnState.txn != nil && !txnState.txn.IsFinalized() {
+		if err != nil && txnState.mu.txn != nil && !txnState.mu.txn.IsFinalized() {
 			if _, retryable := err.(*roachpb.HandledRetryableTxnError); !retryable {
 				log.Fatalf(session.Ctx(), "got a non-retryable error but the KV "+
 					"transaction is not finalized. TxnState: %s, err: %s\n"+
-					"err:%+v\n\ntxn: %s", txnState.State, err, err, txnState.txn.Proto())
+					"err:%+v\n\ntxn: %s", txnState.State, err, err, txnState.mu.txn.Proto())
 			}
 		}
 
@@ -1030,6 +1036,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 		}
 
 		txnState.schemaChangers.curStatementIdx = i
+
+		stmt.queryHandle = session.addActiveQuery(stmt)
+		defer session.removeActiveQuery(stmt.queryHandle)
 
 		var stmtStrBefore string
 		// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
@@ -1314,7 +1323,7 @@ func (e *Executor) execStmtInOpenTxn(
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
 		// started running. The client txn's statement count indicates how many
 		// statements have been executed as part of this transaction.
-		if txnState.txn.CommandCount() > 0 {
+		if txnState.mu.txn.CommandCount() > 0 {
 			return Result{}, errors.Errorf("SAVEPOINT %s needs to be the first statement in a "+
 				"transaction", parser.RestartSavepointName)
 		}
@@ -1327,8 +1336,8 @@ func (e *Executor) execStmtInOpenTxn(
 		// If commands have already been sent through the transaction,
 		// restart the client txn's proto to increment the epoch. The SQL
 		// txn's state is already set to OPEN.
-		if err == nil && txnState.txn.CommandCount() > 0 {
-			txnState.txn.Proto().Restart(0, 0, hlc.Timestamp{})
+		if err == nil && txnState.mu.txn.CommandCount() > 0 {
+			txnState.mu.txn.Proto().Restart(0, 0, hlc.Timestamp{})
 		}
 		return Result{}, err
 	case *parser.Prepare:
@@ -1399,12 +1408,12 @@ func (e *Executor) execStmtInOpenTxn(
 	if runInParallel {
 		// Create a new planner from the Session to execute the statement, since
 		// we're executing in parallel.
-		p = session.newPlanner(e, txnState.txn)
+		p = session.newPlanner(e, txnState.mu.txn)
 	} else {
 		// We're not executing in parallel. We can use the cached planner on the
 		// session.
 		p = &session.planner
-		session.resetPlanner(p, e, txnState.txn)
+		session.resetPlanner(p, e, txnState.mu.txn)
 	}
 	p.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
 	p.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
@@ -1476,9 +1485,9 @@ func stmtAllowedInImplicitTxn(stmt Statement) bool {
 func rollbackSQLTransaction(txnState *txnState) Result {
 	if txnState.State != Open && txnState.State != RestartWait {
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
-			txnState.State, txnState.txn.Proto()))
+			txnState.State, txnState.mu.txn.Proto()))
 	}
-	err := txnState.txn.Rollback(txnState.Ctx)
+	err := txnState.mu.txn.Rollback(txnState.Ctx)
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 	if err != nil {
 		log.Warningf(txnState.Ctx, "txn rollback failed. The error was swallowed: %s", err)
@@ -1499,12 +1508,12 @@ const (
 // commitSqlTransaction commits a transaction.
 func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, error) {
 	if txnState.State != Open {
-		panic(fmt.Sprintf("commitSqlTransaction called on non-open txn: %+v", txnState.txn))
+		panic(fmt.Sprintf("commitSqlTransaction called on non-open txn: %+v", txnState.mu.txn))
 	}
 	if commitType == commit {
 		txnState.commitSeen = true
 	}
-	if err := txnState.txn.Commit(txnState.Ctx); err != nil {
+	if err := txnState.mu.txn.Commit(txnState.Ctx); err != nil {
 		// Errors on COMMIT need special handling: if the errors is not handled by
 		// auto-retry, COMMIT needs to finalize the transaction (it can't leave it
 		// in Aborted or RestartWait). Higher layers will handle this with the help
@@ -1704,6 +1713,7 @@ func (e *Executor) execStmt(
 	}
 
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	session.setQueryExecutionMode(stmt.queryHandle, useDistSQL)
 	if useDistSQL {
 		err = e.execDistSQL(planner, plan, &result)
 	} else {

@@ -43,6 +43,7 @@ func makeTestV3Conn(c net.Conn) v3Conn {
 			AmbientCtx:              log.AmbientContext{Tracer: tracing.NewTracer()},
 			HistogramWindowInterval: metric.TestSampleInterval,
 			TestingKnobs:            &sql.ExecutorTestingKnobs{},
+			SessionRegistry:         sql.MakeSessionRegistry(),
 		},
 		nil, /* stopper */
 	)

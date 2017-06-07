@@ -114,6 +114,7 @@ type Server struct {
 	stopper            *stop.Stopper
 	sqlExecutor        *sql.Executor
 	leaseMgr           *sql.LeaseManager
+	sessionRegistry    *sql.SessionRegistry
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
@@ -294,46 +295,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.adminMemMetrics = sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(s.adminMemMetrics)
 
-	// Set up Executor
-	execCfg := sql.ExecutorConfig{
-		AmbientCtx:              s.cfg.AmbientCtx,
-		ClusterID:               s.ClusterID,
-		NodeID:                  &s.nodeIDContainer,
-		DB:                      s.db,
-		Gossip:                  s.gossip,
-		DistSender:              s.distSender,
-		RPCContext:              s.rpcContext,
-		LeaseManager:            s.leaseMgr,
-		Clock:                   s.clock,
-		DistSQLSrv:              s.distSQLServer,
-		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
-		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
-		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
-	}
-	if s.cfg.TestingKnobs.SQLExecutor != nil {
-		execCfg.TestingKnobs = s.cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
-	} else {
-		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
-	}
-	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
-		execCfg.SchemaChangerTestingKnobs =
-			s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
-	} else {
-		execCfg.SchemaChangerTestingKnobs = &sql.SchemaChangerTestingKnobs{}
-	}
-	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
-	s.registry.AddMetricStruct(s.sqlExecutor)
-
-	s.pgServer = pgwire.MakeServer(
-		s.cfg.AmbientCtx,
-		s.cfg.Config,
-		s.sqlExecutor,
-		&s.internalMemMetrics,
-		&rootSQLMemoryMonitor,
-		s.cfg.HistogramWindowInterval(),
-	)
-	s.registry.AddMetricStruct(s.pgServer.Metrics())
-
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, s.cfg.TimeSeriesServerConfig, s.stopper)
 
@@ -378,6 +339,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 
+	s.sessionRegistry = sql.MakeSessionRegistry()
+
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
@@ -390,10 +353,53 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.rpcContext,
 		s.node.stores,
 		s.stopper,
+		s.sessionRegistry,
 	)
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
+
+	// Set up Executor
+	execCfg := sql.ExecutorConfig{
+		AmbientCtx:              s.cfg.AmbientCtx,
+		ClusterID:               s.ClusterID,
+		NodeID:                  &s.nodeIDContainer,
+		DB:                      s.db,
+		Gossip:                  s.gossip,
+		DistSender:              s.distSender,
+		RPCContext:              s.rpcContext,
+		LeaseManager:            s.leaseMgr,
+		Clock:                   s.clock,
+		DistSQLSrv:              s.distSQLServer,
+		StatusServer:            s.status,
+		SessionRegistry:         s.sessionRegistry,
+		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
+		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
+		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
+	}
+	if s.cfg.TestingKnobs.SQLExecutor != nil {
+		execCfg.TestingKnobs = s.cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	} else {
+		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
+	}
+	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
+		execCfg.SchemaChangerTestingKnobs =
+			s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
+	} else {
+		execCfg.SchemaChangerTestingKnobs = &sql.SchemaChangerTestingKnobs{}
+	}
+	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
+	s.registry.AddMetricStruct(s.sqlExecutor)
+
+	s.pgServer = pgwire.MakeServer(
+		s.cfg.AmbientCtx,
+		s.cfg.Config,
+		s.sqlExecutor,
+		&s.internalMemMetrics,
+		&rootSQLMemoryMonitor,
+		s.cfg.HistogramWindowInterval(),
+	)
+	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
 	return s, nil
 }
