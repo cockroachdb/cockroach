@@ -590,7 +590,6 @@ func (s *Server) Start(ctx context.Context) error {
 	})
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		fmt.Println("Serve ", anyL)
 		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
 	})
 
@@ -711,11 +710,13 @@ func (s *Server) Start(ctx context.Context) error {
 		log.Info(ctx, "No stores bootstrapped and --join flag specified.  Starting Init Server and " +
 			"attempting to connect to gossip.")
 
-		newInitServer(s, &ln).startAndAwait(ctx)
+		if err  = newInitServer(s, &ln).startAndAwait(ctx); err != nil {
+			return nil
+		}
 	}
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
-	// init all the replicas.
+	// init all the replicas.  At this point *some* store has been bootstrapped.
 	err = s.node.start(
 		ctx,
 		unresolvedAdvertAddr,

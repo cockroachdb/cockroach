@@ -17,6 +17,8 @@
 package server
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	
 	"golang.org/x/net/context"
@@ -36,25 +38,33 @@ func newInitServer(s *Server, ln *net.Listener) *initServer {
 	return &initServer{server: s, ln: ln, bootstrapped: make(chan struct{})}
 }
 
-func (s *initServer) startAndAwait(ctx context.Context) {
+type stayOpenListener struct {
+	net.Listener
+}
+
+func (l stayOpenListener) Close() error {
+	return nil
+}
+
+func (s *initServer) startAndAwait(ctx context.Context) error {
 	serverpb.RegisterInitServer(s.server.grpc, s)
 	
 	s.server.stopper.RunWorker(ctx, func(context.Context) {
 		log.Info(ctx, "Starting dedicated grpc server for Init")
-		netutil.FatalIfUnexpected(s.server.grpc.Serve(*s.ln))
+		netutil.FatalIfUnexpected(s.server.grpc.Serve(stayOpenListener{*s.ln}))
 	})
 
 	select {
 	case <- s.server.node.storeCfg.Gossip.Connected:
-		log.Info(ctx, "Gossip connected")
 	case <- s.bootstrapped:
-		log.Info(ctx, "Node bootstrapped")
-		// TODO(adam): Wait for stopper?
+	case <- s.server.stopper.ShouldStop():
+		return errors.New("Stop called while waiting to bootstrap")
 	}
 
 	log.Info(ctx, "Stopping dedicated grpc server for Init")
 	s.server.grpc.GracefulStop()
 	log.Info(ctx, "grpc Stopped")
+	return nil
 }
 
 func (s *initServer) Bootstrap(
@@ -67,8 +77,10 @@ func (s *initServer) Bootstrap(
 		log.Error(ctx, "Node bootstrap failed: ", err)
 		return &serverpb.BootstrapResponse{}, err
 	}
-	
-	s.bootstrapped <- struct{}{}
+
+	log.Info(ctx, "Closing bootstrap")
+	close(s.bootstrapped)
+	log.Info(ctx, "Closed")
 	return &serverpb.BootstrapResponse{}, nil
 }
 
