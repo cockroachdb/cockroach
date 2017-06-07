@@ -306,6 +306,7 @@ func BenchmarkSortLimit(b *testing.B) {
 					rowSource.Reset()
 				}
 			})
+
 		}
 	})
 }

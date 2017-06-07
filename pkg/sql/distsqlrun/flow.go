@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -71,6 +72,13 @@ type FlowCtx struct {
 	// run.
 	nodeID       roachpb.NodeID
 	testingKnobs TestingKnobs
+
+	// tempStorage is used by some DistSQL processors to store Rows when the
+	// working set is larger than can be stored in memory.
+	tempStorage engine.Engine
+	// tempStorageIDGenerator is used to generate unique prefixes for each processor,
+	// so they use non-overlapping parts of the local store's keyspace.
+	tempStorageIDGenerator *TempStorageIDGenerator
 }
 
 func (flowCtx *FlowCtx) setupTxn() *client.Txn {
