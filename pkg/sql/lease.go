@@ -529,10 +529,10 @@ type tableState struct {
 	// nil if there is no lease acquisition in progress for the table. If
 	// non-nil, the channel will be closed when lease acquisition completes.
 	acquiring chan struct{}
-	// Indicates that the table has been deleted, or has an outstanding deletion.
+	// Indicates that the table has been dropped, or is being dropped.
 	// If set, leases are released from the store as soon as their refcount drops
 	// to 0, as opposed to waiting until they expire.
-	deleted bool
+	dropped bool
 }
 
 // acquire returns a lease at the specified version. The lease will have its
@@ -680,7 +680,7 @@ func (t *tableState) acquireWait() bool {
 }
 
 // If the lease cannot be obtained because the descriptor is in the process of
-// being deleted, the error will be errDescriptorDeleted.
+// being dropped, the error will be errTableDropped.
 // minExpirationTime, if not set to the zero value, will be used as a lower
 // bound on the expiration of the new lease. This can be used to eliminate the
 // jitter in the expiration time, and guarantee that we get a lease that will be
@@ -732,9 +732,9 @@ func (t *tableState) release(lease *LeaseState, m *LeaseManager) error {
 		// when the refcount drops to 0). If so, we'll need to mark the lease as
 		// released.
 		removeOnceDereferenced := m.LeaseStore.testingKnobs.RemoveOnceDereferenced ||
-			// Release from the store if the table has been deleted; no leases
+			// Release from the store if the table has been dropped; no leases
 			// can be acquired any more.
-			t.deleted ||
+			t.dropped ||
 			// Release from the store if the LeaseManager is draining.
 			m.isDraining() ||
 			// Release from the store if the lease is not for the latest
@@ -784,8 +784,8 @@ func (t *tableState) removeLease(lease *LeaseState, m *LeaseManager) {
 // purgeOldLeases refreshes the leases on a table. Unused leases older than
 // minVersion will be released.
 // If dropped is set, minVersion is ignored; no lease is acquired and all
-// existing unused leases are released. The table is further marked for
-// deletion, which will cause existing in-use leases to be eagerly released once
+// existing unused leases are released. The table is further marked dropped,
+// which will cause existing in-use leases to be eagerly released once
 // they're not in use any more.
 // If t has no active leases, nothing is done.
 func (t *tableState) purgeOldLeases(
@@ -804,10 +804,10 @@ func (t *tableState) purgeOldLeases(
 		return nil
 	}
 
-	releaseInactives := func(deleted bool) {
+	releaseInactives := func(drop bool) {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		t.deleted = deleted
+		t.dropped = drop
 		t.releaseInactiveLeases(m)
 	}
 
@@ -952,7 +952,7 @@ func (c *tableNameCache) remove(lease *LeaseState) {
 	if !ok {
 		// Table for lease not found in table name cache. This can happen if we had
 		// a more recent lease on the table in the tableNameCache, then the table
-		// gets deleted, then the more recent lease is remove()d - which clears the
+		// gets dropped, then the more recent lease is remove()d - which clears the
 		// cache.
 		return
 	}
@@ -1252,7 +1252,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 							continue
 						}
 						if log.V(2) {
-							log.Infof(ctx, "%s: refreshing lease table: %d (%s), version: %d, deleted: %t",
+							log.Infof(ctx, "%s: refreshing lease table: %d (%s), version: %d, dropped: %t",
 								kv.Key, table.ID, table.Name, table.Version, table.Dropped())
 						}
 						// Try to refresh the table lease to one >= this version.
