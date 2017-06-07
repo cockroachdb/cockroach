@@ -32,6 +32,10 @@ import (
 
 	"golang.org/x/net/context"
 
+	"path/filepath"
+
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -495,6 +499,38 @@ func TestOfficializeAddr(t *testing.T) {
 			t.Fatalf("unexpected error %v", err)
 		}
 	})
+}
+
+func TestCleanupLocalStorageDirs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+
+	tempBytes := []byte{byte(1), byte(2), byte(3)}
+	if err := ioutil.WriteFile(filepath.Join(dir, "FOO"), tempBytes, 0777); err != nil {
+		t.Fatal(err)
+	}
+	if err := ioutil.WriteFile(filepath.Join(dir, "BAR"), tempBytes, 0777); err != nil {
+		t.Fatal(err)
+	}
+	if err := ioutil.WriteFile(filepath.Join(dir, "BAZ"), tempBytes, 0777); err != nil {
+		t.Fatal(err)
+	}
+
+	wg := sync.WaitGroup{}
+	if err := cleanupLocalStorageDirs(context.TODO(), dir, &wg); err != nil {
+		t.Fatal(fmt.Sprintf("error encountered in cleanupLocalStorageDirs: %v", err))
+	}
+	wg.Wait()
+
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		t.Fatal(fmt.Sprintf("error reading temporary directory: %v", err))
+	}
+	if len(files) != 0 {
+		t.Fatalf("directory not cleaned up after calling cleanupLocalStorageDirs, still have %d files", len(files))
+	}
 }
 
 func TestListenURLFileCreation(t *testing.T) {
