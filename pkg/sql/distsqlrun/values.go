@@ -101,7 +101,8 @@ func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 				break
 			}
 
-			if !emitHelper(ctx, &v.out, row, meta, nil /* inputs */) {
+			if !emitHelper(ctx, &v.out, row, meta) {
+				v.out.close()
 				return
 			}
 		}
