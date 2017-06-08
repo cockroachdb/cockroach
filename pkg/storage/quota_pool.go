@@ -55,8 +55,6 @@
 package storage
 
 import (
-	"errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -70,7 +68,7 @@ type quotaPool struct {
 	// We service quota acquisitions in a first come, first serve basis. This
 	// is done in order to prevent starvations of large acquisitions by a
 	// continuous stream of smaller ones. Acquisitions 'register' themselves
-	// for a notification that indicates they're now first in line.  This is
+	// for a notification that indicates they're now first in line. This is
 	// done by appending to the queue the channel they will then wait
 	// on. If a goroutine no longer needs to be notified, i.e. their
 	// acquisition context has been cancelled, the goroutine is responsible for
@@ -181,7 +179,7 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 			// We don't need to 'unregister' ourselves as in the case when the
 			// context is cancelled. In fact, we want others waiters to only
 			// receive on qp.done and signaling them would work against that.
-			return errors.New("quota pool no longer in use")
+			return nil
 		case <-notifyCh:
 		}
 		break
@@ -211,9 +209,8 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 			return ctx.Err()
 		case <-qp.done:
 			// We don't need to release quota back as all ongoing and
-			// subsequent acquisitions will fail with an error indicating that
-			// the pool is now closed.
-			return errors.New("quota pool no longer in use")
+			// subsequent acquisitions will succeed immediately.
+			return nil
 		case q := <-qp.quota:
 			acquired += q
 		}
@@ -270,13 +267,10 @@ func (qp *quotaPool) approximateQuota() int64 {
 	}
 }
 
-// close closes the quota pool and is safe for concurrent use.
+// close signals to all ongoing and subsequent acquisitions that they are
+// free to return to their callers without error.
 //
-// NB: This is best effort, we try to fail all ongoing and subsequent
-// acquisitions with an error indicating so but acquisitions may still seep
-// through. This is due to go's behaviour where if we're waiting on multiple
-// channels in a select statement, if there are values ready for more than one
-// channel the runtime will pseudo-randomly choose one to proceed.
+// Safe for concurrent use.
 func (qp *quotaPool) close() {
 	qp.Lock()
 	if !qp.closed {
