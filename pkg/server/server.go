@@ -536,9 +536,11 @@ func (s *Server) Start(ctx context.Context) error {
 	var serveOnMux sync.Once
 	m := cmux.New(ln)
 
-	// Direct all requests to the Init server if it is accepting connections; this means the node is
-	// uninitialized and awaiting either an explicit Bootstrap RPC or gossip to respond.
-	initL := m.Match(s.init.acceptConnection)
+	// Direct all requests to the Init listener until we're ready to accept connections.
+	readyToServe := int32(0)
+	initL := m.Match(func(_ io.Reader) bool {
+		return atomic.LoadInt32(&readyToServe) == 0
+	})
 
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
@@ -720,9 +722,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
-		log.Info(ctx, "No stores bootstrapped and --join flag specified.  Starting Init Server and "+
-			"attempting to connect to gossip.")
-
+		log.Info(ctx, "No stores bootstrapped and --join flag specified, starting Init Server.")
 		if err = s.init.startAndAwait(ctx, initL); err != nil {
 			return nil
 		}
@@ -786,6 +786,11 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
+
+	// Set the readyToServe bit which removes the initL from cmux.
+	if !atomic.CompareAndSwapInt32(&readyToServe, 0, 1) {
+		return errors.New("Failed to set readyToServe bit")
+	}
 
 	if len(s.cfg.SocketFile) != 0 {
 		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)

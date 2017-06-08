@@ -18,10 +18,8 @@ package server
 
 import (
 	"errors"
-	"io"
 	"net"
 	"sync"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,17 +29,16 @@ import (
 
 type initServer struct {
 	server       *Server
-	bootstrapped int32
-	didBootstrap chan struct{}
+	bootstrapped chan struct{}
 	mux          sync.Mutex
 }
 
 func newInitServer(s *Server) *initServer {
-	return &initServer{server: s, bootstrapped: 0, didBootstrap: make(chan struct{})}
+	return &initServer{server: s, bootstrapped: make(chan struct{})}
 }
 
 func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
-	grpcServer = s.server.grpc
+	grpcServer := s.server.grpc
 	serverpb.RegisterInitServer(grpcServer, s)
 
 	s.server.stopper.RunWorker(ctx, func(context.Context) {
@@ -50,14 +47,9 @@ func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
 
 	select {
 	case <-s.server.node.storeCfg.Gossip.Connected:
-	case <-s.didBootstrap:
+	case <-s.bootstrapped:
 	case <-s.server.stopper.ShouldStop():
 		return errors.New("Stop called while waiting to bootstrap")
-	}
-
-	// Set the bootstrapped bit to stop accepting connections.
-	if !atomic.CompareAndSwapInt32(&s.bootstrapped, 0, 1) {
-		return errors.New("Failed to set bootstrapped")
 	}
 
 	return nil
@@ -65,21 +57,13 @@ func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
 
 func (s *initServer) Bootstrap(ctx context.Context, request *serverpb.BootstrapRequest,
 ) (response *serverpb.BootstrapResponse, err error) {
-	log.Info(ctx, "Bootstrap", request)
-	s.mux.Lock()
+	s.mux.Lock() // Mux bootstrap
 	defer s.mux.Unlock()
-
 	if err := s.server.node.bootstrap(ctx, s.server.engines); err != nil {
 		log.Error(ctx, "Node bootstrap failed: ", err)
 		return nil, err
 	}
 
-	log.Info(ctx, "Closing bootstrap")
-	close(s.didBootstrap)
-	log.Info(ctx, "Closed")
+	close(s.bootstrapped)
 	return &serverpb.BootstrapResponse{}, nil
-}
-
-func (s *initServer) acceptConnection(_ io.Reader) bool {
-	return atomic.LoadInt32(&s.bootstrapped) == 0
 }
