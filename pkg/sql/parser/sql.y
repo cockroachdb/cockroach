@@ -376,7 +376,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str>   BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
-%token <str>   CASCADE CASE CAST CHAR
+%token <str>   CANCEL CASCADE CASE CAST CHAR
 %token <str>   CHARACTER CHARACTERISTICS CHECK
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
 %token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
@@ -404,7 +404,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   INNER INSERT INT INT2VECTOR INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
-%token <str>   JOIN
+%token <str>   JOB JOIN
 
 %token <str>   KEY KEYS
 
@@ -421,16 +421,16 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   OF OFF OFFSET OID ON ONLY OPTIONS OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
 
-%token <str>   PARENT PARTIAL PARTITION PASSWORD PLACING POSITION
+%token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PLACING POSITION
 %token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
-%token <str>   QUERIES
+%token <str>   QUERIES QUERY
 
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
 %token <str>   REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
 %token <str>   RENAME REPEATABLE
-%token <str>   RELEASE RESET RESTORE RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
-%token <str>   ROW ROWS RSHIFT
+%token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
+%token <str>   ROLLBACK ROLLUP ROW ROWS RSHIFT
 
 %token <str>   SAVEPOINT SCATTER SEARCH SECOND SELECT
 %token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
@@ -477,6 +477,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %type <Statement> alter_table_stmt
 %type <Statement> backup_stmt
+%type <Statement> cancel_stmt
 %type <Statement> copy_from_stmt
 %type <Statement> create_stmt
 %type <Statement> create_database_stmt
@@ -496,9 +497,11 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> deallocate_stmt
 %type <Statement> grant_stmt
 %type <Statement> insert_stmt
+%type <Statement> pause_stmt
 %type <Statement> release_stmt
 %type <Statement> rename_stmt
 %type <Statement> reset_stmt
+%type <Statement> resume_stmt
 %type <Statement> revoke_stmt
 %type <*Select> select_stmt
 %type <Statement> savepoint_stmt
@@ -812,6 +815,7 @@ stmt_list:
 stmt:
   alter_table_stmt
 | backup_stmt
+| cancel_stmt
 | copy_from_stmt
 | create_stmt
 | delete_stmt
@@ -823,7 +827,9 @@ stmt:
 | deallocate_stmt
 | grant_stmt
 | insert_stmt
+| pause_stmt
 | rename_stmt
+| resume_stmt
 | revoke_stmt
 | savepoint_stmt
 | select_stmt
@@ -1085,6 +1091,17 @@ copy_from_stmt:
 | COPY qualified_name '(' qualified_name_list ')' FROM STDIN
   {
     $$.val = &CopyFrom{Table: $2.normalizableTableName(), Columns: $4.unresolvedNames(), Stdin: true}
+  }
+
+// CANCEL [JOB|QUERY] id
+cancel_stmt:
+  CANCEL JOB var_value
+  {
+    $$.val = &CancelJob{ID: $3.expr()}
+  }
+| CANCEL QUERY var_value
+  {
+    $$.val = &CancelQuery{ID: $3.expr()}
   }
 
 // CREATE [DATABASE|INDEX|TABLE|TABLE AS|VIEW]
@@ -1791,6 +1808,13 @@ for_grantee_clause:
     $$.val = NameList(nil)
   }
 
+// PAUSE JOB id
+pause_stmt:
+  PAUSE JOB var_value
+  {
+    $$.val = &PauseJob{ID: $3.expr()}
+  }
+
 split_stmt:
   ALTER TABLE qualified_name SPLIT AT select_stmt
   {
@@ -2339,6 +2363,13 @@ release_stmt:
  {
   $$.val = &ReleaseSavepoint{Savepoint: $2}
  }
+
+// RESUME JOB id
+resume_stmt:
+  RESUME JOB var_value
+  {
+    $$.val = &ResumeJob{ID: $3.expr()}
+  }
 
 savepoint_stmt:
  SAVEPOINT savepoint_name
@@ -5301,6 +5332,7 @@ unreserved_keyword:
 | BEGIN
 | BLOB
 | BY
+| CANCEL
 | CASCADE
 | CLUSTER
 | COLUMNS
@@ -5339,6 +5371,7 @@ unreserved_keyword:
 | INT2VECTOR
 | INTERLEAVE
 | ISOLATION
+| JOB
 | KEY
 | KEYS
 | LC_COLLATE
@@ -5366,10 +5399,12 @@ unreserved_keyword:
 | PARTIAL
 | PARTITION
 | PASSWORD
+| PAUSE
 | PRECEDING
 | PREPARE
 | PRIORITY
 | QUERIES
+| QUERY
 | RANGE
 | READ
 | RECURSIVE
@@ -5385,6 +5420,7 @@ unreserved_keyword:
 | RESET
 | RESTORE
 | RESTRICT
+| RESUME
 | REVOKE
 | ROLLBACK
 | ROLLUP

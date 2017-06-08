@@ -1,0 +1,25 @@
+# LogicTest: default parallel-stmts distsql
+
+query error unimplemented
+PAUSE JOB 1
+
+query error unimplemented
+PAUSE JOB 'foo'
+
+query error unimplemented
+RESUME JOB 1
+
+query error unimplemented
+RESUME JOB 'foo'
+
+query error unimplemented
+CANCEL JOB 1
+
+query error unimplemented
+CANCEL JOB 'foo'
+
+query error unimplemented
+CANCEL QUERY 1
+
+query error unimplemented
+CANCEL QUERY 'foo'
