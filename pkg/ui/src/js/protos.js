@@ -29344,6 +29344,7 @@ export const cockroach = $root.cockroach = (() => {
              * @property {Long} [epoch] Liveness epoch.
              * @property {cockroach.util.hlc.Timestamp$Properties} [expiration] Liveness expiration.
              * @property {boolean} [draining] Liveness draining.
+             * @property {boolean} [decommissioning] Liveness decommissioning.
              */
 
             /**
@@ -29384,6 +29385,12 @@ export const cockroach = $root.cockroach = (() => {
             Liveness.prototype.draining = false;
 
             /**
+             * Liveness decommissioning.
+             * @type {boolean}
+             */
+            Liveness.prototype.decommissioning = false;
+
+            /**
              * Creates a new Liveness instance using the specified properties.
              * @param {cockroach.storage.Liveness$Properties=} [properties] Properties to set
              * @returns {cockroach.storage.Liveness} Liveness instance
@@ -29409,6 +29416,8 @@ export const cockroach = $root.cockroach = (() => {
                     $root.cockroach.util.hlc.Timestamp.encode(message.expiration, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 if (message.draining != null && message.hasOwnProperty("draining"))
                     writer.uint32(/* id 4, wireType 0 =*/32).bool(message.draining);
+                if (message.decommissioning != null && message.hasOwnProperty("decommissioning"))
+                    writer.uint32(/* id 5, wireType 0 =*/40).bool(message.decommissioning);
                 return writer;
             };
 
@@ -29448,6 +29457,9 @@ export const cockroach = $root.cockroach = (() => {
                         break;
                     case 4:
                         message.draining = reader.bool();
+                        break;
+                    case 5:
+                        message.decommissioning = reader.bool();
                         break;
                     default:
                         reader.skipType(tag & 7);
@@ -29492,6 +29504,9 @@ export const cockroach = $root.cockroach = (() => {
                 if (message.draining != null && message.hasOwnProperty("draining"))
                     if (typeof message.draining !== "boolean")
                         return "draining: boolean expected";
+                if (message.decommissioning != null && message.hasOwnProperty("decommissioning"))
+                    if (typeof message.decommissioning !== "boolean")
+                        return "decommissioning: boolean expected";
                 return null;
             };
 
@@ -29522,6 +29537,8 @@ export const cockroach = $root.cockroach = (() => {
                 }
                 if (object.draining != null)
                     message.draining = Boolean(object.draining);
+                if (object.decommissioning != null)
+                    message.decommissioning = Boolean(object.decommissioning);
                 return message;
             };
 
@@ -29553,6 +29570,7 @@ export const cockroach = $root.cockroach = (() => {
                         object.epoch = options.longs === String ? "0" : 0;
                     object.expiration = null;
                     object.draining = false;
+                    object.decommissioning = false;
                 }
                 if (message.node_id != null && message.hasOwnProperty("node_id"))
                     object.node_id = message.node_id;
@@ -29565,6 +29583,8 @@ export const cockroach = $root.cockroach = (() => {
                     object.expiration = $root.cockroach.util.hlc.Timestamp.toObject(message.expiration, options);
                 if (message.draining != null && message.hasOwnProperty("draining"))
                     object.draining = message.draining;
+                if (message.decommissioning != null && message.hasOwnProperty("decommissioning"))
+                    object.decommissioning = message.decommissioning;
                 return object;
             };
 
