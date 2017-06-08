@@ -340,7 +340,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // Test that there's no deadlock between AcquireByName and Release.
 // We used to have one due to lock inversion between the tableNameCache lock and
 // the leaseState lock, triggered when the same lease was Release()d after the
-// table had been deleted (which means it's removed from the tableNameCache) and
+// table had been dropped (which means it's removed from the tableNameCache) and
 // AcquireByName()d at the same time.
 func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -379,10 +379,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	// Pretend the table has been deleted, so that when we release leases on it,
+	// Pretend the table has been dropped, so that when we release leases on it,
 	// they are removed from the tableNameCache too.
 	tableState := leaseManager.findTableState(tableDesc.ID, true)
-	tableState.deleted = true
+	tableState.dropped = true
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
 	// Release.

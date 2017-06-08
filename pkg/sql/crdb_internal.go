@@ -238,7 +238,7 @@ CREATE TABLE crdb_internal.leases (
 				ts.mu.Lock()
 				defer ts.mu.Unlock()
 
-				deleted := parser.MakeDBool(parser.DBool(ts.deleted))
+				dropped := parser.MakeDBool(parser.DBool(ts.dropped))
 
 				for _, state := range ts.active.data {
 					if !userCanSeeDescriptor(&state.TableDescriptor, p.session.User) {
@@ -252,7 +252,7 @@ CREATE TABLE crdb_internal.leases (
 						parser.NewDInt(parser.DInt(int64(state.ParentID))),
 						&expCopy,
 						parser.MakeDBool(parser.DBool(state.released)),
-						deleted,
+						dropped,
 					); err != nil {
 						return err
 					}
