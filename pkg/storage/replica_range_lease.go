@@ -176,7 +176,6 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	leaseReq roachpb.Request,
 ) error {
 	return repl.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
-		ctx = repl.AnnotateCtx(ctx)
 		var pErr *roachpb.Error
 
 		// If requesting an epoch-based lease & current state is expired,
@@ -443,6 +442,10 @@ func (r *Replica) requestLeaseLocked(
 // this method joins in waiting for it to complete if it's transferring to the
 // same replica. Otherwise, a NotLeaseHolderError is returned.
 func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID) error {
+	// Depending on the caller, the context might not have been annotated by the
+	// replica. If it has, this is a no-op.
+	ctx = r.AnnotateCtx(ctx)
+
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
