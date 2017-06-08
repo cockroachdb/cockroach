@@ -18,59 +18,71 @@ package server
 
 import (
 	"errors"
+	"io"
 	"net"
-	
-	"golang.org/x/net/context"
-	
+	"sync"
+	"sync/atomic"
+
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 )
 
 type initServer struct {
 	server       *Server
-	bootstrapped chan struct{}
+	bootstrapped int32
+	didBootstrap chan struct{}
+	mux          sync.Mutex
 }
 
 func newInitServer(s *Server) *initServer {
-	return &initServer{server: s, bootstrapped: make(chan struct{})}
-}
-
-type stayOpenListener struct {
-	net.Listener
-	accepted     bool
+	return &initServer{server: s, bootstrapped: 0, didBootstrap: make(chan struct{})}
 }
 
 func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
-	serverpb.RegisterInitServer(s.server.grpc, s)
+	grpcServer := grpc.NewServer()
+	serverpb.RegisterInitServer(grpcServer, s)
+
 	s.server.stopper.RunWorker(ctx, func(context.Context) {
-		netutil.FatalIfUnexpected(s.server.grpc.Serve(ln))
+		netutil.FatalIfUnexpected(grpcServer.Serve(ln))
 	})
 
 	select {
-	case <- s.server.node.storeCfg.Gossip.Connected:
-	case <- s.bootstrapped:
-	case <- s.server.stopper.ShouldStop():
+	case <-s.server.node.storeCfg.Gossip.Connected:
+	case <-s.didBootstrap:
+	case <-s.server.stopper.ShouldStop():
 		return errors.New("Stop called while waiting to bootstrap")
 	}
 
-	// set bootstrapped
-	log.Info(ctx, "Stopping dedicated grpc server for Init")
+	// Set the bootstrapped bit to stop accepting connections.
+	if !atomic.CompareAndSwapInt32(&s.bootstrapped, 0, 1) {
+		return errors.New("Failed to set bootstrapped")
+	}
+
+	// NOTE(adamgee): Stopping our private grpc server somehow affects the shared cmux connection.
+	//grpcServer.GracefulStop()
 	return nil
 }
 
 func (s *initServer) Bootstrap(ctx context.Context, request *serverpb.BootstrapRequest,
 ) (response *serverpb.BootstrapResponse, err error) {
 	log.Info(ctx, "Bootstrap", request)
+	s.mux.Lock()
+	defer s.mux.Unlock()
 
 	if err := s.server.node.bootstrap(ctx, s.server.engines); err != nil {
 		log.Error(ctx, "Node bootstrap failed: ", err)
-		return &serverpb.BootstrapResponse{}, err
+		return nil, err
 	}
 
 	log.Info(ctx, "Closing bootstrap")
-	close(s.bootstrapped)
+	close(s.didBootstrap)
 	log.Info(ctx, "Closed")
 	return &serverpb.BootstrapResponse{}, nil
 }
 
+func (s *initServer) acceptConnection(_ io.Reader) bool {
+	return atomic.LoadInt32(&s.bootstrapped) == 0
+}

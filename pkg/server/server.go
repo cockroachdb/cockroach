@@ -106,6 +106,7 @@ type Server struct {
 	registry           *metric.Registry
 	recorder           *status.MetricsRecorder
 	runtime            status.RuntimeStatSampler
+	init               *initServer
 	admin              *adminServer
 	status             *statusServer
 	tsDB               *ts.DB
@@ -341,6 +342,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 
+	s.init = newInitServer(s)
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
@@ -462,7 +464,7 @@ func (s *Server) isAnyStoreBootstrapped(ctx context.Context) (bool, error) {
 			return true, nil
 		}
 	}
-	
+
 	return false, nil
 }
 
@@ -534,21 +536,20 @@ func (s *Server) Start(ctx context.Context) error {
 	// if we wouldn't otherwise reach the point where we start serving on it.
 	var serveOnMux sync.Once
 	m := cmux.New(ln)
-	//var isBootstraped int32
-	initL := m.Match(func(io.Reader)bool{
-		//return atomic.LoadInt32(&isBootstrapped) == 0
-		log.Info(ctx, "foo")
-		return true
-	})
+
+	// Direct all requests to the Init server if it is accepting connections; this means the node is
+	// uninitialized and awaiting either an explicit Bootstrap RPC or gossip to respond.
+	initL := m.Match(s.init.acceptConnection)
+
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
+
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		// TODO(adamgee): Can I nuke serveOnMux now?
 		serveOnMux.Do(func() {
 			netutil.FatalIfUnexpected(m.Serve())
 		})
 	})
-
-	//atomic.SetInt32(&isBootstrapped, 1)
 
 	httpLn, err := net.Listen("tcp", s.cfg.HTTPAddr)
 	if err != nil {
@@ -592,7 +593,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
-		netutil.FatalIfUnexpected(anyL.Close())  // TODO: Do we need to also close pgL?
+		netutil.FatalIfUnexpected(anyL.Close()) // TODO: Do we need to also close pgL?
 		<-s.stopper.ShouldStop()
 		s.grpc.Stop()
 		serveOnMux.Do(func() {
@@ -719,12 +720,14 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
-		log.Info(ctx, "No stores bootstrapped and --join flag specified.  Starting Init Server and " +
+		log.Info(ctx, "No stores bootstrapped and --join flag specified.  Starting Init Server and "+
 			"attempting to connect to gossip.")
 
-		if err  = newInitServer(s).startAndAwait(ctx, initL); err != nil {
+		if err = s.init.startAndAwait(ctx, initL); err != nil {
 			return nil
 		}
+
+		log.Info(ctx, "Init Server returned, the cluster has been bootstrapped")
 	}
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
@@ -735,7 +738,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.engines,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality)
-	
+
 	if err != nil {
 		log.Error(ctx, "Node.start error: ", err)
 		return err
