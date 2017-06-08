@@ -473,6 +473,7 @@ func (s *Server) isAnyStoreBootstrapped(ctx context.Context) (bool, error) {
 // should represent the general startup operation.
 func (s *Server) Start(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
+	workersCtx := s.AnnotateCtx(context.Background())
 
 	startTime := timeutil.Now()
 
@@ -533,8 +534,21 @@ func (s *Server) Start(ctx context.Context) error {
 	// if we wouldn't otherwise reach the point where we start serving on it.
 	var serveOnMux sync.Once
 	m := cmux.New(ln)
+	//var isBootstraped int32
+	initL := m.Match(func(io.Reader)bool{
+		//return atomic.LoadInt32(&isBootstrapped) == 0
+		log.Info(ctx, "foo")
+		return true
+	})
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		serveOnMux.Do(func() {
+			netutil.FatalIfUnexpected(m.Serve())
+		})
+	})
+
+	//atomic.SetInt32(&isBootstrapped, 1)
 
 	httpLn, err := net.Listen("tcp", s.cfg.HTTPAddr)
 	if err != nil {
@@ -548,8 +562,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	s.cfg.HTTPAddr = unresolvedHTTPAddr.String()
-
-	workersCtx := s.AnnotateCtx(context.Background())
 
 	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 		<-s.stopper.ShouldQuiesce()
@@ -580,7 +592,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
-		netutil.FatalIfUnexpected(anyL.Close())
+		netutil.FatalIfUnexpected(anyL.Close())  // TODO: Do we need to also close pgL?
 		<-s.stopper.ShouldStop()
 		s.grpc.Stop()
 		serveOnMux.Do(func() {
@@ -710,7 +722,7 @@ func (s *Server) Start(ctx context.Context) error {
 		log.Info(ctx, "No stores bootstrapped and --join flag specified.  Starting Init Server and " +
 			"attempting to connect to gossip.")
 
-		if err  = newInitServer(s).startAndAwait(ctx, ln); err != nil {
+		if err  = newInitServer(s).startAndAwait(ctx, initL); err != nil {
 			return nil
 		}
 	}
@@ -771,11 +783,6 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		serveOnMux.Do(func() {
-			netutil.FatalIfUnexpected(m.Serve())
-		})
-	})
 
 	if len(s.cfg.SocketFile) != 0 {
 		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)

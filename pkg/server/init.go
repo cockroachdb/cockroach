@@ -17,14 +17,10 @@
 package server
 
 import (
-	"fmt"
-	
 	"errors"
 	"net"
 	
 	"golang.org/x/net/context"
-	
-	"google.golang.org/grpc"
 	
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,22 +38,13 @@ func newInitServer(s *Server) *initServer {
 
 type stayOpenListener struct {
 	net.Listener
-}
-
-func (l stayOpenListener) Close() error {
-	fmt.Println("HERE!!!")
-	return nil
+	accepted     bool
 }
 
 func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
-	// TODO(adam): TLS?
-	grpcServer := grpc.NewServer()
-	
-	serverpb.RegisterInitServer(grpcServer, s)
-	
+	serverpb.RegisterInitServer(s.server.grpc, s)
 	s.server.stopper.RunWorker(ctx, func(context.Context) {
-		log.Info(ctx, "Starting dedicated grpc server for Init")
-		netutil.FatalIfUnexpected(grpcServer.Serve(stayOpenListener{ln}))
+		netutil.FatalIfUnexpected(s.server.grpc.Serve(ln))
 	})
 
 	select {
@@ -66,16 +53,13 @@ func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
 	case <- s.server.stopper.ShouldStop():
 		return errors.New("Stop called while waiting to bootstrap")
 	}
-	
+
+	// set bootstrapped
 	log.Info(ctx, "Stopping dedicated grpc server for Init")
-	grpcServer.GracefulStop()
-	log.Info(ctx, "grpc Stopped")
 	return nil
 }
 
-func (s *initServer) Bootstrap(
-	ctx context.Context,
-	request *serverpb.BootstrapRequest,
+func (s *initServer) Bootstrap(ctx context.Context, request *serverpb.BootstrapRequest,
 ) (response *serverpb.BootstrapResponse, err error) {
 	log.Info(ctx, "Bootstrap", request)
 
