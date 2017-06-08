@@ -176,7 +176,6 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	leaseReq roachpb.Request,
 ) error {
 	return repl.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
-		ctx = repl.AnnotateCtx(ctx)
 		var pErr *roachpb.Error
 
 		// If requesting an epoch-based lease & current state is expired,
