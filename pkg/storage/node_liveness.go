@@ -145,25 +145,54 @@ func NewNodeLiveness(
 	return nl
 }
 
-var errNodeDrainingSet = errors.New("node already has given draining value")
+type livenessField int
+
+const (
+	_ livenessField = iota
+	livenessFieldDraining
+	livenessFieldDecommission
+)
+
+var (
+	errNodeDrainingSet     = errors.New("node already has given draining value")
+	errNodeDecommissionSet = errors.New("node already has given decommission value")
+)
 
 // SetDraining calls PauseHeartbeat with the given boolean and then attempts to
 // update the liveness record.
 func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool) {
+	nl.setState(ctx, nl.gossip.NodeID, livenessFieldDraining, drain)
+}
+
+// SetDecommission calls PauseHeartbeat with the given boolean and then attempts to
+// update the liveness record.
+func (nl *NodeLiveness) SetDecommission(
+	ctx context.Context, nodeID *base.NodeIDContainer, decommission bool,
+) {
+	nl.setState(ctx, nodeID, livenessFieldDecommission, decommission)
+}
+
+func (nl *NodeLiveness) setState(
+	ctx context.Context, nodeID *base.NodeIDContainer, field livenessField, value bool,
+) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		liveness, err := nl.Self()
 		if err != nil && err != ErrNoLivenessRecord {
 			log.Errorf(ctx, "unexpected error getting liveness: %s", err)
 		}
-		if err := nl.setDrainingInternal(ctx, liveness, drain); err == nil {
+		if err := nl.setStateInternal(ctx, nodeID, liveness, field, value); err == nil {
 			return
 		}
 	}
 }
 
-func (nl *NodeLiveness) setDrainingInternal(
-	ctx context.Context, liveness *Liveness, drain bool,
+func (nl *NodeLiveness) setStateInternal(
+	ctx context.Context,
+	nodeID *base.NodeIDContainer,
+	liveness *Liveness,
+	field livenessField,
+	value bool,
 ) error {
 	// Allow only one attempt to set the draining field at a time.
 	select {
@@ -176,26 +205,42 @@ func (nl *NodeLiveness) setDrainingInternal(
 	}()
 
 	newLiveness := Liveness{
-		NodeID: nl.gossip.NodeID.Get(),
+		NodeID: nodeID.Get(),
 		Epoch:  1,
 	}
 	if liveness != nil {
 		newLiveness = *liveness
 	}
-	newLiveness.Draining = drain
+	switch field {
+	case livenessFieldDraining:
+		newLiveness.Draining = value
+	case livenessFieldDecommission:
+		newLiveness.Decommission = value
+	}
 	if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
-		nl.setSelf(actual)
-		if actual.Draining == newLiveness.Draining {
-			return errNodeDrainingSet
+		if nodeID == nl.gossip.NodeID {
+			nl.setSelf(actual)
+		}
+		switch field {
+		case livenessFieldDraining:
+			if actual.Draining == newLiveness.Draining {
+				return errNodeDrainingSet
+			}
+		case livenessFieldDecommission:
+			if actual.Decommission == newLiveness.Decommission {
+				return errNodeDecommissionSet
+			}
 		}
 		return errors.New("failed to update liveness record")
 	}); err != nil {
-		if err == errNodeDrainingSet {
+		if err == errNodeDrainingSet || err == errNodeDecommissionSet {
 			return nil
 		}
 		return err
 	}
-	nl.setSelf(newLiveness)
+	if nodeID == nl.gossip.NodeID {
+		nl.setSelf(newLiveness)
+	}
 	return nil
 }
 

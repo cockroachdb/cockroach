@@ -372,5 +372,10 @@ func GetGCQueueTxnCleanupThreshold() time.Duration {
 func (nl *NodeLiveness) SetDrainingInternal(
 	ctx context.Context, liveness *Liveness, drain bool,
 ) error {
-	return nl.setDrainingInternal(ctx, liveness, drain)
+	return nl.setStateInternal(ctx, nl.gossip.NodeID, liveness, livenessFieldDraining, drain)
+}
+func (nl *NodeLiveness) SetDecommissionInternal(
+	ctx context.Context, liveness *Liveness, decommission bool,
+) error {
+	return nl.setStateInternal(ctx, nl.gossip.NodeID, liveness, livenessFieldDecommission, decommission)
 }
