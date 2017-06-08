@@ -347,9 +347,10 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 	// this session use Session.Ctx() (which may diverge from this method's ctx).
 
 	defer func() {
-		// If we're panicking, don't bother trying to close the session; it would
-		// pollute the logs.
 		if r := recover(); r != nil {
+			// If we're panicking, use an emergency session shutdown so that
+			// the monitors don't shout that they are unhappy.
+			c.session.EmergencyClose()
 			panic(r)
 		}
 		c.closeSession(ctx)
