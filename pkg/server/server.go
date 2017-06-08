@@ -95,6 +95,7 @@ type Server struct {
 	grpc               *grpc.Server
 	gossip             *gossip.Gossip
 	nodeLiveness       *storage.NodeLiveness
+	sem                chan struct{}
 	storePool          *storage.StorePool
 	txnCoordSender     *kv.TxnCoordSender
 	distSender         *kv.DistSender
@@ -136,6 +137,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		stopper:  stopper,
 		cfg:      cfg,
 		registry: metric.NewRegistry(),
+		sem:      make(chan struct{}, 1),
 	}
 
 	// Attempt to load TLS configs right away, failures are permanent.
@@ -800,14 +802,36 @@ func (s *Server) Start(ctx context.Context) error {
 
 	log.Event(ctx, "accepting connections")
 
-	// Begin the node liveness heartbeat. Add a callback which records the local
-	// store "last up" timestamp for every store whenever the liveness record
-	// is updated.
+	// Begin the node liveness heartbeat. Add a callback which
+	// 1. records the local store "last up" timestamp for every store whenever the
+	//    liveness record is updated.
+	// 2. sets Draining if Decommissioning is set in the liveness record
 	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, func(ctx context.Context) error {
 		now := s.clock.Now()
-		return s.node.stores.VisitStores(func(s *storage.Store) error {
+		if err := s.node.stores.VisitStores(func(s *storage.Store) error {
 			return s.WriteLastUpTimestamp(ctx, now)
-		})
+		}); err != nil {
+			return err
+		}
+		if liveness, err := s.nodeLiveness.Self(); err != nil {
+			return err
+		} else if liveness != nil && liveness.Decommissioning && !liveness.Draining {
+			s.stopper.RunWorker(ctx, func(context.Context) {
+				select {
+				case s.sem <- struct{}{}:
+					defer func() {
+						<-s.sem
+					}()
+					if _, err := s.Drain(GracefulDrainModes); err != nil {
+						log.Warningf(ctx, "failed to set Draining when Decommissioning: %v", err)
+					}
+				default:
+					// noop
+				}
+			})
+
+		}
+		return nil
 	})
 
 	// Initialize grpc-gateway mux and context.

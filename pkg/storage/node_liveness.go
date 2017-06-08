@@ -145,7 +145,10 @@ func NewNodeLiveness(
 	return nl
 }
 
-var errNodeDrainingSet = errors.New("node already has given draining value")
+var (
+	errNodeDrainingSet        = errors.New("node already has given draining value")
+	errNodeDecommissioningSet = errors.New("node already has given decommissioning value")
+)
 
 // SetDraining calls PauseHeartbeat with the given boolean and then attempts to
 // update the liveness record.
@@ -157,6 +160,23 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool) {
 			log.Errorf(ctx, "unexpected error getting liveness: %s", err)
 		}
 		if err := nl.setDrainingInternal(ctx, liveness, drain); err == nil {
+			return
+		}
+	}
+}
+
+// SetDecommissioning calls PauseHeartbeat with the given boolean and then attempts to
+// update the liveness record.
+func (nl *NodeLiveness) SetDecommissioning(
+	ctx context.Context, nodeID roachpb.NodeID, decommission bool,
+) {
+	ctx = nl.ambientCtx.AnnotateCtx(ctx)
+	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+		liveness, err := nl.GetLiveness(nodeID)
+		if err != nil && err != ErrNoLivenessRecord {
+			log.Errorf(ctx, "unexpected error getting liveness: %s", err)
+		}
+		if err := nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission); err == nil {
 			return
 		}
 	}
@@ -196,6 +216,43 @@ func (nl *NodeLiveness) setDrainingInternal(
 		return err
 	}
 	nl.setSelf(newLiveness)
+	return nil
+}
+
+func (nl *NodeLiveness) setDecommissioningInternal(
+	ctx context.Context, nodeID roachpb.NodeID, liveness *Liveness, decommission bool,
+) error {
+	// Allow only one attempt to set the decommissioning field at a time if it is this node.
+	if nodeID == nl.gossip.NodeID.Get() {
+		select {
+		case nl.sem <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		defer func() {
+			<-nl.sem
+		}()
+	}
+
+	newLiveness := Liveness{
+		NodeID: nodeID,
+		Epoch:  1,
+	}
+	if liveness != nil {
+		newLiveness = *liveness
+	}
+	newLiveness.Decommissioning = decommission
+	if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
+		if actual.Decommissioning == newLiveness.Decommissioning {
+			return errNodeDecommissioningSet
+		}
+		return errors.New("failed to update liveness record")
+	}); err != nil {
+		if err == errNodeDecommissioningSet {
+			return nil
+		}
+		return err
+	}
 	return nil
 }
 
