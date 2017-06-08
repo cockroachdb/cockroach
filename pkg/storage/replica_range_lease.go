@@ -151,7 +151,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		}
 	}
 
-	if err := p.requestLeaseAsync(repl, nextLeaseHolder, reqLease, status, leaseReq); err != nil {
+	if err := p.requestLeaseAsync(ctx, repl, nextLeaseHolder, reqLease, status, leaseReq); err != nil {
 		// We failed to start the asynchronous task. Send a blank NotLeaseHolderError
 		// back to indicate that we have no idea who the range lease holder might
 		// be; we've withdrawn from active duty.
@@ -168,13 +168,14 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 // requestLeaseAsync sends a transfer lease or lease request to the
 // specified replica. The request is sent in an async task.
 func (p *pendingLeaseRequest) requestLeaseAsync(
+	ctx context.Context,
 	repl *Replica,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	reqLease roachpb.Lease,
 	status LeaseStatus,
 	leaseReq roachpb.Request,
 ) error {
-	return repl.store.Stopper().RunAsyncTask(context.TODO(), func(ctx context.Context) {
+	return repl.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
 		ctx = repl.AnnotateCtx(ctx)
 		var pErr *roachpb.Error
 
