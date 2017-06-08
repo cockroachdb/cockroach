@@ -475,7 +475,6 @@ func (s *Server) isAnyStoreBootstrapped(ctx context.Context) (bool, error) {
 // should represent the general startup operation.
 func (s *Server) Start(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
-	workersCtx := s.AnnotateCtx(context.Background())
 
 	startTime := timeutil.Now()
 
@@ -544,6 +543,7 @@ func (s *Server) Start(ctx context.Context) error {
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
 
+	workersCtx := s.AnnotateCtx(context.Background())
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		// TODO(adamgee): Can I nuke serveOnMux now?
 		serveOnMux.Do(func() {
@@ -593,7 +593,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
-		netutil.FatalIfUnexpected(anyL.Close()) // TODO: Do we need to also close pgL?
+		netutil.FatalIfUnexpected(anyL.Close()) // TODO: Do we need to also close the other listeners?
 		<-s.stopper.ShouldStop()
 		s.grpc.Stop()
 		serveOnMux.Do(func() {

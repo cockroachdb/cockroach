@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 )
 
 type initServer struct {
@@ -42,7 +41,7 @@ func newInitServer(s *Server) *initServer {
 }
 
 func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
-	grpcServer := grpc.NewServer()
+	grpcServer = s.server.grpc
 	serverpb.RegisterInitServer(grpcServer, s)
 
 	s.server.stopper.RunWorker(ctx, func(context.Context) {
@@ -61,8 +60,6 @@ func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
 		return errors.New("Failed to set bootstrapped")
 	}
 
-	// NOTE(adamgee): Stopping our private grpc server somehow affects the shared cmux connection.
-	//grpcServer.GracefulStop()
 	return nil
 }
 
