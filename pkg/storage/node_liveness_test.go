@@ -128,16 +128,21 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 	// Restart the node and verify the epoch is incremented with initial heartbeat.
 	mtc.stopStore(0)
 	mtc.restartStore(0)
+	verifyEpochIncremented(t, mtc, 0)
+}
+
+func verifyEpochIncremented(t *testing.T, mtc *multiTestContext, nodeIdx int) {
 	testutils.SucceedsSoon(t, func() error {
-		liveness, err := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+		liveness, err := mtc.nodeLivenesses[nodeIdx].GetLiveness(mtc.gossips[nodeIdx].NodeID.Get())
 		if err != nil {
 			return err
 		}
-		if liveness.Epoch != 2 {
-			return errors.Errorf("expected epoch to be incremented to 2 on restart; got %d", liveness.Epoch)
+		if liveness.Epoch < 2 {
+			return errors.Errorf("expected epoch to be >=2 on restart but was %d", liveness.Epoch)
 		}
 		return nil
 	})
+
 }
 
 // TestNodeIsLiveCallback verifies that the liveness callback for a
@@ -701,4 +706,66 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	if count := atomic.LoadInt32(&injectedErrorCount); count != 2 {
 		t.Errorf("expected injected error count of 2; got %d", count)
 	}
+}
+
+func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roachpb.NodeID) {
+	testutils.SucceedsSoon(t, func() error {
+		for _, nl := range mtc.nodeLivenesses {
+			livenesses := nl.GetLivenesses()
+			for _, liveness := range livenesses {
+				expected := false
+				if liveness.NodeID == nodeID {
+					expected = true
+				}
+				if liveness.Decommissioning != expected {
+					return errors.Errorf("unexpected Decommissioning value of %v for node %v", liveness.Decommissioning, liveness.NodeID)
+				}
+			}
+		}
+		return nil
+	})
+}
+
+func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+	mtc.initGossipNetwork()
+
+	verifyLiveness(t, mtc)
+
+	ctx := context.Background()
+	callerNodeLiveness := mtc.nodeLivenesses[0]
+	nodeID := mtc.gossips[decommissionNodeIdx].NodeID.Get()
+
+	// Verify success on failed update of a liveness record that already has the
+	// given decommissioning setting.
+	if err := callerNodeLiveness.SetDecommissioningInternal(ctx, nodeID, &storage.Liveness{}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set a node to decommissioning state.
+	callerNodeLiveness.SetDecommissioning(ctx, nodeID, true)
+	verifyNodeIsDecommissioning(t, mtc, nodeID)
+
+	// Stop and restart the store to verify that a restarted server retains the
+	// decommissioning field on the liveness record.
+	mtc.stopStore(decommissionNodeIdx)
+	mtc.restartStore(decommissionNodeIdx)
+
+	// Wait until store has restarted and published a new heartbeat to ensure not
+	// looking at pre-restart state. Want to be sure test fails if node wiped the
+	// decommission flag.
+	verifyEpochIncremented(t, mtc, decommissionNodeIdx)
+	verifyNodeIsDecommissioning(t, mtc, nodeID)
+}
+
+// TestNodeLivenessSetDecommissioning verifies that when decommissioning, a
+// node's liveness record is updated and remains after restart.
+func TestNodeLivenessSetDecommissioning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Sets itself to decommissioning.
+	testNodeLivenessSetDecommissioning(t, 0)
+	// Set another node to decommissioning.
+	testNodeLivenessSetDecommissioning(t, 1)
 }
