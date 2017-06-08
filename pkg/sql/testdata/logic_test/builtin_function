@@ -1255,7 +1255,28 @@ SELECT current_schema()
 test
 
 statement ok
+CREATE TABLE foo (a int)
+
+query B
+SELECT pg_catalog.pg_table_is_visible('foo'::regclass)
+----
+true
+
+statement ok
 SET DATABASE = ''
+
+query B
+SELECT pg_catalog.pg_table_is_visible((SELECT oid FROM pg_class WHERE relname='foo'))
+----
+false
+
+statement ok
+SET SEARCH_PATH = 'test'
+
+query B
+SELECT pg_catalog.pg_table_is_visible((SELECT oid FROM pg_class WHERE relname='foo'))
+----
+true
 
 query T
 SELECT current_schema()
