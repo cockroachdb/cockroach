@@ -1,0 +1,37 @@
+# LogicTest: default parallel-stmts distsql
+
+query error unimplemented
+PAUSE JOB 1
+
+query error unimplemented
+PAUSE JOB 'foo'
+
+query error unimplemented
+PAUSE JOB (SELECT id FROM system.jobs)
+
+query error unimplemented
+RESUME JOB 1
+
+query error unimplemented
+RESUME JOB 'foo'
+
+query error unimplemented
+RESUME JOB (SELECT id FROM system.jobs)
+
+query error unimplemented
+CANCEL JOB 1
+
+query error unimplemented
+CANCEL JOB 'foo'
+
+query error unimplemented
+CANCEL JOB (SELECT id FROM system.jobs)
+
+query error unimplemented
+CANCEL QUERY 1
+
+query error unimplemented
+CANCEL QUERY 'foo'
+
+query error unimplemented
+CANCEL JOB (SELECT * FROM VALUES ((1),(2)))

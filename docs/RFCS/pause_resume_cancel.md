@@ -1,5 +1,5 @@
 - Feature Name: Syntax for pausing, resuming, and canceling operations
-- Status: draft
+- Status: completed
 - Start Date: 2017-06-01
 - Authors: Nikhil Benesch, Jordan Lewis, Bilal Akhtar
 - RFC PR: [#16273]
