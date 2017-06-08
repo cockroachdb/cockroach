@@ -25,7 +25,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
@@ -432,7 +431,7 @@ func verifySystemJobProgress(
 	}
 
 	// Ensure the fractionCompleted of the latest job is in the range [0.25, 0.75].
-	err := util.RetryForDuration(time.Second, func() error {
+	err := util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 		var fractionCompleted float32
 		sqlDB.QueryRow(
 			`SELECT fraction_completed FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
