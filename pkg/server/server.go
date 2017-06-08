@@ -705,7 +705,7 @@ func (s *Server) Start(ctx context.Context) error {
 		log.Info(ctx, "No stores bootstrapped and --join flag specified.  Starting Init Server and " +
 			"attempting to connect to gossip.")
 
-		if err  = newInitServer(s, &ln).startAndAwait(ctx); err != nil {
+		if err  = newInitServer(s).startAndAwait(ctx, ln); err != nil {
 			return nil
 		}
 	}
