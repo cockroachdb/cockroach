@@ -702,3 +702,55 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 		t.Errorf("expected injected error count of 2; got %d", count)
 	}
 }
+
+func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roachpb.NodeID) {
+	testutils.SucceedsSoon(t, func() error {
+		for _, nl := range mtc.nodeLivenesses {
+			livenesses := nl.GetLivenesses()
+			for _, liveness := range livenesses {
+				expected := false
+				if liveness.NodeID == nodeID {
+					expected = true
+				}
+				if liveness.Decommissioning != expected {
+					return errors.Errorf("unexpected Decommissioning value of %v for %v", liveness.Decommissioning, liveness.NodeID)
+				}
+			}
+		}
+		return nil
+	})
+}
+
+// TestNodeLivenessSetDecommissioning verifies that when decommissioning, a
+// node's liveness record is updated and remains after restart.
+func TestNodeLivenessSetDecommissioning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+	mtc.initGossipNetwork()
+
+	verifyLiveness(t, mtc)
+
+	ctx := context.Background()
+	nodeIdx := 0
+	nodeID := mtc.gossips[nodeIdx].NodeID.Get()
+
+	// Verify success on failed update of a liveness record that already has the
+	// given decommissioning setting.
+	if err := mtc.nodeLivenesses[nodeIdx].SetDecommissioningInternal(ctx, &storage.Liveness{}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set a node to decommissioning state
+	mtc.nodeLivenesses[nodeIdx].SetDecommissioning(ctx, nodeID, true)
+	verifyNodeIsDecommissioning(t, mtc, nodeID)
+
+	// Stop and restart the store to verify that a restarted server retains the
+	// decommissioning field on the liveness record.
+	mtc.stopStore(nodeIdx)
+	mtc.restartStore(nodeIdx)
+
+	// Restarted node appears once again in the store list.
+	verifyNodeIsDecommissioning(t, mtc, nodeID)
+}
