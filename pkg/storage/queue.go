@@ -650,7 +650,7 @@ func (bq *baseQueue) maybeAddToPurgatory(
 	bq.failures.Inc(1)
 
 	// Check whether the failure is a purgatory error and whether the queue supports it.
-	if _, ok := triggeringErr.(purgatoryError); !ok || bq.impl.purgatoryChan() == nil {
+	if _, ok := errors.Cause(triggeringErr).(purgatoryError); !ok || bq.impl.purgatoryChan() == nil {
 		log.Error(ctx, triggeringErr)
 		return
 	}

@@ -279,6 +279,36 @@ func (rq *replicateQueue) processOneChange(
 			StoreID: newStore.StoreID,
 		}
 
+		need := int(zone.NumReplicas)
+		willHave := len(desc.Replicas) + 1
+
+		// Only up-replicate if there are suitable allocation targets such
+		// that, either the replication goal is met, or it is possible to get to the
+		// next odd number of replicas. A consensus group of size 2n has worse
+		// failure tolerance properties than a group of size 2n - 1 because it has a
+		// larger quorum. For example, up-replicating from 1 to 2 replicas only
+		// makes sense if it is possible to be able to go to 3 replicas.
+		if willHave != need && willHave%2 == 0 {
+			// This means we are going to up-replicate to an even replica state.
+			// Check if it is possible to go to an odd replica state beyond it.
+			oldPlusNewReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
+			oldPlusNewReplicas = append(oldPlusNewReplicas, roachpb.ReplicaDescriptor{
+				NodeID:  newStore.Node.NodeID,
+				StoreID: newStore.StoreID,
+			})
+			_, err := rq.allocator.AllocateTarget(
+				ctx,
+				zone.Constraints,
+				oldPlusNewReplicas,
+				desc.RangeID,
+				true, /* relaxConstraints */
+			)
+			if err != nil {
+				// Does not seem possible to go to the next odd replica state. Return an
+				// error so that the operation gets queued into the purgatory.
+				return false, errors.Wrap(err, "avoid up-replicating to fragile quorum")
+			}
+		}
 		rq.metrics.AddReplicaCount.Inc(1)
 		if log.V(1) {
 			log.Infof(ctx, "adding replica %+v due to under-replication: %s",
