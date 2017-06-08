@@ -108,6 +108,18 @@ func (*BeginTransaction) StatementTag() string { return "BEGIN" }
 func (*BeginTransaction) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*CancelJob) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CancelJob) StatementTag() string { return "CANCEL JOB" }
+
+// StatementType implements the Statement interface.
+func (*CancelQuery) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CancelQuery) StatementTag() string { return "CANCEL QUERY" }
+
+// StatementType implements the Statement interface.
 func (*CommitTransaction) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -235,6 +247,12 @@ func (*ParenSelect) StatementType() StatementType { return Rows }
 func (*ParenSelect) StatementTag() string { return "SELECT" }
 
 // StatementType implements the Statement interface.
+func (*PauseJob) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*PauseJob) StatementTag() string { return "PAUSE JOB" }
+
+// StatementType implements the Statement interface.
 func (*Prepare) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -290,6 +308,12 @@ func (*Restore) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Restore) StatementTag() string { return "RESTORE" }
+
+// StatementType implements the Statement interface.
+func (*ResumeJob) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ResumeJob) StatementTag() string { return "RESUME JOB" }
 
 // StatementType implements the Statement interface.
 func (*Revoke) StatementType() StatementType { return DDL }
@@ -562,6 +586,8 @@ func (n *AlterTableDropNotNull) String() string    { return AsString(n) }
 func (n *AlterTableSetDefault) String() string     { return AsString(n) }
 func (n *Backup) String() string                   { return AsString(n) }
 func (n *BeginTransaction) String() string         { return AsString(n) }
+func (n *CancelJob) String() string                { return AsString(n) }
+func (n *CancelQuery) String() string              { return AsString(n) }
 func (n *CommitTransaction) String() string        { return AsString(n) }
 func (n *CopyFrom) String() string                 { return AsString(n) }
 func (n *CreateDatabase) String() string           { return AsString(n) }
@@ -581,6 +607,7 @@ func (n *Grant) String() string                    { return AsString(n) }
 func (n *Help) String() string                     { return AsString(n) }
 func (n *Insert) String() string                   { return AsString(n) }
 func (n *ParenSelect) String() string              { return AsString(n) }
+func (n *PauseJob) String() string                 { return AsString(n) }
 func (n *Prepare) String() string                  { return AsString(n) }
 func (n *ReleaseSavepoint) String() string         { return AsString(n) }
 func (n *Relocate) String() string                 { return AsString(n) }
@@ -589,6 +616,7 @@ func (n *RenameDatabase) String() string           { return AsString(n) }
 func (n *RenameIndex) String() string              { return AsString(n) }
 func (n *RenameTable) String() string              { return AsString(n) }
 func (n *Restore) String() string                  { return AsString(n) }
+func (n *ResumeJob) String() string                { return AsString(n) }
 func (n *Revoke) String() string                   { return AsString(n) }
 func (n *RollbackToSavepoint) String() string      { return AsString(n) }
 func (n *RollbackTransaction) String() string      { return AsString(n) }
