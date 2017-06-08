@@ -102,6 +102,69 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	})
 }
 
+func TestReplicateQueueUpReplicate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const replicaCount = 3
+
+	// The goal of this test is to ensure that down replication occurs correctly
+	// using the replicate queue, and to ensure that's the case, the test
+	// cluster needs to be kept in auto replication mode.
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	// Split off a range from the initial range for testing; there are
+	// complications if the metadata ranges are moved.
+	testKey := roachpb.Key("m")
+	if _, _, err := tc.SplitRange(testKey); err != nil {
+		t.Fatal(err)
+	}
+
+	desc, err := tc.LookupRange(testKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(desc.Replicas) != 1 {
+		t.Fatal("replica count, want %d, current %d", replicaCount, len(desc.Replicas))
+	}
+
+	// TODO: How to get default server args.
+	tc.AddServer(t, base.TestServerArgs{})
+
+	// Just sleep so that there is enough chance to up-replicate. But check later
+	// that up-replication did not happen
+	// TODO: Remove this sleep and the check after it once we add a check for
+	// the operation to be in the purgatory.
+	time.Sleep(time.Second)
+
+	desc, err = tc.LookupRange(testKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(desc.Replicas) != 1 {
+		t.Fatal("replica count, want %d, current %d", replicaCount, len(desc.Replicas))
+	}
+
+	// TODO: Check that the up-replicate operation is in purgatory
+
+	tc.AddServer(t, base.TestServerArgs{})
+
+	// Now wait until the replicas have been up-replicated to the
+	// desired number.
+	testutils.SucceedsSoon(t, func() error {
+		desc, err := tc.LookupRange(testKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(desc.Replicas) != replicaCount {
+			return errors.Errorf("replica count, want %d, current %d", replicaCount, len(desc.Replicas))
+		}
+		return nil
+	})
+}
+
 // TestReplicateQueueDownReplicate verifies that the replication queue will
 // notice over-replicated ranges and remove replicas from them.
 func TestReplicateQueueDownReplicate(t *testing.T) {
