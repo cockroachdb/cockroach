@@ -2115,11 +2115,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // reproduce a race (see #1911 and #9037).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sc := storage.TestStoreConfig(nil)
-	// Suppress timeout-based elections to avoid leadership changes in ways
-	// this test doesn't expect.
-	sc.RaftElectionTimeoutTicks = 100000
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 10)
 

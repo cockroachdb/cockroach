@@ -265,7 +265,7 @@ func (r *Replica) InitQuotaPool(quota int64) {
 
 	r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
 	if r.mu.proposalQuota != nil {
-		r.mu.proposalQuota.close()
+		r.mu.proposalQuota.broadcast()
 	}
 	r.mu.proposalQuota = newQuotaPool(quota)
 	r.mu.quotaReleaseQueue = nil

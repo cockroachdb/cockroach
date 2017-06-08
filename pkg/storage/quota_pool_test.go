@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"golang.org/x/net/context"
 )
@@ -105,10 +104,10 @@ func TestQuotaPoolContextCancellation(t *testing.T) {
 	}
 }
 
-// TestQuotaPoolClose tests the behaviour that for an ongoing
-// blocked acquisition, if the quota pool gets closed the acquisition
-// gets cancelled too with an error indicating so.
-func TestQuotaPoolClose(t *testing.T) {
+// TestQuotaPoolBroadcast tests the behaviour that for an ongoing blocked
+// acquisition if the quota pool gets broadcasted, the acquisition goes
+// through.
+func TestQuotaPoolBroadcast(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -122,14 +121,14 @@ func TestQuotaPoolClose(t *testing.T) {
 		errCh <- qp.acquire(ctx, 1)
 	}()
 
-	qp.close()
+	qp.broadcast()
 
 	select {
 	case <-time.After(5 * time.Second):
-		t.Fatal("quota pool closing did not unblock acquisitions within 5s")
+		t.Fatal("quota pool broadcast did not unblock acquisitions within 5s")
 	case err := <-errCh:
-		if !testutils.IsError(err, "quota pool no longer in use") {
-			t.Fatalf("expected acquisition to fail with pool closing, got %v", err)
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -292,5 +291,5 @@ func BenchmarkQuotaPool(b *testing.B) {
 		}
 		qp.add(1)
 	}
-	qp.close()
+	qp.broadcast()
 }
