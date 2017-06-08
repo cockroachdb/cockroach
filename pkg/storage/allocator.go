@@ -210,14 +210,40 @@ func (a *Allocator) ComputeAction(
 	have := len(desc.Replicas)
 	if have < need {
 		// Range is under-replicated, and should add an additional replica.
-		// Priority is adjusted by the difference between the current replica
-		// count and the quorum of the desired replica count.
-		neededQuorum := computeQuorum(need)
-		priority := addMissingReplicaPriority + float64(neededQuorum-have)
-		if log.V(3) {
-			log.Infof(ctx, "AllocatorAdd - need=%d, have=%d, priority=%.2f", need, have, priority)
+		// Only suggest up-replicating if there are suitable allocation targets such
+		// that, either the replication goal is met, or it is possible to get to the
+		// next odd number of replicas. A consensus group of size 2n has worse
+		// failure tolerance properties than a group of size 2n - 1 because it has a
+		// larger quorum. For example, up-replicating from 1 to 2 replicas only
+		// makes sense if it is possible to be able to go to 3 replicas.
+		potentialReplicas := desc.Replicas
+		for {
+			newStore, err := a.AllocateTarget(
+				ctx,
+				zone.Constraints,
+				potentialReplicas,
+				desc.RangeID,
+				true, /* relaxConstraints */
+			)
+			if err != nil {
+				break
+			}
+			newReplica := roachpb.ReplicaDescriptor{
+				StoreID: newStore.StoreID,
+				NodeID:  newStore.Node.NodeID,
+			}
+			potentialReplicas = append(potentialReplicas, newReplica)
+			if len(potentialReplicas) >= need || len(potentialReplicas)%2 == 1 {
+				// Priority is adjusted by the difference between the current replica
+				// count and the quorum of the desired replica count.
+				neededQuorum := computeQuorum(need)
+				priority := addMissingReplicaPriority + float64(neededQuorum-have)
+				if log.V(3) {
+					log.Infof(ctx, "AllocatorAdd - need=%d, have=%d, priority=%.2f", need, have, priority)
+				}
+				return AllocatorAdd, priority
+			}
 		}
-		return AllocatorAdd, priority
 	}
 	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
 	if len(deadReplicas) > 0 {

@@ -1847,6 +1847,203 @@ func TestAllocatorComputeAction(t *testing.T) {
 	}
 }
 
+func TestAllocatorComputeActionUpReplicate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		zone           config.ZoneConfig
+		desc           roachpb.RangeDescriptor
+		expectedAction AllocatorAction
+		live           []roachpb.StoreID
+		dead           []roachpb.StoreID
+	}{
+		// Needs three replicas, has one, but there are only two stores
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+				},
+			},
+			expectedAction: AllocatorNoop,
+			live:           []roachpb.StoreID{1, 2},
+			dead:           []roachpb.StoreID{},
+		},
+		// Needs three replicas, has one, and there are three stores
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+			live:           []roachpb.StoreID{1, 2, 3},
+			dead:           []roachpb.StoreID{},
+		},
+		// Needs three replicas, has two, and there is one more store
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+			live:           []roachpb.StoreID{1, 2, 3},
+			dead:           []roachpb.StoreID{},
+		},
+		// Needs two replicas, has one, and there are two stores
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 2,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+			live:           []roachpb.StoreID{1, 2},
+			dead:           []roachpb.StoreID{},
+		},
+		// Needs four replicas, has one, and there are three stores
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 4,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+			live:           []roachpb.StoreID{1, 2, 3},
+			dead:           []roachpb.StoreID{},
+		},
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 4,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+			live:           []roachpb.StoreID{1, 2, 3},
+			dead:           []roachpb.StoreID{},
+		},
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 4,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+			live:           []roachpb.StoreID{1, 2, 3, 4},
+			dead:           []roachpb.StoreID{},
+		},
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 5,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction: AllocatorNoop,
+			live:           []roachpb.StoreID{1, 2, 3, 4},
+			dead:           []roachpb.StoreID{},
+		},
+	}
+
+	stopper, _, sp, a, _ := createTestAllocator( /* deterministic */ false)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	for i, tcase := range testCases {
+		mockStorePool(sp, tcase.live, tcase.dead, nil)
+
+		action, _ := a.ComputeAction(ctx, tcase.zone, &tcase.desc)
+		if tcase.expectedAction != action {
+			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+			continue
+		}
+	}
+}
 func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
