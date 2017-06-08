@@ -17,11 +17,14 @@
 package server
 
 import (
-	"errors"
 	"fmt"
+	
+	"errors"
 	"net"
 	
 	"golang.org/x/net/context"
+	
+	"google.golang.org/grpc"
 	
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,12 +33,11 @@ import (
 
 type initServer struct {
 	server       *Server
-	ln           *net.Listener
 	bootstrapped chan struct{}
 }
 
-func newInitServer(s *Server, ln *net.Listener) *initServer {
-	return &initServer{server: s, ln: ln, bootstrapped: make(chan struct{})}
+func newInitServer(s *Server) *initServer {
+	return &initServer{server: s, bootstrapped: make(chan struct{})}
 }
 
 type stayOpenListener struct {
@@ -43,15 +45,19 @@ type stayOpenListener struct {
 }
 
 func (l stayOpenListener) Close() error {
+	fmt.Println("HERE!!!")
 	return nil
 }
 
-func (s *initServer) startAndAwait(ctx context.Context) error {
-	serverpb.RegisterInitServer(s.server.grpc, s)
+func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
+	// TODO(adam): TLS?
+	grpcServer := grpc.NewServer()
+	
+	serverpb.RegisterInitServer(grpcServer, s)
 	
 	s.server.stopper.RunWorker(ctx, func(context.Context) {
 		log.Info(ctx, "Starting dedicated grpc server for Init")
-		netutil.FatalIfUnexpected(s.server.grpc.Serve(stayOpenListener{*s.ln}))
+		netutil.FatalIfUnexpected(grpcServer.Serve(stayOpenListener{ln}))
 	})
 
 	select {
@@ -60,9 +66,9 @@ func (s *initServer) startAndAwait(ctx context.Context) error {
 	case <- s.server.stopper.ShouldStop():
 		return errors.New("Stop called while waiting to bootstrap")
 	}
-
+	
 	log.Info(ctx, "Stopping dedicated grpc server for Init")
-	s.server.grpc.GracefulStop()
+	grpcServer.GracefulStop()
 	log.Info(ctx, "grpc Stopped")
 	return nil
 }
