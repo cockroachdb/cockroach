@@ -234,3 +234,14 @@ SELECT * FROM f
 
 statement
 PREPARE z AS SELECT UPPER('a')
+
+# Ensure that GROUP BY HAVING doesn't mutate the parsed AST (#16388)
+statement
+CREATE TABLE foo (a int)
+
+statement
+PREPARE groupbyhaving AS SELECT min(1) FROM foo WHERE a = $1 GROUP BY a HAVING count(a) = 0
+
+query I
+EXECUTE groupbyhaving(1)
+----
