@@ -722,6 +722,8 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <privilege.List> privileges privilege_list
 %type <privilege.Kind> privilege
 
+%type <NameList> user_name_list
+
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
 %nonassoc  SET                 // see relation_expr_opt_alias
@@ -1145,6 +1147,14 @@ drop_stmt:
   {
     $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
+| DROP USER user_name_list
+  {
+    $$.val = &DropUser{Names: $3.nameList(), IfExists: false}
+  }
+| DROP USER IF EXISTS user_name_list
+  {
+    $$.val = &DropUser{Names: $5.nameList(), IfExists: true}
+  }
 
 table_name_list:
   any_name
@@ -1164,6 +1174,16 @@ any_name:
 | name attrs
   {
     $$.val = append(UnresolvedName{Name($1)}, $2.unresolvedName()...)
+  }
+
+user_name_list:
+  name
+  {
+    $$.val = NameList{Name($1)}
+  }
+| user_name_list ',' name
+  {
+    $$.val = append($1.nameList(), Name($3))
   }
 
 attrs:

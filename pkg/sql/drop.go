@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1105,4 +1106,76 @@ func (p *planner) getViewDescForCascade(
 		return nil, sqlbase.NewDependentObjectErrorWithHint(msg, hint)
 	}
 	return viewDesc, nil
+}
+
+type dropUserNode struct {
+	p *planner
+	n *parser.DropUser
+}
+
+// All the deletes happen in single transaction
+//   notes: Should we run each drop user in an individual transaction, returning errors concatenated like in mysql?
+func (n *dropUserNode) Start(ctx context.Context) error {
+	for _, name := range n.n.Names {
+		normalizedUsername, err := NormalizeAndValidateUsername(string(name))
+		if err != nil {
+			return err
+		}
+
+		// Disable deleting root user
+		if normalizedUsername == security.RootUser {
+			return errors.Errorf("username %q cannot be deleted", security.RootUser)
+		}
+
+		// TODO: Remove the privileges granted to the user
+		//   notes: The current remove user from CLI just deletes the entry from system.users,
+		//          keeping the functionality same for now
+		internalExecutor := InternalExecutor{LeaseManager: n.p.LeaseMgr()}
+		rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
+			ctx,
+			"drop-user",
+			n.p.txn,
+			"DELETE FROM system.users WHERE username=$1",
+			normalizedUsername,
+		)
+
+		if err != nil {
+			return err
+		}
+
+		if rowsAffected == 0 {
+			if !n.n.IfExists {
+				return errors.Errorf("user %s does not exist", normalizedUsername)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (*dropUserNode) Next(context.Context) (bool, error) { return false, nil }
+func (*dropUserNode) Close(context.Context)              {}
+func (*dropUserNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
+func (*dropUserNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*dropUserNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropUserNode) DebugValues() debugValues           { return debugValues{} }
+func (*dropUserNode) MarkDebug(mode explainMode)         {}
+
+func (*dropUserNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
+
+// DropUser drops a list of users.
+// Privileges: DELETE on system.users.
+func (p *planner) DropUser(ctx context.Context, n *parser.DropUser) (planNode, error) {
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &parser.TableName{DatabaseName: "system", TableName: "users"})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.CheckPrivilege(tDesc, privilege.DELETE); err != nil {
+		return nil, err
+	}
+
+	return &dropUserNode{p: p, n: n}, nil
 }

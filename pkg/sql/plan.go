@@ -211,8 +211,12 @@ var _ planNode = &updateNode{}
 var _ planNode = &valueGenerator{}
 var _ planNode = &valuesNode{}
 var _ planNode = &windowNode{}
+var _ planNode = &createUserNode{}
+var _ planNode = &dropUserNode{}
 
 var _ planNodeFastPath = &deleteNode{}
+
+// var _ planNodeFastPath = &dropUserNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error) {
@@ -323,6 +327,8 @@ func (p *planner) newPlan(
 		return p.DropTable(ctx, n)
 	case *parser.DropView:
 		return p.DropView(ctx, n)
+	case *parser.DropUser:
+		return p.DropUser(ctx, n)
 	case *parser.Explain:
 		return p.Explain(ctx, n)
 	case *parser.Grant:
