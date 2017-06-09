@@ -1145,6 +1145,14 @@ drop_stmt:
   {
     $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
+| DROP USER name_list
+  {
+    $$.val = &DropUser{Names: $3.nameList(), IfExists: false}
+  }
+| DROP USER IF EXISTS name_list
+  {
+    $$.val = &DropUser{Names: $5.nameList(), IfExists: true}
+  }
 
 table_name_list:
   any_name
