@@ -352,6 +352,9 @@ func (r *Replica) leaseStatus(
 			// If lease validity can't be determined (e.g. gossip is down
 			// and liveness info isn't available for owner), we can neither
 			// use the lease nor do we want to attempt to acquire it.
+			if err != nil {
+				log.Warningf(context.TODO(), "can't determine lease status due to node liveness error: %s", err)
+			}
 			status.state = leaseError
 			return status
 		}
