@@ -82,7 +82,7 @@ var SourceAddr = func() net.Addr {
 	return nil
 }()
 
-var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", false)
+var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
 
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
