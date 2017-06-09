@@ -229,3 +229,8 @@ SELECT * FROM f
 ----
 1 2 NULL
 2 3 NULL
+
+# Ensure that we have a memory monitor for preparing statements
+
+statement
+PREPARE z AS SELECT UPPER('a')
