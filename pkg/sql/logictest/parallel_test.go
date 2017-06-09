@@ -21,7 +21,7 @@
 // dir contains a "test.yaml" file along with a set of files in logic test
 // format. The test.yaml file corresponds to the parTestSpec structure below.
 
-package sql_test
+package logictest
 
 import (
 	gosql "database/sql"
