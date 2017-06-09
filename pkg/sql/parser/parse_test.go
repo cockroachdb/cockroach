@@ -203,6 +203,9 @@ func TestParse(t *testing.T) {
 		{`DROP VIEW a.b CASCADE`},
 		{`DROP VIEW a, b CASCADE`},
 
+		{`DROP USER a`},
+		{`DROP USER a, b`},
+
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN EXPLAIN SELECT 1`},
 		{`EXPLAIN (DEBUG) SELECT 1`},
