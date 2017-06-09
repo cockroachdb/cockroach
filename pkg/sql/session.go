@@ -285,7 +285,7 @@ type Session struct {
 
 	Tracing SessionTracing
 
-	leases LeaseCollection
+	tables TableCollection
 
 	// If set, contains the in progress COPY FROM columns.
 	copyFrom *copyNode
@@ -422,7 +422,7 @@ func NewSession(
 			applicationName: args.ApplicationName,
 			database:        args.Database,
 		},
-		leases: LeaseCollection{
+		tables: TableCollection{
 			leaseMgr:      e.cfg.LeaseManager,
 			databaseCache: e.getDatabaseCache(),
 		},
@@ -497,7 +497,7 @@ func (s *Session) Finish(e *Executor) {
 	// Cleanup leases. We might have unreleased leases if we're finishing the
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
-	s.leases.releaseLeases(s.context)
+	s.tables.releaseTables(s.context)
 
 	s.ClearStatementsAndPortals(s.context)
 	s.sessionMon.Stop(s.context)
@@ -535,7 +535,7 @@ func (s *Session) EmergencyClose() {
 	_ = s.parallelizeQueue.Wait()
 
 	// Release the leases - to ensure other sessions don't get stuck.
-	s.leases.releaseLeases(s.context)
+	s.tables.releaseTables(s.context)
 
 	// The KV txn may be unusable - just leave it dead. Simply
 	// shut down its memory monitor.
@@ -637,22 +637,20 @@ func (s *Session) evalCtx() parser.EvalContext {
 func (s *Session) resetForBatch(e *Executor) {
 	// Update the database cache to a more recent copy, so that we can use tables
 	// that we created in previous batches of the same transaction.
-	s.leases.databaseCache = e.getDatabaseCache()
+	s.tables.databaseCache = e.getDatabaseCache()
 	s.TxnState.schemaChangers.curGroupNum++
 }
 
-// releaseLeases releases all leases currently held by the Session.
-func (lc *LeaseCollection) releaseLeases(ctx context.Context) {
-	if lc.leases != nil {
-		if log.V(2) {
-			log.VEventf(ctx, 2, "releasing %d leases", len(lc.leases))
-		}
-		for _, lease := range lc.leases {
-			if err := lc.leaseMgr.Release(lease); err != nil {
+// releaseTables releases all tables currently held by the Session.
+func (tc *TableCollection) releaseTables(ctx context.Context) {
+	if tc.tables != nil {
+		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
+		for _, table := range tc.tables {
+			if err := tc.leaseMgr.Release(table); err != nil {
 				log.Warning(ctx, err)
 			}
 		}
-		lc.leases = nil
+		tc.tables = nil
 	}
 }
 
@@ -1042,7 +1040,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	ctx context.Context, e *Executor, session *Session, results ResultList,
 ) {
 	// Release the leases once a transaction is complete.
-	session.leases.releaseLeases(ctx)
+	session.tables.releaseTables(ctx)
 	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
 		e.cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
 	}

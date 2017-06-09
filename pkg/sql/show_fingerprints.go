@@ -177,7 +177,7 @@ func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
 		// need to set `avoidCachedDescriptors`.
 		p := makeInternalPlanner("SELECT", txn, security.RootUser, n.p.LeaseMgr().memMetrics)
 		defer finishInternalPlanner(p)
-		p.session.leases.leaseMgr = n.p.LeaseMgr()
+		p.session.tables.leaseMgr = n.p.LeaseMgr()
 		p.avoidCachedDescriptors = true
 
 		var err error

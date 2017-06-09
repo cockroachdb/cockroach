@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -57,33 +58,26 @@ func TestLeaseSet(t *testing.T) {
 		{newest{0}, "2:3"},
 		{newest{2}, "2:3"},
 		{newest{3}, "<nil>"},
-		{insert{2, 1}, "2:1 2:3"},
-		{newest{0}, "2:3"},
-		{newest{2}, "2:3"},
-		{newest{3}, "<nil>"},
-		{insert{2, 4}, "2:1 2:3 2:4"},
+		{remove{2, 3}, ""},
+		{insert{2, 4}, "2:4"},
 		{newest{0}, "2:4"},
 		{newest{2}, "2:4"},
 		{newest{3}, "<nil>"},
-		{insert{2, 2}, "2:1 2:2 2:3 2:4"},
-		{insert{3, 1}, "2:1 2:2 2:3 2:4 3:1"},
+		{insert{3, 1}, "2:4 3:1"},
 		{newest{0}, "3:1"},
 		{newest{1}, "<nil>"},
 		{newest{2}, "2:4"},
 		{newest{3}, "3:1"},
 		{newest{4}, "<nil>"},
-		{insert{1, 1}, "1:1 2:1 2:2 2:3 2:4 3:1"},
+		{insert{1, 1}, "1:1 2:4 3:1"},
 		{newest{0}, "3:1"},
 		{newest{1}, "1:1"},
 		{newest{2}, "2:4"},
 		{newest{3}, "3:1"},
 		{newest{4}, "<nil>"},
-		{remove{2, 4}, "1:1 2:1 2:2 2:3 3:1"},
-		{remove{3, 1}, "1:1 2:1 2:2 2:3"},
-		{remove{1, 1}, "2:1 2:2 2:3"},
-		{remove{2, 2}, "2:1 2:3"},
-		{remove{2, 3}, "2:1"},
-		{remove{2, 1}, ""},
+		{remove{3, 1}, "1:1 2:4"},
+		{remove{1, 1}, "2:4"},
+		{remove{2, 4}, ""},
 	}
 
 	set := &leaseSet{}
@@ -156,30 +150,46 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	var leases []*LeaseState
-	err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		for i := 0; i < 3; i++ {
-			lease, err := leaseManager.acquireFreshestFromStore(ctx, txn, tableDesc.ID)
-			if err != nil {
-				t.Fatal(err)
+	var tables []sqlbase.TableDescriptor
+	var expiration hlc.Timestamp
+	getLeases := func() {
+		err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			for i := 0; i < 3; i++ {
+				table, exp, err := leaseManager.acquireFreshestFromStore(ctx, txn, tableDesc.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				tables = append(tables, table)
+				expiration = exp
+				if err := leaseManager.Release(table); err != nil {
+					t.Fatal(err)
+				}
 			}
-			leases = append(leases, lease)
-			if err := leaseManager.Release(lease); err != nil {
-				t.Fatal(err)
-			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
+	}
+	getLeases()
+	ts := leaseManager.findTableState(tableDesc.ID, false)
+	if numLeases := getNumLeases(ts); numLeases != 1 {
+		t.Fatalf("found %d leases instead of 1", numLeases)
+	}
+	// Publish a new version for the table
+	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.TableDescriptor) error {
 		return nil
-	})
-	if err != nil {
+	}, nil); err != nil {
 		t.Fatal(err)
 	}
-	ts := leaseManager.findTableState(tableDesc.ID, false)
-	if numLeases := getNumLeases(ts); numLeases != 3 {
-		t.Fatalf("found %d leases instead of 3", numLeases)
-	}
 
+	getLeases()
+	ts = leaseManager.findTableState(tableDesc.ID, false)
+	if numLeases := getNumLeases(ts); numLeases != 2 {
+		t.Fatalf("found %d leases instead of 1", numLeases)
+	}
 	if err := ts.purgeOldLeases(
-		context.TODO(), kvDB, false, 1 /* minVersion */, leaseManager); err != nil {
+		context.TODO(), kvDB, false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 
@@ -187,10 +197,15 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d leases instead of 1", numLeases)
 	}
 	ts.mu.Lock()
-	correctLease := ts.active.data[0] == leases[2]
+	correctLease := ts.active.data[0].TableDescriptor.ID == tables[5].ID &&
+		ts.active.data[0].TableDescriptor.Version == tables[5].Version
+	correctExpiration := ts.active.data[0].expirationToHLC() == expiration
 	ts.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
+	}
+	if !correctExpiration {
+		t.Fatalf("wrong lease expiration survived purge")
 	}
 }
 
@@ -233,7 +248,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.ID != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
 	}
-	if err := leaseManager.Release(lease); err != nil {
+	if err := leaseManager.Release(lease.TableDescriptor); err != nil {
 		t.Fatal(err)
 	}
 
@@ -260,7 +275,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.ID != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
 	}
-	if err := leaseManager.Release(lease); err != nil {
+	if err := leaseManager.Release(lease.TableDescriptor); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -293,7 +308,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock()); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
 	} else {
-		if err := leaseManager.Release(lease); err != nil {
+		if err := leaseManager.Release(lease.TableDescriptor); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -332,7 +347,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease == nil {
 		t.Fatalf("no name cache entry")
 	}
-	if err := leaseManager.Release(lease); err != nil {
+	if err := leaseManager.Release(lease.TableDescriptor); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -367,15 +382,15 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Populate the name cache.
-	var lease *LeaseState
+	var table sqlbase.TableDescriptor
 	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		lease, err = leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
+		table, _, err = leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := leaseManager.Release(lease); err != nil {
+	if err := leaseManager.Release(table); err != nil {
 		t.Fatal(err)
 	}
 
@@ -386,22 +401,22 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
 	// Release.
-	// leaseChan acts as a barrier, synchornizing the two routines at every
+	// tableChan acts as a barrier, synchornizing the two routines at every
 	// iteration.
-	leaseChan := make(chan *LeaseState)
+	tableChan := make(chan sqlbase.TableDescriptor)
 	errChan := make(chan error)
 	go func() {
-		for lease := range leaseChan {
+		for table := range tableChan {
 			// Move errors to the main goroutine.
-			errChan <- leaseManager.Release(lease)
+			errChan <- leaseManager.Release(table)
 		}
 	}()
 
 	for i := 0; i < 50; i++ {
-		var leaseByName *LeaseState
+		var tableByName sqlbase.TableDescriptor
 		if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			var err error
-			lease, err := leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
+			table, _, err := leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -412,15 +427,15 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			// removed from the store until they expire, and the jitter is small
 			// compared to their lifetime, but it is a problem in this test because
 			// we churn through leases quickly.
-			tracker := removalTracker.TrackRemoval(lease)
+			tracker := removalTracker.TrackRemoval(table)
 			// Start the race: signal the other guy to release, and we do another
 			// acquire at the same time.
-			leaseChan <- lease
-			leaseByName, err = leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
+			tableChan <- table
+			tableByName, _, err = leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
 			if err != nil {
 				t.Fatal(err)
 			}
-			tracker2 := removalTracker.TrackRemoval(leaseByName)
+			tracker2 := removalTracker.TrackRemoval(tableByName)
 			// See if there was an error releasing lease.
 			err = <-errChan
 			if err != nil {
@@ -430,21 +445,15 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			// Depending on how the race went, there are two cases - either the
 			// AcquireByName ran first, and got the same lease as we already had,
 			// or the Release ran first and so we got a new lease.
-			if leaseByName == lease {
-				if lease.Refcount() != 1 {
-					t.Fatalf("expected refcount 1, got %d", lease.Refcount())
-				}
-				if err := leaseManager.Release(lease); err != nil {
+			if tableByName.ID == table.ID {
+				if err := leaseManager.Release(table); err != nil {
 					t.Fatal(err)
 				}
 				if err := tracker.WaitForRemoval(); err != nil {
 					t.Fatal(err)
 				}
 			} else {
-				if lease.Refcount() != 0 {
-					t.Fatalf("expected refcount 0, got %d", lease.Refcount())
-				}
-				if err := leaseManager.Release(leaseByName); err != nil {
+				if err := leaseManager.Release(tableByName); err != nil {
 					t.Fatal(err)
 				}
 				if err := tracker2.WaitForRemoval(); err != nil {
@@ -456,7 +465,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			t.Fatal(err)
 		}
 	}
-	close(leaseChan)
+	close(tableChan)
 }
 
 // TestAcquireFreshestFromStoreRaces runs
@@ -483,11 +492,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		go func() {
 			defer wg.Done()
 			err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-				lease, err := leaseManager.acquireFreshestFromStore(ctx, txn, tableDesc.ID)
+				table, _, err := leaseManager.acquireFreshestFromStore(ctx, txn, tableDesc.ID)
 				if err != nil {
 					return err
 				}
-				if err := leaseManager.Release(lease); err != nil {
+				if err := leaseManager.Release(table); err != nil {
 					return err
 				}
 				return nil

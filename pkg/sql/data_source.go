@@ -458,7 +458,7 @@ func (p *planner) getTableScanByRef(
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	tableID := sqlbase.ID(tref.TableID)
-	descFunc := p.session.leases.getTableLeaseByID
+	descFunc := p.session.tables.getTableVersionByID
 	if p.avoidCachedDescriptors {
 		descFunc = sqlbase.GetTableDescFromID
 	}
@@ -502,7 +502,7 @@ func (p *planner) getTableScanOrViewPlan(
 		desc, err = mustGetTableOrViewDesc(
 			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
 	} else {
-		desc, err = p.session.leases.getTableLease(ctx, p.txn, p.getVirtualTabler(), tn)
+		desc, err = p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 	}
 	if err != nil {
 		return planDataSource{}, err

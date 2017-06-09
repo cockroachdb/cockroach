@@ -427,7 +427,7 @@ func (p *planner) showCreateTable(
 	buf.WriteString(primary)
 	for _, idx := range desc.Indexes {
 		if fk := idx.ForeignKey; fk.IsSet() {
-			fkTable, err := p.session.leases.getTableLeaseByID(ctx, p.txn, fk.Table)
+			fkTable, err := p.session.tables.getTableVersionByID(ctx, p.txn, fk.Table)
 			if err != nil {
 				return "", err
 			}
