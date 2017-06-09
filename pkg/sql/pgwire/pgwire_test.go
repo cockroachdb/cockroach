@@ -437,6 +437,7 @@ func TestPGPrepareFail(t *testing.T) {
 // transaction.
 func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 

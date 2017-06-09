@@ -894,7 +894,7 @@ func (e *Executor) execParsed(
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			session.leases.releaseLeases(session.Ctx())
+			session.tables.releaseTables(session.Ctx())
 			txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, session, res.ResultList)
 		}
 

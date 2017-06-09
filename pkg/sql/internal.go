@@ -45,7 +45,7 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 ) (int, error) {
 	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
-	p.session.leases.leaseMgr = ie.LeaseManager
+	p.session.tables.leaseMgr = ie.LeaseManager
 	return p.exec(ctx, statement, qargs...)
 }
 
@@ -57,7 +57,7 @@ func (ie InternalExecutor) QueryRowInTransaction(
 ) (parser.Datums, error) {
 	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
-	p.session.leases.leaseMgr = ie.LeaseManager
+	p.session.tables.leaseMgr = ie.LeaseManager
 	return p.QueryRow(ctx, statement, qargs...)
 }
 
@@ -68,7 +68,7 @@ func (ie InternalExecutor) GetTableSpan(
 	// Lookup the table ID.
 	p := makeInternalPlanner("get-table-span", txn, user, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
-	p.session.leases.leaseMgr = ie.LeaseManager
+	p.session.tables.leaseMgr = ie.LeaseManager
 
 	tn := parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
 	tableID, err := getTableID(ctx, p, &tn)
@@ -97,7 +97,7 @@ func getTableID(ctx context.Context, p *planner, tn *parser.TableName) (sqlbase.
 		return virtual.GetID(), nil
 	}
 
-	dbID, err := p.session.leases.databaseCache.getDatabaseID(ctx, p.txn, p.getVirtualTabler(), tn.Database())
+	dbID, err := p.session.tables.databaseCache.getDatabaseID(ctx, p.txn, p.getVirtualTabler(), tn.Database())
 	if err != nil {
 		return 0, err
 	}
