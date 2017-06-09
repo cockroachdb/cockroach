@@ -339,6 +339,7 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	if err := rt.WaitForRemoval(); err != nil {
 		t.Fatal(err)
 	}
+
 	// Only one actual lease.
 	t.expectLeases(descID, "/1/1")
 
