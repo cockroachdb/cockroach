@@ -497,3 +497,20 @@ func TestListenURLFileCreation(t *testing.T) {
 		t.Fatalf("expected URL %s to match host %s", u, s.ServingAddr())
 	}
 }
+
+func TestUncleanShutdown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("expected panic")
+			}
+		}()
+		s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Stopper().Stop(context.TODO())
+		panic("uh-oh")
+	}()
+}
