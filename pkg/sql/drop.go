@@ -1106,3 +1106,76 @@ func (p *planner) getViewDescForCascade(
 	}
 	return viewDesc, nil
 }
+
+type dropUserNode struct {
+	p *planner
+	n *parser.DropUser
+	// The number of users deleted.
+	numDeleted int
+}
+
+func (n *dropUserNode) Start(ctx context.Context) error {
+	numDeleted := 0
+	for _, name := range n.n.Names {
+		normalizedUsername, err := NormalizeAndValidateUsername(string(name))
+		if err != nil {
+			return err
+		}
+
+		// Note: protected users like security.RootUser are not included in system.users,
+		// so there is no need to filter them out.
+
+		// TODO: Remove the privileges granted to the user.
+		// Note: The current remove user from CLI just deletes the entry from system.users,
+		// keeping the functionality same for now.
+		internalExecutor := InternalExecutor{LeaseManager: n.p.LeaseMgr()}
+		rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
+			ctx,
+			"drop-user",
+			n.p.txn,
+			"DELETE FROM system.users WHERE username=$1",
+			normalizedUsername,
+		)
+		if err != nil {
+			return err
+		}
+
+		if rowsAffected == 0 && !n.n.IfExists {
+			return errors.Errorf("user %s does not exist", normalizedUsername)
+		}
+
+		numDeleted += rowsAffected
+	}
+
+	n.numDeleted = numDeleted
+
+	return nil
+}
+
+func (*dropUserNode) Next(context.Context) (bool, error) { return false, nil }
+func (*dropUserNode) Close(context.Context)              {}
+func (*dropUserNode) Columns() sqlbase.ResultColumns     { return make(sqlbase.ResultColumns, 0) }
+func (*dropUserNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*dropUserNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropUserNode) DebugValues() debugValues           { return debugValues{} }
+func (*dropUserNode) MarkDebug(mode explainMode)         {}
+func (n *dropUserNode) FastPathResults() (int, bool)     { return n.numDeleted, true }
+
+func (*dropUserNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
+
+// DropUser drops a list of users.
+// Privileges: DELETE on system.users.
+func (p *planner) DropUser(ctx context.Context, n *parser.DropUser) (planNode, error) {
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &parser.TableName{DatabaseName: "system", TableName: "users"})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.CheckPrivilege(tDesc, privilege.DELETE); err != nil {
+		return nil, err
+	}
+
+	return &dropUserNode{p: p, n: n}, nil
+}

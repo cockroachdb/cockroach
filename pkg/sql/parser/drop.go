@@ -118,3 +118,18 @@ func (node *DropView) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString(node.DropBehavior.String())
 	}
 }
+
+// DropUser represents a DROP USER statement
+type DropUser struct {
+	Names    NameList
+	IfExists bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *DropUser) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("DROP USER ")
+	if node.IfExists {
+		buf.WriteString("IF EXISTS ")
+	}
+	FormatNode(buf, f, node.Names)
+}

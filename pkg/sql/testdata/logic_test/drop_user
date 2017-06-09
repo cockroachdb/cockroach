@@ -1,0 +1,113 @@
+# LogicTest: default
+
+statement ok
+CREATE USER user1
+
+query T colnames
+SHOW USERS
+----
+username
+testuser
+user1
+
+statement ok
+DROP USER user1
+
+query T colnames
+SHOW USERS
+----
+username
+testuser
+
+statement ok
+CREATE USER user1
+
+query T colnames
+SHOW USERS
+----
+username
+testuser
+user1
+
+statement ok
+DROP USER USEr1
+
+query T colnames
+SHOW USERS
+----
+username
+testuser
+
+statement error user user1 does not exist
+DROP USER user1
+
+statement error user user1 does not exist
+DROP USER usER1
+
+statement ok
+DROP USER IF EXISTS user1
+
+statement error username "node" reserved
+DROP USER node
+
+statement error pq: username "foo☂" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+DROP USER foo☂
+
+statement ok
+CREATE USER user1
+
+statement ok
+CREATE USER user2
+
+statement ok
+CREATE USER user3
+
+statement ok
+CREATE USER user4
+
+query T colnames
+SHOW USERS
+----
+username
+testuser
+user1
+user2
+user3
+user4
+
+statement ok
+DROP USER user1,user2
+
+query T colnames
+SHOW USERS
+----
+username
+testuser
+user3
+user4
+
+statement error user user1 does not exist
+DROP USER user1,user3
+
+query T colnames
+SHOW USERS
+----
+username
+testuser
+user3
+user4
+
+statement ok
+DROP USER IF EXISTS user1,user3
+
+query T colnames
+SHOW USERS
+----
+username
+testuser
+user4
+
+user testuser
+
+statement error pq: user testuser does not have DELETE privilege on table users
+DROP USER user2
