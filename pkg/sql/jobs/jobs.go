@@ -144,7 +144,11 @@ func GetJobLogger(
 func (jl *JobLogger) runInTxn(
 	ctx context.Context, retryable func(context.Context, *client.Txn) error,
 ) error {
-	defer func() { jl.txn = nil }()
+	defer func() {
+		if jl.txn != nil {
+			jl.txn = nil
+		}
+	}()
 	if jl.txn != nil {
 		return jl.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true, AssignTimestampImmediately: true},
 			func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
@@ -156,7 +160,8 @@ func (jl *JobLogger) runInTxn(
 
 // WithTxn sets the transaction that this JobLogger will use for its next
 // operation. If the transaction is nil, the JobLogger will create a one-off
-// transaction instead.
+// transaction instead. If you use WithTxn, this JobLogger will no longer be
+// threadsafe.
 func (jl *JobLogger) WithTxn(txn *client.Txn) *JobLogger {
 	jl.txn = txn
 	return jl

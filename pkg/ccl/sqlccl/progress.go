@@ -46,7 +46,6 @@ type jobProgressLogger struct {
 
 func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
 	jpl.mu.Lock()
-	defer jpl.mu.Unlock()
 	jpl.mu.completedChunks++
 	fraction := float32(jpl.mu.completedChunks) / float32(jpl.totalChunks)
 	shouldLogProgress := fraction-jpl.mu.lastReportedFraction > progressFractionThreshold ||
@@ -55,6 +54,7 @@ func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
 		jpl.mu.lastReportedAt = timeutil.Now()
 		jpl.mu.lastReportedFraction = fraction
 	}
+	jpl.mu.Unlock()
 
 	if shouldLogProgress {
 		return jpl.jobLogger.Progressed(ctx, fraction)
