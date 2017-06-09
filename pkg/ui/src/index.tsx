@@ -25,8 +25,6 @@ import {
 import { store, history } from "src/redux/state";
 import Layout from "src/views/app/containers/layout";
 
-import Nodes from "src/views/cluster/containers/nodes";
-
 import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
 
@@ -48,12 +46,10 @@ ReactDOM.render(
     <Router history={history}>
       <Route path="/" component={Layout}>
         <IndexRedirect to="cluster" />
-        <Route path="cluster" component={ Nodes }>
+        <Route path="cluster">
           <IndexRedirect to="all/overview" />
           <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
           <Route path={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` } component={NodeGraphs} />
-        </Route>
-        <Route path="cluster">
           <Route path="nodes">
             <IndexRoute component={NodesOverview} />
             <Route path={`:${nodeIDAttr}`}>
