@@ -12,8 +12,9 @@ build/builder.sh env \
 	TARGET=stressrace \
 	github-pull-request-make
 
-build/builder.sh env \
+build/builder.sh \
 	make testrace \
+	PKG="$(go list ./pkg/... | grep -Fv github.com/cockroachdb/cockroach/pkg/sql/logictest | tr '\n' ' ')" \
 	TESTFLAGS='-v' \
 	2>&1 \
 	| tee artifacts/testrace.log \
