@@ -26,11 +26,17 @@ testcmd="cd jepsen/cockroachdb && set -eo pipefail && \
    --nodes-file ~/nodes \
    --os ubuntu \
    --time-limit 180 \
+   --recovery-time 25 \
    --test-count 1 \
    --test ${test} ${nemesis} \
 2>&1 | stdbuf -oL tee invoke.log"
 
 exitcode=0
+
+# Save our PID for use with pkill's "parent PID" filter below.
+# Without this we sometimes get warnings about other ssh processes
+# we are unable to kill (or worse, could stomp on another run).
+SCRIPT_PID=$$
 
 # Although we run tests of 3 minutes each, we use a timeout
 # much larger than that; this is because Jepsen for some tests
@@ -45,14 +51,18 @@ if timeout 15m ssh "${SSH_OPTIONS[@]}" "ubuntu@${controller}" "${testcmd}" \
            prevsecs=0
            while true; do
                # Fail if no jepsen logging message within 30 seconds.
+               # Note that jepsen sleeps for the --recovery-time
+               # parameter above at the end of the test, so this
+               # timeout must be greater than that value.
                read -t 30 x
                status=$?
                if [ $status -gt 128 ]; then
                    progress "Jepsen test was silent for too long, aborting"
                    # timeout: kill ssh to abort the test.
-                   killall ssh
+                   pkill -P $SCRIPT_PID ssh
                    exit $status
-               elif [ $status != 0 ]; then
+               elif [ $status -ne 0 ]; then
+                   progress "Test finished with $i log lines"
                    break
                fi
                secs=$(date +%s);
