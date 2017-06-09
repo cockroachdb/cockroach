@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -109,28 +110,29 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 
 func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
-) (*sql.LeaseState, error) {
-	var lease *sql.LeaseState
+) (sqlbase.TableDescriptor, hlc.Timestamp, error) {
+	var table sqlbase.TableDescriptor
+	var expiration hlc.Timestamp
 	err := t.kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		lease, err = t.node(nodeID).Acquire(ctx, txn, descID, version)
+		table, expiration, err = t.node(nodeID).Acquire(ctx, txn, descID, version)
 		return err
 	})
-	return lease, err
+	return table, expiration, err
 }
 
 func (t *leaseTest) mustAcquire(
 	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
-) *sql.LeaseState {
-	lease, err := t.acquire(nodeID, descID, version)
+) (sqlbase.TableDescriptor, hlc.Timestamp) {
+	table, expiration, err := t.acquire(nodeID, descID, version)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return lease
+	return table, expiration
 }
 
-func (t *leaseTest) release(nodeID uint32, lease *sql.LeaseState) error {
-	return t.node(nodeID).Release(lease)
+func (t *leaseTest) release(nodeID uint32, table sqlbase.TableDescriptor) error {
+	return t.node(nodeID).Release(table)
 }
 
 // If leaseRemovalTracker is not nil, it will be used to block until the lease is
@@ -138,13 +140,13 @@ func (t *leaseTest) release(nodeID uint32, lease *sql.LeaseState) error {
 // store (i.e. it's not expired and it's not for an old descriptor version),
 // this shouldn't be set.
 func (t *leaseTest) mustRelease(
-	nodeID uint32, lease *sql.LeaseState, leaseRemovalTracker *sql.LeaseRemovalTracker,
+	nodeID uint32, table sqlbase.TableDescriptor, leaseRemovalTracker *sql.LeaseRemovalTracker,
 ) {
 	var tracker sql.RemovalTracker
 	if leaseRemovalTracker != nil {
-		tracker = leaseRemovalTracker.TrackRemoval(lease)
+		tracker = leaseRemovalTracker.TrackRemoval(table)
 	}
-	if err := t.release(nodeID, lease); err != nil {
+	if err := t.release(nodeID, table); err != nil {
 		t.Fatal(err)
 	}
 	if leaseRemovalTracker != nil {
@@ -203,11 +205,11 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// We can't acquire a lease on a non-existent table.
 	expected := "descriptor not found"
-	if _, err := t.acquire(1, 10000, 0); !testutils.IsError(err, expected) {
+	if _, _, err := t.acquire(1, 10000, 0); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
 
-	l1 := t.mustAcquire(1, descID, 0)
+	l1, _ := t.mustAcquire(1, descID, 0)
 	t.expectLeases(descID, "/1/1")
 	// Node 2 never acquired a lease on descID, so we should expect an error.
 	if err := t.release(2, l1); err == nil {
@@ -219,14 +221,14 @@ func TestLeaseManager(testingT *testing.T) {
 	// It is an error to acquire a lease for a specific version that doesn't
 	// exist yet.
 	expected = "version 2 of table .* does not exist"
-	if _, err := t.acquire(1, descID, 2); !testutils.IsError(err, expected) {
+	if _, _, err := t.acquire(1, descID, 2); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
 
 	// Publish a new version and explicitly acquire it.
-	l2 := t.mustAcquire(1, descID, 0)
+	l2, _ := t.mustAcquire(1, descID, 0)
 	t.mustPublish(ctx, 1, descID)
-	l3 := t.mustAcquire(1, descID, 2)
+	l3, _ := t.mustAcquire(1, descID, 2)
 	t.expectLeases(descID, "/1/1 /2/1")
 
 	// When the last local reference on the new version is released we don't
@@ -236,7 +238,7 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// We can still acquire a local reference on the old version since it hasn't
 	// expired.
-	l4 := t.mustAcquire(1, descID, 1)
+	l4, _ := t.mustAcquire(1, descID, 1)
 	t.mustRelease(1, l4, nil)
 	t.expectLeases(descID, "/1/1 /2/1")
 
@@ -248,13 +250,13 @@ func TestLeaseManager(testingT *testing.T) {
 	// It is an error to acquire a lease for an old version once a new version
 	// exists and there are no local references for the old version.
 	expected = `table \d+ unable to acquire lease on old version: 1 < 2`
-	if _, err := t.acquire(1, descID, 1); !testutils.IsError(err, expected) {
+	if _, _, err := t.acquire(1, descID, 1); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
 
 	// Acquire 2 node leases on version 2.
-	l5 := t.mustAcquire(1, descID, 2)
-	l6 := t.mustAcquire(2, descID, 2)
+	l5, _ := t.mustAcquire(1, descID, 2)
+	l6, _ := t.mustAcquire(2, descID, 2)
 	// Publish version 3. This will succeed immediately.
 	t.mustPublish(ctx, 3, descID)
 
@@ -268,8 +270,8 @@ func TestLeaseManager(testingT *testing.T) {
 	}()
 
 	// Force both nodes ahead to version 3.
-	l7 := t.mustAcquire(1, descID, 3)
-	l8 := t.mustAcquire(2, descID, 3)
+	l7, _ := t.mustAcquire(1, descID, 3)
+	l8, _ := t.mustAcquire(2, descID, 3)
 	t.expectLeases(descID, "/2/1 /2/2 /3/1 /3/2")
 
 	t.mustRelease(1, l5, removalTracker)
@@ -279,7 +281,7 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// Wait for version 4 to be published.
 	wg.Wait()
-	l9 := t.mustAcquire(1, descID, 4)
+	l9, _ := t.mustAcquire(1, descID, 4)
 	t.mustRelease(1, l7, removalTracker)
 	t.mustRelease(2, l8, nil)
 	t.expectLeases(descID, "/3/2 /4/1")
@@ -303,16 +305,14 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 
 	const descID = keys.LeaseTableID
 
-	// Acquire 2 leases from the same node. They should point to the same lease
-	// structure.
-	l1 := t.mustAcquire(1, descID, 0)
-	l2 := t.mustAcquire(1, descID, 0)
-	if l1 != l2 {
-		t.Fatalf("expected same lease, but found %p != %p", l1, l2)
+	// Acquire 2 leases from the same node. They should return the same
+	// table and expiration.
+	l1, e1 := t.mustAcquire(1, descID, 0)
+	l2, e2 := t.mustAcquire(1, descID, 0)
+	if l1.ID != l2.ID || e1 != e2 {
+		t.Fatalf("expected same lease, but found %v != %v", l1, l2)
 	}
-	if l1.Refcount() != 2 {
-		t.Fatalf("expected refcount of 2, but found %d", l1.Refcount())
-	}
+
 	t.expectLeases(descID, "/1/1")
 
 	// Set the minimum lease duration such that the next lease acquisition will
@@ -321,25 +321,29 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer func() {
 		sql.LeaseDuration, sql.MinLeaseDuration = savedLeaseDuration, savedMinLeaseDuration
 	}()
-	sql.MinLeaseDuration = l1.Expiration().Sub(timeutil.Now())
+
+	sql.MinLeaseDuration = time.Unix(0, e1.WallTime).Sub(timeutil.Now())
 	sql.LeaseDuration = 2 * sql.MinLeaseDuration
 
 	// Another lease acquisition from the same node will result in a new lease.
-	l3 := t.mustAcquire(1, descID, 0)
-	if l1 == l3 {
-		t.Fatalf("expected different leases, but found %p", l1)
+	rt := removalTracker.TrackRemoval(l1)
+	l3, e3 := t.mustAcquire(1, descID, 0)
+	if l1.ID == l3.ID && e3.WallTime == e1.WallTime {
+		t.Fatalf("expected different leases, but found %v", l1)
 	}
-	if l3.Refcount() != 1 {
-		t.Fatalf("expected refcount of 1, but found %d", l3.Refcount())
-	}
-	if l3.Expiration().Before(l1.Expiration()) {
+	if e3.WallTime < e1.WallTime {
 		t.Fatalf("expected new lease expiration (%s) to be after old lease expiration (%s)",
-			l3.Expiration(), l1.Expiration())
+			e3, e1)
 	}
-	t.expectLeases(descID, "/1/1 /1/1")
+	// In acquiring the new lease the older lease is released.
+	if err := rt.WaitForRemoval(); err != nil {
+		t.Fatal(err)
+	}
+	// Only one actual lease.
+	t.expectLeases(descID, "/1/1")
 
 	t.mustRelease(1, l1, nil)
-	t.mustRelease(1, l2, removalTracker)
+	t.mustRelease(1, l2, nil)
 	t.mustRelease(1, l3, nil)
 }
 
@@ -445,8 +449,8 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 	const descID = keys.LeaseTableID
 
 	{
-		l1 := t.mustAcquire(1, descID, 0)
-		l2 := t.mustAcquire(2, descID, 0)
+		l1, _ := t.mustAcquire(1, descID, 0)
+		l2, _ := t.mustAcquire(2, descID, 0)
 		t.mustRelease(1, l1, nil)
 		t.expectLeases(descID, "/1/1 /1/2")
 
@@ -458,7 +462,7 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 		t.nodes[2].SetDraining(true)
 
 		// Leases cannot be acquired when in draining mode.
-		if _, err := t.acquire(1, descID, 0); !testutils.IsError(err, "cannot acquire lease when draining") {
+		if _, _, err := t.acquire(1, descID, 0); !testutils.IsError(err, "cannot acquire lease when draining") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -479,7 +483,7 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 		// Check that leases with a refcount of 0 are correctly kept in the
 		// store once the drain mode has been exited.
 		t.nodes[1].SetDraining(false)
-		l1 := t.mustAcquire(1, descID, 0)
+		l1, _ := t.mustAcquire(1, descID, 0)
 		t.mustRelease(1, l1, nil)
 		t.expectLeases(descID, "/1/1")
 	}
@@ -534,7 +538,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	tableDesc := sqlbase.GetTableDescriptor(t.kvDB, "test", "t")
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
-	_, err = t.acquire(1, tableDesc.ID, tableDesc.Version+1)
+	_, _, err = t.acquire(1, tableDesc.ID, tableDesc.Version+1)
 	if !testutils.IsError(err, "table is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
@@ -556,14 +560,15 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 
 func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion,
-) (*sql.LeaseState, error) {
-	var lease *sql.LeaseState
+) (sqlbase.TableDescriptor, hlc.Timestamp, error) {
+	var table sqlbase.TableDescriptor
+	var expiration hlc.Timestamp
 	err := s.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		lease, err = s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, txn, descID, version)
+		table, expiration, err = s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, txn, descID, version)
 		return err
 	})
-	return lease, err
+	return table, expiration, err
 }
 
 // Test that once a table is marked as deleted, a lease's refcount dropping to 0
@@ -618,11 +623,11 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 	ctx := context.TODO()
 
-	lease1, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
+	lease1, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lease2, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
+	lease2, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +650,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	<-deleted
 
 	// We should still be able to acquire, because we have an active lease.
-	lease3, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
+	lease3, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -661,7 +666,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 	// Now we shouldn't be able to acquire any more.
-	_, err = acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
+	_, _, err = acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
 	if !testutils.IsError(err, "table is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}

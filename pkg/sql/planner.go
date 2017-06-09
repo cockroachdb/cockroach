@@ -98,7 +98,7 @@ func makeInternalPlanner(
 		User:     user,
 		TxnState: txnState{Ctx: ctx},
 		context:  ctx,
-		leases:   LeaseCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
+		tables:   TableCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
 	}
 
 	s.mon = mon.MakeUnlimitedMonitor(ctx,
@@ -144,7 +144,7 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 }
 
 func (p *planner) LeaseMgr() *LeaseManager {
-	return p.session.leases.leaseMgr
+	return p.session.tables.leaseMgr
 }
 
 func (p *planner) User() string {
@@ -261,7 +261,7 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 
 func (p *planner) fillFKTableMap(ctx context.Context, m sqlbase.TableLookupsByID) error {
 	for tableID := range m {
-		table, err := p.session.leases.getTableLeaseByID(ctx, p.txn, tableID)
+		table, err := p.session.tables.getTableVersionByID(ctx, p.txn, tableID)
 		if err == errTableAdding {
 			m[tableID] = sqlbase.TableLookup{IsAdding: true}
 			continue

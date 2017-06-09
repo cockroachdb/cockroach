@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -38,7 +39,7 @@ type LeaseRemovalTracker struct {
 	mu syncutil.Mutex
 	// map from a lease whose release we're waiting for to a tracker for that
 	// lease.
-	tracking map[*LeaseState]RemovalTracker
+	tracking map[tableVersionID]RemovalTracker
 }
 
 type RemovalTracker struct {
@@ -50,21 +51,25 @@ type RemovalTracker struct {
 // NewLeaseRemovalTracker creates a LeaseRemovalTracker.
 func NewLeaseRemovalTracker() *LeaseRemovalTracker {
 	return &LeaseRemovalTracker{
-		tracking: make(map[*LeaseState]RemovalTracker),
+		tracking: make(map[tableVersionID]RemovalTracker),
 	}
 }
 
 // TrackRemoval starts monitoring lease removals for a particular lease.
 // This should be called before triggering the operation that (asynchronously)
 // removes the lease.
-func (w *LeaseRemovalTracker) TrackRemoval(lease *LeaseState) RemovalTracker {
+func (w *LeaseRemovalTracker) TrackRemoval(table sqlbase.TableDescriptor) RemovalTracker {
+	id := tableVersionID{
+		id:      table.ID,
+		version: table.Version,
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if tracker, ok := w.tracking[lease]; ok {
+	if tracker, ok := w.tracking[id]; ok {
 		return tracker
 	}
 	tracker := RemovalTracker{removed: make(chan struct{}), err: new(error)}
-	w.tracking[lease] = tracker
+	w.tracking[id] = tracker
 	return tracker
 }
 
@@ -80,10 +85,14 @@ func (t RemovalTracker) WaitForRemoval() error {
 func (w *LeaseRemovalTracker) LeaseRemovedNotification(lease *LeaseState, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if tracker, ok := w.tracking[lease]; ok {
+	id := tableVersionID{
+		id:      lease.ID,
+		version: lease.Version,
+	}
+	if tracker, ok := w.tracking[id]; ok {
 		*tracker.err = err
 		close(tracker.removed)
-		delete(w.tracking, lease)
+		delete(w.tracking, id)
 	}
 }
 
