@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestLeaseSet(t *testing.T) {
+func TestTableSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type data struct {
@@ -80,16 +80,16 @@ func TestLeaseSet(t *testing.T) {
 		{remove{2, 4}, ""},
 	}
 
-	set := &leaseSet{}
+	set := &tableSet{}
 	for i, d := range testData {
 		switch op := d.op.(type) {
 		case insert:
-			s := &LeaseState{}
+			s := &tableVersionState{}
 			s.Version = op.version
 			s.expiration.Time = time.Unix(0, op.expiration)
 			set.insert(s)
 		case remove:
-			s := &LeaseState{}
+			s := &tableVersionState{}
 			s.Version = op.version
 			s.expiration.Time = time.Unix(0, op.expiration)
 			set.remove(s)
@@ -354,7 +354,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 // Test that there's no deadlock between AcquireByName and Release.
 // We used to have one due to lock inversion between the tableNameCache lock and
-// the leaseState lock, triggered when the same lease was Release()d after the
+// the tableVersionState lock, triggered when the same lease was Release()d after the
 // table had been dropped (which means it's removed from the tableNameCache) and
 // AcquireByName()d at the same time.
 func TestReleaseAcquireByNameDeadlock(t *testing.T) {
