@@ -235,7 +235,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+	s := grpc.NewServer(
+		grpc.RPCDecompressor(snappyDecompressor{}), grpc.Creds(credentials.NewTLS(tlsConfig)))
 	ln, err := net.Listen("tcp", util.TestAddr.String())
 	if err != nil {
 		t.Fatal(err)
