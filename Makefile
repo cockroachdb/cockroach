@@ -189,8 +189,8 @@ testrace: TESTTIMEOUT := $(RACETIMEOUT)
 # guaranteed to be irrelevant to save nearly 10s on every Make invocation.
 FIND_RELEVANT := find pkg -name node_modules -prune -o
 
-bin/sql.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
-	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/sql.test ./pkg/sql
+bin/logictest.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/logictest.test ./pkg/sql/logictest
 
 bench: BENCHES := .
 bench: TESTS := -
@@ -204,8 +204,8 @@ check test testshort testrace bench: gotestdashi
 # with make testlogic FILES="foo bar".
 testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$,TestLogic)
 testlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
-testlogic: bin/sql.test
-	cd pkg/sql && sql.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+testlogic: bin/logictest.test
+	cd pkg/sql/logictest && sql.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
