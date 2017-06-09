@@ -33,3 +33,9 @@ func TestCrashReportingFormatSave(t *testing.T) {
 		t.Errorf("wanted %s, got %s", exp3, f3)
 	}
 }
+
+func TestingSetCrashReportingURL(url string) func() {
+	oldCrashReportURL := crashReportURL
+	crashReportURL = url
+	return func() { crashReportURL = oldCrashReportURL }
+}
