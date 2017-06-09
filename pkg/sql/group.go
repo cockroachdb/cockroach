@@ -108,7 +108,6 @@ func (p *planner) groupBy(
 		if err != nil {
 			return nil, err
 		}
-		n.Having.Expr = typedHaving
 	}
 
 	group := &groupNode{
