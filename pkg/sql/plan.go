@@ -211,6 +211,8 @@ var _ planNode = &updateNode{}
 var _ planNode = &valueGenerator{}
 var _ planNode = &valuesNode{}
 var _ planNode = &windowNode{}
+var _ planNode = &createUserNode{}
+var _ planNode = &dropUserNode{}
 
 var _ planNodeFastPath = &deleteNode{}
 
@@ -323,6 +325,8 @@ func (p *planner) newPlan(
 		return p.DropTable(ctx, n)
 	case *parser.DropView:
 		return p.DropView(ctx, n)
+	case *parser.DropUser:
+		return p.DropUser(ctx, n)
 	case *parser.Explain:
 		return p.Explain(ctx, n)
 	case *parser.Grant:

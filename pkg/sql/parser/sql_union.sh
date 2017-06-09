@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set +x
 
 # Trigger this script by running `make generate PKG=./pkg/sql/parser` from the
 # repository root to ensure your PATH includes vendored binaries.
