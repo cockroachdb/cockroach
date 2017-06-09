@@ -31,19 +31,28 @@ type initServer struct {
 	server       *Server
 	bootstrapped chan struct{}
 	mux          sync.Mutex
+	waiting      bool
 }
 
 func newInitServer(s *Server) *initServer {
-	return &initServer{server: s, bootstrapped: make(chan struct{})}
+	return &initServer{server: s, bootstrapped: make(chan struct{}), waiting: false}
 }
 
-func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
+func (s *initServer) serve(ctx context.Context, ln net.Listener) {
 	grpcServer := s.server.grpc
 	serverpb.RegisterInitServer(grpcServer, s)
 
 	s.server.stopper.RunWorker(ctx, func(context.Context) {
 		netutil.FatalIfUnexpected(grpcServer.Serve(ln))
 	})
+}
+
+func (s *initServer) awaitBootstrap() error {
+	{
+		s.mux.Lock()
+		s.waiting = true
+		s.mux.Unlock()
+	}
 
 	select {
 	case <-s.server.node.storeCfg.Gossip.Connected:
@@ -57,8 +66,12 @@ func (s *initServer) startAndAwait(ctx context.Context, ln net.Listener) error {
 
 func (s *initServer) Bootstrap(ctx context.Context, request *serverpb.BootstrapRequest,
 ) (response *serverpb.BootstrapResponse, err error) {
-	s.mux.Lock() // Mux bootstrap
+	s.mux.Lock()
 	defer s.mux.Unlock()
+	if !s.waiting {
+		return nil, errors.New("Init not expecting Bootstrap")
+	}
+
 	if err := s.server.node.bootstrap(ctx, s.server.engines); err != nil {
 		log.Error(ctx, "Node bootstrap failed: ", err)
 		return nil, err

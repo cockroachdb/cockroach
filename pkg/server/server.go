@@ -541,6 +541,7 @@ func (s *Server) Start(ctx context.Context) error {
 	initL := m.Match(func(_ io.Reader) bool {
 		return atomic.LoadInt32(&readyToServe) == 0
 	})
+	s.init.serve(ctx, initL)
 
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
@@ -723,7 +724,7 @@ func (s *Server) Start(ctx context.Context) error {
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
 		log.Info(ctx, "No stores bootstrapped and --join flag specified, starting Init Server.")
-		if err = s.init.startAndAwait(ctx, initL); err != nil {
+		if err = s.init.awaitBootstrap(); err != nil {
 			return nil
 		}
 
