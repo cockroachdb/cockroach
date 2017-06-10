@@ -70,10 +70,6 @@ const (
 	// rangeDebugEndpoint exposes an html page with information about a specific range.
 	rangeDebugEndpoint = "/debug/range"
 
-	// problemRangesDebugEndpoint exposes an html page with a list of all ranges
-	// that are experiencing problems.
-	problemRangesDebugEndpoint = "/debug/problemranges"
-
 	// certificatesDebugEndpoint lists the certificates on a node.
 	certificatesDebugEndpoint = "/debug/certificates"
 
@@ -169,7 +165,7 @@ func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, er
 		return s.gossip.NodeID.Get(), true, nil
 	}
 
-	id, err := strconv.ParseInt(nodeIDParam, 10, 64)
+	id, err := strconv.ParseInt(nodeIDParam, 0, 32)
 	if err != nil {
 		return 0, false, errors.Wrap(err, "node id could not be parsed")
 	}

@@ -16,53 +16,41 @@
 package server
 
 import (
-	"fmt"
-	"html/template"
-	"net/http"
 	"sort"
-	"strconv"
 
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 )
 
-const (
-	debugRangeProblemHeaderUnavailable          = "Unavailable"
-	debugRangeProblemHeaderLeaderNotLeaseholder = "Raft Leader but Not Lease Holder"
-	debugRangeProblemHeaderNoRaftLeader         = "No Raft Leader"
-	debugRangeProblemHeaderNoLease              = "No Lease"
-	debugRangeProblemHeaderUnderreplicated      = "Underreplicated"
-)
+func (s *statusServer) ProblemRanges(
+	ctx context.Context, req *serverpb.ProblemRangesRequest,
+) (*serverpb.ProblemRangesResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 
-// Returns an HTML page displaying information about all the problem ranges in
-// a node or the full cluster.
-func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Request) {
-	ctx := s.AnnotateCtx(r.Context())
-	w.Header().Add("Content-type", "text/html")
-	nodeIDString := r.URL.Query().Get("node_id")
-
-	data := debugProblemRangeData{
-		Problems: make(map[string]roachpb.RangeIDSlice),
-		ProblemHeaders: []string{
-			debugRangeProblemHeaderUnavailable,
-			debugRangeProblemHeaderNoRaftLeader,
-			debugRangeProblemHeaderNoLease,
-			debugRangeProblemHeaderLeaderNotLeaseholder,
-			debugRangeProblemHeaderUnderreplicated,
-		},
+	response := &serverpb.ProblemRangesResponse{}
+	if len(req.NodeID) > 0 {
+		var err error
+		response.NodeID, _, err = s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		}
 	}
 
-	if len(nodeIDString) > 0 {
-		nodeIDInt, err := strconv.ParseInt(nodeIDString, 10, 0)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	if response.NodeID != 0 {
+		// If there is a specific nodeID requested, limited the responses to
+		// just this node.
+		if !isLiveMap[response.NodeID] {
+			return nil, grpc.Errorf(codes.NotFound, "n%d is not alive", response.NodeID)
 		}
-		nodeID := roachpb.NodeID(nodeIDInt)
-		data.NodeID = &nodeID
+		isLiveMap = map[roachpb.NodeID]bool{
+			response.NodeID: true,
+		}
 	}
 
 	type nodeResponse struct {
@@ -70,20 +58,6 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 		resp   *serverpb.RangesResponse
 		err    error
 	}
-
-	isLiveMap := s.nodeLiveness.GetIsLiveMap()
-	if data.NodeID != nil {
-		// If there is a specific nodeID requested, limited the responses to
-		// just this node.
-		if !isLiveMap[*data.NodeID] {
-			http.Error(w, fmt.Sprintf("n%d is not alive", *data.NodeID), http.StatusInternalServerError)
-			return
-		}
-		isLiveMap = map[roachpb.NodeID]bool{
-			*data.NodeID: true,
-		}
-	}
-
 	noRaftLeader := make(map[roachpb.RangeID]struct{})
 	numNodes := len(isLiveMap)
 	responses := make(chan nodeResponse)
@@ -91,8 +65,8 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 	defer cancel()
 	for nodeID, alive := range isLiveMap {
 		if !alive {
-			data.Failures = append(data.Failures, serverpb.RangeInfo{
-				SourceNodeID: nodeID,
+			response.Failures = append(response.Failures, serverpb.ProblemRangesResponse_Failures{
+				NodeID:       nodeID,
 				ErrorMessage: "node liveness reports that the node is not alive",
 			})
 			numNodes--
@@ -119,212 +93,62 @@ func (s *statusServer) handleProblemRanges(w http.ResponseWriter, r *http.Reques
 				// Context completed, response no longer needed.
 			}
 		}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}
 	}
 	for remainingResponses := numNodes; remainingResponses > 0; remainingResponses-- {
 		select {
 		case resp := <-responses:
 			if resp.err != nil {
-				data.Failures = append(data.Failures, serverpb.RangeInfo{
-					SourceNodeID: resp.nodeID,
+				response.Failures = append(response.Failures, serverpb.ProblemRangesResponse_Failures{
+					NodeID:       resp.nodeID,
 					ErrorMessage: resp.err.Error(),
 				})
 				continue
 			}
 			for _, info := range resp.resp.Ranges {
 				if len(info.ErrorMessage) != 0 {
-					data.Failures = append(data.Failures, info)
+					response.Failures = append(response.Failures, serverpb.ProblemRangesResponse_Failures{
+						NodeID:       info.SourceNodeID,
+						ErrorMessage: info.ErrorMessage,
+					})
 					continue
 				}
 				if info.Problems.Unavailable {
-					data.Problems[debugRangeProblemHeaderUnavailable] =
-						append(data.Problems[debugRangeProblemHeaderUnavailable], info.State.Desc.RangeID)
+					response.UnavailableRangeIDs =
+						append(response.UnavailableRangeIDs, info.State.Desc.RangeID)
 				}
 				if info.Problems.LeaderNotLeaseHolder {
-					data.Problems[debugRangeProblemHeaderLeaderNotLeaseholder] =
-						append(data.Problems[debugRangeProblemHeaderLeaderNotLeaseholder], info.State.Desc.RangeID)
+					response.RaftLeaderNotLeaseHolderRangeIDs =
+						append(response.RaftLeaderNotLeaseHolderRangeIDs, info.State.Desc.RangeID)
 				}
 				if info.Problems.NoRaftLeader {
 					noRaftLeader[info.State.Desc.RangeID] = struct{}{}
 				}
 				if info.Problems.Underreplicated {
-					data.Problems[debugRangeProblemHeaderUnderreplicated] =
-						append(data.Problems[debugRangeProblemHeaderUnderreplicated], info.State.Desc.RangeID)
+					response.UnderreplicatedRangeIDs =
+						append(response.UnderreplicatedRangeIDs, info.State.Desc.RangeID)
 				}
 				if info.Problems.NoLease {
-					data.Problems[debugRangeProblemHeaderNoLease] =
-						append(data.Problems[debugRangeProblemHeaderNoLease], info.State.Desc.RangeID)
+					response.NoLeaseRangeIDs =
+						append(response.NoLeaseRangeIDs, info.State.Desc.RangeID)
 				}
 			}
 		case <-ctx.Done():
-			http.Error(w, ctx.Err().Error(), http.StatusRequestTimeout)
-			return
+			return nil, grpc.Errorf(codes.DeadlineExceeded, ctx.Err().Error())
 		}
 	}
 
-	if data.NodeID != nil {
-		data.Title = fmt.Sprintf("Problem Ranges for Node n%d", *data.NodeID)
-	} else {
-		data.Title = "Problem Ranges for the Cluster"
-	}
-
 	for rangeID := range noRaftLeader {
-		data.Problems[debugRangeProblemHeaderNoRaftLeader] =
-			append(data.Problems[debugRangeProblemHeaderNoRaftLeader], rangeID)
+		response.NoRaftLeaderRangeIDs =
+			append(response.NoRaftLeaderRangeIDs, rangeID)
 	}
 
-	for _, rangeIDs := range data.Problems {
-		sort.Sort(rangeIDs)
-	}
+	sort.Sort(roachpb.RangeIDSlice(response.UnavailableRangeIDs))
+	sort.Sort(roachpb.RangeIDSlice(response.RaftLeaderNotLeaseHolderRangeIDs))
+	sort.Sort(roachpb.RangeIDSlice(response.NoRaftLeaderRangeIDs))
+	sort.Sort(roachpb.RangeIDSlice(response.NoLeaseRangeIDs))
+	sort.Sort(roachpb.RangeIDSlice(response.UnderreplicatedRangeIDs))
 
-	t, err := template.New("webpage").Parse(debugProblemRangesTemplate)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := t.Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	return response, nil
 }
-
-type debugProblemRangeData struct {
-	NodeID         *roachpb.NodeID
-	Title          string
-	Failures       rangeInfoSlice
-	ProblemHeaders []string
-	Problems       map[string]roachpb.RangeIDSlice
-}
-
-const debugProblemRangesTemplate = `
-<!DOCTYPE html>
-<HTML>
-  <HEAD>
-  	<META CHARSET="UTF-8"/>
-    <TITLE>{{$.Title}}</TITLE>
-    <STYLE>
-      body {
-        font-family: "Helvetica Neue", Helvetica, Arial;
-        font-size: 14px;
-        line-height: 20px;
-        font-weight: 400;
-        color: #3b3b3b;
-        -webkit-font-smoothing: antialiased;
-        font-smoothing: antialiased;
-        background: #e4e4e4;
-      }
-      .wrapper {
-        margin: 0 auto;
-        padding: 0 40px;
-      }
-      .table {
-        margin: 0 0 40px 0;
-        display: table;
-        width: 100%;
-      }
-      .row {
-        display: table-row;
-        background: #f6f6f6;
-      }
-      .cell:nth-of-type(odd) {
-        background: #e9e9e9;
-      }
-      .cell {
-        padding: 6px 12px;
-        display: table-cell;
-        height: 20px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        max-width: 200px;
-        border-width: 1px 1px 0 0;
-        border-color: rgba(0, 0, 0, 0.1);
-        border-style: solid;
-      }
-      .header.cell{
-        font-weight: 900;
-        color: #ffffff;
-        background: #2980b9;
-        text-overflow: clip;
-        border: none;
-        width: 1px;
-        text-align: right;
-      }
-      .failure-table {
-        margin: 0 0 40px 0;
-        display: table;
-        width: 100%;
-      }
-      .failure-row {
-        display: table-row;
-        background: #f6f6f6;
-      }
-      .failure-row:nth-of-type(odd) {
-        background: #e9e9e9;
-      }
-      .failure-cell {
-        padding: 6px 12px;
-        display: table-cell;
-        height: 20px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        border-width: 1px 1px 0 0;
-        border-color: rgba(0, 0, 0, 0.1);
-        border-style: solid;
-        max-width: 500px;
-      }
-      .failure-row:first-of-type .failure-cell {
-        font-weight: 900;
-        color: #ffffff;
-        background: #ea6153;
-        border: none;
-      }
-      .failure-cell.small {
-          max-width: 1px;
-      }
-    </STYLE>
-  </HEAD>
-  <BODY>
-    <DIV CLASS="wrapper">
-      <H1>{{$.Title}}</H1>
-      {{- if $.Failures}}
-        <H2>Failures</H2>
-        <DIV CLASS="failure-table">
-          <DIV CLASS="failure-row">
-            <DIV CLASS="failure-cell small">Node</DIV>
-            <DIV CLASS="failure-cell small">Store</DIV>
-            <DIV CLASS="failure-cell">Error</DIV>
-          </DIV>
-          {{- range $_, $det := $.Failures}}
-            <DIV CLASS="failure-row">
-              <DIV CLASS="failure-cell small">n{{$det.SourceNodeID}}</DIV>
-              {{- if not (eq $det.SourceStoreID 0)}}
-                <DIV CLASS="failure-cell small">n{{$det.SourceStoreID}}</DIV>
-              {{- else -}}
-                <DIV CLASS="failure-cell">-</DIV>
-              {{- end}}
-              <DIV CLASS="failure-cell" TITLE="{{$det.ErrorMessage}}">{{$det.ErrorMessage}}</DIV>
-            </DIV>
-          {{- end}}
-        </DIV>
-      {{- end}}
-      {{- range $_, $header := $.ProblemHeaders}}
-        <H2>{{$header}}</H2>
-        <DIV CLASS="table">
-          <DIV CLASS="row">
-            {{- if index $.Problems $header}}
-              {{- range $_, $r := index $.Problems $header}}
-                <a href="/debug/range?id={{$r}}">{{$r}}</a>&nbsp;
-              {{- end}}
-            {{- else}}
-              None
-            {{- end}}
-          </DIV>
-        </DIV>
-      {{- end}}
-    </DIV>
-  </BODY>
-</HTML>
-`
