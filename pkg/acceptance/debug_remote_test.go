@@ -72,7 +72,6 @@ func TestDebugRemote(t *testing.T) {
 				"/debug/pprof",
 				"/debug/requests",
 				"/debug/range?id=1",
-				"/debug/problemranges",
 				"/debug/certificates",
 				"/debug/network",
 				"/debug/nodes",

@@ -72,6 +72,9 @@ export const queryToID = (req: api.QueryPlanRequestMessage): string => req.query
 const queryPlanReducerObj = new CachedDataReducer(api.getQueryPlan, "queryPlan");
 export const refreshQueryPlan = queryPlanReducerObj.refresh;
 
+const problemRangesReducerObj = new CachedDataReducer(api.getProblemRanges, "problemRanges");
+export const refreshProblemRanges = problemRangesReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -86,6 +89,7 @@ export interface APIReducersState {
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
+  problemRanges: CachedDataReducerState<api.ProblemRangesResponseMessage>;
 }
 
 export default combineReducers<APIReducersState>({
@@ -102,6 +106,7 @@ export default combineReducers<APIReducersState>({
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
+  [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
 });
 
 export {CachedDataReducerState, KeyedCachedDataReducerState};
