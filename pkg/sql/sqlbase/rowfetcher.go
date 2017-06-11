@@ -146,13 +146,6 @@ func (rf *RowFetcher) Init(
 	for i, id := range indexColumnIDs {
 		rf.indexColIdx[i] = rf.colIdxMap[id]
 	}
-	// Add composite key columns to neededCols so that, like other key
-	// columns, their values are decoded.
-	for _, id := range index.CompositeColumnIDs {
-		if _, ok := colIdxMap[id]; ok {
-			rf.neededCols.Add(uint32(id))
-		}
-	}
 
 	if isSecondaryIndex {
 		for i := range rf.cols {
