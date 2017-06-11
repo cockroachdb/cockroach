@@ -301,6 +301,15 @@ func (rf *RowFetcher) ProcessKV(
 		}
 	}
 
+	if rf.neededCols.Empty() {
+		// We don't need to decode any values.
+		if debugStrings {
+			prettyValue = parser.DNull.String()
+		}
+
+		return prettyKey, prettyValue, nil
+	}
+
 	if !rf.isSecondaryIndex && len(rf.keyRemainingBytes) > 0 {
 		_, familyID, err := encoding.DecodeUvarintAscending(rf.keyRemainingBytes)
 		if err != nil {
