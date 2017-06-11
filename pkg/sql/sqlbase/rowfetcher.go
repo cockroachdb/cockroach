@@ -99,6 +99,10 @@ type RowFetcher struct {
 	alloc DatumAlloc
 }
 
+// debugRowFetch can be used to turn on some low-level debugging logs. We use
+// this to avoid using log.V in the hot path.
+const debugRowFetch = false
+
 // Init sets up a RowFetcher for a given table and index. If we are using a
 // non-primary index, valNeededForCol can only be true for the columns in the
 // index.
@@ -368,7 +372,7 @@ func (rf *RowFetcher) ProcessKV(
 			}
 		}
 
-		if log.V(2) {
+		if debugRowFetch {
 			if rf.extraVals != nil {
 				log.Infof(context.TODO(), "Scan %s -> %s", kv.Key, prettyEncDatums(rf.extraVals))
 			} else {
@@ -437,7 +441,7 @@ func (rf *RowFetcher) processValueSingle(
 				panic(fmt.Sprintf("duplicate value for column %d", idx))
 			}
 			rf.row[idx] = DatumToEncDatum(typ, value)
-			if log.V(3) {
+			if debugRowFetch {
 				log.Infof(context.TODO(), "Scan %s -> %v", kv.Key, value)
 			}
 			return prettyKey, prettyValue, nil
@@ -446,7 +450,7 @@ func (rf *RowFetcher) processValueSingle(
 
 	// No need to unmarshal the column value. Either the column was part of
 	// the index key or it isn't needed.
-	if log.V(3) {
+	if debugRowFetch {
 		log.Infof(context.TODO(), "Scan %s -> [%d] (skipped)", kv.Key, colID)
 	}
 	return prettyKey, prettyValue, nil
@@ -476,7 +480,7 @@ func (rf *RowFetcher) processValueBytes(
 				return "", "", err
 			}
 			bytes = bytes[len:]
-			if log.V(3) {
+			if debugRowFetch {
 				log.Infof(context.TODO(), "Scan %s -> [%d] (skipped)", kv.Key, colID)
 			}
 			continue
@@ -504,7 +508,7 @@ func (rf *RowFetcher) processValueBytes(
 			panic(fmt.Sprintf("duplicate value for column %d", idx))
 		}
 		rf.row[idx] = encValue
-		if log.V(3) {
+		if debugRowFetch {
 			log.Infof(context.TODO(), "Scan %d -> %v", idx, encValue)
 		}
 	}
