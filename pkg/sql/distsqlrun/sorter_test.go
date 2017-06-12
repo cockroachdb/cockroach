@@ -21,8 +21,10 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -177,48 +179,70 @@ func TestSorter(t *testing.T) {
 	}
 
 	ctx := context.Background()
+	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
 	for _, c := range testCases {
-		t.Run(c.name, func(t *testing.T) {
-			types := make([]sqlbase.ColumnType, len(c.input[0]))
-			for i := range types {
-				types[i] = c.input[0][i].Type
-			}
-			in := NewRowBuffer(types, c.input, RowBufferArgs{})
-			out := &RowBuffer{}
-			evalCtx := parser.MakeTestingEvalContext()
-			defer evalCtx.Stop(ctx)
-			flowCtx := FlowCtx{
-				evalCtx: evalCtx,
-			}
-
-			s, err := newSorter(&flowCtx, &c.spec, in, &c.post, out)
-			if err != nil {
-				t.Fatal(err)
-			}
-			s.Run(ctx, nil)
-			if !out.ProducerClosed {
-				t.Fatalf("output RowReceiver not closed")
-			}
-
-			var retRows sqlbase.EncDatumRows
-			for {
-				row, meta := out.Next()
-				if !meta.Empty() {
-					t.Fatalf("unexpected metadata: %v", meta)
+		// Test with several memory limits:
+		// 0: Use the default limit.
+		// 1: Immediately switch to disk.
+		// 1150: This is the memory used after we store a couple of rows in
+		// memory. Tests the transfer of rows from memory to disk on
+		// initialization.
+		// 2048: A memory limit that should not be hit; the strategy will not
+		// use disk.
+		for _, memLimit := range []int64{0, 1, 1150, 2048} {
+			t.Run(fmt.Sprintf("%sMemLimit=%d", c.name, memLimit), func(t *testing.T) {
+				types := make([]sqlbase.ColumnType, len(c.input[0]))
+				for i := range types {
+					types[i] = c.input[0][i].Type
 				}
-				if row == nil {
-					break
+				in := NewRowBuffer(types, c.input, RowBufferArgs{})
+				out := &RowBuffer{}
+				evalCtx := parser.MakeTestingEvalContext()
+				defer evalCtx.Stop(ctx)
+				flowCtx := FlowCtx{
+					evalCtx:                evalCtx,
+					tempStorage:            tempEngine,
+					tempStorageIDGenerator: &TempStorageIDGenerator{},
 				}
-				retRows = append(retRows, row)
-			}
 
-			expStr := c.expected.String()
-			retStr := retRows.String()
-			if expStr != retStr {
-				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
-					expStr, retStr)
-			}
-		})
+				s, err := newSorter(&flowCtx, &c.spec, in, &c.post, out)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Override the default memory limit. This will result in using
+				// a memory row container which will hit this limit and fall
+				// back to using a disk row container.
+				s.testingKnobMemLimit = memLimit
+				s.Run(ctx, nil)
+				if !out.ProducerClosed {
+					t.Fatalf("output RowReceiver not closed")
+				}
+
+				var retRows sqlbase.EncDatumRows
+				for {
+					row, meta := out.Next()
+					if !meta.Empty() {
+						t.Fatalf("unexpected metadata: %v", meta)
+					}
+					if row == nil {
+						break
+					}
+					retRows = append(retRows, row)
+				}
+
+				expStr := c.expected.String()
+				retStr := retRows.String()
+				if expStr != retStr {
+					t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
+						expStr, retStr)
+				}
+			})
+		}
 	}
 }
 
