@@ -222,7 +222,7 @@ type Replica struct {
 	abortCache   *AbortCache   // Avoids anomalous reads after abort
 	pushTxnQueue *pushTxnQueue // Queues push txn attempts by txn ID
 
-	stats *replicaStats
+	leaseholderStats *replicaStats
 
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
@@ -562,7 +562,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		r.leaseHistory = newLeaseHistory()
 	}
 	if store.cfg.StorePool != nil {
-		r.stats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
+		r.leaseholderStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
 	}
 
 	// Init rangeStr with the range ID.
@@ -1633,8 +1633,8 @@ func (r *Replica) Send(
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
 
-	if r.stats != nil && ba.Header.GatewayNodeID != 0 {
-		r.stats.record(ba.Header.GatewayNodeID)
+	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
+		r.leaseholderStats.record(ba.Header.GatewayNodeID)
 	}
 
 	if err := r.checkBatchRequest(ba); err != nil {
