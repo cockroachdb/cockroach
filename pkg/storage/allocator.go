@@ -48,6 +48,11 @@ const (
 	// that store.
 	baseRebalanceThreshold = 0.05
 
+	// minReplicaWeight sets a floor for how low a replica weight can be. This is
+	// needed because a weight of zero doesn't work in the current lease scoring
+	// algorithm.
+	minReplicaWeight
+
 	// priorities for various repair operations.
 	addMissingReplicaPriority  float64 = 10000
 	removeDeadReplicaPriority  float64 = 1000
@@ -594,13 +599,13 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 			replicaWeights[nodeID] += (1 - replicaLocality.DiversityScore(requestLocality)) * qps
 		}
 	}
-	sourceWeight := math.Max(1.0, replicaWeights[source.Node.NodeID])
 
 	if log.V(1) {
 		log.Infof(ctx,
 			"shouldTransferLease qpsStats: %+v, replicaLocalities: %+v, replicaWeights: %+v",
 			qpsStats, replicaLocalities, replicaWeights)
 	}
+	sourceWeight := math.Max(minReplicaWeight, replicaWeights[source.Node.NodeID])
 
 	// TODO(a-robinson): This may not have enough protection against all leases
 	// ending up on a single node in extreme cases. Continue testing against
@@ -625,7 +630,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 			continue
 		}
 
-		remoteWeight := math.Max(1.0, replicaWeights[repl.NodeID])
+		remoteWeight := math.Max(minReplicaWeight, replicaWeights[repl.NodeID])
 		score := loadBasedLeaseRebalanceScore(
 			ctx, remoteWeight, remoteLatency, storeDesc, sourceWeight, source, sl.candidateLeases.mean)
 		if score > bestReplScore {
