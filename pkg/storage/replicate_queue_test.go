@@ -114,42 +114,44 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(context.Background())
 
-	// Split off a range from the initial range for testing; there are
-	// complications if the metadata ranges are moved.
-	testKey := roachpb.Key("m")
-	if _, _, err := tc.SplitRange(testKey); err != nil {
-		t.Fatal(err)
-	}
-
+	testKey := keys.MetaMin
 	desc, err := tc.LookupRange(testKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if len(desc.Replicas) != 1 {
-		t.Fatal("replica count, want %d, current %d", replicaCount, len(desc.Replicas))
+		t.Fatalf("replica count, want 1, current %d", len(desc.Replicas))
 	}
 
-	// TODO: How to get default server args.
-	tc.AddServer(t, base.TestServerArgs{})
-
-	// Just sleep so that there is enough chance to up-replicate. But check later
-	// that up-replication did not happen
-	// TODO: Remove this sleep and the check after it once we add a check for
-	// the operation to be in the purgatory.
-	time.Sleep(time.Second)
-
-	desc, err = tc.LookupRange(testKey)
-	if err != nil {
+	if err := tc.AddServer(t, base.TestServerArgs{}); err != nil {
 		t.Fatal(err)
 	}
-	if len(desc.Replicas) != 1 {
-		t.Fatal("replica count, want %d, current %d", replicaCount, len(desc.Replicas))
+
+	testutils.SucceedsSoon(t, func() error {
+		// After the initial splits have been performed, all of the resulting ranges
+		// should be present in replicate queue purgatory (because we only have a
+		// single store in the test and thus replication cannot succeed).
+		expected, err := tc.Servers[0].ExpectedInitialRangeCount()
+		if err != nil {
+			return err
+		}
+
+		var store *storage.Store
+		_ = tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
+			store = s
+			return nil
+		})
+
+		if n := store.ReplicateQueuePurgatoryLength(); expected != n {
+			return errors.Errorf("expected %d replicas in purgatory, but found %d", expected, n)
+		}
+		return nil
+	})
+
+	if err := tc.AddServer(t, base.TestServerArgs{}); err != nil {
+		t.Fatal(err)
 	}
-
-	// TODO: Check that the up-replicate operation is in purgatory
-
-	tc.AddServer(t, base.TestServerArgs{})
 
 	// Now wait until the replicas have been up-replicated to the
 	// desired number.

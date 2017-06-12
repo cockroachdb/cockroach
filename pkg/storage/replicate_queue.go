@@ -291,8 +291,11 @@ func (rq *replicateQueue) processOneChange(
 		if willHave != need && willHave%2 == 0 {
 			// This means we are going to up-replicate to an even replica state.
 			// Check if it is possible to go to an odd replica state beyond it.
-			oldPlusNewReplicas := append([]ReplicaDescriptor(nil), desc.Replicas...)
-			oldPlusNewReplicas = append(oldPlusNewReplicas, newReplica)
+			oldPlusNewReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
+			oldPlusNewReplicas = append(oldPlusNewReplicas, roachpb.ReplicaDescriptor{
+				NodeID:  newStore.Node.NodeID,
+				StoreID: newStore.StoreID,
+			})
 			_, err := rq.allocator.AllocateTarget(
 				ctx,
 				zone.Constraints,
