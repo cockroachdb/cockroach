@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"golang.org/x/net/context"
 )
@@ -105,9 +104,9 @@ func TestQuotaPoolContextCancellation(t *testing.T) {
 	}
 }
 
-// TestQuotaPoolClose tests the behaviour that for an ongoing
-// blocked acquisition, if the quota pool gets closed the acquisition
-// gets cancelled too with an error indicating so.
+// TestQuotaPoolClose tests the behaviour that for an ongoing blocked
+// acquisition if the quota pool gets closed, all ongoing and subsequent
+// acquisitions go through.
 func TestQuotaPoolClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -116,20 +115,41 @@ func TestQuotaPoolClose(t *testing.T) {
 	if err := qp.acquire(ctx, 1); err != nil {
 		t.Fatal(err)
 	}
-	errCh := make(chan error)
+	const numGoroutines = 5
+	resCh := make(chan error, numGoroutines)
 
-	go func() {
-		errCh <- qp.acquire(ctx, 1)
-	}()
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			resCh <- qp.acquire(ctx, 1)
+		}()
+	}
 
 	qp.close()
+
+	// Second call should be a no-op.
+	qp.close()
+
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case <-time.After(5 * time.Second):
+			t.Fatal("quota pool closing did not unblock acquisitions within 5s")
+		case err := <-resCh:
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	go func() {
+		resCh <- qp.acquire(ctx, 1)
+	}()
 
 	select {
 	case <-time.After(5 * time.Second):
 		t.Fatal("quota pool closing did not unblock acquisitions within 5s")
-	case err := <-errCh:
-		if !testutils.IsError(err, "quota pool no longer in use") {
-			t.Fatalf("expected acquisition to fail with pool closing, got %v", err)
+	case err := <-resCh:
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }
