@@ -158,11 +158,20 @@ func (b *sstBatcher) Finish(ctx context.Context, db *client.DB) error {
 		return errors.Wrapf(err, "finishing constructed sstable")
 	}
 
-	// TODO(dan): This will fail if the range has split.
-	if err := db.ExperimentalAddSSTable(ctx, start, end, sstBytes); err != nil {
-		return errors.Wrapf(err, "linking sstable into rocksdb")
+	const maxAddSSTableRetries = 10
+	for i := 0; ; i++ {
+		// TODO(dan): This will fail if the range has split.
+		err := db.ExperimentalAddSSTable(ctx, start, end, sstBytes)
+		if err == nil {
+			return nil
+		}
+		if _, ok := err.(*roachpb.AmbiguousResultError); i == maxAddSSTableRetries || !ok {
+			return errors.Wrapf(err, "addsstable [%s,%s)", start, end)
+		}
+		log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v",
+			start, end, i, err)
+		continue
 	}
-	return nil
 }
 
 func (b *sstBatcher) Close() {

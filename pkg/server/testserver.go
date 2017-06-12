@@ -169,10 +169,12 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			if storeSpec.SizePercent > 0 {
 				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
 			}
-		} else {
-			// TODO(bram): This will require some cleanup of on disk files.
-			panic(fmt.Sprintf("test server does not yet support on disk stores: %s", storeSpec))
 		}
+		// The default store spec is in-memory, so if this one is on-disk then
+		// one specific test must have requested it. A failure is returned if
+		// the Path field is empty, which means the test is then forced to pick
+		// the dir (and the test is then responsible for cleaning it up, not
+		// TestServer).
 	}
 	// Copy over the store specs.
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
