@@ -200,7 +200,7 @@ func runTransactionsAndNemeses(
 	}
 	for i := 0; i < concurrency; i++ {
 		localI := i
-		if err := stopper.RunAsyncTask(ctx, func(_ context.Context) {
+		if err := stopper.RunAsyncTask(ctx, "test", func(_ context.Context) {
 			for timeutil.Now().Before(deadline) {
 				select {
 				case <-stopper.ShouldQuiesce():

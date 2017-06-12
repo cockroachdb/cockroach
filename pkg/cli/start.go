@@ -611,7 +611,7 @@ func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stop
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it
 	// provides).
-	stopper := initBacktrace(outputDirectory, stop.TrackTasks(false))
+	stopper := initBacktrace(outputDirectory)
 	log.Event(startCtx, "initialized profiles")
 
 	return stopper, nil

@@ -470,7 +470,7 @@ func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- 
 	t.mtc.mu.RLock()
 	s := t.mtc.stoppers[nodeIndex]
 	t.mtc.mu.RUnlock()
-	if s == nil || s.RunAsyncTask(ctx, func(ctx context.Context) {
+	if s == nil || s.RunAsyncTask(ctx, "storage.multiTestContextKVTransport: calling next replica", func(ctx context.Context) {
 		t.mtc.mu.RLock()
 		sender := t.mtc.senders[nodeIndex]
 		t.mtc.mu.RUnlock()

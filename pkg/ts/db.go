@@ -101,7 +101,7 @@ func (p *poller) start() {
 // returned time series data on the server.
 func (p *poller) poll() {
 	bgCtx := p.AnnotateCtx(context.Background())
-	if err := p.stopper.RunTask(bgCtx, func(bgCtx context.Context) {
+	if err := p.stopper.RunTask(bgCtx, "ts.poller: poll", func(bgCtx context.Context) {
 		data := p.source.GetTimeSeriesData()
 		if len(data) == 0 {
 			return

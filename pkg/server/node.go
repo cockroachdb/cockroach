@@ -522,7 +522,7 @@ func (n *Node) initStores(
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if len(bootstraps) > 0 {
-		if err := stopper.RunAsyncTask(ctx, func(ctx context.Context) {
+		if err := stopper.RunAsyncTask(ctx, "node.Node: bootstrapping stores", func(ctx context.Context) {
 			n.bootstrapStores(ctx, bootstraps, stopper)
 		}); err != nil {
 			return err
@@ -753,7 +753,7 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 // NodeStatusRecorder and persists them to the cockroach data store.
 func (n *Node) writeSummaries(ctx context.Context) error {
 	var err error
-	if runErr := n.stopper.RunTask(ctx, func(ctx context.Context) {
+	if runErr := n.stopper.RunTask(ctx, "node.Node: writing summary", func(ctx context.Context) {
 		err = n.recorder.WriteStatusSummary(ctx, n.storeCfg.DB)
 	}); runErr != nil {
 		err = runErr
@@ -828,7 +828,7 @@ func (n *Node) batchInternal(
 
 	var br *roachpb.BatchResponse
 
-	if err := n.stopper.RunTaskWithErr(ctx, func(ctx context.Context) error {
+	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
 		var finishSpan func(*roachpb.BatchResponse)
 		// Shadow ctx from the outer function. Written like this to pass the linter.
 		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx)
