@@ -1872,7 +1872,7 @@ func TestLeaseConcurrent(t *testing.T) {
 			ts := tc.Clock().Now()
 			pErrCh := make(chan *roachpb.Error, num)
 			for i := 0; i < num; i++ {
-				if err := stopper.RunAsyncTask(context.Background(), func(ctx context.Context) {
+				if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
 					tc.repl.mu.Lock()
 					status := tc.repl.leaseStatus(*tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
 					leaseCh := tc.repl.requestLeaseLocked(ctx, status)
@@ -2086,7 +2086,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 						// Asynchronously put a value to the range with blocking enabled.
 						cmd1Done := make(chan *roachpb.Error, 1)
-						if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+						if err := stopper.RunAsyncTask(context.Background(), "test", func(_ context.Context) {
 							args := readOrWriteArgs(key1, test.cmd1Read)
 							cmd1Done <- sendWithHeader(roachpb.Header{
 								UserPriority: blockingPriority,
@@ -2103,7 +2103,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 						// First, try a command for same key as cmd1 to verify whether it blocks.
 						cmd2Done := make(chan *roachpb.Error, 1)
-						if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+						if err := stopper.RunAsyncTask(context.Background(), "", func(_ context.Context) {
 							args := readOrWriteArgs(key1, test.cmd2Read)
 							cmd2Done <- sendWithHeader(roachpb.Header{}, args)
 						}); err != nil {
@@ -2112,7 +2112,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 						// Next, try read for a non-impacted key--should go through immediately.
 						cmd3Done := make(chan *roachpb.Error, 1)
-						if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+						if err := stopper.RunAsyncTask(context.Background(), "", func(_ context.Context) {
 							args := readOrWriteArgs(key2, true)
 							cmd3Done <- sendWithHeader(roachpb.Header{}, args)
 						}); err != nil {
@@ -2286,7 +2286,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	startBlockingCmd := func(ctx context.Context, keys ...roachpb.Key) <-chan *roachpb.Error {
 		done := make(chan *roachpb.Error)
 
-		if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+		if err := stopper.RunAsyncTask(context.Background(), "test", func(_ context.Context) {
 			ba := roachpb.BatchRequest{
 				Header: roachpb.Header{
 					UserPriority: 42,
