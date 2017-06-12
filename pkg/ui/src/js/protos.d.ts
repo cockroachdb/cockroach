@@ -15839,6 +15839,7 @@ export namespace cockroach {
             epoch?: Long;
             expiration?: cockroach.util.hlc.Timestamp$Properties;
             draining?: boolean;
+            decommission?: boolean;
         };
 
         /**
@@ -15880,6 +15881,12 @@ export namespace cockroach {
              * @type {boolean}
              */
             public draining: boolean;
+
+            /**
+             * Liveness decommission.
+             * @type {boolean}
+             */
+            public decommission: boolean;
 
             /**
              * Creates a new Liveness instance using the specified properties.
