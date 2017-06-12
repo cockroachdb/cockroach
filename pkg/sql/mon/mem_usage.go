@@ -203,6 +203,14 @@ type MemoryMonitor struct {
 	// upon Stop.
 	reserved BoundAccount
 
+	// limit specifies a hard limit on the number of bytes a monitor allows to
+	// be allocated. Note that this limit will not be observed if allocations
+	// hit constraints on the owner monitor. This is useful to limit allocations
+	// when an owner monitor has a larger capacity than wanted but should still
+	// keep track of allocations made through this monitor. Note that child
+	// monitors are affected by this limit.
+	limit int64
+
 	// pool specifies where to send requests to increase or decrease
 	// curBudget. May be nil for a standalone monitor.
 	pool *MemoryMonitor
@@ -256,16 +264,46 @@ func MakeMonitor(
 	increment int64,
 	noteworthy int64,
 ) MemoryMonitor {
+	return MakeMonitorWithLimit(name, math.MaxInt64, curCount, maxHist, increment, noteworthy)
+}
+
+// MakeMonitorWithLimit creates a new monitor with a limit local to this
+// monitor.
+func MakeMonitorWithLimit(
+	name string,
+	limit int64,
+	curCount *metric.Counter,
+	maxHist *metric.Histogram,
+	increment int64,
+	noteworthy int64,
+) MemoryMonitor {
 	if increment <= 0 {
 		increment = DefaultPoolAllocationSize
 	}
+	if limit <= 0 {
+		limit = math.MaxInt64
+	}
 	return MemoryMonitor{
 		name:                 name,
+		limit:                limit,
 		noteworthyUsageBytes: noteworthy,
 		curBytesCount:        curCount,
 		maxBytesHist:         maxHist,
 		poolAllocationSize:   increment,
 	}
+}
+
+// MakeMonitorInheritWithLimit creates a new monitor with a limit local to this
+// monitor with all other attributes inherited from the passed in monitor.
+func MakeMonitorInheritWithLimit(name string, limit int64, m *MemoryMonitor) MemoryMonitor {
+	return MakeMonitorWithLimit(
+		name,
+		limit,
+		m.curBytesCount,
+		m.maxBytesHist,
+		m.poolAllocationSize,
+		m.noteworthyUsageBytes,
+	)
 }
 
 // Start begins a monitoring region.
@@ -315,6 +353,7 @@ func MakeUnlimitedMonitor(
 	}
 	return MemoryMonitor{
 		name:                 name,
+		limit:                math.MaxInt64,
 		noteworthyUsageBytes: noteworthy,
 		curBytesCount:        curCount,
 		maxBytesHist:         maxHist,
@@ -512,6 +551,11 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 func (mm *MemoryMonitor) reserveMemory(ctx context.Context, x int64) error {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
+	// Check the local limit first.
+	if mm.mu.curAllocated+x > mm.limit {
+		return newMemoryError(mm.name, x, mm.limit)
+	}
+	// Check whether we need to request an increase of our budget.
 	if mm.mu.curAllocated > mm.mu.curBudget.curAllocated+mm.reserved.curAllocated-x {
 		if err := mm.increaseBudget(ctx, x); err != nil {
 			return err
