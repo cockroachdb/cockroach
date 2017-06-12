@@ -1791,7 +1791,7 @@ func MakeRocksDBSstFileWriter() (RocksDBSstFileWriter, error) {
 // is not greater than any previously added entry (according to the comparator
 // configured during writer creation). `Close` cannot have been called.
 func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
-	if fw == nil {
+	if fw.fw == nil {
 		return errors.New("cannot call Open on a closed writer")
 	}
 	fw.DataSize += int64(len(kv.Key.Key)) + int64(len(kv.Value))
@@ -1801,6 +1801,9 @@ func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
 // Finish finalizes the writer and returns the constructed file's contents. At
 // least one kv entry must have been added.
 func (fw *RocksDBSstFileWriter) Finish() ([]byte, error) {
+	if fw.fw == nil {
+		return nil, errors.New("cannot call Finish on a closed writer")
+	}
 	var contents C.DBString
 	if err := statusToError(C.DBSstFileWriterFinish(fw.fw, &contents)); err != nil {
 		return nil, err
