@@ -259,9 +259,9 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	}
 
 	var batcher importBatcher
-	resetBatcher := func() error {
+	makeBatcher := func() error {
 		if batcher != nil {
-			batcher.Close()
+			return errors.New("cannot overwrite a batcher")
 		}
 		if AddSSTableEnabled.Get() {
 			sstWriter, err := engine.MakeRocksDBSstFileWriter()
@@ -274,7 +274,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		batcher = &writeBatcher{}
 		return nil
 	}
-	if err := resetBatcher(); err != nil {
+	if err := makeBatcher(); err != nil {
 		return nil, err
 	}
 	defer batcher.Close()
@@ -322,10 +322,12 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 
 		if batcher.Size() > importBatchSize.Get() {
 			finishBatcher := batcher
+			batcher = nil
 			g.Go(func() error {
+				defer finishBatcher.Close()
 				return finishBatcher.Finish(gCtx, db)
 			})
-			if err := resetBatcher(); err != nil {
+			if err := makeBatcher(); err != nil {
 				return nil, err
 			}
 		}
@@ -336,6 +338,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	// Flush out the last batch.
 	if batcher.Size() > 0 {
 		g.Go(func() error {
+			defer batcher.Close()
 			return batcher.Finish(gCtx, db)
 		})
 	}
