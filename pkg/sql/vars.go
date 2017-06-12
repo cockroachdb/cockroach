@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -230,6 +231,11 @@ var varGen = map[string]sessionVar{
 				return origRepr
 			}
 			return p.session.Location.String()
+		},
+		Set: setTimeZone,
+		Reset: func(p *planner) error {
+			p.session.Location = time.UTC
+			return nil
 		},
 	},
 	`transaction isolation level`: {

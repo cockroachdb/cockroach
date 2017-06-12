@@ -33,7 +33,7 @@ import (
 )
 
 const strKey = "testing.str"
-const intKey = `testing."int"`
+const intKey = `testing.int`
 const durationKey = "testing.duration"
 const byteSizeKey = "testing.bytesize"
 const enumKey = "testing.enum"
@@ -196,8 +196,8 @@ func TestSettingsSetAndShow(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(t, rawDB)
 
 	// TODO(dt): add placeholder support to SET and SHOW.
-	setQ := "SET CLUSTER SETTING %s = %s"
-	showQ := "SHOW CLUSTER SETTING %s"
+	setQ := `SET CLUSTER SETTING "%s" = %s`
+	showQ := `SHOW CLUSTER SETTING "%s"`
 
 	db.Exec(fmt.Sprintf(setQ, strKey, "'via-set'"))
 	testutils.SucceedsSoon(t, func() error {
