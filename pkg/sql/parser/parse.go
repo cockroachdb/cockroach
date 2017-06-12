@@ -153,6 +153,33 @@ func ParseTableName(sql string) (*TableName, error) {
 	return rename.Name.Normalize()
 }
 
+// ParseType parses a column type.
+func ParseType(sql string) (CastTargetType, error) {
+	stmt, err := ParseOne(fmt.Sprintf("SELECT 1::%s", sql))
+	if err != nil {
+		return nil, err
+	}
+	sel, ok := stmt.(*Select)
+	if !ok {
+		return nil, errors.Errorf("expected an SELECT statement, but found %T", stmt)
+	}
+	clause, ok := sel.Select.(*SelectClause)
+	if !ok {
+		return nil, errors.Errorf("expected a SelectClause, but found %T", sel.Select)
+	}
+
+	if len(clause.Exprs) != 1 {
+		return nil, errors.Errorf("Expected 1 select expr, found %+v", clause.Exprs)
+	}
+
+	cast, ok := clause.Exprs[0].Expr.(*CastExpr)
+	if !ok {
+		return nil, errors.Errorf("expected a CastExpr, but found %T", clause.Exprs[0].Expr)
+	}
+
+	return cast.Type, nil
+}
+
 // parseExprs parses one or more sql expressions.
 func parseExprs(exprs []string) (Exprs, error) {
 	stmt, err := ParseOne(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")))

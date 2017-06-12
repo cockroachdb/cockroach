@@ -1468,7 +1468,7 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('interval'::regtype, -1)),
        (format_type('timestamp'::regtype, -1)),
        (format_type('timestamptz'::regtype, -1)),
-       (format_type('record'::regtype, -1))
+       (format_type('record'::regtype, -1)),
 ----
 anyelement
 boolean
