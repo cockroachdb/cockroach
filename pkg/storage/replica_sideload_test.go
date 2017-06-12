@@ -308,7 +308,7 @@ func setMockAddSSTable() (undo func()) {
 	// TODO(tschottdorf): this already does nontrivial work. Worth open-sourcing the relevant
 	// subparts of the real evalAddSSTable to make this test less likely to rot.
 	evalAddSSTable := func(
-		ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
+		ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
 	) (EvalResult, error) {
 		log.Event(ctx, "evaluated testing-only AddSSTable mock")
 		args := cArgs.Args.(*roachpb.AddSSTableRequest)
@@ -570,7 +570,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 				ss = tc.repl.raftMu.sideloaded
 			}
 			entries, err := entries(
-				ctx, tc.store.Engine(), tc.repl.RangeID, tc.store.raftEntryCache, ss, sideloadedIndex, sideloadedIndex+1, 1<<20,
+				ctx, tc.store.Engine(), tc.store.RaftEngine(), tc.repl.RangeID, tc.store.raftEntryCache, ss, sideloadedIndex, sideloadedIndex+1, 1<<20,
 			)
 			if err != nil {
 				t.Fatal(err)

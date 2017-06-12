@@ -29,7 +29,7 @@ func makeUnimplementedCommand(method roachpb.Method) Command {
 	return Command{
 		DeclareKeys: DefaultDeclareKeys,
 		Eval: func(
-			_ context.Context, _ engine.ReadWriter, _ CommandArgs, _ roachpb.Response,
+			_ context.Context, _, _ engine.ReadWriter, _ CommandArgs, _ roachpb.Response,
 		) (EvalResult, error) {
 			return EvalResult{}, errors.Errorf("unimplemented command: %s", method.String())
 		}}

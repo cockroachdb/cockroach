@@ -76,6 +76,11 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	defer engineStopper.Stop(context.TODO())
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(eng)
+	raftEng := eng
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		engineStopper.AddCloser(raftEng)
+	}
 	var rangeID2 roachpb.RangeID
 
 	get := func(store *storage.Store, rangeID roachpb.RangeID, key roachpb.Key) int64 {
@@ -102,7 +107,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	func() {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(context.TODO())
-		store := createTestStoreWithEngine(t, eng, true, storeCfg, stopper)
+		store := createTestStoreWithEngine(t, eng, raftEng, true, storeCfg, stopper)
 
 		increment := func(rangeID roachpb.RangeID, key roachpb.Key, value int64) (*roachpb.IncrementResponse, *roachpb.Error) {
 			args := incrementArgs(key, value)
@@ -139,7 +144,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Now create a new store with the same engine and make sure the expected data is present.
 	// We must use the same clock because a newly-created manual clock will be behind the one
 	// we wrote with and so will see stale MVCC data.
-	store := createTestStoreWithEngine(t, eng, false, storeCfg, engineStopper)
+	store := createTestStoreWithEngine(t, eng, raftEng, false, storeCfg, engineStopper)
 
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.
@@ -168,6 +173,11 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer eng.Close()
+	raftEng := eng
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		raftEng = engine.NewInMem(roachpb.Attributes{}, 10<<20)
+		defer raftEng.Close()
+	}
 
 	numIncrements := 0
 
@@ -184,7 +194,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 				}
 				return nil
 			}
-		store := createTestStoreWithEngine(t, eng, true, storeCfg, stopper)
+		store := createTestStoreWithEngine(t, eng, raftEng, true, storeCfg, stopper)
 
 		// Write a bytes value so the increment will fail.
 		putArgs := putArgs(keyA, []byte("asdf"))
@@ -208,7 +218,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	// Recover from the engine.
-	store := createTestStoreWithEngine(t, eng, false, storeCfg, stopper)
+	store := createTestStoreWithEngine(t, eng, raftEng, false, storeCfg, stopper)
 
 	// Issue a no-op write to lazily initialize raft on the range.
 	keyB := roachpb.Key("b")
@@ -581,6 +591,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 func TestRaftLogSizeAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)

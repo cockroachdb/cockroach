@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -62,6 +63,7 @@ const (
 
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
+	raftEngineSubDir                  = "raft"
 
 	productionSettingsWebpage = "please see https://www.cockroachlabs.com/docs/stable/recommended-production-settings.html for more details"
 )
@@ -435,12 +437,17 @@ func (e *Engines) Close() {
 }
 
 // CreateEngines creates Engines based on the specs in cfg.Stores.
-func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
-	engines := Engines(nil)
+func (cfg *Config) CreateEngines(ctx context.Context) (Engines, Engines, error) {
+	var engines Engines
 	defer engines.Close()
 
+	var raftEngines Engines
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		defer raftEngines.Close()
+	}
+
 	if cfg.enginesCreated {
-		return Engines{}, errors.Errorf("engines already created")
+		return Engines{}, Engines{}, errors.Errorf("engines already created")
 	}
 	cfg.enginesCreated = true
 
@@ -458,7 +465,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	}
 	openFileLimitPerStore, err := setOpenFileLimit(physicalStores)
 	if err != nil {
-		return Engines{}, err
+		return Engines{}, Engines{}, err
 	}
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
@@ -469,27 +476,41 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if spec.SizePercent > 0 {
 				sysMem, err := GetTotalMemory(ctx)
 				if err != nil {
-					return Engines{}, errors.Errorf("could not retrieve system memory")
+					return Engines{}, Engines{}, errors.Errorf("could not retrieve system memory")
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
+				return Engines{}, Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			details = append(details, fmt.Sprintf("store %d: in-memory, size %s",
 				i, humanizeutil.IBytes(sizeInBytes)))
-			engines = append(engines, engine.NewInMem(spec.Attributes, sizeInBytes))
+			var engSize int64
+			if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+				engSize = (9 * sizeInBytes) / 10
+			}
+			eng := engine.NewInMem(spec.Attributes, engSize)
+			raftEng := eng
+			if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+				// TODO(irfansharif): For now we specify initialize the raft
+				// engine with 10% of the total size specified, this can/should
+				// be determined via user specified flags.
+				raftEng = engine.NewInMem(spec.Attributes, sizeInBytes-engSize)
+			}
+
+			engines = append(engines, eng)
+			raftEngines = append(raftEngines, raftEng)
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
 				if err := fileSystemUsage.Get(spec.Path); err != nil {
-					return Engines{}, err
+					return Engines{}, Engines{}, err
 				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
+				return Engines{}, Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
@@ -503,20 +524,41 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				openFileLimitPerStore,
 			)
 			if err != nil {
-				return Engines{}, err
+				return Engines{}, Engines{}, err
 			}
+
+			raftEng := eng
+			if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+				// TODO(irfansharif): TBD on max open files. For now we also
+				// use the same shared cache. It's worth exploring if there's
+				// performance gain to be had using a dedicated cache instead.
+				raftEng, err = engine.NewRocksDB(
+					spec.Attributes,
+					filepath.Join(spec.Path, raftEngineSubDir),
+					cache,
+					sizeInBytes,
+					engine.DefaultMaxOpenFiles,
+				)
+				if err != nil {
+					return Engines{}, Engines{}, err
+				}
+			}
+
 			engines = append(engines, eng)
+			raftEngines = append(raftEngines, raftEng)
 		}
 	}
 
-	log.Infof(ctx, "%d storage engine%s initialized",
+	log.Infof(ctx, "%d storage {raft,}engine%s initialized",
 		len(engines), util.Pluralize(int64(len(engines))))
 	for _, s := range details {
 		log.Info(ctx, s)
 	}
 	enginesCopy := engines
 	engines = nil
-	return enginesCopy, nil
+	raftEnginesCopy := raftEngines
+	raftEngines = nil
+	return enginesCopy, raftEnginesCopy, nil
 }
 
 // InitNode parses node attributes and initializes the gossip bootstrap

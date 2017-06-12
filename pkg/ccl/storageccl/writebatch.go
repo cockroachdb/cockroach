@@ -33,7 +33,7 @@ func init() {
 // data in the affected keyrange is first cleared (not tombstoned), which makes
 // this command idempotent.
 func evalWriteBatch(
-	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, _ roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs storage.CommandArgs, _ roachpb.Response,
 ) (storage.EvalResult, error) {
 
 	args := cArgs.Args.(*roachpb.WriteBatchRequest)

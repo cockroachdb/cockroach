@@ -1225,6 +1225,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 // split, so it still has a conflicting range.
 func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip()
 	runSetupSplitSnapshotRace(t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
 		// Bring the right range up first.
 		for i := 3; i <= 5; i++ {
