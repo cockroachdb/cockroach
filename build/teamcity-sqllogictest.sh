@@ -11,7 +11,7 @@ export BUILDER_HIDE_GOPATH_SRC=0
 
 for config in default distsql; do
     build/builder.sh env \
-        make test TESTFLAGS="-v -bigtest -config ${config}" TESTTIMEOUT='24h' PKG='./pkg/sql' TESTS='^TestLogic$$' 2>&1 \
+        make test TESTFLAGS="-v -bigtest -config ${config}" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestLogic$$' 2>&1 \
         | tee "artifacts/${config}.log" \
         | go-test-teamcity
 done
