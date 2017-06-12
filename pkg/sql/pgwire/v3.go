@@ -413,9 +413,7 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 				return err
 			}
 		}
-		if c.doNotSendReadyForQuery {
-			c.doNotSendReadyForQuery = false
-		}
+		c.doNotSendReadyForQuery = false
 		typ, n, err := c.readBuf.readTypedMsg(c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
