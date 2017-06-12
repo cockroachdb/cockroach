@@ -16,16 +16,16 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
-	"html/template"
-	"net/http"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -33,9 +33,9 @@ import (
 )
 
 const (
-	// The preceding space allows for simple string concatenations on classes.
-	debugNodesClassHeader        = " header"
-	debugNodesClassHeaderWarning = " warning"
+	debugClassCellLeftHeader = "left-header"
+	debugClassCellShort      = "short"
+	debugClassWarning        = "warning"
 )
 
 // This specifies the order in which these values are displayed.
@@ -82,51 +82,55 @@ var debugNodesHeaders = []struct {
 	debugNodesHeaderUpdatedAt:    {"Updated at", false},
 }
 
-// Returns an HTML page displaying information about nodes status.
-func (s *statusServer) handleDebugNodes(w http.ResponseWriter, r *http.Request) {
-	ctx := s.AnnotateCtx(r.Context())
-	w.Header().Add("Content-type", "text/html")
+func (s *statusServer) DebugNodes(
+	ctx context.Context, req *serverpb.DebugNodesRequest,
+) (*serverpb.DebugNodesResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 
-	nodeIDsString := r.URL.Query().Get("node_ids")
+	response := &serverpb.DebugNodesResponse{}
 	requestedNodeIDs := make(map[roachpb.NodeID]struct{})
-
-	var data debugNodes
-	if len(nodeIDsString) > 0 {
-		var nodeFilter bytes.Buffer
-		nodeFilter.WriteString("Only nodes: ")
-		for i, nodeIDString := range strings.Split(nodeIDsString, ",") {
+	if len(req.NodeIDs) > 0 {
+		for _, nodeIDString := range strings.Split(req.NodeIDs, ",") {
 			nodeID, _, err := s.parseNodeID(nodeIDString)
 			if err != nil {
-				http.Error(w, errors.Wrapf(err,
+				return nil, grpc.Errorf(codes.InvalidArgument, errors.Wrapf(err,
 					"could not parse node_ids parameter, it must be a comma separated list of node ids: %s",
-					nodeIDsString,
-				).Error(), http.StatusBadRequest)
-				return
+					req.NodeIDs,
+				).Error())
 			}
 			requestedNodeIDs[nodeID] = struct{}{}
-			if i > 0 {
-				nodeFilter.WriteString(",")
-			}
-			nodeFilter.WriteString(nodeID.String())
 		}
-		data.Filters = append(data.Filters, nodeFilter.String())
+		var requestedNodeIDValues []roachpb.NodeID
+		for requestedNodeID := range requestedNodeIDs {
+			requestedNodeIDValues = append(requestedNodeIDValues, requestedNodeID)
+		}
+		sort.Slice(requestedNodeIDValues, func(i, j int) bool {
+			return requestedNodeIDValues[i] < requestedNodeIDValues[j]
+		})
+		requestedNodeIDStrings := make([]string, len(requestedNodeIDValues))
+		for i, requestedNodeID := range requestedNodeIDValues {
+			requestedNodeIDStrings[i] = fmt.Sprintf("n%d", requestedNodeID)
+		}
+		response.Filters = []string{fmt.Sprintf("only nodes: %s", strings.Join(requestedNodeIDStrings, ","))}
 	}
-	localityString := r.URL.Query().Get("locality")
 	var localityRegex *regexp.Regexp
-	if len(localityString) > 0 {
+	if len(req.Locality) > 0 {
 		var err error
-		localityRegex, err = regexp.Compile(localityString)
+		localityRegex, err = regexp.Compile(req.Locality)
 		if err != nil {
-			http.Error(w, errors.Wrapf(err, "could not compile regex for locality parameter: %s",
-				localityString).Error(), http.StatusBadRequest)
+			return nil, grpc.Errorf(codes.InvalidArgument, errors.Wrapf(err,
+				"could not compile regex for locality parameter: %s",
+				req.Locality,
+			).Error())
 		}
-		data.Filters = append(data.Filters, fmt.Sprintf("Locality Regex: %s", localityString))
+		response.Filters = append(response.Filters,
+			fmt.Sprintf("locality regex: %s", localityRegex.String()))
 	}
 
 	resp, err := s.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
-		http.Error(w, "could not retrieve node statuses", http.StatusInternalServerError)
-		return
+		return nil, grpc.Errorf(codes.Internal,
+			errors.Wrapf(err, "could not retrieve node statuses").Error())
 	}
 
 	var mostRecentUpdatedAt time.Time
@@ -154,6 +158,7 @@ func (s *statusServer) handleDebugNodes(w http.ResponseWriter, r *http.Request) 
 				continue
 			}
 		}
+
 		nodeIDs = append(nodeIDs, nodeIDItem{
 			id:       nodeStatus.Desc.NodeID,
 			locality: nodeStatus.Desc.Locality.String(),
@@ -179,19 +184,19 @@ func (s *statusServer) handleDebugNodes(w http.ResponseWriter, r *http.Request) 
 	})
 
 	// Add the headers.
-	data.Data = make([][]*debugOutput, len(debugNodesHeaders))
+	response.Rows = make([]serverpb.DebugRow, len(debugNodesHeaders))
 	for i, header := range debugNodesHeaders {
-		data.Data[i] = append(data.Data[i], &debugOutput{
-			Title: header.title,
-			Value: header.title,
-			Class: debugNodesClassHeader,
+		response.Rows[i].Cells = append(response.Rows[i].Cells, serverpb.DebugCell{
+			Title:   header.title,
+			Values:  []string{header.title},
+			Classes: []string{debugClassCellLeftHeader, debugClassCellShort},
 		})
 	}
 
 	addOutputWithTitle := func(i int, value, title string) {
-		data.Data[i] = append(data.Data[i], &debugOutput{
-			Title: title,
-			Value: value,
+		response.Rows[i].Cells = append(response.Rows[i].Cells, serverpb.DebugCell{
+			Title:  title,
+			Values: []string{value},
 		})
 	}
 
@@ -200,7 +205,7 @@ func (s *statusServer) handleDebugNodes(w http.ResponseWriter, r *http.Request) 
 	}
 
 	addOutputs := func(i int, values []string) {
-		data.Data[i] = append(data.Data[i], &debugOutput{
+		response.Rows[i].Cells = append(response.Rows[i].Cells, serverpb.DebugCell{
 			Title:  strings.Join(values, "\n"),
 			Values: values,
 		})
@@ -213,15 +218,20 @@ func (s *statusServer) handleDebugNodes(w http.ResponseWriter, r *http.Request) 
 		}
 		nodeStatus, ok := nodeStatuses[nodeID]
 		if !ok {
-			data.Failures = append(data.Failures,
-				fmt.Sprintf("no node status available for n%d", nodeID))
+			response.Failures = append(response.Failures, serverpb.DebugFailure{
+				NodeID:       nodeID,
+				ErrorMessage: "no node status available",
+			})
 			continue
 		}
 		addOutput(debugNodesHeaderNode, fmt.Sprintf("n%d", nodeID))
 		addOutput(debugNodesHeaderAddress, nodeStatus.Desc.Address.String())
 		netAddr, err := nodeStatus.Desc.Address.Resolve()
 		if err != nil {
-			data.Failures = append(data.Failures, fmt.Sprintf("could not resolve ip for n%d", nodeID))
+			response.Failures = append(response.Failures, serverpb.DebugFailure{
+				NodeID:       nodeID,
+				ErrorMessage: "could not resolve ip",
+			})
 			addOutput(debugNodesHeaderIP, "")
 		} else {
 			addOutput(debugNodesHeaderIP, netAddr.String())
@@ -249,158 +259,14 @@ func (s *statusServer) handleDebugNodes(w http.ResponseWriter, r *http.Request) 
 		if !header.check {
 			continue
 		}
-		for j := 2; j < len(data.Data[i]); j++ {
-			if data.Data[i][1].Title != data.Data[i][j].Title {
-				data.Data[i][0].Class += debugNodesClassHeaderWarning
+		for j := 2; j < len(response.Rows[i].Cells); j++ {
+			if response.Rows[i].Cells[1].Title != response.Rows[i].Cells[j].Title {
+				response.Rows[i].Cells[0].Classes = append(response.Rows[i].Cells[0].Classes,
+					debugClassWarning)
 				break
 			}
 		}
 	}
 
-	t, err := template.New("webpage").Parse(debugNodesTemplate)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := t.Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	return response, nil
 }
-
-type debugNodes struct {
-	Failures []string
-	Data     [][]*debugOutput
-	Filters  []string
-}
-
-const debugNodesTemplate = `
-<!DOCTYPE html>
-<HTML>
-  <HEAD>
-  	<META CHARSET="UTF-8"/>
-    <TITLE>Node Diagnostics</TITLE>
-    <STYLE>
-      body {
-        font-family: "Helvetica Neue", Helvetica, Arial;
-        font-size: 12px;
-        line-height: 20px;
-        font-weight: 400;
-        color: #3b3b3b;
-        -webkit-font-smoothing: antialiased;
-        background-color: #e4e4e4;
-      }
-      .wrapper {
-        margin: 0 auto;
-        padding: 0 40px;
-      }
-      .table {
-        margin: 0 0 40px 0;
-        display: table;
-      }
-      .row {
-        display: table-row;
-        background-color: white;
-      }
-      .cell {
-        padding: 1px 10px;
-        display: table-cell;
-        height: 20px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 200px;
-        border-width: 1px 1px 0 0;
-        border-color: rgba(0, 0, 0, 0.1);
-        border-style: solid;
-      }
-      .cell.header{
-        font-weight: 900;
-        color: #ffffff;
-        background-color: #2980b9;
-        text-overflow: clip;
-        width: 1px;
-        text-align: right;
-      }
-      .cell.header.warning{
-        color: yellow;
-      }
-      .list-table {
-        margin: 0 0 40px 0;
-        display: table;
-      }
-      .list-row {
-        display: table-row;
-        background-color: white;
-      }
-      .list-cell {
-        padding: 6px 12px;
-        display: table-cell;
-        height: 20px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        border-width: 1px 1px 0 0;
-        border-color: rgba(0, 0, 0, 0.1);
-        border-style: solid;
-      }
-      .list-row:first-of-type .list-cell {
-        font-weight: 900;
-        color: white;
-        border: none;
-      }
-      .failure-cell {
-        padding: 6px 12px;
-        display: table-cell;
-        height: 20px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        border-width: 1px 1px 0 0;
-        border-color: rgba(0, 0, 0, 0.1);
-        border-style: solid;
-        font-weight: 900;
-        color: black;
-        background-color: white;
-      }
-    </STYLE>
-  </HEAD>
-  <BODY>
-    <DIV CLASS="wrapper">
-      <H1>Node Diagnostics Page</H1>
-      {{- if $.Filters}}
-        <H2>Filters</H2>
-        {{- range $_, $filter := $.Filters}}
-          <DIV>• {{$filter}}</DIV>
-        {{- end}}
-      {{- end}}
-      <H2>Nodes</H2>
-      <DIV CLASS="table">
-        {{- range $_, $row := $.Data}}
-          <DIV CLASS="row">
-            {{- range $_, $cell := $row}}
-              <DIV CLASS="cell {{$cell.Class}}" TITLE="{{$cell.Title}}">
-                {{- if $cell.Values}}
-                  {{- range $_, $value := $cell.Values}}
-                    {{$value}}<BR/>
-                  {{- end}}
-                {{- else}}
-                  {{$cell.Value}}
-                {{- end}}
-              </DIV>
-            {{- end}}
-          </DIV>
-        {{- end}}
-      </DIV>
-      {{- if $.Failures }}
-        <H2>Failures</H2>
-        <DIV CLASS="table">
-          {{- range $_, $f := $.Failures}}
-            <DIV CLASS="row">
-              <DIV CLASS="failure-cell">{{$f}}</DIV>
-            </DIV>
-          {{- end}}
-        </DIV>
-      {{- end}}
-    </DIV>
-  </BODY>
-</HTML>
-`

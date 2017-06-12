@@ -77,10 +77,6 @@ const (
 	// information about network connections.
 	networkDebugEndpoint = "/debug/network"
 
-	// nodesDebugEndpoint exposes an html page with a list of active nodes
-	// and their statuses.
-	nodesDebugEndpoint = "/debug/nodes"
-
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
 

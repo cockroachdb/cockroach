@@ -56,6 +56,9 @@ export type QueryPlanResponseMessage = protos.cockroach.server.serverpb.QueryPla
 export type ProblemRangesRequestMessage = protos.cockroach.server.serverpb.ProblemRangesRequest;
 export type ProblemRangesResponseMessage = protos.cockroach.server.serverpb.ProblemRangesResponse;
 
+export type DebugNodesRequestMessage = protos.cockroach.server.serverpb.DebugNodesRequest;
+export type DebugNodesResponseMessage = protos.cockroach.server.serverpb.DebugNodesResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -223,4 +226,19 @@ export function getQueryPlan(req: QueryPlanRequestMessage, timeout?: moment.Dura
 export function getProblemRanges(req: ProblemRangesRequestMessage, timeout?: moment.Duration): Promise<ProblemRangesResponseMessage> {
   const query = (!_.isEmpty(req.node_id)) ? `?node_id=${req.node_id}` : "";
   return timeoutFetch(serverpb.ProblemRangesResponse, `${STATUS_PREFIX}/problemranges${query}`, null, timeout);
+}
+
+// getDebugNodes returns information needed by the nodes debug page.
+export function getDebugNodes(req: DebugNodesRequestMessage, timeout?: moment.Duration): Promise<DebugNodesResponseMessage> {
+  let query = "";
+  if (!_.isEmpty(req.node_ids)) {
+    query += `node_ids=${req.node_ids}`;
+  }
+  if (!_.isEmpty(req.locality)) {
+    if (!_.isEmpty(query)) {
+      query += "&";
+    }
+    query += `locality=${req.locality}`;
+  }
+  return timeoutFetch(serverpb.DebugNodesResponse, `${STATUS_PREFIX}/debug/nodes?${query}`, null, timeout);
 }
