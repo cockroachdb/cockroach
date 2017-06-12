@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -70,6 +71,12 @@ const Version = 4
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
 const MinAcceptedVersion = 4
+
+var distSQLUseLocalStorage = settings.RegisterBoolSetting(
+	"sql.defaults.distsql.localstorage",
+	"set to true to enable use of disk for larger distributed sql queries",
+	true,
+)
 
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 10*1024)
 

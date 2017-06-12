@@ -79,7 +79,7 @@ type hashJoiner struct {
 	// We read a portion of both streams, in the hope that one is small. One of
 	// the containers will contain the entire "stored" stream, the other just the
 	// start of the other stream.
-	rows [2]rowContainer
+	rows [2]memRowContainer
 
 	// storedSide is set by the initial buffering phase and indicates which stream
 	// we store fully and build the hashtable from.

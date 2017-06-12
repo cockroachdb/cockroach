@@ -27,10 +27,52 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// rowContainer is the wrapper around sqlbase.RowContainer that provides more
+// sortableRowContainer is a container used to store rows and optionally sort
+// these.
+type sortableRowContainer interface {
+	AddRow(context.Context, sqlbase.EncDatumRow) error
+	// Sort sorts the rows according to an ordering specified at initialization.
+	Sort()
+	// NewIterator returns a rowIterator that can be used to iterate over
+	// the rows.
+	NewIterator(context.Context) rowIterator
+
+	// Close frees up resources held by the sortableRowContainer.
+	Close(context.Context)
+}
+
+// rowIterator is a simple iterator used to iterate over sqlbase.EncDatumRows.
+// Example use:
+// 	var i rowIterator
+// 	for i.Rewind(); i.Valid(); i.Next() {
+//		row, err := i.Row()
+//		if err != nil {
+//			// Handle error.
+//		}
+//		// Do something.
+// 	}
+//
+type rowIterator interface {
+	// Rewind seeks to the first row.
+	Rewind()
+	// Valid must be called after any call to Rewind() or Next(). It returns
+	// true if the iterator points to a valid row and false if the iterator has
+	// moved past the last row.
+	Valid() bool
+	// Next advances the iterator to the next row in the iteration.
+	Next()
+	// Row returns the current row. The returned row is only valid until the
+	// next call to Rewind() or Next().
+	Row() (sqlbase.EncDatumRow, error)
+
+	// Close frees up resources held by the iterator.
+	Close()
+}
+
+// memRowContainer is the wrapper around sqlbase.RowContainer that provides more
 // functionality, especially around converting to/from EncDatumRows and
 // facilitating sorting.
-type rowContainer struct {
+type memRowContainer struct {
 	sqlbase.RowContainer
 	types         []sqlbase.ColumnType
 	invertSorting bool // Inverts the sorting predicate.
@@ -43,13 +85,14 @@ type rowContainer struct {
 	datumAlloc sqlbase.DatumAlloc
 }
 
-var _ heap.Interface = &rowContainer{}
+var _ heap.Interface = &memRowContainer{}
+var _ sortableRowContainer = &memRowContainer{}
 
 func makeRowContainer(
 	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *parser.EvalContext,
-) rowContainer {
+) memRowContainer {
 	acc := evalCtx.Mon.MakeBoundAccount()
-	return rowContainer{
+	return memRowContainer{
 		RowContainer:  sqlbase.MakeRowContainer(acc, sqlbase.ColTypeInfoFromColTypes(types), 0),
 		types:         types,
 		ordering:      ordering,
@@ -60,7 +103,7 @@ func makeRowContainer(
 }
 
 // Less is part of heap.Interface and is only meant to be used internally.
-func (sv *rowContainer) Less(i, j int) bool {
+func (sv *memRowContainer) Less(i, j int) bool {
 	cmp := sqlbase.CompareDatums(sv.ordering, sv.evalCtx, sv.At(i), sv.At(j))
 	if sv.invertSorting {
 		cmp = -cmp
@@ -70,7 +113,7 @@ func (sv *rowContainer) Less(i, j int) bool {
 
 // EncRow returns the idx-th row as an EncDatumRow. The slice itself is reused
 // so it is only valid until the next call to EncRow.
-func (sv *rowContainer) EncRow(idx int) sqlbase.EncDatumRow {
+func (sv *memRowContainer) EncRow(idx int) sqlbase.EncDatumRow {
 	datums := sv.At(idx)
 	for i, d := range datums {
 		sv.scratchEncRow[i] = sqlbase.DatumToEncDatum(sv.types[i], d)
@@ -79,7 +122,7 @@ func (sv *rowContainer) EncRow(idx int) sqlbase.EncDatumRow {
 }
 
 // AddRow adds a row to the container.
-func (sv *rowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (sv *memRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	if len(row) != len(sv.types) {
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(sv.types))
 	}
@@ -94,20 +137,20 @@ func (sv *rowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) err
 	return err
 }
 
-func (sv *rowContainer) Sort() {
+func (sv *memRowContainer) Sort() {
 	sv.invertSorting = false
 	sort.Sort(sv)
 }
 
 // Push is part of heap.Interface.
-func (sv *rowContainer) Push(_ interface{}) { panic("unimplemented") }
+func (sv *memRowContainer) Push(_ interface{}) { panic("unimplemented") }
 
 // Pop is part of heap.Interface.
-func (sv *rowContainer) Pop() interface{} { panic("unimplemented") }
+func (sv *memRowContainer) Pop() interface{} { panic("unimplemented") }
 
 // MaybeReplaceMax replaces the maximum element with the given row, if it is smaller.
 // Assumes InitMaxHeap was called.
-func (sv *rowContainer) MaybeReplaceMax(row sqlbase.EncDatumRow) error {
+func (sv *memRowContainer) MaybeReplaceMax(row sqlbase.EncDatumRow) error {
 	max := sv.At(0)
 	cmp, err := row.CompareToDatums(&sv.datumAlloc, sv.ordering, sv.evalCtx, max)
 	if err != nil {
@@ -127,7 +170,45 @@ func (sv *rowContainer) MaybeReplaceMax(row sqlbase.EncDatumRow) error {
 }
 
 // InitMaxHeap rearranges the rows in the rowContainer into a Max-Heap.
-func (sv *rowContainer) InitMaxHeap() {
+func (sv *memRowContainer) InitMaxHeap() {
 	sv.invertSorting = true
 	heap.Init(sv)
 }
+
+// memRowIterator is a rowIterator that iterates over a memRowContainer. This
+// iterator doesn't iterate over a snapshot of memRowContainer and deletes rows
+// as soon as they are iterated over to free up memory eagerly.
+type memRowIterator struct {
+	*memRowContainer
+}
+
+var _ rowIterator = memRowIterator{}
+
+// NewIterator returns an iterator that can be used to iterate over a
+// memRowContainer. Note that this iterator doesn't iterate over a snapshot
+// of memRowContainer and that it deletes rows as soon as they are iterated
+// over.
+func (sv *memRowContainer) NewIterator(_ context.Context) rowIterator {
+	return memRowIterator{memRowContainer: sv}
+}
+
+// Rewind implements the rowIterator interface.
+func (i memRowIterator) Rewind() {}
+
+// Valid implements the rowIterator interface.
+func (i memRowIterator) Valid() bool {
+	return i.Len() > 0
+}
+
+// Next implements the rowIterator interface.
+func (i memRowIterator) Next() {
+	i.PopFirst()
+}
+
+// Row implements the rowIterator interface.
+func (i memRowIterator) Row() (sqlbase.EncDatumRow, error) {
+	return i.EncRow(0), nil
+}
+
+// Close implements the rowIterator interface.
+func (i memRowIterator) Close() {}
