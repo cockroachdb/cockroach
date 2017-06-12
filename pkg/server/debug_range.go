@@ -249,10 +249,9 @@ func (r rangeInfoSlice) Less(i, j int) bool {
 }
 
 type debugOutput struct {
-	Class  string
-	Title  string
-	Value  string
-	Values []string
+	Class string
+	Title string
+	Value string
 }
 
 type debugLeaseDetail struct {

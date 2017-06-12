@@ -75,7 +75,12 @@
 		SpanStatsRequest
 		SpanStatsResponse
 		ProblemRangesRequest
+		DebugFailure
 		ProblemRangesResponse
+		DebugCell
+		DebugRow
+		DebugNodesRequest
+		DebugNodesResponse
 		PrettySpan
 */
 package serverpb
