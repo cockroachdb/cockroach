@@ -2334,7 +2334,7 @@ DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file) {
   // the option to false avoids this codepath during development. #16345.
   ingest_options.snapshot_consistency = false;
   ingest_options.allow_global_seqno = true;
-  ingest_options.allow_blocking_flush = false;
+  ingest_options.allow_blocking_flush = true;
   rocksdb::Status status = db->rep->IngestExternalFile(paths, ingest_options);
   if (!status.ok()) {
     return ToDBStatus(status);
