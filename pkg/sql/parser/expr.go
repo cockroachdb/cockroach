@@ -1202,7 +1202,7 @@ type CollateExpr struct {
 func (node *CollateExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	exprFmtWithParen(buf, f, node.Expr)
 	buf.WriteString(" COLLATE ")
-	encodeSQLIdent(buf, node.Locale)
+	encodeSQLIdent(buf, node.Locale, FmtSimple)
 }
 
 func (node *AliasedTableExpr) String() string { return AsString(node) }

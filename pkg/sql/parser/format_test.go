@@ -93,6 +93,11 @@ func TestFormatStatement(t *testing.T) {
 			`CREATE DATABASE foo TEMPLATE = 'bar,baz'`},
 		{`CREATE DATABASE foo TEMPLATE = 'bar{baz}'`, FmtBareStrings,
 			`CREATE DATABASE foo TEMPLATE = 'bar{baz}'`},
+
+		{`SET "time zone" = UTC`, FmtSimple,
+			`SET "time zone" = 'utc'`},
+		{`SET "time zone" = UTC`, FmtBareIdentifiers,
+			`SET time zone = 'utc'`},
 	}
 
 	for i, test := range testData {
