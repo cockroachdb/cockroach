@@ -167,12 +167,27 @@ BOOTSTRAP_TARGET := $(LOCAL_BIN)/.bootstrap
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/glide.lock
+$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
 	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/{metacheck,ncpus,returncheck} \
-	$$($(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build)
+		"./vendor/github.com/client9/misspell/cmd/misspell" \
+		"./vendor/github.com/cockroachdb/crlfmt" \
+		"./vendor/github.com/cockroachdb/stress" \
+		"./vendor/github.com/golang/lint/golint" \
+		"./vendor/github.com/google/pprof" \
+		"./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway" \
+		"./vendor/github.com/jteeuwen/go-bindata/go-bindata" \
+		"./vendor/github.com/kisielk/errcheck" \
+		"./vendor/github.com/mattn/goveralls" \
+		"./vendor/github.com/mdempsky/unconvert" \
+		"./vendor/github.com/mibk/dupl" \
+		"./vendor/github.com/wadey/gocovmerge" \
+		"./vendor/golang.org/x/perf/cmd/benchstat" \
+		"./vendor/golang.org/x/tools/cmd/goimports" \
+		"./vendor/golang.org/x/tools/cmd/goyacc" \
+		"./vendor/golang.org/x/tools/cmd/stringer"
 	touch $@
 
 # Make doesn't expose a list of the variables declared in a given file, so we

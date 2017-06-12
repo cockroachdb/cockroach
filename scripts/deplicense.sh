@@ -95,7 +95,7 @@ function inspect() {
   echo "unable to determine license"
 }
 
-pkgs=$(grep '^- name: ' glide.lock | cut -d' ' -f3)
+pkgs=$(grep '^- name: ' Gopkg.lock | cut -d' ' -f3)
 
 for pkg in ${pkgs}; do
   info=$(inspect "vendor/${pkg}")
