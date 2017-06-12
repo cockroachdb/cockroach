@@ -94,13 +94,14 @@ func createTestStoreWithConfig(
 ) *storage.Store {
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
-	store := createTestStoreWithEngine(t,
-		eng,
-		true,
-		storeCfg,
-		stopper,
-	)
-	return store
+
+	var raftEng engine.Engine = eng
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		raftEng = engine.NewInMem(roachpb.Attributes{}, 10<<20)
+		stopper.AddCloser(raftEng)
+	}
+
+	return createTestStoreWithEngine(t, eng, raftEng, true, storeCfg, stopper)
 }
 
 // createTestStoreWithEngine creates a test store using the given engine and clock.
@@ -108,7 +109,7 @@ func createTestStoreWithConfig(
 // tests.
 func createTestStoreWithEngine(
 	t testing.TB,
-	eng engine.Engine,
+	eng, raftEng engine.Engine,
 	bootstrap bool,
 	storeCfg storage.StoreConfig,
 	stopper *stop.Stopper,
@@ -150,7 +151,7 @@ func createTestStoreWithEngine(
 	storeCfg.StorePool = storage.NewTestStorePool(storeCfg)
 	storeCfg.Transport = storage.NewDummyRaftTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
-	store := storage.NewStore(storeCfg, eng, nodeDesc)
+	store := storage.NewStore(storeCfg, eng, raftEng, nodeDesc)
 	if bootstrap {
 		if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 			t.Fatal(err)
@@ -203,6 +204,7 @@ type multiTestContext struct {
 	// use distinct clocks per store.
 	clocks      []*hlc.Clock
 	engines     []engine.Engine
+	raftEngines []engine.Engine
 	grpcServers []*grpc.Server
 	distSenders []*kv.DistSender
 	dbs         []*client.DB
@@ -213,6 +215,7 @@ type multiTestContext struct {
 	// 'stoppers' slice corresponds to the 'stores'.
 	transportStopper   *stop.Stopper
 	engineStoppers     []*stop.Stopper
+	raftEngineStoppers []*stop.Stopper
 	timeUntilStoreDead time.Duration
 
 	// The fields below may mutate at runtime so the pointers they contain are
@@ -341,6 +344,9 @@ func (m *multiTestContext) Stop() {
 		m.transportStopper.Stop(context.TODO())
 
 		for _, s := range m.engineStoppers {
+			s.Stop(context.TODO())
+		}
+		for _, s := range m.raftEngineStoppers {
 			s.Stop(context.TODO())
 		}
 		close(done)
@@ -687,15 +693,31 @@ func (m *multiTestContext) addStore(idx int) {
 		m.clocks = append(m.clocks, clock)
 	}
 	var eng engine.Engine
+	var raftEng engine.Engine
 	var needBootstrap bool
 	if len(m.engines) > idx {
 		eng = m.engines[idx]
+
+		raftEng = eng
+		if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+			raftEng = m.raftEngines[idx]
+		}
 	} else {
 		engineStopper := stop.NewStopper()
 		m.engineStoppers = append(m.engineStoppers, engineStopper)
 		eng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		engineStopper.AddCloser(eng)
 		m.engines = append(m.engines, eng)
+
+		raftEng = eng
+		if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+			raftEngineStopper := stop.NewStopper()
+			m.raftEngineStoppers = append(m.raftEngineStoppers, raftEngineStopper)
+			raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+			raftEngineStopper.AddCloser(raftEng)
+		}
+
+		m.raftEngines = append(m.raftEngines, raftEng)
 		needBootstrap = true
 	}
 	grpcServer := rpc.NewServer(m.rpcContext)
@@ -744,8 +766,7 @@ func (m *multiTestContext) addStore(idx int) {
 	cfg.DB = m.dbs[idx]
 	cfg.NodeLiveness = m.nodeLivenesses[idx]
 	cfg.StorePool = m.storePools[idx]
-
-	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
+	store := storage.NewStore(cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
 		if err := store.Bootstrap(roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
@@ -891,7 +912,7 @@ func (m *multiTestContext) restartStore(i int) {
 	cfg.DB = m.dbs[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
 	cfg.StorePool = m.storePools[i]
-	store := storage.NewStore(cfg, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
+	store := storage.NewStore(cfg, m.engines[i], m.raftEngines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
 	m.stores[i] = store
 
 	ctx := context.Background()
@@ -980,6 +1001,7 @@ func (m *multiTestContext) changeReplicasLocked(
 ) (roachpb.ReplicaID, error) {
 	ctx := context.TODO()
 	startKey := m.findStartKeyLocked(rangeID)
+	log.Infof(context.TODO(), "skey: %v", startKey)
 
 	// Perform a consistent read to get the updated range descriptor (as
 	// opposed to just going to one of the stores), to make sure we have
@@ -1338,7 +1360,7 @@ func verifyRecomputedStats(
 	if ms, err := storage.ComputeStatsForRange(d, eng, nowNanos); err != nil {
 		return err
 	} else if expMS != ms {
-		return fmt.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", expMS, ms)
+		return fmt.Errorf("expected range's stats to agree with recomputation, diff(expected, got): %s", pretty.Diff(expMS, ms))
 	}
 	return nil
 }

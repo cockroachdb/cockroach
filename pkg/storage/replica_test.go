@@ -122,6 +122,7 @@ type testContext struct {
 	rangeID       roachpb.RangeID
 	gossip        *gossip.Gossip
 	engine        engine.Engine
+	raftEngine    engine.Engine
 	manualClock   *hlc.ManualClock
 	bootstrapMode bootstrapMode
 }
@@ -149,10 +150,19 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		server := rpc.NewServer(rpcContext) // never started
 		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 	}
+
 	if tc.engine == nil {
 		tc.engine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 		stopper.AddCloser(tc.engine)
 	}
+	if tc.raftEngine == nil {
+		tc.raftEngine = tc.engine
+		if TransitioningRaftStorage || EnabledRaftStorage {
+			tc.raftEngine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"mem", "raft"}}, 1<<20)
+			stopper.AddCloser(tc.raftEngine)
+		}
+	}
+
 	if tc.transport == nil {
 		tc.transport = NewDummyRaftTransport()
 	}
@@ -166,7 +176,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		// store will be passed to the sender after it is created and bootstrapped.
 		sender := &testSender{}
 		cfg.DB = client.NewDB(sender, cfg.Clock)
-		tc.store = NewStore(cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
+		tc.store = NewStore(cfg, tc.engine, tc.raftEngine, &roachpb.NodeDescriptor{NodeID: 1})
 		if err := tc.store.Bootstrap(roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
@@ -198,6 +208,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 			if _, err := writeInitialState(
 				context.Background(),
 				tc.store.Engine(),
+				tc.store.RaftEngine(),
 				enginepb.MVCCStats{},
 				*testDesc,
 				raftpb.HardState{},
@@ -771,7 +782,7 @@ func TestReplicaLease(t *testing.T) {
 	for _, lease := range []roachpb.Lease{
 		{Start: one, Expiration: hlc.Timestamp{}},
 	} {
-		if _, err := evalRequestLease(context.Background(), tc.store.Engine(),
+		if _, err := evalRequestLease(context.Background(), tc.store.Engine(), nil,
 			CommandArgs{
 				EvalCtx: ReplicaEvalContext{tc.repl, nil},
 				Args: &roachpb.RequestLeaseRequest{
@@ -3934,7 +3945,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				var gr roachpb.GetResponse
 				if _, err := evalGet(
-					ctx, tc.engine, CommandArgs{
+					ctx, tc.engine, nil, CommandArgs{
 						Args: &roachpb.GetRequest{Span: roachpb.Span{
 							Key: keys.TransactionKey(txn.Key, *txn.ID),
 						}},
@@ -4625,20 +4636,20 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 
 	ctx := context.Background()
 	// Should not be able to push or resolve in a transaction.
-	if _, err := evalPushTxn(ctx, b, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := evalPushTxn(ctx, b, nil, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
 		t.Fatalf("transactional PushTxn returned unexpected error: %v", err)
 	}
-	if _, err := evalResolveIntent(ctx, b, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &ra}, &roachpb.ResolveIntentResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := evalResolveIntent(ctx, b, nil, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &ra}, &roachpb.ResolveIntentResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
 		t.Fatalf("transactional ResolveIntent returned unexpected error: %v", err)
 	}
-	if _, err := evalResolveIntentRange(ctx, b, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &rra}, &roachpb.ResolveIntentRangeResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := evalResolveIntentRange(ctx, b, nil, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &rra}, &roachpb.ResolveIntentRangeResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
 		t.Fatalf("transactional ResolveIntentRange returned unexpected error: %v", err)
 	}
 
 	// Should not get a transaction back from PushTxn. It used to erroneously
 	// return args.PusherTxn.
 	var reply roachpb.PushTxnResponse
-	if _, err := evalPushTxn(ctx, b, CommandArgs{Stats: &ms, Args: &pa}, &reply); err != nil {
+	if _, err := evalPushTxn(ctx, b, nil, CommandArgs{Stats: &ms, Args: &pa}, &reply); err != nil {
 		t.Fatal(err)
 	} else if reply.Txn != nil {
 		t.Fatalf("expected nil response txn, but got %s", reply.Txn)
@@ -6073,8 +6084,15 @@ func TestEntries(t *testing.T) {
 	repl.mu.Unlock()
 
 	// Case 24: add a gap to the indexes.
-	if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.Timestamp{}, nil); err != nil {
-		t.Fatal(err)
+	if DisabledRaftStorage || TransitioningRaftStorage {
+		if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.Timestamp{}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		if err := engine.MVCCDelete(context.Background(), tc.store.RaftEngine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.Timestamp{}, nil); err != nil {
+			t.Fatal(err)
+		}
 	}
 	repl.store.raftEntryCache.delEntries(rangeID, indexes[6], indexes[6]+1)
 
@@ -6398,7 +6416,7 @@ func TestComputeChecksumVersioning(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	if pct, _ := evalComputeChecksum(context.TODO(), nil,
+	if pct, _ := evalComputeChecksum(context.TODO(), nil, nil,
 		CommandArgs{Args: &roachpb.ComputeChecksumRequest{
 			ChecksumID: uuid.MakeV4(),
 			Version:    replicaChecksumVersion,
@@ -6407,7 +6425,7 @@ func TestComputeChecksumVersioning(t *testing.T) {
 		t.Error("right checksum version: expected post-commit trigger")
 	}
 
-	if pct, _ := evalComputeChecksum(context.TODO(), nil,
+	if pct, _ := evalComputeChecksum(context.TODO(), nil, nil,
 		CommandArgs{Args: &roachpb.ComputeChecksumRequest{
 			ChecksumID: uuid.MakeV4(),
 			Version:    replicaChecksumVersion + 1,
@@ -7256,7 +7274,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 				var resp roachpb.GCResponse
 
-				if _, err := evalGC(ctx, rw, CommandArgs{
+				if _, err := evalGC(ctx, rw, nil, CommandArgs{
 					Args: &gc,
 					EvalCtx: ReplicaEvalContext{
 						repl: &Replica{},
@@ -7444,8 +7462,11 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	ba.Add(&txnPut)
 	ba.Add(&txnPut)
 
-	batch, _, _, _, pErr := tc.repl.evaluateTxnWriteBatch(ctx, makeIDKey(), ba, nil)
+	batch, raftBatch, _, _, _, pErr := tc.repl.evaluateTxnWriteBatch(ctx, makeIDKey(), ba, nil)
 	defer batch.Close()
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		defer raftBatch.Close()
+	}
 	if pErr != nil {
 		t.Fatal(pErr)
 	}

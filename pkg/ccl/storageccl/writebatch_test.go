@@ -150,7 +150,7 @@ func TestWriteBatchMVCCStats(t *testing.T) {
 			ValCount:  10000,
 		},
 	}
-	if _, err := evalWriteBatch(ctx, e, cArgs, nil); err != nil {
+	if _, err := evalWriteBatch(ctx, e, nil, cArgs, nil); err != nil {
 		t.Fatalf("%+v", err)
 	}
 
@@ -167,7 +167,7 @@ func TestWriteBatchMVCCStats(t *testing.T) {
 	}
 
 	// Run the same WriteBatch command a second time to test the idempotence.
-	if _, err := evalWriteBatch(ctx, e, cArgs, nil); err != nil {
+	if _, err := evalWriteBatch(ctx, e, nil, cArgs, nil); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	if !reflect.DeepEqual(expectedStats, cArgs.Stats) {

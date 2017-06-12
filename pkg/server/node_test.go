@@ -61,7 +61,7 @@ import (
 // of engines. The server, clock and node are returned. If gossipBS is
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(
-	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
+	addr net.Addr, gossipBS net.Addr, t *testing.T,
 ) (*grpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
 	cfg := storage.TestStoreConfig(nil)
 
@@ -146,14 +146,14 @@ func createTestNode(
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
 func createAndStartTestNode(
 	addr net.Addr,
-	engines []engine.Engine,
+	engines, raftEngines []engine.Engine,
 	gossipBS net.Addr,
 	locality roachpb.Locality,
 	t *testing.T,
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	canBootstrap := gossipBS == nil
-	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, locality, canBootstrap); err != nil {
+	grpcServer, addr, _, node, stopper := createTestNode(addr, gossipBS, t)
+	if err := node.start(context.Background(), addr, engines, raftEngines, roachpb.Attributes{}, locality, canBootstrap); err != nil {
 		t.Fatal(err)
 	}
 	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
@@ -185,8 +185,13 @@ func TestBootstrapCluster(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
+	re := e
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		stopper.AddCloser(re)
+	}
 	if _, err := bootstrapCluster(
-		storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		storage.StoreConfig{}, []engine.Engine{e}, []engine.Engine{re}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -226,8 +231,12 @@ func TestBootstrapCluster(t *testing.T) {
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	re := e
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	}
 	if _, err := bootstrapCluster(
-		storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		storage.StoreConfig{}, []engine.Engine{e}, []engine.Engine{re}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -239,9 +248,20 @@ func TestBootstrapNewStore(t *testing.T) {
 		engine.NewInMem(roachpb.Attributes{}, 1<<20),
 	})
 	defer engines.Close()
+
+	raftEngines := engines
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		raftEngines = Engines([]engine.Engine{
+			re,
+			engine.NewInMem(roachpb.Attributes{}, 1<<20),
+			engine.NewInMem(roachpb.Attributes{}, 1<<20),
+		})
+		defer raftEngines.Close()
+	}
 	_, _, node, stopper := createAndStartTestNode(
 		util.TestAddr,
 		engines,
+		raftEngines,
 		util.TestAddr,
 		roachpb.Locality{},
 		t,
@@ -278,17 +298,26 @@ func TestNodeJoin(t *testing.T) {
 	defer engineStopper.Stop(context.TODO())
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(e)
+
+	re := e
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		engineStopper.AddCloser(re)
+	}
+
 	if _, err := bootstrapCluster(
-		storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		storage.StoreConfig{}, []engine.Engine{e}, []engine.Engine{re}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
+	raftEngines1 := []engine.Engine{re}
 	_, server1Addr, node1, stopper1 := createAndStartTestNode(
 		util.TestAddr,
 		engines1,
+		raftEngines1,
 		util.TestAddr,
 		roachpb.Locality{},
 		t,
@@ -298,10 +327,19 @@ func TestNodeJoin(t *testing.T) {
 	// Create a new node.
 	e2 := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(e2)
+
+	re2 := e2
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		re2 = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		engineStopper.AddCloser(re2)
+	}
+
 	engines2 := []engine.Engine{e2}
+	raftEngines2 := []engine.Engine{re2}
 	_, server2Addr, node2, stopper2 := createAndStartTestNode(
 		util.TestAddr,
 		engines2,
+		raftEngines2,
 		server1Addr,
 		roachpb.Locality{},
 		t,
@@ -345,10 +383,18 @@ func TestNodeJoinSelf(t *testing.T) {
 
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
+
+	re := e
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		defer re.Close()
+	}
+
 	engines := []engine.Engine{e}
-	_, addr, _, node, stopper := createTestNode(util.TestAddr, engines, util.TestAddr, t)
+	raftEngines := []engine.Engine{re}
+	_, addr, _, node, stopper := createTestNode(util.TestAddr, util.TestAddr, t)
 	defer stopper.Stop(context.TODO())
-	err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, roachpb.Locality{}, false)
+	err := node.start(context.Background(), addr, engines, raftEngines, roachpb.Attributes{}, roachpb.Locality{}, false)
 	if err != errCannotJoinSelf {
 		t.Fatalf("expected err %s; got %s", errCannotJoinSelf, err)
 	}
@@ -361,8 +407,13 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
+	re := e
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		defer re.Close()
+	}
 	if _, err := bootstrapCluster(
-		storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		storage.StoreConfig{}, []engine.Engine{e}, []engine.Engine{re}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -378,10 +429,11 @@ func TestCorruptedClusterID(t *testing.T) {
 	}
 
 	engines := []engine.Engine{e}
-	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
+	raftEngines := []engine.Engine{re}
+	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, nil, t)
 	stopper.Stop(context.TODO())
 	if err := node.start(
-		context.Background(), serverAddr, engines, roachpb.Attributes{}, roachpb.Locality{}, true,
+		context.Background(), serverAddr, engines, raftEngines, roachpb.Attributes{}, roachpb.Locality{}, true,
 	); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
@@ -691,14 +743,21 @@ func TestStartNodeWithLocality(t *testing.T) {
 	testLocalityWithNewNode := func(locality roachpb.Locality) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
+
+		re := e
+		if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+			re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+			defer re.Close()
+		}
 		if _, err := bootstrapCluster(
-			storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+			storage.StoreConfig{}, []engine.Engine{e}, []engine.Engine{re}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {
 			t.Fatal(err)
 		}
 		_, _, node, stopper := createAndStartTestNode(
 			util.TestAddr,
 			[]engine.Engine{e},
+			[]engine.Engine{re},
 			util.TestAddr,
 			locality,
 			t,

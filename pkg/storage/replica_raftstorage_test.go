@@ -127,6 +127,8 @@ func BenchmarkSerialPuts(b *testing.B) {
 
 			tc.engine = engine.NewTestRocksDB(fmt.Sprintf("BenchmarkSerialPuts_%d", valSize))
 			stopper.AddCloser(tc.engine)
+			tc.raftEngine = engine.NewTestRocksDB(fmt.Sprintf("BenchmarkSerialPuts_%d-raft", valSize))
+			stopper.AddCloser(tc.raftEngine)
 			tc.Start(b, stopper)
 
 			rep, err := tc.store.GetReplica(rangeID)

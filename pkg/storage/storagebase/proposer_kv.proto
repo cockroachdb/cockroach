@@ -105,13 +105,17 @@ message ReplicatedEvalResult {
   reserved 10001 to 10013;
 }
 
-// WriteBatch is the serialized representation of a RocksDB write
-// batch. A wrapper message is used so that the absence of the field
-// can be distinguished from a zero-length batch, and so structs
-// containing pointers to it can be compared with the == operator (we
-// rely on this in storage.EvalResult)
+// WriteBatch is the serialized representation of two RocksDB write batches.
+// This is used in the context of storage.EvalResult where we propose through
+// raft two write batches corresponding to the two RocksDB instances, the
+// dedicated raft engine and the original.
+// A wrapper message is used so that the absence of fields it can be
+// distinguished from a zero-length batch, and so structs containing pointers
+// to it can be compared with the == operator (we rely on this in
+// storage.EvalResult)
 message WriteBatch {
   optional bytes data = 1;
+  optional bytes raft_data = 2;
 }
 
 // RaftCommand is the message written to the raft log. It contains

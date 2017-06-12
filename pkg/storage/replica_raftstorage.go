@@ -60,8 +60,8 @@ var _ raft.Storage = (*replicaRaftStorage)(nil)
 // InitialState requires that r.mu is held.
 func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.mu.stateLoader.loadHardState(ctx, r.store.Engine())
 	// For uninitialized ranges, membership is unknown at this point.
+	hs, err := r.mu.stateLoader.loadHardState(ctx, r.store.RaftEngine())
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
@@ -80,8 +80,13 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
+	raftEngSnap := snap
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		raftEngSnap = r.store.NewRaftEngineSnapshot()
+		defer raftEngSnap.Close()
+	}
 	ctx := r.AnnotateCtx(context.TODO())
-	return entries(ctx, snap, r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
+	return entries(ctx, snap, raftEngSnap, r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
 // raftEntriesLocked requires that r.mu is held.
@@ -96,6 +101,7 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 func entries(
 	ctx context.Context,
 	e engine.Reader,
+	re engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
 	sideloaded sideloadStorage,
@@ -161,7 +167,7 @@ func entries(
 		return exceededMaxBytes, nil
 	}
 
-	if err := iterateEntries(ctx, e, rangeID, expectedIndex, hi, scanFunc); err != nil {
+	if err := iterateEntries(ctx, re, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, err
 	}
 	// Cache the fetched entries, if we may.
@@ -187,6 +193,7 @@ func entries(
 		}
 
 		// Was the missing index after the last index?
+		// TODO(irfansharif): Explore writing last index to raft engine.
 		lastIndex, err := loadLastIndex(ctx, e, rangeID)
 		if err != nil {
 			return nil, err
@@ -200,6 +207,8 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
+	// TODO(irfansharif): Explore writing truncated state to raft engine.
+	// Possibly separating out TruncatedState from ReplicaState.
 	ts, err := loadTruncatedState(ctx, e, rangeID)
 	if err != nil {
 		return nil, err
@@ -237,8 +246,13 @@ func iterateEntries(
 func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
+	raftEngSnap := snap
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		raftEngSnap = r.store.NewRaftEngineSnapshot()
+		defer raftEngSnap.Close()
+	}
 	ctx := r.AnnotateCtx(context.TODO())
-	return term(ctx, snap, r.RangeID, r.store.raftEntryCache, i)
+	return term(ctx, snap, raftEngSnap, r.RangeID, r.store.raftEntryCache, i)
 }
 
 // raftTermLocked requires that r.mu is held.
@@ -247,11 +261,15 @@ func (r *Replica) raftTermLocked(i uint64) (uint64, error) {
 }
 
 func term(
-	ctx context.Context, eng engine.Reader, rangeID roachpb.RangeID, eCache *raftEntryCache, i uint64,
+	ctx context.Context,
+	eng, raftEng engine.Reader,
+	rangeID roachpb.RangeID,
+	eCache *raftEntryCache,
+	i uint64,
 ) (uint64, error) {
 	// entries() accepts a `nil` sideloaded storage and will skip inlining of
 	// sideloaded entries. We only need the term, so this is what we do.
-	ents, err := entries(ctx, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, 0)
+	ents, err := entries(ctx, eng, raftEng, rangeID, eCache, nil /* sideloaded */, i, i+1, 0)
 	if err == raft.ErrCompacted {
 		ts, err := loadTruncatedState(ctx, eng, rangeID)
 		if err != nil {
@@ -369,6 +387,10 @@ func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSn
 	defer sp.Finish()
 	snap := r.store.NewSnapshot()
 	log.Eventf(ctx, "new engine snapshot for replica %s", r)
+	raftEngSnap := snap
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		raftEngSnap = r.store.NewRaftEngineSnapshot()
+	}
 
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
@@ -379,7 +401,7 @@ func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSn
 		return fn(r.raftMu.sideloaded)
 	}
 	snapData, err := snapshot(
-		ctx, snapType, snap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
+		ctx, snapType, snap, raftEngSnap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
 	)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %s", err)
@@ -395,8 +417,9 @@ type OutgoingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The Raft snapshot message to send. Contains SnapUUID as its data.
 	RaftSnap raftpb.Snapshot
-	// The RocksDB snapshot that will be streamed from.
-	EngineSnap engine.Reader
+	// The RocksDB snapshots that will be streamed from.
+	EngineSnap     engine.Reader
+	RaftEngineSnap engine.Reader
 	// The complete range iterator for the snapshot to stream.
 	Iter *ReplicaDataIterator
 	// The replica state within the snapshot.
@@ -413,6 +436,9 @@ type OutgoingSnapshot struct {
 func (s *OutgoingSnapshot) Close() {
 	s.Iter.Close()
 	s.EngineSnap.Close()
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		s.RaftEngineSnap.Close()
+	}
 }
 
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
@@ -432,7 +458,7 @@ type IncomingSnapshot struct {
 func snapshot(
 	ctx context.Context,
 	snapType string,
-	snap engine.Reader,
+	snap, raftEngSnap engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
 	withSideloaded func(func(sideloadStorage) error) error,
@@ -468,7 +494,7 @@ func snapshot(
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
 
-	term, err := term(ctx, snap, rangeID, eCache, appliedIndex)
+	term, err := term(ctx, snap, raftEngSnap, rangeID, eCache, appliedIndex)
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
@@ -490,6 +516,7 @@ func snapshot(
 		RaftEntryCache: eCache,
 		WithSideloaded: withSideloaded,
 		EngineSnap:     snap,
+		RaftEngineSnap: raftEngSnap,
 		Iter:           iter,
 		State:          state,
 		SnapUUID:       snapUUID,
@@ -515,7 +542,7 @@ func snapshot(
 // payloads in case the log tail is replaced.
 func (r *Replica) append(
 	ctx context.Context,
-	batch engine.ReadWriter,
+	batch, raftBatch engine.ReadWriter,
 	prevLastIndex uint64,
 	prevRaftLogSize int64,
 	entries []raftpb.Entry,
@@ -535,12 +562,27 @@ func (r *Replica) append(
 		value.InitChecksum(key)
 		var err error
 		if ent.Index > prevLastIndex {
-			err = engine.MVCCBlindPut(ctx, batch, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = engine.MVCCBlindPut(ctx, raftBatch, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		} else {
-			err = engine.MVCCPut(ctx, batch, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = engine.MVCCPut(ctx, raftBatch, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		}
 		if err != nil {
 			return 0, 0, err
+		}
+		if TransitioningRaftStorage {
+			var err error
+			if ent.Index > prevLastIndex {
+				// We pass in a nil MVCCStats so to not account for this delta
+				// in raftLogSize. In TransitioningRaftStorage mode log truncations
+				// are based entirely on the size of the raft log stored in the
+				// raft specific RocksDB instance.
+				err = engine.MVCCBlindPut(ctx, batch, nil, key, hlc.Timestamp{}, value, nil /* txn */)
+			} else {
+				err = engine.MVCCPut(ctx, batch, nil, key, hlc.Timestamp{}, value, nil /* txn */)
+			}
+			if err != nil {
+				return 0, 0, err
+			}
 		}
 	}
 
@@ -549,10 +591,17 @@ func (r *Replica) append(
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		// Note that the caller is in charge of deleting any sideloaded payloads
 		// (which they must only do *after* the batch has committed).
-		err := engine.MVCCDelete(ctx, batch, &diff, r.raftMu.stateLoader.RaftLogKey(i),
+		err := engine.MVCCDelete(ctx, raftBatch, &diff, r.raftMu.stateLoader.RaftLogKey(i),
 			hlc.Timestamp{}, nil /* txn */)
 		if err != nil {
 			return 0, 0, err
+		}
+		if TransitioningRaftStorage {
+			err := engine.MVCCDelete(ctx, batch, nil, r.raftMu.stateLoader.RaftLogKey(i),
+				hlc.Timestamp{}, nil /* txn */)
+			if err != nil {
+				return 0, 0, err
+			}
 		}
 	}
 
@@ -601,7 +650,10 @@ const (
 )
 
 func clearRangeData(
-	ctx context.Context, desc *roachpb.RangeDescriptor, eng engine.Engine, batch engine.Batch,
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	eng, raftEng engine.Engine,
+	batch, raftBatch engine.Batch,
 ) error {
 	iter := eng.NewIterator(false)
 	defer iter.Close()
@@ -619,6 +671,20 @@ func clearRangeData(
 		if err != nil {
 			return err
 		}
+	}
+
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		raftIter := raftEng.NewIterator(false)
+		defer raftIter.Close()
+
+		for _, keyRange := range makeRaftEngineKeyRanges(desc) {
+			// The metadata ranges have a relatively small number of keys making usage
+			// of range tombstones (as created by ClearRange) a pessimization.
+			if err := raftBatch.ClearIterRange(raftIter, keyRange.start, keyRange.end); err != nil {
+				return err
+			}
+		}
+
 	}
 	return nil
 }
@@ -693,13 +759,19 @@ func (r *Replica) applySnapshot(
 	// reads from the batch.
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
+	raftBatch := batch
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		raftBatch = r.store.RaftEngine().NewWriteOnlyBatch()
+		defer raftBatch.Close()
+	}
 
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	if err := clearRangeData(ctx, s.Desc, r.store.Engine(), batch); err != nil {
+	if err := clearRangeData(ctx, s.Desc, r.store.Engine(), r.store.RaftEngine(), batch, raftBatch); err != nil {
 		return err
 	}
+
 	stats.clear = timeutil.Now()
 
 	// Write the snapshot into the range.
@@ -712,6 +784,10 @@ func (r *Replica) applySnapshot(
 	// The log entries are all written to distinct keys so we can use a
 	// distinct batch.
 	distinctBatch := batch.Distinct()
+	distinctBatchRaft := distinctBatch
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		distinctBatchRaft = raftBatch.Distinct()
+	}
 	stats.batch = timeutil.Now()
 
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
@@ -728,6 +804,7 @@ func (r *Replica) applySnapshot(
 	_, raftLogSize, err = r.append(
 		ctx,
 		distinctBatch,
+		distinctBatchRaft,
 		0,
 		raftLogSize,
 		thinEntries,
@@ -744,7 +821,12 @@ func (r *Replica) applySnapshot(
 	// say it isn't going to accept a snapshot which is identical to the current
 	// state?
 	if !raft.IsEmptyHardState(hs) {
-		if err := r.raftMu.stateLoader.setHardState(ctx, distinctBatch, hs); err != nil {
+		if TransitioningRaftStorage {
+			if err := r.raftMu.stateLoader.setHardState(ctx, distinctBatch, hs); err != nil {
+				return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
+			}
+		}
+		if err := r.raftMu.stateLoader.setHardState(ctx, distinctBatchRaft, hs); err != nil {
 			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 		}
 	}
@@ -752,6 +834,9 @@ func (r *Replica) applySnapshot(
 	// We need to close the distinct batch and start using the normal batch for
 	// the read below.
 	distinctBatch.Close()
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		distinctBatchRaft.Close()
+	}
 
 	// As outlined above, last and applied index are the same after applying
 	// the snapshot (i.e. the snapshot has no uncommitted tail).
@@ -764,6 +849,12 @@ func (r *Replica) applySnapshot(
 	if err := batch.Commit(syncRaftLog.Get()); err != nil {
 		return err
 	}
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		if err := raftBatch.Commit(syncRaftLog.Get()); err != nil {
+			return err
+		}
+	}
+
 	stats.commit = timeutil.Now()
 
 	r.mu.Lock()
