@@ -1480,7 +1480,7 @@ set_rest_more:
 | TIME ZONE zone_value
   {
     /* SKIP DOC */
-    $$.val = &SetTimeZone{Value: $3.expr()}
+    $$.val = &Set{Name: UnresolvedName{Name("time zone")}, Values: Exprs{$3.expr()}}
   }
 | set_name
 
@@ -1642,7 +1642,7 @@ show_stmt:
   }
 | SHOW CLUSTER SETTING any_name
   {
-    $$.val = &Show{Name: $4.unresolvedName().String(), ClusterSetting: true}
+    $$.val = &Show{Name: AsStringWithFlags($4.unresolvedName(), FmtBareIdentifiers), ClusterSetting: true}
   }
 | SHOW CLUSTER SETTING ALL
   {

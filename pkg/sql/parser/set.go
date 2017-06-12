@@ -23,7 +23,6 @@
 package parser
 
 import "bytes"
-import "strings"
 
 // Set represents a SET or RESET statement.
 type Set struct {
@@ -82,33 +81,6 @@ type SetTransaction struct {
 func (node *SetTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SET TRANSACTION")
 	node.Modes.Format(buf, f)
-}
-
-// SetTimeZone represents a SET TIME ZONE statement.
-type SetTimeZone struct {
-	Value Expr
-}
-
-// Format implements the NodeFormatter interface.
-func (node *SetTimeZone) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("SET TIME ZONE ")
-	switch node.Value.(type) {
-	case *DInterval:
-		FormatNode(buf, f, node.Value)
-	default:
-		var s string
-		switch v := node.Value.(type) {
-		case *DString:
-			s = string(*v)
-		case *StrVal:
-			s = strings.ToUpper(v.s)
-		}
-		if s == "DEFAULT" || s == "LOCAL" {
-			buf.WriteString(s)
-		} else {
-			FormatNode(buf, f, node.Value)
-		}
-	}
 }
 
 // SetDefaultIsolation represents a SET SESSION CHARACTERISTICS AS TRANSACTION statement.

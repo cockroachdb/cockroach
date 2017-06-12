@@ -68,7 +68,7 @@ func (n Name) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.anonymize {
 		buf.WriteByte('_')
 	} else {
-		encodeSQLIdent(buf, string(n))
+		encodeSQLIdent(buf, string(n), f)
 	}
 }
 
