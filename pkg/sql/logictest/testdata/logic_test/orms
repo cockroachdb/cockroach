@@ -101,3 +101,14 @@ AND t3.nspname = ANY (current_schemas(false))
 ORDER BY c.conname
 ----
 a  a_id  id  fk_a_id_ref_a  a  a
+
+# Default value columns in Rails produce these kinds of queries:
+query O
+SELECT 'decimal(18,2)'::regtype::oid
+----
+1700
+
+query O
+SELECT 'character varying'::regtype::oid
+----
+25
