@@ -120,6 +120,7 @@ type Server struct {
 	leaseMgr           *sql.LeaseManager
 	sessionRegistry    *sql.SessionRegistry
 	engines            Engines
+	raftEngines        Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
 }
@@ -674,11 +675,14 @@ func (s *Server) Start(ctx context.Context) error {
 	s.gossip.Start(unresolvedAdvertAddr, filtered)
 	log.Event(ctx, "started gossip")
 
-	s.engines, err = s.cfg.CreateEngines(ctx)
+	s.engines, s.raftEngines, err = s.cfg.CreateEngines(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to create engines")
+		return errors.Wrap(err, "failed to create {raft,}engines")
 	}
 	s.stopper.AddCloser(&s.engines)
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		s.stopper.AddCloser(&s.raftEngines)
+	}
 
 	// We might have to sleep a bit to protect against this node producing non-
 	// monotonic timestamps. Before restarting, its clock might have been driven
@@ -721,6 +725,7 @@ func (s *Server) Start(ctx context.Context) error {
 		ctx,
 		unresolvedAdvertAddr,
 		s.engines,
+		s.raftEngines,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		// If the _unfiltered_ list of hosts from the --join flag is

@@ -177,8 +177,11 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 // single range spanning all keys. Initial range lookup metadata is
 // populated for the range. Returns the cluster ID.
 func bootstrapCluster(
-	cfg storage.StoreConfig, engines []engine.Engine, txnMetrics kv.TxnMetrics,
+	cfg storage.StoreConfig, engines, raftEngines []engine.Engine, txnMetrics kv.TxnMetrics,
 ) (uuid.UUID, error) {
+	if len(engines) != len(raftEngines) {
+		panic(fmt.Sprintf("len(engines) %d != len(raftEngines) %d", len(engines), len(raftEngines)))
+	}
 	clusterID := uuid.MakeV4()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -200,7 +203,7 @@ func bootstrapCluster(
 	sender := kv.NewTxnCoordSender(cfg.AmbientCtx, stores, cfg.Clock, false, stopper, txnMetrics)
 	cfg.DB = client.NewDB(sender, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport()
-	for i, eng := range engines {
+	for i := range engines {
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
 			NodeID:    FirstNodeID,
@@ -209,7 +212,7 @@ func bootstrapCluster(
 
 		// The bootstrapping store will not connect to other nodes so its
 		// StoreConfig doesn't really matter.
-		s := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
+		s := storage.NewStore(cfg, engines[i], raftEngines[i], &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
 		// Bootstrap store to persist the store ident.
 		if err := s.Bootstrap(sIdent); err != nil {
@@ -345,6 +348,7 @@ func (n *Node) start(
 	ctx context.Context,
 	addr net.Addr,
 	engines []engine.Engine,
+	raftEngines []engine.Engine,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
 	canBootstrap bool,
@@ -352,7 +356,7 @@ func (n *Node) start(
 	n.initDescriptor(addr, attrs, locality)
 
 	// Initialize stores, including bootstrapping new ones.
-	if err := n.initStores(ctx, engines, n.stopper, false); err != nil {
+	if err := n.initStores(ctx, engines, raftEngines, n.stopper, false); err != nil {
 		if err == errNeedsBootstrap {
 			if !canBootstrap {
 				return errCannotJoinSelf
@@ -360,14 +364,14 @@ func (n *Node) start(
 			n.initialBoot = true
 			// This node has no initialized stores and no way to connect to
 			// an existing cluster, so we bootstrap it.
-			clusterID, err := bootstrapCluster(n.storeCfg, engines, n.txnMetrics)
+			clusterID, err := bootstrapCluster(n.storeCfg, engines, raftEngines, n.txnMetrics)
 			if err != nil {
 				return err
 			}
 			log.Infof(ctx, "**** cluster %s has been created", clusterID)
 			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", addr)
 			// After bootstrapping, try again to initialize the stores.
-			if err := n.initStores(ctx, engines, n.stopper, true); err != nil {
+			if err := n.initStores(ctx, engines, raftEngines, n.stopper, true); err != nil {
 				return err
 			}
 		} else {
@@ -380,7 +384,7 @@ func (n *Node) start(
 	n.startComputePeriodicMetrics(n.stopper, n.storeCfg.MetricsSampleInterval)
 	n.startGossip(n.stopper)
 
-	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, engines, attrs.Attrs)
+	log.Infof(ctx, "%s: started with %v engine(s), %v raft engines and attributes %v", n, engines, raftEngines, attrs.Attrs)
 	return nil
 }
 
@@ -412,16 +416,22 @@ func (n *Node) SetDraining(drain bool) error {
 // bootstraps list for initialization once the cluster and node IDs
 // have been determined.
 func (n *Node) initStores(
-	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper, bootstrapped bool,
+	ctx context.Context,
+	engines, raftEngines []engine.Engine,
+	stopper *stop.Stopper,
+	bootstrapped bool,
 ) error {
+	if len(engines) != len(raftEngines) {
+		panic(fmt.Sprintf("len(engines) %d != len(raftEngines) %d", len(engines), len(raftEngines)))
+	}
 	var bootstraps []*storage.Store
 
 	if len(engines) == 0 {
 		return errors.Errorf("no engines")
 	}
-	for _, e := range engines {
-		s := storage.NewStore(n.storeCfg, e, &n.Descriptor)
-		log.Eventf(ctx, "created store for engine: %s", e)
+	for i := range engines {
+		s := storage.NewStore(n.storeCfg, engines[i], raftEngines[i], &n.Descriptor)
+		log.Eventf(ctx, "created store for engine: %s, raft engine: %s", engines[i], raftEngines[i])
 		if bootstrapped {
 			s.NotifyBootstrapped()
 		}

@@ -505,6 +505,7 @@ func (rsl replicaStateLoader) synthesizeHardState(
 func writeInitialState(
 	ctx context.Context,
 	eng engine.ReadWriter,
+	raftEng engine.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	oldHS raftpb.HardState,
@@ -551,7 +552,12 @@ func writeInitialState(
 		return enginepb.MVCCStats{}, err
 	}
 
-	if err := rsl.synthesizeHardState(ctx, eng, s, oldHS); err != nil {
+	if TransitioningRaftStorage {
+		if err := rsl.synthesizeHardState(ctx, eng, s, oldHS); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+	}
+	if err := rsl.synthesizeHardState(ctx, raftEng, s, oldHS); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 
@@ -618,6 +624,12 @@ func (rec ReplicaEvalContext) DB() *client.DB {
 // evaluation Batch should be used instead.
 func (rec ReplicaEvalContext) Engine() engine.Engine {
 	return rec.repl.store.Engine()
+}
+
+// RaftEngine returns the Replica's underlying RaftEngine. In most cases the
+// evaluation Batch should be used instead.
+func (rec ReplicaEvalContext) RaftEngine() engine.Engine {
+	return rec.repl.store.RaftEngine()
 }
 
 // AbortCache returns the Replica's AbortCache.

@@ -310,6 +310,35 @@ type RocksDB struct {
 }
 
 var _ Engine = &RocksDB{}
+var _ Engine = &TestRocksDB{}
+
+// TestRocksDB is a wrapper around an on-disk RocksDB instance that cleans
+// after itself when closed.
+type TestRocksDB struct {
+	*RocksDB
+	dir string // The data directory
+}
+
+// NewTestRocksDB allocates and returns an on-disk RocksDB instance. The
+// caller must call the engine's Close method when the engine is no longer
+// needed which will delete the files stored on disk.
+func NewTestRocksDB(dir string) *TestRocksDB {
+	t := TestRocksDB{dir: dir}
+	rocksdb, err := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, 0, DefaultMaxOpenFiles)
+	if err != nil {
+		panic(err)
+	}
+	t.RocksDB = rocksdb
+	return &t
+}
+
+// Close closes the database and deletes all generated files.
+func (t *TestRocksDB) Close() {
+	t.RocksDB.Close()
+	if err := os.RemoveAll(t.dir); err != nil {
+		panic(err)
+	}
+}
 
 // NewRocksDB allocates and returns a new RocksDB object.
 // This creates options and opens the database. If the database

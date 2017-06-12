@@ -33,7 +33,7 @@ func init() {
 }
 
 func evalAddSSTable(
-	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, _ roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs storage.CommandArgs, _ roachpb.Response,
 ) (storage.EvalResult, error) {
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header

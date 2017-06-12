@@ -158,7 +158,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			ValCount:  10000,
 		},
 	}
-	if _, err := evalAddSSTable(ctx, e, cArgs, nil); err != nil {
+	if _, err := evalAddSSTable(ctx, e, nil, cArgs, nil); err != nil {
 		t.Fatalf("%+v", err)
 	}
 

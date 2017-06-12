@@ -135,12 +135,20 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	// The scanner affects background operations; we must also disable
 	// the split queue separately to cover event-driven splits.
 	cfg.TestingKnobs.DisableSplitQueue = true
+
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
+
+	raftEng := eng
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		raftEng = engine.NewInMem(roachpb.Attributes{}, 10<<20)
+		stopper.AddCloser(raftEng)
+	}
+
 	cfg.Transport = NewDummyRaftTransport()
 	sender := &testSender{}
 	cfg.DB = client.NewDB(sender, cfg.Clock)
-	store := NewStore(*cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+	store := NewStore(*cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 	sender.store = store
 	if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)
@@ -185,10 +193,17 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
+
+	var raftEng engine.Engine = eng
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		stopper.AddCloser(raftEng)
+	}
+
 	cfg.Transport = NewDummyRaftTransport()
 
 	{
-		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		store := NewStore(cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 		// Can't start as haven't bootstrapped.
 		if err := store.Start(context.Background(), stopper); err == nil {
 			t.Error("expected failure starting un-bootstrapped store")
@@ -206,7 +221,6 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		if _, err := ReadStoreIdent(context.Background(), eng); err != nil {
 			t.Fatalf("unable to read store ident: %s", err)
 		}
-
 		// Try to get 1st range--non-existent.
 		if _, err := store.GetReplica(1); err == nil {
 			t.Error("expected error fetching non-existent range")
@@ -220,7 +234,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 	// Now, attempt to initialize a store with a now-bootstrapped range.
 	{
-		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		store := NewStore(cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 		if err := store.Start(context.Background(), stopper); err != nil {
 			t.Fatalf("failure initializing bootstrapped store: %s", err)
 		}
@@ -250,13 +264,24 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
 
+	var raftEng engine.Engine = eng
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		stopper.AddCloser(raftEng)
+	}
+
 	// Put some random garbage into the engine.
 	if err := eng.Put(engine.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
 		t.Errorf("failure putting key foo into engine: %s", err)
 	}
+
+	if err := raftEng.Put(engine.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
+		t.Errorf("failure putting key foo into engine: %s", err)
+	}
+
 	cfg := TestStoreConfig(nil)
 	cfg.Transport = NewDummyRaftTransport()
-	store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+	store := NewStore(cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
 	switch err := errors.Cause(store.Start(context.Background(), stopper)); err.(type) {
@@ -1007,7 +1032,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
 	if _, err := writeInitialState(
-		context.Background(), store.engine, enginepb.MVCCStats{}, *desc, raftpb.HardState{}, roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
+		context.Background(), store.engine, store.raftEngine, enginepb.MVCCStats{}, *desc, raftpb.HardState{}, roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -2262,7 +2287,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	}
 
 	if _, err := writeInitialState(
-		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(), raftpb.HardState{}, roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
+		ctx, s.Engine(), s.RaftEngine(), enginepb.MVCCStats{}, *repl1.Desc(), raftpb.HardState{}, roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
 	); err != nil {
 		t.Fatal(err)
 	}

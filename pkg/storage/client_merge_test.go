@@ -405,10 +405,10 @@ func TestStoreRangeMergeStats(t *testing.T) {
 
 	// Stats should agree with recomputation.
 	if err := verifyRecomputedStats(snap, aDesc, msA, manual.UnixNano()); err != nil {
-		t.Fatalf("failed to verify range A's stats before split: %v", err)
+		t.Fatalf("failed to verify range A's stats before merge: %v", err)
 	}
 	if err := verifyRecomputedStats(snap, bDesc, msB, manual.UnixNano()); err != nil {
-		t.Fatalf("failed to verify range B's stats before split: %v", err)
+		t.Fatalf("failed to verify range B's stats before merge: %v", err)
 	}
 
 	manual.Increment(100)

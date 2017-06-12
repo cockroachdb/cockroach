@@ -100,7 +100,7 @@ type Command struct {
 	// type) and return special side effects (if any) in the EvalResult.
 	// If it writes to the engine it should also update
 	// *CommandArgs.Stats.
-	Eval func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error)
+	Eval func(context.Context, engine.ReadWriter, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error)
 }
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys
@@ -154,7 +154,7 @@ var commands = map[roachpb.Method]Command{
 
 	roachpb.DeprecatedVerifyChecksum: {
 		DeclareKeys: DefaultDeclareKeys,
-		Eval: func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error) {
+		Eval: func(context.Context, engine.ReadWriter, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error) {
 			return EvalResult{}, nil
 		}},
 }
@@ -167,7 +167,7 @@ func evaluateCommand(
 	ctx context.Context,
 	raftCmdID storagebase.CmdIDKey,
 	index int,
-	batch engine.ReadWriter,
+	batch, raftBatch engine.ReadWriter,
 	rec ReplicaEvalContext,
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
@@ -204,7 +204,7 @@ func evaluateCommand(
 			MaxKeys: maxKeys,
 			Stats:   ms,
 		}
-		pd, err = cmd.Eval(ctx, batch, cArgs, reply)
+		pd, err = cmd.Eval(ctx, batch, raftBatch, cArgs, reply)
 	} else {
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
@@ -265,7 +265,7 @@ func intentsToEvalResult(intents []roachpb.Intent, args roachpb.Request) EvalRes
 
 // evalGet returns the value for a specified key.
 func evalGet(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.GetRequest)
 	h := cArgs.Header
@@ -278,7 +278,7 @@ func evalGet(
 
 // evalPut sets the value for a specified key.
 func evalPut(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.PutRequest)
 	h := cArgs.Header
@@ -307,7 +307,7 @@ func evalPut(
 // the expected value matches. If not, the return value contains
 // the actual value.
 func evalConditionalPut(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.ConditionalPutRequest)
 	h := cArgs.Header
@@ -331,7 +331,7 @@ func evalConditionalPut(
 // returns an error if the key exists with an existing value that is different
 // from the value provided.
 func evalInitPut(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.InitPutRequest)
 	h := cArgs.Header
@@ -355,7 +355,7 @@ func evalInitPut(
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
 func evalIncrement(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.IncrementRequest)
 	h := cArgs.Header
@@ -368,7 +368,7 @@ func evalIncrement(
 
 // evalDelete deletes the key and value specified by key.
 func evalDelete(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.DeleteRequest)
 	h := cArgs.Header
@@ -379,7 +379,7 @@ func evalDelete(
 // evalDeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
 func evalDeleteRange(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.DeleteRangeRequest)
 	h := cArgs.Header
@@ -411,7 +411,7 @@ func evalDeleteRange(
 // stores the number of scan results remaining for this batch
 // (MaxInt64 for no limit).
 func evalScan(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.ScanRequest)
 	h := cArgs.Header
@@ -431,7 +431,7 @@ func evalScan(
 // maxKeys stores the number of scan results remaining for this batch
 // (MaxInt64 for no limit).
 func evalReverseScan(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.ReverseScanRequest)
 	h := cArgs.Header
@@ -482,7 +482,7 @@ func declareKeysBeginTransaction(
 // to receive the write batch before a heartbeat or txn push is
 // performed first and aborts the transaction.
 func evalBeginTransaction(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.BeginTransactionRequest)
 	h := cArgs.Header
@@ -648,7 +648,7 @@ func declareKeysEndTransaction(
 // transaction according to the args.Commit parameter. Rolling back
 // an already rolled-back txn is ok.
 func evalEndTransaction(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, raftBatch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.EndTransactionRequest)
 	h := cArgs.Header
@@ -794,7 +794,7 @@ func evalEndTransaction(
 	var pd EvalResult
 	if reply.Txn.Status == roachpb.COMMITTED {
 		var err error
-		if pd, err = runCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch), ms, *args, reply.Txn); err != nil {
+		if pd, err = runCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch), raftBatch.(engine.Batch), ms, *args, reply.Txn); err != nil {
 			return EvalResult{}, NewReplicaCorruptionError(err)
 		}
 	}
@@ -1016,7 +1016,7 @@ func intersectSpan(
 func runCommitTrigger(
 	ctx context.Context,
 	rec ReplicaEvalContext,
-	batch engine.Batch,
+	batch, raftBatch engine.Batch,
 	ms *enginepb.MVCCStats,
 	args roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
@@ -1028,13 +1028,13 @@ func runCommitTrigger(
 
 	if ct.GetSplitTrigger() != nil {
 		newMS, trigger, err := splitTrigger(
-			ctx, rec, batch, *ms, ct.SplitTrigger, txn.Timestamp,
+			ctx, rec, batch, raftBatch, *ms, ct.SplitTrigger, txn.Timestamp,
 		)
 		*ms = newMS
 		return trigger, err
 	}
 	if ct.GetMergeTrigger() != nil {
-		return mergeTrigger(ctx, rec, batch, ms, ct.MergeTrigger, txn.Timestamp)
+		return mergeTrigger(ctx, rec, batch, raftBatch, ms, ct.MergeTrigger, txn.Timestamp)
 	}
 	if crt := ct.GetChangeReplicasTrigger(); crt != nil {
 		return changeReplicasTrigger(ctx, rec, batch, crt), nil
@@ -1119,7 +1119,7 @@ func runCommitTrigger(
 // specifies whether descriptors are prefetched in descending or ascending
 // order.
 func evalRangeLookup(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	log.Event(ctx, "RangeLookup")
 	args := cArgs.Args.(*roachpb.RangeLookupRequest)
@@ -1345,7 +1345,7 @@ func declareKeysHeartbeatTransaction(
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
 func evalHeartbeatTxn(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.HeartbeatTxnRequest)
 	h := cArgs.Header
@@ -1413,7 +1413,7 @@ func declareKeysGC(
 // listed key along with the expiration timestamp. The GC metadata
 // specified in the args is persisted after GC.
 func evalGC(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.GCRequest)
 	h := cArgs.Header
@@ -1537,7 +1537,7 @@ func declareKeysPushTransaction(
 // queue to purge entries for which the transaction coordinator must have found
 // out via its heartbeats that the transaction has failed.
 func evalPushTxn(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.PushTxnRequest)
 	reply := resp.(*roachpb.PushTxnResponse)
@@ -1706,7 +1706,7 @@ func canPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
 // other txns which are waiting on this transaction in order
 // to find dependency cycles.
 func evalQueryTxn(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.QueryTxnRequest)
 	reply := resp.(*roachpb.QueryTxnResponse)
@@ -1764,7 +1764,7 @@ func declareKeysResolveIntent(
 // evalResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
 func evalResolveIntent(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.ResolveIntentRequest)
 	h := cArgs.Header
@@ -1799,7 +1799,7 @@ func declareKeysResolveIntentRange(
 // evalResolveIntentRange resolves write intents in the specified
 // key range according to the status of the transaction which created it.
 func evalResolveIntentRange(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.ResolveIntentRangeRequest)
 	h := cArgs.Header
@@ -1831,7 +1831,7 @@ func evalResolveIntentRange(
 // transactional, merges are not currently exposed directly to
 // clients. Merged values are explicitly not MVCC data.
 func evalMerge(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.MergeRequest)
 	h := cArgs.Header
@@ -1851,7 +1851,7 @@ func declareKeysTruncateLog(
 // has already been truncated has no effect. If this range is not the one
 // specified within the request body, the request will also be ignored.
 func evalTruncateLog(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, raftBatch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.TruncateLogRequest)
 
@@ -1888,9 +1888,20 @@ func evalTruncateLog(
 	var diff enginepb.MVCCStats
 	// Passing zero timestamp to MVCCDeleteRange is equivalent to a ranged clear
 	// but it also computes stats.
-	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, math.MaxInt64, /* max */
-		hlc.Timestamp{}, nil /* txn */, false /* returnKeys */); err != nil {
+	if _, _, _, err := engine.MVCCDeleteRange(ctx, raftBatch, &diff, start, end, math.MaxInt64, /* max */
+		hlc.Timestamp{}, nil /* txn */, true /* returnKeys */); err != nil {
 		return EvalResult{}, err
+	}
+
+	if TransitioningRaftStorage {
+		// We pass in a nil MVCCStats so to not account for this delta in
+		// RaftLogSize. In TransitioningRaftStorage mode log truncations are
+		// based entirely on the size of the raft log stored in the raft
+		// specific RocksDB instance.
+		if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, nil, start, end, math.MaxInt64, /* max */
+			hlc.Timestamp{}, nil /* txn */, true /* returnKeys */); err != nil {
+			return EvalResult{}, err
+		}
 	}
 
 	tState := &roachpb.RaftTruncatedState{
@@ -1932,7 +1943,7 @@ func declareKeysRequestLease(
 // lease, all duties required of the range lease holder are commenced, including
 // clearing the command queue and timestamp cache.
 func evalRequestLease(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.RequestLeaseRequest)
 	// When returning an error from this method, must always return
@@ -1999,7 +2010,7 @@ func evalRequestLease(
 // ex-) lease holder which must have dropped all of its lease holder powers
 // before proposing.
 func evalTransferLease(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.TransferLeaseRequest)
 
@@ -2302,7 +2313,7 @@ func (r *Replica) computeChecksumDone(
 // a particular snapshot. The checksum is later verified through a
 // CollectChecksumRequest.
 func evalComputeChecksum(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, _, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.ComputeChecksumRequest)
 
@@ -2378,7 +2389,7 @@ func makeUnimplementedCommand(method roachpb.Method) Command {
 	return Command{
 		DeclareKeys: DefaultDeclareKeys,
 		Eval: func(
-			_ context.Context, _ engine.ReadWriter, _ CommandArgs, _ roachpb.Response,
+			_ context.Context, _, _ engine.ReadWriter, _ CommandArgs, _ roachpb.Response,
 		) (EvalResult, error) {
 			return EvalResult{}, errors.Errorf("unimplemented command: %s", method.String())
 		}}
@@ -2931,7 +2942,7 @@ func (r *Replica) adminSplitWithDescriptor(
 func splitTrigger(
 	ctx context.Context,
 	rec ReplicaEvalContext,
-	batch engine.Batch,
+	batch, raftBatch engine.Batch,
 	bothDeltaMS enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
@@ -3063,10 +3074,11 @@ func splitTrigger(
 		// to not reading from the batch is that we won't see any writes to the
 		// right hand side's hard state that were previously made in the batch
 		// (which should be impossible).
-		oldHS, err := loadHardState(ctx, rec.Engine(), split.RightDesc.RangeID)
+		oldHS, err := loadHardState(ctx, rec.RaftEngine(), split.RightDesc.RangeID)
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load hard state")
 		}
+
 		// Initialize the right-hand lease to be the same as the left-hand lease.
 		// Various pieces of code rely on a replica's lease never being unitialized,
 		// but it's more than that - it ensures that we properly initialize the
@@ -3121,7 +3133,7 @@ func splitTrigger(
 		}
 
 		rightMS, err = writeInitialState(
-			ctx, batch, rightMS, split.RightDesc, oldHS, rightLease, gcThreshold, txnSpanGCThreshold,
+			ctx, batch, raftBatch, rightMS, split.RightDesc, oldHS, rightLease, gcThreshold, txnSpanGCThreshold,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial state")
@@ -3275,7 +3287,7 @@ func (r *Replica) AdminMerge(
 func mergeTrigger(
 	ctx context.Context,
 	rec ReplicaEvalContext,
-	batch engine.Batch,
+	batch, raftBatch engine.Batch,
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
 	ts hlc.Timestamp,
@@ -3329,6 +3341,14 @@ func mergeTrigger(
 	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(rightRangeID)
 	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), math.MaxInt64, hlc.Timestamp{}, nil, false); err != nil {
 		return EvalResult{}, errors.Errorf("cannot remove range metadata %s", err)
+	}
+	if TransitioningRaftStorage || EnabledRaftStorage {
+		localRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(rightRangeID)
+		if _, _, _, err := engine.MVCCDeleteRange(ctx, raftBatch, nil,
+			localRangeIDUnreplicatedPrefix, localRangeIDUnreplicatedPrefix.PrefixEnd(),
+			math.MaxInt64, hlc.Timestamp{}, nil, false); err != nil {
+			return EvalResult{}, errors.Errorf("cannot remove range metadata %s", err)
+		}
 	}
 
 	// Add in the stats for the RHS range's range keys.
@@ -3816,7 +3836,7 @@ func declareKeysLeaseInfo(
 
 // LeaseInfo returns information about the lease holder for the range.
 func evalLeaseInfo(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	reply := resp.(*roachpb.LeaseInfoResponse)
 	lease, nextLease, err := cArgs.EvalCtx.GetLease()

@@ -138,6 +138,7 @@ func TestStoresLookupReplica(t *testing.T) {
 
 	// Create two new stores with ranges we care about.
 	var e [2]engine.Engine
+	var re [2]engine.Engine
 	var s [2]*Store
 	var d [2]*roachpb.RangeDescriptor
 	ranges := []struct {
@@ -150,8 +151,13 @@ func TestStoresLookupReplica(t *testing.T) {
 	for i, rng := range ranges {
 		e[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		stopper.AddCloser(e[i])
+		re[i] = e[i]
+		if TransitioningRaftStorage || EnabledRaftStorage {
+			re[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+			stopper.AddCloser(re[i])
+		}
 		cfg.Transport = NewDummyRaftTransport()
-		s[i] = NewStore(cfg, e[i], &roachpb.NodeDescriptor{NodeID: 1})
+		s[i] = NewStore(cfg, e[i], re[i], &roachpb.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID
 
 		d[i] = &roachpb.RangeDescriptor{
@@ -241,7 +247,12 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 		cfg.Transport = NewDummyRaftTransport()
 		eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		stopper.AddCloser(eng)
-		s := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		raftEng := eng
+		if TransitioningRaftStorage || EnabledRaftStorage {
+			raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+			stopper.AddCloser(raftEng)
+		}
+		s := NewStore(cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++
 		s.Ident.StoreID = storeIDAlloc
 		stores = append(stores, s)

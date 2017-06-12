@@ -215,8 +215,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		}
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
+	raftEng := eng
+	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
+		raftEng = engine.NewInMem(roachpb.Attributes{}, 10<<20)
+		stopper.AddCloser(raftEng)
+	}
 	store := createTestStoreWithEngine(t,
 		eng,
+		raftEng,
 		true,
 		cfg,
 		stopper,

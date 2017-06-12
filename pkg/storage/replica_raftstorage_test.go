@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -27,7 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -106,5 +110,51 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 			after, rep.GetMaxBytes(),
 			rep.needsSplitBySize(), rep.exceedsDoubleSplitSizeRLocked(), err,
 		)
+	}
+}
+
+func BenchmarkReplicaRaftStorage(b *testing.B) {
+	for _, valueSize := range []int{1 << 10, 1 << 12, 1 << 14, 1 << 16, 1 << 18, 1 << 20} {
+		b.Run(fmt.Sprintf("vs=%d", valueSize), func(b *testing.B) {
+			defer settings.TestingSetBool(&syncRaftLog, true)()
+
+			tc := testContext{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+
+			tc.engine = engine.NewTestRocksDB(fmt.Sprintf("BenchmarkReplicaRaftStorage_%d", valueSize))
+			stopper.AddCloser(tc.engine)
+
+			if TransitioningRaftStorage || EnabledRaftStorage {
+				tc.raftEngine = engine.NewTestRocksDB(fmt.Sprintf("BenchmarkReplicaRaftStorage_%d-raft", valueSize))
+				stopper.AddCloser(tc.raftEngine)
+			}
+
+			tc.Start(b, stopper)
+			rep, err := tc.store.GetReplica(rangeID)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			if _, pErr := rep.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+				b.Fatal(pErr)
+			}
+
+			keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				rng, _ := randutil.NewPseudoRand()
+				value := randutil.RandBytes(rng, valueSize)
+				key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+				pArgs := putArgs(key, value)
+				if _, pErr := client.SendWrappedWith(context.Background(), rep, roachpb.Header{
+					RangeID: rangeID,
+				}, &pArgs); pErr != nil {
+					b.Fatal(pErr)
+				}
+			}
+			b.StopTimer()
+		})
 	}
 }
