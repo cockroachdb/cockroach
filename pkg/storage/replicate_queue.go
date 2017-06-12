@@ -179,7 +179,7 @@ func (rq *replicateQueue) shouldQueue(
 	if lease, _ := repl.getLease(); repl.IsLeaseValid(lease, now) {
 		if rq.canTransferLease() &&
 			rq.allocator.ShouldTransferLease(
-				ctx, zone.Constraints, desc.Replicas, lease.Replica.StoreID, desc.RangeID, repl.stats) {
+				ctx, zone.Constraints, desc.Replicas, lease.Replica.StoreID, desc.RangeID, repl.leaseholderStats) {
 			if log.V(2) {
 				log.Infof(ctx, "lease transfer needed, enqueuing")
 			}
@@ -466,7 +466,7 @@ func (rq *replicateQueue) transferLease(
 		candidates,
 		repl.store.StoreID(),
 		desc.RangeID,
-		repl.stats,
+		repl.leaseholderStats,
 		checkTransferLeaseSource,
 		checkCandidateFullness,
 	); target != (roachpb.ReplicaDescriptor{}) {
