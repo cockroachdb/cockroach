@@ -1156,7 +1156,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	imbalanced1 := newReplicaStats(clock, localityFn)
 	imbalanced2 := newReplicaStats(clock, localityFn)
 	imbalanced3 := newReplicaStats(clock, localityFn)
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 100*int(MinLeaseTransferStatsDuration.Seconds()); i++ {
 		evenlyBalanced.record(99)
 		imbalanced1.record(1)
 		imbalanced2.record(2)
