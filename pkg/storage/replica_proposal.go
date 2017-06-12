@@ -423,8 +423,8 @@ func (r *Replica) leasePostApply(
 
 		// Reset the request counts used to make lease placement decisions whenever
 		// starting a new lease.
-		if r.stats != nil {
-			r.stats.resetRequestCounts()
+		if r.leaseholderStats != nil {
+			r.leaseholderStats.resetRequestCounts()
 		}
 
 		// Gossip the first range whenever its lease is acquired. We check to
