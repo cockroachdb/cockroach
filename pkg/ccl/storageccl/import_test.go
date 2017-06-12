@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -107,8 +108,30 @@ func clientKVsToEngineKVs(kvs []client.KeyValue) []engine.MVCCKeyValue {
 
 func TestImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Run("WriteBatch", func(t *testing.T) {
+		t.Run("batch=default", runTestImport)
+		t.Run("batch=1", func(t *testing.T) {
+			// The test normally doesn't trigger the batching behavior, so lower
+			// the threshold to force it.
+			defer settings.TestingSetByteSize(&importBatchSize, 1)()
+			runTestImport(t)
+		})
+	})
+	t.Run("AddSSTable", func(t *testing.T) {
+		defer settings.TestingSetBool(&AddSSTableEnabled, true)()
+		defer storage.TestingSetDisableSnapshotClearRange(true)()
+		t.Run("batch=default", runTestImport)
+		t.Run("batch=1", func(t *testing.T) {
+			// The test normally doesn't trigger the batching behavior, so lower
+			// the threshold to force it.
+			defer settings.TestingSetByteSize(&importBatchSize, 1)()
+			runTestImport(t)
+		})
+	})
+}
 
-	t.Skip("TODO(mjibson): #15611")
+func runTestImport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
@@ -186,16 +209,19 @@ func TestImport(t *testing.T) {
 		t.Fatalf("failed to rewrite key: %s", reqEndKey)
 	}
 
-	// Make the first few WriteBatch calls return AmbiguousResultError. Import
-	// should be resilient to this.
-	const initialAmbiguousWriteBatches = 3
-	remainingAmbiguousWriteBatches := int64(initialAmbiguousWriteBatches)
+	// Make the first few WriteBatch/AddSSTable calls return
+	// AmbiguousResultError. Import should be resilient to this.
+	const initialAmbiguousSubReqs = 3
+	remainingAmbiguousSubReqs := int64(initialAmbiguousSubReqs)
 	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
 		TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if _, ok := filterArgs.Req.(*roachpb.WriteBatchRequest); !ok {
+			switch filterArgs.Req.(type) {
+			case *roachpb.WriteBatchRequest, *roachpb.AddSSTableRequest:
+			// No-op.
+			default:
 				return nil
 			}
-			r := atomic.AddInt64(&remainingAmbiguousWriteBatches, -1)
+			r := atomic.AddInt64(&remainingAmbiguousSubReqs, -1)
 			if r < 0 {
 				return nil
 			}
@@ -204,7 +230,13 @@ func TestImport(t *testing.T) {
 	}}
 
 	ctx := context.Background()
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
+	args := base.TestServerArgs{Knobs: knobs}
+	// TODO(dan): This currently doesn't work with AddSSTable on in-memory
+	// stores because RocksDB's InMemoryEnv doesn't support NewRandomRWFile
+	// (which breaks the global-seqno rewrite used when the added sstable
+	// overlaps with existing data in the RocksDB instance). #16345.
+	args.StoreSpecs = []base.StoreSpec{{InMemory: false, Path: filepath.Join(dir, "testserver")}}
+	s, _, kvDB := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 
 	storage, err := ExportStorageConfFromURI("nodelocal://" + dir)
@@ -214,7 +246,7 @@ func TestImport(t *testing.T) {
 
 	for i := 1; i <= len(files); i++ {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			atomic.StoreInt64(&remainingAmbiguousWriteBatches, initialAmbiguousWriteBatches)
+			atomic.StoreInt64(&remainingAmbiguousSubReqs, initialAmbiguousSubReqs)
 
 			req := &roachpb.ImportRequest{
 				Span:     roachpb.Span{Key: reqStartKey},
@@ -229,7 +261,7 @@ func TestImport(t *testing.T) {
 
 			// Import may be retried by DistSender if it takes too long to return, so
 			// make sure it's idempotent.
-			for j := 0; j < 3; j++ {
+			for j := 0; j < 1; j++ {
 				b := &client.Batch{}
 				b.AddRawRequest(req)
 				if err := kvDB.Run(ctx, b); err != nil {
@@ -249,8 +281,8 @@ func TestImport(t *testing.T) {
 				}
 			}
 
-			if r := atomic.LoadInt64(&remainingAmbiguousWriteBatches); r > 0 {
-				t.Errorf("expected ambiguous write batches to be depleted got %d", r)
+			if r := atomic.LoadInt64(&remainingAmbiguousSubReqs); r > 0 {
+				t.Errorf("expected ambiguous sub-requests to be depleted got %d", r)
 			}
 		})
 	}

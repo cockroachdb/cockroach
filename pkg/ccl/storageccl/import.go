@@ -158,11 +158,20 @@ func (b *sstBatcher) Finish(ctx context.Context, db *client.DB) error {
 		return errors.Wrapf(err, "finishing constructed sstable")
 	}
 
-	// TODO(dan): This will fail if the range has split.
-	if err := db.ExperimentalAddSSTable(ctx, start, end, sstBytes); err != nil {
-		return errors.Wrapf(err, "linking sstable into rocksdb")
+	const maxAddSSTableRetries = 10
+	for i := 0; ; i++ {
+		// TODO(dan): This will fail if the range has split.
+		err := db.ExperimentalAddSSTable(ctx, start, end, sstBytes)
+		if err == nil {
+			return nil
+		}
+		if _, ok := err.(*roachpb.AmbiguousResultError); i == maxAddSSTableRetries || !ok {
+			return errors.Wrapf(err, "addsstable [%s,%s)", start, end)
+		}
+		log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v",
+			start, end, i, err)
+		continue
 	}
-	return nil
 }
 
 func (b *sstBatcher) Close() {
@@ -259,9 +268,9 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	}
 
 	var batcher importBatcher
-	resetBatcher := func() error {
+	makeBatcher := func() error {
 		if batcher != nil {
-			batcher.Close()
+			return errors.New("cannot overwrite a batcher")
 		}
 		if AddSSTableEnabled.Get() {
 			sstWriter, err := engine.MakeRocksDBSstFileWriter()
@@ -274,7 +283,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		batcher = &writeBatcher{}
 		return nil
 	}
-	if err := resetBatcher(); err != nil {
+	if err := makeBatcher(); err != nil {
 		return nil, err
 	}
 	defer batcher.Close()
@@ -322,10 +331,12 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 
 		if batcher.Size() > importBatchSize.Get() {
 			finishBatcher := batcher
+			batcher = nil
 			g.Go(func() error {
+				defer finishBatcher.Close()
 				return finishBatcher.Finish(gCtx, db)
 			})
-			if err := resetBatcher(); err != nil {
+			if err := makeBatcher(); err != nil {
 				return nil, err
 			}
 		}
@@ -336,6 +347,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	// Flush out the last batch.
 	if batcher.Size() > 0 {
 		g.Go(func() error {
+			defer batcher.Close()
 			return batcher.Finish(gCtx, db)
 		})
 	}
