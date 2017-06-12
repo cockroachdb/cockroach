@@ -125,7 +125,7 @@ system  2939540337
 query OO
 SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID
 ----
-bool  16
+boolean  16
 
 query OO
 SELECT 'numeric(10,3)'::REGTYPE, 'numeric( 10, 3 )'::REGTYPE
