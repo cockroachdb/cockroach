@@ -21,8 +21,10 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -44,6 +46,9 @@ type sorter struct {
 	// procOutputHelper. 0 if the sorter should sort and push all the rows from
 	// the input.
 	count int64
+	// testingKnobMemLimit is used in testing to set a limit on the memory that
+	// should be used by the sortAllStrategy. Minimum value to enable is 1.
+	testingKnobMemLimit int64
 	// tempStorage is used to store rows when the working set is larger than can
 	// be stored in memory.
 	tempStorage engine.Engine
@@ -83,6 +88,8 @@ func newSorter(
 	return s, nil
 }
 
+var workMem = envutil.EnvOrDefaultInt64("COCKROACH_WORK_MEM", 64*1024*1024 /* 64MB */)
+
 // Run is part of the processor interface.
 func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
@@ -98,7 +105,29 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting sorter run")
 	}
 
-	sv := makeRowContainer(s.ordering, s.rawInput.Types(), &s.flowCtx.evalCtx)
+	var sv memRowContainer
+	useTempStorage := distSQLUseTempStorage.Get()
+	if s.matchLen == 0 && s.count == 0 && useTempStorage {
+		// We will use the sortAllStrategy in this case and potentially fall
+		// back to disk.
+		// Limit the memory use by creating a child monitor with a hard limit.
+		// The strategy will overflow to disk if this limit is not enough.
+		limit := s.testingKnobMemLimit
+		if limit <= 0 {
+			limit = workMem
+		}
+		limitedMon := mon.MakeMonitorInheritWithLimit(
+			"sortall-limited", limit, s.flowCtx.evalCtx.Mon,
+		)
+		limitedMon.Start(ctx, s.flowCtx.evalCtx.Mon, mon.BoundAccount{})
+		defer limitedMon.Stop(ctx)
+
+		evalCtx := s.flowCtx.evalCtx
+		evalCtx.Mon = &limitedMon
+		sv = makeRowContainer(s.ordering, s.rawInput.Types(), &evalCtx)
+	} else {
+		sv = makeRowContainer(s.ordering, s.rawInput.Types(), &s.flowCtx.evalCtx)
+	}
 	// Construct the optimal sorterStrategy.
 	var ss sorterStrategy
 	if s.matchLen == 0 {
@@ -107,7 +136,7 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			// optimizations are possible so we simply load all rows into memory and
 			// sort all values in-place. It has a worst-case time complexity of
 			// O(n*log(n)) and a worst-case space complexity of O(n).
-			ss = newSortAllStrategy(sv)
+			ss = newSortAllStrategy(sv, useTempStorage)
 		} else {
 			// No specified ordering match length but specified limit; we can optimize
 			// our sort procedure by maintaining a max-heap populated with only the
