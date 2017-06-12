@@ -278,6 +278,8 @@ func TestReplicaStatsDecay(t *testing.T) {
 		}
 		durationDivisor := time.Duration(float64(replStatsRotateInterval) * decayFactor).Seconds()
 		expected := perLocalityCounts{
+			// We expect the first loop's requests to be decreased by decayFactor,
+			// but not the second loop's.
 			awsLocalities[1]: 2 * decayFactor / durationDivisor,
 			awsLocalities[2]: (2*decayFactor + 2) / durationDivisor,
 			awsLocalities[3]: (1*decayFactor + 3) / durationDivisor,
