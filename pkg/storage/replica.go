@@ -890,6 +890,9 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
+
+			// We unblock all ongoing and subsequent quota acquisition
+			// goroutines (if any).
 			r.mu.proposalQuota.close()
 			r.mu.proposalQuota = nil
 			r.mu.quotaReleaseQueue = nil
@@ -906,8 +909,8 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// We're still the leader.
 
-	// We need to check if the replica is being destroyed and if so, close the
-	// quota pool and unblock ongoing quota acquisition goroutines (if any).
+	// We need to check if the replica is being destroyed and if so, unblock
+	// all ongoing and subsequent quota acquisition goroutines (if any).
 	//
 	// TODO(irfansharif): There is still a potential problem here that leaves
 	// clients hanging if the replica gets destroyed but this code path is
