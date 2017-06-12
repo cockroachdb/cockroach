@@ -91,9 +91,11 @@ func (rs *replicaStats) rotateLocked() {
 	rs.mu.requests[rs.mu.idx] = make(perLocalityCounts)
 }
 
-// getRequestCounts returns the current per-locality request counts and the
-// amount of time over which the counts were accumulated.
-func (rs *replicaStats) getRequestCounts() (perLocalityCounts, time.Duration) {
+// perLocalityDecayingQPS returns the per-locality QPS and the amount of time
+// over which the stats were accumulated.
+// Note that the QPS stats are exponentially decayed such that newer requests
+// are weighted more heavily than older requests.
+func (rs *replicaStats) perLocalityDecayingQPS() (perLocalityCounts, time.Duration) {
 	now := time.Unix(0, rs.clock.PhysicalNow())
 
 	rs.mu.Lock()
@@ -103,20 +105,33 @@ func (rs *replicaStats) getRequestCounts() (perLocalityCounts, time.Duration) {
 
 	// Use the fraction of time since the last rotation as a smoothing factor to
 	// avoid jarring changes in request count immediately before/after a rotation.
-	fractionOfRotation := float64(now.Sub(rs.mu.lastRotate)) / float64(replStatsRotateInterval)
+	timeSinceRotate := now.Sub(rs.mu.lastRotate)
+	fractionOfRotation := float64(timeSinceRotate) / float64(replStatsRotateInterval)
 
 	counts := make(perLocalityCounts)
+	var duration time.Duration
 	for i := range rs.mu.requests {
 		// We have to add len(rs.mu.requests) to the numerator to avoid getting a
 		// negative result from the modulus operation when rs.mu.idx is small.
 		requestsIdx := (rs.mu.idx + len(rs.mu.requests) - i) % len(rs.mu.requests)
 		if cur := rs.mu.requests[requestsIdx]; cur != nil {
+			decay := math.Pow(decayFactor, float64(i)+fractionOfRotation)
+			if i == 0 {
+				duration += time.Duration(float64(timeSinceRotate) * decay)
+			} else {
+				duration += time.Duration(float64(replStatsRotateInterval) * decay)
+			}
 			for k, v := range cur {
-				counts[k] += v * math.Pow(decayFactor, float64(i)+fractionOfRotation)
+				counts[k] += v * decay
 			}
 		}
 	}
 
+	if duration.Seconds() > 0 {
+		for k := range counts {
+			counts[k] = counts[k] / duration.Seconds()
+		}
+	}
 	return counts, now.Sub(rs.mu.lastReset)
 }
 

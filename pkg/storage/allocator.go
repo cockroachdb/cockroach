@@ -563,26 +563,26 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 		}
 	}
 
-	requestCounts, requestCountsDur := stats.getRequestCounts()
+	qpsStats, qpsStatsDur := stats.perLocalityDecayingQPS()
 
 	// If we haven't yet accumulated enough data, avoid transferring for now. Do
 	// not fall back to the algorithm that doesn't use stats, since it can easily
 	// start fighting with the stats-based algorithm. This provides some amount of
 	// safety from lease thrashing, since leases cannot transfer more frequently
 	// than this threshold (because replica stats get reset upon lease transfer).
-	if requestCountsDur < MinLeaseTransferStatsDuration {
+	if qpsStatsDur < MinLeaseTransferStatsDuration {
 		return shouldNotTransfer, roachpb.ReplicaDescriptor{}
 	}
 
 	// On the other hand, if we don't have any stats with associated localities,
 	// then do fall back to the algorithm that doesn't use request stats.
-	delete(requestCounts, "")
-	if len(requestCounts) == 0 {
+	delete(qpsStats, "")
+	if len(qpsStats) == 0 {
 		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
 
 	replicaWeights := make(map[roachpb.NodeID]float64)
-	for requestLocalityStr, count := range requestCounts {
+	for requestLocalityStr, qps := range qpsStats {
 		var requestLocality roachpb.Locality
 		if err := requestLocality.Set(requestLocalityStr); err != nil {
 			log.Errorf(ctx, "unable to parse locality string %q: %s", requestLocalityStr, err)
@@ -591,15 +591,15 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 		for nodeID, replicaLocality := range replicaLocalities {
 			// Add weights to each replica based on the number of requests from
 			// that replica's locality and neighboring localities.
-			replicaWeights[nodeID] += (1 - replicaLocality.DiversityScore(requestLocality)) * count
+			replicaWeights[nodeID] += (1 - replicaLocality.DiversityScore(requestLocality)) * qps
 		}
 	}
 	sourceWeight := math.Max(1.0, replicaWeights[source.Node.NodeID])
 
 	if log.V(1) {
 		log.Infof(ctx,
-			"shouldTransferLease requestCounts: %+v, replicaLocalities: %+v, replicaWeights: %+v",
-			requestCounts, replicaLocalities, replicaWeights)
+			"shouldTransferLease qpsStats: %+v, replicaLocalities: %+v, replicaWeights: %+v",
+			qpsStats, replicaLocalities, replicaWeights)
 	}
 
 	// TODO(a-robinson): This may not have enough protection against all leases
