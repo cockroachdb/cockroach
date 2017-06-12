@@ -19,6 +19,7 @@ package distsqlrun
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -43,12 +44,12 @@ type sorterStrategy interface {
 //
 // The strategy is intended to be used when all values need to be sorted.
 type sortAllStrategy struct {
-	rows rowContainer
+	rows memRowContainer
 }
 
 var _ sorterStrategy = &sortAllStrategy{}
 
-func newSortAllStrategy(rows rowContainer) sorterStrategy {
+func newSortAllStrategy(rows memRowContainer) sorterStrategy {
 	return &sortAllStrategy{
 		rows: rows,
 	}
@@ -60,6 +61,38 @@ func newSortAllStrategy(rows rowContainer) sorterStrategy {
 //  - sends each row out to the output stream.
 func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 	defer ss.rows.Close(ctx)
+	var err error
+	if !s.testingKnobForceDisk {
+		// TODO(asubiotto): I don't think it's possible to set up a monitor such
+		// that it is still connected to the pool yet has a hard limit on its
+		// budget. I'll build this in.
+		err = ss.executeImpl(ctx, s, &ss.rows)
+		if pgErr, ok := err.(*pgerror.Error); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+			return err
+		}
+	}
+	if !DistSQLUseLocalStorage.Get() {
+		log.Warningf(ctx, "External storage for large queries disabled, query out of memory: %v", err)
+		return err
+	}
+	if s.localStorage == nil {
+		log.Warningf(ctx, "External storage not provided on this cockroach node, query out of memory: %v", err)
+		return err
+	}
+	// The diskContainer will free the memory taken up by ss.rows as it is
+	// created from them.
+	log.Infof(ctx, "sorter switching to disk sort: %v", err)
+	diskContainer, err := makeDiskRowContainer(ctx, s.localStoragePrefix, ss.rows.types, ss.rows.ordering, ss.rows, s.localStorage)
+	if err != nil {
+		return err
+	}
+	defer diskContainer.Close(ctx)
+	return ss.executeImpl(ctx, s, &diskContainer)
+}
+
+func (ss *sortAllStrategy) executeImpl(
+	ctx context.Context, s *sorter, r sortableRowContainer,
+) error {
 	for {
 		row, err := s.input.NextRow()
 		if err != nil {
@@ -68,19 +101,20 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 		if row == nil {
 			break
 		}
-		if err := ss.rows.AddRow(ctx, row); err != nil {
+		if err := r.AddRow(ctx, row); err != nil {
 			return err
 		}
 	}
-	ss.rows.Sort()
+	r.Sort()
 
-	for ss.rows.Len() > 0 {
-		// Push the row to the output; stop if they don't need more rows.
-		consumerStatus, err := s.out.emitRow(ctx, ss.rows.EncRow(0))
+	i := r.NewIterator(ctx)
+	defer i.Close()
+
+	for i.Rewind(); i.Valid(); i.Next() {
+		consumerStatus, err := s.out.emitRow(ctx, i.Row(ctx))
 		if err != nil || consumerStatus != NeedMoreRows {
 			return err
 		}
-		ss.rows.PopFirst()
 	}
 	return nil
 }
@@ -102,14 +136,16 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 // of O(n + k*log(k)) while maintaining a worst-case space complexity of O(k).
 // For instance, the top k can be found in linear time, and then this can be
 // sorted in linearithmic time.
+//
+// TODO(asubiotto): Use diskRowContainer for these other strategies.
 type sortTopKStrategy struct {
-	rows rowContainer
+	rows memRowContainer
 	k    int64
 }
 
 var _ sorterStrategy = &sortTopKStrategy{}
 
-func newSortTopKStrategy(rows rowContainer, k int64) sorterStrategy {
+func newSortTopKStrategy(rows memRowContainer, k int64) sorterStrategy {
 	ss := &sortTopKStrategy{
 		rows: rows,
 		k:    k,
@@ -168,13 +204,13 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 // If we're scanning an index with a prefix matching an ordering prefix, we only accumulate values
 // for equal fields in this prefix, sort the accumulated chunk and then output.
 type sortChunksStrategy struct {
-	rows  rowContainer
+	rows  memRowContainer
 	alloc sqlbase.DatumAlloc
 }
 
 var _ sorterStrategy = &sortChunksStrategy{}
 
-func newSortChunksStrategy(rows rowContainer) sorterStrategy {
+func newSortChunksStrategy(rows memRowContainer) sorterStrategy {
 	return &sortChunksStrategy{
 		rows: rows,
 	}

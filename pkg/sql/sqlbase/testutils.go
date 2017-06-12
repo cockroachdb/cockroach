@@ -189,8 +189,18 @@ func RandEncDatum(rng *rand.Rand) EncDatum {
 // type.
 func RandEncDatumSlice(rng *rand.Rand, numVals int) []EncDatum {
 	typ := RandColumnType(rng)
-	vals := make([]EncDatum, numVals)
-	for i := range vals {
+	types := make([]ColumnType, numVals)
+	for i := range types {
+		types[i] = typ
+	}
+	return RandEncDatumSliceOfTypes(rng, types)
+}
+
+// RandEncDatumSliceOfTypes generates a slice of random EncDatum values for the
+// corresponding type in types.
+func RandEncDatumSliceOfTypes(rng *rand.Rand, types []ColumnType) []EncDatum {
+	vals := make([]EncDatum, len(types))
+	for i, typ := range types {
 		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
 	}
 	return vals
@@ -202,6 +212,27 @@ func RandEncDatumSlices(rng *rand.Rand, numSets, numValsPerSet int) [][]EncDatum
 	vals := make([][]EncDatum, numSets)
 	for i := range vals {
 		vals[i] = RandEncDatumSlice(rng, numValsPerSet)
+	}
+	return vals
+}
+
+// RandEncDatumRows generates EncDatumRows where all rows follow the same
+// random []ColumnType structure.
+// TODO(asubiotto): Find a better name?
+func RandEncDatumRows(rng *rand.Rand, numSets, numValsPerSet int) [][]EncDatum {
+	types := make([]ColumnType, numValsPerSet)
+	for i := range types {
+		types[i] = RandColumnType(rng)
+	}
+	return RandEncDatumSlicesOfTypes(rng, numSets, types)
+}
+
+// RandEncDatumSlicesOfTypes generates EncDatum slices, each slice with values
+// of the corresponding type in types.
+func RandEncDatumSlicesOfTypes(rng *rand.Rand, numSets int, types []ColumnType) [][]EncDatum {
+	vals := make([][]EncDatum, numSets)
+	for i := range vals {
+		vals[i] = RandEncDatumSliceOfTypes(rng, types)
 	}
 	return vals
 }
