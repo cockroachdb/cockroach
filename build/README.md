@@ -41,40 +41,9 @@ and checked out as a submodule at `./vendor`.
 
 ## Updating Dependencies
 
-This snapshot was built and is managed using `glide`.
+This snapshot was built and is managed using `dep` and we manage `vendor` as a submodule.
 
-Install the pinned version of `glide` with `go install ./vendor/github.com/Masterminds/glide`
-- Note that versions in `brew` or elsewhere are sometimes missing recent fixes.
-
-### Using Glide
-
-`glide` uses import statements in our code to discover what it needs to vendor.
-
-- When introducing a new library, adding an import and running `glide up` will fetch it to `vendor`.
-  - Don't try to use `glide get`, since it [will delete all comments](https://github.com/Masterminds/glide/issues/691) in `glide.yaml`.
-- If you are adding a non-import dependency (e.g. a binary tool to be used in development),
-  please add a dummy import to `build/tool_imports.go` to ensure glide remains [aware of it](https://github.com/Masterminds/glide/issues/690).
-- [glide-diff-parser](https://github.com/cockroachdb/glide-diff-parser) can be useful to inspect or summarize changes.
-
-### Version Pins
-
-We pin many of our dependencies in `glide.yaml` to make it easier to update or add a single dependency.
-
-Glide always re-resolves everything when updating any dependency (to preserve correctness given
-potential changes in transitive requirements). Unfortunately it always picks the latest version of a
-dependency unless it has a direct or transitive pin, which means even when attempting to `update` or
-`get` even just one dependency, any other unrelated dependencies could unexpectedly change versions
-unless they are pinned.
-
-Thus for libraries where we care about what version we resolve -- e.g. if they affect stability, if we
-want to vet upstream changes, if we rely on features or fixes in specific upstream versions, etc --
-we pin revisions to make them stable between `update` runs, and only unpin them when we actually want
-them to change. While not a hard rule, if we directly import something in our code, there's a decent
-chance we care about it enough that we want its version to remain stable unless intentionally changed,
-and thus it may benefit from being pinned.
-
-In cases where a sweeping update of all deps is actually desired, comment out all the stability pins
-section of `glide.yaml`, run `update`, then restore the pins with their new revisions.
+Install `dep` using the vendored sources: `go install ./vendor/github.com/golang/dep/cmd/dep`
 
 ### Working with Submodules
 
@@ -84,7 +53,7 @@ To keep the bloat of all the changes in all our dependencies out of our main rep
 This split across two repositories however means that changes involving changed dependencies require
 a two step process.
 
-- After using glide as described above to add or update dependencies and making related code changes,
+- After using dep to add or update dependencies and making related code changes,
 `git status` in `cockroachdb/cockroach` checkout will report that the `vendor` submodule has
 `modified/untracked content`
 - Switch into `vendor` and commit all changes (or use `git -C vendor`), on a new named branch.
@@ -113,7 +82,7 @@ ensure the ref remains reachable and thus is never garbage collected.
 
 The canonical linearization of history is always the main repo. In the event of concurrent
 changes to `vendor`, the first should cause the second to see a conflict on the `vendor` submodule
-pointer. When resolving that conflict, it is important to re-run glide against the fetched, updated
+pointer. When resolving that conflict, it is important to re-run dep against the fetched, updated
 `vendor` ref, thus generating a new commit in the submodule that has as its parent the one from the
 earlier change.
 
