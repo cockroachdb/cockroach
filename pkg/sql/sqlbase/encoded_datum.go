@@ -25,6 +25,19 @@ import (
 	"github.com/pkg/errors"
 )
 
+// EncodingDirToDatumEncoding returns an equivalent DatumEncoding for the given
+// encoding direction.
+func EncodingDirToDatumEncoding(dir encoding.Direction) (DatumEncoding, error) {
+	switch dir {
+	case encoding.Ascending:
+		return DatumEncoding_ASCENDING_KEY, nil
+	case encoding.Descending:
+		return DatumEncoding_DESCENDING_KEY, nil
+	default:
+		return DatumEncoding_ASCENDING_KEY, errors.Errorf("invalid encoding direction: %d", dir)
+	}
+}
+
 // EncDatum represents a datum that is "backed" by an encoding and/or by a
 // parser.Datum. It allows "passing through" a Datum without decoding and
 // reencoding.

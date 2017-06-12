@@ -21,8 +21,10 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -177,48 +179,68 @@ func TestSorter(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	for _, c := range testCases {
-		t.Run(c.name, func(t *testing.T) {
-			types := make([]sqlbase.ColumnType, len(c.input[0]))
-			for i := range types {
-				types[i] = c.input[0][i].Type
-			}
-			in := NewRowBuffer(types, c.input, RowBufferArgs{})
-			out := &RowBuffer{}
-			evalCtx := parser.MakeTestingEvalContext()
-			defer evalCtx.Stop(ctx)
-			flowCtx := FlowCtx{
-				evalCtx: evalCtx,
-			}
+	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
 
-			s, err := newSorter(&flowCtx, &c.spec, in, &c.post, out)
-			if err != nil {
-				t.Fatal(err)
-			}
-			s.Run(ctx, nil)
-			if !out.ProducerClosed {
-				t.Fatalf("output RowReceiver not closed")
-			}
-
-			var retRows sqlbase.EncDatumRows
-			for {
-				row, meta := out.Next()
-				if !meta.Empty() {
-					t.Fatalf("unexpected metadata: %v", meta)
+	for _, forceDisk := range []bool{false, true} {
+		testNameSuffix := "Mem"
+		if forceDisk {
+			testNameSuffix = "Disk"
+		}
+		for _, c := range testCases {
+			t.Run(fmt.Sprintf("%s%s", c.name, testNameSuffix), func(t *testing.T) {
+				types := make([]sqlbase.ColumnType, len(c.input[0]))
+				for i := range types {
+					types[i] = c.input[0][i].Type
 				}
-				if row == nil {
-					break
+				in := NewRowBuffer(types, c.input, RowBufferArgs{})
+				out := &RowBuffer{}
+				evalCtx := parser.MakeTestingEvalContext()
+				defer evalCtx.Stop(ctx)
+				flowCtx := FlowCtx{
+					evalCtx:                evalCtx,
+					tempStorage:            tempEngine,
+					tempStorageIDGenerator: &TempStorageIDGenerator{},
 				}
-				retRows = append(retRows, row)
-			}
 
-			expStr := c.expected.String()
-			retStr := retRows.String()
-			if expStr != retStr {
-				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
-					expStr, retStr)
-			}
-		})
+				s, err := newSorter(&flowCtx, &c.spec, in, &c.post, out)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Override the default memory limit. This will result in using
+				// a memory row container which will hit this limit and fall
+				// back to using a disk row container.
+				if forceDisk {
+					s.testingKnobMemLimit = 1
+				}
+				s.Run(ctx, nil)
+				if !out.ProducerClosed {
+					t.Fatalf("output RowReceiver not closed")
+				}
+
+				var retRows sqlbase.EncDatumRows
+				for {
+					row, meta := out.Next()
+					if !meta.Empty() {
+						t.Fatalf("unexpected metadata: %v", meta)
+					}
+					if row == nil {
+						break
+					}
+					retRows = append(retRows, row)
+				}
+
+				expStr := c.expected.String()
+				retStr := retRows.String()
+				if expStr != retStr {
+					t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
+						expStr, retStr)
+				}
+			})
+		}
 	}
 }
 
