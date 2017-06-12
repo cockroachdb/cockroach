@@ -205,7 +205,7 @@ check test testshort testrace bench: gotestdashi
 testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$,TestLogic)
 testlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
 testlogic: bin/logictest.test
-	cd pkg/sql/logictest && sql.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	cd pkg/sql/logictest && logictest.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
