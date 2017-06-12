@@ -513,6 +513,10 @@ func main() {
 	allNodeArgs := append(flag.Args(), "--vmodule=allocator=1")
 	c.Start("allocsim", *workers, os.Args[0], allNodeArgs, perNodeArgs, perNodeEnv)
 	c.UpdateZoneConfig(1, 1<<20)
+	_, err := c.DB[0].Exec("SET CLUSTER SETTING kv.raft_log.synchronize = false;")
+	if err != nil {
+		log.Fatal(context.Background(), err)
+	}
 	if len(config.Localities) != 0 {
 		a.runWithConfig(config)
 	} else {
