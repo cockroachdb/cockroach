@@ -2326,15 +2326,29 @@ DBString DBGetUserProperties(DBEngine* db) {
 DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file) {
   const std::vector<std::string> paths = { ToString(path) };
   rocksdb::IngestExternalFileOptions ingest_options;
+  // If move_files is true and the env supports it, RocksDB will hard link.
+  // Otherwise, it will copy.
   ingest_options.move_files = move_file;
+  // If snapshot_consistency is true and there is an outstanding RocksDB
+  // snapshot, a global sequence number is forced (see the allow_global_seqno
+  // option).
+  //
   // TODO(dan): Switch snapshot_consistency back to true. The RocksDB in-memory
   // env doesn't support NewRandomRWFile, which is used when a file is ingested
   // while a snapshot is outstanding (it rewrites the sequence number in the
   // ingested file to be greated than the snapshot's sequence number). Setting
   // the option to false avoids this codepath during development. #16345.
   ingest_options.snapshot_consistency = false;
+  // If a file is ingested over existing data (including the range tombstones
+  // used by range snapshots) or if a RocksDB snapshot is outstanding when this
+  // ingest runs, then after moving/copying the file, RocksDB will edit it
+  // (overwrite some of the bytes) to have a global sequence number. If this is
+  // false, it will error in these cases instead.
   ingest_options.allow_global_seqno = true;
-  ingest_options.allow_blocking_flush = false;
+  // If there are mutations in the memtable for the keyrange covered by the file
+  // being ingested, this option is checked. If true, the memtable is flused and
+  // the ingest run. If false, an error is returned.
+  ingest_options.allow_blocking_flush = true;
   rocksdb::Status status = db->rep->IngestExternalFile(paths, ingest_options);
   if (!status.ok()) {
     return ToDBStatus(status);
