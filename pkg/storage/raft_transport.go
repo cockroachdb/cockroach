@@ -64,6 +64,21 @@ type RaftMessageResponseStream interface {
 	Send(*RaftMessageResponse) error
 }
 
+// lockedRaftRaftMessageResponseStream is an implementation of
+// RaftMessageResponseStream which provides support for concurrent calls to
+// Send. Note that the default implementation of grpc.Stream for server
+// responses (grpc.serverStream) is not safe for concurrent calls to Send.
+type lockedRaftMessageResponseStream struct {
+	RaftMessageResponseStream
+	sendMu syncutil.Mutex
+}
+
+func (s *lockedRaftMessageResponseStream) Send(resp *RaftMessageResponse) error {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	return s.RaftMessageResponseStream.Send(resp)
+}
+
 // SnapshotResponseStream is the subset of the
 // MultiRaft_RaftSnapshotServer interface that is needed for sending responses.
 type SnapshotResponseStream interface {
@@ -296,6 +311,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 		t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
 			errCh <- func() error {
 				var stats *raftTransportStats
+				respStream := &lockedRaftMessageResponseStream{RaftMessageResponseStream: stream}
 				for {
 					batch, err := stream.Recv()
 					if err != nil {
@@ -312,9 +328,9 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					for i := range batch.Requests {
 						req := &batch.Requests[i]
 						atomic.AddInt64(&stats.serverRecv, 1)
-						if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
+						if pErr := t.handleRaftRequest(ctx, req, respStream); pErr != nil {
 							atomic.AddInt64(&stats.serverSent, 1)
-							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
+							if err := respStream.Send(newRaftMessageResponse(req, pErr)); err != nil {
 								return err
 							}
 						}
