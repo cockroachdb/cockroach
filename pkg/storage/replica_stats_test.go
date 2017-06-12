@@ -26,6 +26,11 @@ import (
 	"github.com/kr/pretty"
 )
 
+func floatsEqual(x, y float64) bool {
+	diff := math.Abs(y - x)
+	return diff < 0.00000001
+}
+
 func floatMapsEqual(expected, actual map[string]float64) bool {
 	if len(expected) != len(actual) {
 		return false
@@ -35,7 +40,7 @@ func floatMapsEqual(expected, actual map[string]float64) bool {
 		if !ok {
 			return false
 		}
-		if diff := math.Abs(v2 - v1); diff > 0.00000001 {
+		if !floatsEqual(v1, v2) {
 			return false
 		}
 	}
@@ -177,6 +182,13 @@ func TestReplicaStats(t *testing.T) {
 		if actual, _ := rs.perLocalityDecayingQPS(); !floatMapsEqual(tc.expected, actual) {
 			t.Errorf("%d: incorrect per-locality QPS averages: %s", i, pretty.Diff(tc.expected, actual))
 		}
+		var expectedAvgQPS float64
+		for _, v := range tc.expected {
+			expectedAvgQPS += v
+		}
+		if actual, _ := rs.avgQPS(); actual != expectedAvgQPS {
+			t.Errorf("%d: avgQPS() got %f, want %f", i, actual, expectedAvgQPS)
+		}
 		// Verify that QPS numbers get cut in half after another second.
 		manual.Increment(int64(time.Second))
 		for k, v := range tc.expected {
@@ -184,6 +196,10 @@ func TestReplicaStats(t *testing.T) {
 		}
 		if actual, _ := rs.perLocalityDecayingQPS(); !floatMapsEqual(tc.expected, actual) {
 			t.Errorf("%d: incorrect per-locality QPS averages: %s", i, pretty.Diff(tc.expected, actual))
+		}
+		expectedAvgQPS /= 2
+		if actual, _ := rs.avgQPS(); actual != expectedAvgQPS {
+			t.Errorf("%d: avgQPS() got %f, want %f", i, actual, expectedAvgQPS)
 		}
 		rs.resetRequestCounts()
 		if actual, _ := rs.perLocalityDecayingQPS(); len(actual) != 0 {
