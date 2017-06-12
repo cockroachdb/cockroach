@@ -2445,9 +2445,17 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				}
 				return queryOid(ctx, typ, NewDString(funcDef.Name))
 			case oidColTypeRegType:
+				colType, err := ParseType(s)
+				if err == nil {
+					datumType := CastTargetToDatumType(colType)
+					return &DOid{kind: typ, DInt: DInt(datumType.Oid()), name: datumType.SQLName()}, nil
+				}
+				// Fall back to searching pg_type, since we don't provide syntax for
+				// every postgres type that we understand OIDs for.
 				// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 				return queryOid(ctx, typ, NewDString(s))
+
 			case oidColTypeRegClass:
 				// Resolving a table name requires looking at the search path to
 				// determine the database that owns it.
