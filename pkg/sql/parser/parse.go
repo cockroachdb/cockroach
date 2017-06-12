@@ -177,3 +177,18 @@ func ParseExpr(sql string) (Expr, error) {
 	}
 	return exprs[0], nil
 }
+
+// ParseType parses a column type.
+func ParseType(sql string) (CastTargetType, error) {
+	expr, err := ParseExpr(fmt.Sprintf("1::%s", sql))
+	if err != nil {
+		return nil, err
+	}
+
+	cast, ok := expr.(*CastExpr)
+	if !ok {
+		return nil, errors.Errorf("expected a CastExpr, but found %T", expr)
+	}
+
+	return cast.Type, nil
+}
