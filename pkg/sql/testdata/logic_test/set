@@ -139,6 +139,9 @@ SET STANDARD_CONFORMING_STRINGS = 'off'
 statement ok
 SET CLIENT_ENCODING = 'UTF8'
 
+statement ok
+SET CLIENT_ENCODING = 'unicode'
+
 statement error non-UTF8 encoding other not supported
 SET CLIENT_ENCODING = 'other'
 

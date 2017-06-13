@@ -264,7 +264,8 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			if strings.ToUpper(s) != "UTF8" {
+			upper := strings.ToUpper(s)
+			if upper != "UTF8" && upper != "UNICODE" {
 				return fmt.Errorf("non-UTF8 encoding %s not supported", s)
 			}
 			return nil
