@@ -156,9 +156,9 @@ func shouldNotPanic(t *testing.T, f func(), funcName string) {
 	f()
 }
 
-// TestReadOnlyBasics verifies that for a read-only ReadWriter (obtained via engine.NewReadOnly()) all Reader methods
-// work except NewTimeBoundIterator, and all Writer methods panic as "not implemented". Also basic iterating
-// functionality is verified.
+// TestReadOnlyBasics verifies that for a read-only ReadWriter (obtained via
+// engine.NewReadOnly()) all Reader methods work, and all Writer methods panic
+// as "not implemented". Also basic iterating functionality is verified.
 func TestReadOnlyBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -177,6 +177,7 @@ func TestReadOnlyBasics(t *testing.T) {
 		func() { _, _, _, _ = b.GetProto(a, getVal) },
 		func() { _ = b.Iterate(a, a, func(MVCCKeyValue) (bool, error) { return true, nil }) },
 		func() { _ = b.NewIterator(false) },
+		func() { _ = b.NewTimeBoundIterator(hlc.Timestamp{}, hlc.Timestamp{}) },
 	}
 	defer func() {
 		b.Close()
@@ -193,9 +194,8 @@ func TestReadOnlyBasics(t *testing.T) {
 		shouldNotPanic(t, f, string(i))
 	}
 
-	// For a read-only ReadWriter, all Writer methods should panic, as well as NewTimeBoundIterator
+	// For a read-only ReadWriter, all Writer methods should panic.
 	failureTestCases := []func(){
-		func() { _ = b.NewTimeBoundIterator(hlc.Timestamp{}, hlc.Timestamp{}) },
 		func() { _ = b.ApplyBatchRepr(nil, false) },
 		func() { _ = b.Clear(a) },
 		func() { _ = b.ClearRange(a, a) },
