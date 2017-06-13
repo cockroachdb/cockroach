@@ -14,9 +14,15 @@ query error expected 1 to be of type bool, found type int
 SELECT ARRAY['a', true, 1]
 
 query T
-SELECT ARRAY['a,', 'b{', 'c}', 'd']
+SELECT ARRAY['a,', 'b{', 'c}', 'd', 'e f']
 ----
-{'a,','b{','c}',d}
+{'a,','b{','c}',d,'e f'}
+
+# TODO(jordan): #16487
+# query T
+# SELECT ARRAY[e'g\x10h']
+# ----
+# {g\x10h}
 
 # array construction from subqueries
 

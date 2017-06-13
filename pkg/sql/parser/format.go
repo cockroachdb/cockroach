@@ -76,9 +76,10 @@ var FmtParsable FmtFlags = &fmtFlags{disambiguateDatumTypes: true}
 // that can be used to check equivalence of expressions. Specifically:
 //  - IndexedVars are formatted using symbolic notation (to disambiguate
 //    columns).
-//  - datum types are disambiguated with casts. This is necessary because datums
-//    of different types can otherwise be formatted to the same string: (for
-//    example the DDecimal 1 and the DInt 1).
+//  - datum types are disambiguated with explicit type
+//    annotations. This is necessary because datums of different types
+//    can otherwise be formatted to the same string: (for example the
+//    DDecimal 1 and the DInt 1).
 var FmtCheckEquivalence FmtFlags = &fmtFlags{symbolicVars: true, disambiguateDatumTypes: true}
 
 // FmtHideConstants instructs the pretty-printer to produce a
