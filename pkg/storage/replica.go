@@ -2288,7 +2288,9 @@ func (r *Replica) executeReadOnlyBatch(
 	// "wrong" key range being served after the range has been split.
 	var result EvalResult
 	rec := ReplicaEvalContext{r, spans}
-	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
+	readOnly := r.store.Engine().NewReadOnly()
+	defer readOnly.Close()
+	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
 
 	if intents := result.Local.detachIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
