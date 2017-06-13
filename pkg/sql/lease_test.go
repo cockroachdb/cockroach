@@ -733,13 +733,13 @@ func TestSubqueryLeases(t *testing.T) {
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				RemoveOnceDereferenced: true,
-				LeaseAcquiredEvent: func(lease *sql.LeaseState, _ error) {
-					if lease.Name == "foo" {
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.Name == "foo" {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
-				LeaseReleasedEvent: func(lease *sql.LeaseState, _ error) {
-					if lease.Name == "foo" {
+				LeaseReleasedEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.Name == "foo" {
 						// Note: we don't use close(fooRelease) here because the
 						// lease on "foo" may be re-acquired (and re-released)
 						// multiple times, at least once for the first
