@@ -99,7 +99,7 @@ func (s *Server) refreshSettings() {
 		}
 
 		if err := u.Set(k, v, t); err != nil {
-			log.Warning(ctx, err)
+			log.Warningf(ctx, "setting %q to %q failed: %#v", k, v, err)
 		}
 		return nil
 	}
