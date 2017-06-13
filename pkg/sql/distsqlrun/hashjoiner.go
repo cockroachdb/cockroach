@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Irfan Sharif (irfansharif@cockroachlabs.com)
+// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package distsqlrun
 
@@ -33,38 +34,65 @@ import (
 type bucket struct {
 	// rows holds indices of rows into the hashJoiner's rows container.
 	rows []int
-	// seen is only used for right-outer and full-outer joins; there is a entry
-	// for each row in `rows` indicating if that row had at least a matching row
-	// in the opposite stream ("matching" meaning that the ON condition passed).
+	// seen is only used for outer joins; there is an entry for each row in `rows`
+	// indicating if that row had at least a matching row in the opposite stream
+	// ("matching" meaning that the ON condition passed).
 	seen []bool
 }
+
+// hashJoinerInitialBufferSize controls the size of the initial buffering phase
+// (see hashJoiner).
+const hashJoinerInitialBufferSize = 4 * 1024 * 1024
 
 const sizeOfBucket = int64(unsafe.Sizeof(bucket{}))
 const sizeOfRowIdx = int64(unsafe.Sizeof(int(0)))
 
-// HashJoiner performs hash join, it has two input streams and one output.
+// HashJoiner performs a hash join.
 //
-// It works by reading the entire right stream and putting it in a hash
-// table. Thus, there is no guarantee on the ordering of results that stem only
-// from the right input (in the case of RIGHT OUTER, FULL OUTER). However, it is
-// guaranteed that results that involve the left stream preserve the ordering;
-// i.e. all results that stem from left row (i) precede results that stem from
-// left row (i+1).
+// It has two input streams and one output. It works in three phases:
+//
+//  1. Initial buffering: we read and store rows from both streams, up to a
+//     certain amount of memory. If we find the end of a stream, this is the
+//     stream we will build the buckets from in the next phase. If not, we
+//     choose the right stream and read it and buffer it until the end.
+//
+//  2. Build phase: in this phase we build the buckets from the rows stored
+//     in the first phase.
+//
+//  3. Probe phase: in this phase we process all the rows from the other stream
+//     and look for matching rows from the stored stream using the map.
+//
+// There is no guarantee on the output ordering.
 type hashJoiner struct {
 	joinerBase
 
-	// All the rows are stored in this container. The buckets reference these rows
-	// by index.
-	rows rowContainer
+	// initialBufferSize is the maximum amount of data we buffer from each stream
+	// as part of the initial buffering phase. Normally
+	// hashJoinerInitialBufferSize, can be tweaked for tests.
+	initialBufferSize int64
+
+	// eqCols contains the indices of the columns that are constrained to be
+	// equal. Specifically column eqCols[0][i] on the left side must match the
+	// column eqCols[1][i] on the right side.
+	eqCols [2]columns
+
+	// We read a portion of both streams, in the hope that one is small. One of
+	// the containers will contain the entire "stored" stream, the other just the
+	// start of the other stream.
+	rows [2]rowContainer
+
+	// storedSide is set by the initial buffering phase and indicates which stream
+	// we store fully and build the hashtable from.
+	storedSide joinSide
 
 	// bucketsAcc is the memory account for the buckets. The datums themselves are
 	// all in the rows container.
 	bucketsAcc mon.BoundAccount
 
-	leftEqCols  columns
-	rightEqCols columns
-	buckets     map[string]bucket
-	datumAlloc  sqlbase.DatumAlloc
+	scratch []byte
+
+	buckets    map[string]bucket
+	datumAlloc sqlbase.DatumAlloc
 }
 
 var _ processor = &hashJoiner{}
@@ -78,12 +106,14 @@ func newHashJoiner(
 	output RowReceiver,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
-		leftEqCols:  columns(spec.LeftEqColumns),
-		rightEqCols: columns(spec.RightEqColumns),
-		buckets:     make(map[string]bucket),
-		bucketsAcc:  flowCtx.evalCtx.Mon.MakeBoundAccount(),
-		rows:        makeRowContainer(nil /* ordering */, rightSource.Types(), &flowCtx.evalCtx),
+		initialBufferSize: hashJoinerInitialBufferSize,
+		buckets:           make(map[string]bucket),
+		bucketsAcc:        flowCtx.evalCtx.Mon.MakeBoundAccount(),
 	}
+	h.eqCols[leftSide] = columns(spec.LeftEqColumns)
+	h.eqCols[rightSide] = columns(spec.RightEqColumns)
+	h.rows[leftSide] = makeRowContainer(nil /* ordering */, leftSource.Types(), &flowCtx.evalCtx)
+	h.rows[rightSide] = makeRowContainer(nil /* ordering */, rightSource.Types(), &flowCtx.evalCtx)
 
 	if err := h.joinerBase.init(
 		flowCtx, leftSource, rightSource, spec.Type, spec.OnExpr, post, output,
@@ -112,28 +142,41 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting hash joiner run")
 	}
 
+	defer h.rows[leftSide].Close(ctx)
+	defer h.rows[rightSide].Close(ctx)
 	defer h.bucketsAcc.Close(ctx)
-	defer h.rows.Close(ctx)
 
-	earlyExit, err := h.buildPhase(ctx)
-	if err != nil {
-		// We got an error. We still want to drain. Any error encountered while
-		// draining will be swallowed, and the original error will be forwarded to
-		// the consumer.
-		log.Infof(ctx, "build phase error %s", err)
+	if earlyExit, err := h.bufferPhase(ctx); earlyExit || err != nil {
+		if err != nil {
+			// We got an error. We still want to drain. Any error encountered while
+			// draining will be swallowed, and the original error will be forwarded to
+			// the consumer.
+			log.Infof(ctx, "initial buffering phase error %s", err)
+		}
 		DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
 		return
 	}
-	if earlyExit {
+
+	// From this point, we are done with the source for h.storedSide.
+	srcToClose := h.leftSource
+	if h.storedSide == leftSide {
+		srcToClose = h.rightSource
+	}
+
+	if err := h.buildPhase(ctx); err != nil {
+		log.Infof(ctx, "build phase error %s", err)
+		DrainAndClose(ctx, h.out.output, err /* cause */, srcToClose)
 		return
 	}
 
-	if h.joinType == rightOuter || h.joinType == fullOuter {
+	// Allocate seen slices to produce results for unmatched stored rows,
+	// for FULL OUTER AND LEFT/RIGHT OUTER (depending on which stream we store).
+	if shouldEmitUnmatchedRow(h.storedSide, h.joinType) {
 		for k, bucket := range h.buckets {
 			if err := h.bucketsAcc.Grow(
 				ctx, int64(sizeOfBoolSlice+uintptr(len(bucket.rows))*sizeOfBool),
 			); err != nil {
-				DrainAndClose(ctx, h.out.output, err, h.leftSource)
+				DrainAndClose(ctx, h.out.output, err, srcToClose)
 				return
 			}
 			bucket.seen = make([]bool, len(bucket.rows))
@@ -141,66 +184,145 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		}
 	}
 	log.VEventf(ctx, 1, "build phase complete")
-	if err := h.probePhase(ctx); err != nil {
-		// We got an error. We still want to drain. Any error encountered while
-		// draining will be swallowed, and the original error will be forwarded to
-		// the consumer. Note that rightSource has already been drained at this
-		// point.
-		log.Infof(ctx, "probe phase error %s", err)
-		DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource)
+	if earlyExit, err := h.probePhase(ctx); earlyExit || err != nil {
+		if err != nil {
+			// We got an error. We still want to drain. Any error encountered while
+			// draining will be swallowed, and the original error will be forwarded to
+			// the consumer. Note that rightSource has already been drained at this
+			// point.
+			log.Infof(ctx, "probe phase error %s", err)
+		}
+		DrainAndClose(ctx, h.out.output, err /* cause */, srcToClose)
+	}
+}
+
+// receiveRow receives a row from either the left or right stream.
+// It takes care of forwarding any metadata, and processes any rows that have
+// NULL on an equality column - these rows will not match anything, they are
+// routed directly to the output if appropriate (depending on the type of join)
+// and then discarded.
+// If earlyExit is set, the output doesn't need more rows.
+func (h *hashJoiner) receiveRow(
+	ctx context.Context, src RowSource, side joinSide,
+) (_ sqlbase.EncDatumRow, earlyExit bool, _ error) {
+	for {
+		row, meta := src.Next()
+		if row == nil {
+			if meta.Empty() {
+				// Done.
+				return nil, false, nil
+			}
+			if meta.Err != nil {
+				return nil, false, meta.Err
+			}
+			if h.out.output.Push(nil /* row */, meta) != NeedMoreRows {
+				return nil, true, nil
+			}
+			continue
+		}
+
+		// See if we have NULLs on equality columns.
+		hasNull := false
+		for _, c := range h.eqCols[side] {
+			if row[c].IsNull() {
+				hasNull = true
+				break
+			}
+		}
+		if !hasNull {
+			// Normal path.
+			return row, false, nil
+		}
+
+		if !h.maybeEmitUnmatchedRow(ctx, row, side) {
+			return nil, true, nil
+		}
+	}
+}
+
+// bufferPhase is an initial phase where we read a portion of both streams,
+// in the hope that one of them is small.
+//
+// Rows that contain NULLs on equality columns go straight to the output if it's
+// an outer join; otherwise they are discarded.
+//
+// A successful initial buffering phase sets h.storedSide.
+//
+// If earlyExit is set, the output doesn't need more rows.
+func (h *hashJoiner) bufferPhase(ctx context.Context) (earlyExit bool, _ error) {
+	srcs := [2]RowSource{h.leftSource, h.rightSource}
+	for {
+		leftUsage := h.rows[leftSide].MemUsage()
+		rightUsage := h.rows[rightSide].MemUsage()
+		if leftUsage >= h.initialBufferSize && rightUsage >= h.initialBufferSize {
+			break
+		}
+		side := rightSide
+		if leftUsage < rightUsage {
+			side = leftSide
+		}
+
+		row, earlyExit, err := h.receiveRow(ctx, srcs[side], side)
+		if row == nil {
+			if err != nil {
+				return false, err
+			}
+			if earlyExit {
+				return true, nil
+			}
+
+			// This stream is done, great! We will build the hashtable using this
+			// stream.
+			h.storedSide = side
+			return false, nil
+		}
+		// Add the row to the correct container.
+		if err := h.rows[side].AddRow(ctx, row); err != nil {
+			return false, err
+		}
+	}
+
+	// We did not find a short stream. Stop reading for both streams, just
+	// choose the right stream and consume it.
+	h.storedSide = rightSide
+
+	for {
+		row, earlyExit, err := h.receiveRow(ctx, h.rightSource, rightSide)
+		if row == nil {
+			if err != nil {
+				return false, err
+			}
+			return earlyExit, nil
+		}
+		if err := h.rows[rightSide].AddRow(ctx, row); err != nil {
+			return false, err
+		}
 	}
 }
 
 // buildPhase constructs our internal hash map of rows seen. This is done
-// entirely from the right stream with the encoding/group key generated using
-// the left equality columns. If a row is found to have a NULL in an equality
-// column (and thus will not match anything), it might be routed directly to the
-// output (for outer joins). In such cases it is possible that the buildPhase
-// will fully satisfy the consumer.
-//
-// The inputsDrained return flag is set if there was no error and our consumer
-// indicated it does not need more data; in this case both inputs have been
-// drained and closed. In all other cases it is the caller's responsibility to
-// drain and close the inputs.
-func (h *hashJoiner) buildPhase(ctx context.Context) (inputsDrained bool, _ error) {
-	var scratch []byte
-	for {
-		rrow, meta := h.rightSource.Next()
-		if !meta.Empty() {
-			if meta.Err != nil {
-				return false, meta.Err
-			}
-			if !emitHelper(
-				ctx, &h.out, nil /* row */, meta, h.leftSource, h.rightSource) {
-				return true, nil
-			}
-			continue
-		}
-		if rrow == nil {
-			return false, nil
-		}
+// entirely from one stream (chosen during initial buffering) with the
+// encoding/group key generated using the equality columns. If a row is found to
+// have a NULL in an equality column (and thus will not match anything), it
+// might be routed directly to the output (for outer joins). In such cases it is
+// possible that the buildPhase will fully satisfy the consumer.
+func (h *hashJoiner) buildPhase(ctx context.Context) error {
+	storedRows := &h.rows[h.storedSide]
+
+	for rowIdx := 0; rowIdx < storedRows.Len(); rowIdx++ {
+		row := storedRows.EncRow(rowIdx)
 
 		encoded, hasNull, err := encodeColumnsOfRow(
-			&h.datumAlloc, scratch, rrow, h.rightEqCols, false, /* encodeNull */
+			&h.datumAlloc, h.scratch, row, h.eqCols[h.storedSide], false, /* encodeNull */
 		)
 		if err != nil {
-			return false, err
+			return err
 		}
 
-		scratch = encoded[:0]
+		h.scratch = encoded[:0]
 
-		// A row that has a NULL in an equality column cannot match anything.
-		// Output it or throw it away.
 		if hasNull {
-			if !h.maybeEmitUnmatchedRow(ctx, rrow, false /* !leftSide */) {
-				return true, nil
-			}
-			continue
-		}
-
-		rowIdx := h.rows.Len()
-		if err := h.rows.AddRow(ctx, rrow); err != nil {
-			return false, err
+			panic("NULLs not detected during receive")
 		}
 
 		b, bucketExists := h.buckets[string(encoded)]
@@ -213,12 +335,66 @@ func (h *hashJoiner) buildPhase(ctx context.Context) (inputsDrained bool, _ erro
 		}
 
 		if err := h.bucketsAcc.Grow(ctx, usage); err != nil {
-			return false, err
+			return err
 		}
 
 		b.rows = append(b.rows, rowIdx)
 		h.buckets[string(encoded)] = b
 	}
+	return nil
+}
+
+func (h *hashJoiner) probeRow(
+	ctx context.Context, row sqlbase.EncDatumRow,
+) (earlyExit bool, _ error) {
+	side := otherSide(h.storedSide)
+	encoded, hasNull, err := encodeColumnsOfRow(
+		&h.datumAlloc, h.scratch, row, h.eqCols[side], false, /* encodeNull */
+	)
+	if err != nil {
+		return false, err
+	}
+	h.scratch = encoded[:0]
+
+	if hasNull {
+		panic("NULLs not detected during receive")
+	}
+
+	matched := false
+	if b, ok := h.buckets[string(encoded)]; ok {
+		for i, otherRowIdx := range b.rows {
+			otherRow := h.rows[h.storedSide].EncRow(otherRowIdx)
+
+			var renderedRow sqlbase.EncDatumRow
+			var err error
+			if h.storedSide == rightSide {
+				renderedRow, err = h.render(row, otherRow)
+			} else {
+				renderedRow, err = h.render(otherRow, row)
+			}
+
+			if err != nil {
+				return false, err
+			}
+			// If the ON condition failed, renderedRow is nil.
+			if renderedRow != nil {
+				matched = true
+				if b.seen != nil {
+					// Mark the right row as matched (for right/full outer join).
+					b.seen[i] = true
+				}
+				consumerStatus, err := h.out.emitRow(ctx, renderedRow)
+				if err != nil || consumerStatus != NeedMoreRows {
+					return true, nil
+				}
+			}
+		}
+	}
+
+	if !matched && !h.maybeEmitUnmatchedRow(ctx, row, otherSide(h.storedSide)) {
+		return true, nil
+	}
+	return false, nil
 }
 
 // probePhase uses our constructed hash map of rows seen from the right stream,
@@ -227,81 +403,54 @@ func (h *hashJoiner) buildPhase(ctx context.Context) (inputsDrained bool, _ erro
 // i.e. for RIGHT OUTER joins if no corresponding left row is seen an empty
 // DNull row is emitted instead.
 //
-// In error cases it is the caller's responsibility to drain the input stream and
-// close the output stream.
-func (h *hashJoiner) probePhase(ctx context.Context) error {
-	var scratch []byte
+// In error or earlyExit cases it is the caller's responsibility to drain the
+// input stream and close the output stream.
+func (h *hashJoiner) probePhase(ctx context.Context) (earlyExit bool, _ error) {
+	side := otherSide(h.storedSide)
+
+	src := h.leftSource
+	if side == rightSide {
+		src = h.rightSource
+	}
+	bufferedRows := &h.rows[side]
+	// First process the rows that were already buffered.
+	for i := 0; i < bufferedRows.Len(); i++ {
+		row := bufferedRows.EncRow(i)
+		earlyExit, err := h.probeRow(ctx, row)
+		if earlyExit || err != nil {
+			return earlyExit, err
+		}
+	}
+	bufferedRows.Clear(ctx)
 
 	for {
-		lrow, meta := h.leftSource.Next()
-		if !meta.Empty() {
-			if meta.Err != nil {
-				return meta.Err
+		row, earlyExit, err := h.receiveRow(ctx, src, side)
+		if row == nil {
+			if earlyExit || err != nil {
+				return earlyExit, err
 			}
-			if !emitHelper(
-				ctx, &h.out, nil /* row */, meta, h.leftSource, h.rightSource) {
-				return nil
-			}
-			continue
-		}
-
-		if lrow == nil {
 			break
 		}
-
-		encoded, hasNull, err := encodeColumnsOfRow(
-			&h.datumAlloc, scratch, lrow, h.leftEqCols, false, /* encodeNull */
-		)
-		if err != nil {
-			return err
-		}
-		scratch = encoded[:0]
-
-		matched := false
-
-		// A row that has a NULL in an equality column cannot match anything.
-		if !hasNull {
-			if b, ok := h.buckets[string(encoded)]; ok {
-				for i, rrowIdx := range b.rows {
-					rrow := h.rows.EncRow(rrowIdx)
-
-					renderedRow, err := h.render(lrow, rrow)
-					if err != nil {
-						return err
-					}
-					// If the ON condition failed, renderedRow is nil.
-					if renderedRow != nil {
-						matched = true
-						if b.seen != nil {
-							// Mark the right row as matched (for right/full outer join).
-							b.seen[i] = true
-						}
-						if !emitHelper(ctx, &h.out, renderedRow, ProducerMetadata{}, h.leftSource) {
-							return nil
-						}
-					}
-				}
-			}
-		}
-
-		if !matched && !h.maybeEmitUnmatchedRow(ctx, lrow, true /* leftSide */) {
-			return nil
+		if earlyExit, err := h.probeRow(ctx, row); earlyExit || err != nil {
+			return earlyExit, err
 		}
 	}
 
-	if h.joinType == rightOuter || h.joinType == fullOuter {
-		// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
+	if shouldEmitUnmatchedRow(h.storedSide, h.joinType) {
+		// Produce results for unmatched rows, for FULL OUTER AND LEFT/RIGHT OUTER
+		// (depending on which stream we use).
+		storedRows := &h.rows[h.storedSide]
 		for _, b := range h.buckets {
 			for i, seen := range b.seen {
-				if !seen && !h.maybeEmitUnmatchedRow(ctx, h.rows.EncRow(b.rows[i]), false /*!leftSide */) {
-					return nil
+				if !seen && !h.maybeEmitUnmatchedRow(ctx, storedRows.EncRow(b.rows[i]), h.storedSide) {
+					return true, nil
 				}
 			}
 		}
 	}
 
 	h.out.close()
-	return nil
+	return false, nil
 }
 
 // encodeColumnsOfRow returns the encoding for the grouping columns. This is
