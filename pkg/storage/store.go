@@ -1930,6 +1930,10 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	// pushTxnQueue after we clear it.
 	origRng.pushTxnQueue.Clear(false /* disable */)
 
+	// Clear the original range's request stats, since they include requests for
+	// spans that are now owned by the new range.
+	origRng.stats.resetRequestCounts()
+
 	if kr := s.mu.replicasByKey.ReplaceOrInsert(origRng); kr != nil {
 		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, origRng)
 	}
