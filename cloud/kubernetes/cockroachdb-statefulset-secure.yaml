@@ -81,6 +81,7 @@ spec:
       # Init containers are run only once in the lifetime of a pod, before
       # it's started up for the first time. It has to exit successfully
       # before the pod's main containers are allowed to start.
+      initContainers:
       # This particular init container does a DNS lookup for other pods in
       # the set to help determine whether or not a cluster already exists.
       # If any other pods exist, it creates a file in the cockroach-data
@@ -91,7 +92,6 @@ spec:
       #
       # If your Kubernetes cluster uses a custom DNS domain, you will have
       # to add an additional arg to this pod: "-domain=<your-custom-domain>"
-      initContainers:
       - name: bootstrap
         image: cockroachdb/cockroach-k8s-init:0.2
         imagePullPolicy: IfNotPresent
@@ -106,6 +106,39 @@ spec:
         volumeMounts:
         - name: datadir
           mountPath: "/cockroach/cockroach-data"
+      # The init-certs container sends a certificate signing request to the
+      # kubernetes cluster.
+      # You can see pending requests using: kubectl get csr
+      # CSRs can be approved using:         kubectl certificate approve <csr name>
+      #
+      # All addresses used to contact a node must be specified in the --addresses arg.
+      #
+      # In addition to the node certificate and key, the init-certs entrypoint will symlink
+      # the cluster CA to the certs directory.
+      - name: init-certs
+        image: cockroachdb/cockroach-k8s-request-cert:0.1
+        imagePullPolicy: IfNotPresent
+        args:
+        - "-certs-dir=/cockroach-certs"
+        - "-addresses=localhost,127.0.0.1,$(POD_IP),$(POD_NAME).cockroachdb.$(POD_NAMESPACE).svc.cluster.local,cockroachdb-public"
+        - "-symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: certs
+          mountPath: "/cockroach-certs"
+
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -130,13 +163,15 @@ spec:
         volumeMounts:
         - name: datadir
           mountPath: /cockroach/cockroach-data
+        - name: certs
+          mountPath: /cockroach/cockroach-certs
         command:
           - "/bin/bash"
           - "-ecx"
           - |
             # The use of qualified `hostname -f` is crucial:
             # Other nodes aren't able to look up the unqualified hostname.
-            CRARGS=("start" "--logtostderr" "--insecure" "--host" "$(hostname -f)" "--http-host" "0.0.0.0")
+            CRARGS=("start" "--logtostderr" "--certs-dir" "/cockroach/cockroach-certs" "--host" "$(hostname -f)" "--http-host" "0.0.0.0")
             # We only want to initialize a new cluster (by omitting the join flag)
             # if we're sure that we're the first node (i.e. index 0) and that
             # there aren't any other nodes running as part of the cluster that
@@ -160,6 +195,8 @@ spec:
       - name: datadir
         persistentVolumeClaim:
           claimName: datadir
+      - name: certs
+        emptyDir: {}
   volumeClaimTemplates:
   - metadata:
       name: datadir
