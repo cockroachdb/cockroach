@@ -58,7 +58,10 @@ if timeout 15m ssh "${SSH_OPTIONS[@]}" "ubuntu@${controller}" "${testcmd}" \
                status=$?
                if [ $status -gt 128 ]; then
                    progress "Jepsen test was silent for too long, aborting"
-                   # timeout: kill ssh to abort the test.
+                   # timeout: try to get any running jvm to log its stack traces
+                   ssh "${SSH_OPTIONS[@]}" "ubuntu@${controller}" pkill -QUIT java
+                   sleep 10
+                   # kill ssh to abort the test.
                    pkill -P $SCRIPT_PID ssh
                    exit $status
                elif [ $status -ne 0 ]; then
