@@ -192,15 +192,18 @@ func DrainAndClose(ctx context.Context, dst RowReceiver, cause error, srcs ...Ro
 		// DrainAndForwardMetadata() calls below to close srcs in all cases.
 		_ = dst.Push(nil /* row */, ProducerMetadata{Err: cause})
 	}
-	var wg sync.WaitGroup
-	for _, input := range srcs {
-		wg.Add(1)
-		go func(input RowSource) {
-			DrainAndForwardMetadata(ctx, input, dst)
-			wg.Done()
-		}(input)
+	if len(srcs) > 0 {
+		var wg sync.WaitGroup
+		for _, input := range srcs[1:] {
+			wg.Add(1)
+			go func(input RowSource) {
+				DrainAndForwardMetadata(ctx, input, dst)
+				wg.Done()
+			}(input)
+		}
+		DrainAndForwardMetadata(ctx, srcs[0], dst)
+		wg.Wait()
 	}
-	wg.Wait()
 	dst.ProducerDone()
 }
 
