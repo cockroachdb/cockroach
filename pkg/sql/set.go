@@ -43,7 +43,7 @@ func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 		return nil, errors.New("invalid statement: SET ROW")
 	}
 
-	name := n.Name.String()
+	name := parser.AsStringWithFlags(n.Name, parser.FmtBareIdentifiers)
 	setMode := n.SetMode
 
 	if setMode == parser.SetModeClusterSetting {
@@ -263,14 +263,13 @@ func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, 
 	return &emptyNode{}, nil
 }
 
-func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
-	typedValue, err := parser.TypeCheck(n.Value, nil, parser.TypeInt)
-	if err != nil {
-		return nil, err
+func setTimeZone(_ context.Context, p *planner, values []parser.TypedExpr) error {
+	if len(values) != 1 {
+		return errors.New("set time zone requires a single argument")
 	}
-	d, err := typedValue.Eval(&p.evalCtx)
+	d, err := values[0].Eval(&p.evalCtx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	var loc *time.Location
@@ -285,7 +284,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 			if err1 != nil {
 				loc, err1 = timeutil.LoadLocation(strings.ToTitle(location))
 				if err1 != nil {
-					return nil, fmt.Errorf("cannot find time zone %q: %v", location, err)
+					return fmt.Errorf("cannot find time zone %q: %v", location, err)
 				}
 			}
 		}
@@ -293,7 +292,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 	case *parser.DInterval:
 		offset, _, _, err = v.Duration.Div(time.Second.Nanoseconds()).Encode()
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 	case *parser.DInt:
@@ -309,15 +308,15 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 		ed.Mul(sixty, sixty, &v.Decimal)
 		offset = ed.Int64(sixty)
 		if ed.Err() != nil {
-			return nil, fmt.Errorf("time zone value %s would overflow an int64", sixty)
+			return fmt.Errorf("time zone value %s would overflow an int64", sixty)
 		}
 
 	default:
-		return nil, fmt.Errorf("bad time zone value: %v", n.Value)
+		return fmt.Errorf("bad time zone value: %s", d.String())
 	}
 	if loc == nil {
 		loc = sqlbase.FixedOffsetTimeZoneToLocation(int(offset), d.String())
 	}
 	p.session.Location = loc
-	return &emptyNode{}, nil
+	return nil
 }

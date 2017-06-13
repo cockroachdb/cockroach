@@ -358,8 +358,6 @@ func (p *planner) newPlan(
 		return p.SelectClause(ctx, n, nil, nil, desiredTypes, publicColumns)
 	case *parser.Set:
 		return p.Set(ctx, n)
-	case *parser.SetTimeZone:
-		return p.SetTimeZone(n)
 	case *parser.SetTransaction:
 		return p.SetTransaction(n)
 	case *parser.SetDefaultIsolation:

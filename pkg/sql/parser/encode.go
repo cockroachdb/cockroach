@@ -34,7 +34,11 @@ var (
 	encodeMap [256]byte
 	// mustQuoteMap contains characters that require that their enclosing
 	// string be quoted, even when FmtFlags.bareStrings is true.
+	//
+	// This is used e.g. when stringifying expressions with array types
+	// for pgwire.
 	mustQuoteMap = map[byte]bool{
+		' ': true,
 		',': true,
 		'{': true,
 		'}': true,
@@ -51,7 +55,7 @@ func encodeSQLString(buf *bytes.Buffer, in string) {
 // encodeSQLStringWithFlags writes a string literal to buf. All unicode and
 // non-printable characters are escaped. FmtFlags controls the output format:
 // if f.bareStrings is true, the output string will not be wrapped in quotes
-// if possible.
+// if the strings contains no special characters.
 func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
@@ -115,14 +119,16 @@ func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 	}
 }
 
-func encodeSQLIdent(buf *bytes.Buffer, s string) {
+func encodeSQLIdent(buf *bytes.Buffer, s string, f FmtFlags) {
 	if isNonKeywordBareIdentifier(s) {
 		buf.WriteString(s)
 		return
 	}
 
 	// The only character that requires escaping is a double quote.
-	buf.WriteString(`"`)
+	if !f.bareIdentifiers {
+		buf.WriteString(`"`)
+	}
 	start := 0
 	for i, n := 0, len(s); i < n; i++ {
 		ch := s[i]
@@ -138,7 +144,9 @@ func encodeSQLIdent(buf *bytes.Buffer, s string) {
 	if start < len(s) {
 		buf.WriteString(s[start:])
 	}
-	buf.WriteString(`"`)
+	if !f.bareIdentifiers {
+		buf.WriteString(`"`)
+	}
 }
 
 func encodeSQLBytes(buf *bytes.Buffer, in string) {

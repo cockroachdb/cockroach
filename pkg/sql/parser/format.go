@@ -38,8 +38,11 @@ type fmtFlags struct {
 	starDatumFormat func(buf *bytes.Buffer, f FmtFlags)
 	// If true, non-function names are replaced by underscores.
 	anonymize bool
-	// If true, strings will be rendered without wrapping quotes if possible.
+	// If true, strings will be rendered without wrapping quotes if they
+	// contain no special characters.
 	bareStrings bool
+	// If true, identifiers will be rendered without wrapping quotes.
+	bareIdentifiers bool
 	// If true, datums and placeholders will have type annotations (like
 	// :::interval) as necessary to disambiguate between possible type
 	// resolutions.
@@ -64,8 +67,12 @@ var FmtSimpleWithPasswords FmtFlags = &fmtFlags{showPasswords: true}
 var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
 
 // FmtBareStrings instructs the pretty-printer to print strings without
-// wrapping quotes, if possible.
+// wrapping quotes, if the string contains no special characters.
 var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
+
+// FmtBareIdentifiers instructs the pretty-printer to print
+// identifiers without wrapping quotes in any case.
+var FmtBareIdentifiers FmtFlags = &fmtFlags{bareIdentifiers: true}
 
 // FmtParsable instructs the pretty-printer to produce a representation that
 // can be parsed into an equivalent expression (useful for serialization of
@@ -76,9 +83,10 @@ var FmtParsable FmtFlags = &fmtFlags{disambiguateDatumTypes: true}
 // that can be used to check equivalence of expressions. Specifically:
 //  - IndexedVars are formatted using symbolic notation (to disambiguate
 //    columns).
-//  - datum types are disambiguated with casts. This is necessary because datums
-//    of different types can otherwise be formatted to the same string: (for
-//    example the DDecimal 1 and the DInt 1).
+//  - datum types are disambiguated with explicit type
+//    annotations. This is necessary because datums of different types
+//    can otherwise be formatted to the same string: (for example the
+//    DDecimal 1 and the DInt 1).
 var FmtCheckEquivalence FmtFlags = &fmtFlags{symbolicVars: true, disambiguateDatumTypes: true}
 
 // FmtHideConstants instructs the pretty-printer to produce a

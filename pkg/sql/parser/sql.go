@@ -6732,7 +6732,7 @@ sqldefault:
 		//line sql.y:1485
 		{
 			/* SKIP DOC */
-			sqlVAL.union.val = &SetTimeZone{Value: sqlDollar[3].union.expr()}
+			sqlVAL.union.val = &Set{Name: UnresolvedName{Name("time zone")}, Values: Exprs{sqlDollar[3].union.expr()}}
 		}
 	case 176:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -6921,7 +6921,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:1642
 		{
-			sqlVAL.union.val = &Show{Name: sqlDollar[4].union.unresolvedName().String(), ClusterSetting: true}
+			sqlVAL.union.val = &Show{Name: AsStringWithFlags(sqlDollar[4].union.unresolvedName(), FmtBareIdentifiers), ClusterSetting: true}
 		}
 	case 213:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
