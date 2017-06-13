@@ -635,6 +635,116 @@ func (r *RocksDB) NewSnapshot() Reader {
 	}
 }
 
+// NewReadOnly returns a new ReadWriter wrapping this rocksdb engine.
+func (r *RocksDB) NewReadOnly() ReadWriter {
+	return &rocksDBReadOnly{
+		parent:   r,
+		isClosed: false,
+	}
+}
+
+type rocksDBReadOnly struct {
+	parent     *RocksDB
+	prefixIter reusableIterator
+	normalIter reusableIterator
+	isClosed   bool
+}
+
+func (r *rocksDBReadOnly) Close() {
+	if r.isClosed {
+		panic("closing an already-closed rocksDBReadOnly")
+	}
+	r.isClosed = true
+	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
+		i.destroy()
+	}
+	if i := &r.normalIter.rocksDBIterator; i.iter != nil {
+		i.destroy()
+	}
+}
+
+// Read-only batches are not committed
+func (r *rocksDBReadOnly) Closed() bool {
+	return r.isClosed
+}
+
+func (r *rocksDBReadOnly) Get(key MVCCKey) ([]byte, error) {
+	if r.isClosed {
+		panic("using a closed rocksDBReadOnly")
+	}
+	return dbGet(r.parent.rdb, key)
+}
+
+func (r *rocksDBReadOnly) GetProto(
+	key MVCCKey, msg proto.Message,
+) (ok bool, keyBytes, valBytes int64, err error) {
+	if r.isClosed {
+		panic("using a closed rocksDBReadOnly")
+	}
+	return dbGetProto(r.parent.rdb, key, msg)
+}
+
+func (r *rocksDBReadOnly) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+	if r.isClosed {
+		panic("using a closed rocksDBReadOnly")
+	}
+	return dbIterate(r.parent.rdb, r, start, end, f)
+}
+
+// NewIterator returns an iterator over the underlying engine. Note
+// that the returned iterator is cached and re-used for the lifetime of the
+// rocksDBReadOnly. A panic will be thrown if multiple prefix or normal (non-prefix)
+// iterators are used simultaneously on the same rocksDBReadOnly.
+func (r *rocksDBReadOnly) NewIterator(prefix bool) Iterator {
+	if r.isClosed {
+		panic("using a closed rocksDBReadOnly")
+	}
+	iter := &r.normalIter
+	if prefix {
+		iter = &r.prefixIter
+	}
+	if iter.rocksDBIterator.iter == nil {
+		iter.rocksDBIterator.init(r.parent.rdb, prefix, r)
+	}
+	if iter.inuse {
+		panic("iterator already in use")
+	}
+	iter.inuse = true
+	return iter
+}
+
+func (r *rocksDBReadOnly) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
+	panic("not implemented")
+}
+
+// Writer methods are not implemented for rocksDBReadOnly. Ideally, the code could be refactored so that
+// a Reader could be supplied to evaluateBatch
+
+// Writer is the write interface to an engine's data.
+func (r *rocksDBReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
+	panic("not implemented")
+}
+
+func (r *rocksDBReadOnly) Clear(key MVCCKey) error {
+	panic("not implemented")
+}
+
+func (r *rocksDBReadOnly) ClearRange(start, end MVCCKey) error {
+	panic("not implemented")
+}
+
+func (r *rocksDBReadOnly) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	panic("not implemented")
+}
+
+func (r *rocksDBReadOnly) Merge(key MVCCKey, value []byte) error {
+	panic("not implemented")
+}
+
+func (r *rocksDBReadOnly) Put(key MVCCKey, value []byte) error {
+	panic("not implemented")
+}
+
 // NewBatch returns a new batch wrapping this rocksdb engine.
 func (r *RocksDB) NewBatch() Batch {
 	return newRocksDBBatch(r, false /* writeOnly */)
