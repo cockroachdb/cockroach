@@ -16,21 +16,20 @@ permissions and limitations under the License.
 
 $debug-table
   margin 0 0 40px
-  display table
   width 100%
+  border-collapse collapse
+  border-spacing 0
 
   &__row
-    display table-row
     background-color $light-gray-2
 
     &--header
       font-weight 900
       color white
-      border 0
+      border-style none
 
   &__cell
     padding 6px 12px
-    display table-cell
     height 20px
     overflow hidden
     text-overflow ellipsis
@@ -46,6 +45,9 @@ $debug-table
       background-color $glow-blue
       border 0
       text-align right
+
+    &&--header
+      border-style none
 
     &&&--warning
       color $alert-yellow-dark

@@ -52,20 +52,24 @@ class DebugNodes extends React.Component<DebugNodesProps, {}> {
       return (
         <div>
           <h2>Failures</h2>
-          <div className="failure-table">
-            <div className="failure-table__row failure-table__row--header">
-              <div className="failure-table__cell failure-table__cell--short">Node</div>
-              <div className="failure-table__cell">Error</div>
-            </div>
-            {
-              _.map(failures, (failure) => (
-                <div className="failure-table__row" key={failure.node_id}>
-                  <div className="failure-table__cell failure-table__cell--short">n{failure.node_id}</div>
-                  <div className="failure-table__cell">title={failure.error_message}>{failure.error_message}</div>
-                </div>
-              ))
-            }
-          </div>
+          <table className="failure-table">
+            <thead>
+              <tr className="failure-table__row failure-table__row--header">
+                <td className="failure-table__cell failure-table__cell--header failure-table__cell--short">Node</td>
+                <td className="failure-table__cell failure-table__cell--short">Error</td>
+              </tr>
+            </thead>
+            <tbody>
+              {
+                _.map(failures, (failure) => (
+                  <tr className="failure-table__row" key={failure.node_id}>
+                    <td className="failure-table__cell failure-table__cell--short">n{failure.node_id}</td>
+                    <td className="failure-table__cell">title={failure.error_message}>{failure.error_message}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
         </div>
       );
     };
@@ -105,28 +109,30 @@ class DebugNodes extends React.Component<DebugNodesProps, {}> {
           return cellClass + "--" + className;
         })], " ");
       return (
-        <div className={tableClass}>
-          {
-            _.map(rows, (row, i) => (
-              <div className={rowClassNames(row.classes)} key={i}>
-                {
-                  _.map(row.cells, (cell, j) => (
-                    <div className={cellClassNames(cell.classes)} key={j} title={cell.title}>
-                      {
-                        _.map(cell.values, (value, k) => (
-                          <span key={k}>
-                            {value}
-                            <br/>
-                          </span>
-                        ))
-                      }
-                    </div>
-                  ))
-                }
-              </div>
-            ))
-          }
-        </div>
+        <table className={tableClass}>
+          <tbody>
+            {
+              _.map(rows, (row, i) => (
+                <tr className={rowClassNames(row.classes)} key={i}>
+                  {
+                    _.map(row.cells, (cell, j) => (
+                      <td className={cellClassNames(cell.classes)} key={j} title={cell.title}>
+                        {
+                          _.map(cell.values, (value, k) => (
+                            <span key={k}>
+                              {value}
+                              <br/>
+                            </span>
+                          ))
+                        }
+                      </td>
+                    ))
+                  }
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
       );
     };
 
