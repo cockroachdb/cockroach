@@ -57,25 +57,22 @@ to be created manually. See [minikube.sh](minikube.sh) for the necessary
 steps. If you're on GCE or AWS, where dynamic provisioning is supported, no
 manual work is needed to create the persistent volumes.
 
-## Testing locally on minikube
+## Creating your kubernetes cluster
+
+### Locally on minikube
 
 Set up your minikube cluster following the
 [instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/minikube/).
 
 Then once you have a Kubernetes cluster running on minikube, follow the steps
-in [minikube.sh](minikube.sh) (or simply run that file) to create your
-cockroachdb cluster.
+in [minikube.sh](minikube.sh) (or simply run that file).
 
-## Testing in the cloud on AWS
+### On AWS
 
 Set up your cluster following the
 [instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/aws/).
 
-Then once you have a Kubernetes cluster running, either run the
-[aws.sh](aws.sh) script or just run `kubectl create -f cockroachdb-statefulset.yaml`
-to create your cockroachdb cluster.
-
-## Testing in the cloud on GCE
+### On GCE
 
 You can either set up your cluster following the
 [instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/gce/)
@@ -86,9 +83,34 @@ or by using the hosted
 gcloud container clusters create NAME
 ```
 
-Then once you have a Kubernetes cluster running, either run the
-[gce.sh](gce.sh) script or just run `kubectl create -f cockroachdb-statefulset.yaml`
-to create your cockroachdb cluster.
+### On Azure
+
+Set up your cluster following the
+[instructions provided in the Kubernetes docs](https://kubernetes.io/docs/getting-started-guides/azure/).
+
+
+## Creating the cockroach cluster
+
+Once your kubernetes cluster is up and running, you can launch your cockroach cluster.
+
+### Insecure mode
+
+Run: `kubectl create -f cockroachdb-statefulset.yaml`
+
+### Secure mode
+
+Run: `kubectl create -f cockroachdb-statefulset-secure.yaml`
+
+Each new node will request a certificate from the kubernetes CA during its initialization phase.
+
+You can view pending certificates and approve them using:
+```
+$ kubectl get csr
+NAME                         AGE       REQUESTOR                               CONDITION
+node-request-cockroachdb-0   1s        system:serviceaccount:default:default   Pending
+$ kubectl certificate approve node-request-cockroachdb-0
+certificatesigningrequest "node-request-cockroachdb-0" approved
+```
 
 ## Accessing the database
 
@@ -107,6 +129,8 @@ You can see example SQL statements for inserting and querying data in the
 included [demo script](demo.sh), but can use almost any Postgres-style SQL
 commands. Some more basic examples can be found within
 [CockroachDB's documentation](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html).
+
+**WARNING**: client certificate fetching is not yet implemented, so this will not work in secure mode.
 
 ## Accessing the admin UI
 
@@ -160,4 +184,9 @@ we can clean up everything that we created in one quick command using a selector
 
 ```shell
 kubectl delete statefulsets,pods,persistentvolumes,persistentvolumeclaims,services,poddisruptionbudget -l app=cockroachdb
+```
+
+If running in secure mode, you want to cleanup old certificate requests:
+```shell
+kubectl delete csr --all
 ```
