@@ -378,8 +378,6 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := newTimestampCache(clock)
-	defer tc.Clear(clock.Now())
 
 	// Run each test case in several configurations.
 	for _, testCase := range []layeredIntervalTestCase{
@@ -406,6 +404,14 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 							// transaction; otherwise each is a separate transaction.
 							for _, sameTxn := range []bool{false, true} {
 								t.Run(fmt.Sprintf("sameTxn=%t", sameTxn), func(t *testing.T) {
+									tc := newTimestampCache(clock)
+									defer func() {
+										tc.Clear(clock.Now())
+										if tc.bytes != 0 {
+											t.Fatalf("expected 0, but found %d", tc.bytes)
+										}
+									}()
+
 									txns := make([]txnState, len(testCase.spans))
 									if sameTxn {
 										id := uuid.MakeV4()
@@ -426,6 +432,7 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 											txns[i].ts = now
 										}
 									} else {
+										manual.Increment(1)
 										for i := range txns {
 											txns[i].ts = clock.Now()
 										}

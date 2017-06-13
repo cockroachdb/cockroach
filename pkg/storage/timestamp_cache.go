@@ -277,6 +277,12 @@ func (tc *timestampCache) add(
 			key := entry.Key.(*cache.IntervalKey)
 			sCmp := r.Start.Compare(key.Start)
 			eCmp := r.End.Compare(key.End)
+			// Some of the cases below adjust cv and key in-place (in a manner that
+			// maintains the IntervalCache invariants). These in-place modifications
+			// change the size of the entry. To capture all of these modifications we
+			// compute the current size of the entry and then use the new size at the
+			// end of this iteration to update TimestampCache.bytes.
+			oldSize := cacheEntrySize(key.Start, key.End, cv.txnID)
 			if cv.timestamp.Less(timestamp) {
 				// The existing interval has a timestamp less than the new
 				// interval. Compare interval ranges to determine how to
@@ -302,6 +308,7 @@ func (tc *timestampCache) add(
 					// New: ------------      ------------      ------------
 					// Old:
 					tcache.DelEntry(entry)
+					continue // DelEntry adjusted tc.bytes, don't do it again
 				case sCmp > 0 && eCmp < 0:
 					// Old contains new; split up old into two.
 					//
@@ -409,6 +416,7 @@ func (tc *timestampCache) add(
 					// New: ------------      ------------      ------------
 					// Old:
 					tcache.DelEntry(entry)
+					continue // DelEntry adjusted tc.bytes, don't do it again
 				case eCmp >= 0:
 					// Left partial overlap; truncate old end.
 					//
@@ -445,6 +453,7 @@ func (tc *timestampCache) add(
 					// Nil: ============
 					// Old:
 					cv.txnID = nil
+					tc.bytes += cacheEntrySize(key.Start, key.End, cv.txnID) - oldSize
 					return
 				case sCmp == 0 && eCmp > 0:
 					// New contains old, left-aligned. Clear ownership of the
@@ -481,6 +490,7 @@ func (tc *timestampCache) add(
 					// Nil:   ========
 					// Old:
 					cv.txnID = nil
+
 					newKey := tcache.MakeKey(r.Start, key.Start)
 					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: txnID})
 					addEntryAfter(newEntry, entry)
@@ -536,6 +546,7 @@ func (tc *timestampCache) add(
 					// Nil:     ====
 					// Old: ----
 					key.End, r.Start = r.Start, key.End
+
 					newKey := tcache.MakeKey(key.End, r.Start)
 					newCV := cacheValue{timestamp: cv.timestamp, txnID: nil}
 					newEntry := makeCacheEntry(newKey, newCV)
@@ -551,6 +562,7 @@ func (tc *timestampCache) add(
 					// Nil:     ====
 					// Old:         ----
 					key.Start, r.End = r.End, key.Start
+
 					newKey := tcache.MakeKey(r.End, key.Start)
 					newCV := cacheValue{timestamp: cv.timestamp, txnID: nil}
 					newEntry := makeCacheEntry(newKey, newCV)
@@ -559,6 +571,7 @@ func (tc *timestampCache) add(
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
 			}
+			tc.bytes += cacheEntrySize(key.Start, key.End, cv.txnID) - oldSize
 		}
 		addRange(r)
 	}
