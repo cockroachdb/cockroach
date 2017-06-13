@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -275,6 +277,50 @@ var varGen = map[string]sessionVar{
 		},
 		Reset: func(*planner) error { return nil },
 	},
+
+	`trace`: {
+		Get: func(p *planner) string {
+			if p.session.Tracing.Enabled() {
+				return "ON"
+			}
+			return "OFF"
+		},
+		Reset: func(p *planner) error {
+			if !p.session.Tracing.Enabled() {
+				// Tracing is not active. Nothing to do.
+				return nil
+			}
+			return stopTracing(p.session)
+		},
+		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
+			s, err := p.getStringVal("trace", values)
+			if err != nil {
+				return err
+			}
+			switch parser.Name(s).Normalize() {
+			case parser.ReNormalizeName("on"), parser.ReNormalizeName("local"):
+				recordingType := tracing.SnowballRecording
+				if parser.Name(s).Normalize() == parser.ReNormalizeName("local") {
+					recordingType = tracing.SingleNodeRecording
+				}
+				if err := p.session.Tracing.StartTracing(recordingType); err != nil {
+					return err
+				}
+				return nil
+			case parser.ReNormalizeName("off"):
+				return stopTracing(p.session)
+			default:
+				return fmt.Errorf("set trace: \"%s\" not supported", s)
+			}
+		},
+	},
+}
+
+func stopTracing(s *Session) error {
+	if err := s.Tracing.StopTracing(); err != nil {
+		return errors.Wrapf(err, "error stopping tracing")
+	}
+	return nil
 }
 
 var varNames = func() []string {
