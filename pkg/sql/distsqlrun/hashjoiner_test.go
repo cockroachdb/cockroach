@@ -17,6 +17,7 @@
 package distsqlrun
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -504,28 +505,35 @@ func TestHashJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			hs := c.spec
-			leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
-			rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
-			out := &RowBuffer{}
-			evalCtx := parser.MakeTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			flowCtx := FlowCtx{evalCtx: evalCtx}
+			// Run tests with a variety of initial buffer sizes.
+			for _, initialBuffer := range []int64{0, 32, 64, 128, 1024 * 1024} {
+				t.Run(fmt.Sprintf("%d", initialBuffer), func(t *testing.T) {
+					hs := c.spec
+					leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
+					rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
+					out := &RowBuffer{}
+					evalCtx := parser.MakeTestingEvalContext()
+					defer evalCtx.Stop(context.Background())
+					flowCtx := FlowCtx{evalCtx: evalCtx}
 
-			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-			h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
-			if err != nil {
-				t.Fatal(err)
-			}
+					post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+					h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
+					if err != nil {
+						t.Fatal(err)
+					}
+					h.initialBufferSize = initialBuffer
 
-			h.Run(context.Background(), nil)
+					h.Run(context.Background(), nil)
 
-			if !out.ProducerClosed {
-				t.Fatalf("output RowReceiver not closed")
-			}
+					if !out.ProducerClosed {
+						t.Fatalf("output RowReceiver not closed")
+					}
 
-			if err := checkExpectedRows(c.expected, out); err != nil {
-				t.Fatal(err)
+					if err := checkExpectedRows(c.expected, out); err != nil {
+						fmt.Println(err)
+						t.Fatal(err)
+					}
+				})
 			}
 		})
 	}
@@ -563,9 +571,9 @@ func checkExpectedRows(expectedRows sqlbase.EncDatumRows, results *RowBuffer) er
 // TestDrain tests that, if the consumer starts draining, the hashJoiner informs
 // the producers and drains them.
 //
-// Concretely, the HashJoiner reads the right input fully before starting to
-// produce rows, so only the left input will be ask to drain if the consumer is
-// draining.
+// Concretely, the HashJoiner is set up to read the right input fully before
+// starting to produce rows, so only the left input will be asked to drain if
+// the consumer is draining.
 func TestHashJoinerDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
@@ -625,6 +633,8 @@ func TestHashJoinerDrain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Disable initial buffering. We always store the right stream in this case.
+	h.initialBufferSize = 0
 
 	out.ConsumerDone()
 	h.Run(context.Background(), nil)
@@ -734,6 +744,8 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Disable initial buffering. We always store the right stream in this case.
+	h.initialBufferSize = 0
 
 	h.Run(context.Background(), nil)
 

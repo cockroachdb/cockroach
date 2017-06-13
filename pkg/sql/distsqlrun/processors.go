@@ -163,9 +163,9 @@ func (h *procOutputHelper) neededColumns() []bool {
 // If the consumer signals the producer to drain, the message is relayed and all
 // the draining metadata is consumed and forwarded.
 //
-// inputs can be nil.
+// inputs are optional.
 //
-// Returns true if more rows are needed, false otherwise. If false is returned,
+// Returns true if more rows are needed, false otherwise. If false is returned
 // both the inputs and the output have been properly closed.
 func emitHelper(
 	ctx context.Context,
@@ -186,10 +186,10 @@ func emitHelper(
 		var err error
 		consumerStatus, err = output.emitRow(ctx, row)
 		if err != nil {
+			output.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			for _, input := range inputs {
 				input.ConsumerClosed()
 			}
-			output.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			output.close()
 			return false
 		}
