@@ -64,9 +64,6 @@ manual work is needed to create the persistent volumes.
 Set up your minikube cluster following the
 [instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/minikube/).
 
-Then once you have a Kubernetes cluster running on minikube, follow the steps
-in [minikube.sh](minikube.sh) (or simply run that file).
-
 ### On AWS
 
 Set up your cluster following the
@@ -102,14 +99,17 @@ Run: `kubectl create -f cockroachdb-statefulset.yaml`
 Run: `kubectl create -f cockroachdb-statefulset-secure.yaml`
 
 Each new node will request a certificate from the kubernetes CA during its initialization phase.
+Statefulsets create pods one at a time, waiting for each previous pod to be initialized.
+This means that you must approve podN's certificate for podN+1 to be created.
 
 You can view pending certificates and approve them using:
 ```
 $ kubectl get csr
-NAME                         AGE       REQUESTOR                               CONDITION
-node-request-cockroachdb-0   1s        system:serviceaccount:default:default   Pending
-$ kubectl certificate approve node-request-cockroachdb-0
-certificatesigningrequest "node-request-cockroachdb-0" approved
+NAME                 AGE       REQUESTOR                               CONDITION
+node-cockroachdb-0   4s        system:serviceaccount:default:default   Pending
+
+$ kubectl certificate approve node-cockroachdb-0
+certificatesigningrequest "node-cockroachdb-0" approved
 ```
 
 ## Accessing the database
@@ -186,7 +186,7 @@ we can clean up everything that we created in one quick command using a selector
 kubectl delete statefulsets,pods,persistentvolumes,persistentvolumeclaims,services,poddisruptionbudget -l app=cockroachdb
 ```
 
-If running in secure mode, you want to cleanup old certificate requests:
+If running in secure mode, you'll want to cleanup old certificate requests:
 ```shell
 kubectl delete csr --all
 ```

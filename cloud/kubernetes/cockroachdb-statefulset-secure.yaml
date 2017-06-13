@@ -17,6 +17,8 @@ spec:
   - port: 8080
     targetPort: 8080
     name: http
+  # Uncomment the line below to publish the service externally.
+  # type: LoadBalancer
   selector:
     app: cockroachdb
 ---
@@ -105,7 +107,8 @@ spec:
               fieldPath: metadata.namespace
         volumeMounts:
         - name: datadir
-          mountPath: "/cockroach/cockroach-data"
+          mountPath: /cockroach/cockroach-data
+
       # The init-certs container sends a certificate signing request to the
       # kubernetes cluster.
       # You can see pending requests using: kubectl get csr
@@ -118,26 +121,18 @@ spec:
       - name: init-certs
         image: cockroachdb/cockroach-k8s-request-cert:0.1
         imagePullPolicy: IfNotPresent
-        args:
-        - "-certs-dir=/cockroach-certs"
-        - "-addresses=localhost,127.0.0.1,$(POD_IP),$(POD_NAME).cockroachdb.$(POD_NAMESPACE).svc.cluster.local,cockroachdb-public"
-        - "-symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        command:
+        - "/bin/ash"
+        - "-ecx"
+        - "/request-cert -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,${POD_IP},$(hostname -f),cockroachdb-public -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
         env:
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
         - name: POD_IP
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
         volumeMounts:
         - name: certs
-          mountPath: "/cockroach-certs"
+          mountPath: /cockroach-certs
 
       affinity:
         podAntiAffinity:
