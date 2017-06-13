@@ -130,8 +130,6 @@ included [demo script](demo.sh), but can use almost any Postgres-style SQL
 commands. Some more basic examples can be found within
 [CockroachDB's documentation](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html).
 
-**WARNING**: client certificate fetching is not yet implemented, so this will not work in secure mode.
-
 ## Accessing the admin UI
 
 If you want to see information about how the cluster is doing, you can try
@@ -144,6 +142,25 @@ kubectl port-forward cockroachdb-0 8080
 
 Once you’ve done that, you should be able to access the admin UI by visiting
 http://localhost:8080/ in your web browser.
+
+## Running the example app
+
+This directory contains the configuration to launch a simple load generator with 2 pods.
+
+If you created an insecure cockroach cluster, run:
+```shell
+kubectl create -f example_app.yaml
+```
+
+If you created a secure cockroach cluster, run:
+```shell
+kubectl create -f example_app_secure.yaml
+```
+
+For every pod being created, you will need to approve its client certificate request:
+```shell
+kubectl certificate approve client.root-example-secure-etc..
+```
 
 ## Simulating failures
 
