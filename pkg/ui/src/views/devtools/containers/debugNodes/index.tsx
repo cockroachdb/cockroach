@@ -6,6 +6,7 @@ import * as protos from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
 import { refreshDebugNodes } from "src/redux/apiReducers";
 import { RouterState } from "react-router";
+import { DebugFailureTable } from "src/views/devtools/components/debugFailureTable";
 
 interface DebugNodesOwnProps {
   debugNodes: protos.cockroach.server.serverpb.DebugNodesResponse;
@@ -44,35 +45,6 @@ class DebugNodes extends React.Component<DebugNodesProps, {}> {
         </div>
       );
     }
-
-    const failuresTable = (failures: protos.cockroach.server.serverpb.DebugFailure$Properties[]) => {
-      if (_.isEmpty(failures)) {
-        return null;
-      }
-      return (
-        <div>
-          <h2>Failures</h2>
-          <table className="failure-table">
-            <thead>
-              <tr className="failure-table__row failure-table__row--header">
-                <td className="failure-table__cell failure-table__cell--header failure-table__cell--short">Node</td>
-                <td className="failure-table__cell failure-table__cell--short">Error</td>
-              </tr>
-            </thead>
-            <tbody>
-              {
-                _.map(failures, (failure) => (
-                  <tr className="failure-table__row" key={failure.node_id}>
-                    <td className="failure-table__cell failure-table__cell--short">n{failure.node_id}</td>
-                    <td className="failure-table__cell">title={failure.error_message}>{failure.error_message}</td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-        </div>
-      );
-    };
 
     const filtersOutput = (filters: string[]) => {
       if (_.isEmpty(filters)) {
@@ -139,7 +111,7 @@ class DebugNodes extends React.Component<DebugNodesProps, {}> {
     return (
       <div className="section">
         <h1>Node Diagnostics Page</h1>
-        {failuresTable(debugNodes.failures)}
+        <DebugFailureTable failures={debugNodes.failures} />
         {filtersOutput(debugNodes.filters)}
         <h2>Nodes</h2>
         {debugTable(debugNodes.rows, "debugnodes")}
