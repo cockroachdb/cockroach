@@ -273,6 +273,9 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		params.Stopper = stop.NewStopper()
 	}
 
+	// TODO(andrei): Running two TestServers concurrently with
+	// PartOfCluster==false can result in the default zone config not be reset
+	// properly. It would be nice if this were more robust.
 	if !params.PartOfCluster {
 		// Change the replication requirements so we don't get log spam about ranges
 		// not being replicated enough.

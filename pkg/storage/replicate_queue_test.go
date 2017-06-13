@@ -102,6 +102,72 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	})
 }
 
+// Test that up-replication only proceeds if there are a good number of
+// candidates to up-replicate to. Specifically, we won't up-replicate to an
+// even number of replicas unless there is an additional candidate that will
+// allow a subsequent up-replication to an odd number.
+func TestReplicateQueueUpReplicate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const replicaCount = 3
+
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	testKey := keys.MetaMin
+	desc, err := tc.LookupRange(testKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(desc.Replicas) != 1 {
+		t.Fatalf("replica count, want 1, current %d", len(desc.Replicas))
+	}
+
+	if err := tc.AddServer(t, base.TestServerArgs{}); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		// After the initial splits have been performed, all of the resulting ranges
+		// should be present in replicate queue purgatory (because we only have a
+		// single store in the test and thus replication cannot succeed).
+		expected, err := tc.Servers[0].ExpectedInitialRangeCount()
+		if err != nil {
+			return err
+		}
+
+		var store *storage.Store
+		_ = tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
+			store = s
+			return nil
+		})
+
+		if n := store.ReplicateQueuePurgatoryLength(); expected != n {
+			return errors.Errorf("expected %d replicas in purgatory, but found %d", expected, n)
+		}
+		return nil
+	})
+
+	if err := tc.AddServer(t, base.TestServerArgs{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now wait until the replicas have been up-replicated to the
+	// desired number.
+	testutils.SucceedsSoon(t, func() error {
+		desc, err := tc.LookupRange(testKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(desc.Replicas) != replicaCount {
+			return errors.Errorf("replica count, want %d, current %d", replicaCount, len(desc.Replicas))
+		}
+		return nil
+	})
+}
+
 // TestReplicateQueueDownReplicate verifies that the replication queue will
 // notice over-replicated ranges and remove replicas from them.
 func TestReplicateQueueDownReplicate(t *testing.T) {
