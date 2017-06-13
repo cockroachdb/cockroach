@@ -1580,7 +1580,10 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
 		// TODO(dt): expose properly once #15892 is addressed.
 		log.Errorf(ctx, "on-disk and in-memory state diverged:\n%s", pretty.Diff(diskState, r.mu.state))
 		r.mu.state.Desc, diskState.Desc = nil, nil
-		panic(log.Safe{V: fmt.Sprintf("on-disk and in-memory state diverged: %s", pretty.Diff(diskState, r.mu.state))})
+		log.Fatal(ctx, log.Safe{
+			V: fmt.Sprintf("on-disk and in-memory state diverged: %s",
+				pretty.Diff(diskState, r.mu.state)),
+		})
 	}
 }
 
@@ -4396,7 +4399,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 				err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
 				return nil, ms, nil, EvalResult{}, roachpb.NewError(err)
 			}
-			panic("unreachable")
+			log.Fatal(ctx, "unreachable")
 		}
 
 		log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
