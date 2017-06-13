@@ -170,15 +170,11 @@ func (p *planner) Insert(
 					return nil, err
 				}
 
-				status, idx, err := en.tableDesc.FindColumnByName(c.ColumnName)
+				col, _, err := en.tableDesc.FindColumnByName(c.ColumnName)
 				if err != nil {
 					return nil, err
 				}
-				if status == sqlbase.DescriptorActive {
-					updateCols[i] = en.tableDesc.Columns[idx]
-				} else {
-					updateCols[i] = *en.tableDesc.Mutations[idx].GetColumn()
-				}
+				updateCols[i] = col
 			}
 
 			helper, err := p.makeUpsertHelper(

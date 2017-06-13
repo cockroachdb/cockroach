@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -98,12 +99,17 @@ func (mt mutationTest) makeMutationsActive() {
 // writeColumnMutation adds column as a mutation and writes the
 // descriptor to the DB.
 func (mt mutationTest) writeColumnMutation(column string, m sqlbase.DescriptorMutation) {
-	_, i, err := mt.tableDesc.FindColumnByNormalizedName(column)
+	name := parser.Name(column)
+	col, _, err := mt.tableDesc.FindColumnByName(name)
 	if err != nil {
 		mt.Fatal(err)
 	}
-	col := mt.tableDesc.Columns[i]
-	mt.tableDesc.Columns = append(mt.tableDesc.Columns[:i], mt.tableDesc.Columns[i+1:]...)
+	for i := range mt.tableDesc.Columns {
+		if col.ID == mt.tableDesc.Columns[i].ID {
+			mt.tableDesc.Columns = append(mt.tableDesc.Columns[:i], mt.tableDesc.Columns[i+1:]...)
+			break
+		}
+	}
 	m.Descriptor_ = &sqlbase.DescriptorMutation_Column{Column: &col}
 	mt.writeMutation(m)
 }
@@ -125,12 +131,12 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 		}
 	}
 	if m.State == sqlbase.DescriptorMutation_UNKNOWN {
-		// randomly pick DELETE_ONLY/WRITE_ONLY state.
+		// randomly pick DELETE_ONLY/DELETE_AND_WRITE_ONLY state.
 		r := rand.Intn(2)
 		if r == 0 {
 			m.State = sqlbase.DescriptorMutation_DELETE_ONLY
 		} else {
-			m.State = sqlbase.DescriptorMutation_WRITE_ONLY
+			m.State = sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY
 		}
 	}
 	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
@@ -178,7 +184,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 	starQuery := `SELECT * FROM t.test`
 	for _, useUpsert := range []bool{true, false} {
 		// Run the tests for both states.
-		for _, state := range []sqlbase.DescriptorMutation_State{sqlbase.DescriptorMutation_DELETE_ONLY, sqlbase.DescriptorMutation_WRITE_ONLY} {
+		for _, state := range []sqlbase.DescriptorMutation_State{sqlbase.DescriptorMutation_DELETE_ONLY,
+			sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY} {
 			// Init table to start state.
 			mTest.Exec(`TRUNCATE TABLE t.test`)
 			initRows := [][]string{{"a", "z", "q"}}
@@ -202,7 +209,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			mTest.CheckQueryResults(starQuery, [][]string{{"a", "z"}})
 
 			// The column backfill uses Put instead of CPut because it depends on
-			// an INSERT of a column in the WRITE_ONLY state failing. These two
+			// an INSERT of a column in the DELETE_AND_WRITE_ONLY state failing. These two
 			// tests guarantee that.
 
 			var err error
@@ -267,11 +274,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			// Make column "i" live so that it is read.
 			mTest.makeMutationsActive()
 			// Notice that the default value of "i" is only written when the
-			// descriptor is in the WRITE_ONLY state.
+			// descriptor is in the DELETE_AND_WRITE_ONLY state.
 			mTest.CheckQueryResults(starQuery, afterInsert)
 
 			// The column backfill uses Put instead of CPut because it depends on
-			// an UPDATE of a column in the WRITE_ONLY state failing. This test
+			// an UPDATE of a column in the DELETE_AND_WRITE_ONLY state failing. This test
 			// guarantees that.
 
 			// Make column "i" a mutation.
@@ -346,12 +353,18 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 // descriptor to the DB.
 func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMutation) {
 	tableDesc := mt.tableDesc
-	_, i, err := tableDesc.FindIndexByNormalizedName(index)
+	name := parser.Name(index)
+	idx, _, err := tableDesc.FindIndexByName(name)
 	if err != nil {
 		mt.Fatal(err)
 	}
-	idx := tableDesc.Indexes[i]
-	tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+	for i := range tableDesc.Indexes {
+		if idx.ID == tableDesc.Indexes[i].ID {
+			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+			break
+		}
+	}
+
 	m.Descriptor_ = &sqlbase.DescriptorMutation_Index{Index: &idx}
 	mt.writeMutation(m)
 }
@@ -386,7 +399,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	indexQuery := `SELECT v FROM t.test@foo`
 	for _, useUpsert := range []bool{true, false} {
 		// See the effect of the operations depending on the state.
-		for _, state := range []sqlbase.DescriptorMutation_State{sqlbase.DescriptorMutation_DELETE_ONLY, sqlbase.DescriptorMutation_WRITE_ONLY} {
+		for _, state := range []sqlbase.DescriptorMutation_State{sqlbase.DescriptorMutation_DELETE_ONLY,
+			sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY} {
 			// Init table with some entries.
 			if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
 				t.Fatal(err)
@@ -531,16 +545,16 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 		// Run the tests for both states for a column and an index.
 		for _, state := range []sqlbase.DescriptorMutation_State{
 			sqlbase.DescriptorMutation_DELETE_ONLY,
-			sqlbase.DescriptorMutation_WRITE_ONLY,
+			sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		} {
 			for _, idxState := range []sqlbase.DescriptorMutation_State{
 				sqlbase.DescriptorMutation_DELETE_ONLY,
-				sqlbase.DescriptorMutation_WRITE_ONLY,
+				sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 			} {
 				// Ignore the impossible column in DELETE_ONLY state while index
-				// is in the WRITE_ONLY state.
+				// is in the DELETE_AND_WRITE_ONLY state.
 				if state == sqlbase.DescriptorMutation_DELETE_ONLY &&
-					idxState == sqlbase.DescriptorMutation_WRITE_ONLY {
+					idxState == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 					continue
 				}
 				// Init table to start state.
@@ -863,8 +877,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 
 	// Try to change column defaults while column is under mutation.
 	mt.writeColumnMutation("e", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN e SET DEFAULT 'a'`); !testutils.IsError(
-		err, `column "e" in the middle of being added`) {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN e SET DEFAULT 'a'`); err != nil {
 		t.Fatal(err)
 	}
 	mt.makeMutationsActive()
@@ -947,10 +960,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 		{"idx_f", 2, sqlbase.DescriptorMutation_DELETE_ONLY},
 		// Third.
 		{"idx_g", 3, sqlbase.DescriptorMutation_DELETE_ONLY},
-		// Drop mutations start off in the WRITE_ONLY state.
+		// Drop mutations start off in the DELETE_AND_WRITE_ONLY state.
 		// UNIQUE column deletion gets split into two mutation ids.
-		{"test_v_key", 4, sqlbase.DescriptorMutation_WRITE_ONLY},
-		{"v", 5, sqlbase.DescriptorMutation_WRITE_ONLY},
+		{"test_v_key", 4, sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY},
+		{"v", 5, sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY},
 	}
 
 	if len(tableDesc.Mutations) != len(expected) {
