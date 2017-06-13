@@ -14,7 +14,7 @@
 //
 // Author: Nikhil Benesch (nikhil.benesch@gmail.com)
 
-package sql
+package jobs
 
 import (
 	"time"
@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,9 +40,10 @@ import (
 // database, however, even when calling e.g. Started or Succeeded.
 type JobLogger struct {
 	db    *client.DB
-	ex    InternalExecutor
+	ex    sqlutil.InternalExecutor
 	jobID *int64
 	Job   JobRecord
+	txn   *client.Txn
 }
 
 // JobDetails is a marker interface for job details proto structs.
@@ -72,10 +74,10 @@ const (
 )
 
 // NewJobLogger creates a new JobLogger.
-func NewJobLogger(db *client.DB, leaseMgr *LeaseManager, job JobRecord) JobLogger {
+func NewJobLogger(db *client.DB, ex sqlutil.InternalExecutor, job JobRecord) JobLogger {
 	return JobLogger{
 		db:  db,
-		ex:  InternalExecutor{LeaseManager: leaseMgr},
+		ex:  ex,
 		Job: job,
 	}
 }
@@ -83,14 +85,14 @@ func NewJobLogger(db *client.DB, leaseMgr *LeaseManager, job JobRecord) JobLogge
 // GetJobLogger creates a new JobLogger initialized from a previously created
 // job id.
 func GetJobLogger(
-	ctx context.Context, db *client.DB, leaseMgr *LeaseManager, jobID int64,
+	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor, jobID int64,
 ) (*JobLogger, error) {
 	jl := &JobLogger{
 		db:    db,
-		ex:    InternalExecutor{LeaseManager: leaseMgr},
+		ex:    ex,
 		jobID: &jobID,
 	}
-	if err := jl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		payload, err := jl.retrieveJobPayload(ctx, txn)
 		if err != nil {
 			return err
@@ -113,6 +115,28 @@ func GetJobLogger(
 		return nil, err
 	}
 	return jl, nil
+}
+
+func (jl *JobLogger) runInTxn(
+	ctx context.Context, retryable func(context.Context, *client.Txn) error,
+) error {
+	if jl.txn != nil {
+		defer func() { jl.txn = nil }()
+		return jl.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true, AssignTimestampImmediately: true},
+			func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
+				return retryable(ctx, txn)
+			})
+	}
+	return jl.db.Txn(ctx, retryable)
+}
+
+// WithTxn sets the transaction that this JobLogger will use for its next
+// operation. If the transaction is nil, the JobLogger will create a one-off
+// transaction instead. If you use WithTxn, this JobLogger will no longer be
+// threadsafe.
+func (jl *JobLogger) WithTxn(txn *client.Txn) *JobLogger {
+	jl.txn = txn
+	return jl
 }
 
 // JobID returns the ID of the job that this JobLogger is currently tracking.
@@ -147,7 +171,8 @@ func (jl *JobLogger) Created(ctx context.Context) error {
 func (jl *JobLogger) Started(ctx context.Context) error {
 	return jl.updateJobRecord(ctx, JobStatusRunning, func(payload *JobPayload) (bool, error) {
 		if payload.StartedMicros != 0 {
-			return false, errors.Errorf("JobLogger: job %d already started", jl.jobID)
+			// Already started - do nothing.
+			return false, nil
 		}
 		payload.StartedMicros = jobTimestamp(timeutil.Now())
 		return true, nil
@@ -191,7 +216,8 @@ func (jl *JobLogger) Failed(ctx context.Context, err error) {
 	}
 	internalErr := jl.updateJobRecord(ctx, JobStatusFailed, func(payload *JobPayload) (bool, error) {
 		if payload.FinishedMicros != 0 {
-			return false, errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+			// Already finished - do nothing.
+			return false, nil
 		}
 		payload.Error = err.Error()
 		payload.FinishedMicros = jobTimestamp(timeutil.Now())
@@ -208,7 +234,8 @@ func (jl *JobLogger) Failed(ctx context.Context, err error) {
 func (jl *JobLogger) Succeeded(ctx context.Context) error {
 	return jl.updateJobRecord(ctx, JobStatusSucceeded, func(payload *JobPayload) (bool, error) {
 		if payload.FinishedMicros != 0 {
-			return false, errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+			// Already finished - do nothing.
+			return false, nil
 		}
 		payload.FinishedMicros = jobTimestamp(timeutil.Now())
 		payload.FractionCompleted = 1.0
@@ -218,11 +245,12 @@ func (jl *JobLogger) Succeeded(ctx context.Context) error {
 
 func (jl *JobLogger) insertJobRecord(ctx context.Context, payload *JobPayload) error {
 	if jl.jobID != nil {
-		return errors.Errorf("JobLogger cannot create job: job %d already created", jl.jobID)
+		// Already created - do nothing.
+		return nil
 	}
 
 	var row parser.Datums
-	if err := jl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		payload.ModifiedMicros = jobTimestamp(txn.Proto().OrigTimestamp.GoTime())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
@@ -247,7 +275,7 @@ func (jl *JobLogger) retrieveJobPayload(ctx context.Context, txn *client.Txn) (*
 		return nil, err
 	}
 
-	return unmarshalJobPayload(row[0])
+	return UnmarshalJobPayload(row[0])
 }
 
 func (jl *JobLogger) updateJobRecord(
@@ -257,7 +285,7 @@ func (jl *JobLogger) updateJobRecord(
 		return errors.New("JobLogger cannot update job: job not created")
 	}
 
-	return jl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		payload, err := jl.retrieveJobPayload(ctx, txn)
 		if err != nil {
 			return err
@@ -296,7 +324,8 @@ const (
 	JobTypeSchemaChange string = "SCHEMA CHANGE"
 )
 
-func (jp *JobPayload) typ() string {
+// Typ returns the payload's job type.
+func (jp *JobPayload) Typ() string {
 	switch jp.Details.(type) {
 	case *JobPayload_Backup:
 		return JobTypeBackup
@@ -305,11 +334,13 @@ func (jp *JobPayload) typ() string {
 	case *JobPayload_SchemaChange:
 		return JobTypeSchemaChange
 	default:
-		panic("JobPayload.typ called on a payload with an unknown details type")
+		panic("JobPayload.Typ called on a payload with an unknown details type")
 	}
 }
 
-func unmarshalJobPayload(datum parser.Datum) (*JobPayload, error) {
+// UnmarshalJobPayload unmarshals and returns the JobPayload encoded in the
+// input datum, which should be a DBytes.
+func UnmarshalJobPayload(datum parser.Datum) (*JobPayload, error) {
 	payload := &JobPayload{}
 	bytes, ok := datum.(*parser.DBytes)
 	if !ok {

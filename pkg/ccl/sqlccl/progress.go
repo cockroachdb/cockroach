@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -32,7 +32,7 @@ const (
 
 type jobProgressLogger struct {
 	// These fields must be externally initialized.
-	jobLogger   *sql.JobLogger
+	jobLogger   *jobs.JobLogger
 	totalChunks int
 
 	// The remaining fields are for internal use only.
