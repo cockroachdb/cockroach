@@ -87,21 +87,6 @@ const (
 	PrimaryKeyIndexName = "primary"
 )
 
-// DescriptorStatus is the status for a descriptor.
-type DescriptorStatus int
-
-const (
-	_ DescriptorStatus = iota
-	// DescriptorAbsent for a descriptor that doesn't exist.
-	DescriptorAbsent
-	// DescriptorIncomplete for a descriptor that is a part of a
-	// schema change, and is still being processed.
-	DescriptorIncomplete
-	// DescriptorActive for a descriptor that is completely active
-	// for read/write and delete operations.
-	DescriptorActive
-)
-
 // ErrMissingColumns indicates a table with no columns.
 var ErrMissingColumns = errors.New("table must contain at least 1 column")
 
@@ -206,7 +191,7 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 	name := baseName
 
 	exists := func(name string) bool {
-		_, _, err := tableDesc.FindIndexByNormalizedName(name)
+		_, _, err := tableDesc.findIndexByNormalizedName(name)
 		return err == nil
 	}
 	for i := 1; exists(name); i++ {
@@ -675,15 +660,9 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 			index.ExtraColumnIDs = extraColumnIDs
 
 			for _, colName := range index.StoreColumnNames {
-				status, i, err := desc.FindColumnByNormalizedName(parser.ReNormalizeName(colName))
+				col, _, err := desc.FindColumnByName(parser.Name(colName))
 				if err != nil {
 					return err
-				}
-				var col *ColumnDescriptor
-				if status == DescriptorActive {
-					col = &desc.Columns[i]
-				} else {
-					col = desc.Mutations[i].GetColumn()
 				}
 				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
 					continue
@@ -1372,8 +1351,12 @@ func (desc *TableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 	}
 }
 
-// RenameColumnNormalized updates all references to a column name in indexes and families.
-func (desc *TableDescriptor) RenameColumnNormalized(colID ColumnID, newColName string) {
+// RenameColumnDescriptor updates all references to a column name in
+// a table descriptor including indexes and families.
+func (desc *TableDescriptor) RenameColumnDescriptor(column ColumnDescriptor, newColName string) {
+	colID := column.ID
+	column.Name = newColName
+	desc.UpdateColumnDescriptor(column)
 	for i := range desc.Families {
 		for j := range desc.Families[i].ColumnIDs {
 			if desc.Families[i].ColumnIDs[j] == colID {
@@ -1416,30 +1399,48 @@ func (desc *TableDescriptor) FindActiveColumnsByNames(
 	return cols, nil
 }
 
-// FindColumnByNormalizedName finds the column with the specified name. It returns
-// DescriptorStatus for the column, and an index into either the columns
-// (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindColumnByNormalizedName(
+// findColumnByNormalizedName finds the column with the specified name.
+func (desc *TableDescriptor) findColumnByNormalizedName(
 	normName string,
-) (DescriptorStatus, int, error) {
+) (ColumnDescriptor, bool, error) {
 	for i, c := range desc.Columns {
 		if parser.ReNormalizeName(c.Name) == normName {
-			return DescriptorActive, i, nil
+			return desc.Columns[i], false, nil
 		}
 	}
-	for i, m := range desc.Mutations {
+	for _, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
 			if parser.ReNormalizeName(c.Name) == normName {
-				return DescriptorIncomplete, i, nil
+				return *c, m.Direction == DescriptorMutation_DROP, nil
 			}
 		}
 	}
-	return DescriptorAbsent, -1, fmt.Errorf("column %q does not exist", normName)
+	return ColumnDescriptor{}, false, fmt.Errorf("column %q does not exist", normName)
 }
 
-// FindColumnByName calls FindColumnByNormalizedName with a normalized argument.
-func (desc *TableDescriptor) FindColumnByName(name parser.Name) (DescriptorStatus, int, error) {
-	return desc.FindColumnByNormalizedName(name.Normalize())
+// FindColumnByName finds the column with the specified name. It returns
+// an active column or a column from the mutation list. It returns true
+// if the column is being dropped.
+func (desc *TableDescriptor) FindColumnByName(name parser.Name) (ColumnDescriptor, bool, error) {
+	return desc.findColumnByNormalizedName(name.Normalize())
+}
+
+// UpdateColumnDescriptor updates an existing column descriptor.
+func (desc *TableDescriptor) UpdateColumnDescriptor(column ColumnDescriptor) {
+	for i := range desc.Columns {
+		if desc.Columns[i].ID == column.ID {
+			desc.Columns[i] = column
+			return
+		}
+	}
+	for i, m := range desc.Mutations {
+		if col := m.GetColumn(); col != nil && col.ID == column.ID {
+			desc.Mutations[i].Descriptor_ = &DescriptorMutation_Column{Column: &column}
+			return
+		}
+	}
+
+	panic(fmt.Sprintf("column %q does not exist", column.Name))
 }
 
 // FindActiveColumnByNormalizedName finds an active column with the specified normalized name.
@@ -1496,30 +1497,47 @@ func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescripto
 	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
 }
 
-// FindIndexByNormalizedName finds the index with the specified name. It returns
-// DescriptorStatus for the index, and an index into either the indexes
-// (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindIndexByNormalizedName(
+// findIndexByNormalizedName finds the index with the specified name.
+func (desc *TableDescriptor) findIndexByNormalizedName(
 	normName string,
-) (DescriptorStatus, int, error) {
+) (IndexDescriptor, bool, error) {
 	for i, idx := range desc.Indexes {
 		if parser.ReNormalizeName(idx.Name) == normName {
-			return DescriptorActive, i, nil
+			return desc.Indexes[i], false, nil
 		}
 	}
-	for i, m := range desc.Mutations {
+	for _, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil {
 			if parser.ReNormalizeName(idx.Name) == normName {
-				return DescriptorIncomplete, i, nil
+				return *idx, m.Direction == DescriptorMutation_DROP, nil
 			}
 		}
 	}
-	return DescriptorAbsent, -1, fmt.Errorf("index %q does not exist", normName)
+	return IndexDescriptor{}, false, fmt.Errorf("index %q does not exist", normName)
 }
 
-// FindIndexByName calls FindIndexByNormalizedName on a normalized argument.
-func (desc *TableDescriptor) FindIndexByName(name parser.Name) (DescriptorStatus, int, error) {
-	return desc.FindIndexByNormalizedName(name.Normalize())
+// FindIndexByName finds the index with the specified name in the active
+// list or the mutations list. It returns true if the index is being dropped.
+func (desc *TableDescriptor) FindIndexByName(name parser.Name) (IndexDescriptor, bool, error) {
+	return desc.findIndexByNormalizedName(name.Normalize())
+}
+
+// RenameIndexDescriptor renames an index descriptor.
+func (desc *TableDescriptor) RenameIndexDescriptor(index IndexDescriptor, name string) {
+	id := index.ID
+	for i := range desc.Indexes {
+		if desc.Indexes[i].ID == id {
+			desc.Indexes[i].Name = name
+			return
+		}
+	}
+	for _, m := range desc.Mutations {
+		if idx := m.GetIndex(); idx != nil && idx.ID == id {
+			idx.Name = name
+			return
+		}
+	}
+	panic(fmt.Sprintf("index with id = %d does not exist", id))
 }
 
 // FindIndexByID finds an index (active or inactive) with the specified ID.
@@ -1544,13 +1562,13 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 
 // GetIndexMutationCapabilities returns:
 // 1. Whether the index is a mutation
-// 2. if so, is it in state WRITE_ONLY
+// 2. if so, is it in state DELETE_AND_WRITE_ONLY
 func (desc *TableDescriptor) GetIndexMutationCapabilities(id IndexID) (bool, bool) {
 	for _, mutation := range desc.Mutations {
 		if mutationIndex := mutation.GetIndex(); mutationIndex != nil {
 			if mutationIndex.ID == id {
 				return true,
-					mutation.State == DescriptorMutation_WRITE_ONLY
+					mutation.State == DescriptorMutation_DELETE_AND_WRITE_ONLY
 			}
 		}
 	}
@@ -1619,7 +1637,7 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 		m.State = DescriptorMutation_DELETE_ONLY
 
 	case DescriptorMutation_DROP:
-		m.State = DescriptorMutation_WRITE_ONLY
+		m.State = DescriptorMutation_DELETE_AND_WRITE_ONLY
 	}
 	m.MutationID = desc.NextMutationID
 	desc.Mutations = append(desc.Mutations, m)
