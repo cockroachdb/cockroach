@@ -116,16 +116,14 @@ func (o *ordinalityNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error
 func (o *ordinalityNode) restrictOrdering(
 	desiredOrdering sqlbase.ColumnOrdering,
 ) sqlbase.ColumnOrdering {
-	// If there's a desired ordering on the ordinality column, drop it.
+	// If there's a desired ordering on the ordinality column, drop it and every
+	// column after that.
 	if len(desiredOrdering) > 0 {
-		newDesired := make(sqlbase.ColumnOrdering, 0, len(desiredOrdering))
-		for _, ordInfo := range desiredOrdering {
+		for i, ordInfo := range desiredOrdering {
 			if ordInfo.ColIdx == len(o.columns)-1 {
-				break
+				return desiredOrdering[:i]
 			}
-			newDesired = append(newDesired, ordInfo)
 		}
-		desiredOrdering = newDesired
 	}
 	return desiredOrdering
 }
