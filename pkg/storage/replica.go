@@ -223,6 +223,7 @@ type Replica struct {
 	pushTxnQueue *pushTxnQueue // Queues push txn attempts by txn ID
 
 	leaseholderStats *replicaStats
+	applyStats       *replicaStats
 
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
@@ -564,6 +565,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	if store.cfg.StorePool != nil {
 		r.leaseholderStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
 	}
+	r.applyStats = newReplicaStats(store.Clock(), nil)
 
 	// Init rangeStr with the range ID.
 	r.rangeStr.store(0, &roachpb.RangeDescriptor{RangeID: rangeID})
@@ -4068,7 +4070,7 @@ func (r *Replica) processRaftCommand(
 	if proposedLocally {
 		proposal.finish(response)
 	} else if response.Err != nil {
-		log.VEventf(ctx, 1, "error executing raft command resulted in err: %s", response.Err)
+		log.VEventf(ctx, 1, "applying raft command resulted in error: %s", response.Err)
 	}
 
 	return raftCmd.ReplicatedEvalResult.ChangeReplicas != nil
@@ -4165,6 +4167,7 @@ func (r *Replica) applyRaftCommand(
 	if rResult.State.RaftAppliedIndex <= 0 {
 		log.Fatalf(ctx, "raft command index is <= 0")
 	}
+	r.applyStats.record(0)
 
 	r.mu.Lock()
 	oldRaftAppliedIndex := r.mu.state.RaftAppliedIndex

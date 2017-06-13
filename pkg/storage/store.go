@@ -1991,6 +1991,9 @@ func (s *Store) MergeRange(
 	if subsumingRng.leaseholderStats != nil {
 		subsumingRng.leaseholderStats.resetRequestCounts()
 	}
+	if subsumingRng.applyStats != nil {
+		subsumingRng.applyStats.resetRequestCounts()
+	}
 
 	if err := s.maybeMergeTimestampCaches(ctx, subsumingRng, subsumedRng); err != nil {
 		return err
