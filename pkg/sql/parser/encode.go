@@ -34,7 +34,11 @@ var (
 	encodeMap [256]byte
 	// mustQuoteMap contains characters that require that their enclosing
 	// string be quoted, even when FmtFlags.bareStrings is true.
+	//
+	// This is used e.g. when stringifying expressions with array types
+	// for pgwire.
 	mustQuoteMap = map[byte]bool{
+		' ': true,
 		',': true,
 		'{': true,
 		'}': true,
