@@ -17,8 +17,6 @@ spec:
   - port: 8080
     targetPort: 8080
     name: http
-  # Uncomment the line below to publish the service externally.
-  # type: LoadBalancer
   selector:
     app: cockroachdb
 ---
