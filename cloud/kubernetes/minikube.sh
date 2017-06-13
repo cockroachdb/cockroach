@@ -2,9 +2,6 @@
 
 set -exuo pipefail
 
-# Clean up anything from a prior run:
-kubectl delete statefulsets,pods,persistentvolumes,persistentvolumeclaims,services,poddisruptionbudget -l app=cockroachdb
-
 # Make persistent volumes and (correctly named) claims. We must create the
 # claims here manually even though that sounds counter-intuitive. For details
 # see https://github.com/kubernetes/contrib/pull/1295#issuecomment-230180894.
@@ -42,5 +39,3 @@ spec:
       storage: 1Gi
 EOF
 done;
-
-kubectl create -f cockroachdb-statefulset.yaml
