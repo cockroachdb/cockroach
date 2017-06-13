@@ -362,14 +362,6 @@ func (*SetTransaction) StatementTag() string { return "SET TRANSACTION" }
 func (*SetTransaction) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
-func (*SetTimeZone) StatementType() StatementType { return Ack }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*SetTimeZone) StatementTag() string { return "SET TIME ZONE" }
-
-func (*SetTimeZone) hiddenFromStats() {}
-
-// StatementType implements the Statement interface.
 func (*SetDefaultIsolation) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -605,7 +597,6 @@ func (n *Select) String() string                   { return AsString(n) }
 func (n *SelectClause) String() string             { return AsString(n) }
 func (n *Set) String() string                      { return AsString(n) }
 func (n *SetDefaultIsolation) String() string      { return AsString(n) }
-func (n *SetTimeZone) String() string              { return AsString(n) }
 func (n *SetTransaction) String() string           { return AsString(n) }
 func (n *Show) String() string                     { return AsString(n) }
 func (n *ShowBackup) String() string               { return AsString(n) }

@@ -40,3 +40,13 @@ pg_catalog
 
 statement ok
 RESET client_encoding; RESET NAMES
+
+query T
+SET "time zone" = 'Europe/Amsterdam'; SHOW TIME ZONE
+----
+Europe/Amsterdam
+
+query T
+RESET "time zone"; SHOW TIME ZONE
+----
+UTC
