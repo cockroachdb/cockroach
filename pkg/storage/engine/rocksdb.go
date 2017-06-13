@@ -714,7 +714,12 @@ func (r *rocksDBReadOnly) NewIterator(prefix bool) Iterator {
 }
 
 func (r *rocksDBReadOnly) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
-	panic("not implemented")
+	if r.isClosed {
+		panic("using a closed rocksDBReadOnly")
+	}
+	it := &rocksDBIterator{}
+	it.initTimeBound(r.parent.rdb, start, end, r)
+	return it
 }
 
 // Writer methods are not implemented for rocksDBReadOnly. Ideally, the code could be refactored so that
