@@ -23,7 +23,7 @@ spec:
       # the cluster CA to the certs directory.
       - name: init-certs
         image: cockroachdb/cockroach-k8s-request-cert:0.1
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         args:
         - "-certs-dir=/cockroach-certs"
         - "-type=client"

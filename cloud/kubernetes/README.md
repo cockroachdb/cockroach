@@ -23,6 +23,10 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start
 
 ## Limitations
 
+### Kubernetes version
+
+The minimum kubernetes version to successfully run the examples in this directory is `1.6`.
+
 ### StatefulSet limitations
 
 StatefulSets were broadly introduced in Kubernetes version 1.5. If using an
@@ -56,6 +60,15 @@ available. When that is not the case, the persistent volume claims need
 to be created manually. See [minikube.sh](minikube.sh) for the necessary
 steps. If you're on GCE or AWS, where dynamic provisioning is supported, no
 manual work is needed to create the persistent volumes.
+
+### Secure mode
+
+Secure mode currently works by requesting node/client certificates from the kubernetes
+controller at pod initialization time.
+
+This means that rescheduled pods will go through the CSR process, requiring manual involvement.
+A future improvement for node/client certificates will use kubernetes secrets, simplifying
+deployment and maintenance.
 
 ## Creating your kubernetes cluster
 
@@ -150,6 +163,8 @@ SQL shell using:
 ```console
 $ kubectl run -it --rm cockroach-client --image=cockroachdb/cockroach --restart=Never --command -- ./cockroach sql --host cockroachdb-public
 ```
+
+**WARNING**: there is not secure mode equivalent of doing this (yet).
 
 You can see example SQL statements for inserting and querying data in the
 included [demo script](demo.sh), but can use almost any Postgres-style SQL
