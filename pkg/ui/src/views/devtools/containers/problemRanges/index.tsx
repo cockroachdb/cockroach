@@ -4,12 +4,12 @@ import _ from "lodash";
 
 import * as protos from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
-import { refreshProblemRanges } from "src/redux/apiReducers";
+import { refreshDebugProblemRanges } from "src/redux/apiReducers";
 import { RouterState } from "react-router";
 
 interface ProblemRangesOwnProps {
-  problemRanges: protos.cockroach.server.serverpb.ProblemRangesResponse;
-  refreshProblemRanges: typeof refreshProblemRanges;
+  problemRanges: protos.cockroach.server.serverpb.DebugProblemRangesResponse;
+  refreshDebugProblemRanges: typeof refreshDebugProblemRanges;
 }
 
 type ProblemRangesProps = ProblemRangesOwnProps & RouterState;
@@ -19,7 +19,7 @@ type ProblemRangesProps = ProblemRangesOwnProps & RouterState;
  */
 class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   refresh(props = this.props) {
-    props.refreshProblemRanges(new protos.cockroach.server.serverpb.ProblemRangesRequest({
+    props.refreshDebugProblemRanges(new protos.cockroach.server.serverpb.DebugProblemRangesRequest({
       node_id: (!_.isEmpty(props.location.query.node_id)) ? props.location.query.node_id : "",
     }));
   }
@@ -128,10 +128,10 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 export default connect(
   (state: AdminUIState) => {
     return {
-      problemRanges: state.cachedData.problemRanges.data,
+      problemRanges: state.cachedData.debugProblemRanges.data,
     };
   },
   {
-    refreshProblemRanges,
+    refreshDebugProblemRanges,
   },
 )(ProblemRanges);

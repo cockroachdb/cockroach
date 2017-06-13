@@ -28,11 +28,11 @@ import (
 )
 
 func (s *statusServer) ProblemRanges(
-	ctx context.Context, req *serverpb.ProblemRangesRequest,
-) (*serverpb.ProblemRangesResponse, error) {
+	ctx context.Context, req *serverpb.DebugProblemRangesRequest,
+) (*serverpb.DebugProblemRangesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	response := &serverpb.ProblemRangesResponse{}
+	response := &serverpb.DebugProblemRangesResponse{}
 	if len(req.NodeID) > 0 {
 		var err error
 		response.NodeID, _, err = s.parseNodeID(req.NodeID)

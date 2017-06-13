@@ -53,8 +53,8 @@ export type LivenessResponseMessage = protos.cockroach.server.serverpb.LivenessR
 export type QueryPlanRequestMessage = protos.cockroach.server.serverpb.QueryPlanRequest;
 export type QueryPlanResponseMessage = protos.cockroach.server.serverpb.QueryPlanResponse;
 
-export type ProblemRangesRequestMessage = protos.cockroach.server.serverpb.ProblemRangesRequest;
-export type ProblemRangesResponseMessage = protos.cockroach.server.serverpb.ProblemRangesResponse;
+export type DebugProblemRangesRequestMessage = protos.cockroach.server.serverpb.DebugProblemRangesRequest;
+export type DebugProblemRangesResponseMessage = protos.cockroach.server.serverpb.DebugProblemRangesResponse;
 
 export type DebugNodesRequestMessage = protos.cockroach.server.serverpb.DebugNodesRequest;
 export type DebugNodesResponseMessage = protos.cockroach.server.serverpb.DebugNodesResponse;
@@ -223,9 +223,9 @@ export function getQueryPlan(req: QueryPlanRequestMessage, timeout?: moment.Dura
 }
 
 // getProblemRanges returns information needed by the problem range debug page.
-export function getProblemRanges(req: ProblemRangesRequestMessage, timeout?: moment.Duration): Promise<ProblemRangesResponseMessage> {
+export function getDebugProblemRanges(req: DebugProblemRangesRequestMessage, timeout?: moment.Duration): Promise<DebugProblemRangesResponseMessage> {
   const query = (!_.isEmpty(req.node_id)) ? `?node_id=${req.node_id}` : "";
-  return timeoutFetch(serverpb.ProblemRangesResponse, `${STATUS_PREFIX}/problemranges${query}`, null, timeout);
+  return timeoutFetch(serverpb.DebugProblemRangesResponse, `${STATUS_PREFIX}/debug/problemranges${query}`, null, timeout);
 }
 
 // getDebugNodes returns information needed by the nodes debug page.

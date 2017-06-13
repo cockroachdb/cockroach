@@ -74,9 +74,9 @@
 		ListSessionsResponse
 		SpanStatsRequest
 		SpanStatsResponse
-		ProblemRangesRequest
+		DebugProblemRangesRequest
 		DebugFailure
-		ProblemRangesResponse
+		DebugProblemRangesResponse
 		DebugCell
 		DebugRow
 		DebugNodesRequest

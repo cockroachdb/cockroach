@@ -419,7 +419,7 @@ var (
 )
 
 func request_Status_ProblemRanges_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq ProblemRangesRequest
+	var protoReq DebugProblemRangesRequest
 	var metadata runtime.ServerMetadata
 
 	if err := runtime.PopulateQueryParameters(&protoReq, req.URL.Query(), filter_Status_ProblemRanges_0); err != nil {
@@ -1018,7 +1018,7 @@ var (
 
 	pattern_Status_Logs_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"_status", "logs", "node_id"}, ""))
 
-	pattern_Status_ProblemRanges_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"_status", "problemranges"}, ""))
+	pattern_Status_ProblemRanges_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"_status", "debug", "problemranges"}, ""))
 
 	pattern_Status_DebugNodes_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"_status", "debug", "nodes"}, ""))
 )

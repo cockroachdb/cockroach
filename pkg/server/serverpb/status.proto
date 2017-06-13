@@ -328,7 +328,7 @@ message SpanStatsResponse {
   cockroach.storage.engine.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
 }
 
-message ProblemRangesRequest {
+message DebugProblemRangesRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
 }
 
@@ -340,7 +340,7 @@ message DebugFailure {
   string error_message = 2;
 }
 
-message ProblemRangesResponse {
+message DebugProblemRangesResponse {
   // If node_id is greater than 0, then this response is only representative of
   // a single node's knowledge.
   int32 node_id = 1 [
@@ -481,9 +481,9 @@ service Status {
       get: "/_status/logs/{node_id}"
     };
   }
-  rpc ProblemRanges(ProblemRangesRequest) returns (ProblemRangesResponse) {
+  rpc ProblemRanges(DebugProblemRangesRequest) returns (DebugProblemRangesResponse) {
     option (google.api.http) = {
-      get: "/_status/problemranges"
+      get: "/_status/debug/problemranges"
     };
   }
   rpc DebugNodes(DebugNodesRequest) returns (DebugNodesResponse) {
