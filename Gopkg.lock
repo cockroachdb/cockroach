@@ -524,7 +524,7 @@
 
 [[projects]]
   name = "golang.org/x/perf"
-  packages = ["benchstat","cmd/benchstat","internal/stats","storage/benchfmt"]
+  packages = ["benchstat","cmd/benchstat","internal/stats","storage","storage/benchfmt"]
   revision = "844f0140c89c0be84e3d3143f075ccff10819462"
 
 [[projects]]
@@ -570,7 +570,8 @@
 [[projects]]
   name = "google.golang.org/grpc"
   packages = [".","codes","credentials","credentials/oauth","grpclb/grpc_lb_v1","grpclog","internal","keepalive","metadata","naming","peer","stats","status","tap","transport"]
-  revision = "3419b42955675df23457629c75f58eb8dcd56954"
+  revision = "d8960bd63c6743defa6d54926e5edfa8e4a28e43"
+  version = "v1.4.0"
 
 [[projects]]
   name = "gopkg.in/yaml.v2"
@@ -585,6 +586,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "321c06350f151bb665ef35759ae1fc19afd6e0abba33aba47173c07f6bbe57ec"
+  inputs-digest = "562093f8ce91cd0353b3752147c62d3d3a32add8c2df0dba5145caedafbae699"
   solver-name = "gps-cdcl"
   solver-version = 1
