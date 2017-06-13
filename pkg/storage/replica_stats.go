@@ -69,7 +69,10 @@ func newReplicaStats(clock *hlc.Clock, getNodeLocality localityOracle) *replicaS
 }
 
 func (rs *replicaStats) record(nodeID roachpb.NodeID) {
-	locality := rs.getNodeLocality(nodeID)
+	var locality string
+	if rs.getNodeLocality != nil {
+		locality = rs.getNodeLocality(nodeID)
+	}
 	now := time.Unix(0, rs.clock.PhysicalNow())
 
 	rs.mu.Lock()
