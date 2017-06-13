@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"go/build"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -123,6 +124,52 @@ func do(ctx context.Context) error {
 		}
 	}
 
+	dir, err := ioutil.TempDir("", "cockroachdb-benchmark")
+	if err != nil {
+		return errors.Wrap(err, "could not create temp directory")
+	}
+	defer func() {
+		_ = os.RemoveAll(dir)
+	}()
+
+	var files []*os.File
+	for i := 0; i < numIterations; i++ {
+		f, err := ioutil.TempFile(dir, fmt.Sprintf("bench%02d.txt", i))
+		if err != nil {
+			return errors.Wrap(err, "could not create temp file")
+		}
+		defer f.Close()
+		files = append(files, f)
+
+		if _, err := fmt.Fprintf(
+			f,
+			"commit: %s\niteration: %d\nstart-time: %s\n",
+			bytes.TrimSpace(rev),
+			i,
+			timeutil.Now().UTC().Format(time.RFC3339),
+		); err != nil {
+			return errors.Wrap(err, "could not write header")
+		}
+
+		for _, txt := range binaries {
+			binaryPath, err := filepath.Abs(txt)
+			if err != nil {
+				return errors.Wrapf(err, "could not find test binary %s", txt)
+			}
+
+			cmd := exec.CommandContext(ctx, binaryPath, "-test.run", "-", "-test.bench", ".", "-test.benchmem")
+			cmd.Dir = filepath.Dir(binaryPath)
+			cmd.Stdout = io.MultiWriter(f, os.Stdout)
+			cmd.Stderr = os.Stderr
+
+			log.Printf("exec: %s", cmd.Args)
+
+			if err := cmd.Run(); err != nil {
+				return errors.Wrapf(err, "could not run test binary %s", binaryPath)
+			}
+		}
+	}
+
 	client := storage.Client{
 		BaseURL:    storageURL,
 		HTTPClient: conf.Client(ctx),
@@ -131,38 +178,16 @@ func do(ctx context.Context) error {
 	u := client.NewUpload(ctx)
 
 	if err := func() error {
-		for i := 0; i < numIterations; i++ {
+		for i, f := range files {
 			w, err := u.CreateFile(fmt.Sprintf("bench%02d.txt", i))
 			if err != nil {
-				return errors.Wrap(err, "could not create file")
+				return errors.Wrap(err, "could not create upload file")
 			}
-
-			if _, err := fmt.Fprintf(
-				w,
-				"commit: %s\niteration: %d\nstart-time: %s\n",
-				bytes.TrimSpace(rev),
-				i,
-				timeutil.Now().UTC().Format(time.RFC3339),
-			); err != nil {
-				return errors.Wrap(err, "could not write header")
+			if _, err := f.Seek(0, 0); err != nil {
+				return errors.Wrapf(err, "could not seek temp file %s", f.Name())
 			}
-
-			for _, txt := range binaries {
-				binaryPath, err := filepath.Abs(txt)
-				if err != nil {
-					return errors.Wrapf(err, "could not find test binary %s", txt)
-				}
-
-				cmd := exec.CommandContext(ctx, binaryPath, "-test.run", "-", "-test.bench", ".", "-test.benchmem")
-				cmd.Dir = filepath.Dir(binaryPath)
-				cmd.Stdout = io.MultiWriter(w, os.Stdout)
-				cmd.Stderr = os.Stderr
-
-				log.Printf("exec: %s", cmd.Args)
-
-				if err := cmd.Run(); err != nil {
-					return errors.Wrapf(err, "could not run test binary %q", binaryPath)
-				}
+			if _, err := io.Copy(w, f); err != nil {
+				return errors.Wrapf(err, "could not copy from temp file %s", f.Name())
 			}
 		}
 
