@@ -104,12 +104,38 @@ This means that you must approve podN's certificate for podN+1 to be created.
 
 You can view pending certificates and approve them using:
 ```
+# List CSRs:
 $ kubectl get csr
 NAME                 AGE       REQUESTOR                               CONDITION
 node-cockroachdb-0   4s        system:serviceaccount:default:default   Pending
 
+# Decode and examine the requested certificate:
+$ kubectl get csr node-cockroachdb-0 -o jsonpath='{.spec.request}' | base64 -d | openssl req -text -noout
+Certificate Request:
+    Data:
+        Version: 0 (0x0)
+        Subject: O=Cockroach, CN=node
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                Public-Key: (2048 bit)
+                Modulus:
+									<snip>
+                Exponent: 65537 (0x10001)
+        Attributes:
+        Requested Extensions:
+            X509v3 Subject Alternative Name:
+                DNS:localhost, DNS:cockroachdb-0.cockroachdb.default.svc.cluster.local, DNS:cockroachdb-public, IP Address:127.0.0.1, IP Address:10.20.1.39
+    Signature Algorithm: sha256WithRSAEncryption
+      <snip>
+
+
+# If everything checks out, approve the CSR:
 $ kubectl certificate approve node-cockroachdb-0
 certificatesigningrequest "node-cockroachdb-0" approved
+
+# Otherwise, deny the CSR:
+$ kubectl certificate deny node-cockroachdb-0
+certificatesigningrequest "node-cockroachdb-0" denied
 ```
 
 ## Accessing the database
