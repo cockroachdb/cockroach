@@ -896,7 +896,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	cfg.SetDefaults()
 
 	if !cfg.Valid() {
-		panic(fmt.Sprintf("invalid store configuration: %+v", &cfg))
+		log.Fatalf(context.Background(), "invalid store configuration: %+v", &cfg)
 	}
 	s := &Store{
 		cfg:      cfg,
@@ -1387,7 +1387,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	select {
 	case <-s.cfg.Gossip.Connected:
 	default:
-		panic(fmt.Sprintf("%s: not connected to gossip", s))
+		log.Fatalf(ctx, "not connected to gossip")
 	}
 
 	storeDesc, err := s.Descriptor()
@@ -2854,7 +2854,7 @@ func (s *Store) HandleRaftRequest(
 ) *roachpb.Error {
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		if req.RangeID != 0 {
-			panic("coalesced heartbeats must have rangeID == 0")
+			log.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")
 		}
 		s.uncoalesceBeats(ctx, req.Heartbeats, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeat, respStream)
 		s.uncoalesceBeats(ctx, req.HeartbeatResps, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeatResp, respStream)
@@ -2915,7 +2915,7 @@ func (s *Store) processRaftRequest(
 
 	if req.Quiesce {
 		if req.Message.Type != raftpb.MsgHeartbeat {
-			panic(fmt.Sprintf("unexpected quiesce: %+v", req))
+			log.Fatalf(ctx, "unexpected quiesce: %+v", req)
 		}
 		status := r.RaftStatus()
 		if status != nil && status.Term == req.Message.Term && status.Commit == req.Message.Commit {
@@ -3150,7 +3150,7 @@ func (s *Store) processRaftRequest(
 
 	if _, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
 		// mimic the behavior in processRaft.
-		panic(err)
+		log.Fatal(ctx, err)
 	}
 	removePlaceholder = false
 	return nil
@@ -3450,7 +3450,7 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	if ok {
 		stats, err := r.handleRaftReady(IncomingSnapshot{})
 		if err != nil {
-			panic(err) // TODO(bdarnell)
+			log.Fatal(r.AnnotateCtx(context.Background()), err) // TODO(bdarnell)
 		}
 		elapsed := timeutil.Since(start)
 		s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
@@ -3579,7 +3579,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 	} else if len(beats) == 0 {
 		msgType = raftpb.MsgHeartbeatResp
 	} else {
-		panic("cannot coalesce both heartbeats and responses")
+		log.Fatal(s.AnnotateCtx(context.Background()), "cannot coalesce both heartbeats and responses")
 	}
 
 	chReq := &RaftMessageRequest{
