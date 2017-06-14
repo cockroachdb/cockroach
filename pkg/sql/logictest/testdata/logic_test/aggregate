@@ -49,6 +49,11 @@ SELECT COALESCE(MAX(1), 0) FROM generate_series(1,0)
 ----
 0
 
+query I
+SELECT COUNT_ROWS() FROM generate_series(1,100)
+----
+100
+
 # Same, using arithmetic on COUNT.
 query I
 SELECT 1 + COUNT(*) FROM generate_series(1,0)
@@ -248,15 +253,17 @@ SELECT COUNT(*), s FROM kv GROUP BY UPPER(s)
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
-0  group                                       ("count(*)", "k + v")
-0          aggregate 0  count(*)
-0          aggregate 1  test.kv.k + test.kv.v
-1  render                                      ("k + v", "*")
-1          render 0     test.kv.k + test.kv.v
-1          render 1     *
-2  scan                                        (k, v, w[omitted], s[omitted])
-2          table        kv@primary
-2          spans        ALL
+0  render                                      ("count(*)", "k + v")
+0          render 0     count_rows()
+0          render 1     k + v
+1  group                                       ("count_rows()", "k + v")
+1          aggregate 0  count_rows()
+1          aggregate 1  test.kv.k + test.kv.v
+2  render                                      ("k + v")
+2          render 0     test.kv.k + test.kv.v
+3  scan                                        (k, v, w[omitted], s[omitted])
+3          table        kv@primary
+3          spans        ALL
 
 query II rowsort
 SELECT COUNT(*), k+v FROM kv GROUP BY k+v
@@ -273,18 +280,17 @@ SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
-0  render                           ("count(*)", "k + v")
-0          render 0     count(*)
+0  render                             ("count(*)", "k + v")
+0          render 0     count_rows()
 0          render 1     k + v
-1  group                            ("count(*)", k, v)
-1          aggregate 0  count(*)
+1  group                              ("count_rows()", k, v)
+1          aggregate 0  count_rows()
 1          aggregate 1  test.kv.k
 1          aggregate 2  test.kv.v
-2  render                           (k, v, "*")
+2  render                             (k, v)
 2          render 0     test.kv.k
 2          render 1     test.kv.v
-2          render 2     *
-3  scan                             (k, v, w[omitted], s[omitted])
+3  scan                               (k, v, w[omitted], s[omitted])
 3          table        kv@primary
 3          spans        ALL
 
@@ -422,14 +428,14 @@ SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY 1 DESC
 2 3
 NULL 1
 
-query IIII colnames
-SELECT COUNT(*), COUNT(kv.*), COUNT(k), COUNT(kv.v) FROM kv
+query III colnames
+SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM kv
 ----
-count(*)  count(kv.*)  count(k)  count(kv.v)
-6         6            6         5
+count(*)  count(k)  count(kv.v)
+6         6         5
 
-query error source name "nonexistent" not found in FROM clause
-SELECT COUNT(nonexistent.*) FROM kv
+query error cannot use "kv\.\*" in this context
+SELECT COUNT(kv.*) FROM kv
 
 query III
 SELECT COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv
@@ -996,15 +1002,17 @@ EXPLAIN (EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 ----
 0  sort
 0          order        +"count(*)"
-1  group
-1          aggregate 0  v
-1          aggregate 1  count(*)
-2  render
-2          render 0     v
-2          render 1     *
-3  scan
-3          table        kv@primary
-3          spans        ALL
+1  render
+1          render 0     v
+1          render 1     count_rows()
+2  group
+2          aggregate 0  v
+2          aggregate 1  count_rows()
+3  render
+3          render 0     v
+4  scan
+4          table        kv@primary
+4          spans        ALL
 
 query ITTT
 EXPLAIN (EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
@@ -1085,29 +1093,32 @@ SELECT v, COUNT(*) FILTER (WHERE COUNT(*) > 5) FROM filter_test GROUP BY v
 query ITTT
 EXPLAIN (EXPRS) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 ----
-0  group
-0          aggregate 0  count(*) FILTER (WHERE k > 5)
-0          aggregate 1  max(k > 5) FILTER (WHERE k > 5)
-1  render
-1          render 0     v
-1          render 1     *
-1          render 2     k > 5
-2  scan
-2          table        filter_test@primary
-2          spans        ALL
+0  render
+0          render 0     count_rows() FILTER (WHERE k > 5)
+0          render 1     max(k > 5) FILTER (WHERE k > 5)
+1  group
+1          aggregate 0  count_rows() FILTER (WHERE k > 5)
+1          aggregate 1  max(k > 5) FILTER (WHERE k > 5)
+2  render
+2          render 0     v
+2          render 1     k > 5
+3  scan
+3          table        filter_test@primary
+3          spans        ALL
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
-0  group                                                                                   ("count(*) FILTER (WHERE k > 5)" int)
-0          aggregate 0  (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
-1  render                                                                                  (v int, "*" int, "k > 5" bool)
-1          render 0     (v)[int]
-1          render 1     (*)[int]
-1          render 2     ((k)[int] > (5)[int])[bool]
-2  scan                                                                                    (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)
-2          table        filter_test@primary
-2          spans        ALL
+0  render                                                                               ("count(*) FILTER (WHERE k > 5)" int)
+0          render 0     (count_rows() FILTER (WHERE k > 5))[int]
+1  group                                                                                ("count_rows() FILTER (WHERE k > 5)" int)
+1          aggregate 0  (count_rows() FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
+2  render                                                                               (v int, "k > 5" bool)
+2          render 0     (v)[int]
+2          render 1     ((k)[int] > (5)[int])[bool]
+3  scan                                                                                 (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)
+3          table        filter_test@primary
+3          spans        ALL
 
 # Tests with * inside GROUP BY.
 query ITTT

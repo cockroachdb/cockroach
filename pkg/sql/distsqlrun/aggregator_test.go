@@ -64,31 +64,31 @@ func TestAggregator(t *testing.T) {
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_MIN,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 					{
 						Func:   AggregatorSpec_MAX,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 					{
 						Func:   AggregatorSpec_COUNT,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 					{
 						Func:   AggregatorSpec_AVG,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 					{
 						Func:   AggregatorSpec_SUM,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 					{
 						Func:   AggregatorSpec_STDDEV,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 					{
 						Func:   AggregatorSpec_VARIANCE,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 				},
 			},
@@ -104,11 +104,11 @@ func TestAggregator(t *testing.T) {
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_IDENT,
-						ColIdx: 1,
+						ColIdx: []uint32{1},
 					},
 					{
 						Func:   AggregatorSpec_COUNT,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 				},
 			},
@@ -132,11 +132,11 @@ func TestAggregator(t *testing.T) {
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_IDENT,
-						ColIdx: 1,
+						ColIdx: []uint32{1},
 					},
 					{
 						Func:   AggregatorSpec_COUNT,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 				},
 			},
@@ -158,11 +158,11 @@ func TestAggregator(t *testing.T) {
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_IDENT,
-						ColIdx: 1,
+						ColIdx: []uint32{1},
 					},
 					{
 						Func:   AggregatorSpec_SUM,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 				},
 			},
@@ -183,11 +183,11 @@ func TestAggregator(t *testing.T) {
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_COUNT,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 					{
 						Func:   AggregatorSpec_SUM,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 				},
 			},
@@ -209,7 +209,7 @@ func TestAggregator(t *testing.T) {
 					{
 						Func:     AggregatorSpec_SUM,
 						Distinct: true,
-						ColIdx:   0,
+						ColIdx:   []uint32{0},
 					},
 				},
 			},
@@ -230,7 +230,7 @@ func TestAggregator(t *testing.T) {
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_IDENT,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 				},
 			},
@@ -248,20 +248,20 @@ func TestAggregator(t *testing.T) {
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_MAX,
-						ColIdx: 0,
+						ColIdx: []uint32{0},
 					},
 					{
 						Func:   AggregatorSpec_MIN,
-						ColIdx: 1,
+						ColIdx: []uint32{1},
 					},
 					{
 						Func:   AggregatorSpec_COUNT,
-						ColIdx: 1,
+						ColIdx: []uint32{1},
 					},
 					{
 						Func:     AggregatorSpec_COUNT,
 						Distinct: true,
-						ColIdx:   1,
+						ColIdx:   []uint32{1},
 					},
 				},
 			},
@@ -276,17 +276,21 @@ func TestAggregator(t *testing.T) {
 				{v[5], v[2], v[5], v[2]},
 			},
 		}, {
-			// SELECT MAX(@1) FILTER @2, COUNT(@3) FILTER @4
+			// SELECT MAX(@1) FILTER @2, COUNT(@3) FILTER @4, COUNT_ROWS FILTER @4
 			spec: AggregatorSpec{
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:         AggregatorSpec_MAX,
-						ColIdx:       0,
+						ColIdx:       []uint32{0},
 						FilterColIdx: colPtr(1),
 					},
 					{
 						Func:         AggregatorSpec_COUNT,
-						ColIdx:       2,
+						ColIdx:       []uint32{2},
+						FilterColIdx: colPtr(3),
+					},
+					{
+						Func:         AggregatorSpec_COUNT_ROWS,
 						FilterColIdx: colPtr(3),
 					},
 				},
@@ -299,7 +303,7 @@ func TestAggregator(t *testing.T) {
 				{v[2], boolTrue, v[1], boolTrue},
 			},
 			expected: sqlbase.EncDatumRows{
-				{v[2], v[3]},
+				{v[2], v[3], v[3]},
 			},
 		},
 	}

@@ -319,6 +319,7 @@ message AggregatorSpec {
     SUM_INT = 11;
     VARIANCE = 12;
     XOR_AGG = 13;
+    COUNT_ROWS = 14;
   }
 
   message Aggregation {
@@ -329,14 +330,19 @@ message AggregatorSpec {
     // the '<FUNC> ALL' operation.
     optional bool distinct = 2 [(gogoproto.nullable) = false];
 
-    // The column index specifies the argument to the aggregator function.
-    optional uint32 col_idx = 3 [(gogoproto.nullable) = false];
+    // The column index specifies the argument(s) to the aggregator function.
+    //
+    // Currently no functions take more than one argument.
+    // COUNT_ROWS takes no arguments.
+    repeated uint32 col_idx = 5 [(gogoproto.nullable) = false];
 
     // If set, this column index specifies a boolean argument; rows for which
     // this value is not true don't contribute to this aggregation. This enables
     // the filter clause, e.g.:
     //   SELECT SUM(x) FILTER (WHERE y > 1), SUM(x) FILTER (WHERE y < 1) FROM t
     optional uint32 filter_col_idx = 4;
+
+    reserved 3;
   }
 
   // The group key is a subset of the columns in the input stream schema on the
