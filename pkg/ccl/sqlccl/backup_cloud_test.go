@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
 
-package sqlccl
+package sqlccl_test
 
 import (
 	"fmt"
