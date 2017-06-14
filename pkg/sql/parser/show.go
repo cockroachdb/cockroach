@@ -229,18 +229,6 @@ func (node *ShowRanges) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-// ShowSource encapsulates one of the other SHOW statements as a data source.
-type ShowSource struct {
-	Statement Statement
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ShowSource) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteByte('[')
-	node.Statement.Format(buf, f)
-	buf.WriteByte(']')
-}
-
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
 type ShowFingerprints struct {
 	Table *NormalizableTableName
