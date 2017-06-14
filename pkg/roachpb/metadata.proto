@@ -98,6 +98,7 @@ message StoreCapacity {
   optional int64 available = 2 [(gogoproto.nullable) = false];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
   optional int32 lease_count = 4 [(gogoproto.nullable) = false];
+  optional double applies_per_second = 5 [(gogoproto.nullable) = false];
 }
 
 // NodeDescriptor holds details on node physical/network topology.
