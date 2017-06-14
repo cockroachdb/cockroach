@@ -326,6 +326,10 @@ func writeSST(
 	kvs []engine.MVCCKeyValue,
 	ts hlc.Timestamp,
 ) error {
+	if len(kvs) == 0 {
+		return nil
+	}
+
 	filename := fmt.Sprintf("load-%d.sst", rand.Int63())
 	log.Info(ctx, "writesst ", filename)
 
