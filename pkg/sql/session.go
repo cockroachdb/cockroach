@@ -570,22 +570,6 @@ func (s *Session) Ctx() context.Context {
 	return s.context
 }
 
-// hijackCtx changes the current transaction's context to the provided one and
-// returns a cleanup function to be used to restore the original context when
-// the hijack is no longer needed.
-// TODO(andrei): delete this when explainTraceNode is refactored to use session tracing.
-func (s *Session) hijackCtx(ctx context.Context) func() {
-	if s.TxnState.State != Open {
-		// This hijacking is dubious to begin with. Let's at least assert it's being
-		// done when the TxnState is in an expected state. In particular, if the
-		// state would be NoTxn, then we'd need to hijack session.Ctx instead of the
-		// txnState's context.
-		log.Fatalf(ctx, "can only hijack while a SQL txn is Open. txnState: %+v",
-			&s.TxnState)
-	}
-	return s.TxnState.hijackCtx(ctx)
-}
-
 func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.session = s
 	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
@@ -985,18 +969,6 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 	}
 }
 
-// hijackCtx changes the transaction's context to the provided one and returns a
-// cleanup function to be used to restore the original context when the hijack
-// is no longer needed.
-// TODO(andrei): delete this when explainTraceNode is refactored to use session tracing.
-func (ts *txnState) hijackCtx(ctx context.Context) func() {
-	origCtx := ts.Ctx
-	ts.Ctx = ctx
-	return func() {
-		ts.Ctx = origCtx
-	}
-}
-
 type schemaChangerCollection struct {
 	// A schemaChangerCollection accumulates schemaChangers from potentially
 	// multiple user requests, part of the same SQL transaction. We need to
@@ -1239,7 +1211,9 @@ func extractMsgFromRecord(rec tracing.RecordedSpan_LogRecord) string {
 	return "<event missing in trace message>"
 }
 
-// GenerateSessionTraceVTable generates the rows of said table by using the log
+type traceRow [7]parser.Datum
+
+// generateSessionTraceVTable generates the rows of said table by using the log
 // messages from the session's trace (i.e. the ongoing trace, if any, or the
 // last one recorded). Note that, if there's an ongoing trace, the current
 // transaction is not part of it yet.
@@ -1272,7 +1246,7 @@ func extractMsgFromRecord(rec tracing.RecordedSpan_LogRecord) string {
 // | +-------------------+ |
 // |            7          |
 // +-----------------------+
-func (st *SessionTracing) GenerateSessionTraceVTable() [][7]parser.Datum {
+func (st *SessionTracing) generateSessionTraceVTable() []traceRow {
 	// Get all the log messages, in the right order.
 	var allLogs []logRecordRow
 	for txnIdx, spans := range st.txnRecordings {
@@ -1302,7 +1276,7 @@ func (st *SessionTracing) GenerateSessionTraceVTable() [][7]parser.Datum {
 	}
 
 	// Transform the log messages into table rows.
-	var res [][7]parser.Datum
+	var res []traceRow
 	for _, lrr := range allLogs {
 		// The "operation" column is only set for the first row in span.
 		var operation parser.Datum
@@ -1329,7 +1303,7 @@ func (st *SessionTracing) GenerateSessionTraceVTable() [][7]parser.Datum {
 			dur = parser.DNull
 		}
 
-		row := [7]parser.Datum{
+		row := traceRow{
 			txnIdx, // txn_idx
 			parser.NewDInt(parser.DInt(lrr.span.index)),             // span_idx
 			parser.NewDInt(parser.DInt(lrr.index)),                  // message_idx

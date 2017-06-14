@@ -588,7 +588,7 @@ func (p *planner) ShowTrace(ctx context.Context, n *parser.ShowTrace) (planNode,
 	if err != nil {
 		return nil, err
 	}
-	return p.makeTraceNode(plan), nil
+	return p.makeTraceNode(plan)
 }
 
 // ShowDatabases returns all the databases.
