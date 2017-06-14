@@ -6,12 +6,16 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
 
-package sqlccl
+package sqlccl_test
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/testdataccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,7 +32,7 @@ func TestImportChunking(t *testing.T) {
 	defer cleanupFn()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	desc, err := Load(ctx, sqlDB.DB, bankStatementBuf(numAccounts), "bench", dir, ts, chunkSize, dir)
+	desc, err := sqlccl.Load(ctx, sqlDB.DB, bankBuf(numAccounts), "data", dir, ts, chunkSize, dir)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -43,14 +47,24 @@ func TestImportOutOfOrder(t *testing.T) {
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
 	defer cleanupFn()
 
+	bankData := testdataccl.Bank(2, 0, 0)
+	row1, ok := bankData.NextRow()
+	if !ok {
+		t.Fatalf("expected 2 rows")
+	}
+	row2, ok := bankData.NextRow()
+	if !ok {
+		t.Fatalf("expected 2 rows")
+	}
+
 	var buf bytes.Buffer
-	buf.WriteString(bankCreateTable + ";\n")
-	stmts := bankDataInsertStmts(2 * bankDataInsertRows)
-	buf.WriteString(stmts[1] + ";\n")
-	buf.WriteString(stmts[0] + ";\n")
+	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name(), bankData.Schema())
+	// Intentionally write the rows out of order.
+	fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name(), strings.Join(row2, `,`))
+	fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name(), strings.Join(row1, `,`))
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	_, err := Load(ctx, sqlDB.DB, &buf, "bench", dir, ts, 0, dir)
+	_, err := sqlccl.Load(ctx, sqlDB.DB, &buf, "data", dir, ts, 0, dir)
 	if !testutils.IsError(err, "out of order row") {
 		t.Fatalf("expected out of order row, got: %+v", err)
 	}
@@ -63,11 +77,11 @@ func BenchmarkImport(b *testing.B) {
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
 
-	buf := bankStatementBuf(b.N)
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
+	buf := bankBuf(b.N)
 	b.SetBytes(int64(buf.Len() / b.N))
 	b.ResetTimer()
-	if _, err := Load(ctx, sqlDB.DB, buf, "bench", dir, ts, 0, dir); err != nil {
+	if _, err := sqlccl.Load(ctx, sqlDB.DB, buf, "data", dir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
 }

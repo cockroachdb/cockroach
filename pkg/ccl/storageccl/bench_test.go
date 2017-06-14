@@ -9,77 +9,73 @@
 package storageccl_test
 
 import (
-	"context"
+	"path/filepath"
 	"strconv"
 	"testing"
-	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/testdataccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func BenchmarkAddSSTable(b *testing.B) {
 	defer storage.TestingSetDisableSnapshotClearRange(true)()
+	tempDir, dirCleanupFn := testutils.TempDir(b)
+	defer dirCleanupFn()
 
-	rng, _ := randutil.NewPseudoRand()
-	const payloadSize = 100
-	v := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, payloadSize))
-
-	ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
 	for _, numEntries := range []int{100, 1000, 10000, 100000} {
+		bankData := testdataccl.BankRows(numEntries)
+		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
+		backup, err := testdataccl.ToBackup(b, bankData, backupDir)
+		if err != nil {
+			b.Fatalf("%+v", err)
+		}
+
 		b.Run(strconv.Itoa(numEntries), func(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).KVClient().(*client.DB)
 
-			id := keys.MaxReservedDescID + 1
-			sst, err := engine.MakeRocksDBSstFileWriter()
-			if err != nil {
-				b.Fatalf("%+v", err)
-			}
-			defer sst.Close()
+			id := sqlbase.ID(keys.MaxReservedDescID + 1)
 
 			var totalLen int64
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				b.StopTimer()
-				prefix := roachpb.Key(keys.MakeTablePrefix(uint32(id)))
+				sst, err := engine.MakeRocksDBSstFileWriter()
+				if err != nil {
+					b.Fatalf("%+v", err)
+				}
+
 				id++
-				for j := 0; j < numEntries; j++ {
-					key := encoding.EncodeUvarintAscending(prefix, uint64(j))
-					v.ClearChecksum()
-					v.InitChecksum(key)
-					kv := engine.MVCCKeyValue{
-						Key:   engine.MVCCKey{Key: key, Timestamp: ts},
-						Value: v.RawBytes,
-					}
+				backup.ResetKeyValueIteration()
+				kvs, span, err := backup.NextKeyValues(numEntries, id)
+				if err != nil {
+					b.Fatalf("%+v", err)
+				}
+				for _, kv := range kvs {
 					if err := sst.Add(kv); err != nil {
 						b.Fatalf("%+v", err)
 					}
 				}
-				end := prefix.PrefixEnd()
 				data, err := sst.Finish()
 				if err != nil {
 					b.Fatalf("%+v", err)
 				}
 				sst.Close()
-				sst, err = engine.MakeRocksDBSstFileWriter()
-				if err != nil {
-					b.Fatalf("%+v", err)
-				}
 				totalLen += int64(len(data))
 				b.StartTimer()
 
-				if err := kvDB.ExperimentalAddSSTable(ctx, prefix, end, data); err != nil {
+				if err := kvDB.ExperimentalAddSSTable(ctx, span.Key, span.EndKey, data); err != nil {
 					b.Fatalf("%+v", err)
 				}
 			}
@@ -90,39 +86,44 @@ func BenchmarkAddSSTable(b *testing.B) {
 }
 
 func BenchmarkWriteBatch(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
-	const payloadSize = 100
-	v := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, payloadSize))
+	tempDir, dirCleanupFn := testutils.TempDir(b)
+	defer dirCleanupFn()
 
-	ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
 	for _, numEntries := range []int{100, 1000, 10000, 100000} {
+		bankData := testdataccl.BankRows(numEntries)
+		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
+		backup, err := testdataccl.ToBackup(b, bankData, backupDir)
+		if err != nil {
+			b.Fatalf("%+v", err)
+		}
+
 		b.Run(strconv.Itoa(numEntries), func(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).KVClient().(*client.DB)
 
-			id := keys.MaxReservedDescID + 1
+			id := sqlbase.ID(keys.MaxReservedDescID + 1)
 			var batch engine.RocksDBBatchBuilder
 
 			var totalLen int64
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				b.StopTimer()
-				prefix := roachpb.Key(keys.MakeTablePrefix(uint32(id)))
 				id++
-				for j := 0; j < numEntries; j++ {
-					key := encoding.EncodeUvarintAscending(prefix, uint64(j))
-					v.ClearChecksum()
-					v.InitChecksum(key)
-					batch.Put(engine.MVCCKey{Key: key, Timestamp: ts}, v.RawBytes)
+				backup.ResetKeyValueIteration()
+				kvs, span, err := backup.NextKeyValues(numEntries, id)
+				if err != nil {
+					b.Fatalf("%+v", err)
 				}
-				end := prefix.PrefixEnd()
+				for _, kv := range kvs {
+					batch.Put(kv.Key, kv.Value)
+				}
 				repr := batch.Finish()
 				totalLen += int64(len(repr))
 				b.StartTimer()
 
-				if err := kvDB.WriteBatch(ctx, prefix, end, repr); err != nil {
+				if err := kvDB.WriteBatch(ctx, span.Key, span.EndKey, repr); err != nil {
 					b.Fatalf("%+v", err)
 				}
 			}
