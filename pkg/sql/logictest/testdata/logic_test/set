@@ -177,7 +177,7 @@ SELECT name, value FROM system.settings WHERE name = 'testing.str'
 
 # quoted identifiers
 statement ok
-SET "time zone" = UTC
+SET "time zone" = 'UTC'
 
 query T
 SHOW "time zone"
