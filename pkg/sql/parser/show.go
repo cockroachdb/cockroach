@@ -70,6 +70,21 @@ func (node *ShowDatabases) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW DATABASES")
 }
 
+// ShowTrace represents a SHOW SESSION TRACE statement.
+type ShowTrace struct {
+	Statement Statement
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTrace) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node.Statement == nil {
+		buf.WriteString("SHOW SESSION TRACE")
+	} else {
+		buf.WriteString("SHOW TRACE FOR ")
+		FormatNode(buf, f, node.Statement)
+	}
+}
+
 // ShowIndex represents a SHOW INDEX statement.
 type ShowIndex struct {
 	Table NormalizableTableName

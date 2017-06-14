@@ -34,7 +34,7 @@ RowIdx  Key  Value  Disposition
 0       NULL NULL   ROW
 
 query TITTITTT colnames
-SELECT "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition" FROM [EXPLAIN (TRACE) SELECT 1]
+SELECT "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition" FROM [SHOW TRACE FOR SELECT 1]
 ----
 Duration  Span Pos  Operation      Event              RowIdx  Key   Value  Disposition
           1                                           0       NULL  NULL   t
@@ -49,24 +49,21 @@ Level  Type     Field     Description  Columns    Ordering
 1      nullrow                         ()
 
 statement error cannot set EXPLAIN mode more than once
-EXPLAIN (TRACE,TRACE) SELECT 1
-
-statement error cannot set EXPLAIN mode more than once
-EXPLAIN (DEBUG,TRACE) SELECT 1
+EXPLAIN (PLAN,PLAN) SELECT 1
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (PLAN,DEBUG) SELECT 1
 
 statement error unsupported EXPLAIN option
-EXPLAIN (TRACE,UNKNOWN) SELECT 1
+EXPLAIN (PLAN,UNKNOWN) SELECT 1
 
 # Ensure that tracing results are sorted after gathering
 query ITTTTT
-EXPLAIN (METADATA) EXPLAIN (TRACE) SELECT 1
+EXPLAIN (METADATA) SHOW TRACE FOR SELECT 1
 ----
 0  sort                                            ("Cumulative Time", "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition")
 0                 order  +"Timestamp",+"Span Pos"
-1  explain trace                                   ("Cumulative Time", "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition", "Timestamp")
+1  show trace for                                  ("Cumulative Time", "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition", "Timestamp")
 2  render                                          ("1")                                                                                                                    ="1"
 3  nullrow                                         ()
 

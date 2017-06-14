@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// explainTraceNode is a planNode that wraps another node and converts DebugValues() results to a
-// row of Values(). It is used as the top-level node for EXPLAIN (TRACE) statements.
-type explainTraceNode struct {
+// traceNode is a planNode that wraps another node and converts DebugValues() results to a
+// row of Values(). It is used as the top-level node for SHOW TRACE FOR statements.
+type traceNode struct {
 	plan planNode
 	// Internal state, not to be initialized.
 	earliest    time.Time
@@ -72,7 +72,7 @@ var traceOrdering = sqlbase.ColumnOrdering{
 
 func (p *planner) makeTraceNode(plan planNode) planNode {
 	return &sortNode{
-		plan: &explainTraceNode{
+		plan: &traceNode{
 			plan: plan,
 			p:    p,
 		},
@@ -84,7 +84,7 @@ func (p *planner) makeTraceNode(plan planNode) planNode {
 	}
 }
 
-func (n *explainTraceNode) Start(ctx context.Context) error {
+func (n *traceNode) Start(ctx context.Context) error {
 	return n.plan.Start(ctx)
 }
 
@@ -101,7 +101,7 @@ func (n *explainTraceNode) Start(ctx context.Context) error {
 // un-hijacked one - otherwise, the hijacked ctx will be used by that call to
 // sortNode.Next() after the explandPlanNode closes the tracing span (resulting
 // in a span use-after-finish).
-func (n *explainTraceNode) hijackTxnContext(ctx context.Context) error {
+func (n *traceNode) hijackTxnContext(ctx context.Context) error {
 	tracer := n.p.session.execCfg.AmbientCtx.Tracer
 	tracingCtx, sp, err := tracing.StartSnowballTrace(ctx, tracer, "explain trace")
 	if err != nil {
@@ -116,7 +116,7 @@ func (n *explainTraceNode) hijackTxnContext(ctx context.Context) error {
 	return nil
 }
 
-func (n *explainTraceNode) Close(ctx context.Context) {
+func (n *traceNode) Close(ctx context.Context) {
 	if n.restorePlannerCtx != nil {
 		n.unhijackCtx()
 		sp := opentracing.SpanFromContext(n.tracingCtx)
@@ -125,13 +125,13 @@ func (n *explainTraceNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 }
 
-func (n *explainTraceNode) unhijackCtx() {
+func (n *traceNode) unhijackCtx() {
 	// Restore the hijacked context on the planner.
 	n.restorePlannerCtx()
 	n.restorePlannerCtx = nil
 }
 
-func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
+func (n *traceNode) Next(ctx context.Context) (bool, error) {
 	first := n.rows == nil
 	if first {
 		n.rows = []parser.Datums{}
@@ -242,9 +242,9 @@ func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (n *explainTraceNode) Values() parser.Datums {
+func (n *traceNode) Values() parser.Datums {
 	return n.rows[0]
 }
 
-func (*explainTraceNode) MarkDebug(_ explainMode)  {}
-func (*explainTraceNode) DebugValues() debugValues { return debugValues{} }
+func (*traceNode) MarkDebug(_ explainMode)  {}
+func (*traceNode) DebugValues() debugValues { return debugValues{} }
