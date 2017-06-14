@@ -50,6 +50,15 @@ const crdb = "github.com/cockroachdb/cockroach"
 
 const serviceAccountJSONEnv = "SERVICE_ACCOUNT_JSON"
 
+type taggedWriter struct {
+	tag string
+	io.Writer
+}
+
+func (tw *taggedWriter) Write(b []byte) (int, error) {
+	return tw.Writer.Write(append(append([]byte(tw.tag), []byte(": ")...), b...))
+}
+
 func do(ctx context.Context) error {
 	rootPkg, err := build.Import(crdb, "", 0)
 	if err != nil {
@@ -144,9 +153,10 @@ func do(ctx context.Context) error {
 			cmd := exec.CommandContext(ctx, binaryPath, "-test.timeout", "0", "-test.run", "-", "-test.bench", ".", "-test.benchmem")
 			cmd.Dir = filepath.Dir(binaryPath)
 			cmd.Stdout = io.MultiWriter(&buffer, os.Stdout)
-			cmd.Stderr = os.Stderr
-
-			log.Printf("exec: %s", cmd.Args)
+			cmd.Stderr = &taggedWriter{
+				tag:    fmt.Sprint(cmd.Args),
+				Writer: os.Stderr,
+			}
 
 			if err := cmd.Run(); err != nil {
 				return errors.Wrapf(err, "could not run test binary %s", binaryPath)
