@@ -33,12 +33,16 @@ EXPLAIN (DEBUG,METADATA) SELECT 1
 RowIdx  Key  Value  Disposition
 0       NULL NULL   ROW
 
-query TITTITTT colnames
-SELECT "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition" FROM [SHOW TRACE FOR SELECT 1]
+query IIIT colnames
+SELECT txn_idx, span_idx, message_idx, operation FROM [SHOW TRACE FOR SELECT 1]
 ----
-Duration  Span Pos  Operation      Event              RowIdx  Key   Value  Disposition
-          1                                           0       NULL  NULL   t
-          0         explain trace  tracing completed  0       NULL         NULL
+txn_idx  span_idx  message_idx  operation
+0        0         0            sql txn implicit
+NULL     1         0            starting plan
+NULL     2         0            consuming rows
+NULL     2         1            NULL
+NULL     2         2            NULL
+NULL     2         3            NULL
 
 query ITTTTT colnames
 EXPLAIN (TYPES) SELECT 1
@@ -61,11 +65,9 @@ EXPLAIN (PLAN,UNKNOWN) SELECT 1
 query ITTTTT
 EXPLAIN (METADATA) SHOW TRACE FOR SELECT 1
 ----
-0  sort                                            ("Cumulative Time", "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition")
-0                 order  +"Timestamp",+"Span Pos"
-1  show trace for                                  ("Cumulative Time", "Duration", "Span Pos", "Operation", "Event", "RowIdx", "Key", "Value", "Disposition", "Timestamp")
-2  render                                          ("1")                                                                                                                    ="1"
-3  nullrow                                         ()
+0  show trace for      (txn_idx, span_idx, message_idx, "timestamp", duration, operation, message)
+1  render              ("1")                                                                        ="1"
+2  nullrow             ()
 
 # Ensure that all relevant statement types can be explained
 query ITTT
