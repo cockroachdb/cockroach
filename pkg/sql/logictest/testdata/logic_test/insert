@@ -37,8 +37,11 @@ INSERT INTO kv VALUES ('nil4', NULL)
 statement ok
 INSERT INTO kv (k,v) VALUES ('a', 'b'), ('c', 'd')
 
-statement ok
-INSERT INTO kv VALUES ('e', 'f'), ('g', '')
+query T
+SELECT v || 'hello' FROM [INSERT INTO kv VALUES ('e', 'f'), ('g', '') RETURNING v]
+----
+fhello
+hello
 
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv
