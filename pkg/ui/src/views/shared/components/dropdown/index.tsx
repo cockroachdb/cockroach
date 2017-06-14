@@ -2,6 +2,8 @@ import Select from "react-select";
 import React from "react";
 import _ from "lodash";
 
+import "./dropdown.styl";
+
 import {leftArrow, rightArrow} from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 

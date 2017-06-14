@@ -1,6 +1,8 @@
 import React from "react";
 import classNames from "classnames";
 
+import "./tooltip.styl";
+
 interface ToolTipWrapperProps {
   text: React.ReactNode;
 }
