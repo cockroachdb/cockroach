@@ -56,6 +56,14 @@ var (
 	MinLeaseDuration = time.Minute
 )
 
+type leaseState struct {
+	id         sqlbase.ID
+	version    sqlbase.DescriptorVersion
+	expiration parser.DTimestamp
+
+	testingKnobs LeaseStoreTestingKnobs
+}
+
 // tableVersionState holds the state for a table version. This includes
 // the lease information for a table version.
 // TODO(vivek): A node only needs to manage lease information on what it
@@ -64,36 +72,36 @@ type tableVersionState struct {
 	// This descriptor is immutable and can be shared by many goroutines.
 	// Care must be taken to not modify it.
 	sqlbase.TableDescriptor
-	expiration parser.DTimestamp
 
 	// mu protects refcount and released
 	mu       syncutil.Mutex
 	refcount int
 	// Set if the lease has been released and cannot be handed out any more. The
-	// table name cache can have references to such leases since releasing a lease
+	// table name cache can have references to such tables since releasing a lease
 	// and updating the cache is not atomic.
 	released bool
 
-	testingKnobs LeaseStoreTestingKnobs
+	// A lease for the table version if needed.
+	lease *leaseState
 }
 
 func (s *tableVersionState) String() string {
-	return fmt.Sprintf("%d(%q) ver=%d:%d, refcount=%d", s.ID, s.Name, s.Version, s.expiration.UnixNano(), s.refcount)
+	return fmt.Sprintf("%d(%q) ver=%d:%d, refcount=%d", s.ID, s.Name, s.Version, s.lease.expiration.UnixNano(), s.refcount)
 }
 
 // Expiration returns the expiration time of the table version.
 func (s *tableVersionState) Expiration() time.Time {
-	return s.expiration.Time
+	return s.lease.expiration.Time
 }
 
 // hasSomeLifeLeft returns true if the lease has at least a minimum of
 // lifetime left until expiration, and thus can be used.
 func (s *tableVersionState) hasSomeLifeLeft(clock *hlc.Clock) bool {
-	if s.testingKnobs.CanUseExpiredLeases {
+	if s.lease.testingKnobs.CanUseExpiredLeases {
 		return true
 	}
 	minDesiredExpiration := clock.Now().GoTime().Add(MinLeaseDuration)
-	return s.expiration.After(minDesiredExpiration)
+	return s.lease.expiration.After(minDesiredExpiration)
 }
 
 func (s *tableVersionState) incRefcount() {
@@ -141,13 +149,13 @@ func (s LeaseStore) Acquire(
 	minVersion sqlbase.DescriptorVersion,
 	minExpirationTime parser.DTimestamp,
 ) (*tableVersionState, error) {
-	table := &tableVersionState{testingKnobs: s.testingKnobs}
+	table := &tableVersionState{lease: &leaseState{testingKnobs: s.testingKnobs}}
 	expiration := time.Unix(0, s.clock.Now().WallTime).Add(jitteredLeaseDuration())
 	expiration = expiration.Round(time.Microsecond)
 	if !minExpirationTime.IsZero() && expiration.Before(minExpirationTime.Time) {
 		expiration = minExpirationTime.Time
 	}
-	table.expiration = parser.DTimestamp{Time: expiration}
+	table.lease.expiration = parser.DTimestamp{Time: expiration}
 
 	// Use the supplied (user) transaction to look up the descriptor because the
 	// descriptor might have been created within the transaction.
@@ -162,6 +170,8 @@ func (s LeaseStore) Acquire(
 	// Once the descriptor is set it is immutable and care must be taken
 	// to not modify it.
 	table.TableDescriptor = *tableDesc
+	table.lease.id = table.ID
+	table.lease.version = table.Version
 
 	// ValidateTable instead of Validate, even though we have a txn available,
 	// so we don't block reads waiting for this table version.
@@ -193,7 +203,10 @@ func (s LeaseStore) Acquire(
 		defer finishInternalPlanner(p)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
-		count, err := p.exec(ctx, insertLease, table.ID, int(table.Version), nodeID, &table.expiration)
+		lease := table.lease
+		count, err := p.exec(
+			ctx, insertLease, lease.id, int(lease.version), nodeID, &lease.expiration,
+		)
 		if err != nil {
 			return err
 		}
@@ -222,8 +235,9 @@ func (s LeaseStore) Release(ctx context.Context, stopper *stop.Stopper, table *t
 			defer finishInternalPlanner(p)
 			const deleteLease = `DELETE FROM system.lease ` +
 				`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
+			lease := table.lease
 			count, err := p.exec(
-				ctx, deleteLease, table.ID, int(table.Version), nodeID, &table.expiration)
+				ctx, deleteLease, lease.id, int(lease.version), nodeID, &lease.expiration)
 			if err != nil {
 				return err
 			}
@@ -625,7 +639,7 @@ func (t *tableState) acquireFreshestFromStoreLocked(
 	newestTable := t.active.findNewest(0)
 	if newestTable != nil {
 		minExpirationTime = parser.DTimestamp{
-			Time: newestTable.expiration.Add(time.Millisecond)}
+			Time: newestTable.lease.expiration.Add(time.Millisecond)}
 	}
 
 	s, err := t.acquireNodeLease(ctx, txn, version, m, minExpirationTime)
