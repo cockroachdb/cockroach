@@ -123,6 +123,37 @@ func do(ctx context.Context) error {
 		}
 	}
 
+	buffers := make([]bytes.Buffer, numIterations)
+	for i, buffer := range buffers {
+		if _, err := fmt.Fprintf(
+			&buffer,
+			"commit: %s\niteration: %d\nstart-time: %s\n",
+			bytes.TrimSpace(rev),
+			i,
+			timeutil.Now().UTC().Format(time.RFC3339),
+		); err != nil {
+			return errors.Wrap(err, "could not write header")
+		}
+
+		for _, txt := range binaries {
+			binaryPath, err := filepath.Abs(txt)
+			if err != nil {
+				return errors.Wrapf(err, "could not find test binary %s", txt)
+			}
+
+			cmd := exec.CommandContext(ctx, binaryPath, "-test.run", "-", "-test.bench", ".", "-test.benchmem")
+			cmd.Dir = filepath.Dir(binaryPath)
+			cmd.Stdout = io.MultiWriter(&buffer, os.Stdout)
+			cmd.Stderr = os.Stderr
+
+			log.Printf("exec: %s", cmd.Args)
+
+			if err := cmd.Run(); err != nil {
+				return errors.Wrapf(err, "could not run test binary %s", binaryPath)
+			}
+		}
+	}
+
 	client := storage.Client{
 		BaseURL:    storageURL,
 		HTTPClient: conf.Client(ctx),
@@ -131,45 +162,20 @@ func do(ctx context.Context) error {
 	u := client.NewUpload(ctx)
 
 	if err := func() error {
-		for i := 0; i < numIterations; i++ {
+		for i, buffer := range buffers {
 			w, err := u.CreateFile(fmt.Sprintf("bench%02d.txt", i))
 			if err != nil {
-				return errors.Wrap(err, "could not create file")
+				return errors.Wrap(err, "could not create upload file")
 			}
-
-			if _, err := fmt.Fprintf(
-				w,
-				"commit: %s\niteration: %d\nstart-time: %s\n",
-				bytes.TrimSpace(rev),
-				i,
-				timeutil.Now().UTC().Format(time.RFC3339),
-			); err != nil {
-				return errors.Wrap(err, "could not write header")
-			}
-
-			for _, txt := range binaries {
-				binaryPath, err := filepath.Abs(txt)
-				if err != nil {
-					return errors.Wrapf(err, "could not find test binary %s", txt)
-				}
-
-				cmd := exec.CommandContext(ctx, binaryPath, "-test.run", "-", "-test.bench", ".", "-test.benchmem")
-				cmd.Dir = filepath.Dir(binaryPath)
-				cmd.Stdout = io.MultiWriter(w, os.Stdout)
-				cmd.Stderr = os.Stderr
-
-				log.Printf("exec: %s", cmd.Args)
-
-				if err := cmd.Run(); err != nil {
-					return errors.Wrapf(err, "could not run test binary %q", binaryPath)
-				}
+			if _, err := io.Copy(w, &buffer); err != nil {
+				return errors.Wrapf(err, "could not write to upload file")
 			}
 		}
 
 		return nil
 	}(); err != nil {
 		if err := u.Abort(); err != nil {
-			log.Println(errors.Wrap(err, "could not abort upload"))
+			log.Printf("could not abort upload: %s", err)
 		}
 		return errors.Wrap(err, "could not upload file")
 	}
