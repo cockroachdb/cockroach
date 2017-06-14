@@ -88,7 +88,6 @@ func doExpandPlan(
 		if err != nil {
 			return plan, err
 		}
-		n.plan.MarkDebug(explainDebug)
 
 	case *explainPlanNode:
 		if n.expanded {

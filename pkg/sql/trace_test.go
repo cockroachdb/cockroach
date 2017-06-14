@@ -83,7 +83,7 @@ func prettyPrint(m [][]string) string {
 	return buf.String()
 }
 
-func TestExplainTrace(t *testing.T) {
+func TestShowTraceFor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// SHOW TRACE FOR needs to work regardless of whether tracing is enabled. Test both cases.
@@ -118,12 +118,17 @@ func TestExplainTrace(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer rows.Close()
-				expParts := []string{"explain trace", "grpcTransport SendNext", "/cockroach.roachpb.Internal/Batch"}
+				expParts := []string{
+					"starting plan",
+					"consuming rows",
+					"grpcTransport SendNext",
+					"/cockroach.roachpb.Internal/Batch",
+				}
 				var parts []string
 
 				pretty := rowsToStrings(rows)
 				for _, row := range pretty[1:] {
-					part := row[3] // Operation
+					part := row[5] // Operation
 					if ind := sort.SearchStrings(parts, part); ind == len(parts) || parts[ind] != part {
 						parts = append(parts, part)
 						sort.Strings(parts)
