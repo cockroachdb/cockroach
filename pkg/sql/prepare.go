@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -44,6 +45,14 @@ type PreparedStatement struct {
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
 
 	memAcc WrappableMemoryAccount
+	// constantAcc handles the allocation of various constant-folded values which
+	// are generated while planning the statement.
+	constantAcc mon.BoundAccount
+}
+
+func (p *PreparedStatement) close(ctx context.Context, s *Session) {
+	p.memAcc.Wsession(s).Close(ctx)
+	p.constantAcc.Close(ctx)
 }
 
 // Statement contains a statement with optional expected result columns and metadata.
@@ -162,7 +171,7 @@ func (ps PreparedStatements) New(
 	}
 
 	if prevStmt, ok := ps.Get(name); ok {
-		prevStmt.memAcc.Wsession(ps.session).Close(ps.session.Ctx())
+		prevStmt.close(ps.session.Ctx(), ps.session)
 	}
 
 	pStmt.Str = stmtStr
@@ -182,7 +191,7 @@ func (ps PreparedStatements) Delete(ctx context.Context, name string) bool {
 				}
 			}
 		}
-		stmt.memAcc.Wsession(ps.session).Close(ctx)
+		stmt.close(ctx, ps.session)
 		delete(ps.stmts, name)
 		return true
 	}
@@ -192,7 +201,7 @@ func (ps PreparedStatements) Delete(ctx context.Context, name string) bool {
 // closeAll de-registers all statements and portals from the monitor.
 func (ps PreparedStatements) closeAll(ctx context.Context, s *Session) {
 	for _, stmt := range ps.stmts {
-		stmt.memAcc.Wsession(s).Close(ctx)
+		stmt.close(ctx, s)
 	}
 	for _, portal := range s.PreparedPortals.portals {
 		portal.memAcc.Wsession(s).Close(ctx)
