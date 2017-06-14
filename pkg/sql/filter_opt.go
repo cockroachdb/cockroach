@@ -302,7 +302,7 @@ func (p *planner) propagateFilters(
 			}
 		}
 
-	case *explainTraceNode:
+	case *traceNode:
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
 		}

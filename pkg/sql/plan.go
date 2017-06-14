@@ -188,8 +188,7 @@ var _ planNode = &emptyNode{}
 var _ planNode = &explainDebugNode{}
 var _ planNode = &explainDistSQLNode{}
 var _ planNode = &explainPlanNode{}
-var _ planNode = &explainTraceNode{}
-var _ planNode = &hookFnNode{}
+var _ planNode = &traceNode{}
 var _ planNode = &filterNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &hookFnNode{}
@@ -384,6 +383,8 @@ func (p *planner) newPlan(
 		return p.ShowSessions(ctx, n)
 	case *parser.ShowTables:
 		return p.ShowTables(ctx, n)
+	case *parser.ShowTrace:
+		return p.ShowTrace(ctx, n)
 	case *parser.ShowTransactionStatus:
 		return p.ShowTransactionStatus()
 	case *parser.ShowUsers:
@@ -451,6 +452,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.ShowSessions(ctx, n)
 	case *parser.ShowTables:
 		return p.ShowTables(ctx, n)
+	case *parser.ShowTrace:
+		return p.ShowTrace(ctx, n)
 	case *parser.ShowUsers:
 		return p.ShowUsers(ctx, n)
 	case *parser.ShowTransactionStatus:
