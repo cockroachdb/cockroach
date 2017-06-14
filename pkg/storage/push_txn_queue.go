@@ -397,18 +397,17 @@ func (ptq *pushTxnQueue) MaybeWaitForPush(
 	// to execute the QueryTxn command.
 	ptq.clearWaitingQueriesLocked(ctx, *req.PusheeTxn.ID)
 
-	if log.V(2) {
-		if req.PusherTxn.ID != nil {
-			log.Infof(
-				ctx,
-				"%s pushing %s (%d pending)",
-				req.PusherTxn.ID.Short(),
-				req.PusheeTxn.ID.Short(),
-				len(pending.waitingPushes),
-			)
-		} else {
-			log.Infof(ctx, "pushing %s (%d pending)", req.PusheeTxn.ID.Short(), len(pending.waitingPushes))
-		}
+	if req.PusherTxn.ID != nil {
+		log.VEventf(
+			ctx,
+			2,
+			"%s pushing %s (%d pending)",
+			req.PusherTxn.ID.Short(),
+			req.PusheeTxn.ID.Short(),
+			len(pending.waitingPushes),
+		)
+	} else {
+		log.VEventf(ctx, 2, "pushing %s (%d pending)", req.PusheeTxn.ID.Short(), len(pending.waitingPushes))
 	}
 	ptq.mu.Unlock()
 
@@ -450,9 +449,11 @@ func (ptq *pushTxnQueue) MaybeWaitForPush(
 		select {
 		case <-ctx.Done():
 			// Caller has given up.
+			log.Event(ctx, "pusher giving up due to context cancellation")
 			return nil, roachpb.NewError(ctx.Err())
 
 		case txn := <-push.pending:
+			log.Eventf(ctx, "result of pending push: %v", txn)
 			// If txn is nil, the queue was cleared, presumably because the
 			// replica lost the range lease. Return not pushed so request
 			// proceeds and is redirected to the new range lease holder.
@@ -463,12 +464,15 @@ func (ptq *pushTxnQueue) MaybeWaitForPush(
 			// pushed. If this PushTxn request is satisfied, return
 			// successful PushTxn response.
 			if isPushed(req, txn) {
+				log.Event(ctx, "push request is satisfied")
 				return createPushTxnResponse(txn), nil
 			}
 			// If not successfully pushed, return not pushed so request proceeds.
+			log.Event(ctx, "not pushed; returning to caller")
 			return nil, nil
 
 		case <-pusheeTxnTimer.C:
+			log.Event(ctx, "querying pushee")
 			pusheeTxnTimer.Read = true
 			// Periodically check whether the pushee txn has been abandoned.
 			updatedPushee, _, pErr := ptq.queryTxnStatus(
@@ -478,18 +482,18 @@ func (ptq *pushTxnQueue) MaybeWaitForPush(
 				return nil, pErr
 			} else if updatedPushee == nil {
 				// Continue with push.
+				log.Event(ctx, "pushee not found, push should now succeed")
 				return nil, nil
 			}
 			pusheePriority = updatedPushee.Priority
 			pending.txn.Store(updatedPushee)
 			if isExpired(ptq.store.Clock().Now(), updatedPushee) {
-				if log.V(1) {
-					log.Warningf(ctx, "pushing expired txn %s", req.PusheeTxn.ID.Short())
-				}
+				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				return nil, nil
 			}
 
 		case updatedPusher := <-queryPusherCh:
+			log.Eventf(ctx, "pusher was updated: %v", updatedPusher)
 			switch updatedPusher.Status {
 			case roachpb.COMMITTED:
 				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedPusher)
@@ -507,17 +511,16 @@ func (ptq *pushTxnQueue) MaybeWaitForPush(
 			for id := range push.mu.dependents {
 				dependents = append(dependents, id.Short())
 			}
-			if log.V(2) {
-				log.Infof(
-					ctx,
-					"%s (%d), pushing %s (%d), has dependencies=%s",
-					req.PusherTxn.ID.Short(),
-					pusherPriority,
-					req.PusheeTxn.ID.Short(),
-					pusheePriority,
-					dependents,
-				)
-			}
+			log.VEventf(
+				ctx,
+				2,
+				"%s (%d), pushing %s (%d), has dependencies=%s",
+				req.PusherTxn.ID.Short(),
+				pusherPriority,
+				req.PusheeTxn.ID.Short(),
+				pusheePriority,
+				dependents,
+			)
 			push.mu.Unlock()
 
 			// Since the pusher has been updated, clear any waiting queries
@@ -540,6 +543,7 @@ func (ptq *pushTxnQueue) MaybeWaitForPush(
 						)
 					}
 					return nil, errDeadlock
+
 				}
 			}
 			// Signal the pusher query txn loop to continue.
@@ -660,6 +664,7 @@ func (ptq *pushTxnQueue) startQueryPusherTxn(
 				} else if updatedPusher == nil {
 					// No pusher to query; the BeginTransaction hasn't yet created the
 					// pusher's record. Continue in order to backoff and retry.
+					log.Event(ctx, "no pusher found; backing off")
 					continue
 				}
 
