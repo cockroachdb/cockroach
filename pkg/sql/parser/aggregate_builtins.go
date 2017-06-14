@@ -138,6 +138,20 @@ var Aggregates = map[string][]Builtin{
 			"Calculates the number of selected elements."),
 	},
 
+	"count_rows": {
+		{
+			impure:        true,
+			class:         AggregateClass,
+			Types:         ArgTypes{},
+			ReturnType:    fixedReturnType(TypeInt),
+			AggregateFunc: newCountRowsAggregate,
+			WindowFunc: func(params []Type, evalCtx *EvalContext) WindowFunc {
+				return newAggregateWindow(newCountRowsAggregate(params, evalCtx))
+			},
+			Info: "Calculates the number of rows.",
+		},
+	},
+
 	"max": collectBuiltins(func(t Type) Builtin {
 		return makeAggBuiltin(t, t, newMaxAggregate,
 			"Identifies the maximum selected value.")
@@ -494,6 +508,26 @@ func (a *countAggregate) Result() (Datum, error) {
 
 // Close is part of the AggregateFunc interface.
 func (a *countAggregate) Close(context.Context) {}
+
+type countRowsAggregate struct {
+	count int
+}
+
+func newCountRowsAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+	return &countRowsAggregate{}
+}
+
+func (a *countRowsAggregate) Add(_ context.Context, _ Datum) error {
+	a.count++
+	return nil
+}
+
+func (a *countRowsAggregate) Result() (Datum, error) {
+	return NewDInt(DInt(a.count)), nil
+}
+
+// Close is part of the AggregateFunc interface.
+func (a *countRowsAggregate) Close(context.Context) {}
 
 // MaxAggregate keeps track of the largest value passed to Add.
 type MaxAggregate struct {

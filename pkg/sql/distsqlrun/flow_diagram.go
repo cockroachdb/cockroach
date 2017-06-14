@@ -84,17 +84,25 @@ func (a *AggregatorSpec) summary() (string, []string) {
 		details = append(details, colListStr(a.GroupCols))
 	}
 	for _, agg := range a.Aggregations {
-		distinct := ""
+		var buf bytes.Buffer
+		buf.WriteString(agg.Func.String())
+		buf.WriteByte('(')
+
 		if agg.Distinct {
-			distinct = "DISTINCT "
+			buf.WriteString("DISTINCT ")
 		}
-		filter := ""
+		for i, c := range agg.ColIdx {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			fmt.Fprintf(&buf, "@%d", c+1)
+		}
+		buf.WriteByte(')')
 		if agg.FilterColIdx != nil {
-			filter = fmt.Sprintf(" FILTER @%d", *agg.FilterColIdx+1)
+			fmt.Fprintf(&buf, " FILTER @%d", *agg.FilterColIdx+1)
 		}
 
-		str := fmt.Sprintf("%s(%s@%d)%s", agg.Func, distinct, agg.ColIdx+1, filter)
-		details = append(details, str)
+		details = append(details, buf.String())
 	}
 
 	return "Aggregator", details

@@ -224,7 +224,13 @@ func (w *aggregateWindowFunc) Compute(
 	// Accumulate all values in the peer group at the same time, as these
 	// must return the same value.
 	for i := 0; i < wf.PeerRowCount; i++ {
-		if err := w.agg.Add(ctx, wf.argsWithRowOffset(i)[0]); err != nil {
+		args := wf.argsWithRowOffset(i)
+		var value Datum
+		// COUNT_ROWS takes no arguments.
+		if len(args) > 0 {
+			value = args[0]
+		}
+		if err := w.agg.Add(ctx, value); err != nil {
 			return nil, err
 		}
 	}

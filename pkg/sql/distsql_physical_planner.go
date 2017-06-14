@@ -818,7 +818,9 @@ func (dsp *distSQLPlanner) addAggregators(
 			aggregations[i].Func = distsqlrun.AggregatorSpec_Func(funcIdx)
 			aggregations[i].Distinct = (f.Type == parser.DistinctFuncType)
 		}
-		aggregations[i].ColIdx = uint32(p.planToStreamColMap[fholder.argRenderIdx])
+		if fholder.argRenderIdx != noRenderIdx {
+			aggregations[i].ColIdx = []uint32{uint32(p.planToStreamColMap[fholder.argRenderIdx])}
+		}
 		if fholder.hasFilter {
 			col := uint32(p.planToStreamColMap[fholder.filterRenderIdx])
 			aggregations[i].FilterColIdx = &col
@@ -891,7 +893,9 @@ func (dsp *distSQLPlanner) addAggregators(
 		}
 		distinctColsMap := make(map[uint32]struct{})
 		for _, agg := range aggregations {
-			distinctColsMap[agg.ColIdx] = struct{}{}
+			for _, c := range agg.ColIdx {
+				distinctColsMap[c] = struct{}{}
+			}
 		}
 		orderedColumns := make([]uint32, 0, len(orderedColsMap))
 		for o := range orderedColsMap {
@@ -960,7 +964,15 @@ func (dsp *distSQLPlanner) addAggregators(
 					FilterColIdx: e.FilterColIdx,
 				}
 
-				_, localResultType, err := distsqlrun.GetAggregateInfo(localFunc, inputTypes[e.ColIdx])
+				var localResultType sqlbase.ColumnType
+
+				argTypes := make([]sqlbase.ColumnType, len(e.ColIdx))
+				for i, c := range e.ColIdx {
+					argTypes[i] = inputTypes[c]
+				}
+
+				var err error
+				_, localResultType, err = distsqlrun.GetAggregateInfo(localFunc, argTypes...)
 				if err != nil {
 					return err
 				}
@@ -970,7 +982,7 @@ func (dsp *distSQLPlanner) addAggregators(
 					Func: info.FinalStage[i],
 					// The input of final expression aIdx is the output of the
 					// local expression aIdx.
-					ColIdx: uint32(aIdx),
+					ColIdx: []uint32{uint32(aIdx)},
 				}
 				if needRender {
 					_, finalPreRenderTypes[aIdx], err = distsqlrun.GetAggregateInfo(
@@ -989,12 +1001,12 @@ func (dsp *distSQLPlanner) addAggregators(
 		for i, groupColIdx := range groupCols {
 			agg := distsqlrun.AggregatorSpec_Aggregation{
 				Func:   distsqlrun.AggregatorSpec_IDENT,
-				ColIdx: groupColIdx,
+				ColIdx: []uint32{groupColIdx},
 			}
 			// See if there already is an aggregation like the one we want to add.
 			idx := -1
-			for j, jAgg := range localAgg {
-				if jAgg == agg {
+			for j := range localAgg {
+				if localAgg[j].Equals(agg) {
 					idx = j
 					break
 				}
@@ -1053,8 +1065,12 @@ func (dsp *distSQLPlanner) addAggregators(
 
 	finalOutTypes := make([]sqlbase.ColumnType, len(aggregations))
 	for i, agg := range aggregations {
+		argTypes := make([]sqlbase.ColumnType, len(agg.ColIdx))
+		for i, c := range agg.ColIdx {
+			argTypes[i] = inputTypes[c]
+		}
 		var err error
-		_, finalOutTypes[i], err = distsqlrun.GetAggregateInfo(agg.Func, inputTypes[agg.ColIdx])
+		_, finalOutTypes[i], err = distsqlrun.GetAggregateInfo(agg.Func, argTypes...)
 		if err != nil {
 			return err
 		}
