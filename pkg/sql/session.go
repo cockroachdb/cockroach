@@ -573,7 +573,7 @@ func (s *Session) Ctx() context.Context {
 // hijackCtx changes the current transaction's context to the provided one and
 // returns a cleanup function to be used to restore the original context when
 // the hijack is no longer needed.
-// TODO(andrei): delete this when EXPLAIN(TRACE) goes away
+// TODO(andrei): delete this when explainTraceNode is refactored to use session tracing.
 func (s *Session) hijackCtx(ctx context.Context) func() {
 	if s.TxnState.State != Open {
 		// This hijacking is dubious to begin with. Let's at least assert it's being
@@ -989,7 +989,7 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 // hijackCtx changes the transaction's context to the provided one and returns a
 // cleanup function to be used to restore the original context when the hijack
 // is no longer needed.
-// TODO(andrei): delete this when EXPLAIN(TRACE) goes away.
+// TODO(andrei): delete this when explainTraceNode is refactored to use session tracing.
 func (ts *txnState) hijackCtx(ctx context.Context) func() {
 	origCtx := ts.Ctx
 	ts.Ctx = ctx
