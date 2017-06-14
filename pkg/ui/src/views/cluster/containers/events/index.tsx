@@ -5,6 +5,8 @@ import { connect } from "react-redux";
 import moment from "moment";
 import * as protobuf from "protobufjs/minimal";
 
+import "./events.styl";
+
 import * as protos from "src/js/protos";
 
 import { AdminUIState } from "src/redux/state";

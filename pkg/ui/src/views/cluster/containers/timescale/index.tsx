@@ -3,6 +3,8 @@ import { connect } from "react-redux";
 import _ from "lodash";
 import moment from "moment";
 
+import "./timescale.styl";
+
 import Dropdown, { DropdownOption, ArrowDirection } from "src/views/shared/components/dropdown";
 
 import { AdminUIState } from "src/redux/state";
