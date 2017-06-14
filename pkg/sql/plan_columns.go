@@ -67,7 +67,7 @@ func planColumns(plan planNode) sqlbase.ResultColumns {
 		return debugColumns
 	case *explainDistSQLNode:
 		return explainDistSQLColumns
-	case *explainTraceNode:
+	case *traceNode:
 		return traceColumnsWithTS
 	case *relocateNode:
 		return relocateNodeColumns

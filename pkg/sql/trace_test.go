@@ -86,7 +86,7 @@ func prettyPrint(m [][]string) string {
 func TestExplainTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// EXPLAIN (TRACE) needs to work regardless of whether tracing is enabled. Test both cases.
+	// SHOW TRACE FOR needs to work regardless of whether tracing is enabled. Test both cases.
 	for _, enableTr := range []bool{false, true} {
 		name := "TracingOff"
 		if enableTr {
@@ -110,10 +110,10 @@ func TestExplainTrace(t *testing.T) {
 			`); err != nil {
 				t.Fatal(err)
 			}
-			// Check EXPLAIN (TRACE) from all nodes. The point is to test from a node
+			// Check SHOW TRACE from all nodes. The point is to test from a node
 			// that is different than the leaseholder for the range.
 			for n := 0; n < numNodes; n++ {
-				rows, err := cluster.ServerConn(n).Query(`EXPLAIN (TRACE) SELECT * FROM test.foo`)
+				rows, err := cluster.ServerConn(n).Query(`SHOW TRACE FOR SELECT * FROM test.foo`)
 				if err != nil {
 					t.Fatal(err)
 				}

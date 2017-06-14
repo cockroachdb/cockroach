@@ -439,7 +439,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   SYMMETRIC SYSTEM
 
 %token <str>   TABLE TABLES TEMPLATE TESTING_RANGES TESTING_RELOCATE TEXT THEN
-%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRANSACTION TREAT TRIM TRUE
+%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
@@ -1693,6 +1693,14 @@ show_stmt:
 | SHOW LOCAL QUERIES
   {
     $$.val = &ShowQueries{Cluster: false}
+  }
+| SHOW SESSION TRACE
+  {
+    $$.val = &ShowTrace{Statement: nil}
+  }
+| SHOW TRACE FOR preparable_stmt
+  {
+    $$.val = &ShowTrace{Statement: $4.stmt()}
   }
 | SHOW SESSIONS
   {
@@ -5404,6 +5412,7 @@ unreserved_keyword:
 | TESTING_RANGES
 | TESTING_RELOCATE
 | TEXT
+| TRACE
 | TRANSACTION
 | TRUNCATE
 | TYPE
