@@ -438,6 +438,12 @@ func (e *Executor) Prepare(
 		SQLTypes:    pinfo,
 		portalNames: make(map[string]struct{}),
 	}
+
+	// We need a memory account available in order to prepare a statement, since we
+	// might need to allocate memory for constant-folded values in the process of
+	// planning it.
+	prepared.constantAcc = session.mon.MakeBoundAccount()
+
 	if stmt.AST == nil {
 		return prepared, nil
 	}
@@ -473,14 +479,7 @@ func (e *Executor) Prepare(
 	planner := session.newPlanner(e, txn)
 	planner.semaCtx.Placeholders.SetTypes(pinfo)
 	planner.evalCtx.PrepareOnly = true
-
-	// We need a memory account available in order to prepare a statement, since we
-	// might need to allocate memory for constant-folded values in the process of
-	// planning it. We close the account while still storing the statement though,
-	// so we undercount memory here.
-	constantMemAcc := planner.evalCtx.Mon.MakeBoundAccount()
-	planner.evalCtx.ActiveMemAcc = &constantMemAcc
-	defer constantMemAcc.Close(session.Ctx())
+	planner.evalCtx.ActiveMemAcc = &prepared.constantAcc
 
 	if protoTS != nil {
 		planner.avoidCachedDescriptors = true
