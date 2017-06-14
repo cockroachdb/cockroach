@@ -33,31 +33,47 @@ import (
 // GetAggregateInfo returns the aggregate constructor and the return type for
 // the given aggregate function when applied on the given type.
 func GetAggregateInfo(
-	fn AggregatorSpec_Func, inputType sqlbase.ColumnType,
+	fn AggregatorSpec_Func, inputTypes ...sqlbase.ColumnType,
 ) (
 	aggregateConstructor func(*parser.EvalContext) parser.AggregateFunc,
 	returnType sqlbase.ColumnType,
 	err error,
 ) {
 	if fn == AggregatorSpec_IDENT {
-		return parser.NewIdentAggregate, inputType, nil
+		if len(inputTypes) != 1 {
+			return nil, sqlbase.ColumnType{}, errors.Errorf("ident aggregate needs 1 input")
+		}
+		return parser.NewIdentAggregate, inputTypes[0], nil
 	}
 
-	inputDatumType := inputType.ToDatumType()
+	datumTypes := make([]parser.Type, len(inputTypes))
+	for i := range inputTypes {
+		datumTypes[i] = inputTypes[i].ToDatumType()
+	}
+
 	builtins := parser.Aggregates[strings.ToLower(fn.String())]
 	for _, b := range builtins {
-		for _, t := range b.Types.Types() {
-			if inputDatumType.Equivalent(t) {
-				// Found!
-				constructAgg := func(evalCtx *parser.EvalContext) parser.AggregateFunc {
-					return b.AggregateFunc([]parser.Type{inputDatumType}, evalCtx)
-				}
-				return constructAgg, sqlbase.DatumTypeToColumnType(b.FixedReturnType()), nil
+		types := b.Types.Types()
+		if len(types) != len(inputTypes) {
+			continue
+		}
+		match := true
+		for i, t := range types {
+			if !datumTypes[i].Equivalent(t) {
+				match = false
+				break
 			}
+		}
+		if match {
+			// Found!
+			constructAgg := func(evalCtx *parser.EvalContext) parser.AggregateFunc {
+				return b.AggregateFunc(datumTypes, evalCtx)
+			}
+			return constructAgg, sqlbase.DatumTypeToColumnType(b.FixedReturnType()), nil
 		}
 	}
 	return nil, sqlbase.ColumnType{}, errors.Errorf(
-		"no builtin aggregate for %s on %s", fn, inputType.Kind,
+		"no builtin aggregate for %s on %v", fn, inputTypes,
 	)
 }
 
@@ -112,9 +128,6 @@ func newAggregator(
 	// the functions which need to be fed values.
 	inputTypes := input.Types()
 	for i, aggInfo := range spec.Aggregations {
-		if aggInfo.ColIdx >= uint32(len(inputTypes)) {
-			return nil, errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)
-		}
 		if aggInfo.FilterColIdx != nil {
 			col := *aggInfo.FilterColIdx
 			if col >= uint32(len(inputTypes)) {
@@ -127,7 +140,14 @@ func newAggregator(
 				)
 			}
 		}
-		aggConstructor, retType, err := GetAggregateInfo(aggInfo.Func, inputTypes[aggInfo.ColIdx])
+		argTypes := make([]sqlbase.ColumnType, len(aggInfo.ColIdx))
+		for i, c := range aggInfo.ColIdx {
+			if c >= uint32(len(inputTypes)) {
+				return nil, errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)
+			}
+			argTypes[i] = inputTypes[c]
+		}
+		aggConstructor, retType, err := GetAggregateInfo(aggInfo.Func, argTypes...)
 		if err != nil {
 			return nil, err
 		}
@@ -274,10 +294,15 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 					continue
 				}
 			}
-			if err := row[a.ColIdx].EnsureDecoded(&ag.datumAlloc); err != nil {
-				return err
+			var value parser.Datum
+			if len(a.ColIdx) != 0 {
+				c := a.ColIdx[0]
+				if err := row[c].EnsureDecoded(&ag.datumAlloc); err != nil {
+					return err
+				}
+				value = row[c].Datum
 			}
-			if err := ag.funcs[i].add(ctx, encoded, row[a.ColIdx].Datum); err != nil {
+			if err := ag.funcs[i].add(ctx, encoded, value); err != nil {
 				return err
 			}
 		}
