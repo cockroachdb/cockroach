@@ -24314,6 +24314,7 @@ export const cockroach = $root.cockroach = (() => {
              * @property {Long} [available] StoreCapacity available.
              * @property {number} [range_count] StoreCapacity range_count.
              * @property {number} [lease_count] StoreCapacity lease_count.
+             * @property {number} [applies_per_second] StoreCapacity applies_per_second.
              */
 
             /**
@@ -24354,6 +24355,12 @@ export const cockroach = $root.cockroach = (() => {
             StoreCapacity.prototype.lease_count = 0;
 
             /**
+             * StoreCapacity applies_per_second.
+             * @type {number}
+             */
+            StoreCapacity.prototype.applies_per_second = 0;
+
+            /**
              * Creates a new StoreCapacity instance using the specified properties.
              * @param {cockroach.roachpb.StoreCapacity$Properties=} [properties] Properties to set
              * @returns {cockroach.roachpb.StoreCapacity} StoreCapacity instance
@@ -24379,6 +24386,8 @@ export const cockroach = $root.cockroach = (() => {
                     writer.uint32(/* id 3, wireType 0 =*/24).int32(message.range_count);
                 if (message.lease_count != null && message.hasOwnProperty("lease_count"))
                     writer.uint32(/* id 4, wireType 0 =*/32).int32(message.lease_count);
+                if (message.applies_per_second != null && message.hasOwnProperty("applies_per_second"))
+                    writer.uint32(/* id 5, wireType 1 =*/41).double(message.applies_per_second);
                 return writer;
             };
 
@@ -24418,6 +24427,9 @@ export const cockroach = $root.cockroach = (() => {
                         break;
                     case 4:
                         message.lease_count = reader.int32();
+                        break;
+                    case 5:
+                        message.applies_per_second = reader.double();
                         break;
                     default:
                         reader.skipType(tag & 7);
@@ -24460,6 +24472,9 @@ export const cockroach = $root.cockroach = (() => {
                 if (message.lease_count != null && message.hasOwnProperty("lease_count"))
                     if (!$util.isInteger(message.lease_count))
                         return "lease_count: integer expected";
+                if (message.applies_per_second != null && message.hasOwnProperty("applies_per_second"))
+                    if (typeof message.applies_per_second !== "number")
+                        return "applies_per_second: number expected";
                 return null;
             };
 
@@ -24494,6 +24509,8 @@ export const cockroach = $root.cockroach = (() => {
                     message.range_count = object.range_count | 0;
                 if (object.lease_count != null)
                     message.lease_count = object.lease_count | 0;
+                if (object.applies_per_second != null)
+                    message.applies_per_second = Number(object.applies_per_second);
                 return message;
             };
 
@@ -24529,6 +24546,7 @@ export const cockroach = $root.cockroach = (() => {
                         object.available = options.longs === String ? "0" : 0;
                     object.range_count = 0;
                     object.lease_count = 0;
+                    object.applies_per_second = 0;
                 }
                 if (message.capacity != null && message.hasOwnProperty("capacity"))
                     if (typeof message.capacity === "number")
@@ -24544,6 +24562,8 @@ export const cockroach = $root.cockroach = (() => {
                     object.range_count = message.range_count;
                 if (message.lease_count != null && message.hasOwnProperty("lease_count"))
                     object.lease_count = message.lease_count;
+                if (message.applies_per_second != null && message.hasOwnProperty("applies_per_second"))
+                    object.applies_per_second = message.applies_per_second;
                 return object;
             };
 
