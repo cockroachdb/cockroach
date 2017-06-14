@@ -144,10 +144,10 @@ func jitteredLeaseDuration() time.Duration {
 	return time.Duration(float64(LeaseDuration) * (0.75 + 0.5*rand.Float64()))
 }
 
-// Acquire a lease on the most recent version of a table descriptor.
+// acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
 // being dropped, the error will be errTableDropped.
-func (s LeaseStore) Acquire(
+func (s LeaseStore) acquire(
 	ctx context.Context,
 	txn *client.Txn,
 	tableID sqlbase.ID,
@@ -189,7 +189,7 @@ func (s LeaseStore) Acquire(
 
 	// Insert the entry in the lease table in a separate transaction. This is
 	// necessary because we want to ensure that the lease entry is added and the
-	// transaction passed to Acquire() might be aborted. The lease entry needs to
+	// transaction passed to acquire() might be aborted. The lease entry needs to
 	// be added because we store the returned tableVersionState in local in-memory maps
 	// and cannot handle the entry being reverted. This is safe because either
 	// the descriptor we're acquiring the lease on existed prior to the acquire
@@ -224,7 +224,7 @@ func (s LeaseStore) Acquire(
 }
 
 // Release a previously acquired table descriptor.
-func (s LeaseStore) Release(ctx context.Context, stopper *stop.Stopper, table *tableVersionState) {
+func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *tableVersionState) {
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = stopper.ShouldQuiesce()
 	firstAttempt := true
@@ -740,7 +740,7 @@ func (t *tableState) acquireNodeLease(
 	// acquisition.
 	t.mu.Unlock()
 	defer t.mu.Lock()
-	table, err := m.LeaseStore.Acquire(ctx, txn, t.id, minVersion, minExpirationTime)
+	table, err := m.LeaseStore.acquire(ctx, txn, t.id, minVersion, minExpirationTime)
 	if err != nil {
 		return nil, err
 	}
@@ -798,7 +798,7 @@ func (t *tableState) removeTable(table *tableVersionState, m *LeaseManager) {
 	ctx := context.TODO()
 	if m.isDraining() {
 		// Release synchronously to guarantee release before exiting.
-		m.LeaseStore.Release(ctx, t.stopper, table)
+		m.LeaseStore.release(ctx, t.stopper, table)
 		return
 	}
 
@@ -806,7 +806,7 @@ func (t *tableState) removeTable(table *tableVersionState, m *LeaseManager) {
 	if err := t.stopper.RunAsyncTask(
 		ctx, "sql.tableState: releasing descriptor lease",
 		func(ctx context.Context) {
-			m.LeaseStore.Release(ctx, t.stopper, table)
+			m.LeaseStore.release(ctx, t.stopper, table)
 		}); err != nil {
 		log.Warningf(ctx, "error: %s, not releasing lease: %q", err, table)
 	}
