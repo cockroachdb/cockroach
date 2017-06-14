@@ -146,13 +146,6 @@ func (rf *RowFetcher) Init(
 	for i, id := range indexColumnIDs {
 		rf.indexColIdx[i] = rf.colIdxMap[id]
 	}
-	// Add composite key columns to neededCols so that, like other key
-	// columns, their values are decoded.
-	for _, id := range index.CompositeColumnIDs {
-		if _, ok := colIdxMap[id]; ok {
-			rf.neededCols.Add(uint32(id))
-		}
-	}
 
 	if isSecondaryIndex {
 		for i := range rf.cols {
@@ -308,10 +301,14 @@ func (rf *RowFetcher) ProcessKV(
 		}
 	}
 
-	// Composite columns that are not present use the key in the index. Record
-	// those values here for use later on if the datums are not present in
-	// the value.
-	unsetCols := map[int]EncDatum{}
+	if rf.neededCols.Empty() {
+		// We don't need to decode any values.
+		if debugStrings {
+			prettyValue = parser.DNull.String()
+		}
+
+		return prettyKey, prettyValue, nil
+	}
 
 	if !rf.isSecondaryIndex && len(rf.keyRemainingBytes) > 0 {
 		_, familyID, err := encoding.DecodeUvarintAscending(rf.keyRemainingBytes)
@@ -324,17 +321,15 @@ func (rf *RowFetcher) ProcessKV(
 			return "", "", err
 		}
 
-		if familyID == 0 {
-			// This value contains values for the composite columns. Clear the
-			// undecodable bytes that came from the key so that there is no panic for
-			// a duplicate value.
-			for _, colID := range rf.index.CompositeColumnIDs {
-				if idx, ok := rf.colIdxMap[colID]; ok {
-					unsetCols[idx] = rf.row[idx]
-					rf.row[idx].UnsetDatum()
-				}
-			}
-		}
+		// If familyID is 0, kv.Value contains values for composite key columns.
+		// These columns already have a rf.row value assigned above, but that value
+		// (obtained from the key encoding) might not be correct (e.g. for decimals,
+		// it might not contain the right number of trailing 0s; for collated
+		// strings, it is one of potentially many strings with the same collation
+		// key).
+		//
+		// In these cases, the correct value will be present in family 0 and the
+		// rf.row value gets overwritten.
 
 		switch kv.Value.GetTag() {
 		case roachpb.ValueType_TUPLE:
@@ -346,13 +341,6 @@ func (rf *RowFetcher) ProcessKV(
 			return "", "", err
 		}
 	} else {
-		for _, colID := range rf.index.CompositeColumnIDs {
-			if idx, ok := rf.colIdxMap[colID]; ok {
-				unsetCols[idx] = rf.row[idx]
-				rf.row[idx].UnsetDatum()
-			}
-		}
-
 		valueBytes := kv.ValueBytes()
 		if rf.extraVals != nil {
 			// This is a unique index; decode the extra column values from
@@ -385,12 +373,6 @@ func (rf *RowFetcher) ProcessKV(
 			if err != nil {
 				return "", "", err
 			}
-		}
-	}
-
-	for idx, ed := range unsetCols {
-		if rf.row[idx].IsUnset() {
-			rf.row[idx] = ed
 		}
 	}
 
@@ -436,9 +418,6 @@ func (rf *RowFetcher) processValueSingle(
 			}
 			if debugStrings {
 				prettyValue = value.String()
-			}
-			if !rf.row[idx].IsUnset() {
-				panic(fmt.Sprintf("duplicate value for column %d", idx))
 			}
 			rf.row[idx] = DatumToEncDatum(typ, value)
 			if debugRowFetch {
@@ -503,9 +482,6 @@ func (rf *RowFetcher) processValueBytes(
 				return "", "", err
 			}
 			fmt.Fprintf(&rf.prettyValueBuf, "/%v", encValue.Datum)
-		}
-		if !rf.row[idx].IsUnset() {
-			panic(fmt.Sprintf("duplicate value for column %d", idx))
 		}
 		rf.row[idx] = encValue
 		if debugRowFetch {
