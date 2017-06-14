@@ -398,7 +398,11 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 				continue
 			}
 
-			value := values[f.argRenderIdx]
+			var value parser.Datum
+			if f.argRenderIdx != noRenderIdx {
+				value = values[f.argRenderIdx]
+			}
+
 			if err := f.add(ctx, n.planner.session, bucket, value); err != nil {
 				return false, err
 			}
@@ -583,31 +587,40 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 	switch t := expr.(type) {
 	case *parser.FuncExpr:
 		if agg := t.GetAggregateConstructor(); agg != nil {
-			if len(t.Exprs) != 1 {
+			var f *aggregateFuncHolder
+			switch len(t.Exprs) {
+			case 0:
+				// COUNT_ROWS has no arguments.
+				f = v.groupNode.newAggregateFuncHolder(t, noRenderIdx, false /* not ident */, agg)
+
+			case 1:
+				argExpr := t.Exprs[0].(parser.TypedExpr)
+
+				if err := v.planner.parser.AssertNoAggregationOrWindowing(
+					argExpr,
+					fmt.Sprintf("the argument of %s()", t.Func),
+					v.planner.session.SearchPath,
+				); err != nil {
+					v.err = err
+					return false, expr
+				}
+
+				// Add a render for the argument.
+				col := sqlbase.ResultColumn{
+					Name: argExpr.String(),
+					Typ:  argExpr.ResolvedType(),
+				}
+
+				argRenderIdx := v.preRender.addOrReuseRender(col, argExpr, true /* reuse */)
+
+				f = v.groupNode.newAggregateFuncHolder(t, argRenderIdx, false /* not ident */, agg)
+
+			default:
 				// TODO: #10495
 				v.err = pgerror.UnimplementedWithIssueErrorf(10495, "aggregate functions with multiple arguments are not supported yet")
 				return false, expr
 			}
-			argExpr := t.Exprs[0].(parser.TypedExpr)
 
-			if err := v.planner.parser.AssertNoAggregationOrWindowing(
-				argExpr,
-				fmt.Sprintf("the argument of %s()", t.Func),
-				v.planner.session.SearchPath,
-			); err != nil {
-				v.err = err
-				return false, expr
-			}
-
-			// Add a render for the argument.
-			col := sqlbase.ResultColumn{
-				Name: argExpr.String(),
-				Typ:  argExpr.ResolvedType(),
-			}
-
-			argRenderIdx := v.preRender.addOrReuseRender(col, argExpr, true /* reuse */)
-
-			f := v.groupNode.newAggregateFuncHolder(t, argRenderIdx, false /* not ident */, agg)
 			if t.Type == parser.DistinctFuncType {
 				f.setDistinct()
 			}
@@ -683,6 +696,8 @@ type aggregateFuncHolder struct {
 	bucketsMemAcc WrappableMemoryAccount
 	seen          map[string]struct{}
 }
+
+const noRenderIdx = -1
 
 func (n *groupNode) newAggregateFuncHolder(
 	expr parser.TypedExpr,

@@ -60,10 +60,6 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		v.foundDependentVars = true
 	case *parser.AllColumnsSelector:
 		v.foundDependentVars = true
-	case *parser.StarDatum:
-		// StarDatum is inserted into expressions by count(*).
-		// When it is present, the "value" changes every row.
-		v.foundDependentVars = true
 
 	case *parser.IndexedVar:
 		// If the indexed var is a standalone ordinal reference, ensure it
@@ -130,31 +126,36 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		// Save back to avoid re-doing the work later.
 		t.Exprs[0] = vn
 
-		if strings.EqualFold(fd.Name, "count") {
-			// Special case handling for COUNT(*). This is a special construct to
-			// count the number of rows; in this case * does NOT refer to a set of
-			// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
-			// Replace the function argument with a special non-NULL VariableExpr.
-			switch arg := vn.(type) {
-			case parser.UnqualifiedStar:
-				// Replace, see below.
-			case *parser.AllColumnsSelector:
-				// Replace, see below.
-				// However we must first properly reject SELECT COUNT(foo.*) FROM bar.
-				if _, err := v.sources.checkDatabaseName(arg.TableName); err != nil {
-					v.err = err
-					return false, expr
+		if strings.EqualFold(fd.Name, "count") && t.Type == 0 {
+			if _, ok := vn.(parser.UnqualifiedStar); ok {
+				// Special case handling for COUNT(*). This is a special construct to
+				// count the number of rows; in this case * does NOT refer to a set of
+				// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
+				// Replace the function with COUNT_ROWS (which doesn't take any
+				// arguments).
+				e := &parser.FuncExpr{
+					Func: parser.ResolvableFunctionReference{
+						FunctionReference: parser.UnresolvedName{parser.Name("COUNT_ROWS")},
+					},
 				}
-			default:
-				// Nothing to do, recurse.
-				return true, expr
+				// We call TypeCheck to fill in FuncExpr internals. This is a fixed
+				// expression; we should not hit an error here.
+				if _, err := e.TypeCheck(&parser.SemaContext{}, parser.TypeAny); err != nil {
+					panic(err)
+				}
+				e.Filter = t.Filter
+				e.WindowDef = t.WindowDef
+				return true, e
 			}
-
-			t = t.CopyNode()
-			t.Exprs[0] = parser.StarDatumInstance
-
-			return true, t
 		}
+		// TODO(#15750): support additional forms:
+		//
+		//   COUNT(t.*): looks like this behaves the same as COUNT(*) in PG (perhaps
+		//               t.* becomes a tuple and the tuple itself is never NULL?)
+		//
+		//   COUNT(DISTINCT t.*): this deduplicates between the tuples. Note that
+		//                        this can be part of a join:
+		//                          SELECT COUNT(DISTINCT t.*) FROM t, u
 		return true, t
 
 	case *parser.Subquery:
