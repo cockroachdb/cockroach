@@ -141,7 +141,7 @@ func do(ctx context.Context) error {
 				return errors.Wrapf(err, "could not find test binary %s", txt)
 			}
 
-			cmd := exec.CommandContext(ctx, binaryPath, "-test.run", "-", "-test.bench", ".", "-test.benchmem")
+			cmd := exec.CommandContext(ctx, binaryPath, "-test.timeout", "0", "-test.run", "-", "-test.bench", ".", "-test.benchmem")
 			cmd.Dir = filepath.Dir(binaryPath)
 			cmd.Stdout = io.MultiWriter(&buffer, os.Stdout)
 			cmd.Stderr = os.Stderr
