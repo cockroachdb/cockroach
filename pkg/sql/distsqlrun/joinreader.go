@@ -181,6 +181,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 
 		if len(spans) != joinReaderBatchSize {
 			// This was the last batch.
+			sendTraceData(ctx, jr.out.output)
 			jr.out.close()
 			return nil
 		}
@@ -194,7 +195,7 @@ func (jr *joinReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	ctx = log.WithLogTagInt(ctx, "JoinReader", int(jr.desc.ID))
-	ctx, span := tracing.ChildSpan(ctx, "join reader")
+	ctx, span := processorSpan(ctx, "join reader")
 	defer tracing.FinishSpan(span)
 
 	err := jr.mainLoop(ctx)

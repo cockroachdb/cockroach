@@ -71,7 +71,7 @@ func (b *backfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = log.WithLogTagInt(ctx, opName, int(b.spec.Table.ID))
-	ctx, span := tracing.ChildSpan(ctx, opName)
+	ctx, span := processorSpan(ctx, opName)
 	defer tracing.FinishSpan(span)
 
 	log.VEventf(ctx, 1, "starting")
@@ -82,6 +82,7 @@ func (b *backfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if err := b.mainLoop(ctx); err != nil {
 		b.output.Push(nil /* row */, ProducerMetadata{Err: err})
 	}
+	sendTraceData(ctx, b.output)
 	b.output.ProducerDone()
 }
 

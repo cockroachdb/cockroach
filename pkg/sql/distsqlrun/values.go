@@ -60,7 +60,7 @@ func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
-	ctx, span := tracing.ChildSpan(ctx, "values")
+	ctx, span := processorSpan(ctx, "values")
 	defer tracing.FinishSpan(span)
 
 	// We reuse the code in StreamDecoder for decoding the raw data. We just need
@@ -73,8 +73,7 @@ func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// header before any data.
 		Header: &ProducerHeader{}}
 	if err := sd.AddMessage(&m); err != nil {
-		v.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-		v.out.close()
+		DrainAndClose(ctx, v.out.output, err)
 		return
 	}
 
@@ -84,8 +83,7 @@ func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// Push a chunk of data.
 		m.Data.RawBytes = v.data[0]
 		if err := sd.AddMessage(&m); err != nil {
-			v.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-			v.out.close()
+			DrainAndClose(ctx, v.out.output, err)
 			return
 		}
 		v.data = v.data[1:]
@@ -102,10 +100,10 @@ func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 			}
 
 			if !emitHelper(ctx, &v.out, row, meta) {
-				v.out.close()
 				return
 			}
 		}
 	}
+	sendTraceData(ctx, v.out.output)
 	v.out.close()
 }
