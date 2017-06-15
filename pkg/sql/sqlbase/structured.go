@@ -1742,6 +1742,9 @@ func (c *ColumnType) SQLString() string {
 	case ColumnType_INT_ARRAY:
 		return "INT[]"
 	}
+	if c.VisibleType != ColumnType_NONE {
+		return c.VisibleType.String()
+	}
 	return c.SemanticType.String()
 }
 
