@@ -134,8 +134,8 @@ func newReplicateQueue(
 		}
 	}
 
-	// Register a gossip and node liveness callbacks to signal queue
-	// that replicas in purgatory might be retried.
+	// Register gossip and node liveness callbacks to signal that
+	// replicas in purgatory might be retried.
 	if g != nil { // gossip is nil for some unittests
 		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) {
 			updateFn()
