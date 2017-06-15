@@ -307,14 +307,6 @@ func (t *Tracer) StartSpan(
 		}
 	}
 
-	// Copy Baggage from parent context.
-	if hasParent && len(parentCtx.Baggage) > 0 {
-		s.mu.Baggage = make(map[string]string, len(parentCtx.Baggage))
-		for k, v := range parentCtx.Baggage {
-			s.mu.Baggage[k] = v
-		}
-	}
-
 	// Start recording if necessary.
 	if recordingGroup != nil {
 		s.enableRecording(recordingGroup, recordingType)
@@ -327,6 +319,7 @@ func (t *Tracer) StartSpan(
 
 	if hasParent {
 		s.parentSpanID = parentCtx.SpanID
+		// Copy baggage from parent.
 		if l := len(parentCtx.Baggage); l > 0 {
 			s.mu.Baggage = make(map[string]string, l)
 			for k, v := range parentCtx.Baggage {
