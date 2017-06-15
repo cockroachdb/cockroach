@@ -65,6 +65,12 @@ message ColumnType {
     INT2VECTOR = 200;
   }
 
+  enum SubKind {
+    NONE = 0;
+    INT8 = 1;
+    INT64 = 2;
+  }
+
   optional Kind kind = 1 [(gogoproto.nullable) = false];
   // BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
   optional int32 width = 2 [(gogoproto.nullable) = false];
@@ -75,6 +81,10 @@ message ColumnType {
   repeated int32 array_dimensions = 4;
   // Collated STRING, CHAR, and VARCHAR
   optional string locale = 5;
+  // Alias for any types where our internal representation is different than
+  // the user specification. Examples are INT4, FLOAT4, etc. Mostly for Postgres
+  // compatibility.
+  optional SubKind alias = 6 [(gogoproto.nullable) = false];
 }
 
 enum ConstraintValidity {
