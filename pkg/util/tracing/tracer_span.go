@@ -137,7 +137,7 @@ func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
 
 // GetSpanTag returns the value of a tag in a span.
 func GetSpanTag(os opentracing.Span, key string) interface{} {
-	if IsNoopSpan(os) {
+	if _, noop := os.(*noopSpan); noop {
 		return nil
 	}
 	sp := os.(*span)
@@ -156,7 +156,7 @@ func GetSpanTag(os opentracing.Span, key string) interface{} {
 // If recording was already started on this span (either directly or because a
 // parent span is recording), the old recording is lost.
 func StartRecording(os opentracing.Span, recType RecordingType) {
-	if IsNoopSpan(os) {
+	if _, noop := os.(*noopSpan); noop {
 		panic("StartRecording called on NoopSpan; use the Force option for StartSpan")
 	}
 	os.(*span).enableRecording(new(spanGroup), recType)
@@ -198,7 +198,7 @@ func IsRecordable(os opentracing.Span) bool {
 // record are still open; it can run concurrently with operations on those
 // spans.
 func GetRecording(os opentracing.Span) []RecordedSpan {
-	if IsNoopSpan(os) {
+	if _, noop := os.(*noopSpan); noop {
 		return nil
 	}
 	s := os.(*span)
@@ -231,11 +231,18 @@ func ImportRemoteSpans(os opentracing.Span, remoteSpans []RecordedSpan) error {
 	return nil
 }
 
-// IsNoopSpan returns true if events for this span are just dropped. This is the
-// case when tracing is disable and we're not recording.
-func IsNoopSpan(s opentracing.Span) bool {
-	_, noop := s.(*noopSpan)
-	return noop
+// IsBlackHoleSpan returns true if events for this span are just dropped. This
+// is the case when tracing is disabled and we're not recording. Tracing clients
+// can use this method to figure out if they can short-circuit some
+// tracing-related work that would be discarded anyway.
+func IsBlackHoleSpan(s opentracing.Span) bool {
+	// There are two types of black holes: instances of noopSpan and, when tracing
+	// is disabled, real spans that are not recording.
+	if _, noop := s.(*noopSpan); noop {
+		return true
+	}
+	sp := s.(*span)
+	return !sp.isRecording() && sp.netTr == nil && sp.lightstep == nil
 }
 
 // Finish is part of the opentracing.Span interface.
@@ -261,6 +268,10 @@ func (s *span) FinishWithOptions(opts opentracing.FinishOptions) {
 }
 
 // Context is part of the opentracing.Span interface.
+//
+// TODO(andrei, radu): Should this return noopSpanContext for a Recordable span
+// that's not currently recording? That might save work and allocations when
+// creating child spans.
 func (s *span) Context() opentracing.SpanContext {
 	s.mu.Lock()
 	defer s.mu.Unlock()

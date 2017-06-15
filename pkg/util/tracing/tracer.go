@@ -463,18 +463,24 @@ func FinishSpan(span opentracing.Span) {
 }
 
 // ForkCtxSpan checks if ctx has a Span open; if it does, it creates a new Span
-// that follows from the original Span. This allows the resulting context to be
+// that "follows from" the original Span. This allows the resulting context to be
 // used in an async task that might outlive the original operation.
 //
 // Returns the new context and the new span (if any). The span should be
 // closed via FinishSpan.
+//
+// See also ChildSpan() for a "parent-child relationship".
 func ForkCtxSpan(ctx context.Context, opName string) (context.Context, opentracing.Span) {
 	if span := opentracing.SpanFromContext(ctx); span != nil {
-		if IsNoopSpan(span) {
+		if _, noop := span.(*noopSpan); noop {
 			// Optimization: avoid ContextWithSpan call if tracing is disabled.
 			return ctx, span
 		}
 		tr := span.Tracer()
+		if IsBlackHoleSpan(span) {
+			ns := &tr.(*Tracer).noopSpan
+			return opentracing.ContextWithSpan(ctx, ns), ns
+		}
 		newSpan := tr.StartSpan(opName, opentracing.FollowsFrom(span.Context()))
 		return opentracing.ContextWithSpan(ctx, newSpan), newSpan
 	}
@@ -491,11 +497,16 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, opentracing
 	if span == nil {
 		return ctx, nil
 	}
-	if IsNoopSpan(span) {
+	if _, noop := span.(*noopSpan); noop {
 		// Optimization: avoid ContextWithSpan call if tracing is disabled.
 		return ctx, span
 	}
-	newSpan := span.Tracer().StartSpan(opName, opentracing.ChildOf(span.Context()))
+	tr := span.Tracer()
+	if IsBlackHoleSpan(span) {
+		ns := &tr.(*Tracer).noopSpan
+		return opentracing.ContextWithSpan(ctx, ns), ns
+	}
+	newSpan := tr.StartSpan(opName, opentracing.ChildOf(span.Context()))
 	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
 }
 
