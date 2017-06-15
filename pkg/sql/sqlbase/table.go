@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/gogo/protobuf/proto"
 )
 
 func exprContainsVarsError(context string, Expr parser.Expr) error {
@@ -93,6 +94,7 @@ func MakeColumnDefDescs(
 	// Set Type.Kind and Type.Locale.
 	colDatumType := parser.CastTargetToDatumType(d.Type)
 	col.Type = DatumTypeToColumnType(colDatumType)
+	var subtypeMap = proto.EnumValueMap("cockroach.sql.sqlbase.ColumnType_SubKind")
 
 	// Set other attributes of col.Type and perform type-specific verification.
 	switch t := d.Type.(type) {
@@ -106,6 +108,13 @@ func MakeColumnDefDescs(
 			s := "unique_rowid()"
 			col.DefaultExpr = &s
 		}
+
+		if subtypeMap != nil {
+			if val, present := subtypeMap[t.Name]; present {
+				col.Type.Alias = ColumnType_SubKind(val)
+			}
+		}
+
 	case *parser.FloatColType:
 		// If the precision for this float col was intentionally specified as 0, return an error.
 		if t.Prec == 0 && t.PrecSpecified {
