@@ -352,8 +352,8 @@ SHOW COLUMNS FROM test.alltypes
 Field  Type                      Null   Default         Indices
 a      BOOL                      true   NULL            {}
 b      INT                       true   NULL			{}
-c      INT                       true   NULL			{}
-d      INT                       true   NULL			{}
+c      INT8                      true   NULL			{}
+d      INT64                     true   NULL			{}
 e      INT                       true   NULL			{}
 f      INT                       true   NULL			{}
 g      INT                       true   NULL			{}
