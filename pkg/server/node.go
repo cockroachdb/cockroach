@@ -229,11 +229,6 @@ func bootstrapCluster(
 		// StoreConfig doesn't really matter.
 		s := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
-		// Verify the store isn't already part of a cluster.
-		if s.Ident.ClusterID != (uuid.UUID{}) {
-			return uuid.UUID{}, errors.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
-		}
-
 		// Bootstrap store to persist the store ident.
 		if err := s.Bootstrap(sIdent); err != nil {
 			return uuid.UUID{}, err
