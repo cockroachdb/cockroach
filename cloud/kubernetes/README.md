@@ -29,10 +29,6 @@ The minimum kubernetes version to successfully run the examples in this director
 
 ### StatefulSet limitations
 
-StatefulSets were broadly introduced in Kubernetes version 1.5. If using an
-older version of Kubernetes, you may want to look at [an older version of these
-instructions](https://github.com/cockroachdb/cockroach/blob/beta-20161215/cloud/kubernetes/README.md).
-
 There is currently no possibility to use node-local storage (outside of
 single-node tests), and so there is likely a performance hit associated with
 running CockroachDB on some external storage. Note that CockroachDB already
@@ -52,14 +48,6 @@ first node is special in that the administrator must manually prepopulate the
 "new" storage medium by running an instance of CockroachDB with the `--join`
 parameter. If this is not done, the first node will bootstrap a new cluster,
 which will lead to a lot of trouble.
-
-### Dynamic volume provisioning
-
-The deployment is written for a use case in which dynamic volume provisioning is
-available. When that is not the case, the persistent volume claims need
-to be created manually. See [minikube.sh](minikube.sh) for the necessary
-steps. If you're on GCE or AWS, where dynamic provisioning is supported, no
-manual work is needed to create the persistent volumes.
 
 ### Secure mode
 
@@ -164,7 +152,7 @@ SQL shell using:
 $ kubectl run -it --rm cockroach-client --image=cockroachdb/cockroach --restart=Never --command -- ./cockroach sql --host cockroachdb-public
 ```
 
-**WARNING**: there is not secure mode equivalent of doing this (yet).
+**WARNING**: there is no secure mode equivalent of doing this (yet).
 
 You can see example SQL statements for inserting and querying data in the
 included [demo script](demo.sh), but can use almost any Postgres-style SQL
@@ -228,12 +216,6 @@ Scale the StatefulSet by running
 ```shell
 kubectl scale statefulset cockroachdb --replicas=4
 ```
-
-Note that you may need to create a new persistent volume claim first. If you
-ran `minikube.sh`, there's a spare volume so you can immediately scale up by
-one. If you're running on GCE or AWS, you can scale up by as many as you want
-because new volumes will automatically be created for you. Convince yourself
-that the new node immediately serves reads and writes.
 
 ## Cleaning up when you're done
 
