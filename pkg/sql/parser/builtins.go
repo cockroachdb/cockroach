@@ -1637,6 +1637,18 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"crdb_internal.cluster_id": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeUUID),
+			category:   categorySystemInfo,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				return NewDUuid(DUuid{ctx.ClusterID}), nil
+			},
+			Info: "Returns the cluster ID.",
+		},
+	},
+
 	"crdb_internal.force_internal_error": {
 		Builtin{
 			Types:      ArgTypes{{"msg", TypeString}},

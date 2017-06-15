@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var (
@@ -1714,7 +1715,8 @@ type contextHolder func() context.Context
 // distsqlrun.EvalContext. Make sure to keep the two in sync.
 // TODO(andrei): remove or limit the duplication.
 type EvalContext struct {
-	NodeID roachpb.NodeID
+	ClusterID uuid.UUID
+	NodeID    roachpb.NodeID
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().
 	stmtTimestamp time.Time

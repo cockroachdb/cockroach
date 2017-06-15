@@ -598,6 +598,7 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.evalCtx = s.evalCtx()
 	p.evalCtx.Planner = p
 	if e != nil {
+		p.evalCtx.ClusterID = e.cfg.ClusterID()
 		p.evalCtx.NodeID = e.cfg.NodeID.Get()
 		p.evalCtx.ReCache = e.reCache
 	}

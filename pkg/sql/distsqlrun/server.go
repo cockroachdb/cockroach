@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Version identifies the distsqlrun protocol version.
@@ -88,8 +89,10 @@ type ServerConfig struct {
 	ParentMemoryMonitor *mon.MemoryMonitor
 	Counter             *metric.Counter
 	Hist                *metric.Histogram
+
 	// NodeID is the id of the node on which this Server is running.
-	NodeID *base.NodeIDContainer
+	NodeID    *base.NodeIDContainer
+	ClusterID uuid.UUID
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -169,6 +172,7 @@ func (ds *ServerImpl) setupFlow(
 		Location:     &location,
 		Database:     req.EvalContext.Database,
 		SearchPath:   parser.SearchPath(req.EvalContext.SearchPath),
+		ClusterID:    ds.ServerConfig.ClusterID,
 		NodeID:       nodeID,
 		ReCache:      ds.regexpCache,
 		Mon:          &monitor,
