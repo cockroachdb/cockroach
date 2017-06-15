@@ -103,11 +103,20 @@ func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
 	if len(msg.Data.Metadata) > 0 {
 		for _, md := range msg.Data.Metadata {
 			var meta ProducerMetadata
-			if rangeInfo := md.GetRangeInfo(); rangeInfo != nil {
-				meta.Ranges = rangeInfo.RangeInfo
-			} else if pErr := md.GetError(); pErr != nil {
-				meta.Err = pErr.ErrorDetail()
+			switch v := md.Value.(type) {
+			case *RemoteProducerMetadata_RangeInfo:
+				meta.Ranges = v.RangeInfo.RangeInfo
+
+			case *RemoteProducerMetadata_TraceData_:
+				meta.TraceData = v.TraceData.CollectedSpans
+
+			case *RemoteProducerMetadata_Error:
+				meta.Err = v.Error.ErrorDetail()
+
+			default:
+				// Unknown metadata, ignore.
 			}
+
 			sd.metadata = append(sd.metadata, meta)
 		}
 	}

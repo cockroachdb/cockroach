@@ -82,6 +82,12 @@ func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
 				RangeInfo: meta.Ranges,
 			},
 		}
+	} else if meta.TraceData != nil {
+		enc.Value = &RemoteProducerMetadata_TraceData_{
+			TraceData: &RemoteProducerMetadata_TraceData{
+				CollectedSpans: meta.TraceData,
+			},
+		}
 	} else {
 		enc.Value = &RemoteProducerMetadata_Error{
 			Error: NewError(meta.Err),
@@ -109,8 +115,7 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 		}
 	}
 	if len(se.infos) != len(row) {
-		return errors.Errorf("inconsistent row length: had %d, now %d",
-			len(se.infos), len(row))
+		return errors.Errorf("inconsistent row length: had %d, now %d", len(se.infos), len(row))
 	}
 	if len(row) == 0 {
 		se.numEmptyRows++

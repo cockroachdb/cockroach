@@ -77,7 +77,7 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	ctx = log.WithLogTag(ctx, "Sorter", nil)
-	ctx, span := tracing.ChildSpan(ctx, "sorter")
+	ctx, span := processorSpan(ctx, "sorter")
 	defer tracing.FinishSpan(span)
 
 	if log.V(2) {

@@ -79,7 +79,7 @@ func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	ctx = log.WithLogTag(ctx, "MergeJoiner", nil)
-	ctx, span := tracing.ChildSpan(ctx, "merge joiner")
+	ctx, span := processorSpan(ctx, "merge joiner")
 	defer tracing.FinishSpan(span)
 	log.VEventf(ctx, 2, "starting merge joiner run")
 

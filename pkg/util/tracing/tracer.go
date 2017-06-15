@@ -289,10 +289,10 @@ func (t *Tracer) StartSpan(
 		s.SetTag(k, v)
 	}
 
-	var parentLightstepCtx opentracing.SpanContext
 	if lsTr != nil {
 		// If we are using lightstep, we create a new Lightstep span and use the
 		// metadata (TraceID, SpanID, Baggage) from that span.
+		var parentLightstepCtx opentracing.SpanContext
 		if hasParent {
 			if parentCtx.lightstep == nil {
 				panic("lightstep span derived from non-lightstep span")
@@ -398,7 +398,13 @@ func (t *Tracer) linkLightstepSpan(
 //
 // This only works for creating children of local parents (i.e. the caller needs
 // to have a reference to the parent span).
-func StartChildSpan(operationName string, parentSpan opentracing.Span) opentracing.Span {
+//
+// If separateRecording is true and the parent span is recording, we start a
+// new recording for the child span. If separateRecording is false (the
+// default), then the child span will be part of the same recording.
+func StartChildSpan(
+	operationName string, parentSpan opentracing.Span, separateRecording bool,
+) opentracing.Span {
 	tr := parentSpan.Tracer().(*Tracer)
 	// If tracing is disabled, avoid overhead and return a noop span.
 	if IsBlackHoleSpan(parentSpan) {
@@ -443,7 +449,11 @@ func StartChildSpan(operationName string, parentSpan opentracing.Span) opentraci
 
 	// Start recording if necessary.
 	if pSpan.isRecording() {
-		s.enableRecording(pSpan.mu.recordingGroup, pSpan.mu.recordingType)
+		recordingGroup := pSpan.mu.recordingGroup
+		if separateRecording {
+			recordingGroup = new(spanGroup)
+		}
+		s.enableRecording(recordingGroup, pSpan.mu.recordingType)
 	}
 
 	pSpan.mu.Unlock()
@@ -596,7 +606,7 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, opentracing
 		ns := &tr.(*Tracer).noopSpan
 		return opentracing.ContextWithSpan(ctx, ns), ns
 	}
-	newSpan := StartChildSpan(opName, span)
+	newSpan := StartChildSpan(opName, span, false /* !separateRecording */)
 	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
 }
 

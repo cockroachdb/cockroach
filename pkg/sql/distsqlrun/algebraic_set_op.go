@@ -89,7 +89,7 @@ func (e *algebraicSetOp) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	ctx = log.WithLogTag(ctx, "ExceptAll", nil)
-	ctx, span := tracing.ChildSpan(ctx, "exceptAll")
+	ctx, span := processorSpan(ctx, "exceptAll")
 	defer tracing.FinishSpan(span)
 
 	log.VEventf(ctx, 2, "starting exceptAll set process")
@@ -100,16 +100,12 @@ func (e *algebraicSetOp) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	switch e.opType {
 	case AlgebraicSetOpSpec_Except_all:
-		if err := e.exceptAll(ctx); err != nil {
-			e.out.output.Push(nil, ProducerMetadata{Err: err})
-		}
+		err := e.exceptAll(ctx)
+		DrainAndClose(ctx, e.out.output, err, e.leftSource, e.rightSource)
 
 	default:
 		panic(fmt.Sprintf("cannot run unsupported algebraicSetOp %v", e.opType))
 	}
-	e.leftSource.ConsumerClosed()
-	e.rightSource.ConsumerClosed()
-	e.out.close()
 }
 
 // exceptAll pushes all rows in the left stream that are not present in the
