@@ -2,6 +2,8 @@ import _ from "lodash";
 import React from "react";
 import classNames from "classnames";
 
+import "./summarybar.styl";
+
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 

@@ -2,6 +2,8 @@ import React from "react";
 import { RouterState, Link } from "react-router";
 import { connect } from "react-redux";
 
+import "./sqlhighlight.styl";
+
 import * as protos from "src/js/protos";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import { Bytes } from "src/util/format";
@@ -89,8 +91,8 @@ class TableMain extends React.Component<TableMainProps, {}> {
           </div>
           <div className="content l-columns">
             <div className="l-columns__left">
-              <pre className="sql" ref={(node) => this.createStmtNode = node}>
-                {/* TODO (mrtracy): format and highlight create table statement */}
+              <pre className="sql-highlight" ref={(node) => this.createStmtNode = node}>
+                {/* TODO (mrtracy): format create table statement */}
                 {tableInfo.createStatement}
               </pre>
               <div className="sql-table">

@@ -2,6 +2,8 @@ import React from "react";
 import _ from "lodash";
 import classNames from "classnames";
 
+import "./sortabletable.styl";
+
 /**
  * SortableColumn describes the contents a single column of a
  * sortable table.
