@@ -413,7 +413,7 @@ func (r *Replica) GetSnapshot(
 		defer r.raftMu.Unlock()
 		return fn(r.raftMu.sideloaded)
 	}
-	// NB: We have Replica.mu read-locked, but we need ot write-locked in order
+	// NB: We have Replica.mu read-locked, but we need it write-locked in order
 	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
 	snapData, err := snapshot(
