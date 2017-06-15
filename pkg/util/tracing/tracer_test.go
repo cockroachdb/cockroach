@@ -135,6 +135,21 @@ func TestTracerRecording(t *testing.T) {
 	s1.Finish()
 }
 
+func TestStartChildSpan(t *testing.T) {
+	tr := NewTracer()
+	sp1 := tr.StartSpan("parent", Recordable)
+	StartRecording(sp1, SingleNodeRecording)
+	sp2 := StartChildSpan("child", sp1)
+	sp2.Finish()
+	sp1.Finish()
+	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
+		span parent:
+			span child:
+	`); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTracerInjectExtract(t *testing.T) {
 	tr := NewTracer()
 	tr2 := NewTracer()

@@ -263,7 +263,8 @@ func (t *Tracer) StartSpan(
 	}
 	if hasParent && parentCtx.lightstep == nil {
 		// If a lightstep tracer was configured, don't use it if the parent span
-		// isn't using it.
+		// isn't using it. It's possible that the parent was created before
+		// Lightstep was enabled.
 		lsTr = nil
 	}
 
@@ -284,36 +285,23 @@ func (t *Tracer) StartSpan(
 	}
 	s.mu.duration = -1
 
-	// If we are using lightstep, we create a new lightstep span and use the
+	for k, v := range sso.Tags {
+		s.SetTag(k, v)
+	}
+
+	// If we are using lightstep, we create a new Lightstep span and use the
 	// metadata (TraceID, SpanID, Baggage) from that span. Otherwise, we generate
 	// our own IDs.
+	var parentLightstepCtx opentracing.SpanContext
 	if lsTr != nil {
-		// Create the shadow lightstep span.
-		var lsOpts []opentracing.StartSpanOption
-		// Replicate the options, using the lightstep context in the reference.
-		if !sso.StartTime.IsZero() {
-			lsOpts = append(lsOpts, opentracing.StartTime(sso.StartTime))
-		}
-		if sso.Tags != nil {
-			lsOpts = append(lsOpts, opentracing.Tags(sso.Tags))
-		}
 		if hasParent {
 			if parentCtx.lightstep == nil {
 				panic("lightstep span derived from non-lightstep span")
 			}
-			lsOpts = append(lsOpts, opentracing.SpanReference{
-				Type:              parentType,
-				ReferencedContext: parentCtx.lightstep,
-			})
+			s.TraceID = parentCtx.TraceID
+			parentLightstepCtx = parentCtx.lightstep
 		}
-		s.lightstep = lsTr.StartSpan(operationName, lsOpts...)
-		s.TraceID, s.SpanID = getLightstepSpanIDs(lsTr, s.lightstep.Context())
-		if hasParent && s.TraceID != parentCtx.TraceID {
-			panic(fmt.Sprintf(
-				"TraceID doesn't match between parent (%d) and child (%d) spans",
-				parentCtx.TraceID, s.TraceID,
-			))
-		}
+		t.linkLightstepSpan(s, lsTr, parentLightstepCtx, parentType)
 	} else {
 		s.SpanID = uint64(rand.Int63())
 
@@ -346,10 +334,6 @@ func (t *Tracer) StartSpan(
 		}
 	}
 
-	for k, v := range sso.Tags {
-		s.SetTag(k, v)
-	}
-
 	if netTrace || lsTr != nil {
 		// Copy baggage items to tags so they show up in the Lightstep UI or x/net/trace.
 		for k, v := range s.mu.Baggage {
@@ -357,6 +341,113 @@ func (t *Tracer) StartSpan(
 		}
 	}
 
+	return s
+}
+
+// linkLightstepSpan creates and links a Lightstep span to the passed-in span
+// (i.e. fills in s.lightstep). This should only be called when Lightstep
+// tracing is enabled.
+//
+// The Lightstep span will have a parent if parentLightstepCtx is not nil.
+// parentType is ignored if parentLightstepCtx is nil.
+//
+// This will assign sp.SpanID and sp.TraceID.
+//
+// The tags from s be copied to the Lightstep span.
+func (t *Tracer) linkLightstepSpan(
+	s *span,
+	lightstepTracer opentracing.Tracer,
+	parentLightstepCtx opentracing.SpanContext,
+	parentType opentracing.SpanReferenceType,
+) {
+	hasParent := parentLightstepCtx != nil
+	if hasParent && s.TraceID == 0 {
+		panic("span.TraceID should have been set")
+	}
+
+	// Create the shadow lightstep span.
+	var lsOpts []opentracing.StartSpanOption
+	// Replicate the options, using the lightstep context in the reference.
+	lsOpts = append(lsOpts, opentracing.StartTime(s.startTime))
+	if s.mu.tags != nil {
+		lsOpts = append(lsOpts, opentracing.Tags(s.mu.tags))
+	}
+	if hasParent {
+		lsOpts = append(lsOpts, opentracing.SpanReference{
+			Type:              parentType,
+			ReferencedContext: parentLightstepCtx,
+		})
+	}
+	s.lightstep = lightstepTracer.StartSpan(s.operation, lsOpts...)
+	var lightstepTraceID uint64
+	lightstepTraceID, s.SpanID = getLightstepSpanIDs(
+		lightstepTracer, s.lightstep.Context(),
+	)
+	if s.TraceID != 0 && s.TraceID != lightstepTraceID {
+		panic(fmt.Sprintf(
+			"Existing TraceID (%d) doesn't match Lightstep TraceID (%d)",
+			s.TraceID, lightstepTraceID))
+	}
+	s.TraceID = lightstepTraceID
+}
+
+// StartChildSpan creates a child span of the given parent span. This is
+// functionally equivalent to:
+// parentSpan.Tracer().(*Tracer).StartSpan(opName, opentracing.ChildOf(parentSpan.Context()))
+// Compared to that, it's more efficient, particularly in terms of memory
+// allocations; among others, it saves the call to parentSpan.Context.
+//
+// This only works for creating children of local parents (i.e. the caller needs
+// to have a reference to the parent span).
+func StartChildSpan(operationName string, parentSpan opentracing.Span) opentracing.Span {
+	tr := parentSpan.Tracer().(*Tracer)
+	// If tracing is disabled, avoid overhead and return a noop span.
+	if IsBlackHoleSpan(parentSpan) {
+		return &tr.noopSpan
+	}
+
+	pSpan := parentSpan.(*span)
+
+	s := &span{
+		tracer:       tr,
+		operation:    operationName,
+		startTime:    time.Now(),
+		parentSpanID: pSpan.SpanID,
+	}
+
+	// Copy baggage from parent.
+	pSpan.mu.Lock()
+	if l := len(pSpan.mu.Baggage); l > 0 {
+		s.mu.Baggage = make(map[string]string, l)
+		for k, v := range pSpan.mu.Baggage {
+			s.mu.Baggage[k] = v
+		}
+	}
+
+	s.TraceID = pSpan.TraceID
+	// If the parent is using Lightstep, we create a new Lightstep span and use its
+	// SpanID. Otherwise, we generate our own IDs.
+	if pSpan.lightstep != nil {
+		tr.linkLightstepSpan(
+			s, pSpan.lightstep.Tracer(), pSpan.lightstep.Context(), opentracing.ChildOfRef,
+		)
+	} else {
+		s.SpanID = uint64(rand.Int63())
+	}
+
+	if pSpan.netTr != nil || pSpan.lightstep != nil {
+		// Copy baggage items to tags so they show up in the Lightstep UI or x/net/trace.
+		for k, v := range s.mu.Baggage {
+			s.SetTag(k, v)
+		}
+	}
+
+	// Start recording if necessary.
+	if pSpan.isRecording() {
+		s.enableRecording(pSpan.mu.recordingGroup, pSpan.mu.recordingType)
+	}
+
+	pSpan.mu.Unlock()
 	return s
 }
 
@@ -506,7 +597,7 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, opentracing
 		ns := &tr.(*Tracer).noopSpan
 		return opentracing.ContextWithSpan(ctx, ns), ns
 	}
-	newSpan := tr.StartSpan(opName, opentracing.ChildOf(span.Context()))
+	newSpan := StartChildSpan(opName, span)
 	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
 }
 
