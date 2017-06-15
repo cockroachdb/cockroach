@@ -74,8 +74,13 @@
 		ListSessionsResponse
 		SpanStatsRequest
 		SpanStatsResponse
-		ProblemRangesRequest
-		ProblemRangesResponse
+		DebugProblemRangesRequest
+		DebugFailure
+		DebugProblemRangesResponse
+		DebugCell
+		DebugRow
+		DebugNodesRequest
+		DebugNodesResponse
 		PrettySpan
 */
 package serverpb
