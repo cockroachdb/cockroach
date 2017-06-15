@@ -4,12 +4,12 @@ import _ from "lodash";
 
 import * as protos from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
-import { refreshProblemRanges } from "src/redux/apiReducers";
+import { refreshDebugProblemRanges } from "src/redux/apiReducers";
 import { RouterState } from "react-router";
 
 interface ProblemRangesOwnProps {
-  problemRanges: protos.cockroach.server.serverpb.ProblemRangesResponse;
-  refreshProblemRanges: typeof refreshProblemRanges;
+  problemRanges: protos.cockroach.server.serverpb.DebugProblemRangesResponse;
+  refreshDebugProblemRanges: typeof refreshDebugProblemRanges;
 }
 
 type ProblemRangesProps = ProblemRangesOwnProps & RouterState;
@@ -19,7 +19,7 @@ type ProblemRangesProps = ProblemRangesOwnProps & RouterState;
  */
 class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   refresh(props = this.props) {
-    props.refreshProblemRanges(new protos.cockroach.server.serverpb.ProblemRangesRequest({
+    props.refreshDebugProblemRanges(new protos.cockroach.server.serverpb.DebugProblemRangesRequest({
       node_id: (!_.isEmpty(props.location.query.node_id)) ? props.location.query.node_id : "",
     }));
   }
@@ -53,20 +53,24 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
       failures = (
         <div>
           <h2>Failures</h2>
-          <div className="failure-table">
-            <div className="failure-table__row failure-table__row--header">
-              <div className="failure-table__cell failure-table__cell--short">Node</div>
-              <div className="failure-table__cell">Error</div>
-            </div>
+          <table className="failure-table">
+            <thead>
+              <tr className="failure-table__row failure-table__row--header">
+                <td className="failure-table__cell failure-table__cell--short failure-table__cell--header">Node</td>
+                <td className="failure-table__cell failure-table__cell--header">Error</td>
+              </tr>
+            </thead>
+            <tbody>
             {
               _.map(problemRanges.failures, (failure) => (
-                <div className="failure-table__row" key={failure.node_id}>
-                  <div className="failure-table__cell failure-table__cell--short">n{failure.node_id}</div>
-                  <div className="failure-table__cell">title={failure.error_message}>{failure.error_message}</div>
-                </div>
+                <tr className="failure-table__row" key={failure.node_id}>
+                  <td className="failure-table__cell failure-table__cell--short">n{failure.node_id}</td>
+                  <td className="failure-table__cell">title={failure.error_message}>{failure.error_message}</td>
+                </tr>
               ))
             }
-          </div>
+            </tbody>
+          </table>
         </div>
       );
     }
@@ -78,20 +82,22 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
       return (
         <div>
           <h2>{name}</h2>
-          <div className="problems-table">
-            <div className="problems-table__row">
-              <div className="problems-table__cell">
-                {
-                  _.map(ids, (id) => (
-                    <span key={id.toNumber()}>
-                      <a href={`/debug/range?id=${id}`}>{id.toNumber()}</a>
-                      <span> </span>
-                    </span>
-                  ))
-                }
-              </div>
-            </div>
-          </div>
+          <table className="problems-table">
+            <tbody>
+              <tr className="problems-table__row">
+                <td className="problems-table__cell">
+                  {
+                    _.map(ids, (id) => (
+                      <span key={id.toNumber()}>
+                        <a href={`/debug/range?id=${id}`}>{id.toNumber()}</a>
+                        <span> </span>
+                      </span>
+                    ))
+                  }
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       );
     };
@@ -122,10 +128,10 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 export default connect(
   (state: AdminUIState) => {
     return {
-      problemRanges: state.cachedData.problemRanges.data,
+      problemRanges: state.cachedData.debugProblemRanges.data,
     };
   },
   {
-    refreshProblemRanges,
+    refreshDebugProblemRanges,
   },
 )(ProblemRanges);

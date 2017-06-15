@@ -328,25 +328,26 @@ message SpanStatsResponse {
   cockroach.storage.engine.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
 }
 
-message ProblemRangesRequest {
+message DebugProblemRangesRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
 }
 
-message ProblemRangesResponse {
-  message Failures {
-    int32 node_id = 1 [
-      (gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
-    ];
-    string error_message = 2;
-  }
+message DebugFailure {
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  string error_message = 2;
+}
+
+message DebugProblemRangesResponse {
   // If node_id is greater than 0, then this response is only representative of
   // a single node's knowledge.
   int32 node_id = 1 [
     (gogoproto.customname) = "NodeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
-  repeated Failures failures = 2 [(gogoproto.nullable) = false];
+  repeated DebugFailure failures = 2 [(gogoproto.nullable) = false];
   repeated int64 unavailable_range_ids = 3 [
     (gogoproto.customname) = "UnavailableRangeIDs",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
@@ -367,6 +368,30 @@ message ProblemRangesResponse {
     (gogoproto.customname) = "UnderreplicatedRangeIDs",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
   ];
+}
+
+message DebugCell {
+	repeated string classes = 1;
+	string title = 2;
+	repeated string values = 3;
+}
+
+message DebugRow {
+  repeated string classes = 1;
+  repeated DebugCell cells = 2 [(gogoproto.nullable) = false];
+}
+
+message DebugNodesRequest {
+  // This should be a comma separated list of node ids.
+  string node_ids = 1 [(gogoproto.customname) = "NodeIDs"];
+  // A regex used to filter nodes based on locality.
+  string locality = 2;
+}
+
+message DebugNodesResponse {
+  repeated DebugFailure failures = 1 [(gogoproto.nullable) = false];
+  repeated string filters = 2;
+  repeated DebugRow rows = 3 [(gogoproto.nullable) = false];
 }
 
 service Status {
@@ -456,9 +481,14 @@ service Status {
       get: "/_status/logs/{node_id}"
     };
   }
-  rpc ProblemRanges(ProblemRangesRequest) returns (ProblemRangesResponse) {
+  rpc ProblemRanges(DebugProblemRangesRequest) returns (DebugProblemRangesResponse) {
     option (google.api.http) = {
-      get: "/_status/problemranges"
+      get: "/_status/debug/problemranges"
+    };
+  }
+  rpc DebugNodes(DebugNodesRequest) returns (DebugNodesResponse) {
+    option (google.api.http) = {
+      get: "/_status/debug/nodes"
     };
   }
 }

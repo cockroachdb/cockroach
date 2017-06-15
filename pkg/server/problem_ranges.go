@@ -28,11 +28,11 @@ import (
 )
 
 func (s *statusServer) ProblemRanges(
-	ctx context.Context, req *serverpb.ProblemRangesRequest,
-) (*serverpb.ProblemRangesResponse, error) {
+	ctx context.Context, req *serverpb.DebugProblemRangesRequest,
+) (*serverpb.DebugProblemRangesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	response := &serverpb.ProblemRangesResponse{}
+	response := &serverpb.DebugProblemRangesResponse{}
 	if len(req.NodeID) > 0 {
 		var err error
 		response.NodeID, _, err = s.parseNodeID(req.NodeID)
@@ -65,7 +65,7 @@ func (s *statusServer) ProblemRanges(
 	defer cancel()
 	for nodeID, alive := range isLiveMap {
 		if !alive {
-			response.Failures = append(response.Failures, serverpb.ProblemRangesResponse_Failures{
+			response.Failures = append(response.Failures, serverpb.DebugFailure{
 				NodeID:       nodeID,
 				ErrorMessage: "node liveness reports that the node is not alive",
 			})
@@ -102,7 +102,7 @@ func (s *statusServer) ProblemRanges(
 		select {
 		case resp := <-responses:
 			if resp.err != nil {
-				response.Failures = append(response.Failures, serverpb.ProblemRangesResponse_Failures{
+				response.Failures = append(response.Failures, serverpb.DebugFailure{
 					NodeID:       resp.nodeID,
 					ErrorMessage: resp.err.Error(),
 				})
@@ -110,7 +110,7 @@ func (s *statusServer) ProblemRanges(
 			}
 			for _, info := range resp.resp.Ranges {
 				if len(info.ErrorMessage) != 0 {
-					response.Failures = append(response.Failures, serverpb.ProblemRangesResponse_Failures{
+					response.Failures = append(response.Failures, serverpb.DebugFailure{
 						NodeID:       info.SourceNodeID,
 						ErrorMessage: info.ErrorMessage,
 					})
