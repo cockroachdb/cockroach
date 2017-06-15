@@ -22,6 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type joinType int
@@ -160,8 +162,9 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 			continue
 		}
 		if row != nil {
-			log.Fatalf(ctx, "both row data and metadata in the same record. row: %s meta: %s",
-				row, meta)
+			log.Fatalf(
+				ctx, "both row data and metadata in the same record. row: %s meta: %+v", row, meta,
+			)
 		}
 
 		switch dst.Push(row, meta) {
@@ -170,6 +173,14 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 			return
 		case NeedMoreRows:
 		case DrainRequested:
+		}
+	}
+}
+
+func sendTraceData(ctx context.Context, dst RowReceiver) {
+	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+		if rec := tracing.GetRecording(sp); rec != nil {
+			dst.Push(nil /* row */, ProducerMetadata{TraceData: rec})
 		}
 	}
 }
@@ -204,6 +215,7 @@ func DrainAndClose(ctx context.Context, dst RowReceiver, cause error, srcs ...Ro
 		DrainAndForwardMetadata(ctx, srcs[0], dst)
 		wg.Wait()
 	}
+	sendTraceData(ctx, dst)
 	dst.ProducerDone()
 }
 
@@ -262,11 +274,13 @@ type ProducerMetadata struct {
 	Ranges []roachpb.RangeInfo
 	// TODO(vivek): change to type Error
 	Err error
+	// TraceData is sent if snowball tracing is enabled.
+	TraceData []tracing.RecordedSpan
 }
 
 // Empty returns true if none of the fields in metadata are populated.
 func (meta ProducerMetadata) Empty() bool {
-	return meta.Ranges == nil && meta.Err == nil
+	return meta.Ranges == nil && meta.Err == nil && meta.TraceData == nil
 }
 
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to

@@ -28,6 +28,7 @@ import "cockroach/pkg/roachpb/errors.proto";
 import "cockroach/pkg/sql/pgwire/pgerror/errors.proto";
 import "cockroach/pkg/sql/sqlbase/structured.proto";
 import "cockroach/pkg/sql/sqlbase/encoded_datum.proto";
+import "cockroach/pkg/util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
 
 // Error is a generic representation including a string message.
@@ -197,8 +198,12 @@ message RemoteProducerMetadata {
   message RangeInfos {
     repeated roachpb.RangeInfo range_info = 1 [(gogoproto.nullable) = false];
   }
+  message TraceData {
+    repeated util.tracing.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
+  }
   oneof value {
     RangeInfos range_info = 1;
     Error error = 2;
+    TraceData trace_data = 3;
   }
 }

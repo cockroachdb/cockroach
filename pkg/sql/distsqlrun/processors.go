@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -309,17 +310,29 @@ func newNoopProcessor(
 	return n, nil
 }
 
+// processorSpan creates a child span for a processor (if we are doing any
+// tracing). The returned span needs to be finished using tracing.FinishSpan.
+func processorSpan(ctx context.Context, name string) (context.Context, opentracing.Span) {
+	parentSp := opentracing.SpanFromContext(ctx)
+	if parentSp == nil || tracing.IsBlackHoleSpan(parentSp) {
+		return ctx, nil
+	}
+	newSpan := tracing.StartChildSpan(name, parentSp, true /* separateRecording */)
+	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
+}
+
 // Run is part of the processor interface.
 func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	ctx, span := tracing.ChildSpan(ctx, "noop")
+	ctx, span := processorSpan(ctx, "noop")
 	defer tracing.FinishSpan(span)
 
 	for {
 		row, meta := n.input.Next()
 		if row == nil && meta.Empty() {
+			sendTraceData(ctx, n.out.output)
 			n.out.close()
 			return
 		}
