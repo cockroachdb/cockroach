@@ -162,8 +162,8 @@ type queryMeta struct {
 	// The timestamp when this query began execution.
 	start time.Time
 
-	// The raw SQL query string.
-	sql string
+	// AST of the SQL statement - converted to query string only when necessary.
+	stmt parser.Statement
 
 	// States whether this query is distributed. Note that all queries,
 	// including those that are distributed, have this field set to false until
@@ -669,15 +669,10 @@ func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 // addActiveQuery adds a running query to the session's internal store of active
 // queries. Called from executor's execStmt and execStmtInParallel.
 func (s *Session) addActiveQuery(stmt Statement) queryHandle {
-	sql := stmt.String()
-	if len(sql) > 1000 {
-		sql = sql[:997] + "..."
-	}
-
 	s.mu.Lock()
 	query := &queryMeta{
 		start: timeutil.Now(),
-		sql:   sql,
+		stmt:  stmt.AST,
 		phase: preparing,
 	}
 	s.mu.ActiveQueries[query] = struct{}{}
@@ -720,9 +715,13 @@ func (s *Session) serialize() serverpb.Session {
 	activeQueries := make([]serverpb.ActiveQuery, 0, len(s.mu.ActiveQueries))
 
 	for query := range s.mu.ActiveQueries {
+		sql := query.stmt.String()
+		if len(sql) > 1000 {
+			sql = sql[:997] + "..."
+		}
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			Start:         query.start.UTC(),
-			Sql:           query.sql,
+			Sql:           sql,
 			IsDistributed: query.isDistributed,
 			Phase:         (serverpb.ActiveQuery_Phase)(query.phase),
 		})
