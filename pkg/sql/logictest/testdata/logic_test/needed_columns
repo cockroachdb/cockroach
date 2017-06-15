@@ -173,13 +173,12 @@ CREATE TABLE a ("name" string, age int);
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT "name", age FROM a);
 ----
-0  group                             ("count(*)")
-0          aggregate 0  count(*)
-1  render                            ("*")
-1          render 0     *
-2  render                            ("name"[omitted], age[omitted])
+0  group                              ("count(*)")
+0          aggregate 0  count_rows()
+1  render                             ()
+2  render                             ("name"[omitted], age[omitted])
 2          render 0     NULL
 2          render 1     NULL
-3  scan                              ("name"[omitted], age[omitted], rowid[hidden,omitted])
+3  scan                               ("name"[omitted], age[omitted], rowid[hidden,omitted])
 3          table        a@primary
 3          spans        ALL

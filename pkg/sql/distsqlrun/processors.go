@@ -411,3 +411,29 @@ func newProcessor(
 	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
+
+// Equals returns true if two aggregation specifiers are identical (and thus
+// will always yield the same result).
+func (a AggregatorSpec_Aggregation) Equals(b AggregatorSpec_Aggregation) bool {
+	if a.Func != b.Func || a.Distinct != b.Distinct {
+		return false
+	}
+	if a.FilterColIdx == nil {
+		if b.FilterColIdx != nil {
+			return false
+		}
+	} else {
+		if a.FilterColIdx == nil || *a.FilterColIdx != *b.FilterColIdx {
+			return false
+		}
+	}
+	if len(a.ColIdx) != len(b.ColIdx) {
+		return false
+	}
+	for i, c := range a.ColIdx {
+		if c != b.ColIdx[i] {
+			return false
+		}
+	}
+	return true
+}
