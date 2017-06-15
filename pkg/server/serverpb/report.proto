@@ -1,0 +1,69 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "serverpb";
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+
+message ReportProblemRangesRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+message ReportProblemRangesResponse {
+  message Failures {
+    int32 node_id = 1 [
+      (gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+    string error_message = 2;
+  }
+  // If node_id is greater than 0, then this response is only representative of
+  // a single node's knowledge.
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  repeated Failures failures = 2 [(gogoproto.nullable) = false];
+  repeated int64 unavailable_range_ids = 3 [
+    (gogoproto.customname) = "UnavailableRangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 raft_leader_not_lease_holder_range_ids = 4 [
+    (gogoproto.customname) = "RaftLeaderNotLeaseHolderRangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 no_raft_leader_range_ids = 5 [
+    (gogoproto.customname) = "NoRaftLeaderRangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 no_lease_range_ids = 6 [
+    (gogoproto.customname) = "NoLeaseRangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 underreplicated_range_ids = 7 [
+    (gogoproto.customname) = "UnderreplicatedRangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+}
+
+service Report {
+  rpc ProblemRanges(ReportProblemRangesRequest) returns (ReportProblemRangesResponse) {
+    option (google.api.http) = {
+      get: "/_report/problemranges"
+    };
+  }
+}

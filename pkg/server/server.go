@@ -109,6 +109,7 @@ type Server struct {
 	runtime            status.RuntimeStatSampler
 	admin              *adminServer
 	status             *statusServer
+	report             *reportServer
 	tsDB               *ts.DB
 	tsServer           ts.Server
 	raftTransport      *storage.RaftTransport
@@ -356,7 +357,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		s.sessionRegistry,
 	)
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
+	s.report = newReportServer(
+		s.cfg.AmbientCtx,
+		s.nodeLiveness,
+		s.rpcContext,
+		s.status,
+		s.stopper,
+	)
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer, s.report} {
 		gw.RegisterService(s.grpc)
 	}
 
@@ -837,7 +845,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}
 
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer, s.report} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}
@@ -854,6 +862,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(adminPrefix, gwMux)
 	s.mux.Handle(ts.URLPrefix, gwMux)
 	s.mux.Handle(statusPrefix, gwMux)
+	s.mux.Handle(reportPrefix, gwMux)
 	s.mux.Handle("/health", gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	s.mux.Handle(rangeDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugRange)))

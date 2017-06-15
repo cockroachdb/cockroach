@@ -44,7 +44,7 @@ MAPPINGS :=
 MAPPINGS := $(MAPPINGS)Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api,
 MAPPINGS := $(MAPPINGS)Mgoogle/protobuf/timestamp.proto=$(GOGOPROTO_ROOT)/protobuf/types,
 
-GW_SERVER_PROTOS := $(PKG_ROOT)/server/serverpb/admin.proto $(PKG_ROOT)/server/serverpb/status.proto
+GW_SERVER_PROTOS := $(PKG_ROOT)/server/serverpb/admin.proto $(PKG_ROOT)/server/serverpb/status.proto $(PKG_ROOT)/server/serverpb/report.proto
 GW_TS_PROTOS := $(PKG_ROOT)/ts/tspb/timeseries.proto
 
 GW_PROTOS  := $(GW_SERVER_PROTOS) $(GW_TS_PROTOS)

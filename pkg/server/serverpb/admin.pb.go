@@ -7,6 +7,7 @@
 
 	It is generated from these files:
 		cockroach/pkg/server/serverpb/admin.proto
+		cockroach/pkg/server/serverpb/report.proto
 		cockroach/pkg/server/serverpb/status.proto
 
 	It has these top-level messages:
@@ -40,6 +41,8 @@
 		RangeLogResponse
 		QueryPlanRequest
 		QueryPlanResponse
+		ReportProblemRangesRequest
+		ReportProblemRangesResponse
 		CertificatesRequest
 		CertificateDetails
 		CertificatesResponse
@@ -74,8 +77,6 @@
 		ListSessionsResponse
 		SpanStatsRequest
 		SpanStatsResponse
-		ProblemRangesRequest
-		ProblemRangesResponse
 		PrettySpan
 */
 package serverpb

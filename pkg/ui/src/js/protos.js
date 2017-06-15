@@ -16317,862 +16317,6 @@ export const cockroach = $root.cockroach = (() => {
                 return SpanStatsResponse;
             })();
 
-            serverpb.ProblemRangesRequest = (function() {
-
-                /**
-                 * Properties of a ProblemRangesRequest.
-                 * @typedef cockroach.server.serverpb.ProblemRangesRequest$Properties
-                 * @type {Object}
-                 * @property {string} [node_id] ProblemRangesRequest node_id.
-                 */
-
-                /**
-                 * Constructs a new ProblemRangesRequest.
-                 * @exports cockroach.server.serverpb.ProblemRangesRequest
-                 * @constructor
-                 * @param {cockroach.server.serverpb.ProblemRangesRequest$Properties=} [properties] Properties to set
-                 */
-                function ProblemRangesRequest(properties) {
-                    if (properties)
-                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            if (properties[keys[i]] != null)
-                                this[keys[i]] = properties[keys[i]];
-                }
-
-                /**
-                 * ProblemRangesRequest node_id.
-                 * @type {string}
-                 */
-                ProblemRangesRequest.prototype.node_id = "";
-
-                /**
-                 * Creates a new ProblemRangesRequest instance using the specified properties.
-                 * @param {cockroach.server.serverpb.ProblemRangesRequest$Properties=} [properties] Properties to set
-                 * @returns {cockroach.server.serverpb.ProblemRangesRequest} ProblemRangesRequest instance
-                 */
-                ProblemRangesRequest.create = function create(properties) {
-                    return new ProblemRangesRequest(properties);
-                };
-
-                /**
-                 * Encodes the specified ProblemRangesRequest message. Does not implicitly {@link cockroach.server.serverpb.ProblemRangesRequest.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ProblemRangesRequest$Properties} message ProblemRangesRequest message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                ProblemRangesRequest.encode = function encode(message, writer) {
-                    if (!writer)
-                        writer = $Writer.create();
-                    if (message.node_id != null && message.hasOwnProperty("node_id"))
-                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.node_id);
-                    return writer;
-                };
-
-                /**
-                 * Encodes the specified ProblemRangesRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ProblemRangesRequest.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ProblemRangesRequest$Properties} message ProblemRangesRequest message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                ProblemRangesRequest.encodeDelimited = function encodeDelimited(message, writer) {
-                    return this.encode(message, writer).ldelim();
-                };
-
-                /**
-                 * Decodes a ProblemRangesRequest message from the specified reader or buffer.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @param {number} [length] Message length if known beforehand
-                 * @returns {cockroach.server.serverpb.ProblemRangesRequest} ProblemRangesRequest
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                ProblemRangesRequest.decode = function decode(reader, length) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader.create(reader);
-                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.ProblemRangesRequest();
-                    while (reader.pos < end) {
-                        let tag = reader.uint32();
-                        switch (tag >>> 3) {
-                        case 1:
-                            message.node_id = reader.string();
-                            break;
-                        default:
-                            reader.skipType(tag & 7);
-                            break;
-                        }
-                    }
-                    return message;
-                };
-
-                /**
-                 * Decodes a ProblemRangesRequest message from the specified reader or buffer, length delimited.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @returns {cockroach.server.serverpb.ProblemRangesRequest} ProblemRangesRequest
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                ProblemRangesRequest.decodeDelimited = function decodeDelimited(reader) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader(reader);
-                    return this.decode(reader, reader.uint32());
-                };
-
-                /**
-                 * Verifies a ProblemRangesRequest message.
-                 * @param {Object.<string,*>} message Plain object to verify
-                 * @returns {?string} `null` if valid, otherwise the reason why it is not
-                 */
-                ProblemRangesRequest.verify = function verify(message) {
-                    if (typeof message !== "object" || message === null)
-                        return "object expected";
-                    if (message.node_id != null && message.hasOwnProperty("node_id"))
-                        if (!$util.isString(message.node_id))
-                            return "node_id: string expected";
-                    return null;
-                };
-
-                /**
-                 * Creates a ProblemRangesRequest message from a plain object. Also converts values to their respective internal types.
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ProblemRangesRequest} ProblemRangesRequest
-                 */
-                ProblemRangesRequest.fromObject = function fromObject(object) {
-                    if (object instanceof $root.cockroach.server.serverpb.ProblemRangesRequest)
-                        return object;
-                    let message = new $root.cockroach.server.serverpb.ProblemRangesRequest();
-                    if (object.node_id != null)
-                        message.node_id = String(object.node_id);
-                    return message;
-                };
-
-                /**
-                 * Creates a ProblemRangesRequest message from a plain object. Also converts values to their respective internal types.
-                 * This is an alias of {@link cockroach.server.serverpb.ProblemRangesRequest.fromObject}.
-                 * @function
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ProblemRangesRequest} ProblemRangesRequest
-                 */
-                ProblemRangesRequest.from = ProblemRangesRequest.fromObject;
-
-                /**
-                 * Creates a plain object from a ProblemRangesRequest message. Also converts values to other types if specified.
-                 * @param {cockroach.server.serverpb.ProblemRangesRequest} message ProblemRangesRequest
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                ProblemRangesRequest.toObject = function toObject(message, options) {
-                    if (!options)
-                        options = {};
-                    let object = {};
-                    if (options.defaults)
-                        object.node_id = "";
-                    if (message.node_id != null && message.hasOwnProperty("node_id"))
-                        object.node_id = message.node_id;
-                    return object;
-                };
-
-                /**
-                 * Creates a plain object from this ProblemRangesRequest message. Also converts values to other types if specified.
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                ProblemRangesRequest.prototype.toObject = function toObject(options) {
-                    return this.constructor.toObject(this, options);
-                };
-
-                /**
-                 * Converts this ProblemRangesRequest to JSON.
-                 * @returns {Object.<string,*>} JSON object
-                 */
-                ProblemRangesRequest.prototype.toJSON = function toJSON() {
-                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                };
-
-                return ProblemRangesRequest;
-            })();
-
-            serverpb.ProblemRangesResponse = (function() {
-
-                /**
-                 * Properties of a ProblemRangesResponse.
-                 * @typedef cockroach.server.serverpb.ProblemRangesResponse$Properties
-                 * @type {Object}
-                 * @property {number} [node_id] ProblemRangesResponse node_id.
-                 * @property {Array.<cockroach.server.serverpb.ProblemRangesResponse.Failures$Properties>} [failures] ProblemRangesResponse failures.
-                 * @property {Array.<Long>} [unavailable_range_ids] ProblemRangesResponse unavailable_range_ids.
-                 * @property {Array.<Long>} [raft_leader_not_lease_holder_range_ids] ProblemRangesResponse raft_leader_not_lease_holder_range_ids.
-                 * @property {Array.<Long>} [no_raft_leader_range_ids] ProblemRangesResponse no_raft_leader_range_ids.
-                 * @property {Array.<Long>} [no_lease_range_ids] ProblemRangesResponse no_lease_range_ids.
-                 * @property {Array.<Long>} [underreplicated_range_ids] ProblemRangesResponse underreplicated_range_ids.
-                 */
-
-                /**
-                 * Constructs a new ProblemRangesResponse.
-                 * @exports cockroach.server.serverpb.ProblemRangesResponse
-                 * @constructor
-                 * @param {cockroach.server.serverpb.ProblemRangesResponse$Properties=} [properties] Properties to set
-                 */
-                function ProblemRangesResponse(properties) {
-                    this.failures = [];
-                    this.unavailable_range_ids = [];
-                    this.raft_leader_not_lease_holder_range_ids = [];
-                    this.no_raft_leader_range_ids = [];
-                    this.no_lease_range_ids = [];
-                    this.underreplicated_range_ids = [];
-                    if (properties)
-                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            if (properties[keys[i]] != null)
-                                this[keys[i]] = properties[keys[i]];
-                }
-
-                /**
-                 * ProblemRangesResponse node_id.
-                 * @type {number}
-                 */
-                ProblemRangesResponse.prototype.node_id = 0;
-
-                /**
-                 * ProblemRangesResponse failures.
-                 * @type {Array.<cockroach.server.serverpb.ProblemRangesResponse.Failures$Properties>}
-                 */
-                ProblemRangesResponse.prototype.failures = $util.emptyArray;
-
-                /**
-                 * ProblemRangesResponse unavailable_range_ids.
-                 * @type {Array.<Long>}
-                 */
-                ProblemRangesResponse.prototype.unavailable_range_ids = $util.emptyArray;
-
-                /**
-                 * ProblemRangesResponse raft_leader_not_lease_holder_range_ids.
-                 * @type {Array.<Long>}
-                 */
-                ProblemRangesResponse.prototype.raft_leader_not_lease_holder_range_ids = $util.emptyArray;
-
-                /**
-                 * ProblemRangesResponse no_raft_leader_range_ids.
-                 * @type {Array.<Long>}
-                 */
-                ProblemRangesResponse.prototype.no_raft_leader_range_ids = $util.emptyArray;
-
-                /**
-                 * ProblemRangesResponse no_lease_range_ids.
-                 * @type {Array.<Long>}
-                 */
-                ProblemRangesResponse.prototype.no_lease_range_ids = $util.emptyArray;
-
-                /**
-                 * ProblemRangesResponse underreplicated_range_ids.
-                 * @type {Array.<Long>}
-                 */
-                ProblemRangesResponse.prototype.underreplicated_range_ids = $util.emptyArray;
-
-                /**
-                 * Creates a new ProblemRangesResponse instance using the specified properties.
-                 * @param {cockroach.server.serverpb.ProblemRangesResponse$Properties=} [properties] Properties to set
-                 * @returns {cockroach.server.serverpb.ProblemRangesResponse} ProblemRangesResponse instance
-                 */
-                ProblemRangesResponse.create = function create(properties) {
-                    return new ProblemRangesResponse(properties);
-                };
-
-                /**
-                 * Encodes the specified ProblemRangesResponse message. Does not implicitly {@link cockroach.server.serverpb.ProblemRangesResponse.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ProblemRangesResponse$Properties} message ProblemRangesResponse message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                ProblemRangesResponse.encode = function encode(message, writer) {
-                    if (!writer)
-                        writer = $Writer.create();
-                    if (message.node_id != null && message.hasOwnProperty("node_id"))
-                        writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
-                    if (message.failures != null && message.failures.length)
-                        for (let i = 0; i < message.failures.length; ++i)
-                            $root.cockroach.server.serverpb.ProblemRangesResponse.Failures.encode(message.failures[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                    if (message.unavailable_range_ids != null && message.unavailable_range_ids.length) {
-                        writer.uint32(/* id 3, wireType 2 =*/26).fork();
-                        for (let i = 0; i < message.unavailable_range_ids.length; ++i)
-                            writer.int64(message.unavailable_range_ids[i]);
-                        writer.ldelim();
-                    }
-                    if (message.raft_leader_not_lease_holder_range_ids != null && message.raft_leader_not_lease_holder_range_ids.length) {
-                        writer.uint32(/* id 4, wireType 2 =*/34).fork();
-                        for (let i = 0; i < message.raft_leader_not_lease_holder_range_ids.length; ++i)
-                            writer.int64(message.raft_leader_not_lease_holder_range_ids[i]);
-                        writer.ldelim();
-                    }
-                    if (message.no_raft_leader_range_ids != null && message.no_raft_leader_range_ids.length) {
-                        writer.uint32(/* id 5, wireType 2 =*/42).fork();
-                        for (let i = 0; i < message.no_raft_leader_range_ids.length; ++i)
-                            writer.int64(message.no_raft_leader_range_ids[i]);
-                        writer.ldelim();
-                    }
-                    if (message.no_lease_range_ids != null && message.no_lease_range_ids.length) {
-                        writer.uint32(/* id 6, wireType 2 =*/50).fork();
-                        for (let i = 0; i < message.no_lease_range_ids.length; ++i)
-                            writer.int64(message.no_lease_range_ids[i]);
-                        writer.ldelim();
-                    }
-                    if (message.underreplicated_range_ids != null && message.underreplicated_range_ids.length) {
-                        writer.uint32(/* id 7, wireType 2 =*/58).fork();
-                        for (let i = 0; i < message.underreplicated_range_ids.length; ++i)
-                            writer.int64(message.underreplicated_range_ids[i]);
-                        writer.ldelim();
-                    }
-                    return writer;
-                };
-
-                /**
-                 * Encodes the specified ProblemRangesResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ProblemRangesResponse.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ProblemRangesResponse$Properties} message ProblemRangesResponse message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                ProblemRangesResponse.encodeDelimited = function encodeDelimited(message, writer) {
-                    return this.encode(message, writer).ldelim();
-                };
-
-                /**
-                 * Decodes a ProblemRangesResponse message from the specified reader or buffer.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @param {number} [length] Message length if known beforehand
-                 * @returns {cockroach.server.serverpb.ProblemRangesResponse} ProblemRangesResponse
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                ProblemRangesResponse.decode = function decode(reader, length) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader.create(reader);
-                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.ProblemRangesResponse();
-                    while (reader.pos < end) {
-                        let tag = reader.uint32();
-                        switch (tag >>> 3) {
-                        case 1:
-                            message.node_id = reader.int32();
-                            break;
-                        case 2:
-                            if (!(message.failures && message.failures.length))
-                                message.failures = [];
-                            message.failures.push($root.cockroach.server.serverpb.ProblemRangesResponse.Failures.decode(reader, reader.uint32()));
-                            break;
-                        case 3:
-                            if (!(message.unavailable_range_ids && message.unavailable_range_ids.length))
-                                message.unavailable_range_ids = [];
-                            if ((tag & 7) === 2) {
-                                let end2 = reader.uint32() + reader.pos;
-                                while (reader.pos < end2)
-                                    message.unavailable_range_ids.push(reader.int64());
-                            } else
-                                message.unavailable_range_ids.push(reader.int64());
-                            break;
-                        case 4:
-                            if (!(message.raft_leader_not_lease_holder_range_ids && message.raft_leader_not_lease_holder_range_ids.length))
-                                message.raft_leader_not_lease_holder_range_ids = [];
-                            if ((tag & 7) === 2) {
-                                let end2 = reader.uint32() + reader.pos;
-                                while (reader.pos < end2)
-                                    message.raft_leader_not_lease_holder_range_ids.push(reader.int64());
-                            } else
-                                message.raft_leader_not_lease_holder_range_ids.push(reader.int64());
-                            break;
-                        case 5:
-                            if (!(message.no_raft_leader_range_ids && message.no_raft_leader_range_ids.length))
-                                message.no_raft_leader_range_ids = [];
-                            if ((tag & 7) === 2) {
-                                let end2 = reader.uint32() + reader.pos;
-                                while (reader.pos < end2)
-                                    message.no_raft_leader_range_ids.push(reader.int64());
-                            } else
-                                message.no_raft_leader_range_ids.push(reader.int64());
-                            break;
-                        case 6:
-                            if (!(message.no_lease_range_ids && message.no_lease_range_ids.length))
-                                message.no_lease_range_ids = [];
-                            if ((tag & 7) === 2) {
-                                let end2 = reader.uint32() + reader.pos;
-                                while (reader.pos < end2)
-                                    message.no_lease_range_ids.push(reader.int64());
-                            } else
-                                message.no_lease_range_ids.push(reader.int64());
-                            break;
-                        case 7:
-                            if (!(message.underreplicated_range_ids && message.underreplicated_range_ids.length))
-                                message.underreplicated_range_ids = [];
-                            if ((tag & 7) === 2) {
-                                let end2 = reader.uint32() + reader.pos;
-                                while (reader.pos < end2)
-                                    message.underreplicated_range_ids.push(reader.int64());
-                            } else
-                                message.underreplicated_range_ids.push(reader.int64());
-                            break;
-                        default:
-                            reader.skipType(tag & 7);
-                            break;
-                        }
-                    }
-                    return message;
-                };
-
-                /**
-                 * Decodes a ProblemRangesResponse message from the specified reader or buffer, length delimited.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @returns {cockroach.server.serverpb.ProblemRangesResponse} ProblemRangesResponse
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                ProblemRangesResponse.decodeDelimited = function decodeDelimited(reader) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader(reader);
-                    return this.decode(reader, reader.uint32());
-                };
-
-                /**
-                 * Verifies a ProblemRangesResponse message.
-                 * @param {Object.<string,*>} message Plain object to verify
-                 * @returns {?string} `null` if valid, otherwise the reason why it is not
-                 */
-                ProblemRangesResponse.verify = function verify(message) {
-                    if (typeof message !== "object" || message === null)
-                        return "object expected";
-                    if (message.node_id != null && message.hasOwnProperty("node_id"))
-                        if (!$util.isInteger(message.node_id))
-                            return "node_id: integer expected";
-                    if (message.failures != null && message.hasOwnProperty("failures")) {
-                        if (!Array.isArray(message.failures))
-                            return "failures: array expected";
-                        for (let i = 0; i < message.failures.length; ++i) {
-                            let error = $root.cockroach.server.serverpb.ProblemRangesResponse.Failures.verify(message.failures[i]);
-                            if (error)
-                                return "failures." + error;
-                        }
-                    }
-                    if (message.unavailable_range_ids != null && message.hasOwnProperty("unavailable_range_ids")) {
-                        if (!Array.isArray(message.unavailable_range_ids))
-                            return "unavailable_range_ids: array expected";
-                        for (let i = 0; i < message.unavailable_range_ids.length; ++i)
-                            if (!$util.isInteger(message.unavailable_range_ids[i]) && !(message.unavailable_range_ids[i] && $util.isInteger(message.unavailable_range_ids[i].low) && $util.isInteger(message.unavailable_range_ids[i].high)))
-                                return "unavailable_range_ids: integer|Long[] expected";
-                    }
-                    if (message.raft_leader_not_lease_holder_range_ids != null && message.hasOwnProperty("raft_leader_not_lease_holder_range_ids")) {
-                        if (!Array.isArray(message.raft_leader_not_lease_holder_range_ids))
-                            return "raft_leader_not_lease_holder_range_ids: array expected";
-                        for (let i = 0; i < message.raft_leader_not_lease_holder_range_ids.length; ++i)
-                            if (!$util.isInteger(message.raft_leader_not_lease_holder_range_ids[i]) && !(message.raft_leader_not_lease_holder_range_ids[i] && $util.isInteger(message.raft_leader_not_lease_holder_range_ids[i].low) && $util.isInteger(message.raft_leader_not_lease_holder_range_ids[i].high)))
-                                return "raft_leader_not_lease_holder_range_ids: integer|Long[] expected";
-                    }
-                    if (message.no_raft_leader_range_ids != null && message.hasOwnProperty("no_raft_leader_range_ids")) {
-                        if (!Array.isArray(message.no_raft_leader_range_ids))
-                            return "no_raft_leader_range_ids: array expected";
-                        for (let i = 0; i < message.no_raft_leader_range_ids.length; ++i)
-                            if (!$util.isInteger(message.no_raft_leader_range_ids[i]) && !(message.no_raft_leader_range_ids[i] && $util.isInteger(message.no_raft_leader_range_ids[i].low) && $util.isInteger(message.no_raft_leader_range_ids[i].high)))
-                                return "no_raft_leader_range_ids: integer|Long[] expected";
-                    }
-                    if (message.no_lease_range_ids != null && message.hasOwnProperty("no_lease_range_ids")) {
-                        if (!Array.isArray(message.no_lease_range_ids))
-                            return "no_lease_range_ids: array expected";
-                        for (let i = 0; i < message.no_lease_range_ids.length; ++i)
-                            if (!$util.isInteger(message.no_lease_range_ids[i]) && !(message.no_lease_range_ids[i] && $util.isInteger(message.no_lease_range_ids[i].low) && $util.isInteger(message.no_lease_range_ids[i].high)))
-                                return "no_lease_range_ids: integer|Long[] expected";
-                    }
-                    if (message.underreplicated_range_ids != null && message.hasOwnProperty("underreplicated_range_ids")) {
-                        if (!Array.isArray(message.underreplicated_range_ids))
-                            return "underreplicated_range_ids: array expected";
-                        for (let i = 0; i < message.underreplicated_range_ids.length; ++i)
-                            if (!$util.isInteger(message.underreplicated_range_ids[i]) && !(message.underreplicated_range_ids[i] && $util.isInteger(message.underreplicated_range_ids[i].low) && $util.isInteger(message.underreplicated_range_ids[i].high)))
-                                return "underreplicated_range_ids: integer|Long[] expected";
-                    }
-                    return null;
-                };
-
-                /**
-                 * Creates a ProblemRangesResponse message from a plain object. Also converts values to their respective internal types.
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ProblemRangesResponse} ProblemRangesResponse
-                 */
-                ProblemRangesResponse.fromObject = function fromObject(object) {
-                    if (object instanceof $root.cockroach.server.serverpb.ProblemRangesResponse)
-                        return object;
-                    let message = new $root.cockroach.server.serverpb.ProblemRangesResponse();
-                    if (object.node_id != null)
-                        message.node_id = object.node_id | 0;
-                    if (object.failures) {
-                        if (!Array.isArray(object.failures))
-                            throw TypeError(".cockroach.server.serverpb.ProblemRangesResponse.failures: array expected");
-                        message.failures = [];
-                        for (let i = 0; i < object.failures.length; ++i) {
-                            if (typeof object.failures[i] !== "object")
-                                throw TypeError(".cockroach.server.serverpb.ProblemRangesResponse.failures: object expected");
-                            message.failures[i] = $root.cockroach.server.serverpb.ProblemRangesResponse.Failures.fromObject(object.failures[i]);
-                        }
-                    }
-                    if (object.unavailable_range_ids) {
-                        if (!Array.isArray(object.unavailable_range_ids))
-                            throw TypeError(".cockroach.server.serverpb.ProblemRangesResponse.unavailable_range_ids: array expected");
-                        message.unavailable_range_ids = [];
-                        for (let i = 0; i < object.unavailable_range_ids.length; ++i)
-                            if ($util.Long)
-                                (message.unavailable_range_ids[i] = $util.Long.fromValue(object.unavailable_range_ids[i])).unsigned = false;
-                            else if (typeof object.unavailable_range_ids[i] === "string")
-                                message.unavailable_range_ids[i] = parseInt(object.unavailable_range_ids[i], 10);
-                            else if (typeof object.unavailable_range_ids[i] === "number")
-                                message.unavailable_range_ids[i] = object.unavailable_range_ids[i];
-                            else if (typeof object.unavailable_range_ids[i] === "object")
-                                message.unavailable_range_ids[i] = new $util.LongBits(object.unavailable_range_ids[i].low >>> 0, object.unavailable_range_ids[i].high >>> 0).toNumber();
-                    }
-                    if (object.raft_leader_not_lease_holder_range_ids) {
-                        if (!Array.isArray(object.raft_leader_not_lease_holder_range_ids))
-                            throw TypeError(".cockroach.server.serverpb.ProblemRangesResponse.raft_leader_not_lease_holder_range_ids: array expected");
-                        message.raft_leader_not_lease_holder_range_ids = [];
-                        for (let i = 0; i < object.raft_leader_not_lease_holder_range_ids.length; ++i)
-                            if ($util.Long)
-                                (message.raft_leader_not_lease_holder_range_ids[i] = $util.Long.fromValue(object.raft_leader_not_lease_holder_range_ids[i])).unsigned = false;
-                            else if (typeof object.raft_leader_not_lease_holder_range_ids[i] === "string")
-                                message.raft_leader_not_lease_holder_range_ids[i] = parseInt(object.raft_leader_not_lease_holder_range_ids[i], 10);
-                            else if (typeof object.raft_leader_not_lease_holder_range_ids[i] === "number")
-                                message.raft_leader_not_lease_holder_range_ids[i] = object.raft_leader_not_lease_holder_range_ids[i];
-                            else if (typeof object.raft_leader_not_lease_holder_range_ids[i] === "object")
-                                message.raft_leader_not_lease_holder_range_ids[i] = new $util.LongBits(object.raft_leader_not_lease_holder_range_ids[i].low >>> 0, object.raft_leader_not_lease_holder_range_ids[i].high >>> 0).toNumber();
-                    }
-                    if (object.no_raft_leader_range_ids) {
-                        if (!Array.isArray(object.no_raft_leader_range_ids))
-                            throw TypeError(".cockroach.server.serverpb.ProblemRangesResponse.no_raft_leader_range_ids: array expected");
-                        message.no_raft_leader_range_ids = [];
-                        for (let i = 0; i < object.no_raft_leader_range_ids.length; ++i)
-                            if ($util.Long)
-                                (message.no_raft_leader_range_ids[i] = $util.Long.fromValue(object.no_raft_leader_range_ids[i])).unsigned = false;
-                            else if (typeof object.no_raft_leader_range_ids[i] === "string")
-                                message.no_raft_leader_range_ids[i] = parseInt(object.no_raft_leader_range_ids[i], 10);
-                            else if (typeof object.no_raft_leader_range_ids[i] === "number")
-                                message.no_raft_leader_range_ids[i] = object.no_raft_leader_range_ids[i];
-                            else if (typeof object.no_raft_leader_range_ids[i] === "object")
-                                message.no_raft_leader_range_ids[i] = new $util.LongBits(object.no_raft_leader_range_ids[i].low >>> 0, object.no_raft_leader_range_ids[i].high >>> 0).toNumber();
-                    }
-                    if (object.no_lease_range_ids) {
-                        if (!Array.isArray(object.no_lease_range_ids))
-                            throw TypeError(".cockroach.server.serverpb.ProblemRangesResponse.no_lease_range_ids: array expected");
-                        message.no_lease_range_ids = [];
-                        for (let i = 0; i < object.no_lease_range_ids.length; ++i)
-                            if ($util.Long)
-                                (message.no_lease_range_ids[i] = $util.Long.fromValue(object.no_lease_range_ids[i])).unsigned = false;
-                            else if (typeof object.no_lease_range_ids[i] === "string")
-                                message.no_lease_range_ids[i] = parseInt(object.no_lease_range_ids[i], 10);
-                            else if (typeof object.no_lease_range_ids[i] === "number")
-                                message.no_lease_range_ids[i] = object.no_lease_range_ids[i];
-                            else if (typeof object.no_lease_range_ids[i] === "object")
-                                message.no_lease_range_ids[i] = new $util.LongBits(object.no_lease_range_ids[i].low >>> 0, object.no_lease_range_ids[i].high >>> 0).toNumber();
-                    }
-                    if (object.underreplicated_range_ids) {
-                        if (!Array.isArray(object.underreplicated_range_ids))
-                            throw TypeError(".cockroach.server.serverpb.ProblemRangesResponse.underreplicated_range_ids: array expected");
-                        message.underreplicated_range_ids = [];
-                        for (let i = 0; i < object.underreplicated_range_ids.length; ++i)
-                            if ($util.Long)
-                                (message.underreplicated_range_ids[i] = $util.Long.fromValue(object.underreplicated_range_ids[i])).unsigned = false;
-                            else if (typeof object.underreplicated_range_ids[i] === "string")
-                                message.underreplicated_range_ids[i] = parseInt(object.underreplicated_range_ids[i], 10);
-                            else if (typeof object.underreplicated_range_ids[i] === "number")
-                                message.underreplicated_range_ids[i] = object.underreplicated_range_ids[i];
-                            else if (typeof object.underreplicated_range_ids[i] === "object")
-                                message.underreplicated_range_ids[i] = new $util.LongBits(object.underreplicated_range_ids[i].low >>> 0, object.underreplicated_range_ids[i].high >>> 0).toNumber();
-                    }
-                    return message;
-                };
-
-                /**
-                 * Creates a ProblemRangesResponse message from a plain object. Also converts values to their respective internal types.
-                 * This is an alias of {@link cockroach.server.serverpb.ProblemRangesResponse.fromObject}.
-                 * @function
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ProblemRangesResponse} ProblemRangesResponse
-                 */
-                ProblemRangesResponse.from = ProblemRangesResponse.fromObject;
-
-                /**
-                 * Creates a plain object from a ProblemRangesResponse message. Also converts values to other types if specified.
-                 * @param {cockroach.server.serverpb.ProblemRangesResponse} message ProblemRangesResponse
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                ProblemRangesResponse.toObject = function toObject(message, options) {
-                    if (!options)
-                        options = {};
-                    let object = {};
-                    if (options.arrays || options.defaults) {
-                        object.failures = [];
-                        object.unavailable_range_ids = [];
-                        object.raft_leader_not_lease_holder_range_ids = [];
-                        object.no_raft_leader_range_ids = [];
-                        object.no_lease_range_ids = [];
-                        object.underreplicated_range_ids = [];
-                    }
-                    if (options.defaults)
-                        object.node_id = 0;
-                    if (message.node_id != null && message.hasOwnProperty("node_id"))
-                        object.node_id = message.node_id;
-                    if (message.failures && message.failures.length) {
-                        object.failures = [];
-                        for (let j = 0; j < message.failures.length; ++j)
-                            object.failures[j] = $root.cockroach.server.serverpb.ProblemRangesResponse.Failures.toObject(message.failures[j], options);
-                    }
-                    if (message.unavailable_range_ids && message.unavailable_range_ids.length) {
-                        object.unavailable_range_ids = [];
-                        for (let j = 0; j < message.unavailable_range_ids.length; ++j)
-                            if (typeof message.unavailable_range_ids[j] === "number")
-                                object.unavailable_range_ids[j] = options.longs === String ? String(message.unavailable_range_ids[j]) : message.unavailable_range_ids[j];
-                            else
-                                object.unavailable_range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.unavailable_range_ids[j]) : options.longs === Number ? new $util.LongBits(message.unavailable_range_ids[j].low >>> 0, message.unavailable_range_ids[j].high >>> 0).toNumber() : message.unavailable_range_ids[j];
-                    }
-                    if (message.raft_leader_not_lease_holder_range_ids && message.raft_leader_not_lease_holder_range_ids.length) {
-                        object.raft_leader_not_lease_holder_range_ids = [];
-                        for (let j = 0; j < message.raft_leader_not_lease_holder_range_ids.length; ++j)
-                            if (typeof message.raft_leader_not_lease_holder_range_ids[j] === "number")
-                                object.raft_leader_not_lease_holder_range_ids[j] = options.longs === String ? String(message.raft_leader_not_lease_holder_range_ids[j]) : message.raft_leader_not_lease_holder_range_ids[j];
-                            else
-                                object.raft_leader_not_lease_holder_range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.raft_leader_not_lease_holder_range_ids[j]) : options.longs === Number ? new $util.LongBits(message.raft_leader_not_lease_holder_range_ids[j].low >>> 0, message.raft_leader_not_lease_holder_range_ids[j].high >>> 0).toNumber() : message.raft_leader_not_lease_holder_range_ids[j];
-                    }
-                    if (message.no_raft_leader_range_ids && message.no_raft_leader_range_ids.length) {
-                        object.no_raft_leader_range_ids = [];
-                        for (let j = 0; j < message.no_raft_leader_range_ids.length; ++j)
-                            if (typeof message.no_raft_leader_range_ids[j] === "number")
-                                object.no_raft_leader_range_ids[j] = options.longs === String ? String(message.no_raft_leader_range_ids[j]) : message.no_raft_leader_range_ids[j];
-                            else
-                                object.no_raft_leader_range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.no_raft_leader_range_ids[j]) : options.longs === Number ? new $util.LongBits(message.no_raft_leader_range_ids[j].low >>> 0, message.no_raft_leader_range_ids[j].high >>> 0).toNumber() : message.no_raft_leader_range_ids[j];
-                    }
-                    if (message.no_lease_range_ids && message.no_lease_range_ids.length) {
-                        object.no_lease_range_ids = [];
-                        for (let j = 0; j < message.no_lease_range_ids.length; ++j)
-                            if (typeof message.no_lease_range_ids[j] === "number")
-                                object.no_lease_range_ids[j] = options.longs === String ? String(message.no_lease_range_ids[j]) : message.no_lease_range_ids[j];
-                            else
-                                object.no_lease_range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.no_lease_range_ids[j]) : options.longs === Number ? new $util.LongBits(message.no_lease_range_ids[j].low >>> 0, message.no_lease_range_ids[j].high >>> 0).toNumber() : message.no_lease_range_ids[j];
-                    }
-                    if (message.underreplicated_range_ids && message.underreplicated_range_ids.length) {
-                        object.underreplicated_range_ids = [];
-                        for (let j = 0; j < message.underreplicated_range_ids.length; ++j)
-                            if (typeof message.underreplicated_range_ids[j] === "number")
-                                object.underreplicated_range_ids[j] = options.longs === String ? String(message.underreplicated_range_ids[j]) : message.underreplicated_range_ids[j];
-                            else
-                                object.underreplicated_range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.underreplicated_range_ids[j]) : options.longs === Number ? new $util.LongBits(message.underreplicated_range_ids[j].low >>> 0, message.underreplicated_range_ids[j].high >>> 0).toNumber() : message.underreplicated_range_ids[j];
-                    }
-                    return object;
-                };
-
-                /**
-                 * Creates a plain object from this ProblemRangesResponse message. Also converts values to other types if specified.
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                ProblemRangesResponse.prototype.toObject = function toObject(options) {
-                    return this.constructor.toObject(this, options);
-                };
-
-                /**
-                 * Converts this ProblemRangesResponse to JSON.
-                 * @returns {Object.<string,*>} JSON object
-                 */
-                ProblemRangesResponse.prototype.toJSON = function toJSON() {
-                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                };
-
-                ProblemRangesResponse.Failures = (function() {
-
-                    /**
-                     * Properties of a Failures.
-                     * @typedef cockroach.server.serverpb.ProblemRangesResponse.Failures$Properties
-                     * @type {Object}
-                     * @property {number} [node_id] Failures node_id.
-                     * @property {string} [error_message] Failures error_message.
-                     */
-
-                    /**
-                     * Constructs a new Failures.
-                     * @exports cockroach.server.serverpb.ProblemRangesResponse.Failures
-                     * @constructor
-                     * @param {cockroach.server.serverpb.ProblemRangesResponse.Failures$Properties=} [properties] Properties to set
-                     */
-                    function Failures(properties) {
-                        if (properties)
-                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                if (properties[keys[i]] != null)
-                                    this[keys[i]] = properties[keys[i]];
-                    }
-
-                    /**
-                     * Failures node_id.
-                     * @type {number}
-                     */
-                    Failures.prototype.node_id = 0;
-
-                    /**
-                     * Failures error_message.
-                     * @type {string}
-                     */
-                    Failures.prototype.error_message = "";
-
-                    /**
-                     * Creates a new Failures instance using the specified properties.
-                     * @param {cockroach.server.serverpb.ProblemRangesResponse.Failures$Properties=} [properties] Properties to set
-                     * @returns {cockroach.server.serverpb.ProblemRangesResponse.Failures} Failures instance
-                     */
-                    Failures.create = function create(properties) {
-                        return new Failures(properties);
-                    };
-
-                    /**
-                     * Encodes the specified Failures message. Does not implicitly {@link cockroach.server.serverpb.ProblemRangesResponse.Failures.verify|verify} messages.
-                     * @param {cockroach.server.serverpb.ProblemRangesResponse.Failures$Properties} message Failures message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    Failures.encode = function encode(message, writer) {
-                        if (!writer)
-                            writer = $Writer.create();
-                        if (message.node_id != null && message.hasOwnProperty("node_id"))
-                            writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
-                        if (message.error_message != null && message.hasOwnProperty("error_message"))
-                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.error_message);
-                        return writer;
-                    };
-
-                    /**
-                     * Encodes the specified Failures message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ProblemRangesResponse.Failures.verify|verify} messages.
-                     * @param {cockroach.server.serverpb.ProblemRangesResponse.Failures$Properties} message Failures message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    Failures.encodeDelimited = function encodeDelimited(message, writer) {
-                        return this.encode(message, writer).ldelim();
-                    };
-
-                    /**
-                     * Decodes a Failures message from the specified reader or buffer.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @param {number} [length] Message length if known beforehand
-                     * @returns {cockroach.server.serverpb.ProblemRangesResponse.Failures} Failures
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    Failures.decode = function decode(reader, length) {
-                        if (!(reader instanceof $Reader))
-                            reader = $Reader.create(reader);
-                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.ProblemRangesResponse.Failures();
-                        while (reader.pos < end) {
-                            let tag = reader.uint32();
-                            switch (tag >>> 3) {
-                            case 1:
-                                message.node_id = reader.int32();
-                                break;
-                            case 2:
-                                message.error_message = reader.string();
-                                break;
-                            default:
-                                reader.skipType(tag & 7);
-                                break;
-                            }
-                        }
-                        return message;
-                    };
-
-                    /**
-                     * Decodes a Failures message from the specified reader or buffer, length delimited.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @returns {cockroach.server.serverpb.ProblemRangesResponse.Failures} Failures
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    Failures.decodeDelimited = function decodeDelimited(reader) {
-                        if (!(reader instanceof $Reader))
-                            reader = $Reader(reader);
-                        return this.decode(reader, reader.uint32());
-                    };
-
-                    /**
-                     * Verifies a Failures message.
-                     * @param {Object.<string,*>} message Plain object to verify
-                     * @returns {?string} `null` if valid, otherwise the reason why it is not
-                     */
-                    Failures.verify = function verify(message) {
-                        if (typeof message !== "object" || message === null)
-                            return "object expected";
-                        if (message.node_id != null && message.hasOwnProperty("node_id"))
-                            if (!$util.isInteger(message.node_id))
-                                return "node_id: integer expected";
-                        if (message.error_message != null && message.hasOwnProperty("error_message"))
-                            if (!$util.isString(message.error_message))
-                                return "error_message: string expected";
-                        return null;
-                    };
-
-                    /**
-                     * Creates a Failures message from a plain object. Also converts values to their respective internal types.
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.server.serverpb.ProblemRangesResponse.Failures} Failures
-                     */
-                    Failures.fromObject = function fromObject(object) {
-                        if (object instanceof $root.cockroach.server.serverpb.ProblemRangesResponse.Failures)
-                            return object;
-                        let message = new $root.cockroach.server.serverpb.ProblemRangesResponse.Failures();
-                        if (object.node_id != null)
-                            message.node_id = object.node_id | 0;
-                        if (object.error_message != null)
-                            message.error_message = String(object.error_message);
-                        return message;
-                    };
-
-                    /**
-                     * Creates a Failures message from a plain object. Also converts values to their respective internal types.
-                     * This is an alias of {@link cockroach.server.serverpb.ProblemRangesResponse.Failures.fromObject}.
-                     * @function
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.server.serverpb.ProblemRangesResponse.Failures} Failures
-                     */
-                    Failures.from = Failures.fromObject;
-
-                    /**
-                     * Creates a plain object from a Failures message. Also converts values to other types if specified.
-                     * @param {cockroach.server.serverpb.ProblemRangesResponse.Failures} message Failures
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    Failures.toObject = function toObject(message, options) {
-                        if (!options)
-                            options = {};
-                        let object = {};
-                        if (options.defaults) {
-                            object.node_id = 0;
-                            object.error_message = "";
-                        }
-                        if (message.node_id != null && message.hasOwnProperty("node_id"))
-                            object.node_id = message.node_id;
-                        if (message.error_message != null && message.hasOwnProperty("error_message"))
-                            object.error_message = message.error_message;
-                        return object;
-                    };
-
-                    /**
-                     * Creates a plain object from this Failures message. Also converts values to other types if specified.
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    Failures.prototype.toObject = function toObject(options) {
-                        return this.constructor.toObject(this, options);
-                    };
-
-                    /**
-                     * Converts this Failures to JSON.
-                     * @returns {Object.<string,*>} JSON object
-                     */
-                    Failures.prototype.toJSON = function toJSON() {
-                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                    };
-
-                    return Failures;
-                })();
-
-                return ProblemRangesResponse;
-            })();
-
             serverpb.Status = (function() {
 
                 /**
@@ -17606,33 +16750,6 @@ export const cockroach = $root.cockroach = (() => {
                  * @variation 2
                  */
 
-                /**
-                 * Callback as used by {@link Status#problemRanges}.
-                 * @typedef Status_problemRanges_Callback
-                 * @type {function}
-                 * @param {?Error} error Error, if any
-                 * @param {cockroach.server.serverpb.ProblemRangesResponse} [response] ProblemRangesResponse
-                 */
-
-                /**
-                 * Calls ProblemRanges.
-                 * @param {cockroach.server.serverpb.ProblemRangesRequest|Object.<string,*>} request ProblemRangesRequest message or plain object
-                 * @param {Status_problemRanges_Callback} callback Node-style callback called with the error, if any, and ProblemRangesResponse
-                 * @returns {undefined}
-                 */
-                Status.prototype.problemRanges = function problemRanges(request, callback) {
-                    return this.rpcCall(problemRanges, $root.cockroach.server.serverpb.ProblemRangesRequest, $root.cockroach.server.serverpb.ProblemRangesResponse, request, callback);
-                };
-
-                /**
-                 * Calls ProblemRanges.
-                 * @name Status#problemRanges
-                 * @function
-                 * @param {cockroach.server.serverpb.ProblemRangesRequest|Object.<string,*>} request ProblemRangesRequest message or plain object
-                 * @returns {Promise<cockroach.server.serverpb.ProblemRangesResponse>} Promise
-                 * @variation 2
-                 */
-
                 return Status;
             })();
 
@@ -17829,6 +16946,920 @@ export const cockroach = $root.cockroach = (() => {
                 };
 
                 return PrettySpan;
+            })();
+
+            serverpb.ReportProblemRangesRequest = (function() {
+
+                /**
+                 * Properties of a ReportProblemRangesRequest.
+                 * @typedef cockroach.server.serverpb.ReportProblemRangesRequest$Properties
+                 * @type {Object}
+                 * @property {string} [node_id] ReportProblemRangesRequest node_id.
+                 */
+
+                /**
+                 * Constructs a new ReportProblemRangesRequest.
+                 * @exports cockroach.server.serverpb.ReportProblemRangesRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.ReportProblemRangesRequest$Properties=} [properties] Properties to set
+                 */
+                function ReportProblemRangesRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * ReportProblemRangesRequest node_id.
+                 * @type {string}
+                 */
+                ReportProblemRangesRequest.prototype.node_id = "";
+
+                /**
+                 * Creates a new ReportProblemRangesRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.ReportProblemRangesRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.ReportProblemRangesRequest} ReportProblemRangesRequest instance
+                 */
+                ReportProblemRangesRequest.create = function create(properties) {
+                    return new ReportProblemRangesRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified ReportProblemRangesRequest message. Does not implicitly {@link cockroach.server.serverpb.ReportProblemRangesRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ReportProblemRangesRequest$Properties} message ReportProblemRangesRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ReportProblemRangesRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.node_id);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified ReportProblemRangesRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ReportProblemRangesRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ReportProblemRangesRequest$Properties} message ReportProblemRangesRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ReportProblemRangesRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a ReportProblemRangesRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.ReportProblemRangesRequest} ReportProblemRangesRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ReportProblemRangesRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.ReportProblemRangesRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.node_id = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a ReportProblemRangesRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.ReportProblemRangesRequest} ReportProblemRangesRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ReportProblemRangesRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a ReportProblemRangesRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                ReportProblemRangesRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isString(message.node_id))
+                            return "node_id: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a ReportProblemRangesRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ReportProblemRangesRequest} ReportProblemRangesRequest
+                 */
+                ReportProblemRangesRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.ReportProblemRangesRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.ReportProblemRangesRequest();
+                    if (object.node_id != null)
+                        message.node_id = String(object.node_id);
+                    return message;
+                };
+
+                /**
+                 * Creates a ReportProblemRangesRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.ReportProblemRangesRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ReportProblemRangesRequest} ReportProblemRangesRequest
+                 */
+                ReportProblemRangesRequest.from = ReportProblemRangesRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a ReportProblemRangesRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.ReportProblemRangesRequest} message ReportProblemRangesRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ReportProblemRangesRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults)
+                        object.node_id = "";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        object.node_id = message.node_id;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this ReportProblemRangesRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ReportProblemRangesRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this ReportProblemRangesRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                ReportProblemRangesRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return ReportProblemRangesRequest;
+            })();
+
+            serverpb.ReportProblemRangesResponse = (function() {
+
+                /**
+                 * Properties of a ReportProblemRangesResponse.
+                 * @typedef cockroach.server.serverpb.ReportProblemRangesResponse$Properties
+                 * @type {Object}
+                 * @property {number} [node_id] ReportProblemRangesResponse node_id.
+                 * @property {Array.<cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties>} [failures] ReportProblemRangesResponse failures.
+                 * @property {Array.<Long>} [unavailable_range_ids] ReportProblemRangesResponse unavailable_range_ids.
+                 * @property {Array.<Long>} [raft_leader_not_lease_holder_range_ids] ReportProblemRangesResponse raft_leader_not_lease_holder_range_ids.
+                 * @property {Array.<Long>} [no_raft_leader_range_ids] ReportProblemRangesResponse no_raft_leader_range_ids.
+                 * @property {Array.<Long>} [no_lease_range_ids] ReportProblemRangesResponse no_lease_range_ids.
+                 * @property {Array.<Long>} [underreplicated_range_ids] ReportProblemRangesResponse underreplicated_range_ids.
+                 */
+
+                /**
+                 * Constructs a new ReportProblemRangesResponse.
+                 * @exports cockroach.server.serverpb.ReportProblemRangesResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.ReportProblemRangesResponse$Properties=} [properties] Properties to set
+                 */
+                function ReportProblemRangesResponse(properties) {
+                    this.failures = [];
+                    this.unavailable_range_ids = [];
+                    this.raft_leader_not_lease_holder_range_ids = [];
+                    this.no_raft_leader_range_ids = [];
+                    this.no_lease_range_ids = [];
+                    this.underreplicated_range_ids = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * ReportProblemRangesResponse node_id.
+                 * @type {number}
+                 */
+                ReportProblemRangesResponse.prototype.node_id = 0;
+
+                /**
+                 * ReportProblemRangesResponse failures.
+                 * @type {Array.<cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties>}
+                 */
+                ReportProblemRangesResponse.prototype.failures = $util.emptyArray;
+
+                /**
+                 * ReportProblemRangesResponse unavailable_range_ids.
+                 * @type {Array.<Long>}
+                 */
+                ReportProblemRangesResponse.prototype.unavailable_range_ids = $util.emptyArray;
+
+                /**
+                 * ReportProblemRangesResponse raft_leader_not_lease_holder_range_ids.
+                 * @type {Array.<Long>}
+                 */
+                ReportProblemRangesResponse.prototype.raft_leader_not_lease_holder_range_ids = $util.emptyArray;
+
+                /**
+                 * ReportProblemRangesResponse no_raft_leader_range_ids.
+                 * @type {Array.<Long>}
+                 */
+                ReportProblemRangesResponse.prototype.no_raft_leader_range_ids = $util.emptyArray;
+
+                /**
+                 * ReportProblemRangesResponse no_lease_range_ids.
+                 * @type {Array.<Long>}
+                 */
+                ReportProblemRangesResponse.prototype.no_lease_range_ids = $util.emptyArray;
+
+                /**
+                 * ReportProblemRangesResponse underreplicated_range_ids.
+                 * @type {Array.<Long>}
+                 */
+                ReportProblemRangesResponse.prototype.underreplicated_range_ids = $util.emptyArray;
+
+                /**
+                 * Creates a new ReportProblemRangesResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.ReportProblemRangesResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.ReportProblemRangesResponse} ReportProblemRangesResponse instance
+                 */
+                ReportProblemRangesResponse.create = function create(properties) {
+                    return new ReportProblemRangesResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified ReportProblemRangesResponse message. Does not implicitly {@link cockroach.server.serverpb.ReportProblemRangesResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ReportProblemRangesResponse$Properties} message ReportProblemRangesResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ReportProblemRangesResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
+                    if (message.failures != null && message.failures.length)
+                        for (let i = 0; i < message.failures.length; ++i)
+                            $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures.encode(message.failures[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                    if (message.unavailable_range_ids != null && message.unavailable_range_ids.length) {
+                        writer.uint32(/* id 3, wireType 2 =*/26).fork();
+                        for (let i = 0; i < message.unavailable_range_ids.length; ++i)
+                            writer.int64(message.unavailable_range_ids[i]);
+                        writer.ldelim();
+                    }
+                    if (message.raft_leader_not_lease_holder_range_ids != null && message.raft_leader_not_lease_holder_range_ids.length) {
+                        writer.uint32(/* id 4, wireType 2 =*/34).fork();
+                        for (let i = 0; i < message.raft_leader_not_lease_holder_range_ids.length; ++i)
+                            writer.int64(message.raft_leader_not_lease_holder_range_ids[i]);
+                        writer.ldelim();
+                    }
+                    if (message.no_raft_leader_range_ids != null && message.no_raft_leader_range_ids.length) {
+                        writer.uint32(/* id 5, wireType 2 =*/42).fork();
+                        for (let i = 0; i < message.no_raft_leader_range_ids.length; ++i)
+                            writer.int64(message.no_raft_leader_range_ids[i]);
+                        writer.ldelim();
+                    }
+                    if (message.no_lease_range_ids != null && message.no_lease_range_ids.length) {
+                        writer.uint32(/* id 6, wireType 2 =*/50).fork();
+                        for (let i = 0; i < message.no_lease_range_ids.length; ++i)
+                            writer.int64(message.no_lease_range_ids[i]);
+                        writer.ldelim();
+                    }
+                    if (message.underreplicated_range_ids != null && message.underreplicated_range_ids.length) {
+                        writer.uint32(/* id 7, wireType 2 =*/58).fork();
+                        for (let i = 0; i < message.underreplicated_range_ids.length; ++i)
+                            writer.int64(message.underreplicated_range_ids[i]);
+                        writer.ldelim();
+                    }
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified ReportProblemRangesResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ReportProblemRangesResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ReportProblemRangesResponse$Properties} message ReportProblemRangesResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ReportProblemRangesResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a ReportProblemRangesResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.ReportProblemRangesResponse} ReportProblemRangesResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ReportProblemRangesResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.ReportProblemRangesResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.node_id = reader.int32();
+                            break;
+                        case 2:
+                            if (!(message.failures && message.failures.length))
+                                message.failures = [];
+                            message.failures.push($root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures.decode(reader, reader.uint32()));
+                            break;
+                        case 3:
+                            if (!(message.unavailable_range_ids && message.unavailable_range_ids.length))
+                                message.unavailable_range_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.unavailable_range_ids.push(reader.int64());
+                            } else
+                                message.unavailable_range_ids.push(reader.int64());
+                            break;
+                        case 4:
+                            if (!(message.raft_leader_not_lease_holder_range_ids && message.raft_leader_not_lease_holder_range_ids.length))
+                                message.raft_leader_not_lease_holder_range_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.raft_leader_not_lease_holder_range_ids.push(reader.int64());
+                            } else
+                                message.raft_leader_not_lease_holder_range_ids.push(reader.int64());
+                            break;
+                        case 5:
+                            if (!(message.no_raft_leader_range_ids && message.no_raft_leader_range_ids.length))
+                                message.no_raft_leader_range_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.no_raft_leader_range_ids.push(reader.int64());
+                            } else
+                                message.no_raft_leader_range_ids.push(reader.int64());
+                            break;
+                        case 6:
+                            if (!(message.no_lease_range_ids && message.no_lease_range_ids.length))
+                                message.no_lease_range_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.no_lease_range_ids.push(reader.int64());
+                            } else
+                                message.no_lease_range_ids.push(reader.int64());
+                            break;
+                        case 7:
+                            if (!(message.underreplicated_range_ids && message.underreplicated_range_ids.length))
+                                message.underreplicated_range_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.underreplicated_range_ids.push(reader.int64());
+                            } else
+                                message.underreplicated_range_ids.push(reader.int64());
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a ReportProblemRangesResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.ReportProblemRangesResponse} ReportProblemRangesResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ReportProblemRangesResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a ReportProblemRangesResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                ReportProblemRangesResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isInteger(message.node_id))
+                            return "node_id: integer expected";
+                    if (message.failures != null && message.hasOwnProperty("failures")) {
+                        if (!Array.isArray(message.failures))
+                            return "failures: array expected";
+                        for (let i = 0; i < message.failures.length; ++i) {
+                            let error = $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures.verify(message.failures[i]);
+                            if (error)
+                                return "failures." + error;
+                        }
+                    }
+                    if (message.unavailable_range_ids != null && message.hasOwnProperty("unavailable_range_ids")) {
+                        if (!Array.isArray(message.unavailable_range_ids))
+                            return "unavailable_range_ids: array expected";
+                        for (let i = 0; i < message.unavailable_range_ids.length; ++i)
+                            if (!$util.isInteger(message.unavailable_range_ids[i]) && !(message.unavailable_range_ids[i] && $util.isInteger(message.unavailable_range_ids[i].low) && $util.isInteger(message.unavailable_range_ids[i].high)))
+                                return "unavailable_range_ids: integer|Long[] expected";
+                    }
+                    if (message.raft_leader_not_lease_holder_range_ids != null && message.hasOwnProperty("raft_leader_not_lease_holder_range_ids")) {
+                        if (!Array.isArray(message.raft_leader_not_lease_holder_range_ids))
+                            return "raft_leader_not_lease_holder_range_ids: array expected";
+                        for (let i = 0; i < message.raft_leader_not_lease_holder_range_ids.length; ++i)
+                            if (!$util.isInteger(message.raft_leader_not_lease_holder_range_ids[i]) && !(message.raft_leader_not_lease_holder_range_ids[i] && $util.isInteger(message.raft_leader_not_lease_holder_range_ids[i].low) && $util.isInteger(message.raft_leader_not_lease_holder_range_ids[i].high)))
+                                return "raft_leader_not_lease_holder_range_ids: integer|Long[] expected";
+                    }
+                    if (message.no_raft_leader_range_ids != null && message.hasOwnProperty("no_raft_leader_range_ids")) {
+                        if (!Array.isArray(message.no_raft_leader_range_ids))
+                            return "no_raft_leader_range_ids: array expected";
+                        for (let i = 0; i < message.no_raft_leader_range_ids.length; ++i)
+                            if (!$util.isInteger(message.no_raft_leader_range_ids[i]) && !(message.no_raft_leader_range_ids[i] && $util.isInteger(message.no_raft_leader_range_ids[i].low) && $util.isInteger(message.no_raft_leader_range_ids[i].high)))
+                                return "no_raft_leader_range_ids: integer|Long[] expected";
+                    }
+                    if (message.no_lease_range_ids != null && message.hasOwnProperty("no_lease_range_ids")) {
+                        if (!Array.isArray(message.no_lease_range_ids))
+                            return "no_lease_range_ids: array expected";
+                        for (let i = 0; i < message.no_lease_range_ids.length; ++i)
+                            if (!$util.isInteger(message.no_lease_range_ids[i]) && !(message.no_lease_range_ids[i] && $util.isInteger(message.no_lease_range_ids[i].low) && $util.isInteger(message.no_lease_range_ids[i].high)))
+                                return "no_lease_range_ids: integer|Long[] expected";
+                    }
+                    if (message.underreplicated_range_ids != null && message.hasOwnProperty("underreplicated_range_ids")) {
+                        if (!Array.isArray(message.underreplicated_range_ids))
+                            return "underreplicated_range_ids: array expected";
+                        for (let i = 0; i < message.underreplicated_range_ids.length; ++i)
+                            if (!$util.isInteger(message.underreplicated_range_ids[i]) && !(message.underreplicated_range_ids[i] && $util.isInteger(message.underreplicated_range_ids[i].low) && $util.isInteger(message.underreplicated_range_ids[i].high)))
+                                return "underreplicated_range_ids: integer|Long[] expected";
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a ReportProblemRangesResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ReportProblemRangesResponse} ReportProblemRangesResponse
+                 */
+                ReportProblemRangesResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.ReportProblemRangesResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.ReportProblemRangesResponse();
+                    if (object.node_id != null)
+                        message.node_id = object.node_id | 0;
+                    if (object.failures) {
+                        if (!Array.isArray(object.failures))
+                            throw TypeError(".cockroach.server.serverpb.ReportProblemRangesResponse.failures: array expected");
+                        message.failures = [];
+                        for (let i = 0; i < object.failures.length; ++i) {
+                            if (typeof object.failures[i] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.ReportProblemRangesResponse.failures: object expected");
+                            message.failures[i] = $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures.fromObject(object.failures[i]);
+                        }
+                    }
+                    if (object.unavailable_range_ids) {
+                        if (!Array.isArray(object.unavailable_range_ids))
+                            throw TypeError(".cockroach.server.serverpb.ReportProblemRangesResponse.unavailable_range_ids: array expected");
+                        message.unavailable_range_ids = [];
+                        for (let i = 0; i < object.unavailable_range_ids.length; ++i)
+                            if ($util.Long)
+                                (message.unavailable_range_ids[i] = $util.Long.fromValue(object.unavailable_range_ids[i])).unsigned = false;
+                            else if (typeof object.unavailable_range_ids[i] === "string")
+                                message.unavailable_range_ids[i] = parseInt(object.unavailable_range_ids[i], 10);
+                            else if (typeof object.unavailable_range_ids[i] === "number")
+                                message.unavailable_range_ids[i] = object.unavailable_range_ids[i];
+                            else if (typeof object.unavailable_range_ids[i] === "object")
+                                message.unavailable_range_ids[i] = new $util.LongBits(object.unavailable_range_ids[i].low >>> 0, object.unavailable_range_ids[i].high >>> 0).toNumber();
+                    }
+                    if (object.raft_leader_not_lease_holder_range_ids) {
+                        if (!Array.isArray(object.raft_leader_not_lease_holder_range_ids))
+                            throw TypeError(".cockroach.server.serverpb.ReportProblemRangesResponse.raft_leader_not_lease_holder_range_ids: array expected");
+                        message.raft_leader_not_lease_holder_range_ids = [];
+                        for (let i = 0; i < object.raft_leader_not_lease_holder_range_ids.length; ++i)
+                            if ($util.Long)
+                                (message.raft_leader_not_lease_holder_range_ids[i] = $util.Long.fromValue(object.raft_leader_not_lease_holder_range_ids[i])).unsigned = false;
+                            else if (typeof object.raft_leader_not_lease_holder_range_ids[i] === "string")
+                                message.raft_leader_not_lease_holder_range_ids[i] = parseInt(object.raft_leader_not_lease_holder_range_ids[i], 10);
+                            else if (typeof object.raft_leader_not_lease_holder_range_ids[i] === "number")
+                                message.raft_leader_not_lease_holder_range_ids[i] = object.raft_leader_not_lease_holder_range_ids[i];
+                            else if (typeof object.raft_leader_not_lease_holder_range_ids[i] === "object")
+                                message.raft_leader_not_lease_holder_range_ids[i] = new $util.LongBits(object.raft_leader_not_lease_holder_range_ids[i].low >>> 0, object.raft_leader_not_lease_holder_range_ids[i].high >>> 0).toNumber();
+                    }
+                    if (object.no_raft_leader_range_ids) {
+                        if (!Array.isArray(object.no_raft_leader_range_ids))
+                            throw TypeError(".cockroach.server.serverpb.ReportProblemRangesResponse.no_raft_leader_range_ids: array expected");
+                        message.no_raft_leader_range_ids = [];
+                        for (let i = 0; i < object.no_raft_leader_range_ids.length; ++i)
+                            if ($util.Long)
+                                (message.no_raft_leader_range_ids[i] = $util.Long.fromValue(object.no_raft_leader_range_ids[i])).unsigned = false;
+                            else if (typeof object.no_raft_leader_range_ids[i] === "string")
+                                message.no_raft_leader_range_ids[i] = parseInt(object.no_raft_leader_range_ids[i], 10);
+                            else if (typeof object.no_raft_leader_range_ids[i] === "number")
+                                message.no_raft_leader_range_ids[i] = object.no_raft_leader_range_ids[i];
+                            else if (typeof object.no_raft_leader_range_ids[i] === "object")
+                                message.no_raft_leader_range_ids[i] = new $util.LongBits(object.no_raft_leader_range_ids[i].low >>> 0, object.no_raft_leader_range_ids[i].high >>> 0).toNumber();
+                    }
+                    if (object.no_lease_range_ids) {
+                        if (!Array.isArray(object.no_lease_range_ids))
+                            throw TypeError(".cockroach.server.serverpb.ReportProblemRangesResponse.no_lease_range_ids: array expected");
+                        message.no_lease_range_ids = [];
+                        for (let i = 0; i < object.no_lease_range_ids.length; ++i)
+                            if ($util.Long)
+                                (message.no_lease_range_ids[i] = $util.Long.fromValue(object.no_lease_range_ids[i])).unsigned = false;
+                            else if (typeof object.no_lease_range_ids[i] === "string")
+                                message.no_lease_range_ids[i] = parseInt(object.no_lease_range_ids[i], 10);
+                            else if (typeof object.no_lease_range_ids[i] === "number")
+                                message.no_lease_range_ids[i] = object.no_lease_range_ids[i];
+                            else if (typeof object.no_lease_range_ids[i] === "object")
+                                message.no_lease_range_ids[i] = new $util.LongBits(object.no_lease_range_ids[i].low >>> 0, object.no_lease_range_ids[i].high >>> 0).toNumber();
+                    }
+                    if (object.underreplicated_range_ids) {
+                        if (!Array.isArray(object.underreplicated_range_ids))
+                            throw TypeError(".cockroach.server.serverpb.ReportProblemRangesResponse.underreplicated_range_ids: array expected");
+                        message.underreplicated_range_ids = [];
+                        for (let i = 0; i < object.underreplicated_range_ids.length; ++i)
+                            if ($util.Long)
+                                (message.underreplicated_range_ids[i] = $util.Long.fromValue(object.underreplicated_range_ids[i])).unsigned = false;
+                            else if (typeof object.underreplicated_range_ids[i] === "string")
+                                message.underreplicated_range_ids[i] = parseInt(object.underreplicated_range_ids[i], 10);
+                            else if (typeof object.underreplicated_range_ids[i] === "number")
+                                message.underreplicated_range_ids[i] = object.underreplicated_range_ids[i];
+                            else if (typeof object.underreplicated_range_ids[i] === "object")
+                                message.underreplicated_range_ids[i] = new $util.LongBits(object.underreplicated_range_ids[i].low >>> 0, object.underreplicated_range_ids[i].high >>> 0).toNumber();
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a ReportProblemRangesResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.ReportProblemRangesResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ReportProblemRangesResponse} ReportProblemRangesResponse
+                 */
+                ReportProblemRangesResponse.from = ReportProblemRangesResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a ReportProblemRangesResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.ReportProblemRangesResponse} message ReportProblemRangesResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ReportProblemRangesResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults) {
+                        object.failures = [];
+                        object.unavailable_range_ids = [];
+                        object.raft_leader_not_lease_holder_range_ids = [];
+                        object.no_raft_leader_range_ids = [];
+                        object.no_lease_range_ids = [];
+                        object.underreplicated_range_ids = [];
+                    }
+                    if (options.defaults)
+                        object.node_id = 0;
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        object.node_id = message.node_id;
+                    if (message.failures && message.failures.length) {
+                        object.failures = [];
+                        for (let j = 0; j < message.failures.length; ++j)
+                            object.failures[j] = $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures.toObject(message.failures[j], options);
+                    }
+                    if (message.unavailable_range_ids && message.unavailable_range_ids.length) {
+                        object.unavailable_range_ids = [];
+                        for (let j = 0; j < message.unavailable_range_ids.length; ++j)
+                            if (typeof message.unavailable_range_ids[j] === "number")
+                                object.unavailable_range_ids[j] = options.longs === String ? String(message.unavailable_range_ids[j]) : message.unavailable_range_ids[j];
+                            else
+                                object.unavailable_range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.unavailable_range_ids[j]) : options.longs === Number ? new $util.LongBits(message.unavailable_range_ids[j].low >>> 0, message.unavailable_range_ids[j].high >>> 0).toNumber() : message.unavailable_range_ids[j];
+                    }
+                    if (message.raft_leader_not_lease_holder_range_ids && message.raft_leader_not_lease_holder_range_ids.length) {
+                        object.raft_leader_not_lease_holder_range_ids = [];
+                        for (let j = 0; j < message.raft_leader_not_lease_holder_range_ids.length; ++j)
+                            if (typeof message.raft_leader_not_lease_holder_range_ids[j] === "number")
+                                object.raft_leader_not_lease_holder_range_ids[j] = options.longs === String ? String(message.raft_leader_not_lease_holder_range_ids[j]) : message.raft_leader_not_lease_holder_range_ids[j];
+                            else
+                                object.raft_leader_not_lease_holder_range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.raft_leader_not_lease_holder_range_ids[j]) : options.longs === Number ? new $util.LongBits(message.raft_leader_not_lease_holder_range_ids[j].low >>> 0, message.raft_leader_not_lease_holder_range_ids[j].high >>> 0).toNumber() : message.raft_leader_not_lease_holder_range_ids[j];
+                    }
+                    if (message.no_raft_leader_range_ids && message.no_raft_leader_range_ids.length) {
+                        object.no_raft_leader_range_ids = [];
+                        for (let j = 0; j < message.no_raft_leader_range_ids.length; ++j)
+                            if (typeof message.no_raft_leader_range_ids[j] === "number")
+                                object.no_raft_leader_range_ids[j] = options.longs === String ? String(message.no_raft_leader_range_ids[j]) : message.no_raft_leader_range_ids[j];
+                            else
+                                object.no_raft_leader_range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.no_raft_leader_range_ids[j]) : options.longs === Number ? new $util.LongBits(message.no_raft_leader_range_ids[j].low >>> 0, message.no_raft_leader_range_ids[j].high >>> 0).toNumber() : message.no_raft_leader_range_ids[j];
+                    }
+                    if (message.no_lease_range_ids && message.no_lease_range_ids.length) {
+                        object.no_lease_range_ids = [];
+                        for (let j = 0; j < message.no_lease_range_ids.length; ++j)
+                            if (typeof message.no_lease_range_ids[j] === "number")
+                                object.no_lease_range_ids[j] = options.longs === String ? String(message.no_lease_range_ids[j]) : message.no_lease_range_ids[j];
+                            else
+                                object.no_lease_range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.no_lease_range_ids[j]) : options.longs === Number ? new $util.LongBits(message.no_lease_range_ids[j].low >>> 0, message.no_lease_range_ids[j].high >>> 0).toNumber() : message.no_lease_range_ids[j];
+                    }
+                    if (message.underreplicated_range_ids && message.underreplicated_range_ids.length) {
+                        object.underreplicated_range_ids = [];
+                        for (let j = 0; j < message.underreplicated_range_ids.length; ++j)
+                            if (typeof message.underreplicated_range_ids[j] === "number")
+                                object.underreplicated_range_ids[j] = options.longs === String ? String(message.underreplicated_range_ids[j]) : message.underreplicated_range_ids[j];
+                            else
+                                object.underreplicated_range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.underreplicated_range_ids[j]) : options.longs === Number ? new $util.LongBits(message.underreplicated_range_ids[j].low >>> 0, message.underreplicated_range_ids[j].high >>> 0).toNumber() : message.underreplicated_range_ids[j];
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this ReportProblemRangesResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ReportProblemRangesResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this ReportProblemRangesResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                ReportProblemRangesResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                ReportProblemRangesResponse.Failures = (function() {
+
+                    /**
+                     * Properties of a Failures.
+                     * @typedef cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties
+                     * @type {Object}
+                     * @property {number} [node_id] Failures node_id.
+                     * @property {string} [error_message] Failures error_message.
+                     */
+
+                    /**
+                     * Constructs a new Failures.
+                     * @exports cockroach.server.serverpb.ReportProblemRangesResponse.Failures
+                     * @constructor
+                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties=} [properties] Properties to set
+                     */
+                    function Failures(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * Failures node_id.
+                     * @type {number}
+                     */
+                    Failures.prototype.node_id = 0;
+
+                    /**
+                     * Failures error_message.
+                     * @type {string}
+                     */
+                    Failures.prototype.error_message = "";
+
+                    /**
+                     * Creates a new Failures instance using the specified properties.
+                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures instance
+                     */
+                    Failures.create = function create(properties) {
+                        return new Failures(properties);
+                    };
+
+                    /**
+                     * Encodes the specified Failures message. Does not implicitly {@link cockroach.server.serverpb.ReportProblemRangesResponse.Failures.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties} message Failures message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Failures.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.node_id != null && message.hasOwnProperty("node_id"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
+                        if (message.error_message != null && message.hasOwnProperty("error_message"))
+                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.error_message);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified Failures message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ReportProblemRangesResponse.Failures.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties} message Failures message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Failures.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a Failures message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Failures.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.node_id = reader.int32();
+                                break;
+                            case 2:
+                                message.error_message = reader.string();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a Failures message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Failures.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a Failures message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    Failures.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.node_id != null && message.hasOwnProperty("node_id"))
+                            if (!$util.isInteger(message.node_id))
+                                return "node_id: integer expected";
+                        if (message.error_message != null && message.hasOwnProperty("error_message"))
+                            if (!$util.isString(message.error_message))
+                                return "error_message: string expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a Failures message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
+                     */
+                    Failures.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures)
+                            return object;
+                        let message = new $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures();
+                        if (object.node_id != null)
+                            message.node_id = object.node_id | 0;
+                        if (object.error_message != null)
+                            message.error_message = String(object.error_message);
+                        return message;
+                    };
+
+                    /**
+                     * Creates a Failures message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.ReportProblemRangesResponse.Failures.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
+                     */
+                    Failures.from = Failures.fromObject;
+
+                    /**
+                     * Creates a plain object from a Failures message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} message Failures
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Failures.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.node_id = 0;
+                            object.error_message = "";
+                        }
+                        if (message.node_id != null && message.hasOwnProperty("node_id"))
+                            object.node_id = message.node_id;
+                        if (message.error_message != null && message.hasOwnProperty("error_message"))
+                            object.error_message = message.error_message;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this Failures message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Failures.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this Failures to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    Failures.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return Failures;
+                })();
+
+                return ReportProblemRangesResponse;
+            })();
+
+            serverpb.Report = (function() {
+
+                /**
+                 * Constructs a new Report service.
+                 * @exports cockroach.server.serverpb.Report
+                 * @extends $protobuf.rpc.Service
+                 * @constructor
+                 * @param {$protobuf.RPCImpl} rpcImpl RPC implementation
+                 * @param {boolean} [requestDelimited=false] Whether requests are length-delimited
+                 * @param {boolean} [responseDelimited=false] Whether responses are length-delimited
+                 */
+                function Report(rpcImpl, requestDelimited, responseDelimited) {
+                    $protobuf.rpc.Service.call(this, rpcImpl, requestDelimited, responseDelimited);
+                }
+
+                (Report.prototype = Object.create($protobuf.rpc.Service.prototype)).constructor = Report;
+
+                /**
+                 * Creates new Report service using the specified rpc implementation.
+                 * @param {$protobuf.RPCImpl} rpcImpl RPC implementation
+                 * @param {boolean} [requestDelimited=false] Whether requests are length-delimited
+                 * @param {boolean} [responseDelimited=false] Whether responses are length-delimited
+                 * @returns {Report} RPC service. Useful where requests and/or responses are streamed.
+                 */
+                Report.create = function create(rpcImpl, requestDelimited, responseDelimited) {
+                    return new this(rpcImpl, requestDelimited, responseDelimited);
+                };
+
+                /**
+                 * Callback as used by {@link Report#problemRanges}.
+                 * @typedef Report_problemRanges_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.ReportProblemRangesResponse} [response] ReportProblemRangesResponse
+                 */
+
+                /**
+                 * Calls ProblemRanges.
+                 * @param {cockroach.server.serverpb.ReportProblemRangesRequest|Object.<string,*>} request ReportProblemRangesRequest message or plain object
+                 * @param {Report_problemRanges_Callback} callback Node-style callback called with the error, if any, and ReportProblemRangesResponse
+                 * @returns {undefined}
+                 */
+                Report.prototype.problemRanges = function problemRanges(request, callback) {
+                    return this.rpcCall(problemRanges, $root.cockroach.server.serverpb.ReportProblemRangesRequest, $root.cockroach.server.serverpb.ReportProblemRangesResponse, request, callback);
+                };
+
+                /**
+                 * Calls ProblemRanges.
+                 * @name Report#problemRanges
+                 * @function
+                 * @param {cockroach.server.serverpb.ReportProblemRangesRequest|Object.<string,*>} request ReportProblemRangesRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.ReportProblemRangesResponse>} Promise
+                 * @variation 2
+                 */
+
+                return Report;
             })();
 
             return serverpb;

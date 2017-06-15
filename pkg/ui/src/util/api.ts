@@ -53,13 +53,14 @@ export type LivenessResponseMessage = protos.cockroach.server.serverpb.LivenessR
 export type QueryPlanRequestMessage = protos.cockroach.server.serverpb.QueryPlanRequest;
 export type QueryPlanResponseMessage = protos.cockroach.server.serverpb.QueryPlanResponse;
 
-export type ProblemRangesRequestMessage = protos.cockroach.server.serverpb.ProblemRangesRequest;
-export type ProblemRangesResponseMessage = protos.cockroach.server.serverpb.ProblemRangesResponse;
+export type ReportProblemRangesRequestMessage = protos.cockroach.server.serverpb.ReportProblemRangesRequest;
+export type ReportProblemRangesResponseMessage = protos.cockroach.server.serverpb.ReportProblemRangesResponse;
 
 // API constants
 
 export const API_PREFIX = "_admin/v1";
 export const STATUS_PREFIX = "_status";
+export const REPORT_PREFIX = "_report";
 
 // HELPER FUNCTIONS
 
@@ -219,8 +220,8 @@ export function getQueryPlan(req: QueryPlanRequestMessage, timeout?: moment.Dura
   return timeoutFetch(serverpb.QueryPlanResponse, `${API_PREFIX}/queryplan?query=${encodeURIComponent(req.query)}`, null, timeout);
 }
 
-// getProblemRanges returns information needed by the problem range debug page.
-export function getProblemRanges(req: ProblemRangesRequestMessage, timeout?: moment.Duration): Promise<ProblemRangesResponseMessage> {
+// getReportProblemRanges returns information needed by the problem range debug page.
+export function getReportProblemRanges(req: ReportProblemRangesRequestMessage, timeout?: moment.Duration): Promise<ReportProblemRangesResponseMessage> {
   const query = (!_.isEmpty(req.node_id)) ? `?node_id=${req.node_id}` : "";
-  return timeoutFetch(serverpb.ProblemRangesResponse, `${STATUS_PREFIX}/problemranges${query}`, null, timeout);
+  return timeoutFetch(serverpb.ReportProblemRangesResponse, `${REPORT_PREFIX}/problemranges${query}`, null, timeout);
 }

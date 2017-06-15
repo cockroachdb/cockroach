@@ -61,6 +61,9 @@ const (
 	// stackTraceApproxSize is the approximate size of a goroutine stack trace.
 	stackTraceApproxSize = 1024
 
+	// reportPrefix is the root of the cluster api for diagnostic reports.
+	reportPrefix = "/_report/"
+
 	// statusPrefix is the root of the cluster statistics and metrics API.
 	statusPrefix = "/_status/"
 
