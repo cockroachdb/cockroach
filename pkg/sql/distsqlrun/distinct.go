@@ -72,7 +72,7 @@ func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 	defer d.memAcc.Close(ctx)
 
 	ctx = log.WithLogTag(ctx, "Evaluator", nil)
-	ctx, span := tracing.ChildSpan(ctx, "distinct")
+	ctx, span := processorSpan(ctx, "distinct")
 	defer tracing.FinishSpan(span)
 
 	if log.V(2) {
@@ -80,31 +80,32 @@ func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting distinct")
 	}
 
-	cleanup := func(err error) {
-		if err != nil {
-			d.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-		}
+	earlyExit, err := d.mainLoop(ctx)
+	if err != nil {
+		DrainAndClose(ctx, d.out.output, err, d.input)
+	} else if !earlyExit {
+		sendTraceData(ctx, d.out.output)
 		d.input.ConsumerClosed()
 		d.out.close()
 	}
+}
 
+func (d *distinct) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
 	var scratch []byte
 	for {
 		row, meta := d.input.Next()
 		if !meta.Empty() {
 			if meta.Err != nil {
-				DrainAndClose(ctx, d.out.output, meta.Err, d.input)
-				return
+				return false, meta.Err
 			}
 			if !emitHelper(ctx, &d.out, nil /* row */, meta, d.input) {
 				// No cleanup required; emitHelper() took care of it.
-				return
+				return true, nil
 			}
 			continue
 		}
 		if row == nil {
-			cleanup(nil /* err */)
-			return
+			return false, nil
 		}
 
 		encoding := scratch
@@ -115,15 +116,13 @@ func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 		var err error
 		encoding, err = d.encode(scratch, row)
 		if err != nil {
-			cleanup(err)
-			return
+			return false, err
 		}
 		// The 'seen' set is reset whenever we find consecutive rows differing on the
 		// group key thus avoiding the need to store encodings of all rows.
 		matched, err := d.matchLastGroupKey(row)
 		if err != nil {
-			cleanup(err)
-			return
+			return false, err
 		}
 
 		if !matched {
@@ -135,14 +134,13 @@ func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if _, ok := d.seen[string(encoding)]; !ok {
 			if len(encoding) > 0 {
 				if err := d.memAcc.Grow(ctx, int64(len(encoding))); err != nil {
-					cleanup(err)
-					return
+					return false, err
 				}
 				d.seen[string(encoding)] = struct{}{}
 			}
 			if !emitHelper(ctx, &d.out, row, ProducerMetadata{}, d.input) {
 				// No cleanup required; emitHelper() took care of it.
-				return
+				return true, nil
 			}
 			scratch = encoding[:0]
 		}

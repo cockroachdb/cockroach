@@ -30,53 +30,108 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestSessionTrace(t *testing.T) {
+func TestTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s := log.Scope(t)
 	defer s.Close(t)
 
 	testData := []struct {
-		name     string
-		getRows  func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error)
-		expSpans []string
+		name          string
+		getRows       func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error)
+		expSpans      []string
+		optionalSpans []string
 	}{
-		{"SessionTrace", func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-			// Start session tracing.
-			if _, err := sqlDB.Exec("SET TRACE = ON"); err != nil {
-				t.Fatal(err)
-			}
+		{
+			name: "Session",
+			getRows: func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
+				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
+					t.Fatal(err)
+				}
+				// Start session tracing.
+				if _, err := sqlDB.Exec("SET TRACE = ON"); err != nil {
+					t.Fatal(err)
+				}
 
-			// Run some query
-			rows, err := sqlDB.Query(`SELECT * FROM test.foo`)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := rows.Close(); err != nil {
-				t.Fatal(err)
-			}
+				// Run some query
+				rows, err := sqlDB.Query(`SELECT * FROM test.foo`)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := rows.Close(); err != nil {
+					t.Fatal(err)
+				}
 
-			// Stop tracing and extract the trace
-			if _, err := sqlDB.Exec("SET TRACE = OFF"); err != nil {
-				t.Fatal(err)
-			}
+				// Stop tracing and extract the trace
+				if _, err := sqlDB.Exec("SET TRACE = OFF"); err != nil {
+					t.Fatal(err)
+				}
 
-			return sqlDB.Query(
-				"SELECT DISTINCT(operation) op FROM crdb_internal.session_trace " +
-					"WHERE operation IS NOT NULL ORDER BY op")
-		},
-			[]string{
+				return sqlDB.Query(
+					"SELECT DISTINCT(operation) op FROM crdb_internal.session_trace " +
+						"WHERE operation IS NOT NULL ORDER BY op")
+			},
+			expSpans: []string{
 				"sql txn implicit",
 				"grpcTransport SendNext",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
-		{"ShowTraceFor", func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-			return sqlDB.Query(
-				"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
-					"WHERE operation IS NOT NULL ORDER BY op")
+		{
+			name: "SessionDistSQL",
+			getRows: func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
+				if _, err := sqlDB.Exec("SET DISTSQL = ON"); err != nil {
+					t.Fatal(err)
+				}
+
+				// Start session tracing.
+				if _, err := sqlDB.Exec("SET TRACE = ON"); err != nil {
+					t.Fatal(err)
+				}
+
+				// Run some query
+				rows, err := sqlDB.Query(`SELECT * FROM test.foo`)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := rows.Close(); err != nil {
+					t.Fatal(err)
+				}
+
+				// Stop tracing and extract the trace
+				if _, err := sqlDB.Exec("SET TRACE = OFF"); err != nil {
+					t.Fatal(err)
+				}
+
+				return sqlDB.Query(
+					"SELECT DISTINCT(operation) op FROM crdb_internal.session_trace " +
+						"WHERE operation IS NOT NULL ORDER BY op")
+			},
+			expSpans: []string{
+				"sql txn implicit",
+				"grpcTransport SendNext",
+				"flow",
+				"table reader",
+				"/cockroach.roachpb.Internal/Batch",
+			},
+			// Depending on whether the data is local or not, we may not see these
+			// spans.
+			optionalSpans: []string{
+				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
+				"noop",
+			},
 		},
-			[]string{
+		{
+			name: "ShowTraceFor",
+			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
+				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
+					t.Fatal(err)
+				}
+				return sqlDB.Query(
+					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
+						"WHERE operation IS NOT NULL ORDER BY op")
+			},
+			expSpans: []string{
 				"sql txn implicit",
 				"starting plan",
 				"consuming rows",
@@ -109,9 +164,9 @@ func TestSessionTrace(t *testing.T) {
 
 					clusterDB := cluster.ServerConn(0)
 					if _, err := clusterDB.Exec(`
-				CREATE DATABASE test;
-				CREATE TABLE test.foo (id INT PRIMARY KEY);
-			`); err != nil {
+						CREATE DATABASE test;
+						CREATE TABLE test.foo (id INT PRIMARY KEY);
+					`); err != nil {
 						t.Fatal(err)
 					}
 					for i := 0; i < numNodes; i++ {
@@ -132,22 +187,15 @@ func TestSessionTrace(t *testing.T) {
 								t.Fatal(err)
 							}
 
-							// DistSQL doesn't support snowball tracing at the moment.
-							if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
+							// Sanity check that new sessions don't have trace info on them.
+							row := sqlDB.QueryRow("SELECT COUNT(1) FROM crdb_internal.session_trace")
+							var count int
+							if err := row.Scan(&count); err != nil {
 								t.Fatal(err)
 							}
-
-							// Sanity check that new sessions don't have trace info on them.
-							if !enableTr {
-								row := sqlDB.QueryRow("SELECT COUNT(1) FROM crdb_internal.session_trace")
-								var count int
-								if err := row.Scan(&count); err != nil {
-									t.Fatal(err)
-								}
-								if count != 0 {
-									t.Fatalf("expected crdb_internal.session_trace to be empty "+
-										"at the beginning of a session, but it wasn't. Count: %d.", count)
-								}
+							if count != 0 {
+								t.Fatalf("expected crdb_internal.session_trace to be empty "+
+									"at the beginning of a session, but it wasn't. Count: %d.", count)
 							}
 
 							rows, err := test.getRows(t, sqlDB)
@@ -156,11 +204,18 @@ func TestSessionTrace(t *testing.T) {
 							}
 							defer rows.Close()
 
+							ignoreSpans := make(map[string]bool)
+							for _, s := range test.optionalSpans {
+								ignoreSpans[s] = true
+							}
 							r := 0
 							for rows.Next() {
 								var op string
 								if err := rows.Scan(&op); err != nil {
 									t.Fatal(err)
+								}
+								if ignoreSpans[op] {
+									continue
 								}
 								if r >= len(test.expSpans) {
 									t.Fatalf("extra span: %s", op)
@@ -175,7 +230,6 @@ func TestSessionTrace(t *testing.T) {
 							}
 						})
 					}
-
 				})
 			}
 		})

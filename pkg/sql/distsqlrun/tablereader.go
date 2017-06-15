@@ -179,7 +179,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	ctx = log.WithLogTagInt(ctx, "TableReader", int(tr.tableID))
-	ctx, span := tracing.ChildSpan(ctx, "table reader")
+	ctx, span := processorSpan(ctx, "table reader")
 	defer tracing.FinishSpan(span)
 
 	txn := tr.flowCtx.setupTxn()
@@ -205,9 +205,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 			if err != nil {
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			}
-			tr.sendMisplannedRangesMetadata(ctx)
-			tr.out.close()
-			return
+			break
 		}
 		// Emit the row; stop if no more rows are needed.
 		consumerStatus, err := tr.out.emitRow(ctx, fetcherRow)
@@ -215,18 +213,10 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 			if err != nil {
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			}
-			tr.sendMisplannedRangesMetadata(ctx)
-			tr.out.close()
-			return
+			break
 		}
-		/*
-			 * TODO(radu): support limit in procOutputHelper
-			rowIdx++
-			if tr.hardLimit != 0 && rowIdx == tr.hardLimit {
-				// We sent tr.hardLimit rows.
-				tr.out.close(nil)
-				return
-			}
-		*/
 	}
+	tr.sendMisplannedRangesMetadata(ctx)
+	sendTraceData(ctx, tr.out.output)
+	tr.out.close()
 }
