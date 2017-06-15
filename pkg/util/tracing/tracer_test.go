@@ -29,26 +29,29 @@ func TestTracerRecording(t *testing.T) {
 	tr := NewTracer()
 
 	noop1 := tr.StartSpan("noop")
-	if !IsNoopSpan(noop1) {
+	if _, noop := noop1.(*noopSpan); !noop {
 		t.Error("expected noop span")
 	}
 	noop1.LogKV("hello", "void")
 
 	noop2 := tr.StartSpan("noop2", opentracing.ChildOf(noop1.Context()))
-	if !IsNoopSpan(noop2) {
+	if _, noop := noop2.(*noopSpan); !noop {
 		t.Error("expected noop child span")
 	}
 	noop2.Finish()
 	noop1.Finish()
 
 	s1 := tr.StartSpan("a", Recordable)
-	if IsNoopSpan(s1) {
-		t.Error("Recordable span should not be noop")
+	if _, noop := s1.(*noopSpan); noop {
+		t.Error("Recordable (but not recording) span should not be noop")
+	}
+	if !IsBlackHoleSpan(s1) {
+		t.Error("Recordable span should be black hole")
 	}
 
 	// Unless recording is actually started, child spans are still noop.
 	noop3 := tr.StartSpan("noop3", opentracing.ChildOf(s1.Context()))
-	if !IsNoopSpan(noop3) {
+	if _, noop := noop3.(*noopSpan); !noop {
 		t.Error("expected noop child span")
 	}
 	noop3.Finish()
@@ -57,8 +60,8 @@ func TestTracerRecording(t *testing.T) {
 	StartRecording(s1, SingleNodeRecording)
 	s1.LogKV("x", 2)
 	s2 := tr.StartSpan("b", opentracing.ChildOf(s1.Context()))
-	if IsNoopSpan(s2) {
-		t.Error("recording span should not be noop")
+	if IsBlackHoleSpan(s2) {
+		t.Error("recording span should not be black hole")
 	}
 	s2.LogKV("x", 3)
 
@@ -139,7 +142,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that noop spans become noop spans on the remote side.
 
 	noop1 := tr.StartSpan("noop")
-	if !IsNoopSpan(noop1) {
+	if _, noop := noop1.(*noopSpan); !noop {
 		t.Fatalf("expected noop span: %+v", noop1)
 	}
 	carrier := make(opentracing.HTTPHeadersCarrier)
@@ -158,7 +161,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Errorf("expected noop context: %v", wireContext)
 	}
 	noop2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
-	if !IsNoopSpan(noop2) {
+	if _, noop := noop2.(*noopSpan); !noop {
 		t.Fatalf("expected noop span: %+v", noop2)
 	}
 	noop1.Finish()
