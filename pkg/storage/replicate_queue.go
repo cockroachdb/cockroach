@@ -330,6 +330,9 @@ func (rq *replicateQueue) processOneChange(
 		if err != nil {
 			return false, err
 		}
+		if err := canRemoveReplica(repl.RaftStatus(), desc.Replicas, removeReplica); err != nil {
+			return false, err
+		}
 		if removeReplica.StoreID == repl.store.StoreID() {
 			// The local replica was selected as the removal target, but that replica
 			// is the leaseholder, so transfer the lease instead. We don't check that

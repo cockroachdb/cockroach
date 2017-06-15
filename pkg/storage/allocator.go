@@ -789,3 +789,33 @@ func filterBehindReplicas(
 	}
 	return candidates
 }
+
+// canRemoveReplicas returns nil if the target replica can be removed from the
+// range. A replica cannot be removed from a range if it is necessary part of
+// quorum. Specifically, we filter "behind" replicas from the range and only
+// allow removal of either a behind replica or an up-to-date replica that
+// doesn't cause the range to drop below quorum.
+func canRemoveReplica(
+	raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor, target roachpb.ReplicaDescriptor,
+) error {
+	upToDateReplicas := filterBehindReplicas(raftStatus, replicas)
+	quorum := computeQuorum(len(replicas))
+	if len(upToDateReplicas) < quorum {
+		return errors.Errorf("%+v is a necessary part of quorum: %d <= %d",
+			target, len(upToDateReplicas), quorum)
+	}
+	if len(upToDateReplicas) > quorum {
+		// The number of up-to-date replicas is larger than quorum. Any replica can
+		// be removed.
+		return nil
+	}
+	for _, r := range upToDateReplicas {
+		if r == target {
+			// Disallow removal of a replica that is a necessary part of quorum.
+			return errors.Errorf("%+v is a necessary part of quorum: %d <= %d",
+				r, len(upToDateReplicas), quorum)
+		}
+	}
+	// Removal of a behind replica can always proceed.
+	return nil
+}

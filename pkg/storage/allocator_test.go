@@ -2110,6 +2110,102 @@ func TestFilterBehindReplicas(t *testing.T) {
 	}
 }
 
+func TestCanRemoveReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		commit   uint64
+		target   int
+		progress []uint64
+		expected []uint64
+		allowed  bool
+	}{
+		{0, 0, []uint64{0}, nil, false},
+		{1, 0, []uint64{1}, []uint64{1}, false},
+		{1, 0, []uint64{0, 1}, []uint64{1}, false},
+		{1, 1, []uint64{0, 1}, []uint64{1}, false},
+		{1, 0, []uint64{0, 0, 1}, []uint64{1}, false},
+		{1, 1, []uint64{0, 0, 1}, []uint64{1}, false},
+		{1, 2, []uint64{0, 0, 1}, []uint64{1}, false},
+		{1, 0, []uint64{0, 1, 2}, []uint64{1, 2}, true},
+		{1, 1, []uint64{0, 1, 2}, []uint64{1, 2}, false},
+		{1, 2, []uint64{0, 1, 2}, []uint64{1, 2}, false},
+		{1, 0, []uint64{1, 1, 1}, []uint64{1, 1, 1}, true},
+		{1, 1, []uint64{1, 1, 1}, []uint64{1, 1, 1}, true},
+		{1, 2, []uint64{1, 1, 1}, []uint64{1, 1, 1}, true},
+		{2, 0, []uint64{0, 1, 2, 3}, []uint64{2, 3}, false},
+		{2, 1, []uint64{0, 1, 2, 3}, []uint64{2, 3}, false},
+		{2, 2, []uint64{0, 1, 2, 3}, []uint64{2, 3}, false},
+		{2, 3, []uint64{0, 1, 2, 3}, []uint64{2, 3}, false},
+		{2, 0, []uint64{1, 2, 3, 4}, []uint64{2, 3, 4}, true},
+		{2, 1, []uint64{1, 2, 3, 4}, []uint64{2, 3, 4}, false},
+		{2, 2, []uint64{1, 2, 3, 4}, []uint64{2, 3, 4}, false},
+		{2, 3, []uint64{1, 2, 3, 4}, []uint64{2, 3, 4}, false},
+		{2, 0, []uint64{2, 2, 2, 2}, []uint64{2, 2, 2, 2}, true},
+		{2, 1, []uint64{2, 2, 2, 2}, []uint64{2, 2, 2, 2}, true},
+		{2, 2, []uint64{2, 2, 2, 2}, []uint64{2, 2, 2, 2}, true},
+		{2, 3, []uint64{2, 2, 2, 2}, []uint64{2, 2, 2, 2}, true},
+		{2, 0, []uint64{1, 2, 3, 4, 5}, []uint64{2, 3, 4, 5}, true},
+		{2, 1, []uint64{1, 2, 3, 4, 5}, []uint64{2, 3, 4, 5}, true},
+		{2, 2, []uint64{1, 2, 3, 4, 5}, []uint64{2, 3, 4, 5}, true},
+		{2, 3, []uint64{1, 2, 3, 4, 5}, []uint64{2, 3, 4, 5}, true},
+		{2, 4, []uint64{1, 2, 3, 4, 5}, []uint64{2, 3, 4, 5}, true},
+		{3, 0, []uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}, true},
+		{3, 1, []uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}, true},
+		{3, 2, []uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}, false},
+		{3, 3, []uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}, false},
+		{3, 4, []uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}, false},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			status := &raft.Status{
+				Progress: make(map[uint64]raft.Progress),
+			}
+			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
+			// valid replica IDs.
+			status.Lead = 99
+			status.Commit = c.commit
+			var replicas []roachpb.ReplicaDescriptor
+			for j, v := range c.progress {
+				p := raft.Progress{
+					Match: v,
+					State: raft.ProgressStateReplicate,
+				}
+				if v == 0 {
+					p.State = raft.ProgressStateProbe
+				}
+				status.Progress[uint64(j)] = p
+				replicas = append(replicas, roachpb.ReplicaDescriptor{
+					ReplicaID: roachpb.ReplicaID(j),
+					StoreID:   roachpb.StoreID(v),
+				})
+			}
+
+			// This check overlaps with TestFilterBehindReplicas, but acts as a
+			// sanity check that we're testing what we expect.
+			candidates := filterBehindReplicas(status, replicas)
+			var ids []uint64
+			for _, c := range candidates {
+				ids = append(ids, uint64(c.StoreID))
+			}
+			if !reflect.DeepEqual(c.expected, ids) {
+				t.Fatalf("expected %d, but got %d", c.expected, ids)
+			}
+
+			target := roachpb.ReplicaDescriptor{
+				ReplicaID: roachpb.ReplicaID(c.target),
+				StoreID:   roachpb.StoreID(c.progress[c.target]),
+			}
+			err := canRemoveReplica(status, replicas, target)
+			if c.allowed && err != nil {
+				t.Fatalf("expected success, but found %v: %s %s", err, target, candidates)
+			} else if !c.allowed && err == nil {
+				t.Fatalf("expected failure: %s %s", target, candidates)
+			}
+		})
+	}
+}
+
 // TestAllocatorRebalanceAway verifies that when a replica is on a node with a
 // bad zone config, the replica will be rebalanced off of it.
 func TestAllocatorRebalanceAway(t *testing.T) {
