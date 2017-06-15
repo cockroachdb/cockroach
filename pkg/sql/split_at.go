@@ -74,7 +74,7 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 		return nil, err
 	}
 
-	cols := rows.Columns()
+	cols := planColumns(rows)
 	if len(cols) == 0 {
 		return nil, errors.Errorf("no columns in SPLIT AT data")
 	}
@@ -144,25 +144,19 @@ func (n *splitNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
 }
 
-func (*splitNode) Columns() sqlbase.ResultColumns {
-	return sqlbase.ResultColumns{
-		{
-			Name: "key",
-			Typ:  parser.TypeBytes,
-		},
-		{
-			Name: "pretty",
-			Typ:  parser.TypeString,
-		},
-	}
+var splitNodeColumns = sqlbase.ResultColumns{
+	{
+		Name: "key",
+		Typ:  parser.TypeBytes,
+	},
+	{
+		Name: "pretty",
+		Typ:  parser.TypeString,
+	},
 }
 
-func (*splitNode) Ordering() orderingInfo   { return orderingInfo{} }
 func (*splitNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
 func (*splitNode) DebugValues() debugValues { panic("unimplemented") }
-func (*splitNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 // Relocate moves ranges to specific stores
 // (`ALTER TABLE/INDEX ... TESTING_RELOCATE ...` statement)
@@ -193,7 +187,7 @@ func (p *planner) Relocate(ctx context.Context, n *parser.Relocate) (planNode, e
 		return nil, err
 	}
 
-	cols := rows.Columns()
+	cols := planColumns(rows)
 	if len(cols) < 2 {
 		return nil, errors.Errorf("less than two columns in TESTING_RELOCATE data")
 	}
@@ -334,25 +328,19 @@ func (n *relocateNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
 }
 
-func (*relocateNode) Columns() sqlbase.ResultColumns {
-	return sqlbase.ResultColumns{
-		{
-			Name: "key",
-			Typ:  parser.TypeBytes,
-		},
-		{
-			Name: "pretty",
-			Typ:  parser.TypeString,
-		},
-	}
+var relocateNodeColumns = sqlbase.ResultColumns{
+	{
+		Name: "key",
+		Typ:  parser.TypeBytes,
+	},
+	{
+		Name: "pretty",
+		Typ:  parser.TypeString,
+	},
 }
 
-func (*relocateNode) Ordering() orderingInfo   { return orderingInfo{} }
 func (*relocateNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
 func (*relocateNode) DebugValues() debugValues { panic("unimplemented") }
-func (*relocateNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 // Scatter moves ranges to random stores
 // (`ALTER TABLE/INDEX ... SCATTER ...` statement)
@@ -466,21 +454,19 @@ func (n *scatterNode) Next(ctx context.Context) (bool, error) {
 	return hasNext, nil
 }
 
-func (*scatterNode) Columns() sqlbase.ResultColumns {
-	return sqlbase.ResultColumns{
-		{
-			Name: "key",
-			Typ:  parser.TypeBytes,
-		},
-		{
-			Name: "pretty",
-			Typ:  parser.TypeString,
-		},
-		{
-			Name: "error",
-			Typ:  parser.TypeString,
-		},
-	}
+var scatterNodeColumns = sqlbase.ResultColumns{
+	{
+		Name: "key",
+		Typ:  parser.TypeBytes,
+	},
+	{
+		Name: "pretty",
+		Typ:  parser.TypeString,
+	},
+	{
+		Name: "error",
+		Typ:  parser.TypeString,
+	},
 }
 
 func (n *scatterNode) Values() parser.Datums {
@@ -498,9 +484,6 @@ func (n *scatterNode) Values() parser.Datums {
 }
 
 func (*scatterNode) Close(ctx context.Context) {}
-func (*scatterNode) Ordering() orderingInfo    { return orderingInfo{} }
-func (*scatterNode) MarkDebug(_ explainMode)   { panic("unimplemented") }
-func (*scatterNode) DebugValues() debugValues  { panic("unimplemented") }
-func (*scatterNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
+
+func (*scatterNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
+func (*scatterNode) DebugValues() debugValues { panic("unimplemented") }

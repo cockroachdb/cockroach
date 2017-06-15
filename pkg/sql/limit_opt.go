@@ -76,7 +76,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 
 	case *sortNode:
 		if n.needSort && numRows != math.MaxInt64 {
-			v := n.p.newContainerValuesNode(n.plan.Columns(), int(numRows))
+			v := n.p.newContainerValuesNode(planColumns(n.plan), int(numRows))
 			v.ordering = n.ordering
 			if soft {
 				n.sortStrategy = newIterativeSortStrategy(v)

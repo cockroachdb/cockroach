@@ -219,7 +219,7 @@ func (v *planVisitor) visit(plan planNode) {
 		if n.columnsInOrder != nil && v.observer.attr != nil {
 			var buf bytes.Buffer
 			prefix := ""
-			columns := n.Columns()
+			columns := planColumns(n)
 			for i, key := range n.columnsInOrder {
 				if key {
 					buf.WriteString(prefix)
@@ -235,7 +235,7 @@ func (v *planVisitor) visit(plan planNode) {
 		if v.observer.attr != nil {
 			var columns sqlbase.ResultColumns
 			if n.plan != nil {
-				columns = n.plan.Columns()
+				columns = planColumns(n.plan)
 			}
 			// We use n.ordering and not plan.Ordering() because
 			// plan.Ordering() does not include the added sort columns not

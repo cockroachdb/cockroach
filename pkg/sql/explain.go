@@ -23,7 +23,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -247,15 +246,9 @@ var debugColumns = sqlbase.ResultColumns{
 	{Name: "Disposition", Typ: parser.TypeString},
 }
 
-func (*explainDebugNode) Columns() sqlbase.ResultColumns           { return debugColumns }
-func (*explainDebugNode) Ordering() orderingInfo                   { return orderingInfo{} }
 func (n *explainDebugNode) Start(ctx context.Context) error        { return n.plan.Start(ctx) }
 func (n *explainDebugNode) Next(ctx context.Context) (bool, error) { return n.plan.Next(ctx) }
 func (n *explainDebugNode) Close(ctx context.Context)              { n.plan.Close(ctx) }
-
-func (n *explainDebugNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return n.plan.Spans(ctx)
-}
 
 func (n *explainDebugNode) Values() parser.Datums {
 	vals := n.plan.DebugValues()
@@ -292,22 +285,15 @@ type explainDistSQLNode struct {
 	done bool
 }
 
-func (*explainDistSQLNode) Ordering() orderingInfo   { return orderingInfo{} }
 func (*explainDistSQLNode) MarkDebug(_ explainMode)  {}
 func (*explainDistSQLNode) DebugValues() debugValues { return debugValues{} }
 func (*explainDistSQLNode) Close(context.Context)    {}
-
-func (*explainDistSQLNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
 
 var explainDistSQLColumns = sqlbase.ResultColumns{
 	{Name: "Automatic", Typ: parser.TypeBool},
 	{Name: "URL", Typ: parser.TypeString},
 	{Name: "JSON", Typ: parser.TypeString},
 }
-
-func (*explainDistSQLNode) Columns() sqlbase.ResultColumns { return explainDistSQLColumns }
 
 func (n *explainDistSQLNode) Start(ctx context.Context) error {
 	// Trigger limit propagation.

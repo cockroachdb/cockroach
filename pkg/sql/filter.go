@@ -22,7 +22,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -110,10 +109,4 @@ func (f *filterNode) DebugValues() debugValues {
 func (f *filterNode) Close(ctx context.Context) {
 	f.source.plan.Close(ctx)
 }
-func (f *filterNode) Values() parser.Datums          { return f.source.plan.Values() }
-func (f *filterNode) Columns() sqlbase.ResultColumns { return f.source.plan.Columns() }
-func (f *filterNode) Ordering() orderingInfo         { return f.source.plan.Ordering() }
-
-func (f *filterNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return f.source.plan.Spans(ctx)
-}
+func (f *filterNode) Values() parser.Datums { return f.source.plan.Values() }

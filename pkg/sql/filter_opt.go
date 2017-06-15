@@ -375,7 +375,7 @@ func (p *planner) propagateOrWrapFilters(
 
 	// Otherwise, wrap it using a new filterNode.
 	if info == nil {
-		info = newSourceInfoForSingleTable(anonymousTable, newPlan.Columns())
+		info = newSourceInfoForSingleTable(anonymousTable, planColumns(newPlan))
 	}
 	f := &filterNode{
 		p:      p,

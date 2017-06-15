@@ -21,7 +21,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -215,10 +214,6 @@ func (d *deleteNode) fastDelete(ctx context.Context, scan *scanNode) error {
 	return nil
 }
 
-func (d *deleteNode) Columns() sqlbase.ResultColumns {
-	return d.rh.columns
-}
-
 func (d *deleteNode) Values() parser.Datums {
 	return d.run.resultRow
 }
@@ -233,10 +228,4 @@ func (d *deleteNode) MarkDebug(mode explainMode) {
 
 func (d *deleteNode) DebugValues() debugValues {
 	return d.run.rows.DebugValues()
-}
-
-func (d *deleteNode) Ordering() orderingInfo { return orderingInfo{} }
-
-func (d *deleteNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	return d.run.collectSpans(ctx)
 }

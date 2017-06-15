@@ -23,7 +23,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -97,14 +96,6 @@ type renderNode struct {
 	noCopy util.NoCopy
 }
 
-func (r *renderNode) Columns() sqlbase.ResultColumns {
-	return r.columns
-}
-
-func (r *renderNode) Ordering() orderingInfo {
-	return r.ordering
-}
-
 func (r *renderNode) Values() parser.Datums {
 	return r.row
 }
@@ -119,10 +110,6 @@ func (r *renderNode) MarkDebug(mode explainMode) {
 
 func (r *renderNode) DebugValues() debugValues {
 	return r.source.plan.DebugValues()
-}
-
-func (r *renderNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return r.source.plan.Spans(ctx)
 }
 
 func (r *renderNode) Start(ctx context.Context) error {

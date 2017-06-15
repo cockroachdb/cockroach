@@ -22,7 +22,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -304,15 +303,6 @@ type groupNode struct {
 	explain explainMode
 }
 
-func (n *groupNode) Columns() sqlbase.ResultColumns {
-	return n.columns
-}
-
-func (n *groupNode) Ordering() orderingInfo {
-	// TODO(dt): aggregate buckets are returned un-ordered for now.
-	return orderingInfo{}
-}
-
 func (n *groupNode) Values() parser.Datums {
 	return n.values
 }
@@ -341,10 +331,6 @@ func (n *groupNode) DebugValues() debugValues {
 		vals.output = debugValueBuffered
 	}
 	return vals
-}
-
-func (n *groupNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return n.plan.Spans(ctx)
 }
 
 func (n *groupNode) Start(ctx context.Context) error {

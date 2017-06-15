@@ -21,7 +21,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -198,10 +197,5 @@ func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (*showFingerprintsNode) Columns() sqlbase.ResultColumns { return showFingerprintsColumns }
-func (*showFingerprintsNode) Ordering() orderingInfo         { return orderingInfo{} }
-func (*showFingerprintsNode) MarkDebug(_ explainMode)        {}
-func (*showFingerprintsNode) DebugValues() debugValues       { return debugValues{} }
-func (*showFingerprintsNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	panic("unimplemented")
-}
+func (*showFingerprintsNode) MarkDebug(_ explainMode)  {}
+func (*showFingerprintsNode) DebugValues() debugValues { return debugValues{} }

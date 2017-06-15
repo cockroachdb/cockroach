@@ -105,14 +105,6 @@ func (p *planner) Scan() *scanNode {
 	return &scanNode{p: p}
 }
 
-func (n *scanNode) Columns() sqlbase.ResultColumns {
-	return n.resultColumns
-}
-
-func (n *scanNode) Ordering() orderingInfo {
-	return n.ordering
-}
-
 func (n *scanNode) Values() parser.Datums {
 	return n.row
 }
@@ -432,10 +424,6 @@ func (n *scanNode) computeOrdering(
 	// We included any implicit columns, so the results are unique.
 	ordering.unique = true
 	return ordering
-}
-
-func (n *scanNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	return n.spans, nil, nil
 }
 
 // scanNode implements parser.IndexedVarContainer.

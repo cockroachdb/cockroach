@@ -24,7 +24,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -153,18 +152,6 @@ func (n *valuesNode) Start(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (n *valuesNode) Columns() sqlbase.ResultColumns {
-	return n.columns
-}
-
-func (*valuesNode) Ordering() orderingInfo {
-	return orderingInfo{}
-}
-
-func (*valuesNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
-	return nil, nil, nil
 }
 
 func (n *valuesNode) Values() parser.Datums {
