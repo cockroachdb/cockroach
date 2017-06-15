@@ -16,9 +16,12 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -31,7 +34,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 	tempDir, dirCleanupFn := testutils.TempDir(b)
 	defer dirCleanupFn()
 
-	for _, numEntries := range []int{100, 1000, 10000, 100000} {
+	for _, numEntries := range []int{100, 1000, 10000} {
 		bankData := sampledataccl.BankRows(numEntries)
 		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
 		backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
@@ -89,7 +92,7 @@ func BenchmarkWriteBatch(b *testing.B) {
 	tempDir, dirCleanupFn := testutils.TempDir(b)
 	defer dirCleanupFn()
 
-	for _, numEntries := range []int{100, 1000, 10000, 100000} {
+	for _, numEntries := range []int{100, 1000, 10000} {
 		bankData := sampledataccl.BankRows(numEntries)
 		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
 		backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
@@ -126,6 +129,92 @@ func BenchmarkWriteBatch(b *testing.B) {
 				if err := kvDB.WriteBatch(ctx, span.Key, span.EndKey, repr); err != nil {
 					b.Fatalf("%+v", err)
 				}
+			}
+			b.StopTimer()
+			b.SetBytes(totalLen / int64(b.N))
+		})
+	}
+}
+
+func BenchmarkImport(b *testing.B) {
+	b.Run("AddSSTable", func(b *testing.B) {
+		defer settings.TestingSetBool(&storageccl.AddSSTableEnabled, true)()
+		defer storage.TestingSetDisableSnapshotClearRange(true)()
+		runBenchmarkImport(b)
+	})
+	b.Run("WriteBatch", runBenchmarkImport)
+}
+
+func runBenchmarkImport(b *testing.B) {
+	tempDir, dirCleanupFn := testutils.TempDir(b)
+	defer dirCleanupFn()
+
+	for _, numEntries := range []int{1, 100, 10000, 100000} {
+		bankData := sampledataccl.BankRows(numEntries)
+		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
+		backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+		if err != nil {
+			b.Fatalf("%+v", err)
+		}
+		storage, err := storageccl.ExportStorageConfFromURI(`nodelocal://` + backupDir)
+		if err != nil {
+			b.Fatalf("%+v", err)
+		}
+
+		b.Run(strconv.Itoa(numEntries), func(b *testing.B) {
+			ctx := context.Background()
+			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
+			defer tc.Stopper().Stop(ctx)
+			kvDB := tc.Server(0).KVClient().(*client.DB)
+
+			id := sqlbase.ID(keys.MaxReservedDescID + 1)
+
+			var totalLen int64
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				id++
+				var rekeys []roachpb.ImportRequest_TableRekey
+				var oldStartKey roachpb.Key
+				{
+					// TODO(dan): The following should probably make it into
+					// dataccl.Backup somehow.
+					tableDesc := backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1].GetTable()
+					if tableDesc == nil || tableDesc.ParentID == keys.SystemDatabaseID {
+						b.Fatalf("bad table descriptor: %+v", tableDesc)
+					}
+					oldStartKey = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+					newDesc := *tableDesc
+					newDesc.ID = id
+					newDescBytes, err := sqlbase.WrapDescriptor(&newDesc).Marshal()
+					if err != nil {
+						panic(err)
+					}
+					rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
+						OldID: uint32(tableDesc.ID), NewDesc: newDescBytes,
+					})
+				}
+				newStartKey := roachpb.Key(keys.MakeTablePrefix(uint32(id)))
+				b.StartTimer()
+
+				var files []roachpb.ImportRequest_File
+				for _, file := range backup.Desc.Files {
+					files = append(files, roachpb.ImportRequest_File{Dir: storage, Path: file.Path})
+				}
+				req := &roachpb.ImportRequest{
+					// Import is a point request because we don't want DistSender to split
+					// it. Assume (but don't require) the entire post-rewrite span is on the
+					// same range.
+					Span:     roachpb.Span{Key: newStartKey},
+					DataSpan: roachpb.Span{Key: oldStartKey, EndKey: oldStartKey.PrefixEnd()},
+					Files:    files,
+					Rekeys:   rekeys,
+				}
+				res, pErr := client.SendWrapped(ctx, kvDB.GetSender(), req)
+				if pErr != nil {
+					b.Fatalf("%+v", pErr.GoError())
+				}
+				totalLen += res.(*roachpb.ImportResponse).DataSize
 			}
 			b.StopTimer()
 			b.SetBytes(totalLen / int64(b.N))
