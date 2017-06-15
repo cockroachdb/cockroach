@@ -34,6 +34,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"golang.org/x/perf/storage"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -179,6 +180,14 @@ func do(ctx context.Context) error {
 
 	if err := func() error {
 		for i, file := range files {
+			{
+				info, err := file.Stat()
+				if err != nil {
+					return errors.Wrapf(err, "could not stat temporary file %s", file.Name())
+				}
+				log.Printf("uploading file %s: %s", file.Name(), humanizeutil.IBytes(info.Size()))
+			}
+
 			w, err := u.CreateFile(fmt.Sprintf("bench%02d.txt", i))
 			if err != nil {
 				return errors.Wrap(err, "could not create upload file")
