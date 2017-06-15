@@ -1,8 +1,8 @@
 - Feature Name: Array Column Type Encoding
-- Status: draft
+- Status: in-progress
 - Start Date: 2017-05-19
 - Authors: Justin Jaffray, Jordan Lewis
-- RFC PR:
+- RFC PR: #16172
 - Cockroach Issue: #15818
 
 # Summary
