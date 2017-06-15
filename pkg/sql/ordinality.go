@@ -19,7 +19,6 @@ package sql
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -50,11 +49,11 @@ type ordinalityNode struct {
 
 func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	src := ds.plan
-	srcColumns := src.Columns()
+	srcColumns := planColumns(src)
 
 	res := &ordinalityNode{
 		source:   src,
-		ordering: src.Ordering(),
+		ordering: planOrdering(src),
 		row:      make(parser.Datums, len(srcColumns)+1),
 		curCnt:   1,
 	}
@@ -99,17 +98,11 @@ func (o *ordinalityNode) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (o *ordinalityNode) Ordering() orderingInfo          { return o.ordering }
 func (o *ordinalityNode) Values() parser.Datums           { return o.row }
 func (o *ordinalityNode) DebugValues() debugValues        { return o.source.DebugValues() }
 func (o *ordinalityNode) MarkDebug(mode explainMode)      { o.source.MarkDebug(mode) }
-func (o *ordinalityNode) Columns() sqlbase.ResultColumns  { return o.columns }
 func (o *ordinalityNode) Start(ctx context.Context) error { return o.source.Start(ctx) }
 func (o *ordinalityNode) Close(ctx context.Context)       { o.source.Close(ctx) }
-
-func (o *ordinalityNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return o.source.Spans(ctx)
-}
 
 // restrictOrdering transforms an ordering requirement on the output
 // of an ordinalityNode into an ordering requirement on its input.
@@ -134,7 +127,7 @@ func (o *ordinalityNode) optimizeOrdering() {
 	// We are going to "optimize" the ordering. We had an ordering
 	// initially from the source, but expand() may have caused it to
 	// change. So here retrieve the ordering of the source again.
-	origOrdering := o.source.Ordering()
+	origOrdering := planOrdering(o.source)
 
 	if len(origOrdering.ordering) > 0 {
 		// TODO(knz/radu): we basically have two simultaneous orderings.

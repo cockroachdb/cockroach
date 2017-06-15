@@ -24,7 +24,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -267,7 +266,7 @@ func (p *planner) makeJoin(
 
 	n.buffer = &RowBuffer{
 		RowContainer: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(n.Columns()), 0,
+			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
 		),
 	}
 
@@ -276,7 +275,7 @@ func (p *planner) makeJoin(
 		buckets: make(map[string]*bucket),
 		rowContainer: sqlbase.NewRowContainer(
 			p.session.TxnState.makeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(n.right.plan.Columns()),
+			sqlbase.ColTypeInfoFromResCols(planColumns(n.right.plan)),
 			0,
 		),
 	}
@@ -287,11 +286,7 @@ func (p *planner) makeJoin(
 	}, nil
 }
 
-// Columns implements the planNode interface.
-func (n *joinNode) Columns() sqlbase.ResultColumns { return n.columns }
-
 // Ordering implements the planNode interface.
-func (n *joinNode) Ordering() orderingInfo { return orderingInfo{} }
 
 // MarkDebug implements the planNode interface.
 func (n *joinNode) MarkDebug(mode explainMode) {
@@ -301,18 +296,6 @@ func (n *joinNode) MarkDebug(mode explainMode) {
 	n.explain = mode
 	n.left.plan.MarkDebug(mode)
 	n.right.plan.MarkDebug(mode)
-}
-
-func (n *joinNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	leftReads, leftWrites, err := n.left.plan.Spans(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	rightReads, rightWrites, err := n.right.plan.Spans(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	return append(leftReads, rightReads...), append(leftWrites, rightWrites...), nil
 }
 
 // Start implements the planNode interface.
@@ -336,13 +319,13 @@ func (n *joinNode) Start(ctx context.Context) error {
 	// If needed, pre-allocate left and right rows of NULL tuples for when the
 	// join predicate fails to match.
 	if n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter {
-		n.emptyRight = make(parser.Datums, len(n.right.plan.Columns()))
+		n.emptyRight = make(parser.Datums, len(planColumns(n.right.plan)))
 		for i := range n.emptyRight {
 			n.emptyRight[i] = parser.DNull
 		}
 	}
 	if n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter {
-		n.emptyLeft = make(parser.Datums, len(n.left.plan.Columns()))
+		n.emptyLeft = make(parser.Datums, len(planColumns(n.left.plan)))
 		for i := range n.emptyLeft {
 			n.emptyLeft[i] = parser.DNull
 		}

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 const indexJoinBatchSize = 100
@@ -211,14 +210,6 @@ func (p *planner) makeIndexJoin(
 	return node, indexScan
 }
 
-func (n *indexJoinNode) Columns() sqlbase.ResultColumns {
-	return n.table.Columns()
-}
-
-func (n *indexJoinNode) Ordering() orderingInfo {
-	return n.index.Ordering()
-}
-
 func (n *indexJoinNode) Values() parser.Datums {
 	return n.table.Values()
 }
@@ -238,22 +229,6 @@ func (n *indexJoinNode) DebugValues() debugValues {
 		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
 	}
 	return n.debugVals
-}
-
-func (n *indexJoinNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	indexReads, indexWrites, err := n.index.Spans(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(indexWrites) > 0 {
-		return nil, nil, errors.Errorf("unexpected index scan span writes: %v", indexWrites)
-	}
-	// We can not be sure which spans in the table we will read based only on the
-	// initial index span because we will dynamically lookup rows in the table based
-	// on the result of the index scan. We conservatively report that we will read the
-	// index span and the entire span for the table's primary index.
-	primaryReads := n.table.desc.PrimaryIndexSpan()
-	return append(indexReads, primaryReads), nil, nil
 }
 
 func (n *indexJoinNode) Start(ctx context.Context) error {

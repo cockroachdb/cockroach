@@ -209,7 +209,7 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 func (s *subquery) subqueryTupleOrdering() (bool, encoding.Direction) {
 	// Columns must be sorted in the order that they appear in the render
 	// and which they will later appear in the resulting tuple.
-	desired := make(sqlbase.ColumnOrdering, len(s.plan.Columns()))
+	desired := make(sqlbase.ColumnOrdering, len(planColumns(s.plan)))
 	for i := range desired {
 		desired[i] = sqlbase.ColumnOrderInfo{
 			ColIdx:    i,
@@ -218,7 +218,7 @@ func (s *subquery) subqueryTupleOrdering() (bool, encoding.Direction) {
 	}
 
 	// Check Ascending direction.
-	order := s.plan.Ordering()
+	order := planOrdering(s.plan)
 	match := order.computeMatch(desired)
 	if match == len(desired) {
 		return true, encoding.Ascending
@@ -285,7 +285,7 @@ type subquerySpanCollector struct {
 }
 
 func (v *subquerySpanCollector) subqueryNode(ctx context.Context, sq *subquery) error {
-	reads, writes, err := sq.plan.Spans(ctx)
+	reads, writes, err := collectSpans(ctx, sq.plan)
 	if err != nil {
 		return err
 	}
@@ -366,7 +366,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		result.execMode = execMode
 
 		// First check that the number of columns match.
-		cols := plan.Columns()
+		cols := planColumns(plan)
 		if numColumns := len(cols); wantedNumColumns != numColumns {
 			switch wantedNumColumns {
 			case 1:

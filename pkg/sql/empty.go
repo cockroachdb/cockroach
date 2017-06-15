@@ -19,9 +19,7 @@ package sql
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // emptyNode is a planNode with no columns and either no rows (default) or a single row with empty
@@ -33,13 +31,10 @@ type emptyNode struct {
 	results bool
 }
 
-func (*emptyNode) Columns() sqlbase.ResultColumns                      { return nil }
-func (*emptyNode) Ordering() orderingInfo                              { return orderingInfo{} }
-func (*emptyNode) Values() parser.Datums                               { return nil }
-func (*emptyNode) Start(context.Context) error                         { return nil }
-func (*emptyNode) MarkDebug(_ explainMode)                             {}
-func (*emptyNode) Close(context.Context)                               {}
-func (*emptyNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) { return nil, nil, nil }
+func (*emptyNode) Values() parser.Datums       { return nil }
+func (*emptyNode) Start(context.Context) error { return nil }
+func (*emptyNode) MarkDebug(_ explainMode)     {}
+func (*emptyNode) Close(context.Context)       {}
 
 func (e *emptyNode) DebugValues() debugValues {
 	return debugValues{

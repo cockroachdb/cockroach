@@ -25,7 +25,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -456,19 +455,6 @@ type windowNode struct {
 	windowsAcc WrappableMemoryAccount
 
 	explain explainMode
-}
-
-func (n *windowNode) Columns() sqlbase.ResultColumns {
-	return n.values.Columns()
-}
-
-func (n *windowNode) Ordering() orderingInfo {
-	// Window partitions are returned un-ordered.
-	return orderingInfo{}
-}
-
-func (n *windowNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
-	return n.plan.Spans(ctx)
 }
 
 func (n *windowNode) Values() parser.Datums {
