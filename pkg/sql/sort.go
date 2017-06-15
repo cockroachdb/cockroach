@@ -46,6 +46,13 @@ type sortNode struct {
 	debugVals debugValues
 }
 
+func ensureColumnOrderable(c sqlbase.ResultColumn) error {
+	if _, ok := c.Typ.(parser.TArray); ok {
+		return errors.Errorf("can't order by column type %s", c.Typ)
+	}
+	return nil
+}
+
 // orderBy constructs a sortNode based on the ORDER BY clause.
 //
 // In the general case (SELECT/UNION/VALUES), we can sort by a column index or a
@@ -173,6 +180,14 @@ func (p *planner) orderBy(
 			}
 		}
 
+		// If we're ordering by using one of the existing renders, ensure it's a
+		// column type we can order on.
+		if index != -1 {
+			if err := ensureColumnOrderable(columns[index]); err != nil {
+				return nil, err
+			}
+		}
+
 		// Finally, if we haven't found anything so far, we really
 		// need a new render.
 		// TODO(knz/dan): currently this is only possible for renderNode.
@@ -200,6 +215,12 @@ func (p *planner) orderBy(
 					sqlbase.ColumnOrderInfo{ColIdx: colIdxs[i], Direction: direction})
 			}
 			index = colIdxs[len(colIdxs)-1]
+			// Ensure our newly rendered columns are ok to order by.
+			for _, colIdx := range colIdxs {
+				if err := ensureColumnOrderable(s.Columns()[colIdx]); err != nil {
+					return nil, err
+				}
+			}
 		}
 
 		if index == -1 {
