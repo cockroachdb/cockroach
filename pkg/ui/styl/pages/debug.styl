@@ -1,20 +1,35 @@
+/**
+Copyright 2017 The Cockroach Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+implied. See the License for the specific language governing
+permissions and limitations under the License.
+*/
+
 $debug-table
   margin 0 0 40px
-  display table
   width 100%
+  border-collapse collapse
+  border-spacing 0
 
   &__row
-    display table-row
     background-color $light-gray-2
 
     &--header
       font-weight 900
       color white
-      border 0
+      border-style none
 
   &__cell
     padding 6px 12px
-    display table-cell
     height 20px
     overflow hidden
     text-overflow ellipsis
@@ -24,8 +39,21 @@ $debug-table
     border-color rgba(0, 0, 0, .1)
     border-style solid
 
+    &&--left-header
+      font-weight 900
+      color white
+      background-color $glow-blue
+      border 0
+      text-align right
+
+    &&--header
+      border-style none
+
+    &&&--warning
+      color $alert-yellow-dark
+
     &--short
-      max-width 1px
+      width 1px
 
 .failure-table
   @extend $debug-table
@@ -49,3 +77,12 @@ $debug-table
   &__cell
     white-space normal
 
+.debugnodes-table
+  @extend $debug-table
+  font-size 12px
+
+  &__row
+    background-color white
+
+  &__cell
+    white-space normal

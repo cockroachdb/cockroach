@@ -53,20 +53,24 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
       failures = (
         <div>
           <h2>Failures</h2>
-          <div className="failure-table">
-            <div className="failure-table__row failure-table__row--header">
-              <div className="failure-table__cell failure-table__cell--short">Node</div>
-              <div className="failure-table__cell">Error</div>
-            </div>
+          <table className="failure-table">
+            <thead>
+              <tr className="failure-table__row failure-table__row--header">
+                <td className="failure-table__cell failure-table__cell--short failure-table__cell--header">Node</td>
+                <td className="failure-table__cell failure-table__cell--header">Error</td>
+              </tr>
+            </thead>
+            <tbody>
             {
               _.map(problemRanges.failures, (failure) => (
-                <div className="failure-table__row" key={failure.node_id}>
-                  <div className="failure-table__cell failure-table__cell--short">n{failure.node_id}</div>
-                  <div className="failure-table__cell">title={failure.error_message}>{failure.error_message}</div>
-                </div>
+                <tr className="failure-table__row" key={failure.node_id}>
+                  <td className="failure-table__cell failure-table__cell--short">n{failure.node_id}</td>
+                  <td className="failure-table__cell">title={failure.error_message}>{failure.error_message}</td>
+                </tr>
               ))
             }
-          </div>
+            </tbody>
+          </table>
         </div>
       );
     }
@@ -78,20 +82,22 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
       return (
         <div>
           <h2>{name}</h2>
-          <div className="problems-table">
-            <div className="problems-table__row">
-              <div className="problems-table__cell">
-                {
-                  _.map(ids, (id) => (
-                    <span key={id.toNumber()}>
-                      <a href={`/debug/range?id=${id}`}>{id.toNumber()}</a>
-                      <span> </span>
-                    </span>
-                  ))
-                }
-              </div>
-            </div>
-          </div>
+          <table className="problems-table">
+            <tbody>
+              <tr className="problems-table__row">
+                <td className="problems-table__cell">
+                  {
+                    _.map(ids, (id) => (
+                      <span key={id.toNumber()}>
+                        <a href={`/debug/range?id=${id}`}>{id.toNumber()}</a>
+                        <span> </span>
+                      </span>
+                    ))
+                  }
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       );
     };
