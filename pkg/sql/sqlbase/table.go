@@ -93,6 +93,7 @@ func MakeColumnDefDescs(
 	// Set Type.SemanticType and Type.Locale.
 	colDatumType := parser.CastTargetToDatumType(d.Type)
 	col.Type = DatumTypeToColumnType(colDatumType)
+	var visibleTypeMap = ColumnType_VisibleType_value
 
 	// Set other attributes of col.Type and perform type-specific verification.
 	switch t := d.Type.(type) {
@@ -105,6 +106,9 @@ func MakeColumnDefDescs(
 			}
 			s := "unique_rowid()"
 			col.DefaultExpr = &s
+		}
+		if val, present := visibleTypeMap[t.Name]; present {
+			col.Type.VisibleType = ColumnType_VisibleType(val)
 		}
 	case *parser.FloatColType:
 		// If the precision for this float col was intentionally specified as 0, return an error.
