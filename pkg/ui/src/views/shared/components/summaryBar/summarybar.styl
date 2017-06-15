@@ -20,16 +20,16 @@
     font-weight 500
     text-transform uppercase
     letter-spacing 2px
-    color $light-gray
+    color $tooltip-color
 
   &__value
     font-weight 200
     font-size 30px
-    color $light-blue
+    color $body-color
 
 .summary-label
   font-family Lato-Bold
-  color $light-blue
+  color $body-color
   padding-bottom 12px
   text-align center
 
@@ -42,61 +42,61 @@
     clearfix()
 
   &__title
-    color $light-blue
+    color $body-color
     float left
 
     // A link is present on at least one summary stat.
     a
       text-decoration none
-      color $glow-blue
+      color $link-color
       padding-left 6px
 
   &__value
     float right
-    color $light-blue
+    color $body-color
     font-family Lato-Bold
 
   &__tooltip
     display block
     clear both
     font-size 12px
-    color $light-gray
+    color $tooltip-color
 
   & + &
     border-top 1px solid rgb(242, 242, 242)
 
   &--number &__value
-    color $light-green
+    color $healthy-color
 
   &--dead &__value
-    color $secondary-red
+    color $alert-color
     text-transform capitalize
 
   &--suspect &__value
-    color $secondary-gold
+    color $warning-color
     text-transform capitalize
 
   &--healthy &__value
-    color $main-green
+    color $healthy-color
     text-transform capitalize
 
   &--link &__value
     a
       text-decoration none
       font-family Lato-Regular
-      color $glow-blue
+      color $link-color
 
 .summary-stat-breakdown
   padding 2px 0
 
   &--dead
-    color $secondary-red
+    color $alert-color
 
   &--suspect
-    color $secondary-gold
+    color $warning-color
 
   &--healthy
-    color $main-green
+    color $healthy-color
 
   &__body
     clearfix()
