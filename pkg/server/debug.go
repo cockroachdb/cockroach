@@ -157,7 +157,7 @@ func init() {
       </tr>
       <tr>
         <td>node diagnostics</td>
-        <td><a href="/debug/nodes?node_ids=local">this node</a>, <a href="/debug/nodes">all nodes</a></td>
+        <td><a href="../#/debug/nodes?node_ids=local">this node</a>, <a href="../#/debug/nodes">all nodes</a></td>
       </tr>
       <tr>
         <td>range status</td>
