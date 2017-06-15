@@ -16,7 +16,8 @@ mkdir -p "${artifacts_dir}"
 # What is the controller again?
 controller=$(terraform output controller-ip)
 
-# Prepare the command to run the test.
+# Prepare the command to run the test. Note that --concurrency must be
+# a multiple of 10 and some tests require a minimum of 20.
 testcmd="cd jepsen/cockroachdb && set -eo pipefail && \
  stdbuf -oL -eL \
  ~/lein run test \
@@ -26,6 +27,7 @@ testcmd="cd jepsen/cockroachdb && set -eo pipefail && \
    --nodes-file ~/nodes \
    --os ubuntu \
    --time-limit 180 \
+   --concurrency 30 \
    --recovery-time 25 \
    --test-count 1 \
    --test ${test} ${nemesis} \
