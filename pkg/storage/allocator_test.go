@@ -2110,6 +2110,63 @@ func TestFilterBehindReplicas(t *testing.T) {
 	}
 }
 
+func TestFilterUnremovableReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		commit   uint64
+		progress []uint64
+		expected []uint64
+	}{
+		{0, []uint64{0}, nil},
+		{1, []uint64{1}, nil},
+		{1, []uint64{0, 1}, []uint64{0}},
+		{1, []uint64{1, 2, 3}, []uint64{1, 2, 3}},
+		{2, []uint64{1, 2, 3}, []uint64{1}},
+		{3, []uint64{1, 2, 3}, nil},
+		{1, []uint64{1, 2, 3, 4}, []uint64{1, 2, 3, 4}},
+		{2, []uint64{1, 2, 3, 4}, []uint64{1, 2, 3, 4}},
+		{3, []uint64{1, 2, 3, 4}, []uint64{1, 2}},
+		{2, []uint64{1, 2, 3, 4, 5}, []uint64{1, 2, 3, 4, 5}},
+		{3, []uint64{1, 2, 3, 4, 5}, []uint64{1, 2}},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			status := &raft.Status{
+				Progress: make(map[uint64]raft.Progress),
+			}
+			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
+			// valid replica IDs.
+			status.Lead = 99
+			status.Commit = c.commit
+			var replicas []roachpb.ReplicaDescriptor
+			for j, v := range c.progress {
+				p := raft.Progress{
+					Match: v,
+					State: raft.ProgressStateReplicate,
+				}
+				if v == 0 {
+					p.State = raft.ProgressStateProbe
+				}
+				status.Progress[uint64(j)] = p
+				replicas = append(replicas, roachpb.ReplicaDescriptor{
+					ReplicaID: roachpb.ReplicaID(j),
+					StoreID:   roachpb.StoreID(v),
+				})
+			}
+
+			candidates := filterUnremovableReplicas(status, replicas)
+			var ids []uint64
+			for _, c := range candidates {
+				ids = append(ids, uint64(c.StoreID))
+			}
+			if !reflect.DeepEqual(c.expected, ids) {
+				t.Fatalf("expected %d, but got %d", c.expected, ids)
+			}
+		})
+	}
+}
+
 // TestAllocatorRebalanceAway verifies that when a replica is on a node with a
 // bad zone config, the replica will be rebalanced off of it.
 func TestAllocatorRebalanceAway(t *testing.T) {
