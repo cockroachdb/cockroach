@@ -17,6 +17,7 @@
 package log
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/context"
@@ -196,17 +197,17 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 		}
 	}
 
-	var span opentracing.Span
-	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
-		tracer := parentSpan.Tracer()
-		span = tracer.StartSpan(opName, opentracing.ChildOf(parentSpan.Context()))
-	} else {
-		if ac.Tracer == nil {
-			panic("no tracer in AmbientContext for root span")
-		}
-		span = ac.Tracer.StartSpan(opName)
+	// If there is a span in context, create a child.
+	newCtx, childSpan := tracing.ChildSpan(ctx, opName)
+	if childSpan != nil {
+		return newCtx, childSpan
 	}
-	return opentracing.ContextWithSpan(ctx, span), span
+	// Otherwise, create a root span.
+	if ac.Tracer == nil {
+		panic("no tracer in AmbientContext for root span")
+	}
+	rootSpan := ac.Tracer.StartSpan(opName)
+	return opentracing.ContextWithSpan(ctx, rootSpan), rootSpan
 }
 
 // TODO(radu): remove once they start getting used.
