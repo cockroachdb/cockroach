@@ -100,9 +100,10 @@
   revision = "b5fc83876cd1bf9fbb4e39afa9e503c83edce3b5"
 
 [[projects]]
+  branch = "master"
   name = "github.com/cockroachdb/apd"
   packages = ["."]
-  revision = "0ccdf9dd91d85d9f95d131fd2420c78c56f76c1f"
+  revision = "e8e4547368eb5ba69f7edec271c8174d6d619e54"
 
 [[projects]]
   name = "github.com/cockroachdb/cmux"
