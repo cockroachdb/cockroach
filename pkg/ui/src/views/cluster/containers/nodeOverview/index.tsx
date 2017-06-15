@@ -4,6 +4,8 @@ import { createSelector } from "reselect";
 import { RouterState, Link } from "react-router";
 import _ from "lodash";
 
+import "./nodeOverview.styl";
+
 import {
   NodesSummary, nodesSummarySelector, LivenessStatus,
 } from "src/redux/nodes";

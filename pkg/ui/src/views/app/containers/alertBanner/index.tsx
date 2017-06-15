@@ -2,6 +2,8 @@ import React from "react";
 import { Dispatch, bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
+import "./alertbanner.styl";
+
 import { AlertBox } from "src/views/shared/components/alertBox";
 import { Alert, bannerAlertsSelector } from "src/redux/alerts";
 import { AdminUIState } from "src/redux/state";

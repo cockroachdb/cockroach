@@ -1,0 +1,32 @@
+@require '~styl/base/palette.styl'
+@require '~src/views/shared/util/table.styl'
+
+.sort-table
+  @extend $table-base
+
+  &__row--header
+      // Display the sort direction arrow in header cells.
+      .sort-table__cell
+        padding 18px 20px
+        color $lighter-blue
+
+        &--sortable:after
+          display inline-block
+          width 20px
+          line-height 12px
+          font-size 6px
+          vertical-align middle
+          text-align center
+          content "▼"
+
+        &--descending
+          color $light-blue
+
+        &--ascending
+          color $light-blue
+          &:after
+            content "▲"
+
+  &__unbounded-column
+    whitespace normal
+    word-break break-all
