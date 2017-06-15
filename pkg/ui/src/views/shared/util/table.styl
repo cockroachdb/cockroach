@@ -1,17 +1,16 @@
 @require '~styl/base/palette.styl'
 
-$stats-table-cell--border = 1px solid $secondary-gray-12
+$table-cell-border = 1px solid $table-border-color
 
-$stats-table-th--fg = $secondary-light-gray
-$stats-table-td--fg = $table-gray
+$stats-table-td--fg = $body-color
 
 $stats-table-th--bg     = white
 $stats-table-tr--bg     = white
-$stats-table-tr--bg-alt = $secondary-gray-7
+$stats-table-tr--bg-alt = $background-color
 
 $table-base
   width 100%
-  border $stats-table-cell--border
+  border $table-cell-border
   border-collapse collapse
   font-family Lato-Regular
   font-weight 300
@@ -39,11 +38,11 @@ $table-base
 
   &__cell
     padding 10px 20px
-    border-right $stats-table-cell--border
+    border-right $table-cell-border
 
     a
       font-weight 400
-      color $link-blue
+      color $link-color
       text-decoration none
       width 100%
       height 100%

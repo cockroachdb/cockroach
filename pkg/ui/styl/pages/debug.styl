@@ -5,7 +5,7 @@ $debug-table
 
   &__row
     display table-row
-    background-color $light-gray-2
+    background-color $table-border-color
 
     &--header
       font-weight 900
@@ -31,10 +31,10 @@ $debug-table
   @extend $debug-table
 
   &__row
-    alternating-background $light-gray-2 $lighter-gray
+    alternating-background $table-border-color $table-border-color
 
     &&--header
-      background-color $secondary-red-3
+      background-color $alert-color
 
   &__cell
     white-space normal
