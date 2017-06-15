@@ -322,10 +322,11 @@ func (rq *replicateQueue) processOneChange(
 		if log.V(1) {
 			log.Infof(ctx, "removing a replica")
 		}
+		candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas)
 		removeReplica, err := rq.allocator.RemoveTarget(
 			ctx,
 			zone.Constraints,
-			desc.Replicas,
+			candidates,
 		)
 		if err != nil {
 			return false, err
