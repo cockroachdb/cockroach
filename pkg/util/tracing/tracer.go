@@ -342,6 +342,56 @@ func (t *Tracer) StartSpan(
 	return s
 }
 
+// StartChildSpan creates a child span of the given parent span. This is
+// functionally equivalent to:
+// Tracer.StartSpan(opName, opentracing.ChildOf(parentSpan.Context()))
+// Compared to that, it's more efficient, particularly in terms of memory
+// allocations; among others, it saves the call to parentSpan.Context.
+//
+// This only works for creating children of local parents (i.e. the caller needs
+// to have a reference to the parent span).
+func (t *Tracer) StartChildSpan(
+	operationName string, parentSpan opentracing.Span,
+) opentracing.Span {
+	// Short-circuit when the parent is a noopSpan.
+	if _, noop := parentSpan.(*noopSpan); noop {
+		return &t.noopSpan
+	}
+	pSpan := parentSpan.(*span)
+	netTrace := enableNetTrace.Get()
+	lsTr := getLightstep()
+
+	// If tracing is disabled, and we're not part of a recording or snowball
+	// trace, avoid overhead and return a noop span.
+	if !pSpan.isRecording() && lsTr == nil && !netTrace {
+		return &t.noopSpan
+	}
+
+	s := &span{
+		tracer:    t,
+		operation: operationName,
+		startTime: time.Now(),
+	}
+	s.parentSpanID = pSpan.SpanID
+	pSpan.mu.Lock()
+	for k, v := range pSpan.mu.Baggage {
+		s.mu.Baggage[k] = v
+	}
+	for k, v := range pSpan.mu.tags {
+		s.mu.tags[k] = v
+	}
+
+	if netTrace || lsTr != nil {
+		// Copy baggage items to tags so they show up in the Lightstep UI or x/net/trace.
+		for k, v := range s.mu.Baggage {
+			s.SetTag(k, v)
+		}
+	}
+
+	pSpan.mu.Unlock()
+	return s
+}
+
 // Inject is part of the opentracing.Tracer interface.
 func (t *Tracer) Inject(
 	osc opentracing.SpanContext, format interface{}, carrier interface{},
@@ -477,7 +527,7 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, opentracing
 		// Optimization: avoid ContextWithSpan call if tracing is disabled.
 		return ctx, span
 	}
-	newSpan := span.Tracer().StartSpan(opName, opentracing.ChildOf(span.Context()))
+	newSpan := span.Tracer().(*Tracer).StartChildSpan(opName, span)
 	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
 }
 

@@ -310,3 +310,34 @@ func TestLightstepContext(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkSpanCreation(b *testing.B) {
+	b.StopTimer()
+	tr := NewTracer()
+	recordable := tr.StartSpan("test", Recordable)
+	recCtx := recordable.Context()
+	b.ResetTimer()
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		sp := tr.StartSpan("noop", opentracing.ChildOf(recCtx))
+		if !IsNoopSpan(sp) {
+			b.Error("expected noop span")
+		}
+		// ctx := opentracing.ContextWithSpan(context.TODO(), sp)
+	}
+}
+
+func BenchmarkNewSpanCreation(b *testing.B) {
+	b.StopTimer()
+	tr := NewTracer().(*Tracer)
+	recordable := tr.StartSpan("test", Recordable)
+	b.ResetTimer()
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		sp := tr.StartChildSpan("noop", recordable)
+		if !IsNoopSpan(sp) {
+			b.Error("expected noop span")
+		}
+		// ctx := opentracing.ContextWithSpan(context.TODO(), sp)
+	}
+}
