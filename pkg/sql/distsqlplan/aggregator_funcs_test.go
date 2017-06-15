@@ -141,7 +141,7 @@ func checkDistAggregationInfo(
 				},
 			}},
 			Core: distsqlrun.ProcessorCoreUnion{Aggregator: &distsqlrun.AggregatorSpec{
-				Aggregations: []distsqlrun.AggregatorSpec_Aggregation{{Func: fn, ColIdx: 0}},
+				Aggregations: []distsqlrun.AggregatorSpec_Aggregation{{Func: fn, ColIdx: []uint32{0}}},
 			}},
 			Output: []distsqlrun.OutputRouterSpec{{
 				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
@@ -176,12 +176,15 @@ func checkDistAggregationInfo(
 	localAggregations := make([]distsqlrun.AggregatorSpec_Aggregation, numIntermediary)
 	for i, fn := range info.LocalStage {
 		// Local aggregations have the same input.
-		localAggregations[i] = distsqlrun.AggregatorSpec_Aggregation{Func: fn, ColIdx: 0}
+		localAggregations[i] = distsqlrun.AggregatorSpec_Aggregation{Func: fn, ColIdx: []uint32{0}}
 	}
 	finalAggregations := make([]distsqlrun.AggregatorSpec_Aggregation, numIntermediary)
 	for i, fn := range info.FinalStage {
 		// Each local aggregation feeds into a final aggregation.
-		finalAggregations[i] = distsqlrun.AggregatorSpec_Aggregation{Func: fn, ColIdx: uint32(i)}
+		finalAggregations[i] = distsqlrun.AggregatorSpec_Aggregation{
+			Func:   fn,
+			ColIdx: []uint32{uint32(i)},
+		}
 	}
 
 	if numParallel < numRows {
@@ -298,10 +301,13 @@ func TestDistAggregationTable(t *testing.T) {
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	for fn, info := range DistAggregationTable {
-		if info.LocalStage[0] == distsqlrun.AggregatorSpec_IDENT &&
-			info.FinalStage[0] == distsqlrun.AggregatorSpec_IDENT {
+		if fn == distsqlrun.AggregatorSpec_IDENT {
 			// IDENT only works as expected if all rows have the same value on the
 			// relevant column; skip testing this trivial case.
+			continue
+		}
+		if fn == distsqlrun.AggregatorSpec_COUNT_ROWS {
+			// COUNT_ROWS takes no arguments; skip it in this test.
 			continue
 		}
 		// We're going to test each aggregation function on every column that can be

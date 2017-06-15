@@ -61,11 +61,11 @@ import (
 //  - at some later point, we can choose to deprecate version 1 and have
 //    servers only accept versions >= 2 (by setting
 //    MinAcceptedVersion to 2).
-const Version = 3
+const Version = 4
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion = 3
+const MinAcceptedVersion = 4
 
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 10*1024)
 
