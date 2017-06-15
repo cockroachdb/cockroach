@@ -137,7 +137,7 @@ func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
 
 // GetSpanTag returns the value of a tag in a span.
 func GetSpanTag(os opentracing.Span, key string) interface{} {
-	if IsNoopSpan(os) {
+	if IsNoopSpan(os, ActualNoop) {
 		return nil
 	}
 	sp := os.(*span)
@@ -156,7 +156,7 @@ func GetSpanTag(os opentracing.Span, key string) interface{} {
 // If recording was already started on this span (either directly or because a
 // parent span is recording), the old recording is lost.
 func StartRecording(os opentracing.Span, recType RecordingType) {
-	if IsNoopSpan(os) {
+	if IsNoopSpan(os, LogicalNoop) {
 		panic("StartRecording called on NoopSpan; use the Force option for StartSpan")
 	}
 	os.(*span).enableRecording(new(spanGroup), recType)
@@ -198,7 +198,7 @@ func IsRecordable(os opentracing.Span) bool {
 // record are still open; it can run concurrently with operations on those
 // spans.
 func GetRecording(os opentracing.Span) []RecordedSpan {
-	if IsNoopSpan(os) {
+	if IsNoopSpan(os, LogicalNoop) {
 		return nil
 	}
 	s := os.(*span)
@@ -252,11 +252,40 @@ func ClearRecordedLogs(os opentracing.Span) {
 	}
 }
 
+// NoopCheck is used to discriminate before different interpretations of "noop
+// spans".
+type NoopCheck bool
+
+const (
+	// LogicalNoop means the caller is interested if the span should be considered
+	// a "noop" one for purposes of logging (including logging to trace.EventLog)
+	// and creating child spans.
+	// Besides the actual NoopSpan singleton, spans that are not recording, nor
+	// have a net.Trace or a Lightstep span associated with them, are also
+	// considered noops.
+	LogicalNoop NoopCheck = true
+	// ActualNoop means that only the NoopSpan passes the check (i.e. the span
+	// that could have existed was elided because all forms of tracing are
+	// disabled).
+	ActualNoop NoopCheck = false
+)
+
 // IsNoopSpan returns true if events for this span are just dropped. This is the
 // case when tracing is disable and we're not recording.
-func IsNoopSpan(s opentracing.Span) bool {
-	_, noop := s.(*noopSpan)
-	return noop
+//
+// The checkType discriminates between degrees of noop-ness. See the enum
+// comments.
+func IsNoopSpan(s opentracing.Span, checkType NoopCheck) bool {
+	if _, noop := s.(*noopSpan); noop {
+		return true
+	}
+	if checkType == ActualNoop {
+		return false
+	}
+	// A real span is still considered "logical noop" if it's not recording and
+	// tracing is disabled.
+	sp := s.(*span)
+	return !sp.isRecording() && sp.netTr == nil && sp.lightstep == nil
 }
 
 // Finish is part of the opentracing.Span interface.
@@ -282,6 +311,10 @@ func (s *span) FinishWithOptions(opts opentracing.FinishOptions) {
 }
 
 // Context is part of the opentracing.Span interface.
+//
+// TODO(andrei, radu): Should this return noopSpanContext for a Recordable span
+// that's not currently recording? That might save work and allocations when
+// creating child spans.
 func (s *span) Context() opentracing.SpanContext {
 	s.mu.Lock()
 	defer s.mu.Unlock()

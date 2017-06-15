@@ -94,7 +94,7 @@ func FinishEventLog(ctx context.Context) {
 // false.
 func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, bool) {
 	if sp := opentracing.SpanFromContext(ctx); sp != nil {
-		if tracing.IsNoopSpan(sp) {
+		if tracing.IsNoopSpan(sp, tracing.LogicalNoop) {
 			return nil, nil, false
 		}
 		return sp, nil, true
