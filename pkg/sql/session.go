@@ -1091,6 +1091,9 @@ type SessionTracing struct {
 	// enabled is set at times when "session enabled" is active - i.e. when
 	// transactions are being recorded.
 	enabled bool
+	// kvTracingEnabled is set at times when KV tracing is active.
+	kvTracingEnabled bool
+
 	// If tracing==true, recordingType indicates the type of the current
 	// recording.
 	recordingType tracing.RecordingType
@@ -1110,7 +1113,7 @@ type SessionTracing struct {
 // span that have already been created will not be traced).
 //
 // StopTracing() needs to be called to finish this trace.
-func (st *SessionTracing) StartTracing(recType tracing.RecordingType) error {
+func (st *SessionTracing) StartTracing(recType tracing.RecordingType, traceKV bool) error {
 	if st.enabled {
 		return errors.Errorf("already tracing")
 	}
@@ -1124,6 +1127,7 @@ func (st *SessionTracing) StartTracing(recType tracing.RecordingType) error {
 
 	tracing.StartRecording(sp, recType)
 	st.enabled = true
+	st.kvTracingEnabled = traceKV
 	st.recordingType = recType
 	return nil
 }
@@ -1189,6 +1193,16 @@ func (st *SessionTracing) onNewSQLTxn(sp opentracing.Span) {
 		panic("no span for SessionTracing")
 	}
 	tracing.StartRecording(sp, st.recordingType)
+}
+
+// RecordingType returns which type of tracing is currently being done.
+func (st *SessionTracing) RecordingType() tracing.RecordingType {
+	return st.recordingType
+}
+
+// KVTracingEnabled checks whether KV tracing is currently enabled.
+func (st *SessionTracing) KVTracingEnabled() bool {
+	return st.kvTracingEnabled
 }
 
 // Enabled checks whether session tracing is currently enabled.

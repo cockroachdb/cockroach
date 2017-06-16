@@ -140,7 +140,7 @@ func (ib *indexBackfiller) runChunk(
 
 		b := txn.NewBatch()
 		for i := int64(0); i < chunkSize; i++ {
-			encRow, err := ib.fetcher.NextRow(ctx)
+			encRow, err := ib.fetcher.NextRow(ctx, false /* traceKV */)
 			if err != nil {
 				return err
 			}

@@ -996,6 +996,7 @@ func truncateAndDropTable(
 	tableDesc *sqlbase.TableDescriptor,
 	db *client.DB,
 	testingKnobs SchemaChangerTestingKnobs,
+	traceKV bool,
 ) error {
 	zoneKey, nameKey, descKey := GetKeysForTableDescriptor(tableDesc)
 	// The table name is no longer in use across the entire cluster.
@@ -1024,7 +1025,7 @@ func truncateAndDropTable(
 		}
 	}
 
-	if err := truncateTableInChunks(ctx, tableDesc, db); err != nil {
+	if err := truncateTableInChunks(ctx, tableDesc, db, traceKV); err != nil {
 		return err
 	}
 

@@ -65,7 +65,7 @@ func (n *traceNode) Start(ctx context.Context) error {
 	if n.p.session.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
 	}
-	if err := n.p.session.Tracing.StartTracing(tracing.SnowballRecording); err != nil {
+	if err := n.p.session.Tracing.StartTracing(tracing.SnowballRecording, true); err != nil {
 		return err
 	}
 

@@ -330,7 +330,7 @@ func (f baseFKHelper) check(ctx context.Context, values parser.Datums) (parser.D
 	if err := f.rf.StartScan(ctx, f.txn, spans, true /* limit batches */, 1); err != nil {
 		return nil, err
 	}
-	return f.rf.NextRowDecoded(ctx)
+	return f.rf.NextRowDecoded(ctx, false /* traceKV */)
 }
 
 // CollectSpans implements the FkSpanCollector interface.

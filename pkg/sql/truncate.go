@@ -93,8 +93,10 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 		}
 	}
 
+	// TODO(knz): move truncate logic to Start/Next so it can be used with SHOW TRACE FOR.
+	traceKV := p.session.Tracing.KVTracingEnabled()
 	for _, tableDesc := range toTruncate {
-		if err := truncateTable(tableDesc, p.txn); err != nil {
+		if err := truncateTable(p.session.Ctx(), tableDesc, p.txn, traceKV); err != nil {
 			return nil, err
 		}
 	}
@@ -105,7 +107,9 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 // truncateTable truncates the data of a table in a single transaction. It
 // deletes a range of data for the table, which includes the PK and all
 // indexes.
-func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
+func truncateTable(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, txn *client.Txn, traceKV bool,
+) error {
 	rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false)
 	if err != nil {
 		return err
@@ -114,20 +118,20 @@ func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
 	if err := td.init(txn); err != nil {
 		return err
 	}
-	_, err = td.deleteAllRows(context.TODO(), roachpb.Span{}, math.MaxInt64)
+	_, err = td.deleteAllRows(ctx, roachpb.Span{}, math.MaxInt64, traceKV)
 	return err
 }
 
 // truncateTableInChunks truncates the data of a table in chunks. It deletes a
 // range of data for the table, which includes the PK and all indexes.
 func truncateTableInChunks(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB,
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
 ) error {
 	const chunkSize = TableTruncateChunkSize
 	var resume roachpb.Span
 	for row, done := 0, false; !done; row += chunkSize {
 		resumeAt := resume
-		if log.V(2) {
+		if traceKV || log.V(2) {
 			log.Infof(ctx, "table %s truncate at row: %d, span: %s", tableDesc.Name, row, resume)
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -139,7 +143,7 @@ func truncateTableInChunks(
 			if err := td.init(txn); err != nil {
 				return err
 			}
-			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize)
+			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, traceKV)
 			return err
 		}); err != nil {
 			return err
