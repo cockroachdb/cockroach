@@ -215,8 +215,9 @@ func (p *planner) orderBy(
 			}
 			index = colIdxs[len(colIdxs)-1]
 			// Ensure our newly rendered columns are ok to order by.
+			renderCols := planColumns(s)
 			for _, colIdx := range colIdxs {
-				if err := ensureColumnOrderable(s.Columns()[colIdx]); err != nil {
+				if err := ensureColumnOrderable(renderCols[colIdx]); err != nil {
 					return nil, err
 				}
 			}
