@@ -478,7 +478,7 @@ CREATE TABLE crdb_internal.session_trace(
 );
 `,
 	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		rows := p.session.Tracing.GenerateSessionTraceVTable()
+		rows := p.session.Tracing.generateSessionTraceVTable()
 		for _, r := range rows {
 			if err := addRow(r[:]...); err != nil {
 				return err

@@ -34,7 +34,6 @@ const (
 	explainNone explainMode = iota
 	explainDebug
 	explainPlan
-	explainTrace
 	// explainDistSQL shows the physical distsql plan for a query and whether a
 	// query would be run in "auto" DISTSQL mode. See explainDistSQLNode for
 	// details.
@@ -44,7 +43,6 @@ const (
 var explainStrings = map[explainMode]string{
 	explainDebug:   "debug",
 	explainPlan:    "plan",
-	explainTrace:   "trace",
 	explainDistSQL: "distsql",
 }
 
@@ -154,9 +152,6 @@ func (p *planner) Explain(ctx context.Context, n *parser.Explain) (planNode, err
 		p.semaCtx.Placeholders.FillUnassigned()
 		return p.makeExplainPlanNode(explainer, expanded, optimized, plan), nil
 
-	case explainTrace:
-		return p.makeTraceNode(plan), nil
-
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
 	}
@@ -204,32 +199,6 @@ type debugValues struct {
 	key    string
 	value  string
 	output debugValueType
-}
-
-func (vals *debugValues) AsRow() parser.Datums {
-	keyVal := parser.DNull
-	if vals.key != "" {
-		keyVal = parser.NewDString(vals.key)
-	}
-
-	// The "output" value is NULL for partial rows, or a DBool indicating if the row passed the
-	// filtering.
-	outputVal := parser.DNull
-
-	switch vals.output {
-	case debugValueFiltered:
-		outputVal = parser.MakeDBool(false)
-
-	case debugValueRow:
-		outputVal = parser.MakeDBool(true)
-	}
-
-	return parser.Datums{
-		parser.NewDInt(parser.DInt(vals.rowIdx)),
-		keyVal,
-		parser.NewDString(vals.value),
-		outputVal,
-	}
 }
 
 // explainDebugNode is a planNode that wraps another node and converts DebugValues() results to a

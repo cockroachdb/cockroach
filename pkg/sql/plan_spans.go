@@ -60,7 +60,7 @@ func collectSpans(ctx context.Context, plan planNode) (reads, writes roachpb.Spa
 		return collectSpans(ctx, n.plan)
 	case *explainPlanNode:
 		return collectSpans(ctx, n.plan)
-	case *explainTraceNode:
+	case *traceNode:
 		return collectSpans(ctx, n.plan)
 	case *limitNode:
 		return collectSpans(ctx, n.plan)

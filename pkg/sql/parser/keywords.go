@@ -255,6 +255,7 @@ var keywords = map[string]int{
 	"TIMESTAMP":                 TIMESTAMP,
 	"TIMESTAMPTZ":               TIMESTAMPTZ,
 	"TO":                        TO,
+	"TRACE":                     TRACE,
 	"TRAILING":                  TRAILING,
 	"TRANSACTION":               TRANSACTION,
 	"TREAT":                     TREAT,

@@ -215,15 +215,19 @@ func (*ParenTableExpr) tableExpr()   {}
 func (*JoinTableExpr) tableExpr()    {}
 func (*FuncExpr) tableExpr()         {}
 
-// The Explain node, used for the EXPLAIN statement, can also be
-// present as a data source in FROM, and thus implements the TableExpr
-// interface.
+// StatementSource encapsulates one of the other statements as a data source.
+type StatementSource struct {
+	Statement Statement
+}
 
-func (*Explain) tableExpr() {}
+// Format implements the NodeFormatter interface.
+func (node *StatementSource) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('[')
+	node.Statement.Format(buf, f)
+	buf.WriteByte(']')
+}
 
-// Ditto for ShowSource, used for [SHOW ...]
-
-func (*ShowSource) tableExpr() {}
+func (*StatementSource) tableExpr() {}
 
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID uint32

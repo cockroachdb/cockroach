@@ -342,18 +342,8 @@ func (p *planner) getDataSource(
 		}
 		return p.makeJoin(ctx, t.Join, left, right, t.Cond)
 
-	case *parser.ShowSource:
+	case *parser.StatementSource:
 		plan, err := p.newPlan(ctx, t.Statement, nil)
-		if err != nil {
-			return planDataSource{}, err
-		}
-		return planDataSource{
-			info: newSourceInfoForSingleTable(anonymousTable, planColumns(plan)),
-			plan: plan,
-		}, nil
-
-	case *parser.Explain:
-		plan, err := p.Explain(ctx, t)
 		if err != nil {
 			return planDataSource{}, err
 		}

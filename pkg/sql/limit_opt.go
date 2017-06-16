@@ -146,7 +146,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 		setUnlimited(n.plan)
 	case *explainDistSQLNode:
 		setUnlimited(n.plan)
-	case *explainTraceNode:
+	case *traceNode:
 		setUnlimited(n.plan)
 	case *explainPlanNode:
 		if n.expanded {

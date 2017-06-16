@@ -439,7 +439,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   SYMMETRIC SYSTEM
 
 %token <str>   TABLE TABLES TEMPLATE TESTING_RANGES TESTING_RELOCATE TEXT THEN
-%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRANSACTION TREAT TRIM TRUE
+%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
@@ -488,7 +488,6 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> delete_stmt
 %type <Statement> drop_stmt
 %type <Statement> explain_stmt
-%type <Statement> explainable_stmt
 %type <Statement> help_stmt
 %type <Statement> prepare_stmt
 %type <Statement> preparable_stmt
@@ -1186,16 +1185,16 @@ attrs:
 
 // EXPLAIN (options) query
 explain_stmt:
-  EXPLAIN explainable_stmt
+  EXPLAIN preparable_stmt
   {
     $$.val = &Explain{Statement: $2.stmt()}
   }
-| EXPLAIN '(' explain_option_list ')' explainable_stmt
+| EXPLAIN '(' explain_option_list ')' preparable_stmt
   {
     $$.val = &Explain{Options: $3.strs(), Statement: $5.stmt()}
   }
 
-explainable_stmt:
+preparable_stmt:
   select_stmt
   {
     $$.val = $1.slct()
@@ -1246,15 +1245,6 @@ prep_type_clause:
   {
     $$.val = []ColumnType(nil)
   }
-
-preparable_stmt:
-  select_stmt
-  {
-    $$.val = $1.slct()
-  }
-| insert_stmt
-| update_stmt
-| delete_stmt
 
 execute_stmt:
   // EXECUTE <plan_name> [(params, ...)]
@@ -1703,6 +1693,14 @@ show_stmt:
 | SHOW LOCAL QUERIES
   {
     $$.val = &ShowQueries{Cluster: false}
+  }
+| SHOW SESSION TRACE
+  {
+    $$.val = &ShowTrace{Statement: nil}
+  }
+| SHOW TRACE FOR preparable_stmt
+  {
+    $$.val = &ShowTrace{Statement: $4.stmt()}
   }
 | SHOW SESSIONS
   {
@@ -3212,30 +3210,21 @@ table_ref:
 // The following syntax is a CockroachDB extension:
 //     SELECT ... FROM [ EXPLAIN .... ] WHERE ...
 //     SELECT ... FROM [ SHOW .... ] WHERE ...
-// EXPLAIN within square brackets can be used as a table expression (data source).
+//     SELECT ... FROM [ INSERT ... RETURNING ... ] WHERE ...
+// A statement within square brackets can be used as a table expression (data source).
 // We use square brackets for two reasons:
 // - the grammar would be terribly ambiguous if we used simple
 //   parentheses or no parentheses at all.
 // - it carries visual semantic information, by marking the table
-//   expression as radically different from the other things. This is
-//   useful because the statement after EXPLAIN never runs, so the
-//   entire bracketed EXPLAIN data source can be seen as a way to
-//   "escape" the enclosed statement. And if a user does not know this
-//   and encounters this syntax, they will know from the unusual
-//   choice that something rather different is going on and may be
-//   pushed by the unusual syntax to investigate further in the docs.
+//   expression as radically different from the other things.
+//   If a user does not know this and encounters this syntax, they
+//   will know from the unusual choice that something rather different
+//   is going on and may be pushed by the unusual syntax to
+//   investigate further in the docs.
 
-| '[' EXPLAIN  explainable_stmt ']' opt_ordinality opt_alias_clause
+| '[' preparable_stmt ']' opt_ordinality opt_alias_clause
   {
-    $$.val = &AliasedTableExpr{Expr: &Explain{ Statement: $3.stmt(), Enclosed: true }, Ordinality: $5.bool(), As: $6.aliasClause() }
-  }
-| '[' EXPLAIN '(' explain_option_list ')' explainable_stmt ']' opt_ordinality opt_alias_clause
-  {
-    $$.val = &AliasedTableExpr{Expr: &Explain{ Options: $4.strs(), Statement: $6.stmt(), Enclosed: true }, Ordinality: $8.bool(), As: $9.aliasClause() }
-  }
-| '[' show_stmt ']' opt_ordinality opt_alias_clause
-  {
-    $$.val = &AliasedTableExpr{Expr: &ShowSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
+      $$.val = &AliasedTableExpr{Expr: &StatementSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
   }
 
 opt_tableref_col_list:
@@ -5423,6 +5412,7 @@ unreserved_keyword:
 | TESTING_RANGES
 | TESTING_RELOCATE
 | TEXT
+| TRACE
 | TRANSACTION
 | TRUNCATE
 | TYPE
