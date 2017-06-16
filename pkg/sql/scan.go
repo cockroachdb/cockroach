@@ -220,7 +220,7 @@ func (n *scanNode) Next(ctx context.Context) (bool, error) {
 	// We fetch one row at a time until we find one that passes the filter.
 	for n.hardLimit == 0 || n.rowIndex < n.hardLimit {
 		var err error
-		n.row, err = n.fetcher.NextRowDecoded(ctx)
+		n.row, err = n.fetcher.NextRowDecoded(ctx, n.p.session.Tracing.KVTracingEnabled())
 		if err != nil || n.row == nil {
 			return false, err
 		}

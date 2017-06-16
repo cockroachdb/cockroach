@@ -199,7 +199,8 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	for {
-		fetcherRow, err := tr.fetcher.NextRow(ctx)
+		// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
+		fetcherRow, err := tr.fetcher.NextRow(ctx, false /* traceKV */)
 		if err != nil || fetcherRow == nil {
 			if err != nil {
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})

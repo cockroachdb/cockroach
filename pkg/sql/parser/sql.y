@@ -1630,6 +1630,11 @@ show_stmt:
     /* SKIP DOC */
     $$.val = &Show{Name: $2}
   }
+| SHOW TRACE
+  {
+    /* SKIP DOC */
+    $$.val = &Show{Name: $2}
+  }
 | SHOW ALL
   {
     $$.val = &Show{Name: $2}

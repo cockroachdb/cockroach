@@ -55,17 +55,21 @@ type tableWriter interface {
 
 	// init provides the tableWriter with a Txn to write to and returns an error
 	// if it was misconfigured.
-	init(*client.Txn) error
+	init(txn *client.Txn) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
 	// The passed Datums is not used after `row` returns. The returned Datums is
 	// suitable for use with returningHelper.
-	row(context.Context, parser.Datums) (parser.Datums, error)
+	// The traceKV parameter determines whether the individual K/V operations
+	// should be logged to the context.
+	row(ctx context.Context, values parser.Datums, traceKV bool) (parser.Datums, error)
 
 	// finalize flushes out any remaining writes. It is called after all calls to
 	// row.
-	finalize(ctx context.Context) error
+	// The traceKV parameter determines whether the individual K/V operations
+	// should be logged to the context.
+	finalize(ctx context.Context, traceKV bool) error
 
 	// spans collects the upper bound set of read and write spans that the
 	// tableWriter will touch when executed. This is contractual, and the
@@ -101,11 +105,13 @@ func (ti *tableInserter) init(txn *client.Txn) error {
 	return nil
 }
 
-func (ti *tableInserter) row(ctx context.Context, values parser.Datums) (parser.Datums, error) {
-	return nil, ti.ri.InsertRow(ctx, ti.b, values, false)
+func (ti *tableInserter) row(
+	ctx context.Context, values parser.Datums, traceKV bool,
+) (parser.Datums, error) {
+	return nil, ti.ri.InsertRow(ctx, ti.b, values, false, traceKV)
 }
 
-func (ti *tableInserter) finalize(ctx context.Context) error {
+func (ti *tableInserter) finalize(ctx context.Context, _ bool) error {
 	var err error
 	if ti.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
@@ -144,13 +150,15 @@ func (tu *tableUpdater) init(txn *client.Txn) error {
 	return nil
 }
 
-func (tu *tableUpdater) row(ctx context.Context, values parser.Datums) (parser.Datums, error) {
+func (tu *tableUpdater) row(
+	ctx context.Context, values parser.Datums, traceKV bool,
+) (parser.Datums, error) {
 	oldValues := values[:len(tu.ru.FetchCols)]
 	updateValues := values[len(tu.ru.FetchCols):]
-	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues)
+	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, traceKV)
 }
 
-func (tu *tableUpdater) finalize(ctx context.Context) error {
+func (tu *tableUpdater) finalize(ctx context.Context, _ bool) error {
 	var err error
 	if tu.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
@@ -306,7 +314,9 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		tu.fetchCols, valNeededForCol, false /*returnRangeInfo*/)
 }
 
-func (tu *tableUpserter) row(ctx context.Context, row parser.Datums) (parser.Datums, error) {
+func (tu *tableUpserter) row(
+	ctx context.Context, row parser.Datums, traceKV bool,
+) (parser.Datums, error) {
 	if tu.fastPathBatch != nil {
 		primaryKey, _, err := sqlbase.EncodeIndexKey(
 			tu.tableDesc, &tu.tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
@@ -317,7 +327,7 @@ func (tu *tableUpserter) row(ctx context.Context, row parser.Datums) (parser.Dat
 			return nil, fmt.Errorf("UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time")
 		}
 		tu.fastPathKeys[string(primaryKey)] = struct{}{}
-		err = tu.ri.InsertRow(ctx, tu.fastPathBatch, row, true)
+		err = tu.ri.InsertRow(ctx, tu.fastPathBatch, row, true, traceKV)
 		return nil, err
 	}
 
@@ -329,12 +339,12 @@ func (tu *tableUpserter) row(ctx context.Context, row parser.Datums) (parser.Dat
 }
 
 // flush commits to tu.txn any rows batched up in tu.insertRows.
-func (tu *tableUpserter) flush(ctx context.Context, finalize bool) error {
+func (tu *tableUpserter) flush(ctx context.Context, finalize, traceKV bool) error {
 	defer func() {
 		tu.insertRows = nil
 	}()
 
-	existingRows, err := tu.fetchExisting(ctx)
+	existingRows, err := tu.fetchExisting(ctx, traceKV)
 	if err != nil {
 		return err
 	}
@@ -344,7 +354,7 @@ func (tu *tableUpserter) flush(ctx context.Context, finalize bool) error {
 		existingRow := existingRows[i]
 
 		if existingRow == nil {
-			err := tu.ri.InsertRow(ctx, b, insertRow, false)
+			err := tu.ri.InsertRow(ctx, b, insertRow, false, traceKV)
 			if err != nil {
 				return err
 			}
@@ -356,7 +366,7 @@ func (tu *tableUpserter) flush(ctx context.Context, finalize bool) error {
 				if err != nil {
 					return err
 				}
-				_, err = tu.ru.UpdateRow(ctx, b, existingValues, updateValues)
+				_, err = tu.ru.UpdateRow(ctx, b, existingValues, updateValues, traceKV)
 				if err != nil {
 					return err
 				}
@@ -443,7 +453,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context) ([]roachpb.Key, error
 // fetchExisting returns any existing rows in the table that conflict with the
 // ones in tu.insertRows. The returned slice is the same length as tu.insertRows
 // and a nil entry indicates no conflict.
-func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.Datums, error) {
+func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]parser.Datums, error) {
 	primaryKeys, err := tu.upsertRowPKs(ctx)
 	if err != nil {
 		return nil, err
@@ -472,7 +482,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.Datums, er
 
 	rows := make([]parser.Datums, len(primaryKeys))
 	for {
-		row, err := tu.fetcher.NextRowDecoded(ctx)
+		row, err := tu.fetcher.NextRowDecoded(ctx, traceKV)
 		if err != nil {
 			return nil, err
 		}
@@ -495,7 +505,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.Datums, er
 	return rows, nil
 }
 
-func (tu *tableUpserter) finalize(ctx context.Context) error {
+func (tu *tableUpserter) finalize(ctx context.Context, traceKV bool) error {
 	if tu.fastPathBatch != nil {
 		if tu.autoCommit {
 			// An auto-txn can commit the transaction with the batch. This is an
@@ -505,7 +515,7 @@ func (tu *tableUpserter) finalize(ctx context.Context) error {
 		}
 		return tu.txn.Run(ctx, tu.fastPathBatch)
 	}
-	return tu.flush(ctx, true /* finalize */)
+	return tu.flush(ctx, true /* finalize */, traceKV)
 }
 
 func (tu *tableUpserter) spans() (reads, writes roachpb.Spans, err error) {
@@ -530,11 +540,13 @@ func (td *tableDeleter) init(txn *client.Txn) error {
 	return nil
 }
 
-func (td *tableDeleter) row(ctx context.Context, values parser.Datums) (parser.Datums, error) {
-	return nil, td.rd.DeleteRow(ctx, td.b, values)
+func (td *tableDeleter) row(
+	ctx context.Context, values parser.Datums, traceKV bool,
+) (parser.Datums, error) {
+	return nil, td.rd.DeleteRow(ctx, td.b, values, traceKV)
 }
 
-func (td *tableDeleter) finalize(ctx context.Context) error {
+func (td *tableDeleter) finalize(ctx context.Context, _ bool) error {
 	if td.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
@@ -570,15 +582,18 @@ func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
 // fastDelete adds to the batch the kv operations necessary to delete sql rows
 // without knowing the values that are currently present. fastDelete calls
 // finalize, so it should not be called after.
-func (td *tableDeleter) fastDelete(ctx context.Context, scan *scanNode) (rowCount int, err error) {
+func (td *tableDeleter) fastDelete(
+	ctx context.Context, scan *scanNode, traceKV bool,
+) (rowCount int, err error) {
+
 	for _, span := range scan.spans {
-		if log.V(2) {
-			log.Infof(ctx, "Skipping scan and just deleting %s - %s", span.Key, span.EndKey)
+		if traceKV {
+			log.VEventf(ctx, 2, "Skipping scan and just deleting %s - %s", span.Key, span.EndKey)
 		}
 		td.b.DelRange(span.Key, span.EndKey, true)
 	}
 
-	err = td.finalize(ctx)
+	err = td.finalize(ctx, traceKV)
 	if err != nil {
 		return 0, err
 	}
@@ -620,19 +635,19 @@ func (td *tableDeleter) fastDelete(ctx context.Context, scan *scanNode) (rowCoun
 // limit is a limit on either the number of keys or table-rows (for
 // interleaved tables) deleted in the operation.
 func (td *tableDeleter) deleteAllRows(
-	ctx context.Context, resume roachpb.Span, limit int64,
+	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if td.rd.Helper.TableDesc.IsInterleaved() {
-		if log.V(2) {
-			log.Info(ctx, "delete forced to scan: table is interleaved")
+		if traceKV {
+			log.VEvent(ctx, 2, "delete forced to scan: table is interleaved")
 		}
-		return td.deleteAllRowsScan(ctx, resume, limit)
+		return td.deleteAllRowsScan(ctx, resume, limit, traceKV)
 	}
-	return td.deleteAllRowsFast(ctx, resume, limit)
+	return td.deleteAllRowsFast(ctx, resume, limit, traceKV)
 }
 
 func (td *tableDeleter) deleteAllRowsFast(
-	ctx context.Context, resume roachpb.Span, limit int64,
+	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		tablePrefix := roachpb.Key(
@@ -644,12 +659,12 @@ func (td *tableDeleter) deleteAllRowsFast(
 			EndKey: tablePrefix.PrefixEnd(),
 		}
 	}
-	if log.V(2) {
-		log.Infof(ctx, "DelRange %s - %s", resume.Key, resume.EndKey)
+	if traceKV {
+		log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	}
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
-	if err := td.finalize(ctx); err != nil {
+	if err := td.finalize(ctx, traceKV); err != nil {
 		return resume, err
 	}
 	if l := len(td.b.Results); l != 1 {
@@ -659,7 +674,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 }
 
 func (td *tableDeleter) deleteAllRowsScan(
-	ctx context.Context, resume roachpb.Span, limit int64,
+	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
@@ -682,7 +697,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	}
 
 	for i := int64(0); i < limit; i++ {
-		row, err := rf.NextRowDecoded(ctx)
+		row, err := rf.NextRowDecoded(ctx, traceKV)
 		if err != nil {
 			return resume, err
 		}
@@ -691,7 +706,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 			resume = roachpb.Span{}
 			break
 		}
-		_, err = td.row(ctx, row)
+		_, err = td.row(ctx, row, traceKV)
 		if err != nil {
 			return resume, err
 		}
@@ -700,7 +715,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 		// Update the resume start key for the next iteration.
 		resume.Key = rf.Key()
 	}
-	return resume, td.finalize(ctx)
+	return resume, td.finalize(ctx, traceKV)
 }
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the
@@ -713,30 +728,30 @@ func (td *tableDeleter) deleteAllRowsScan(
 //
 // limit is a limit on the number of index entries deleted in the operation.
 func (td *tableDeleter) deleteIndex(
-	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if len(idx.Interleave.Ancestors) > 0 || len(idx.InterleavedBy) > 0 {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
-		return td.deleteIndexScan(ctx, idx, resume, limit)
+		return td.deleteIndexScan(ctx, idx, resume, limit, traceKV)
 	}
-	return td.deleteIndexFast(ctx, idx, resume, limit)
+	return td.deleteIndexFast(ctx, idx, resume, limit, traceKV)
 }
 
 func (td *tableDeleter) deleteIndexFast(
-	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.IndexSpan(idx.ID)
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "DelRange %s - %s", resume.Key, resume.EndKey)
+	if traceKV {
+		log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	}
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
-	if err := td.finalize(ctx); err != nil {
+	if err := td.finalize(ctx, traceKV); err != nil {
 		return resume, err
 	}
 	if l := len(td.b.Results); l != 1 {
@@ -746,7 +761,7 @@ func (td *tableDeleter) deleteIndexFast(
 }
 
 func (td *tableDeleter) deleteIndexScan(
-	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
@@ -769,7 +784,7 @@ func (td *tableDeleter) deleteIndexScan(
 	}
 
 	for i := int64(0); i < limit; i++ {
-		row, err := rf.NextRowDecoded(ctx)
+		row, err := rf.NextRowDecoded(ctx, traceKV)
 		if err != nil {
 			return resume, err
 		}
@@ -778,7 +793,7 @@ func (td *tableDeleter) deleteIndexScan(
 			resume = roachpb.Span{}
 			break
 		}
-		if err := td.rd.DeleteIndexRow(ctx, td.b, idx, row); err != nil {
+		if err := td.rd.DeleteIndexRow(ctx, td.b, idx, row, traceKV); err != nil {
 			return resume, err
 		}
 	}
@@ -786,7 +801,7 @@ func (td *tableDeleter) deleteIndexScan(
 		// Update the resume start key for the next iteration.
 		resume.Key = rf.Key()
 	}
-	return resume, td.finalize(ctx)
+	return resume, td.finalize(ctx, traceKV)
 }
 
 func (td *tableDeleter) spans() (reads, writes roachpb.Spans, err error) {
