@@ -80,6 +80,7 @@ application_name               helloworld
 client_encoding                UTF8
 client_min_messages
 database                       foo
+datestyle                      ISO
 default_transaction_isolation  SERIALIZABLE
 distsql                        off
 extra_float_digits
@@ -145,6 +146,12 @@ SET CLIENT_ENCODING = 'unicode'
 
 statement error non-UTF8 encoding other not supported
 SET CLIENT_ENCODING = 'other'
+
+statement ok
+SET DATESTYLE = 'ISO'
+
+statement error non-ISO date style other not supported
+SET DATESTYLE = 'other'
 
 statement ok
 SET SEARCH_PATH = 'blah'
