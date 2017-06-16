@@ -467,7 +467,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 		} else if actual.Epoch < liveness.Epoch {
 			return errors.Errorf("unexpected liveness epoch %d; expected >= %d", actual.Epoch, liveness.Epoch)
 		}
-		return errors.Errorf("mismatch incrementing epoch for %+v; actual is %+v", liveness, actual)
+		return errors.Errorf("mismatch incrementing epoch for %+v; actual is %+v", *liveness, actual)
 	}); err != nil {
 		if err == errEpochAlreadyIncremented {
 			return nil
