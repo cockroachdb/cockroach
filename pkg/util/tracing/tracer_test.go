@@ -17,64 +17,13 @@
 package tracing
 
 import (
-	"fmt"
-	"sort"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 )
-
-func checkRecordedSpans(t *testing.T, recSpans []RecordedSpan, expected string) {
-	expected = strings.TrimSpace(expected)
-	var rows []string
-	row := func(format string, args ...interface{}) {
-		rows = append(rows, fmt.Sprintf(format, args...))
-	}
-
-	for _, rs := range recSpans {
-		row("span %s:", rs.Operation)
-		if len(rs.Tags) > 0 {
-			var tags []string
-			for k, v := range rs.Tags {
-				tags = append(tags, fmt.Sprintf("%s=%v", k, v))
-			}
-			sort.Strings(tags)
-			row("  tags: %s", strings.Join(tags, " "))
-		}
-		for _, l := range rs.Logs {
-			msg := ""
-			for _, f := range l.Fields {
-				msg = msg + fmt.Sprintf("  %s: %v", f.Key, f.Value)
-			}
-			row("%s", msg)
-		}
-	}
-	var expRows []string
-	if expected != "" {
-		expRows = strings.Split(expected, "\n")
-	}
-	match := false
-	if len(expRows) == len(rows) {
-		match = true
-		for i := range expRows {
-			e := strings.Trim(expRows[i], " \t")
-			r := strings.Trim(rows[i], " \t")
-			if e != r {
-				match = false
-				break
-			}
-		}
-	}
-	if !match {
-		file, line, _ := caller.Lookup(1)
-		t.Errorf("%s:%d expected:\n%s\ngot:\n%s", file, line, expected, strings.Join(rows, "\n"))
-	}
-}
 
 func TestTracerRecording(t *testing.T) {
 	tr := NewTracer()
@@ -113,19 +62,23 @@ func TestTracerRecording(t *testing.T) {
 	}
 	s2.LogKV("x", 3)
 
-	checkRecordedSpans(t, GetRecording(s1), `
-	  span a:
-      x: 2
-	  span b:
-      x: 3
-	`)
+	if err := TestingCheckRecordedSpans(GetRecording(s1), `
+		span a:
+			x: 2
+		span b:
+			x: 3
+	`); err != nil {
+		t.Fatal(err)
+	}
 
-	checkRecordedSpans(t, GetRecording(s2), `
-	  span a:
-      x: 2
-	  span b:
-      x: 3
-	`)
+	if err := TestingCheckRecordedSpans(GetRecording(s2), `
+		span a:
+			x: 2
+		span b:
+			x: 3
+	`); err != nil {
+		t.Fatal(err)
+	}
 
 	s3 := tr.StartSpan("c", opentracing.FollowsFrom(s2.Context()))
 	s3.LogKV("x", 4)
@@ -133,40 +86,49 @@ func TestTracerRecording(t *testing.T) {
 
 	s2.Finish()
 
-	checkRecordedSpans(t, GetRecording(s1), `
-	  span a:
-      x: 2
-	  span b:
-      x: 3
-	  span c:
-		  tags: tag=val
-      x: 4
-	`)
+	if err := TestingCheckRecordedSpans(GetRecording(s1), `
+		span a:
+			x: 2
+		span b:
+			x: 3
+		span c:
+			tags: tag=val
+			x: 4
+	`); err != nil {
+		t.Fatal(err)
+	}
 	s3.Finish()
-	checkRecordedSpans(t, GetRecording(s1), `
-	  span a:
-      x: 2
-	  span b:
-      x: 3
-	  span c:
-		  tags: tag=val
-      x: 4
-	`)
+	if err := TestingCheckRecordedSpans(GetRecording(s1), `
+		span a:
+			x: 2
+		span b:
+			x: 3
+		span c:
+			tags: tag=val
+			x: 4
+	`); err != nil {
+		t.Fatal(err)
+	}
 	StopRecording(s1)
 	s1.LogKV("x", 100)
-	checkRecordedSpans(t, GetRecording(s1), ``)
+	if err := TestingCheckRecordedSpans(GetRecording(s1), ``); err != nil {
+		t.Fatal(err)
+	}
+
 	// The child span is still recording.
 	s3.LogKV("x", 5)
-	checkRecordedSpans(t, GetRecording(s3), `
-	  span a:
-      x: 2
-	  span b:
-      x: 3
-	  span c:
-		  tags: tag=val
-      x: 4
-      x: 5
-	`)
+	if err := TestingCheckRecordedSpans(GetRecording(s3), `
+		span a:
+			x: 2
+		span b:
+			x: 3
+		span c:
+			tags: tag=val
+			x: 4
+			x: 5
+	`); err != nil {
+		t.Fatal(err)
+	}
 	s1.Finish()
 }
 
@@ -229,28 +191,34 @@ func TestTracerInjectExtract(t *testing.T) {
 
 	// Verify that recording was started automatically.
 	rec := GetRecording(s2)
-	checkRecordedSpans(t, rec, `
-	  span remote op:
-		  tags: sb=1
-	    x: 1
-	`)
+	if err := TestingCheckRecordedSpans(rec, `
+		span remote op:
+			tags: sb=1
+			x: 1
+	`); err != nil {
+		t.Fatal(err)
+	}
 
-	checkRecordedSpans(t, GetRecording(s1), `
-	  span a:
-	    tags: sb=1
-	`)
+	if err := TestingCheckRecordedSpans(GetRecording(s1), `
+		span a:
+			tags: sb=1
+	`); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := ImportRemoteSpans(s1, rec); err != nil {
 		t.Fatal(err)
 	}
 
-	checkRecordedSpans(t, GetRecording(s1), `
-	  span a:
-		  tags: sb=1
+	if err := TestingCheckRecordedSpans(GetRecording(s1), `
+		span a:
+			tags: sb=1
 		span remote op:
-		  tags: sb=1
+			tags: sb=1
 			x: 1
-	`)
+	`); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestLightstepContext(t *testing.T) {
