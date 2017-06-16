@@ -80,6 +80,7 @@ application_name               helloworld
 client_encoding                UTF8
 client_min_messages
 database                       foo
+datestyle                      ISO
 default_transaction_isolation  SERIALIZABLE
 distsql                        off
 extra_float_digits
