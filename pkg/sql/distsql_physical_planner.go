@@ -127,12 +127,12 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 	}
 	switch t := expr.(type) {
 	case *subquery, *parser.Subquery:
-		v.err = errors.Errorf("subqueries not supported yet")
+		v.err = queryNotSupportedError("subqueries not supported yet")
 		return false, expr
 
 	case *parser.FuncExpr:
 		if t.IsDistSQLBlacklist() {
-			v.err = errors.Errorf("function %s cannot be executed with distsql", t)
+			v.err = queryNotSupportedError(fmt.Sprintf("function %s cannot be executed with distsql", t))
 			return false, expr
 		}
 	}
@@ -193,6 +193,10 @@ func (a distRecommendation) compose(b distRecommendation) distRecommendation {
 	return canDistribute
 }
 
+type queryNotSupportedError string
+
+func (e queryNotSupportedError) Error() string { return string(e) }
+
 // checkSupportForNode returns a distRecommendation (as described above) or an
 // error if the plan subtree is not supported by DistSQL.
 // TODO(radu): add tests for this.
@@ -209,7 +213,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			if typ := n.columns[i].Typ; typ.FamilyEqual(parser.TypeTuple) ||
 				typ.FamilyEqual(parser.TypeStringArray) ||
 				typ.FamilyEqual(parser.TypeIntArray) {
-				return 0, errors.Errorf("unsupported render type %s", typ)
+				return 0, queryNotSupportedError(fmt.Sprintf("unsupported render type %s", typ))
 			}
 			if err := dsp.checkExpr(e); err != nil {
 				return 0, err
@@ -230,7 +234,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *joinNode:
 		if n.joinType != joinTypeInner {
-			return 0, errors.Errorf("only inner join supported")
+			return 0, queryNotSupportedError("only inner join supported")
 		}
 		if err := dsp.checkExpr(n.pred.onCond); err != nil {
 			return 0, err
@@ -286,7 +290,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		for _, fholder := range n.funcs {
 			if f, ok := fholder.expr.(*parser.FuncExpr); ok {
 				if strings.ToUpper(f.Func.FunctionReference.String()) == "ARRAY_AGG" {
-					return 0, errors.Errorf("ARRAY_AGG aggregation not supported yet")
+					return 0, queryNotSupportedError("ARRAY_AGG aggregation not supported yet")
 				}
 			}
 		}
@@ -310,7 +314,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return dsp.checkSupportForNode(n.plan)
 
 	default:
-		return 0, errors.Errorf("unsupported node %T", node)
+		return 0, queryNotSupportedError(fmt.Sprintf("unsupported node %T", node))
 	}
 }
 
