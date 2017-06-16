@@ -2111,6 +2111,7 @@ func MVCCGarbageCollect(
 	keys []roachpb.GCRequest_GCKey,
 	timestamp hlc.Timestamp,
 ) error {
+	count := 0
 	iter := engine.NewIterator(false)
 	defer iter.Close()
 	// Iterate through specified GC keys.
@@ -2181,6 +2182,10 @@ func MVCCGarbageCollect(
 				}
 				if err := engine.Clear(unsafeIterKey); err != nil {
 					return err
+				}
+				count++
+				if count > 100000 {
+					break
 				}
 			}
 		}
