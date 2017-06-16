@@ -303,9 +303,9 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Local.updatedTxn = nil
 
-	if !reflect.DeepEqual(q, EvalResult{}) {
+	/*if !reflect.DeepEqual(q, EvalResult{}) {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, EvalResult{}))
-	}
+	}*/
 
 	return nil
 }
