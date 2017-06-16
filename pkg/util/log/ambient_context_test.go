@@ -21,6 +21,8 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestAnnotateCtxTags(t *testing.T) {
@@ -44,8 +46,8 @@ func TestAnnotateCtxTags(t *testing.T) {
 }
 
 func TestAnnotateCtxSpan(t *testing.T) {
-	var traceEv events
-	tracer := testingTracer(&traceEv)
+	tracer := tracing.NewTracer()
+	tracer.(*tracing.Tracer).SetForceRealSpans(true)
 
 	ac := AmbientContext{}
 	ac.AddLogTag("ambient", nil)
@@ -53,6 +55,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	// Annotate a context that has an open span.
 
 	sp1 := tracer.StartSpan("root")
+	tracing.StartRecording(sp1, tracing.SingleNodeRecording)
 	ctx1 := opentracing.ContextWithSpan(context.Background(), sp1)
 	Event(ctx1, "a")
 
@@ -63,25 +66,28 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	sp2.Finish()
 	sp1.Finish()
 
-	if expected := (events{
-		"root:start", "root:a", "child:start", "child:[ambient] b", "root:c", "child:finish",
-		"root:finish",
-	}); !compareTraces(expected, traceEv) {
-		t.Errorf("expected events '%s', got '%v'", expected, traceEv)
+	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp1), `
+		span root:
+			event: a
+			event: c
+		span child:
+			event: [ambient] b
+	`); err != nil {
+		t.Fatal(err)
 	}
 
 	// Annotate a context that has no span.
 
-	traceEv = nil
 	ac.Tracer = tracer
 	ctx, sp := ac.AnnotateCtxWithSpan(context.Background(), "s")
+	tracing.StartRecording(sp, tracing.SingleNodeRecording)
 	Event(ctx, "a")
 	sp.Finish()
-
-	if expected := (events{
-		"s:start", "s:[ambient] a", "s:finish",
-	}); !compareTraces(expected, traceEv) {
-		t.Errorf("expected events '%s', got '%v'", expected, traceEv)
+	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp), `
+	  span s:
+			event: [ambient] a
+	`); err != nil {
+		t.Fatal(err)
 	}
 }
 
