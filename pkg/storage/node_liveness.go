@@ -101,8 +101,10 @@ type NodeLiveness struct {
 	livenessThreshold time.Duration
 	heartbeatInterval time.Duration
 	pauseHeartbeat    atomic.Value // contains a bool
-	sem               chan struct{}
+	selfSem           chan struct{}
+	otherSem          chan struct{}
 	triggerHeartbeat  chan struct{} // for testing
+
 	metrics           LivenessMetrics
 
 	mu struct {
@@ -131,7 +133,8 @@ func NewNodeLiveness(
 		gossip:            g,
 		livenessThreshold: livenessThreshold,
 		heartbeatInterval: livenessThreshold - renewalDuration,
-		sem:               make(chan struct{}, 1),
+		selfSem:           make(chan struct{}, 1),
+		otherSem:          make(chan struct{}, 1),
 		triggerHeartbeat:  make(chan struct{}, 1),
 	}
 	nl.metrics = LivenessMetrics{
@@ -149,7 +152,16 @@ func NewNodeLiveness(
 	return nl
 }
 
+
 var errNodeDrainingSet = errors.New("node is already draining")
+
+func (nl *NodeLiveness) sem(nodeID roachpb.NodeID) chan struct{} {
+	if nodeID == nl.gossip.NodeID.Get() {
+		return nl.selfSem
+	} else {
+		return nl.otherSem
+	}
+}
 
 // SetDraining calls PauseHeartbeat with the given boolean and then attempts to
 // update the liveness record.
@@ -199,18 +211,20 @@ func (nl *NodeLiveness) SetDecommissioning(
 func (nl *NodeLiveness) setDrainingInternal(
 	ctx context.Context, liveness *Liveness, drain bool,
 ) error {
+	nodeID := nl.gossip.NodeID.Get()
+	sem := nl.sem(nodeID)
 	// Allow only one attempt to set the draining field at a time.
 	select {
-	case nl.sem <- struct{}{}:
+	case sem <- struct{}{}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 	defer func() {
-		<-nl.sem
+		<-sem
 	}()
 
 	newLiveness := Liveness{
-		NodeID: nl.gossip.NodeID.Get(),
+		NodeID: nodeID,
 		Epoch:  1,
 	}
 	if liveness != nil {
@@ -365,17 +379,19 @@ func (nl *NodeLiveness) heartbeatInternal(
 		}(timeutil.Now())
 
 		// Allow only one heartbeat at a time.
+		nodeID := nl.gossip.NodeID.Get()
+		sem := nl.sem(nodeID)
 		select {
-		case nl.sem <- struct{}{}:
+		case sem <- struct{}{}:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 		defer func() {
-			<-nl.sem
+			<-sem
 		}()
 
 		newLiveness := Liveness{
-			NodeID: nl.gossip.NodeID.Get(),
+			NodeID: nodeID,
 			Epoch:  1,
 		}
 		if liveness != nil {
@@ -509,13 +525,14 @@ var errEpochAlreadyIncremented = errors.New("epoch already incremented")
 // gathered through gossip, an error is returned.
 func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) error {
 	// Allow only one increment at a time.
+	sem := nl.sem(liveness.NodeID)
 	select {
-	case nl.sem <- struct{}{}:
+	case sem <- struct{}{}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 	defer func() {
-		<-nl.sem
+		<-sem
 	}()
 
 	if liveness.isLive(nl.clock.Now(), nl.clock.MaxOffset()) {
