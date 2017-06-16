@@ -301,7 +301,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				resume, err = td.deleteIndex(
-					ctx, &desc, resumeAt, chunkSize,
+					ctx, &desc, resumeAt, chunkSize, false, /* traceKV */
 				)
 				if err != nil {
 					return err

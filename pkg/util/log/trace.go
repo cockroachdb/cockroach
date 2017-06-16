@@ -205,6 +205,17 @@ func VEventf(ctx context.Context, level level, format string, args ...interface{
 	}
 }
 
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+func VEventfDepth(ctx context.Context, depth int, level level, format string, args ...interface{}) {
+	if VDepth(level, 1+depth) {
+		// Log to INFO (which also logs an event).
+		logDepth(ctx, 1+depth, Severity_INFO, format, args)
+	} else {
+		eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
+	}
+}
+
 // HasSpanOrEvent returns true if the context has a span or event that should
 // be logged to.
 func HasSpanOrEvent(ctx context.Context) bool {

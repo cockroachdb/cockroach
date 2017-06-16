@@ -282,11 +282,13 @@ func insertStmtToKVs(
 				return err
 			}
 		}
-		row, err := sql.GenerateInsertRow(defaultExprs, ri.InsertColIDtoRowIndex, cols, evalCtx, tableDesc, row)
+		row, err := sql.GenerateInsertRow(
+			defaultExprs, ri.InsertColIDtoRowIndex, cols, evalCtx, tableDesc, row,
+		)
 		if err != nil {
 			return errors.Wrapf(err, "process insert %q", row)
 		}
-		if err := ri.InsertRow(ctx, b, row, true); err != nil {
+		if err := ri.InsertRow(ctx, b, row, true, false /* traceKV */); err != nil {
 			return errors.Wrapf(err, "insert %q", row)
 		}
 	}

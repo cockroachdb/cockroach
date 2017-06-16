@@ -163,7 +163,8 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		// the next batch. We could start the next batch early while we are
 		// outputting rows.
 		for {
-			fetcherRow, err := jr.fetcher.NextRow(ctx)
+			// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
+			fetcherRow, err := jr.fetcher.NextRow(ctx, false /* traceKV */)
 			if err != nil {
 				return err
 			}

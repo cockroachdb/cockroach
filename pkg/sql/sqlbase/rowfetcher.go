@@ -442,11 +442,7 @@ func (rf *RowFetcher) processValueSingle(
 }
 
 func (rf *RowFetcher) processValueBytes(
-	ctx context.Context,
-	kv client.KeyValue,
-	bytes []byte,
-	debugStrings bool,
-	prettyKeyPrefix string,
+	ctx context.Context, kv client.KeyValue, bytes []byte, debugStrings bool, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 	if debugStrings {
@@ -507,10 +503,7 @@ func (rf *RowFetcher) processValueBytes(
 // processValueTuple processes the given values (of columns family.ColumnIDs),
 // setting values in the rf.row accordingly. The key is only used for logging.
 func (rf *RowFetcher) processValueTuple(
-	ctx context.Context,
-	kv client.KeyValue,
-	debugStrings bool,
-	prettyKeyPrefix string,
+	ctx context.Context, kv client.KeyValue, debugStrings bool, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	tupleBytes, err := kv.Value.GetTuple()
 	if err != nil {
@@ -524,7 +517,7 @@ func (rf *RowFetcher) processValueTuple(
 // index used; values that are not needed (as per valNeededForCol) are nil. The
 // EncDatumRow should not be modified and is only valid until the next call.
 // When there are no more rows, the EncDatumRow is nil.
-func (rf *RowFetcher) NextRow(ctx context.Context) (EncDatumRow, error) {
+func (rf *RowFetcher) NextRow(ctx context.Context, traceKV bool) (EncDatumRow, error) {
 	if rf.kvEnd {
 		return nil, nil
 	}
@@ -536,9 +529,12 @@ func (rf *RowFetcher) NextRow(ctx context.Context) (EncDatumRow, error) {
 	// column name. When the index key changes we output a row containing the
 	// current values.
 	for {
-		_, _, err := rf.processKV(ctx, rf.kv, false)
+		prettyKey, prettyVal, err := rf.processKV(ctx, rf.kv, traceKV)
 		if err != nil {
 			return nil, err
+		}
+		if traceKV {
+			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
 		rowDone, err := rf.NextKey(ctx)
 		if err != nil {
@@ -554,8 +550,8 @@ func (rf *RowFetcher) NextRow(ctx context.Context) (EncDatumRow, error) {
 // NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
-func (rf *RowFetcher) NextRowDecoded(ctx context.Context) (parser.Datums, error) {
-	encRow, err := rf.NextRow(ctx)
+func (rf *RowFetcher) NextRowDecoded(ctx context.Context, traceKV bool) (parser.Datums, error) {
+	encRow, err := rf.NextRow(ctx, traceKV)
 	if err != nil {
 		return nil, err
 	}

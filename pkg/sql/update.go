@@ -408,7 +408,7 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 	if !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = u.tw.finalize(ctx)
+			err = u.tw.finalize(ctx, u.p.session.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -460,7 +460,9 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 	}
 
 	// Update the row values.
-	newValues, err := u.tw.row(ctx, append(oldValues, updateValues...))
+	newValues, err := u.tw.row(
+		ctx, append(oldValues, updateValues...), u.p.session.Tracing.KVTracingEnabled(),
+	)
 	if err != nil {
 		return false, err
 	}
