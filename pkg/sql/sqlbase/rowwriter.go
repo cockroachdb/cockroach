@@ -199,19 +199,23 @@ func MakeRowInserter(
 
 // insertCPutFn is used by insertRow when conflicts (i.e. the key already exists)
 // should generate errors.
-func insertCPutFn(ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value) {
+func insertCPutFn(
+	ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+) {
 	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
 	// client.Batch wrapper instead of inlining it everywhere.
-	if log.V(2) {
-		log.InfofDepth(ctx, 1, "CPut %s -> %s", *key, value.PrettyPrint())
+	if traceKV {
+		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", *key, value.PrettyPrint())
 	}
 	b.CPut(key, value, nil /* expValue */)
 }
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
-func insertPutFn(ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value) {
-	if log.V(2) {
-		log.InfofDepth(ctx, 1, "Put %s -> %s", *key, value.PrettyPrint())
+func insertPutFn(
+	ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+) {
+	if traceKV {
+		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", *key, value.PrettyPrint())
 	}
 	b.Put(key, value)
 }
@@ -224,7 +228,7 @@ type puter interface {
 // InsertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
 func (ri *RowInserter) InsertRow(
-	ctx context.Context, b puter, values []parser.Datum, ignoreConflicts bool,
+	ctx context.Context, b puter, values []parser.Datum, ignoreConflicts bool, traceKV bool,
 ) error {
 	if len(values) != len(ri.InsertCols) {
 		return errors.Errorf("got %d values but expected %d", len(values), len(ri.InsertCols))
@@ -282,7 +286,7 @@ func (ri *RowInserter) InsertRow(
 				// the row exists.
 
 				ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-				putFn(ctx, b, &ri.key, &ri.marshalled[idx])
+				putFn(ctx, b, &ri.key, &ri.marshalled[idx], traceKV)
 				ri.key = nil
 			}
 
@@ -325,7 +329,7 @@ func (ri *RowInserter) InsertRow(
 
 		if family.ID == 0 || len(ri.valueBuf) > 0 {
 			ri.value.SetTuple(ri.valueBuf)
-			putFn(ctx, b, &ri.key, &ri.value)
+			putFn(ctx, b, &ri.key, &ri.value, traceKV)
 		}
 
 		ri.key = nil
@@ -333,7 +337,7 @@ func (ri *RowInserter) InsertRow(
 
 	for i := range secondaryIndexEntries {
 		e := &secondaryIndexEntries[i]
-		putFn(ctx, b, &e.Key, &e.Value)
+		putFn(ctx, b, &e.Key, &e.Value, traceKV)
 	}
 
 	return nil
@@ -531,7 +535,11 @@ func MakeRowUpdater(
 //
 // The return value is only good until the next call to UpdateRow.
 func (ru *RowUpdater) UpdateRow(
-	ctx context.Context, b *client.Batch, oldValues []parser.Datum, updateValues []parser.Datum,
+	ctx context.Context,
+	b *client.Batch,
+	oldValues []parser.Datum,
+	updateValues []parser.Datum,
+	traceKV bool,
 ) ([]parser.Datum, error) {
 	if len(oldValues) != len(ru.FetchCols) {
 		return nil, errors.Errorf("got %d values but expected %d", len(oldValues), len(ru.FetchCols))
@@ -596,10 +604,10 @@ func (ru *RowUpdater) UpdateRow(
 			}
 		}
 
-		if err := ru.rd.DeleteRow(ctx, b, oldValues); err != nil {
+		if err := ru.rd.DeleteRow(ctx, b, oldValues, traceKV); err != nil {
 			return nil, err
 		}
-		if err := ru.ri.InsertRow(ctx, b, ru.newValues, false); err != nil {
+		if err := ru.ri.InsertRow(ctx, b, ru.newValues, false, traceKV); err != nil {
 			return nil, err
 		}
 		return ru.newValues, nil
@@ -638,8 +646,8 @@ func (ru *RowUpdater) UpdateRow(
 			}
 
 			ru.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-			if log.V(2) {
-				log.Infof(ctx, "Put %s -> %v", ru.key, ru.marshalled[idx].PrettyPrint())
+			if traceKV {
+				log.VEventf(ctx, 2, "Put %s -> %v", ru.key, ru.marshalled[idx].PrettyPrint())
 			}
 			b.Put(&ru.key, &ru.marshalled[idx])
 			ru.key = nil
@@ -686,15 +694,15 @@ func (ru *RowUpdater) UpdateRow(
 		if family.ID != 0 && len(ru.valueBuf) == 0 {
 			// The family might have already existed but every column in it is being
 			// set to NULL, so delete it.
-			if log.V(2) {
-				log.Infof(ctx, "Del %s", ru.key)
+			if traceKV {
+				log.VEventf(ctx, 2, "Del %s", ru.key)
 			}
 
 			b.Del(&ru.key)
 		} else {
 			ru.value.SetTuple(ru.valueBuf)
-			if log.V(2) {
-				log.Infof(ctx, "Put %s -> %v", ru.key, ru.value.PrettyPrint())
+			if traceKV {
+				log.VEventf(ctx, 2, "Put %s -> %v", ru.key, ru.value.PrettyPrint())
 			}
 			b.Put(&ru.key, &ru.value)
 		}
@@ -711,8 +719,8 @@ func (ru *RowUpdater) UpdateRow(
 				return nil, err
 			}
 
-			if log.V(2) {
-				log.Infof(ctx, "Del %s", secondaryIndexEntry.Key)
+			if traceKV {
+				log.VEventf(ctx, 2, "Del %s", secondaryIndexEntry.Key)
 			}
 			b.Del(secondaryIndexEntry.Key)
 		} else if !bytes.Equal(newSecondaryIndexEntry.Value.RawBytes, secondaryIndexEntry.Value.RawBytes) {
@@ -722,8 +730,8 @@ func (ru *RowUpdater) UpdateRow(
 		}
 		// Do not update Indexes in the DELETE_ONLY state.
 		if _, ok := ru.deleteOnlyIndex[i]; !ok {
-			if log.V(2) {
-				log.Infof(ctx, "CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value.PrettyPrint())
+			if traceKV {
+				log.VEventf(ctx, 2, "CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value.PrettyPrint())
 			}
 			b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
 		}
@@ -824,7 +832,9 @@ func MakeRowDeleter(
 
 // DeleteRow adds to the batch the kv operations necessary to delete a table row
 // with the given values.
-func (rd *RowDeleter) DeleteRow(ctx context.Context, b *client.Batch, values []parser.Datum) error {
+func (rd *RowDeleter) DeleteRow(
+	ctx context.Context, b *client.Batch, values []parser.Datum, traceKV bool,
+) error {
 	if err := rd.Fks.checkAll(ctx, values); err != nil {
 		return err
 	}
@@ -835,8 +845,8 @@ func (rd *RowDeleter) DeleteRow(ctx context.Context, b *client.Batch, values []p
 	}
 
 	for _, secondaryIndexEntry := range secondaryIndexEntries {
-		if log.V(2) {
-			log.Infof(ctx, "Del %s", secondaryIndexEntry.Key)
+		if traceKV {
+			log.VEventf(ctx, 2, "Del %s", secondaryIndexEntry.Key)
 		}
 		b.Del(secondaryIndexEntry.Key)
 	}
@@ -844,8 +854,8 @@ func (rd *RowDeleter) DeleteRow(ctx context.Context, b *client.Batch, values []p
 	// Delete the row.
 	rd.startKey = roachpb.Key(primaryIndexKey)
 	rd.endKey = roachpb.Key(encoding.EncodeNotNullDescending(primaryIndexKey))
-	if log.V(2) {
-		log.Infof(ctx, "DelRange %s - %s", rd.startKey, rd.endKey)
+	if traceKV {
+		log.VEventf(ctx, 2, "DelRange %s - %s", rd.startKey, rd.endKey)
 	}
 	b.DelRange(&rd.startKey, &rd.endKey, false)
 	rd.startKey, rd.endKey = nil, nil
@@ -856,7 +866,7 @@ func (rd *RowDeleter) DeleteRow(ctx context.Context, b *client.Batch, values []p
 // DeleteIndexRow adds to the batch the kv operations necessary to delete a
 // table row from the given index.
 func (rd *RowDeleter) DeleteIndexRow(
-	ctx context.Context, b *client.Batch, idx *IndexDescriptor, values []parser.Datum,
+	ctx context.Context, b *client.Batch, idx *IndexDescriptor, values []parser.Datum, traceKV bool,
 ) error {
 	if err := rd.Fks.checkAll(ctx, values); err != nil {
 		return err
@@ -866,8 +876,8 @@ func (rd *RowDeleter) DeleteIndexRow(
 	if err != nil {
 		return err
 	}
-	if log.V(2) {
-		log.Infof(ctx, "Del %s", secondaryIndexEntry.Key)
+	if traceKV {
+		log.VEventf(ctx, 2, "Del %s", secondaryIndexEntry.Key)
 	}
 	b.Del(secondaryIndexEntry.Key)
 	return nil

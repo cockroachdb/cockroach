@@ -33,7 +33,7 @@ server_version                 9.5.0
 session_user                   root
 standard_conforming_strings    on
 time zone                      UTC
-trace                          OFF
+trace                          off
 transaction isolation level    SERIALIZABLE
 transaction priority           NORMAL
 transaction status             NoTxn
