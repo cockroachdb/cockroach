@@ -239,6 +239,23 @@ func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	return nil
 }
 
+// TableCollection is a collection of tables held by a single session that
+// serves SQL requests, or a background job using a table descriptor.
+type TableCollection struct {
+	timestamp hlc.Timestamp
+	// A collection of table descriptor valid for the timestamp.
+	// They are released once the transaction using them is complete.
+	// If the transaction gets pushed and the timestamp changes,
+	// the tables are released.
+	tables []sqlbase.TableDescriptor
+	// leaseMgr manages acquiring and releasing per-table leases.
+	leaseMgr *LeaseManager
+	// databaseCache is used as a cache for database names.
+	// TODO(andrei): get rid of it and replace it with a leasing system for
+	// database descriptors.
+	databaseCache *databaseCache
+}
+
 func (tc *TableCollection) maybeChangeTimestamp(ctx context.Context, txn *client.Txn) {
 	if tc.timestamp != (hlc.Timestamp{}) && tc.timestamp != txn.OrigTimestamp() {
 		txn.ResetDeadline()
@@ -379,6 +396,19 @@ func (tc *TableCollection) getTableVersionByID(
 	// the deadline.
 	txn.UpdateDeadlineMaybe(expiration)
 	return &table, nil
+}
+
+// releaseTables releases all tables currently held by the Session.
+func (tc *TableCollection) releaseTables(ctx context.Context) {
+	if tc.tables != nil {
+		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
+		for _, table := range tc.tables {
+			if err := tc.leaseMgr.Release(table); err != nil {
+				log.Warning(ctx, err)
+			}
+		}
+		tc.tables = nil
+	}
 }
 
 // getTableNames retrieves the list of qualified names of tables

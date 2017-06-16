@@ -625,19 +625,6 @@ func (s *Session) resetForBatch(e *Executor) {
 	s.TxnState.schemaChangers.curGroupNum++
 }
 
-// releaseTables releases all tables currently held by the Session.
-func (tc *TableCollection) releaseTables(ctx context.Context) {
-	if tc.tables != nil {
-		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
-		for _, table := range tc.tables {
-			if err := tc.leaseMgr.Release(table); err != nil {
-				log.Warning(ctx, err)
-			}
-		}
-		tc.tables = nil
-	}
-}
-
 // setTestingVerifyMetadata sets a callback to be called after the Session
 // is done executing the current SQL statement. It can be used to verify
 // assumptions about how metadata will be asynchronously updated.
