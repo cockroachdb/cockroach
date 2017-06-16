@@ -52,7 +52,7 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 			return nil, err
 		}
 
-		tableDesc, err := p.session.leases.getTableLease(ctx, p.txn, p.getVirtualTabler(), tn)
+		tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +77,7 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 					continue
 				}
 
-				other, err := p.session.leases.getTableLeaseByID(ctx, p.txn, ref.Table)
+				other, err := p.session.tables.getTableVersionByID(ctx, p.txn, ref.Table)
 				if err != nil {
 					return nil, err
 				}

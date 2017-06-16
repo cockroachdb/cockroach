@@ -232,10 +232,10 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	return nil
 }
 
-func (sc *SchemaChanger) getTableLease(
-	ctx context.Context, txn *client.Txn, lc *LeaseCollection, version sqlbase.DescriptorVersion,
+func (sc *SchemaChanger) getTableVersion(
+	ctx context.Context, txn *client.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := lc.getTableLeaseByID(ctx, txn, sc.tableID)
+	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -285,9 +285,9 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 
-				lc := &LeaseCollection{leaseMgr: sc.leaseMgr}
-				defer lc.releaseLeases(ctx)
-				tableDesc, err := sc.getTableLease(ctx, txn, lc, version)
+				tc := &TableCollection{leaseMgr: sc.leaseMgr}
+				defer tc.releaseTables(ctx)
+				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
 					return err
 				}
@@ -402,10 +402,10 @@ func (sc *SchemaChanger) distBackfill(
 		}
 		log.VEventf(ctx, 2, "backfill: process %+v spans", spans)
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			lc := &LeaseCollection{leaseMgr: sc.leaseMgr}
+			tc := &TableCollection{leaseMgr: sc.leaseMgr}
 			// Use a leased table descriptor for the backfill.
-			defer lc.releaseLeases(ctx)
-			tableDesc, err := sc.getTableLease(ctx, txn, lc, version)
+			defer tc.releaseTables(ctx)
+			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 			if err != nil {
 				return err
 			}
@@ -415,7 +415,7 @@ func (sc *SchemaChanger) distBackfill(
 			if backfillType == columnBackfill {
 				fkTables := sqlbase.TablesNeededForFKs(*tableDesc, sqlbase.CheckUpdates)
 				for k := range fkTables {
-					table, err := lc.getTableLeaseByID(ctx, txn, k)
+					table, err := tc.getTableVersionByID(ctx, txn, k)
 					if err != nil {
 						return err
 					}

@@ -313,7 +313,7 @@ func planNodeForQuery(
 	txn := client.NewTxn(kvDB)
 	txn.Proto().OrigTimestamp = s.Clock().Now()
 	p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
-	p.session.leases.leaseMgr = s.LeaseManager().(*LeaseManager)
+	p.session.tables.leaseMgr = s.LeaseManager().(*LeaseManager)
 	p.session.Database = "test"
 
 	stmts, err := p.parser.Parse(sql)
