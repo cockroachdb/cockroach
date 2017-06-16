@@ -28,18 +28,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// Iterator is an interface for iterating over key/value pairs in an
-// engine. Iterator implementations are thread safe unless otherwise
-// noted.
-type Iterator interface {
+// SimpleIterator is an interface for iterating over key/value pairs in an
+// engine. SimpleIterator implementations are thread safe unless otherwise
+// noted. SimpleIterator is a subset of the functionality offered by Iterator.
+type SimpleIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
 	// Seek advances the iterator to the first key in the engine which
 	// is >= the provided key.
 	Seek(key MVCCKey)
-	// SeekReverse advances the iterator to the first key in the engine which
-	// is <= the provided key.
-	SeekReverse(key MVCCKey)
 	// Valid must be called after any call to Seek(), Next(), Prev(), or
 	// similar methods. It returns (true, nil) if the iterator points to
 	// a valid key (it is undefined to call Key(), Value(), or similar
@@ -52,15 +49,32 @@ type Iterator interface {
 	// iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the last key.
 	Next()
-	// Prev moves the iterator backward to the previous key/value
-	// in the iteration. After this call, Valid() will be true if the
-	// iterator was not positioned at the first key.
-	Prev()
 	// NextKey advances the iterator to the next MVCC key. This operation is
 	// distinct from Next which advances to the next version of the current key
 	// or the next key if the iterator is currently located at the last version
 	// for a key.
 	NextKey()
+	// UnsafeKey returns the same value as Key, but the memory is invalidated on
+	// the next call to {Next,Prev,Seek,SeekReverse,Close}.
+	UnsafeKey() MVCCKey
+	// UnsafeValue returns the same value as Value, but the memory is
+	// invalidated on the next call to {Next,Prev,Seek,SeekReverse,Close}.
+	UnsafeValue() []byte
+}
+
+// Iterator is an interface for iterating over key/value pairs in an
+// engine. Iterator implementations are thread safe unless otherwise
+// noted.
+type Iterator interface {
+	SimpleIterator
+
+	// SeekReverse advances the iterator to the first key in the engine which
+	// is <= the provided key.
+	SeekReverse(key MVCCKey)
+	// Prev moves the iterator backward to the previous key/value
+	// in the iteration. After this call, Valid() will be true if the
+	// iterator was not positioned at the first key.
+	Prev()
 	// PrevKey moves the iterator backward to the previous MVCC key. This
 	// operation is distinct from Prev which moves the iterator backward to the
 	// prev version of the current key or the prev key if the iterator is
@@ -73,12 +87,6 @@ type Iterator interface {
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg proto.Message) error
-	// UnsafeKey returns the same value as Key, but the memory is invalidated on
-	// the next call to {Next,Prev,Seek,SeekReverse,Close}.
-	UnsafeKey() MVCCKey
-	// UnsafeValue returns the same value as Value, but the memory is
-	// invalidated on the next call to {Next,Prev,Seek,SeekReverse,Close}.
-	UnsafeValue() []byte
 	// Less returns true if the key the iterator is currently positioned at is
 	// less than the specified key.
 	Less(key MVCCKey) bool
