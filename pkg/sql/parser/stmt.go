@@ -424,6 +424,14 @@ func (*ShowDatabases) hiddenFromStats()                   {}
 func (*ShowDatabases) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
+func (*ShowTrace) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowTrace) StatementTag() string { return "SHOW TRACE" }
+
+func (*ShowTrace) hiddenFromStats() {}
+
+// StatementType implements the Statement interface.
 func (*ShowGrants) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -610,6 +618,7 @@ func (n *ShowConstraints) String() string          { return AsString(n) }
 func (n *ShowQueries) String() string              { return AsString(n) }
 func (n *ShowSessions) String() string             { return AsString(n) }
 func (n *ShowTables) String() string               { return AsString(n) }
+func (n *ShowTrace) String() string                { return AsString(n) }
 func (n *ShowTransactionStatus) String() string    { return AsString(n) }
 func (n *ShowUsers) String() string                { return AsString(n) }
 func (n *ShowRanges) String() string               { return AsString(n) }

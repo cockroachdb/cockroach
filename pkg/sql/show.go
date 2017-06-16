@@ -570,6 +570,27 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 	}, nil
 }
 
+// ShowTrace shows the current stored session trace.
+// Privileges: None.
+func (p *planner) ShowTrace(ctx context.Context, n *parser.ShowTrace) (planNode, error) {
+	if n.Statement == nil {
+		// SHOW SESSION TRACE: just a regular query.
+		const getTrace = `TABLE crdb_internal.session_trace`
+		stmt, err := parser.ParseOne(getTrace)
+		if err != nil {
+			return nil, err
+		}
+		return p.newPlan(ctx, stmt, nil)
+	}
+
+	// SHOW TRACE FOR SELECT ...
+	plan, err := p.newPlan(ctx, n.Statement, nil)
+	if err != nil {
+		return nil, err
+	}
+	return p.makeTraceNode(plan)
+}
+
 // ShowDatabases returns all the databases.
 // Privileges: None.
 //   Notes: postgres does not have a "show databases"

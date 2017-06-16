@@ -83,12 +83,11 @@ func doExpandPlan(
 			return plan, err
 		}
 
-	case *explainTraceNode:
+	case *traceNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 		if err != nil {
 			return plan, err
 		}
-		n.plan.MarkDebug(explainDebug)
 
 	case *explainPlanNode:
 		if n.expanded {
@@ -397,7 +396,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 	case *explainDistSQLNode:
 		n.plan = simplifyOrderings(n.plan, nil)
 
-	case *explainTraceNode:
+	case *traceNode:
 		n.plan = simplifyOrderings(n.plan, nil)
 
 	case *explainPlanNode:
