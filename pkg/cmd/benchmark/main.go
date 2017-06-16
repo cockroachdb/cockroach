@@ -40,7 +40,7 @@ import (
 
 func main() {
 	if err := do(context.Background()); err != nil {
-		log.Fatalf("%+v", err)
+		log.Fatal(err)
 	}
 }
 
