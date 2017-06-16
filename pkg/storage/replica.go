@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -2864,6 +2865,16 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		return err
 	}
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
+
+	const largeProposalEventThresholdBytes = 2 << 19 // 512kb
+
+	// Log an event if this is a large proposal. These are more likely to cause
+	// blips or worse, and it's good to be able to pick them from traces.
+	//
+	// TODO(tschottdorf): can we mark them so lightstep can group them?
+	if size := len(p.command.WriteBatch.Data); size > largeProposalEventThresholdBytes {
+		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(size)))
+	}
 
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTransactionRequest with a ChangeReplicasTrigger is special
