@@ -61,7 +61,7 @@ func TestDefaultCallResolver(t *testing.T) {
 	}
 }
 
-func BenchmarkFormatedCaller(b *testing.B) {
+func BenchmarkFormattedCaller(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		file, line, _ := Lookup(1)
 		s := fmt.Sprintf("%s:%d", file, line)
