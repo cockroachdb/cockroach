@@ -17,6 +17,7 @@
 package roachpb
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -440,11 +441,36 @@ func (e *WriteIntentError) Error() string {
 }
 
 func (e *WriteIntentError) message(_ *Error) string {
-	var keys []Key
-	for _, intent := range e.Intents {
-		keys = append(keys, intent.Key)
+	var buf bytes.Buffer
+	buf.WriteString("conflicting intents on ")
+
+	// If we have a lot of intents, we only want to show the first and the last.
+	const maxBegin = 5
+	const maxEnd = 5
+	var begin, end []Intent
+	if len(e.Intents) <= maxBegin+maxEnd {
+		begin = e.Intents
+	} else {
+		begin = e.Intents[0:maxBegin]
+		end = e.Intents[len(e.Intents)-maxEnd : len(e.Intents)]
 	}
-	return fmt.Sprintf("conflicting intents on %v", keys)
+
+	for i := range begin {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(begin[i].Key.String())
+	}
+	if end != nil {
+		buf.WriteString(" ... ")
+		for i := range end {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(end[i].Key.String())
+		}
+	}
+	return buf.String()
 }
 
 var _ ErrorDetailInterface = &WriteIntentError{}
