@@ -332,21 +332,22 @@ message ProblemRangesRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
 }
 
+message Failure {
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  string error_message = 2;
+}
+
 message ProblemRangesResponse {
-  message Failures {
-    int32 node_id = 1 [
-      (gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
-    ];
-    string error_message = 2;
-  }
   // If node_id is greater than 0, then this response is only representative of
   // a single node's knowledge.
   int32 node_id = 1 [
     (gogoproto.customname) = "NodeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
-  repeated Failures failures = 2 [(gogoproto.nullable) = false];
+  repeated Failure failures = 2 [(gogoproto.nullable) = false];
   repeated int64 unavailable_range_ids = 3 [
     (gogoproto.customname) = "UnavailableRangeIDs",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
