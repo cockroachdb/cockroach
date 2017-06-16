@@ -258,7 +258,7 @@ func (n *insertNode) Next(ctx context.Context) (bool, error) {
 	if next, err := n.run.rows.Next(ctx); !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = n.tw.finalize(ctx)
+			err = n.tw.finalize(ctx, n.p.session.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -279,7 +279,7 @@ func (n *insertNode) Next(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	_, err = n.tw.row(ctx, rowVals)
+	_, err = n.tw.row(ctx, rowVals, n.p.session.Tracing.KVTracingEnabled())
 	if err != nil {
 		return false, err
 	}

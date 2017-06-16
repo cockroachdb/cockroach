@@ -142,11 +142,13 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 }
 
 func (d *deleteNode) Next(ctx context.Context) (bool, error) {
+	traceKV := d.p.session.Tracing.KVTracingEnabled()
+
 	next, err := d.run.rows.Next(ctx)
 	if !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = d.tw.finalize(ctx)
+			err = d.tw.finalize(ctx, traceKV)
 		}
 		return false, err
 	}
@@ -157,7 +159,7 @@ func (d *deleteNode) Next(ctx context.Context) (bool, error) {
 
 	rowVals := d.run.rows.Values()
 
-	_, err = d.tw.row(ctx, rowVals)
+	_, err = d.tw.row(ctx, rowVals, traceKV)
 	if err != nil {
 		return false, err
 	}
@@ -206,7 +208,7 @@ func (d *deleteNode) fastDelete(ctx context.Context, scan *scanNode) error {
 	if err := d.tw.init(d.p.txn); err != nil {
 		return err
 	}
-	rowCount, err := d.tw.fastDelete(ctx, scan)
+	rowCount, err := d.tw.fastDelete(ctx, scan, d.p.session.Tracing.KVTracingEnabled())
 	if err != nil {
 		return err
 	}

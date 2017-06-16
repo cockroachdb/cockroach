@@ -201,7 +201,7 @@ func (cb *columnBackfiller) runChunk(
 		b := txn.NewBatch()
 		rowLength := 0
 		for i := int64(0); i < chunkSize; i++ {
-			row, err := cb.fetcher.NextRowDecoded(ctx)
+			row, err := cb.fetcher.NextRowDecoded(ctx, false /* traceKV */)
 			if err != nil {
 				return err
 			}
@@ -229,7 +229,7 @@ func (cb *columnBackfiller) runChunk(
 					oldValues[j] = parser.DNull
 				}
 			}
-			if _, err := ru.UpdateRow(ctx, b, oldValues, updateValues); err != nil {
+			if _, err := ru.UpdateRow(ctx, b, oldValues, updateValues, false /* traceKV */); err != nil {
 				return err
 			}
 		}

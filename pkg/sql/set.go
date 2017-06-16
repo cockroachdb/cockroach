@@ -233,20 +233,24 @@ func (p *planner) toSettingString(
 	}
 }
 
-func (p *planner) getStringVal(name string, values []parser.TypedExpr) (string, error) {
-	if len(values) != 1 {
-		return "", fmt.Errorf("set %s: requires a single string value", name)
-	}
-	val, err := values[0].Eval(&p.evalCtx)
+func (p *planner) datumAsString(name string, value parser.TypedExpr) (string, error) {
+	val, err := value.Eval(&p.evalCtx)
 	if err != nil {
 		return "", err
 	}
 	s, ok := parser.AsDString(val)
 	if !ok {
-		return "", fmt.Errorf("set %s: requires a single string value: %s is a %s",
-			name, values[0], val.ResolvedType())
+		return "", fmt.Errorf("set %s: requires a string value: %s is a %s",
+			name, value, val.ResolvedType())
 	}
 	return string(s), nil
+}
+
+func (p *planner) getStringVal(name string, values []parser.TypedExpr) (string, error) {
+	if len(values) != 1 {
+		return "", fmt.Errorf("set %s: requires a single string value", name)
+	}
+	return p.datumAsString(name, values[0])
 }
 
 func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, error) {

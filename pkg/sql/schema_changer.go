@@ -70,11 +70,12 @@ func (sc *SchemaChanger) truncateAndDropTable(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	tableDesc *sqlbase.TableDescriptor,
+	traceKV bool,
 ) error {
 	if err := sc.ExtendLease(ctx, lease); err != nil {
 		return err
 	}
-	return truncateAndDropTable(ctx, tableDesc, &sc.db, *sc.testingKnobs)
+	return truncateAndDropTable(ctx, tableDesc, &sc.db, *sc.testingKnobs, traceKV)
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -229,7 +230,9 @@ func (sc *SchemaChanger) maybeAddDropRename(
 		}
 
 		// Truncate the table and delete the descriptor.
-		if err := sc.truncateAndDropTable(ctx, lease, table); err != nil {
+		if err := sc.truncateAndDropTable(
+			ctx, lease, table /* false */, false, /* traceKV */
+		); err != nil {
 			return false, err
 		}
 		return true, nil

@@ -151,14 +151,9 @@ var varGen = map[string]sessionVar{
 			newSearchPath := make(parser.SearchPath, len(values))
 			foundPgCatalog := false
 			for i, v := range values {
-				val, err := v.Eval(&p.evalCtx)
+				s, err := p.datumAsString("search_path", v)
 				if err != nil {
 					return err
-				}
-				s, ok := parser.AsDString(val)
-				if !ok {
-					return fmt.Errorf("set search_path: requires string values: %s is %s not string",
-						v, val.ResolvedType())
 				}
 				if s == pgCatalogName {
 					foundPgCatalog = true
@@ -288,9 +283,16 @@ var varGen = map[string]sessionVar{
 	`trace`: {
 		Get: func(p *planner) string {
 			if p.session.Tracing.Enabled() {
-				return "ON"
+				val := "on"
+				if p.session.Tracing.RecordingType() == tracing.SingleNodeRecording {
+					val += ", local"
+				}
+				if p.session.Tracing.KVTracingEnabled() {
+					val += ", kv"
+				}
+				return val
 			}
-			return "OFF"
+			return "off"
 		},
 		Reset: func(p *planner) error {
 			if !p.session.Tracing.Enabled() {
@@ -300,27 +302,41 @@ var varGen = map[string]sessionVar{
 			return stopTracing(p.session)
 		},
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
-			s, err := p.getStringVal("trace", values)
-			if err != nil {
-				return err
-			}
-			switch parser.Name(s).Normalize() {
-			case parser.ReNormalizeName("on"), parser.ReNormalizeName("local"):
-				recordingType := tracing.SnowballRecording
-				if parser.Name(s).Normalize() == parser.ReNormalizeName("local") {
-					recordingType = tracing.SingleNodeRecording
-				}
-				if err := p.session.Tracing.StartTracing(recordingType); err != nil {
-					return err
-				}
-				return nil
-			case parser.ReNormalizeName("off"):
-				return stopTracing(p.session)
-			default:
-				return fmt.Errorf("set trace: \"%s\" not supported", s)
-			}
+			return p.enableTracing(values)
 		},
 	},
+}
+
+func (p *planner) enableTracing(values []parser.TypedExpr) error {
+	traceKV := false
+	recordingType := tracing.SnowballRecording
+	enableMode := true
+
+	for _, v := range values {
+		s, err := p.datumAsString("trace", v)
+		if err != nil {
+			return err
+		}
+
+		switch strings.ToLower(s) {
+		case "on":
+			enableMode = true
+		case "off":
+			enableMode = false
+		case "kv":
+			traceKV = true
+		case "local":
+			recordingType = tracing.SingleNodeRecording
+		case "cluster":
+			recordingType = tracing.SnowballRecording
+		default:
+			return errors.Errorf("set trace: unknown mode %q", s)
+		}
+	}
+	if !enableMode {
+		return stopTracing(p.session)
+	}
+	return p.session.Tracing.StartTracing(recordingType, traceKV)
 }
 
 func stopTracing(s *Session) error {
