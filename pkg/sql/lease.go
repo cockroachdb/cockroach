@@ -1298,20 +1298,3 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 		}
 	})
 }
-
-// TableCollection is a collection of tables held by a single session that
-// serves SQL requests, or a background job using a table descriptor.
-type TableCollection struct {
-	timestamp hlc.Timestamp
-	// A collection of table descriptor valid for the timestamp.
-	// They are released once the transaction using them is complete.
-	// If the transaction gets pushed and the timestamp changes,
-	// the tables are released.
-	tables []sqlbase.TableDescriptor
-	// leaseMgr manages acquiring and releasing per-table leases.
-	leaseMgr *LeaseManager
-	// databaseCache is used as a cache for database names.
-	// TODO(andrei): get rid of it and replace it with a leasing system for
-	// database descriptors.
-	databaseCache *databaseCache
-}
