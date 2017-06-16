@@ -42,6 +42,7 @@
 		QueryPlanRequest
 		QueryPlanResponse
 		ReportProblemRangesRequest
+		ReportFailure
 		ReportProblemRangesResponse
 		CertificatesRequest
 		CertificateDetails

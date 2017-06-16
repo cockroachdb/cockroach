@@ -17122,6 +17122,201 @@ export const cockroach = $root.cockroach = (() => {
                 return ReportProblemRangesRequest;
             })();
 
+            serverpb.ReportFailure = (function() {
+
+                /**
+                 * Properties of a ReportFailure.
+                 * @typedef cockroach.server.serverpb.ReportFailure$Properties
+                 * @type {Object}
+                 * @property {number} [node_id] ReportFailure node_id.
+                 * @property {string} [error_message] ReportFailure error_message.
+                 */
+
+                /**
+                 * Constructs a new ReportFailure.
+                 * @exports cockroach.server.serverpb.ReportFailure
+                 * @constructor
+                 * @param {cockroach.server.serverpb.ReportFailure$Properties=} [properties] Properties to set
+                 */
+                function ReportFailure(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * ReportFailure node_id.
+                 * @type {number}
+                 */
+                ReportFailure.prototype.node_id = 0;
+
+                /**
+                 * ReportFailure error_message.
+                 * @type {string}
+                 */
+                ReportFailure.prototype.error_message = "";
+
+                /**
+                 * Creates a new ReportFailure instance using the specified properties.
+                 * @param {cockroach.server.serverpb.ReportFailure$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.ReportFailure} ReportFailure instance
+                 */
+                ReportFailure.create = function create(properties) {
+                    return new ReportFailure(properties);
+                };
+
+                /**
+                 * Encodes the specified ReportFailure message. Does not implicitly {@link cockroach.server.serverpb.ReportFailure.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ReportFailure$Properties} message ReportFailure message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ReportFailure.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
+                    if (message.error_message != null && message.hasOwnProperty("error_message"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.error_message);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified ReportFailure message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ReportFailure.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ReportFailure$Properties} message ReportFailure message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ReportFailure.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a ReportFailure message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.ReportFailure} ReportFailure
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ReportFailure.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.ReportFailure();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.node_id = reader.int32();
+                            break;
+                        case 2:
+                            message.error_message = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a ReportFailure message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.ReportFailure} ReportFailure
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ReportFailure.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a ReportFailure message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                ReportFailure.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isInteger(message.node_id))
+                            return "node_id: integer expected";
+                    if (message.error_message != null && message.hasOwnProperty("error_message"))
+                        if (!$util.isString(message.error_message))
+                            return "error_message: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a ReportFailure message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ReportFailure} ReportFailure
+                 */
+                ReportFailure.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.ReportFailure)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.ReportFailure();
+                    if (object.node_id != null)
+                        message.node_id = object.node_id | 0;
+                    if (object.error_message != null)
+                        message.error_message = String(object.error_message);
+                    return message;
+                };
+
+                /**
+                 * Creates a ReportFailure message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.ReportFailure.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ReportFailure} ReportFailure
+                 */
+                ReportFailure.from = ReportFailure.fromObject;
+
+                /**
+                 * Creates a plain object from a ReportFailure message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.ReportFailure} message ReportFailure
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ReportFailure.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.node_id = 0;
+                        object.error_message = "";
+                    }
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        object.node_id = message.node_id;
+                    if (message.error_message != null && message.hasOwnProperty("error_message"))
+                        object.error_message = message.error_message;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this ReportFailure message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ReportFailure.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this ReportFailure to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                ReportFailure.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return ReportFailure;
+            })();
+
             serverpb.ReportProblemRangesResponse = (function() {
 
                 /**
@@ -17129,7 +17324,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @typedef cockroach.server.serverpb.ReportProblemRangesResponse$Properties
                  * @type {Object}
                  * @property {number} [node_id] ReportProblemRangesResponse node_id.
-                 * @property {Array.<cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties>} [failures] ReportProblemRangesResponse failures.
+                 * @property {Array.<cockroach.server.serverpb.ReportFailure$Properties>} [failures] ReportProblemRangesResponse failures.
                  * @property {Array.<Long>} [unavailable_range_ids] ReportProblemRangesResponse unavailable_range_ids.
                  * @property {Array.<Long>} [raft_leader_not_lease_holder_range_ids] ReportProblemRangesResponse raft_leader_not_lease_holder_range_ids.
                  * @property {Array.<Long>} [no_raft_leader_range_ids] ReportProblemRangesResponse no_raft_leader_range_ids.
@@ -17164,7 +17359,7 @@ export const cockroach = $root.cockroach = (() => {
 
                 /**
                  * ReportProblemRangesResponse failures.
-                 * @type {Array.<cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties>}
+                 * @type {Array.<cockroach.server.serverpb.ReportFailure$Properties>}
                  */
                 ReportProblemRangesResponse.prototype.failures = $util.emptyArray;
 
@@ -17220,7 +17415,7 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
                     if (message.failures != null && message.failures.length)
                         for (let i = 0; i < message.failures.length; ++i)
-                            $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures.encode(message.failures[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                            $root.cockroach.server.serverpb.ReportFailure.encode(message.failures[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                     if (message.unavailable_range_ids != null && message.unavailable_range_ids.length) {
                         writer.uint32(/* id 3, wireType 2 =*/26).fork();
                         for (let i = 0; i < message.unavailable_range_ids.length; ++i)
@@ -17285,7 +17480,7 @@ export const cockroach = $root.cockroach = (() => {
                         case 2:
                             if (!(message.failures && message.failures.length))
                                 message.failures = [];
-                            message.failures.push($root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures.decode(reader, reader.uint32()));
+                            message.failures.push($root.cockroach.server.serverpb.ReportFailure.decode(reader, reader.uint32()));
                             break;
                         case 3:
                             if (!(message.unavailable_range_ids && message.unavailable_range_ids.length))
@@ -17373,7 +17568,7 @@ export const cockroach = $root.cockroach = (() => {
                         if (!Array.isArray(message.failures))
                             return "failures: array expected";
                         for (let i = 0; i < message.failures.length; ++i) {
-                            let error = $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures.verify(message.failures[i]);
+                            let error = $root.cockroach.server.serverpb.ReportFailure.verify(message.failures[i]);
                             if (error)
                                 return "failures." + error;
                         }
@@ -17434,7 +17629,7 @@ export const cockroach = $root.cockroach = (() => {
                         for (let i = 0; i < object.failures.length; ++i) {
                             if (typeof object.failures[i] !== "object")
                                 throw TypeError(".cockroach.server.serverpb.ReportProblemRangesResponse.failures: object expected");
-                            message.failures[i] = $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures.fromObject(object.failures[i]);
+                            message.failures[i] = $root.cockroach.server.serverpb.ReportFailure.fromObject(object.failures[i]);
                         }
                     }
                     if (object.unavailable_range_ids) {
@@ -17544,7 +17739,7 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.failures && message.failures.length) {
                         object.failures = [];
                         for (let j = 0; j < message.failures.length; ++j)
-                            object.failures[j] = $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures.toObject(message.failures[j], options);
+                            object.failures[j] = $root.cockroach.server.serverpb.ReportFailure.toObject(message.failures[j], options);
                     }
                     if (message.unavailable_range_ids && message.unavailable_range_ids.length) {
                         object.unavailable_range_ids = [];
@@ -17605,201 +17800,6 @@ export const cockroach = $root.cockroach = (() => {
                 ReportProblemRangesResponse.prototype.toJSON = function toJSON() {
                     return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
                 };
-
-                ReportProblemRangesResponse.Failures = (function() {
-
-                    /**
-                     * Properties of a Failures.
-                     * @typedef cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties
-                     * @type {Object}
-                     * @property {number} [node_id] Failures node_id.
-                     * @property {string} [error_message] Failures error_message.
-                     */
-
-                    /**
-                     * Constructs a new Failures.
-                     * @exports cockroach.server.serverpb.ReportProblemRangesResponse.Failures
-                     * @constructor
-                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties=} [properties] Properties to set
-                     */
-                    function Failures(properties) {
-                        if (properties)
-                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                if (properties[keys[i]] != null)
-                                    this[keys[i]] = properties[keys[i]];
-                    }
-
-                    /**
-                     * Failures node_id.
-                     * @type {number}
-                     */
-                    Failures.prototype.node_id = 0;
-
-                    /**
-                     * Failures error_message.
-                     * @type {string}
-                     */
-                    Failures.prototype.error_message = "";
-
-                    /**
-                     * Creates a new Failures instance using the specified properties.
-                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties=} [properties] Properties to set
-                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures instance
-                     */
-                    Failures.create = function create(properties) {
-                        return new Failures(properties);
-                    };
-
-                    /**
-                     * Encodes the specified Failures message. Does not implicitly {@link cockroach.server.serverpb.ReportProblemRangesResponse.Failures.verify|verify} messages.
-                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties} message Failures message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    Failures.encode = function encode(message, writer) {
-                        if (!writer)
-                            writer = $Writer.create();
-                        if (message.node_id != null && message.hasOwnProperty("node_id"))
-                            writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
-                        if (message.error_message != null && message.hasOwnProperty("error_message"))
-                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.error_message);
-                        return writer;
-                    };
-
-                    /**
-                     * Encodes the specified Failures message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ReportProblemRangesResponse.Failures.verify|verify} messages.
-                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties} message Failures message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    Failures.encodeDelimited = function encodeDelimited(message, writer) {
-                        return this.encode(message, writer).ldelim();
-                    };
-
-                    /**
-                     * Decodes a Failures message from the specified reader or buffer.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @param {number} [length] Message length if known beforehand
-                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    Failures.decode = function decode(reader, length) {
-                        if (!(reader instanceof $Reader))
-                            reader = $Reader.create(reader);
-                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures();
-                        while (reader.pos < end) {
-                            let tag = reader.uint32();
-                            switch (tag >>> 3) {
-                            case 1:
-                                message.node_id = reader.int32();
-                                break;
-                            case 2:
-                                message.error_message = reader.string();
-                                break;
-                            default:
-                                reader.skipType(tag & 7);
-                                break;
-                            }
-                        }
-                        return message;
-                    };
-
-                    /**
-                     * Decodes a Failures message from the specified reader or buffer, length delimited.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    Failures.decodeDelimited = function decodeDelimited(reader) {
-                        if (!(reader instanceof $Reader))
-                            reader = $Reader(reader);
-                        return this.decode(reader, reader.uint32());
-                    };
-
-                    /**
-                     * Verifies a Failures message.
-                     * @param {Object.<string,*>} message Plain object to verify
-                     * @returns {?string} `null` if valid, otherwise the reason why it is not
-                     */
-                    Failures.verify = function verify(message) {
-                        if (typeof message !== "object" || message === null)
-                            return "object expected";
-                        if (message.node_id != null && message.hasOwnProperty("node_id"))
-                            if (!$util.isInteger(message.node_id))
-                                return "node_id: integer expected";
-                        if (message.error_message != null && message.hasOwnProperty("error_message"))
-                            if (!$util.isString(message.error_message))
-                                return "error_message: string expected";
-                        return null;
-                    };
-
-                    /**
-                     * Creates a Failures message from a plain object. Also converts values to their respective internal types.
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
-                     */
-                    Failures.fromObject = function fromObject(object) {
-                        if (object instanceof $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures)
-                            return object;
-                        let message = new $root.cockroach.server.serverpb.ReportProblemRangesResponse.Failures();
-                        if (object.node_id != null)
-                            message.node_id = object.node_id | 0;
-                        if (object.error_message != null)
-                            message.error_message = String(object.error_message);
-                        return message;
-                    };
-
-                    /**
-                     * Creates a Failures message from a plain object. Also converts values to their respective internal types.
-                     * This is an alias of {@link cockroach.server.serverpb.ReportProblemRangesResponse.Failures.fromObject}.
-                     * @function
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
-                     */
-                    Failures.from = Failures.fromObject;
-
-                    /**
-                     * Creates a plain object from a Failures message. Also converts values to other types if specified.
-                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} message Failures
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    Failures.toObject = function toObject(message, options) {
-                        if (!options)
-                            options = {};
-                        let object = {};
-                        if (options.defaults) {
-                            object.node_id = 0;
-                            object.error_message = "";
-                        }
-                        if (message.node_id != null && message.hasOwnProperty("node_id"))
-                            object.node_id = message.node_id;
-                        if (message.error_message != null && message.hasOwnProperty("error_message"))
-                            object.error_message = message.error_message;
-                        return object;
-                    };
-
-                    /**
-                     * Creates a plain object from this Failures message. Also converts values to other types if specified.
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    Failures.prototype.toObject = function toObject(options) {
-                        return this.constructor.toObject(this, options);
-                    };
-
-                    /**
-                     * Converts this Failures to JSON.
-                     * @returns {Object.<string,*>} JSON object
-                     */
-                    Failures.prototype.toJSON = function toJSON() {
-                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                    };
-
-                    return Failures;
-                })();
 
                 return ReportProblemRangesResponse;
             })();

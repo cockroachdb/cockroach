@@ -9580,9 +9580,129 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type ReportFailure$Properties = {
+                node_id?: number;
+                error_message?: string;
+            };
+
+            /**
+             * Constructs a new ReportFailure.
+             * @exports cockroach.server.serverpb.ReportFailure
+             * @constructor
+             * @param {cockroach.server.serverpb.ReportFailure$Properties=} [properties] Properties to set
+             */
+            class ReportFailure {
+
+                /**
+                 * Constructs a new ReportFailure.
+                 * @exports cockroach.server.serverpb.ReportFailure
+                 * @constructor
+                 * @param {cockroach.server.serverpb.ReportFailure$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.ReportFailure$Properties);
+
+                /**
+                 * ReportFailure node_id.
+                 * @type {number}
+                 */
+                public node_id: number;
+
+                /**
+                 * ReportFailure error_message.
+                 * @type {string}
+                 */
+                public error_message: string;
+
+                /**
+                 * Creates a new ReportFailure instance using the specified properties.
+                 * @param {cockroach.server.serverpb.ReportFailure$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.ReportFailure} ReportFailure instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.ReportFailure$Properties): cockroach.server.serverpb.ReportFailure;
+
+                /**
+                 * Encodes the specified ReportFailure message. Does not implicitly {@link cockroach.server.serverpb.ReportFailure.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ReportFailure$Properties} message ReportFailure message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.ReportFailure$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ReportFailure message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ReportFailure.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.ReportFailure$Properties} message ReportFailure message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.ReportFailure$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a ReportFailure message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.ReportFailure} ReportFailure
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.ReportFailure;
+
+                /**
+                 * Decodes a ReportFailure message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.ReportFailure} ReportFailure
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.ReportFailure;
+
+                /**
+                 * Verifies a ReportFailure message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a ReportFailure message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ReportFailure} ReportFailure
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.ReportFailure;
+
+                /**
+                 * Creates a ReportFailure message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.ReportFailure.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.ReportFailure} ReportFailure
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.ReportFailure;
+
+                /**
+                 * Creates a plain object from a ReportFailure message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.ReportFailure} message ReportFailure
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.ReportFailure, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ReportFailure message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ReportFailure to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type ReportProblemRangesResponse$Properties = {
                 node_id?: number;
-                failures?: cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties[];
+                failures?: cockroach.server.serverpb.ReportFailure$Properties[];
                 unavailable_range_ids?: Long[];
                 raft_leader_not_lease_holder_range_ids?: Long[];
                 no_raft_leader_range_ids?: Long[];
@@ -9614,9 +9734,9 @@ export namespace cockroach {
 
                 /**
                  * ReportProblemRangesResponse failures.
-                 * @type {Array.<cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties>}
+                 * @type {Array.<cockroach.server.serverpb.ReportFailure$Properties>}
                  */
-                public failures: cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties[];
+                public failures: cockroach.server.serverpb.ReportFailure$Properties[];
 
                 /**
                  * ReportProblemRangesResponse unavailable_range_ids.
@@ -9733,129 +9853,6 @@ export namespace cockroach {
                  * @returns {Object.<string,*>} JSON object
                  */
                 public toJSON(): { [k: string]: any };
-            }
-
-            namespace ReportProblemRangesResponse {
-
-                type Failures$Properties = {
-                    node_id?: number;
-                    error_message?: string;
-                };
-
-                /**
-                 * Constructs a new Failures.
-                 * @exports cockroach.server.serverpb.ReportProblemRangesResponse.Failures
-                 * @constructor
-                 * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties=} [properties] Properties to set
-                 */
-                class Failures {
-
-                    /**
-                     * Constructs a new Failures.
-                     * @exports cockroach.server.serverpb.ReportProblemRangesResponse.Failures
-                     * @constructor
-                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties=} [properties] Properties to set
-                     */
-                    constructor(properties?: cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties);
-
-                    /**
-                     * Failures node_id.
-                     * @type {number}
-                     */
-                    public node_id: number;
-
-                    /**
-                     * Failures error_message.
-                     * @type {string}
-                     */
-                    public error_message: string;
-
-                    /**
-                     * Creates a new Failures instance using the specified properties.
-                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties=} [properties] Properties to set
-                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures instance
-                     */
-                    public static create(properties?: cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties): cockroach.server.serverpb.ReportProblemRangesResponse.Failures;
-
-                    /**
-                     * Encodes the specified Failures message. Does not implicitly {@link cockroach.server.serverpb.ReportProblemRangesResponse.Failures.verify|verify} messages.
-                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties} message Failures message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    public static encode(message: cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                    /**
-                     * Encodes the specified Failures message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ReportProblemRangesResponse.Failures.verify|verify} messages.
-                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties} message Failures message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    public static encodeDelimited(message: cockroach.server.serverpb.ReportProblemRangesResponse.Failures$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                    /**
-                     * Decodes a Failures message from the specified reader or buffer.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @param {number} [length] Message length if known beforehand
-                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.ReportProblemRangesResponse.Failures;
-
-                    /**
-                     * Decodes a Failures message from the specified reader or buffer, length delimited.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.ReportProblemRangesResponse.Failures;
-
-                    /**
-                     * Verifies a Failures message.
-                     * @param {Object.<string,*>} message Plain object to verify
-                     * @returns {?string} `null` if valid, otherwise the reason why it is not
-                     */
-                    public static verify(message: { [k: string]: any }): string;
-
-                    /**
-                     * Creates a Failures message from a plain object. Also converts values to their respective internal types.
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
-                     */
-                    public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.ReportProblemRangesResponse.Failures;
-
-                    /**
-                     * Creates a Failures message from a plain object. Also converts values to their respective internal types.
-                     * This is an alias of {@link cockroach.server.serverpb.ReportProblemRangesResponse.Failures.fromObject}.
-                     * @function
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} Failures
-                     */
-                    public static from(object: { [k: string]: any }): cockroach.server.serverpb.ReportProblemRangesResponse.Failures;
-
-                    /**
-                     * Creates a plain object from a Failures message. Also converts values to other types if specified.
-                     * @param {cockroach.server.serverpb.ReportProblemRangesResponse.Failures} message Failures
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    public static toObject(message: cockroach.server.serverpb.ReportProblemRangesResponse.Failures, options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                    /**
-                     * Creates a plain object from this Failures message. Also converts values to other types if specified.
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                    /**
-                     * Converts this Failures to JSON.
-                     * @returns {Object.<string,*>} JSON object
-                     */
-                    public toJSON(): { [k: string]: any };
-                }
             }
 
             /**

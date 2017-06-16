@@ -6,6 +6,7 @@ import * as protos from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
 import { refreshReportProblemRanges } from "src/redux/apiReducers";
 import { RouterState } from "react-router";
+import { FailureTable } from "src/views/reports/components/failureTable";
 
 interface ProblemRangesOwnProps {
   problemRanges: protos.cockroach.server.serverpb.ReportProblemRangesResponse;
@@ -48,33 +49,6 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     const titleText = (problemRanges.node_id !== 0) ?
       `Problem Ranges for Node n${problemRanges.node_id}` : `Problem Ranges for the Cluster`;
 
-    let failures: JSX.Element;
-    if (problemRanges.failures.length > 0) {
-      failures = (
-        <div>
-          <h2>Failures</h2>
-          <table className="failure-table">
-            <thead>
-              <tr className="failure-table__row failure-table__row--header">
-                <th className="failure-table__cell failure-table__cell--short">Node</th>
-                <th className="failure-table__cell">Error</th>
-              </tr>
-            </thead>
-            <tbody>
-              {
-                _.map(problemRanges.failures, (failure) => (
-                  <tr className="failure-table__row" key={failure.node_id}>
-                    <td className="failure-table__cell failure-table__cell--short">n{failure.node_id}</td>
-                    <td className="failure-table__cell">title={failure.error_message}>{failure.error_message}</td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-        </div>
-      );
-    }
-
     const problemTable = (name: string, ids: Long[]) => {
       if (!ids || ids.length === 0) {
         return null;
@@ -105,7 +79,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     return (
       <div className="section">
         <h1>{titleText}</h1>
-        {failures}
+        <FailureTable failures={problemRanges.failures} />
         {(_.isEmpty(problemRanges.unavailable_range_ids) &&
           _.isEmpty(problemRanges.no_raft_leader_range_ids) &&
           _.isEmpty(problemRanges.no_lease_range_ids) &&
