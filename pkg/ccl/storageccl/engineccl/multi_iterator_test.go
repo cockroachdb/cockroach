@@ -67,7 +67,7 @@ func TestMultiIterator(t *testing.T) {
 	for _, test := range tests {
 		name := fmt.Sprintf("%q", test.inputs)
 		t.Run(name, func(t *testing.T) {
-			var iters []engine.Iterator
+			var iters []engine.SimpleIterator
 			for _, input := range test.inputs {
 				batch := rocksDB.NewBatch()
 				defer batch.Close()
@@ -97,28 +97,28 @@ func TestMultiIterator(t *testing.T) {
 			subtests := []struct {
 				name     string
 				expected string
-				fn       func(*MultiIterator)
+				fn       func(engine.SimpleIterator)
 			}{
-				{"NextKey", test.expectedNextKey, (*MultiIterator).NextKey},
-				{"Next", test.expectedNext, (*MultiIterator).Next},
+				{"NextKey", test.expectedNextKey, (engine.SimpleIterator).NextKey},
+				{"Next", test.expectedNext, (engine.SimpleIterator).Next},
 			}
 			for _, subtest := range subtests {
 				t.Run(subtest.name, func(t *testing.T) {
 					var output bytes.Buffer
 					it := MakeMultiIterator(iters)
-					for it.Seek(engine.MVCCKey{Key: keys.MinKey}); it.Valid(); subtest.fn(it) {
+					for it.Seek(engine.MVCCKey{Key: keys.MinKey}); ; subtest.fn(it) {
+						ok, err := it.Valid()
+						if !ok {
+							break
+						}
+						if !testutils.IsError(err, test.errRE) {
+							t.Fatalf("expected '%s' error got: %+v", test.errRE, err)
+						}
 						output.Write(it.UnsafeKey().Key)
 						output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
 						if len(it.UnsafeValue()) == 0 {
 							output.WriteRune('X')
 						}
-					}
-					if err := it.Error(); len(test.errRE) > 0 {
-						if !testutils.IsError(err, test.errRE) {
-							t.Fatalf("expected '%s' error got: %+v", test.errRE, err)
-						}
-					} else if err != nil {
-						t.Fatalf("unexpected error: %+v", err)
 					}
 					if actual := output.String(); actual != subtest.expected {
 						t.Errorf("got %q expected %q", actual, subtest.expected)
