@@ -523,11 +523,6 @@ func (txn *Txn) ResetDeadline() {
 	txn.deadline = nil
 }
 
-// GetDeadline returns the deadline. For testing.
-func (txn *Txn) GetDeadline() *hlc.Timestamp {
-	return txn.deadline
-}
-
 // Rollback sends an EndTransactionRequest with Commit=false.
 // txn is considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback(ctx context.Context) error {

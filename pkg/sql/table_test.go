@@ -19,15 +19,12 @@ package sql
 import (
 	"reflect"
 	"testing"
-	"time"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -267,56 +264,5 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	err = desc.ValidateTable()
 	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRemoveLeaseIfExpiring(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	mc := hlc.NewManualClock(123)
-	lc := &LeaseCollection{
-		leaseMgr: &LeaseManager{
-			LeaseStore: LeaseStore{clock: hlc.NewClock(mc.UnixNano, time.Nanosecond)},
-		},
-	}
-
-	var txn client.Txn
-
-	if lc.removeLeaseIfExpiring(context.TODO(), &txn, nil) {
-		t.Error("expected false with nil input")
-	}
-
-	// Add a lease to the planner.
-	d := int64(LeaseDuration)
-	l1 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
-	lc.leases = append(lc.leases, l1)
-	et := hlc.Timestamp{WallTime: l1.Expiration().UnixNano()}
-	txn.UpdateDeadlineMaybe(et)
-
-	if lc.removeLeaseIfExpiring(context.TODO(), &txn, l1) {
-		t.Error("expected false with a non-expiring lease")
-	}
-	if d := *txn.GetDeadline(); d != et {
-		t.Errorf("expected deadline %s but got %s", et, d)
-	}
-
-	// Advance the clock so that l1 will be expired.
-	mc.Increment(d + 1)
-
-	// Add another lease.
-	l2 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
-	lc.leases = append(lc.leases, l2)
-	if !lc.removeLeaseIfExpiring(context.TODO(), &txn, l1) {
-		t.Error("expected true with an expiring lease")
-	}
-	et = hlc.Timestamp{WallTime: l2.Expiration().UnixNano()}
-	txn.UpdateDeadlineMaybe(et)
-
-	if !(len(lc.leases) == 1 && lc.leases[0] == l2) {
-		t.Errorf("expected leases to contain %s but has %s", l2, lc.leases)
-	}
-
-	if d := *txn.GetDeadline(); d != et {
-		t.Errorf("expected deadline %s, but got %s", et, d)
 	}
 }

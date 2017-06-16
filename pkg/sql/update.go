@@ -43,7 +43,7 @@ type editNodeBase struct {
 func (p *planner) makeEditNode(
 	ctx context.Context, tn *parser.TableName, priv privilege.Kind,
 ) (editNodeBase, error) {
-	tableDesc, err := p.session.leases.getTableLease(ctx, p.txn, p.getVirtualTabler(), tn)
+	tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return editNodeBase{}, err
 	}

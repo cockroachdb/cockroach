@@ -71,6 +71,12 @@ func GetKeysForTableDescriptor(
 	return
 }
 
+// A unique id for a particular table descriptor version.
+type tableVersionID struct {
+	id      sqlbase.ID
+	version sqlbase.DescriptorVersion
+}
+
 // SchemaAccessor provides helper methods for using the SQL schema.
 type SchemaAccessor interface {
 	// NB: one can use GetTableDescFromID() to retrieve a descriptor for
@@ -233,9 +239,44 @@ func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	return nil
 }
 
-// getTableLease acquires a lease for the specified table. The lease must
-// be released by calling lc.releaseLeases().
-func (lc *LeaseCollection) getTableLease(
+// TableCollection is a collection of tables held by a single session that
+// serves SQL requests, or a background job using a table descriptor.
+type TableCollection struct {
+	timestamp hlc.Timestamp
+	// A collection of table descriptor valid for the timestamp.
+	// They are released once the transaction using them is complete.
+	// If the transaction gets pushed and the timestamp changes,
+	// the tables are released.
+	tables []sqlbase.TableDescriptor
+	// leaseMgr manages acquiring and releasing per-table leases.
+	leaseMgr *LeaseManager
+	// databaseCache is used as a cache for database names.
+	// TODO(andrei): get rid of it and replace it with a leasing system for
+	// database descriptors.
+	databaseCache *databaseCache
+}
+
+func (tc *TableCollection) maybeChangeTimestamp(ctx context.Context, txn *client.Txn) {
+	if tc.timestamp != (hlc.Timestamp{}) && tc.timestamp != txn.OrigTimestamp() {
+		txn.ResetDeadline()
+		tc.releaseTables(ctx)
+	}
+}
+
+// getTableVersion returns a table descriptor with a version suitable for
+// the transaction. The table must be released by calling tc.releaseTables().
+//
+// TODO(vivek): The suitability of the table version returned is only partial
+// checked. The expiration time for the table descriptor is added as a deadline
+// for the transaction. The ModificationTime of the table is not compared to the
+// timestamp of the transaction. Fix this to be such that:
+// table.ModificationTime <= txn.Timestamp < expirationTime
+//
+// TODO(vivek): Rollback most of #6418. #6418 introduced a transaction deadline
+// that is enforced at the KV layer, and was introduced to manager the validity
+// window of a table descriptor. Since we will be checking for the valid use
+// of a table descriptor here, we do not need the extra check at the KV layer.
+func (tc *TableCollection) getTableVersion(
 	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
@@ -260,56 +301,55 @@ func (lc *LeaseCollection) getTableLease(
 		return tbl, nil
 	}
 
-	dbID, err := lc.databaseCache.getDatabaseID(ctx, txn, vt, tn.Database())
+	dbID, err := tc.databaseCache.getDatabaseID(ctx, txn, vt, tn.Database())
 	if err != nil {
 		return nil, err
 	}
 
-	// First, look to see if we already have a lease for this table.
+	// If the txn has been pushed the table collection is released and
+	// txn deadline is reset.
+	tc.maybeChangeTimestamp(ctx, txn)
+
+	// First, look to see if we already have the table.
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
-	var lease *LeaseState
-	for _, l := range lc.leases {
-		if parser.ReNormalizeName(l.Name) == tn.TableName.Normalize() &&
-			l.ParentID == dbID {
-			lease = l
+	for _, table := range tc.tables {
+		if parser.ReNormalizeName(table.Name) == tn.TableName.Normalize() &&
+			table.ParentID == dbID {
 			if log.V(2) {
-				log.Infof(ctx, "found lease in planner cache for table '%s'", tn)
+				log.Infof(ctx, "found table in table collection for table '%s'", tn)
 			}
-			break
+			return &table, nil
 		}
 	}
 
-	// If we didn't find a lease or the lease is about to expire, acquire one.
-	if lease == nil || lc.removeLeaseIfExpiring(ctx, txn, lease) {
-		var err error
-		lease, err = lc.leaseMgr.AcquireByName(ctx, txn, dbID, tn.Table())
-		if err != nil {
-			if err == sqlbase.ErrDescriptorNotFound {
-				// Transform the descriptor error into an error that references the
-				// table's name.
-				return nil, sqlbase.NewUndefinedTableError(tn.String())
-			}
-			return nil, err
+	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, txn, dbID, tn.Table())
+	if err != nil {
+		if err == sqlbase.ErrDescriptorNotFound {
+			// Transform the descriptor error into an error that references the
+			// table's name.
+			return nil, sqlbase.NewUndefinedTableError(tn.String())
 		}
-		lc.leases = append(lc.leases, lease)
-		if log.V(2) {
-			log.Infof(ctx, "added lease on table '%s' to planner cache", tn)
-		}
-		// If the lease we just acquired expires before the txn's deadline, reduce
-		// the deadline.
-		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
+		return nil, err
 	}
-	return &lease.TableDescriptor, nil
+	tc.timestamp = txn.OrigTimestamp()
+	tc.tables = append(tc.tables, table)
+	if log.V(2) {
+		log.Infof(ctx, "added table '%s' to table collection", tn)
+	}
+	// If the table we just acquired expires before the txn's deadline, reduce
+	// the deadline.
+	txn.UpdateDeadlineMaybe(expiration)
+	return &table, nil
 }
 
-// getTableLeaseByID is a by-ID variant of getTableLease (i.e. uses same cache).
-func (lc *LeaseCollection) getTableLeaseByID(
+// getTableVersionByID is a by-ID variant of getTableVersion (i.e. uses same cache).
+func (tc *TableCollection) getTableVersionByID(
 	ctx context.Context, txn *client.Txn, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
-		log.Infof(ctx, "planner acquiring lease on table ID %d", tableID)
+		log.Infof(ctx, "planner getting table on table ID %d", tableID)
 	}
 
 	if testDisableTableLeases {
@@ -323,74 +363,52 @@ func (lc *LeaseCollection) getTableLeaseByID(
 		return table, nil
 	}
 
-	// First, look to see if we already have a lease for this table -- including
-	// leases acquired via `getTableLease`.
-	var lease *LeaseState
-	for _, l := range lc.leases {
-		if l.ID == tableID {
-			lease = l
+	// If the txn has been pushed the table collection is released and
+	// txn deadline is reset.
+	tc.maybeChangeTimestamp(ctx, txn)
+
+	// First, look to see if we already have the table -- including those
+	// via `getTableVersion`.
+	for _, table := range tc.tables {
+		if table.ID == tableID {
 			if log.V(2) {
-				log.Infof(ctx, "found lease in planner cache for table %d", tableID)
+				log.Infof(ctx, "found table %d in table cache", tableID)
 			}
-			break
+			return &table, nil
 		}
 	}
 
-	// If we didn't find a lease or the lease is about to expire, acquire one.
-	if lease == nil || lc.removeLeaseIfExpiring(ctx, txn, lease) {
-		var err error
-		lease, err = lc.leaseMgr.Acquire(ctx, txn, tableID, 0)
-		if err != nil {
-			if err == sqlbase.ErrDescriptorNotFound {
-				// Transform the descriptor error into an error that references the
-				// table's ID.
-				return nil, sqlbase.NewUndefinedTableError(fmt.Sprintf("<id=%d>", tableID))
-			}
-			return nil, err
+	table, expiration, err := tc.leaseMgr.Acquire(ctx, txn, tableID, 0)
+	if err != nil {
+		if err == sqlbase.ErrDescriptorNotFound {
+			// Transform the descriptor error into an error that references the
+			// table's ID.
+			return nil, sqlbase.NewUndefinedTableError(fmt.Sprintf("<id=%d>", tableID))
 		}
-		lc.leases = append(lc.leases, lease)
-		// If the lease we just acquired expires before the txn's deadline, reduce
-		// the deadline.
-		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
+		return nil, err
 	}
-	return &lease.TableDescriptor, nil
+	tc.timestamp = txn.OrigTimestamp()
+	tc.tables = append(tc.tables, table)
+	if log.V(2) {
+		log.Infof(ctx, "added table '%s' to table collection", table.Name)
+	}
+	// If the table we just acquired expires before the txn's deadline, reduce
+	// the deadline.
+	txn.UpdateDeadlineMaybe(expiration)
+	return &table, nil
 }
 
-// removeLeaseIfExpiring removes a lease and returns true if it is about to expire.
-// The method also resets the transaction deadline.
-func (lc *LeaseCollection) removeLeaseIfExpiring(
-	ctx context.Context, txn *client.Txn, lease *LeaseState,
-) bool {
-	if lease == nil || lease.hasSomeLifeLeft(lc.leaseMgr.clock) {
-		return false
-	}
-
-	// Remove the lease from session.leases.
-	idx := -1
-	for i, l := range lc.leases {
-		if l == lease {
-			idx = i
-			break
+// releaseTables releases all tables currently held by the Session.
+func (tc *TableCollection) releaseTables(ctx context.Context) {
+	if tc.tables != nil {
+		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
+		for _, table := range tc.tables {
+			if err := tc.leaseMgr.Release(table); err != nil {
+				log.Warning(ctx, err)
+			}
 		}
+		tc.tables = nil
 	}
-	if idx == -1 {
-		log.Warningf(ctx, "lease (%s) not found", lease)
-		return false
-	}
-	lc.leases[idx] = lc.leases[len(lc.leases)-1]
-	lc.leases[len(lc.leases)-1] = nil
-	lc.leases = lc.leases[:len(lc.leases)-1]
-
-	if err := lc.leaseMgr.Release(lease); err != nil {
-		log.Warning(ctx, err)
-	}
-
-	// Reset the deadline so that a new deadline will be set after the lease is acquired.
-	txn.ResetDeadline()
-	for _, l := range lc.leases {
-		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: l.Expiration().UnixNano()})
-	}
-	return true
 }
 
 // getTableNames retrieves the list of qualified names of tables
@@ -452,7 +470,7 @@ func (p *planner) createSchemaChangeJob(
 		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
 		Details:       jobs.SchemaChangeJobDetails{},
 	}
-	jobLogger := jobs.NewJobLogger(p.ExecCfg().DB, InternalExecutor{LeaseManager: p.session.leases.leaseMgr}, jobRecord)
+	jobLogger := jobs.NewJobLogger(p.ExecCfg().DB, InternalExecutor{LeaseManager: p.session.tables.leaseMgr}, jobRecord)
 	if err := jobLogger.WithTxn(p.txn).Created(ctx); err != nil {
 		return sqlbase.InvalidMutationID, nil
 	}
@@ -533,7 +551,7 @@ func expandTableGlob(
 func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *parser.TableName) error {
 	t := *tn
 
-	descFunc := p.session.leases.getTableLease
+	descFunc := p.session.tables.getTableVersion
 	if p.avoidCachedDescriptors {
 		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
 		// specified time, and never lease anything. The proto transaction already
