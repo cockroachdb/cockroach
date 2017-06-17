@@ -240,32 +240,87 @@ func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 	b.repr[pos] = byte(BatchTypeDeletion)
 }
 
+// EncodeKey encodes an engine.MVCC key into the RocksDB representation. This
+// encoding must match with the encoding in engine/db.cc:EncodeKey().
+func EncodeKey(key MVCCKey) []byte {
+	// TODO(dan): Unify this with (*RocksDBBatchBuilder).encodeKey.
+
+	const (
+		timestampSentinelLen      = 1
+		walltimeEncodedLen        = 8
+		logicalEncodedLen         = 4
+		timestampEncodedLengthLen = 1
+	)
+
+	timestampLength := 0
+	if key.Timestamp != (hlc.Timestamp{}) {
+		timestampLength = timestampSentinelLen + walltimeEncodedLen
+		if key.Timestamp.Logical != 0 {
+			timestampLength += logicalEncodedLen
+		}
+	}
+
+	dbKey := make([]byte, len(key.Key)+timestampLength+timestampEncodedLengthLen)
+	copy(dbKey, key.Key)
+
+	pos := len(key.Key)
+	if timestampLength > 0 {
+		dbKey[pos] = 0
+		pos += timestampSentinelLen
+		putUint64(dbKey[pos:], uint64(key.Timestamp.WallTime))
+		pos += walltimeEncodedLen
+		if key.Timestamp.Logical != 0 {
+			putUint32(dbKey[pos:], uint32(key.Timestamp.Logical))
+			pos += logicalEncodedLen
+		}
+	}
+	dbKey[len(dbKey)-1] = byte(timestampLength)
+
+	return dbKey
+}
+
+// SplitMVCCKey returns the key and timestamp components of an encoded MVCC key. This
+// decoding must match engine/db.cc:SplitKey().
+func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
+	if len(mvccKey) == 0 {
+		return nil, nil, false
+	}
+	tsLen := int(mvccKey[len(mvccKey)-1])
+	keyPartEnd := len(mvccKey) - 1 - tsLen
+	if keyPartEnd < 0 {
+		return nil, nil, false
+	}
+
+	key = mvccKey[:keyPartEnd]
+	if tsLen > 0 {
+		ts = mvccKey[keyPartEnd+1 : len(mvccKey)-1]
+	}
+	return key, ts, true
+}
+
 // DecodeKey decodes an engine.MVCCKey from its serialized representation. This
 // decoding must match engine/db.cc:DecodeKey().
 func DecodeKey(encodedKey []byte) (MVCCKey, error) {
-	tsLen := int(encodedKey[len(encodedKey)-1])
-	keyPartEnd := len(encodedKey) - 1 - tsLen
-	if keyPartEnd < 0 {
+	key, ts, ok := SplitMVCCKey(encodedKey)
+	if !ok {
 		return MVCCKey{}, errors.Errorf("invalid encoded mvcc key: %x", encodedKey)
 	}
 
-	key := MVCCKey{Key: encodedKey[:keyPartEnd]}
-	encodedTs := encodedKey[keyPartEnd:]
-
-	switch tsLen {
+	mvccKey := MVCCKey{Key: key}
+	switch len(ts) {
 	case 0:
 		// No-op.
-	case 9:
-		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTs[1:9]))
-	case 13:
-		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTs[1:9]))
-		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(encodedTs[9:13]))
+	case 8:
+		mvccKey.Timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
+	case 12:
+		mvccKey.Timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
+		mvccKey.Timestamp.Logical = int32(binary.BigEndian.Uint32(ts[8:12]))
 	default:
 		return MVCCKey{}, errors.Errorf(
-			"invalid encoded mvcc key: bad timestamp len %d: %x", encodedKey, tsLen)
+			"invalid encoded mvcc key: %x bad timestamp %x", encodedKey, ts)
 	}
 
-	return key, nil
+	return mvccKey, nil
 }
 
 // RocksDBBatchReader is used to iterate the entries in a RocksDB batch
