@@ -240,6 +240,12 @@
   revision = "23def4e6c14b4da8ac2ed8007337bc5eb5007998"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/golang/leveldb"
+  packages = ["crc","db","memfs","table"]
+  revision = "259d9253d71996b7778a3efb4144fe4892342b18"
+
+[[projects]]
   name = "github.com/golang/lint"
   packages = [".","golint"]
   revision = "cb00e5669539f047b2f4c53a421a01b0c8e172c6"
@@ -583,6 +589,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "52f52f1230e1e90e0a8fd8fa240787b0b7948f9a35beea191580796fb1c1938d"
+  inputs-digest = "95431153729c50faa9f8aaf3d26c9d2b478f52e1495bbe25dd9ce9aad53fde89"
   solver-name = "gps-cdcl"
   solver-version = 1
