@@ -252,17 +252,10 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			}
 		}
 
-		sst := engine.MakeRocksDBSstFileReader()
-		defer sst.Close()
-
-		// Add each file in its own sst reader because IngestExternalFile
-		// requires the affected keyrange be empty and the keys in these files
-		// might overlap.
-		if err := sst.IngestExternalFile(fileContents); err != nil {
+		iter, err := engineccl.NewMemSSTIterator(fileContents)
+		if err != nil {
 			return nil, err
 		}
-
-		iter := sst.NewIterator(false)
 		defer iter.Close()
 		iters = append(iters, iter)
 	}
