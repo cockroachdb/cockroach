@@ -1087,32 +1087,27 @@ SELECT v, COUNT(*) FILTER (WHERE COUNT(*) > 5) FROM filter_test GROUP BY v
 query ITTT
 EXPLAIN (EXPRS) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 ----
-0  render
-0          render 0     count_rows() FILTER (WHERE k > 5)
-0          render 1     max(k > 5) FILTER (WHERE k > 5)
-1  group
-1          aggregate 0  count_rows() FILTER (WHERE k > 5)
-1          aggregate 1  max(k > 5) FILTER (WHERE k > 5)
-2  render
-2          render 0     v
-2          render 1     k > 5
-3  scan
-3          table        filter_test@primary
-3          spans        ALL
+0  group
+0          aggregate 0  count_rows() FILTER (WHERE k > 5)
+0          aggregate 1  max(k > 5) FILTER (WHERE k > 5)
+1  render
+1          render 0     v
+1          render 1     k > 5
+2  scan
+2          table        filter_test@primary
+2          spans        ALL
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
-0  render                                                                               ("count(*) FILTER (WHERE k > 5)" int)
-0          render 0     (count_rows() FILTER (WHERE k > 5))[int]
-1  group                                                                                ("count_rows() FILTER (WHERE k > 5)" int)
-1          aggregate 0  (count_rows() FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
-2  render                                                                               (v int, "k > 5" bool)
-2          render 0     (v)[int]
-2          render 1     ((k)[int] > (5)[int])[bool]
-3  scan                                                                                 (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)
-3          table        filter_test@primary
-3          spans        ALL
+0  group                                                                                ("count(*) FILTER (WHERE k > 5)" int)
+0          aggregate 0  (count_rows() FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
+1  render                                                                               (v int, "k > 5" bool)
+1          render 0     (v)[int]
+1          render 1     ((k)[int] > (5)[int])[bool]
+2  scan                                                                                 (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)
+2          table        filter_test@primary
+2          spans        ALL
 
 # Tests with * inside GROUP BY.
 query ITTT
@@ -1138,25 +1133,23 @@ SELECT 1 FROM kv GROUP BY kv.*;
 query ITTT
 EXPLAIN (EXPRS) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
-0  render
-0          render 0     sum(d)
-1  group
-1          aggregate 0  sum(d)
-2  render
-2          render 0     k
-2          render 1     v
-2          render 2     w
-2          render 3     s
-2          render 4     d
-3  join
-3          type         inner
-3          pred         test.kv.k >= test.abc.d
-4  scan
-4          table        kv@primary
-4          spans        ALL
-4  scan
-4          table        abc@primary
-4          spans        ALL
+0  group
+0          aggregate 0  sum(d)
+1  render
+1          render 0     k
+1          render 1     v
+1          render 2     w
+1          render 3     s
+1          render 4     d
+2  join
+2          type         inner
+2          pred         test.kv.k >= test.abc.d
+3  scan
+3          table        kv@primary
+3          spans        ALL
+3  scan
+3          table        abc@primary
+3          spans        ALL
 
 query R rowsort
 SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
