@@ -122,6 +122,10 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 		return err
 	}
 	_, err := c.conn.Exec(query, args)
+	if err == driver.ErrBadConn {
+		c.reconnecting = true
+		c.Close()
+	}
 	return err
 }
 
