@@ -473,6 +473,10 @@ func (c *cliState) refreshDatabaseName(txnStatus string, nextState cliStateEnum)
 	}
 
 	dbName := formatVal(dbVals[0].(string), false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+
+	// Preserve the current database name in case of reconnects.
+	c.conn.dbName = dbName
+
 	return c.refreshPrompts("/"+dbName+txnStatus, nextState)
 }
 

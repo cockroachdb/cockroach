@@ -46,6 +46,10 @@ type sqlConn struct {
 	url          string
 	conn         sqlConnI
 	reconnecting bool
+
+	// dbName is the last known current database, to be reconfigured in
+	// case of automatic reconnects.
+	dbName string
 }
 
 func (c *sqlConn) ensureConn() error {
@@ -56,6 +60,14 @@ func (c *sqlConn) ensureConn() error {
 		conn, err := pq.Open(c.url)
 		if err != nil {
 			return err
+		}
+		if c.reconnecting && c.dbName != "" {
+			// Attempt to reset the current database.
+			if _, err := conn.(sqlConnI).Exec(
+				`SET DATABASE = `+parser.Name(c.dbName).String(), nil,
+			); err != nil {
+				fmt.Fprintf(stderr, "unable to restore current database: %v\n", err)
+			}
 		}
 		c.reconnecting = false
 		c.conn = conn.(sqlConnI)
