@@ -687,9 +687,8 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u,
 2          equality  (k) = (k)
 3  sort                                 (u, k)                                           +k
 3          order     +k
-4  render                               (u, k)
-5  values                               (column1, column2)
-5          size      2 columns, 2 rows
+4  values                               (u, k)
+4          size      2 columns, 2 rows
 3  values                               (column1, column2)
 3          size      2 columns, 2 rows
 

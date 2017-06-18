@@ -652,11 +652,10 @@ NaN
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
-0  sort                             (x)        +x
+0  sort                             (x)  +x
 0          order  +x
-1  render                           (x)
-2  values                           (column1)
-2          size   1 column, 3 rows
+1  values                           (x)
+1          size   1 column, 3 rows
 
 query ITTT
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
@@ -678,9 +677,8 @@ query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 ----
 0  ordinality                          (x, "ordinality")  +"ordinality",unique
-1  render                              (x)
-2  values                              (column1)
-2              size  1 column, 3 rows
+1  values                              (x)
+1              size  1 column, 3 rows
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
@@ -688,9 +686,8 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS 
 0  ordinality                           (x, "ordinality")  +x
 1  sort                                 (x)                +x
 1              order  +x
-2  render                               (x)
-3  values                               (column1)
-3              size   1 column, 3 rows
+2  values                               (x)
+2              size   1 column, 3 rows
 
 # Check that the ordering of the source does not propagate blindly to RETURNING.
 query ITTTTT
