@@ -11,6 +11,11 @@ eexpect ":/# "
 send "$argv sql\r"
 eexpect root@
 
+start_test "Check node ID."
+eexpect "(node 1)"
+eexpect "/>"
+end_test
+
 start_test "Check database prompt."
 send "CREATE DATABASE IF NOT EXISTS testdb;\r"
 eexpect "\nCREATE DATABASE\r\n"
