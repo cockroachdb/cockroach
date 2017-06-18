@@ -391,13 +391,18 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 
 	txnStatus := c.refreshTransactionStatus()
 	dbName, hasDbName := c.refreshDatabaseName(txnStatus)
+	nodeID, hasNodeID := c.refreshNodeID(txnStatus)
 
 	dbStr := ""
 	if hasDbName {
 		dbStr = "/" + dbName
 	}
+	nodeIDStr := ""
+	if hasNodeID {
+		nodeIDStr = " (node " + nodeID + ")"
+	}
 
-	c.fullPrompt = c.promptPrefix + dbStr + txnStatus
+	c.fullPrompt = c.promptPrefix + nodeIDStr + dbStr + txnStatus
 	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
 	c.fullPrompt += "> "
 
@@ -427,6 +432,28 @@ func (c *cliState) getServerValue(what, sql string) (driver.Value, bool) {
 	}
 
 	return dbVals[0], true
+}
+
+// refreshNodeID retrieves the current node ID from the server.
+// This needs to be done for every prompt, because a reconnect through
+// a load balancer may change which node the client is talking to.
+// The node ID is only queried if there is no transaction ongoing,
+// or the transaction is fully open.
+func (c *cliState) refreshNodeID(txnStatus string) (string, bool) {
+	if !(txnStatus == "" /*NoTxn*/ || txnStatus == "  OPEN") {
+		return "", false
+	}
+
+	dbVal, hasVal := c.getServerValue("node ID",
+		`SELECT node_id FROM crdb_internal.node_build_info LIMIT 1`)
+	if !hasVal {
+		return "", false
+	}
+
+	nodeID := formatVal(dbVal.(int64),
+		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+
+	return nodeID, true
 }
 
 // refreshTransactionStatus retrieves and sets the current transaction status.
