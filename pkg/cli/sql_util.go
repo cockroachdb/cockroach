@@ -122,6 +122,10 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 		return err
 	}
 	_, err := c.conn.Exec(query, args)
+	if err == driver.ErrBadConn {
+		c.reconnecting = true
+		c.Close()
+	}
 	return err
 }
 
@@ -192,6 +196,7 @@ func (r *sqlRows) Tag() string {
 func (r *sqlRows) Close() error {
 	err := r.rows.Close()
 	if err == driver.ErrBadConn {
+		r.conn.reconnecting = true
 		r.conn.Close()
 	}
 	return err
