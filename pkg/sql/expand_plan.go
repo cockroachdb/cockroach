@@ -298,13 +298,19 @@ func expandRenderNode(
 		// instantiation and Start() (e.g. groupNode).
 		// TODO(knz): investigate this further and enable the optimization fully.
 
+		needRename := false
 		foundNonTrivialRender := false
 		for i, e := range r.render {
 			if r.columns[i].Omitted {
 				continue
 			}
-			if iv, ok := e.(*parser.IndexedVar); ok && i < len(sourceCols) &&
-				(iv.Idx == i && sourceCols[i].Name == r.columns[i].Name) {
+			if iv, ok := e.(*parser.IndexedVar); ok && i < len(sourceCols) && iv.Idx == i {
+				if sourceCols[i].Name != r.columns[i].Name {
+					// Pass-through with rename: SELECT k AS x, v AS y FROM kv ...
+					// We'll want to push the demanded names "x" and "y" to the
+					// source.
+					needRename = true
+				}
 				continue
 			}
 			foundNonTrivialRender = true
@@ -312,6 +318,13 @@ func expandRenderNode(
 		}
 		if !foundNonTrivialRender {
 			// Nothing special rendered, remove the render node entirely.
+			if needRename {
+				// If the render was renaming some columns, propagate the
+				// requested names.
+				for i, col := range r.columns {
+					sourceCols[i].Name = col.Name
+				}
+			}
 			return r.source.plan, nil
 		}
 	}
@@ -472,12 +485,17 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		}
 
 		if !n.needSort {
-			if len(n.columns) < len(planColumns(n.plan)) {
+			sourceCols := planColumns(n.plan)
+			if len(n.columns) < len(sourceCols) {
 				// No sorting required, but we have to strip off the extra render
 				// expressions we added. So keep the sort node.
 				// TODO(radu): replace with a renderNode
 			} else {
 				// Sort node fully disappears.
+				// Just be sure to propagate the column names.
+				for i, col := range n.columns {
+					sourceCols[i].Name = col.Name
+				}
 				plan = n.plan
 			}
 		}
