@@ -382,110 +382,102 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 	return nextState
 }
 
-// refreshPrompts refreshes the prompts of the client depending on the
+// doRefreshPrompts refreshes the prompts of the client depending on the
 // status of the current transaction.
 func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	if !isInteractive {
 		return nextState
 	}
 
-	return c.refreshTransactionStatus(nextState)
+	txnStatus := c.refreshTransactionStatus()
+	dbName, hasDbName := c.refreshDatabaseName(txnStatus)
+
+	dbStr := ""
+	if hasDbName {
+		dbStr = "/" + dbName
+	}
+
+	c.fullPrompt = c.promptPrefix + dbStr + txnStatus
+	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
+	c.fullPrompt += "> "
+
+	return nextState
 }
 
-// refreshTransactionStatus retrieves and sets the current transaction status.
-func (c *cliState) refreshTransactionStatus(nextState cliStateEnum) cliStateEnum {
-	// Query the server for the current transaction status.
-	query := makeQuery(`SHOW TRANSACTION STATUS`)
+func (c *cliState) getServerValue(what, sql string) (driver.Value, bool) {
+	var dbVals [1]driver.Value
+
+	query := makeQuery(sql)
 	rows, err := query(c.conn)
 	if err != nil {
-		fmt.Fprintf(stderr, "error retrieving the transaction status: %v", err)
-		return c.refreshDatabaseName(" ?", nextState)
+		fmt.Fprintf(stderr, "error retrieving the %s: %v", what, err)
+		return nil, false
 	}
 	defer func() { _ = rows.Close() }()
 
 	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(stderr, "invalid transaction status\n")
-		return c.refreshDatabaseName(" ?", nextState)
+		fmt.Fprintf(stderr, "cannot get the %s", what)
+		return nil, false
 	}
 
-	val := make([]driver.Value, len(rows.Columns()))
-	err = rows.Next(val)
+	err = rows.Next(dbVals[:])
 	if err != nil {
-		fmt.Fprintf(stderr, "invalid transaction status: %v\n", err)
-		return c.refreshDatabaseName(" ?", nextState)
+		fmt.Fprintf(stderr, "invalid %s: %v\n", what, err)
+		return nil, false
 	}
 
-	// rows is now done being used so we can close it. Closing it twice (due
-	// to the defer above) is safe because Close is idempotent. Without this
-	// close, refreshDatabaseName below will run a query on the same connection,
-	// which causes an error with lib/pq. This normally isn't a problem because
-	// database/sql will use an unused connection instead of the existing
-	// one. However since we aren't using database/sql, we have to manually
-	// ensure rows is closed before executing another query on the connection.
-	_ = rows.Close()
+	return dbVals[0], true
+}
 
-	txnString := formatVal(val[0], false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+// refreshTransactionStatus retrieves and sets the current transaction status.
+func (c *cliState) refreshTransactionStatus() (txnStatus string) {
+	txnStatus = " ?"
+
+	dbVal, hasVal := c.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
+	if !hasVal {
+		return txnStatus
+	}
+
+	txnString := formatVal(dbVal,
+		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
 	// Change the prompt based on the response from the server.
-	promptSuffix := " ?"
 	switch txnString {
 	case sql.NoTxn.String():
-		promptSuffix = ""
+		txnStatus = ""
 	case sql.Aborted.String():
-		promptSuffix = " ERROR"
+		txnStatus = " ERROR"
 	case sql.CommitWait.String():
-		promptSuffix = "  DONE"
+		txnStatus = "  DONE"
 	case sql.RestartWait.String():
-		promptSuffix = " RETRY"
+		txnStatus = " RETRY"
 	case sql.Open.String():
-		promptSuffix = "  OPEN"
+		txnStatus = "  OPEN"
 	}
 
-	return c.refreshDatabaseName(promptSuffix, nextState)
+	return txnStatus
 }
 
 // refreshDatabaseName retrieves the current database name from the server.
 // The database name is only queried if there is no transaction ongoing,
 // or the transaction is fully open.
-func (c *cliState) refreshDatabaseName(txnStatus string, nextState cliStateEnum) cliStateEnum {
+func (c *cliState) refreshDatabaseName(txnStatus string) (string, bool) {
 	if !(txnStatus == "" /*NoTxn*/ || txnStatus == "  OPEN") {
-		return c.refreshPrompts(txnStatus, nextState)
+		return "", false
 	}
 
-	var dbVals [1]driver.Value
-
-	query := makeQuery(`SHOW DATABASE`)
-	rows, err := query(c.conn)
-	if err != nil {
-		fmt.Fprintf(stderr, "error retrieving the database name: %v", err)
-		return c.refreshPrompts(txnStatus, nextState)
-	}
-	defer func() { _ = rows.Close() }()
-
-	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(stderr, "cannot get the database name")
-		return c.refreshPrompts(txnStatus, nextState)
+	dbVal, hasVal := c.getServerValue("database name", `SHOW DATABASE`)
+	if !hasVal {
+		return "", false
 	}
 
-	err = rows.Next(dbVals[:])
-	if err != nil {
-		return c.refreshPrompts(txnStatus, nextState)
-	}
-
-	dbName := formatVal(dbVals[0].(string), false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+	dbName := formatVal(dbVal.(string),
+		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
 	// Preserve the current database name in case of reconnects.
 	c.conn.dbName = dbName
 
-	return c.refreshPrompts("/"+dbName+txnStatus, nextState)
-}
-
-func (c *cliState) refreshPrompts(promptSuffix string, nextState cliStateEnum) cliStateEnum {
-	c.fullPrompt = c.promptPrefix + promptSuffix
-	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
-	c.fullPrompt += "> "
-
-	return nextState
+	return dbName, true
 }
 
 // preparePrompts computes a full and short prompt for the interactive
