@@ -21,13 +21,9 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	"github.com/chzyer/readline"
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -35,13 +31,12 @@ import (
 func TestSQLLex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	defer s.Stopper().Stop(context.TODO())
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
 
-	pgurl, err := s.(*server.TestServer).Cfg.PGURL(url.User(security.RootUser))
-	if err != nil {
-		t.Fatal(err)
-	}
+	pgurl, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+
 	conn := makeSQLConn(pgurl.String())
 	defer conn.Close()
 

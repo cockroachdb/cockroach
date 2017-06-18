@@ -18,25 +18,83 @@ package cli
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"net/url"
 	"reflect"
 	"testing"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+func TestConnRecover(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	p := cliTestParams{t: t}
+	c := newCLITest(p)
+	defer c.cleanup()
+
+	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+
+	conn := makeSQLConn(url.String())
+	defer conn.Close()
+
+	// Sanity check to establish baseline.
+	rows, err := conn.Query(`SELECT 1`, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that Query detects a connection close.
+	defer simulateServerRestart(&c, p, conn)()
+
+	_, err = conn.Query(`SELECT 1`, nil)
+	if err == nil || err != driver.ErrBadConn {
+		t.Fatalf("conn.Query(): expected bad conn, got %v", err)
+	}
+	// Check that Query recovers from a connection close by re-connecting.
+	rows, err = conn.Query(`SELECT 1`, nil)
+	if err != nil {
+		t.Fatalf("conn.Query(): expected no error after reconnect, got %v", err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that Exec detects a connection close.
+	defer simulateServerRestart(&c, p, conn)()
+
+	if err := conn.Exec(`SELECT 1`, nil); err == nil || err != driver.ErrBadConn {
+		t.Fatalf("conn.Exec(): expected bad conn, got %v", err)
+	}
+	// Check that Exec recovers from a connection close by re-connecting.
+	if err := conn.Exec(`SELECT 1`, nil); err != nil {
+		t.Fatalf("conn.Exec(): expected no error after reconnect, got %v", err)
+	}
+}
+
+// simulateServerRestart restarts the test server and reconfigures the connection
+// to use the new test server's port number. This is necessary because the port
+// number is selected randomly.
+func simulateServerRestart(c *cliTest, p cliTestParams, conn *sqlConn) func() {
+	c.restartServer(p)
+	url2, cleanup2 := sqlutils.PGUrl(c.t, c.ServingAddr(), c.t.Name(), url.User(security.RootUser))
+	conn.url = url2.String()
+	return cleanup2
+}
+
 func TestRunQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestRunQuery", url.User(security.RootUser))
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
