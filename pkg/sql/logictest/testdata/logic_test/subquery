@@ -290,10 +290,8 @@ EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS
 ----
 0  sort
 0          order  +foo1
-1  sort
-1          order  +moo2
-2  values
-2          size   3 columns, 3 rows
+1  values
+1          size   3 columns, 3 rows
 
 query II colnames
 SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c

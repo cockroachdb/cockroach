@@ -180,6 +180,11 @@ func doExpandPlan(
 			return plan, err
 		}
 
+		if s, ok := n.plan.(*sortNode); ok {
+			// (... ORDER BY x) ORDER BY y -> keep the outer sort
+			elideDoubleSort(n, s)
+		}
+
 		// Check to see if the requested ordering is compatible with the existing
 		// ordering.
 		match := planOrdering(n.plan).computeMatch(n.ordering)
@@ -245,6 +250,17 @@ func doExpandPlan(
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
 	}
 	return plan, err
+}
+
+// elideDoubleSort removes the source sortNode because it is
+// redundant.
+func elideDoubleSort(parent, source *sortNode) {
+	parent.plan = source.plan
+	// Propagate renamed columns
+	sourceCols := planColumns(parent.plan)
+	for i, col := range parent.columns {
+		sourceCols[i].Name = col.Name
+	}
 }
 
 func expandScanNode(
