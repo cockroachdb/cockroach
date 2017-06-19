@@ -19,6 +19,7 @@ package sql_test
 import (
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -292,6 +293,18 @@ func TestShowQueries(t *testing.T) {
 	var conn1 *gosql.DB
 	var conn2 *gosql.DB
 
+	insertStmt := "INSERT INTO t VALUES (1, '"
+	for i := 0; i < 996; i++ {
+		insertStmt = insertStmt + "a"
+	}
+	insertStmt = insertStmt + "\U0001F4A9aaa')"
+
+	expectedInsertStmt := "INSERT INTO t VALUES (1, e'"
+	for i := 0; i < (996 - 26); i++ {
+		expectedInsertStmt = expectedInsertStmt + "a"
+	}
+	expectedInsertStmt = expectedInsertStmt + "..."
+
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -300,16 +313,21 @@ func TestShowQueries(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
 						StatementFilter: func(ctx context.Context, stmt string, res *sql.Result) {
-							if stmt == "INSERT INTO t VALUES (1)" {
-								rows, _ := conn1.Query("SELECT node_id FROM [SHOW CLUSTER QUERIES]")
+							if strings.Contains(stmt, "INSERT INTO t") {
+								rows, _ := conn1.Query("SELECT node_id,query FROM [SHOW CLUSTER QUERIES]")
 								defer rows.Close()
 
 								for rows.Next() {
 									var nodeID int
-									if err := rows.Scan(&nodeID); err != nil {
+									var sql string
+									if err := rows.Scan(&nodeID, &sql); err != nil {
 										t.Fatal(err)
 									}
-
+									if strings.Contains(sql, "INSERT INTO t") && sql != expectedInsertStmt {
+										t.Fatalf("Unexpected query in SHOW QUERIES: %s, expected: %s",
+											sql,
+											expectedInsertStmt)
+									}
 									if nodeID < 1 || nodeID > 2 {
 										t.Fatalf("Invalid node ID: %d", nodeID)
 									}
@@ -341,10 +359,10 @@ func TestShowQueries(t *testing.T) {
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
 	sqlutils.CreateTable(t, conn1, "t",
-		"num INT",
+		"num INT, text TEXT",
 		0, nil)
 
-	if _, err := conn2.Exec("INSERT INTO t VALUES (1)"); err != nil {
+	if _, err := conn2.Exec(insertStmt); err != nil {
 		t.Fatal(err)
 	}
 

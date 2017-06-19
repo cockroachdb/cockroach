@@ -686,7 +686,15 @@ func (s *Session) serialize() serverpb.Session {
 	for query := range s.mu.ActiveQueries {
 		sql := query.stmt.String()
 		if len(sql) > 1000 {
-			sql = sql[:997] + "..."
+			// Truncate just after the first ASCII character.
+			i := 996
+			for i = 996; i > 0; i-- {
+				if (sql[i] & 0x80) == 0 {
+					// ASCII character found.
+					break
+				}
+			}
+			sql = sql[:(i+1)] + "..."
 		}
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			Start:         query.start.UTC(),
