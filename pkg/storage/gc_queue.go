@@ -143,10 +143,14 @@ func (r gcQueueScore) String() string {
 	if r.ExpMinGCByteAgeReduction < 0 {
 		r.ExpMinGCByteAgeReduction = 0
 	}
+	likelyLastGC := "never"
+	if r.LikelyLastGC != 0 {
+		likelyLastGC = fmt.Sprintf("%s ago", r.LikelyLastGC)
+	}
 	return fmt.Sprintf("queue=%t with %.2f/fuzz(%.2f)=%.2f=valScaleScore(%.2f)*deadFrac(%.2f)+intentScore(%.2f)\n"+
-		"likely last GC: %s ago, %s non-live, curr. age %s*s, min exp. reduction: %s*s",
+		"likely last GC: %s, %s non-live, curr. age %s*s, min exp. reduction: %s*s",
 		r.ShouldQueue, r.FinalScore, r.FuzzFactor, r.FinalScore/r.FuzzFactor, r.ValuesScalableScore,
-		r.DeadFraction, r.IntentScore, r.LikelyLastGC, humanizeutil.IBytes(r.GCBytes),
+		r.DeadFraction, r.IntentScore, likelyLastGC, humanizeutil.IBytes(r.GCBytes),
 		humanizeutil.IBytes(r.GCByteAge), humanizeutil.IBytes(r.ExpMinGCByteAgeReduction))
 }
 
@@ -181,7 +185,9 @@ func makeGCQueueScore(
 	r := makeGCQueueScoreImpl(
 		ctx, int64(desc.RangeID), now, ms, zone.GC.TTLSeconds,
 	)
-	r.LikelyLastGC = time.Duration(now.WallTime - gcThreshold.Add(r.TTL.Nanoseconds(), 0).WallTime)
+	if (gcThreshold != hlc.Timestamp{}) {
+		r.LikelyLastGC = time.Duration(now.WallTime - gcThreshold.Add(r.TTL.Nanoseconds(), 0).WallTime)
+	}
 	return r
 }
 
