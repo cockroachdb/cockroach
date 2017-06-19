@@ -78,7 +78,7 @@ func backupRestoreTestSetupWithParams(
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	for _, s := range tc.Servers {
 		for _, e := range s.Engines() {
-			if err := e.SetTempDir(temp); err != nil {
+			if err := e.SetAuxiliaryDir(temp); err != nil {
 				t.Fatal(err)
 			}
 		}
