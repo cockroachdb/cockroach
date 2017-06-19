@@ -402,9 +402,9 @@ func Example_ranges() {
 	// 	0: node-id=1 store-id=1
 	// /System/"tse"-"ranges3" [4]
 	// 	0: node-id=1 store-id=1
-	// "ranges3"-/Table/0 [11]
+	// "ranges3"-/Table/SystemConfigSpan/Start [11]
 	// 	0: node-id=1 store-id=1
-	// /Table/0-/Table/11 [5]
+	// /Table/SystemConfigSpan/Start-/Table/11 [5]
 	// 	0: node-id=1 store-id=1
 	// /Table/11-/Table/12 [6]
 	// 	0: node-id=1 store-id=1
