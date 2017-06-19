@@ -126,9 +126,10 @@
   revision = "e91bb28baf9de4a530d3ae7f041953b23dcce9be"
 
 [[projects]]
+  branch = "master"
   name = "github.com/cockroachdb/stress"
   packages = ["."]
-  revision = "ce09c414594390d1d6432280c7cac55e62c6b0af"
+  revision = "60f5b5fa410fdfd786059ccb56d468691f2305aa"
 
 [[projects]]
   name = "github.com/codahale/hdrhistogram"
