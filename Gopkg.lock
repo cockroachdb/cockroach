@@ -126,9 +126,10 @@
   revision = "e91bb28baf9de4a530d3ae7f041953b23dcce9be"
 
 [[projects]]
+  branch = "master"
   name = "github.com/cockroachdb/stress"
   packages = ["."]
-  revision = "ce09c414594390d1d6432280c7cac55e62c6b0af"
+  revision = "60f5b5fa410fdfd786059ccb56d468691f2305aa"
 
 [[projects]]
   name = "github.com/codahale/hdrhistogram"
@@ -406,11 +407,6 @@
   version = "v1.0.0-rc0"
 
 [[projects]]
-  name = "github.com/opentracing/basictracer-go"
-  packages = [".","wire"]
-  revision = "1b32af207119a14b1b231d451df3ed04a72efebf"
-
-[[projects]]
   name = "github.com/opentracing/opentracing-go"
   packages = [".","ext","log"]
   revision = "eaaf4e1eeb7a5373b38e70901270c83577dc6fb9"
@@ -587,6 +583,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "562093f8ce91cd0353b3752147c62d3d3a32add8c2df0dba5145caedafbae699"
+  inputs-digest = "52f52f1230e1e90e0a8fd8fa240787b0b7948f9a35beea191580796fb1c1938d"
   solver-name = "gps-cdcl"
   solver-version = 1
