@@ -87,8 +87,9 @@ message ReplicatedEvalResult {
 
   message AddSSTable {
     optional bytes data = 1;
+    optional bytes sideloaded_crc32 = 2 [(gogoproto.customname) = "SideloadedCRC32"];
   }
-  optional AddSSTable add_sstable = 16 [(gogoproto.nullable) = false, (gogoproto.customname) = "AddSSTable"];
+  optional AddSSTable add_sstable = 16 [(gogoproto.customname) = "AddSSTable"];
 
   reserved 10001 to 10013;
 }

@@ -48,10 +48,12 @@ func (a *entryCacheKey) Compare(b llrb.Comparable) int {
 	}
 }
 
-// A raftEntryCache maintains a global cache of Raft group log
-// entries. The cache mostly prevents unnecessary reads from disk of
-// recently-written log entries between log append and application
-// to the FSM.
+// A raftEntryCache maintains a global cache of Raft group log entries. The
+// cache mostly prevents unnecessary reads from disk of recently-written log
+// entries between log append and application to the FSM.
+//
+// This cache stores entries with sideloaded proposals inlined (i.e. ready to
+// be sent to followers).
 type raftEntryCache struct {
 	syncutil.Mutex                     // protects Cache for concurrent access.
 	bytes          uint64              // total size of the cache in bytes

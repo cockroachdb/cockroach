@@ -640,6 +640,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
 	}
+	r.raftMu.timedMutex = makeTimedMutex(nil)
 	if err := r.init(desc, store.Clock(), 0); err != nil {
 		t.Fatal(err)
 	}

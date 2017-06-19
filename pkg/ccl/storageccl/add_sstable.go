@@ -56,6 +56,10 @@ func evalAddSSTable(
 
 	// Check if there was data in the affected keyrange. If so, delete it (and
 	// adjust the MVCCStats) before applying the SSTable.
+	//
+	// TODO(tschottdorf): this could be a large proposal (perhaps too large to
+	// be accepted). Better to compute the stats and send them along, but make
+	// the actual clear a below-Raft side effect.
 	existingStats, err := clearExistingData(batch, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 	if err != nil {
 		return storage.EvalResult{}, errors.Wrap(err, "clearing existing data")
@@ -64,7 +68,7 @@ func evalAddSSTable(
 
 	pd := storage.EvalResult{
 		Replicated: storagebase.ReplicatedEvalResult{
-			AddSSTable: storagebase.ReplicatedEvalResult_AddSSTable{
+			AddSSTable: &storagebase.ReplicatedEvalResult_AddSSTable{
 				Data: args.Data,
 			},
 		},
