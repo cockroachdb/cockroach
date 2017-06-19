@@ -88,6 +88,8 @@ func (p *planner) ShowFingerprints(
 }
 
 type showFingerprintsNode struct {
+	optColumnsSlot
+
 	p *planner
 	n *parser.ShowFingerprints
 
