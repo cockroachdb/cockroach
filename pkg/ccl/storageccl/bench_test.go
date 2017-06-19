@@ -142,7 +142,10 @@ func BenchmarkImport(b *testing.B) {
 		defer storage.TestingSetDisableSnapshotClearRange(true)()
 		runBenchmarkImport(b)
 	})
-	b.Run("WriteBatch", runBenchmarkImport)
+	b.Run("WriteBatch", func(b *testing.B) {
+		defer settings.TestingSetBool(&storageccl.AddSSTableEnabled, false)()
+		runBenchmarkImport(b)
+	})
 }
 
 func runBenchmarkImport(b *testing.B) {
