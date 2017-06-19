@@ -315,7 +315,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 			log.Infof(ctx.masterCtx, "dialing %s", target)
 		}
 		meta.conn, meta.dialErr = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
-		if meta.dialErr == nil {
+		if ctx.GetLocalInternalServerForAddr(target) == nil && meta.dialErr == nil {
 			if err := ctx.Stopper.RunTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
 					ctx.Stopper.RunWorker(masterCtx, func(masterCtx context.Context) {
