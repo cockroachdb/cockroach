@@ -2221,7 +2221,7 @@ func IsValidSplitKey(key roachpb.Key) bool {
 		return false
 	}
 	for _, span := range keys.NoSplitSpans {
-		if bytes.Compare(key, span.Key) >= 0 && bytes.Compare(key, span.EndKey) < 0 {
+		if bytes.Compare(key, span.Key) > 0 && bytes.Compare(key, span.EndKey) < 0 {
 			return false
 		}
 	}
@@ -2317,9 +2317,8 @@ func MVCCFindSplitKey(
 		return nil, nil
 	}
 
-	// The key is an MVCC (versioned) key, so to avoid corrupting MVCC we only
-	// return the base portion, which is fine to split in front of.
-	return bestSplitKey.Key, nil
+	// The family ID has been removed from this key, making it a valid split point.
+	return keys.EnsureSafeSplitKey(bestSplitKey.Key)
 }
 
 // willOverflow returns true iff adding both inputs would under- or overflow

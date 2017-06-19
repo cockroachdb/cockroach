@@ -586,6 +586,7 @@ func MakeFamilyKey(key []byte, famID uint32) []byte {
 }
 
 // MakeRowSentinelKey creates the first key in a sql table row.
+// TODO(bdarnell): should use roachpb.Key or roachpb.RKey, not []byte.
 func MakeRowSentinelKey(key []byte) []byte {
 	return MakeFamilyKey(key, SentinelFamilyID)
 }

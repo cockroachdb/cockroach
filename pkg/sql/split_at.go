@@ -47,7 +47,7 @@ func getRowKey(
 	if err != nil {
 		return nil, err
 	}
-	return keys.MakeRowSentinelKey(key), nil
+	return key, nil
 }
 
 // Split executes a KV split.

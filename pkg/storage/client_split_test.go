@@ -162,8 +162,14 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	tableKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
 	rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
 	rowKey = encoding.EncodeStringAscending(encoding.EncodeVarintAscending(rowKey, 1), "a")
-	col1Key := keys.MakeFamilyKey(append([]byte(nil), rowKey...), 1)
-	col2Key := keys.MakeFamilyKey(append([]byte(nil), rowKey...), 2)
+	col1Key, err := keys.EnsureSafeSplitKey(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	col2Key, err := keys.EnsureSafeSplitKey(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 2))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// We don't care about the value, so just store any old thing.
 	if err := store.DB().Put(context.TODO(), col1Key, "column 1"); err != nil {
@@ -175,13 +181,14 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 
 	// Split between col1Key and col2Key by splitting before col2Key.
 	args := adminSplitArgs(col2Key, col2Key)
-	_, err := client.SendWrapped(context.Background(), rg1(store), args)
-	if err != nil {
-		t.Fatalf("%s: split unexpected error: %s", col1Key, err)
+	_, pErr := client.SendWrapped(context.Background(), rg1(store), args)
+	if pErr != nil {
+		t.Fatalf("%s: split unexpected error: %s", col1Key, pErr)
 	}
 
-	repl1 := store.LookupReplica(col1Key, nil)
-	repl2 := store.LookupReplica(col2Key, nil)
+	repl1 := store.LookupReplica(roachpb.RKey(col1Key), nil)
+	repl2 := store.LookupReplica(roachpb.RKey(col2Key), nil)
+
 	// Verify the two columns are still on the same range.
 	if !reflect.DeepEqual(repl1, repl2) {
 		t.Fatalf("%s: ranges differ: %+v vs %+v", roachpb.Key(col1Key), repl1, repl2)
@@ -290,59 +297,6 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	args = adminSplitArgs(roachpb.KeyMin, []byte("a"))
 	if _, err := client.SendWrapped(context.Background(), rg1(store), args); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
-	}
-}
-
-// TestEnsureSafeSplitKeyOutOfBounds is a regression test for an issue
-// fixed in #16291. A key that was initially within the bounds of a
-// range becomes out of bounds when passed through EnsureSafeSplitKey.
-// This was eventually detected, but it happened so late in the split
-// processes that we had no choice but to panic. Since #16291, this
-// condition is properly validated at the start of the split process
-// and returns an error cleanly.
-func TestEnsureSafeSplitKeyOutOfBounds(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	mtc := &multiTestContext{storeConfig: &storeCfg}
-	mtc.Start(t, 1)
-	defer mtc.Stop()
-
-	// Carefully construct keys with the desired properties: key2 is
-	// greater than key1, but the order reverses when EnsureSafeSplitKey
-	// is called.
-	var key1, key2 roachpb.Key
-	key1 = encoding.EncodeUvarintAscending(key1, keys.MaxReservedDescID+1)
-	key1 = encoding.EncodeUvarintAscending(key1, 1)
-	key1 = keys.MakeRowSentinelKey(key1)
-	key2 = encoding.EncodeUvarintAscending(key2, keys.MaxReservedDescID+1)
-	key2 = encoding.EncodeUvarintAscending(key2, 2)
-	key2 = encoding.EncodeUvarintAscending(key2, 1)
-
-	// Make sure the keys sort in the expected ways.
-	if key1.Compare(key2) >= 0 {
-		t.Fatalf("expected %s < %s", key1, key2)
-	}
-	var eKey1, eKey2 roachpb.Key
-	var err error
-	if eKey1, err = keys.EnsureSafeSplitKey(key1); err != nil {
-		t.Fatal(err)
-	}
-	if eKey2, err = keys.EnsureSafeSplitKey(key2); err != nil {
-		t.Fatal(err)
-	}
-	if eKey1.Compare(eKey2) <= 0 {
-		t.Fatalf("expected %s > %s", eKey1, eKey2)
-	}
-
-	args := adminSplitArgs(key1, key1)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], args); pErr != nil {
-		t.Fatal(pErr)
-	}
-	args = adminSplitArgs(key2, key2)
-	_, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], args)
-	if !testutils.IsPError(pErr, "requested split key.*changed to.*by EnsureSafeSplitKey") {
-		t.Fatalf("unexpected error: %s", pErr)
 	}
 }
 

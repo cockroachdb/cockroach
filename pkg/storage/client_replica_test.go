@@ -1528,8 +1528,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 		keys.MakeTablePrefix(keys.SystemRangesID),
 	}
 	for _, key := range splitKeys {
-		splitKey := keys.MakeRowSentinelKey(key)
-		if _, _, err := tc.SplitRange(splitKey); err != nil {
+		if _, _, err := tc.SplitRange(key); err != nil {
 			t.Fatalf("failed to split at key %s: %s", key, err)
 		}
 	}
