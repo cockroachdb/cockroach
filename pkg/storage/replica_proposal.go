@@ -272,12 +272,12 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Replicated.RaftLogDelta = nil
 
-	if p.Replicated.AddSSTable.Data == nil {
-		p.Replicated.AddSSTable.Data = q.Replicated.AddSSTable.Data
-	} else if q.Replicated.AddSSTable.Data != nil {
+	if p.Replicated.AddSSTable == nil {
+		p.Replicated.AddSSTable = q.Replicated.AddSSTable
+	} else if q.Replicated.AddSSTable != nil {
 		return errors.New("conflicting AddSSTable")
 	}
-	q.Replicated.AddSSTable.Data = nil
+	q.Replicated.AddSSTable = nil
 
 	if q.Local.intents != nil {
 		if p.Local.intents == nil {
@@ -492,8 +492,10 @@ func (r *Replica) addSSTablePostApply(ctx context.Context, data []byte) {
 		checksum = hash.Sum(nil)
 	}
 
-	// TODO(dan): Instead of a path based on checksum, use the one in the RFC:
-	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/raft_sstable_sideloading.md#detailed-design
+	// TODO(danhhz,tschottdorf): we can hardlink directly to the sideloaded
+	// SSTable and ingest that if we also put a "sanitizer" in the
+	// implementation of sideloadedStorage that undoes the serial number that
+	// RocksDB may add to the SSTable. This avoids copying the file entirely.
 	var path string
 	var move bool
 	if inmem, ok := r.store.engine.(engine.InMem); ok {
@@ -503,6 +505,8 @@ func (r *Replica) addSSTablePostApply(ctx context.Context, data []byte) {
 			panic(err)
 		}
 	} else {
+		// TODO(danhhz,tschottdorf): we don't want a temp dir here. Need a concrete
+		// directory specific to this purpose.
 		path = filepath.Join(r.store.engine.GetAuxiliaryDir(), fmt.Sprintf("addsstable-%x", checksum))
 		move = true
 		if err := ioutil.WriteFile(path, data, 0600); err != nil {
@@ -680,6 +684,13 @@ func (r *Replica) handleReplicatedEvalResult(
 		// Clear any entries in the Raft log entry cache for this range up
 		// to and including the most recently truncated index.
 		r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)
+		log.Eventf(ctx, "truncating log up to (and including) index %d", newTruncState.Index)
+		if err := r.raftMu.sideloaded.TruncateTo(ctx, newTruncState.Index+1); err != nil {
+			// We don't *have* to remove these entries for correctness, but a failure here
+			// is unexpected except when the storage medium fails, and we don't handle that
+			// graceful anywhere else.
+			log.Fatalf(ctx, "while removing sideloaded files during log truncation: %s", err)
+		}
 	}
 
 	if newThresh := rResult.State.GCThreshold; newThresh != (hlc.Timestamp{}) {
@@ -734,15 +745,17 @@ func (r *Replica) handleReplicatedEvalResult(
 		}
 	}
 
-	if rResult.AddSSTable.Data != nil {
+	if rResult.AddSSTable != nil {
 		// TODO(dan): DANGER DANGER DANGER. ReplicatedEvalResult is for
 		// in-memory side effects. If there was a crash before this line, the
 		// database would be corrupted because the command would be marked as
 		// applied but the new sstable wouldn't be there. We need to figure out
 		// how to make this atomic with the commit of the batch including the
 		// new AppliedIndex.
+		begin := timeutil.Now()
 		r.addSSTablePostApply(ctx, rResult.AddSSTable.Data)
-		rResult.AddSSTable.Data = nil
+		log.Eventf(ctx, "linked SSTable in %s", timeutil.Since(begin))
+		rResult.AddSSTable = nil
 	}
 
 	if !reflect.DeepEqual(rResult, storagebase.ReplicatedEvalResult{}) {

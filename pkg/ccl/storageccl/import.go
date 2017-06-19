@@ -42,6 +42,7 @@ var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
 
 func init() {
 	storage.SetImportCmd(evalImport)
+	storage.CanSideloadSSTable = AddSSTableEnabled.Get
 }
 
 var importBatchSize = func() *settings.ByteSizeSetting {
@@ -160,6 +161,7 @@ func (b *sstBatcher) Finish(ctx context.Context, db *client.DB) error {
 
 	const maxAddSSTableRetries = 10
 	for i := 0; ; i++ {
+		log.Event(ctx, "sending AddSSTable")
 		// TODO(dan): This will fail if the range has split.
 		err := db.ExperimentalAddSSTable(ctx, start, end, sstBytes)
 		if err == nil {
@@ -212,9 +214,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	var rows rowCounter
 	var iters []engine.SimpleIterator
 	for _, file := range args.Files {
-		if log.V(2) {
-			log.Infof(ctx, "import file [%s,%s) %s", importStart, importEnd, file.Path)
-		}
+		log.VEventf(ctx, 2, "import file [%s,%s) %s", importStart, importEnd, file.Path)
 
 		dir, err := MakeExportStorage(ctx, file.Dir)
 		if err != nil {
@@ -239,6 +239,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		}); err != nil {
 			return nil, errors.Wrapf(err, "fetching %q", file.Path)
 		}
+		log.Event(ctx, "read file")
 
 		rows.BulkOpSummary.DataSize += int64(len(fileContents))
 
@@ -256,6 +257,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		if err != nil {
 			return nil, err
 		}
+
 		defer iter.Close()
 		iters = append(iters, iter)
 	}
@@ -265,6 +267,8 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		if batcher != nil {
 			return errors.New("cannot overwrite a batcher")
 		}
+		log.Event(ctx, "resetting batcher")
+
 		if AddSSTableEnabled.Get() {
 			sstWriter, err := engine.MakeRocksDBSstFileWriter()
 			if err != nil {
@@ -352,10 +356,12 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			return batcher.Finish(gCtx, db)
 		})
 	}
+	log.Event(ctx, "waiting for batchers to finish")
 
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
+	log.Event(ctx, "done")
 
 	return &roachpb.ImportResponse{Imported: rows.BulkOpSummary}, nil
 }

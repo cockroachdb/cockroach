@@ -1833,8 +1833,14 @@ func splitPostApply(
 	if err != nil {
 		log.Fatalf(ctx, "unable to find RHS replica: %s", err)
 	}
-	if err := rightRng.init(&split.RightDesc, r.store.Clock(), 0); err != nil {
-		log.Fatal(ctx, err)
+	{
+		rightRng.mu.Lock()
+		// Already holding raftMu, see above.
+		err := rightRng.initRaftMuLockedReplicaMuLocked(&split.RightDesc, r.store.Clock(), 0)
+		rightRng.mu.Unlock()
+		if err != nil {
+			log.Fatal(ctx, err)
+		}
 	}
 
 	// Finish initialization of the RHS.
@@ -3246,6 +3252,8 @@ func snapshotRateLimit(priority SnapshotRequest_Priority) (rate.Limit, error) {
 	}
 }
 
+var errMustRetrySnapshotDueToTruncation = errors.New("log truncation during snapshot removed sideloaded SSTable")
+
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
@@ -3374,9 +3382,58 @@ func sendSnapshot(
 	}
 
 	rangeID := header.State.Desc.RangeID
+
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return err
 	}
+
+	// Inline the payloads for all sideloaded proposals.
+	//
+	// TODO(tschottdorf): could also send slim proposals and attach sideloaded
+	// SSTables directly to the snapshot. Probably the better long-term
+	// solution, but let's see if it ever becomes relevant. Snapshots with
+	// inlined proposals are hopefully the exception.
+	{
+		var ent raftpb.Entry
+		for i := range logEntries {
+			if err := ent.Unmarshal(logEntries[i]); err != nil {
+				return err
+			}
+			if !sniffSideloadedRaftCommand(ent.Data) {
+				continue
+			}
+			if err := snap.WithSideloaded(func(ss sideloadStorage) error {
+				return maybeInlineSideloadedRaftCommand(
+					ctx, rangeID, &ent, ss, snap.RaftEntryCache,
+				)
+			}); err != nil {
+				if errors.Cause(err) == errSideloadedFileNotFound {
+					// We're creating the Raft snapshot based on a snapshot of
+					// the engine, but the Raft log may since have been
+					// truncated and corresponding on-disk sideloaded payloads
+					// unlinked. Luckily, we can just abort this snapshot; the
+					// caller can retry.
+					//
+					// TODO(tschottdorf): check how callers handle this. They
+					// should simply retry. In some scenarios, perhaps this can
+					// happen repeatedly and prevent a snapshot; not sending the
+					// log entries wouldn't help, though, and so we'd really
+					// need to make sure the entries are always here, for
+					// instance by pre-loading them into memory. Or we can make
+					// log truncation less aggressive about removing sideloaded
+					// files, by delaying trailing file deletion for a bit.
+					return errMustRetrySnapshotDueToTruncation
+				}
+				return err
+			}
+			// TODO(tschottdorf): it should be possible to reuse `logEntries[i]` here.
+			var err error
+			if logEntries[i], err = ent.Marshal(); err != nil {
+				return err
+			}
+		}
+	}
+
 	req := &SnapshotRequest{
 		LogEntries: logEntries,
 		Final:      true,
@@ -3763,7 +3820,7 @@ func (s *Store) tryGetOrCreateReplica(
 		// TODO(bdarnell): other fields are unknown; need to populate them from
 		// snapshot.
 	}
-	if err := repl.initLocked(desc, s.Clock(), replicaID); err != nil {
+	if err := repl.initRaftMuLockedReplicaMuLocked(desc, s.Clock(), replicaID); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it
 		repl.mu.destroyed = errors.Wrapf(err, "%s: failed to initialize", repl)

@@ -75,12 +75,14 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
-// maxBytes. Passing maxBytes equal to zero disables size checking.
+// maxBytes. Passing maxBytes equal to zero disables size checking. Sideloaded
+// files don't count towards maxBytes; only the part of the entry that lives in
+// the Raft log does.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return entries(ctx, snap, r.RangeID, r.store.raftEntryCache, lo, hi, maxBytes)
+	return entries(ctx, snap, r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
 // raftEntriesLocked requires that r.mu is held.
@@ -88,11 +90,16 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 	return (*replicaRaftStorage)(r).Entries(lo, hi, maxBytes)
 }
 
+// retrieve entries from the engine. To accommodate loading the term,
+// `sideloaded` can be supplied as nil, in which case sideloaded entries will
+// not be inlined (and the raft entry cache not populated with *any* of the
+// loaded entries).
 func entries(
 	ctx context.Context,
 	e engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
+	sideloaded sideloadStorage,
 	lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	if lo > hi {
@@ -116,6 +123,10 @@ func entries(
 	// stopping once we have enough.
 	expectedIndex := hitIndex
 
+	// Whether we can populate the Raft entries cache. False if we found a
+	// sideloaded proposal, but the caller didn't give us a sideloaded storage.
+	canCache := true
+
 	var ent raftpb.Entry
 	exceededMaxBytes := false
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
@@ -128,6 +139,18 @@ func entries(
 		}
 		expectedIndex++
 		size += uint64(ent.Size())
+
+		if sniffSideloadedRaftCommand(ent.Data) {
+			canCache = canCache && sideloaded != nil
+			if sideloaded != nil {
+				if err := maybeInlineSideloadedRaftCommand(
+					ctx, rangeID, &ent, sideloaded, eCache,
+				); err != nil {
+					return true, err
+				}
+			}
+		}
+
 		ents = append(ents, ent)
 		exceededMaxBytes = maxBytes > 0 && size > maxBytes
 		return exceededMaxBytes, nil
@@ -136,8 +159,10 @@ func entries(
 	if err := iterateEntries(ctx, e, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, err
 	}
-	// Cache the fetched entries.
-	eCache.addEntries(rangeID, ents)
+	// Cache the fetched entries, if we may.
+	if canCache {
+		eCache.addEntries(rangeID, ents)
+	}
 
 	// Did the correct number of results come back? If so, we're all good.
 	if uint64(len(ents)) == hi-lo {
@@ -219,7 +244,9 @@ func (r *Replica) raftTermLocked(i uint64) (uint64, error) {
 func term(
 	ctx context.Context, eng engine.Reader, rangeID roachpb.RangeID, eCache *raftEntryCache, i uint64,
 ) (uint64, error) {
-	ents, err := entries(ctx, eng, rangeID, eCache, i, i+1, 0)
+	// entries() accepts a `nil` sideloaded storage and will skip inlining of
+	// sideloaded entries. We only need the term, so this is what we do.
+	ents, err := entries(ctx, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, 0)
 	if err == raft.ErrCompacted {
 		ts, err := loadTruncatedState(ctx, eng, rangeID)
 		if err != nil {
@@ -341,7 +368,14 @@ func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSn
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
-	snapData, err := snapshot(ctx, snapType, snap, rangeID, r.store.raftEntryCache, startKey)
+	withSideloaded := func(fn func(sideloadStorage) error) error {
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		return fn(r.raftMu.sideloaded)
+	}
+	snapData, err := snapshot(
+		ctx, snapType, snap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
+	)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %s", err)
 		return nil, err
@@ -362,6 +396,12 @@ type OutgoingSnapshot struct {
 	Iter *ReplicaDataIterator
 	// The replica state within the snapshot.
 	State storagebase.ReplicaState
+	// Allows access the the original Replica's sideloaded storage. Note that
+	// this isn't a snapshot of the sideloaded storage congruent with EngineSnap
+	// or RaftSnap -- a log truncation could have removed files from the
+	// sideloaded storage in the meantime.
+	WithSideloaded func(func(sideloadStorage) error) error
+	RaftEntryCache *raftEntryCache
 }
 
 // Close releases the resources associated with the snapshot.
@@ -390,6 +430,7 @@ func snapshot(
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
+	withSideloaded func(func(sideloadStorage) error) error,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
 	var desc roachpb.RangeDescriptor
@@ -441,10 +482,12 @@ func snapshot(
 	log.Infof(ctx, "generated %s snapshot %s at index %d",
 		snapType, snapUUID.Short(), appliedIndex)
 	return OutgoingSnapshot{
-		EngineSnap: snap,
-		Iter:       iter,
-		State:      state,
-		SnapUUID:   snapUUID,
+		RaftEntryCache: eCache,
+		WithSideloaded: withSideloaded,
+		EngineSnap:     snap,
+		Iter:           iter,
+		State:          state,
+		SnapUUID:       snapUUID,
 		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
 			Metadata: raftpb.SnapshotMetadata{
@@ -460,9 +503,12 @@ func snapshot(
 // r.mu.lastIndex and r.mu.raftLogSize, and returns new values. We do this
 // rather than modifying them directly because these modifications need to be
 // atomic with the commit of the batch. This method requires that r.raftMu is held.
+//
+// append is intentionally oblivious to the existence of sideloaded proposals.
 func (r *Replica) append(
 	ctx context.Context,
 	batch engine.ReadWriter,
+	sideloaded sideloadStorage,
 	prevLastIndex uint64,
 	prevRaftLogSize int64,
 	entries []raftpb.Entry,
@@ -475,6 +521,7 @@ func (r *Replica) append(
 	for i := range entries {
 		ent := &entries[i]
 		key := r.raftMu.stateLoader.RaftLogKey(ent.Index)
+
 		if err := value.SetProto(ent); err != nil {
 			return 0, 0, err
 		}
@@ -493,6 +540,8 @@ func (r *Replica) append(
 	// Delete any previously appended log entries which never committed.
 	lastIndex := entries[len(entries)-1].Index
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
+		// TODO(tschottdorf): can also delete any corresponding sideloaded
+		// files, though only after committing the batch.
 		err := engine.MVCCDelete(ctx, batch, &diff, r.raftMu.stateLoader.RaftLogKey(i),
 			hlc.Timestamp{}, nil /* txn */)
 		if err != nil {
@@ -678,8 +727,19 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
+	thinEntries, err := r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
+	if err != nil {
+		return err
+	}
 	// Write the snapshot's Raft log into the range.
-	_, raftLogSize, err = r.append(ctx, distinctBatch, 0, raftLogSize, logEntries)
+	_, raftLogSize, err = r.append(
+		ctx,
+		distinctBatch,
+		r.raftMu.sideloaded,
+		0,
+		raftLogSize,
+		thinEntries,
+	)
 	if err != nil {
 		return err
 	}
@@ -745,28 +805,50 @@ func (r *Replica) applySnapshot(
 	return nil
 }
 
-// Raft commands are encoded with a 1-byte version (currently 0), an 8-byte ID,
-// followed by the payload. This inflexible encoding is used so we can efficiently
-// parse the command id while processing the logs.
-// TODO(bdarnell): Is this commandID still appropriate for our needs?
+type raftCommandEncodingVersion byte
+
+// Raft commands are encoded with a 1-byte version (currently 0 or 1), an 8-byte
+// ID, followed by the payload. This inflexible encoding is used so we can
+// efficiently parse the command id while processing the logs.
+//
+// TODO(bdarnell): is this commandID still appropriate for our needs?
 const (
 	// The prescribed length for each command ID.
-	raftCommandIDLen                = 8
-	raftCommandEncodingVersion byte = 0
+	raftCommandIDLen = 8
+	// The initial Raft command version, used for all regular Raft traffic.
+	raftCommandEncodingVersionV1 raftCommandEncodingVersion = 0
+	// A proposal containing an SSTable which preferably should be sideloaded
+	// (i.e. not stored in the Raft log wholesale). Can be treated as a v1
+	// proposal when arriving on the wire, but when retrieved from the local
+	// Raft log it necessary to inline the payload first as it has usually
+	// been sideloaded.
+	raftCommandEncodingVersionV2 raftCommandEncodingVersion = 1
 	// The no-split bit is now unused, but we still apply the mask to the first
 	// byte of the command for backward compatibility.
+	//
+	// TODO(tschottdorf): predates v1.0 by a significant margin. Remove.
 	raftCommandNoSplitBit  = 1 << 7
 	raftCommandNoSplitMask = raftCommandNoSplitBit - 1
 )
 
+func encodeRaftCommandV1(commandID storagebase.CmdIDKey, command []byte) []byte {
+	return encodeRaftCommand(raftCommandEncodingVersionV1, commandID, command)
+}
+
+func encodeRaftCommandV2(commandID storagebase.CmdIDKey, command []byte) []byte {
+	return encodeRaftCommand(raftCommandEncodingVersionV2, commandID, command)
+}
+
 // encode a command ID, an encoded storagebase.RaftCommand, and
 // whether the command contains a split.
-func encodeRaftCommand(commandID storagebase.CmdIDKey, command []byte) []byte {
+func encodeRaftCommand(
+	version raftCommandEncodingVersion, commandID storagebase.CmdIDKey, command []byte,
+) []byte {
 	if len(commandID) != raftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), raftCommandIDLen))
 	}
 	x := make([]byte, 1, 1+raftCommandIDLen+len(command))
-	x[0] = raftCommandEncodingVersion
+	x[0] = byte(version)
 	x = append(x, []byte(commandID)...)
 	x = append(x, command...)
 	return x
@@ -778,7 +860,8 @@ func encodeRaftCommand(commandID storagebase.CmdIDKey, command []byte) []byte {
 // than a real command). Usage is mostly internal to the storage package
 // but is exported for use by debugging tools.
 func DecodeRaftCommand(data []byte) (storagebase.CmdIDKey, []byte) {
-	if data[0]&raftCommandNoSplitMask != raftCommandEncodingVersion {
+	v := raftCommandEncodingVersion(data[0] & raftCommandNoSplitMask)
+	if v != raftCommandEncodingVersionV1 && v != raftCommandEncodingVersionV2 {
 		panic(fmt.Sprintf("unknown command encoding version %v", data[0]))
 	}
 	return storagebase.CmdIDKey(data[1 : 1+raftCommandIDLen]), data[1+raftCommandIDLen:]
