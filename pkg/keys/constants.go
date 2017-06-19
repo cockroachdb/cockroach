@@ -244,7 +244,8 @@ var (
 
 	// SystemConfigSplitKey is the key to split at immediately prior to the
 	// system config span. NB: Split keys need to be valid column keys.
-	SystemConfigSplitKey = MakeRowSentinelKey(TableDataMin)
+	// TODO(bdarnell): this should be either roachpb.Key or RKey, not []byte.
+	SystemConfigSplitKey = []byte(TableDataMin)
 	// SystemConfigTableDataMax is the end key of system config span.
 	SystemConfigTableDataMax = roachpb.Key(MakeTablePrefix(MaxSystemConfigDescID + 1))
 

@@ -464,7 +464,7 @@ func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKe
 	findSplitKey := func(startID, endID uint32) roachpb.RKey {
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
-			key := roachpb.RKey(keys.MakeRowSentinelKey(keys.MakeTablePrefix(id)))
+			key := roachpb.RKey(keys.MakeTablePrefix(id))
 			// Skip if this ID matches the provided startKey.
 			if !startKey.Less(key) {
 				continue

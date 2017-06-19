@@ -23,7 +23,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -135,9 +134,9 @@ func TestSplitAt(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			expect := roachpb.Key(keys.MakeRowSentinelKey(rng.StartKey))
+			expect := roachpb.Key(rng.StartKey)
 			if !expect.Equal(key) {
-				t.Fatalf("%s: expected range start %s, got %s", tt.in, pretty, expect)
+				t.Fatalf("%s: expected range start %s, got %s", tt.in, expect, pretty)
 			}
 		}
 	}

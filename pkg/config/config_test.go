@@ -358,7 +358,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 		}
 		var expected roachpb.RKey
 		if tc.split != -1 {
-			expected = keys.MakeRowSentinelKey(keys.MakeTablePrefix(uint32(tc.split)))
+			expected = keys.MakeTablePrefix(uint32(tc.split))
 		}
 		if !splitKey.Equal(expected) {
 			t.Errorf("#%d: bad split:\ngot: %v\nexpected: %v", tcNum, splitKey, expected)
