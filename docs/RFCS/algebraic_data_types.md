@@ -1,5 +1,5 @@
 -   Feature Name: Go infrastructure for algebraic data types
--   Status: draft
+-   Status: in-progress
 -   Start Date: 2017-05-31
 -   Authors: David Eisenstat <eisen@cockroachlabs.com>, with much input
     from Raphael Poss <knz@cockroachlabs.com> and Peter Mattis
