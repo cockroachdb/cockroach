@@ -1248,7 +1248,7 @@ type traceRow [7]parser.Datum
 // | +-------------------+ |
 // |            7          |
 // +-----------------------+
-func (st *SessionTracing) generateSessionTraceVTable() []traceRow {
+func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 	// Get all the log messages, in the right order.
 	var allLogs []logRecordRow
 	for txnIdx, spans := range st.txnRecordings {
@@ -1273,7 +1273,11 @@ func (st *SessionTracing) generateSessionTraceVTable() []traceRow {
 			if spanIdx == 0 {
 				spanWithIndex.txnIdx = txnIdx
 			}
-			allLogs = append(allLogs, getMessagesForSubtrace(spanWithIndex, spans, seenSpans)...)
+			msgs, err := getMessagesForSubtrace(spanWithIndex, spans, seenSpans)
+			if err != nil {
+				return nil, err
+			}
+			allLogs = append(allLogs, msgs...)
 		}
 	}
 
@@ -1316,7 +1320,7 @@ func (st *SessionTracing) generateSessionTraceVTable() []traceRow {
 		}
 		res = append(res, row)
 	}
-	return res
+	return res, nil
 }
 
 // getOrderedChildSpans returns all the spans in allSpans that are children of
@@ -1346,9 +1350,9 @@ func getOrderedChildSpans(spanID uint64, allSpans []tracing.RecordedSpan) []span
 // rooted at span.
 func getMessagesForSubtrace(
 	span spanWithIndex, allSpans []tracing.RecordedSpan, seenSpans map[uint64]struct{},
-) []logRecordRow {
+) ([]logRecordRow, error) {
 	if _, ok := seenSpans[span.SpanID]; ok {
-		panic(fmt.Sprintf("getMessagesForSubtrace called for already-seen span: %d", span.SpanID))
+		return nil, errors.Errorf("duplicate span %d", span.SpanID)
 	}
 	var allLogs []logRecordRow
 	const spanStartMsgTemplate = "=== SPAN START: %s ==="
@@ -1391,14 +1395,15 @@ func getMessagesForSubtrace(
 			i++
 		} else {
 			// Recursively append messages from the trace rooted at the child.
-			allLogs = append(
-				allLogs,
-				getMessagesForSubtrace(childSpans[j], allSpans, seenSpans)...,
-			)
+			childMsgs, err := getMessagesForSubtrace(childSpans[j], allSpans, seenSpans)
+			if err != nil {
+				return nil, err
+			}
+			allLogs = append(allLogs, childMsgs...)
 			j++
 		}
 	}
-	return allLogs
+	return allLogs, nil
 }
 
 // logRecordRow is used to temporarily hold on to log messages and their
