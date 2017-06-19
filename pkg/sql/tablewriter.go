@@ -62,13 +62,17 @@ type tableWriter interface {
 	// The passed Datums is not used after `row` returns. The returned Datums is
 	// suitable for use with returningHelper.
 	// The traceKV parameter determines whether the individual K/V operations
-	// should be logged to the context.
+	// should be logged to the context. We use a separate argument here instead
+	// of a Value field on the context because Value access in context.Context
+	// is rather expensive and the tableWriter interface is used on the
+	// inner loop of table accesses.
 	row(ctx context.Context, values parser.Datums, traceKV bool) (parser.Datums, error)
 
 	// finalize flushes out any remaining writes. It is called after all calls to
 	// row.
 	// The traceKV parameter determines whether the individual K/V operations
-	// should be logged to the context.
+	// should be logged to the context. See the comment above for why
+	// this a separate parameter as opposed to a Value field on the context.
 	finalize(ctx context.Context, traceKV bool) error
 
 	// spans collects the upper bound set of read and write spans that the
