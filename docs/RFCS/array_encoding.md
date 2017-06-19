@@ -76,7 +76,7 @@ enforce the specified dimensionality of the arrays.
 ### Column Type protobuf encoding
 
 The column type protobuf will be modified to include an `ARRAY` value for
-the `Kind`, and a nullable field indicating the element type if the type is
+the `SemanticType`, and a nullable field indicating the element type if the type is
 an array. The existing `array_dimensions` field will be replaced with an int
 field denoting the number of dimensions in the array.
 
@@ -163,7 +163,7 @@ This was deemed wasteful as arrays are restricted to 64MB to begin
 with, and it is expected that the common case is that arrays do not contain
 any `NULL`s (and thus the bitmap can be omitted).
 * The protobuf changes could alternatively be implemented by having the
-existing `Kind` denote the element type, with no special cases required, as
+existing `SemanticType` denote the element type, with no special cases required, as
 a 0-dimensional array can be interpreted as a scalar. This option is
 attractive but it was rejected on the grounds that it overly-centralizes the
 concept of column types around arrays and makes scalar datum types the special

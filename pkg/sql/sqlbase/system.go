@@ -188,10 +188,10 @@ func SystemDesiredPrivileges(id ID) privilege.List {
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
-	colTypeInt       = ColumnType{Kind: ColumnType_INT}
-	colTypeString    = ColumnType{Kind: ColumnType_STRING}
-	colTypeBytes     = ColumnType{Kind: ColumnType_BYTES}
-	colTypeTimestamp = ColumnType{Kind: ColumnType_TIMESTAMP}
+	colTypeInt       = ColumnType{SemanticType: ColumnType_INT}
+	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
+	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
+	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
 	singleASC        = []IndexDescriptor_Direction{IndexDescriptor_ASC}
 	singleID1        = []ColumnID{1}
 )
@@ -465,7 +465,7 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "key", ID: 1, Type: colTypeString},
 			{Name: "value", ID: 2, Type: colTypeBytes, Nullable: true},
-			{Name: "lastUpdated", ID: 3, Type: ColumnType{Kind: ColumnType_TIMESTAMP}},
+			{Name: "lastUpdated", ID: 3, Type: ColumnType{SemanticType: ColumnType_TIMESTAMP}},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{

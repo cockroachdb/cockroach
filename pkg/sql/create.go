@@ -851,9 +851,9 @@ func resolveFK(
 	}
 
 	for i := range srcCols {
-		if s, t := srcCols[i], targetCols[i]; s.Type.Kind != t.Type.Kind {
+		if s, t := srcCols[i], targetCols[i]; s.Type.SemanticType != t.Type.SemanticType {
 			return fmt.Errorf("type of %q (%s) does not match foreign key %q.%q (%s)",
-				s.Name, s.Type.Kind, target.Name, t.Name, t.Type.Kind)
+				s.Name, s.Type.SemanticType, target.Name, t.Name, t.Type.SemanticType)
 		}
 	}
 
