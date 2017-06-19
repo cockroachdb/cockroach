@@ -116,7 +116,11 @@ func (n *traceNode) Next(ctx context.Context) (bool, error) {
 			return false, err
 		}
 
-		n.traceRows = n.p.session.Tracing.generateSessionTraceVTable()
+		var err error
+		n.traceRows, err = n.p.session.Tracing.generateSessionTraceVTable()
+		if err != nil {
+			return false, err
+		}
 		n.execDone = true
 	}
 
