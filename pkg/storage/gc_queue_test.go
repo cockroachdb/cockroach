@@ -73,6 +73,9 @@ func TestGCQueueScoreString(t *testing.T) {
 		},
 			`queue=true with 4.31/fuzz(1.25)=3.45=valScaleScore(4.00)*deadFrac(0.25)+intentScore(0.45)
 likely last GC: 5s ago, 3.0 KiB non-live, curr. age 512 KiB*s, min exp. reduction: 256 KiB*s`},
+		// Check case of empty GCThreshold.
+		{gcQueueScore{ShouldQueue: true}, `queue=true with 0.00/fuzz(0.00)=NaN=valScaleScore(0.00)*deadFrac(0.00)+intentScore(0.00)
+likely last GC: never, 0 B non-live, curr. age 0 B*s, min exp. reduction: 0 B*s`},
 	} {
 		if act := c.r.String(); act != c.exp {
 			t.Errorf("%d: wanted:\n'%s'\ngot:\n'%s'", i, c.exp, act)
