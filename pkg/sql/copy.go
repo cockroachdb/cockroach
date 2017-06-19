@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"time"
 	"unsafe"
 
 	"golang.org/x/net/context"
@@ -194,55 +193,20 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 			exprs[i] = parser.DNull
 			continue
 		}
-		var d parser.Datum
 		switch t := n.resultColumns[i].Typ; t {
-		case parser.TypeBool:
-			d, err = parser.ParseDBool(s)
-		case parser.TypeBytes:
-			s, err = decodeCopy(s)
-			d = parser.NewDBytes(parser.DBytes(s))
-		case parser.TypeDate:
-			s, err = decodeCopy(s)
-			if err != nil {
-				break
-			}
-			d, err = parser.ParseDDate(s, n.p.session.Location)
-		case parser.TypeDecimal:
-			d, err = parser.ParseDDecimal(s)
-		case parser.TypeFloat:
-			d, err = parser.ParseDFloat(s)
-		case parser.TypeInt:
-			d, err = parser.ParseDInt(s)
-		case parser.TypeInterval:
+		case parser.TypeBytes,
+			parser.TypeDate,
+			parser.TypeInterval,
+			parser.TypeString,
+			parser.TypeTimestamp,
+			parser.TypeTimestampTZ,
+			parser.TypeUUID:
 			s, err = decodeCopy(s)
 			if err != nil {
-				break
+				return err
 			}
-			d, err = parser.ParseDInterval(s)
-		case parser.TypeString:
-			s, err = decodeCopy(s)
-			d = parser.NewDString(s)
-		case parser.TypeTimestamp:
-			s, err = decodeCopy(s)
-			if err != nil {
-				break
-			}
-			d, err = parser.ParseDTimestamp(s, time.Microsecond)
-		case parser.TypeTimestampTZ:
-			s, err = decodeCopy(s)
-			if err != nil {
-				break
-			}
-			d, err = parser.ParseDTimestampTZ(s, n.p.session.Location, time.Microsecond)
-		case parser.TypeUUID:
-			s, err = decodeCopy(s)
-			if err != nil {
-				break
-			}
-			d, err = parser.ParseDUuidFromString(s)
-		default:
-			return fmt.Errorf("unknown type %s", t)
 		}
+		d, err := parser.ParseStringAs(n.resultColumns[i].Typ, s, n.p.session.Location)
 		if err != nil {
 			return err
 		}

@@ -26,6 +26,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/pkg/errors"
@@ -199,4 +200,37 @@ func ParseType(sql string) (CastTargetType, error) {
 	}
 
 	return cast.Type, nil
+}
+
+// ParseStringAs parses s as type t.
+func ParseStringAs(t Type, s string, location *time.Location) (Datum, error) {
+	var d Datum
+	var err error
+	switch t {
+	case TypeBool:
+		d, err = ParseDBool(s)
+	case TypeBytes:
+		d = NewDBytes(DBytes(s))
+	case TypeDate:
+		d, err = ParseDDate(s, location)
+	case TypeDecimal:
+		d, err = ParseDDecimal(s)
+	case TypeFloat:
+		d, err = ParseDFloat(s)
+	case TypeInt:
+		d, err = ParseDInt(s)
+	case TypeInterval:
+		d, err = ParseDInterval(s)
+	case TypeString:
+		d = NewDString(s)
+	case TypeTimestamp:
+		d, err = ParseDTimestamp(s, time.Microsecond)
+	case TypeTimestampTZ:
+		d, err = ParseDTimestampTZ(s, location, time.Microsecond)
+	case TypeUUID:
+		d, err = ParseDUuidFromString(s)
+	default:
+		return nil, errors.Errorf("unknown type %s", t)
+	}
+	return d, err
 }

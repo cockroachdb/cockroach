@@ -243,7 +243,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		dataSize += int64(len(fileContents))
 
 		if len(file.Sha512) > 0 {
-			checksum, err := sha512ChecksumData(fileContents)
+			checksum, err := SHA512ChecksumData(fileContents)
 			if err != nil {
 				return nil, err
 			}
