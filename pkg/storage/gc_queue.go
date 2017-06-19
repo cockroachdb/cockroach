@@ -619,7 +619,7 @@ func (gcq *gcQueue) processImpl(
 		// and we might have to worry about mixing range-local and global keys
 		// in a batch which might end up spanning Ranges by the time it executes.
 		ba.Add(&gcArgs)
-		log.Eventf(ctx, "sending batch %d of %d", i, len(batches))
+		log.Eventf(ctx, "sending batch %d of %d", i+1, len(batches))
 		if _, pErr := repl.Send(ctx, ba); pErr != nil {
 			log.ErrEvent(ctx, pErr.String())
 			return pErr.GoError()
