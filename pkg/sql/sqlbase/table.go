@@ -90,7 +90,7 @@ func MakeColumnDefDescs(
 		}
 	}
 
-	// Set Type.Kind and Type.Locale.
+	// Set Type.SemanticType and Type.Locale.
 	colDatumType := parser.CastTargetToDatumType(d.Type)
 	col.Type = DatumTypeToColumnType(colDatumType)
 
@@ -1396,7 +1396,7 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 	} else if !typ.Equivalent(colTyp) {
 		// Not a placeholder; check that the value cast has succeeded.
 		return fmt.Errorf("value type %s doesn't match type %s of column %q",
-			typ, col.Type.Kind, col.Name)
+			typ, col.Type.SemanticType, col.Name)
 	}
 	return nil
 }
@@ -1411,7 +1411,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 		return r, nil
 	}
 
-	switch col.Type.Kind {
+	switch col.Type.SemanticType {
 	case ColumnType_BOOL:
 		if v, ok := val.(*parser.DBool); ok {
 			r.SetBool(bool(*v))
@@ -1485,10 +1485,10 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			return r, nil
 		}
 	default:
-		return r, errors.Errorf("unsupported column type: %s", col.Type.Kind)
+		return r, errors.Errorf("unsupported column type: %s", col.Type.SemanticType)
 	}
 	return r, fmt.Errorf("value type %s doesn't match type %s of column %q",
-		val.ResolvedType(), col.Type.Kind, col.Name)
+		val.ResolvedType(), col.Type.SemanticType, col.Name)
 }
 
 // UnmarshalColumnValue decodes the value from a key-value pair using the type
@@ -1501,7 +1501,7 @@ func UnmarshalColumnValue(
 		return parser.DNull, nil
 	}
 
-	switch typ.Kind {
+	switch typ.SemanticType {
 	case ColumnType_BOOL:
 		v, err := value.GetBool()
 		if err != nil {
@@ -1592,7 +1592,7 @@ func UnmarshalColumnValue(
 		}
 		return a.NewDOid(parser.MakeDOid(parser.DInt(v))), nil
 	default:
-		return nil, errors.Errorf("unsupported column type: %s", typ.Kind)
+		return nil, errors.Errorf("unsupported column type: %s", typ.SemanticType)
 	}
 }
 
@@ -1600,7 +1600,7 @@ func UnmarshalColumnValue(
 // bit string) and scale (for decimals) of the value fits the specified
 // column type. Used by INSERT and UPDATE.
 func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
-	switch col.Type.Kind {
+	switch col.Type.SemanticType {
 	case ColumnType_STRING:
 		if v, ok := parser.AsDString(val); ok {
 			if col.Type.Width > 0 && utf8.RuneCountInString(string(v)) > int(col.Type.Width) {
@@ -1831,8 +1831,8 @@ func MakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Ke
 		colID := index.ColumnIDs[i]
 		for _, c := range desc.Columns {
 			if c.ID == colID {
-				if t := DatumTypeToColumnType(datums[i].ResolvedType()).Kind; t != c.Type.Kind {
-					return nil, errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.Kind, t)
+				if t := DatumTypeToColumnType(datums[i].ResolvedType()).SemanticType; t != c.Type.SemanticType {
+					return nil, errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.SemanticType, t)
 				}
 				break
 			}

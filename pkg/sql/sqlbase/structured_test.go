@@ -840,19 +840,19 @@ func TestColumnTypeSQLString(t *testing.T) {
 		colType     ColumnType
 		expectedSQL string
 	}{
-		{ColumnType{Kind: ColumnType_INT}, "INT"},
-		{ColumnType{Kind: ColumnType_INT, Width: 2}, "BIT(2)"},
-		{ColumnType{Kind: ColumnType_FLOAT}, "FLOAT"},
-		{ColumnType{Kind: ColumnType_FLOAT, Precision: 3}, "FLOAT(3)"},
-		{ColumnType{Kind: ColumnType_DECIMAL}, "DECIMAL"},
-		{ColumnType{Kind: ColumnType_DECIMAL, Precision: 6}, "DECIMAL(6)"},
-		{ColumnType{Kind: ColumnType_DECIMAL, Precision: 7, Width: 8}, "DECIMAL(7,8)"},
-		{ColumnType{Kind: ColumnType_DATE}, "DATE"},
-		{ColumnType{Kind: ColumnType_TIMESTAMP}, "TIMESTAMP"},
-		{ColumnType{Kind: ColumnType_INTERVAL}, "INTERVAL"},
-		{ColumnType{Kind: ColumnType_STRING}, "STRING"},
-		{ColumnType{Kind: ColumnType_STRING, Width: 10}, "STRING(10)"},
-		{ColumnType{Kind: ColumnType_BYTES}, "BYTES"},
+		{ColumnType{SemanticType: ColumnType_INT}, "INT"},
+		{ColumnType{SemanticType: ColumnType_INT, Width: 2}, "BIT(2)"},
+		{ColumnType{SemanticType: ColumnType_FLOAT}, "FLOAT"},
+		{ColumnType{SemanticType: ColumnType_FLOAT, Precision: 3}, "FLOAT(3)"},
+		{ColumnType{SemanticType: ColumnType_DECIMAL}, "DECIMAL"},
+		{ColumnType{SemanticType: ColumnType_DECIMAL, Precision: 6}, "DECIMAL(6)"},
+		{ColumnType{SemanticType: ColumnType_DECIMAL, Precision: 7, Width: 8}, "DECIMAL(7,8)"},
+		{ColumnType{SemanticType: ColumnType_DATE}, "DATE"},
+		{ColumnType{SemanticType: ColumnType_TIMESTAMP}, "TIMESTAMP"},
+		{ColumnType{SemanticType: ColumnType_INTERVAL}, "INTERVAL"},
+		{ColumnType{SemanticType: ColumnType_STRING}, "STRING"},
+		{ColumnType{SemanticType: ColumnType_STRING, Width: 10}, "STRING(10)"},
+		{ColumnType{SemanticType: ColumnType_BYTES}, "BYTES"},
 	}
 	for i, d := range testData {
 		sql := d.colType.SQLString()
@@ -867,20 +867,20 @@ func TestColumnValueEncodedSize(t *testing.T) {
 		colType ColumnType
 		size    int // -1 means unbounded
 	}{
-		{ColumnType{Kind: ColumnType_BOOL}, 1},
-		{ColumnType{Kind: ColumnType_INT}, 10},
-		{ColumnType{Kind: ColumnType_INT, Width: 2}, 10},
-		{ColumnType{Kind: ColumnType_FLOAT}, 9},
-		{ColumnType{Kind: ColumnType_FLOAT, Precision: 100}, 9},
-		{ColumnType{Kind: ColumnType_DECIMAL}, -1},
-		{ColumnType{Kind: ColumnType_DECIMAL, Precision: 100}, 69},
-		{ColumnType{Kind: ColumnType_DECIMAL, Precision: 100, Width: 100}, 69},
-		{ColumnType{Kind: ColumnType_DATE}, 10},
-		{ColumnType{Kind: ColumnType_TIMESTAMP}, 10},
-		{ColumnType{Kind: ColumnType_INTERVAL}, 28},
-		{ColumnType{Kind: ColumnType_STRING}, -1},
-		{ColumnType{Kind: ColumnType_STRING, Width: 100}, 110},
-		{ColumnType{Kind: ColumnType_BYTES}, -1},
+		{ColumnType{SemanticType: ColumnType_BOOL}, 1},
+		{ColumnType{SemanticType: ColumnType_INT}, 10},
+		{ColumnType{SemanticType: ColumnType_INT, Width: 2}, 10},
+		{ColumnType{SemanticType: ColumnType_FLOAT}, 9},
+		{ColumnType{SemanticType: ColumnType_FLOAT, Precision: 100}, 9},
+		{ColumnType{SemanticType: ColumnType_DECIMAL}, -1},
+		{ColumnType{SemanticType: ColumnType_DECIMAL, Precision: 100}, 69},
+		{ColumnType{SemanticType: ColumnType_DECIMAL, Precision: 100, Width: 100}, 69},
+		{ColumnType{SemanticType: ColumnType_DATE}, 10},
+		{ColumnType{SemanticType: ColumnType_TIMESTAMP}, 10},
+		{ColumnType{SemanticType: ColumnType_INTERVAL}, 28},
+		{ColumnType{SemanticType: ColumnType_STRING}, -1},
+		{ColumnType{SemanticType: ColumnType_STRING, Width: 100}, 110},
+		{ColumnType{SemanticType: ColumnType_BYTES}, -1},
 	}
 	for i, test := range tests {
 		testIsBounded := test.size != -1
@@ -904,7 +904,7 @@ func TestColumnValueEncodedSize(t *testing.T) {
 func TestFitColumnToFamily(t *testing.T) {
 	intEncodedSize, _ := upperBoundColumnValueEncodedSize(ColumnDescriptor{
 		ID:   8,
-		Type: ColumnType{Kind: ColumnType_INT},
+		Type: ColumnType{SemanticType: ColumnType_INT},
 	})
 
 	makeTestTableDescriptor := func(familyTypes [][]ColumnType) TableDescriptor {
@@ -927,15 +927,15 @@ func TestFitColumnToFamily(t *testing.T) {
 
 	emptyFamily := []ColumnType{}
 	partiallyFullFamily := []ColumnType{
-		{Kind: ColumnType_INT},
-		{Kind: ColumnType_BYTES, Width: 10},
+		{SemanticType: ColumnType_INT},
+		{SemanticType: ColumnType_BYTES, Width: 10},
 	}
 	fullFamily := []ColumnType{
-		{Kind: ColumnType_BYTES, Width: FamilyHeuristicTargetBytes + 1},
+		{SemanticType: ColumnType_BYTES, Width: FamilyHeuristicTargetBytes + 1},
 	}
 	maxIntsInOneFamily := make([]ColumnType, FamilyHeuristicTargetBytes/intEncodedSize)
 	for i := range maxIntsInOneFamily {
-		maxIntsInOneFamily[i] = ColumnType{Kind: ColumnType_INT}
+		maxIntsInOneFamily[i] = ColumnType{SemanticType: ColumnType_INT}
 	}
 
 	tests := []struct {
@@ -945,27 +945,27 @@ func TestFitColumnToFamily(t *testing.T) {
 		idx              int // not applicable if colFits is false
 	}{
 		// Bounded size column.
-		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
+		{colFits: true, idx: 0, newCol: ColumnType{SemanticType: ColumnType_BOOL},
 			existingFamilies: nil,
 		},
-		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
+		{colFits: true, idx: 0, newCol: ColumnType{SemanticType: ColumnType_BOOL},
 			existingFamilies: [][]ColumnType{emptyFamily},
 		},
-		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
+		{colFits: true, idx: 0, newCol: ColumnType{SemanticType: ColumnType_BOOL},
 			existingFamilies: [][]ColumnType{partiallyFullFamily},
 		},
-		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
+		{colFits: true, idx: 0, newCol: ColumnType{SemanticType: ColumnType_BOOL},
 			existingFamilies: [][]ColumnType{fullFamily},
 		},
-		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
+		{colFits: true, idx: 0, newCol: ColumnType{SemanticType: ColumnType_BOOL},
 			existingFamilies: [][]ColumnType{fullFamily, emptyFamily},
 		},
 
 		// Unbounded size column.
-		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_DECIMAL},
+		{colFits: true, idx: 0, newCol: ColumnType{SemanticType: ColumnType_DECIMAL},
 			existingFamilies: [][]ColumnType{emptyFamily},
 		},
-		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_DECIMAL},
+		{colFits: true, idx: 0, newCol: ColumnType{SemanticType: ColumnType_DECIMAL},
 			existingFamilies: [][]ColumnType{partiallyFullFamily},
 		},
 	}

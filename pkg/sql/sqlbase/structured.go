@@ -555,7 +555,7 @@ func (desc *TableDescriptor) ensurePrimaryKey() error {
 		col := ColumnDescriptor{
 			Name: "rowid",
 			Type: ColumnType{
-				Kind: ColumnType_INT,
+				SemanticType: ColumnType_INT,
 			},
 			DefaultExpr: &s,
 			Hidden:      true,
@@ -577,8 +577,8 @@ func (desc *TableDescriptor) ensurePrimaryKey() error {
 // HasCompositeKeyEncoding returns true if key columns of the given kind can
 // have a composite encoding. For such types, it can be decided on a
 // case-by-base basis whether a given Datum requires the composite encoding.
-func HasCompositeKeyEncoding(kind ColumnType_Kind) bool {
-	switch kind {
+func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
+	switch semanticType {
 	case ColumnType_COLLATEDSTRING,
 		ColumnType_FLOAT,
 		ColumnType_DECIMAL:
@@ -625,7 +625,7 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 
 	isCompositeColumn := make(map[ColumnID]struct{})
 	for _, col := range desc.Columns {
-		if HasCompositeKeyEncoding(col.Type.Kind) {
+		if HasCompositeKeyEncoding(col.Type.SemanticType) {
 			isCompositeColumn[col.ID] = struct{}{}
 		}
 	}
@@ -1210,7 +1210,7 @@ const FamilyHeuristicTargetBytes = 256
 func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 	var typ encoding.Type
 	var size int
-	switch col.Type.Kind {
+	switch col.Type.SemanticType {
 	case ColumnType_BOOL:
 		typ = encoding.True
 	case ColumnType_INT, ColumnType_DATE, ColumnType_TIMESTAMP,
@@ -1227,7 +1227,7 @@ func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 	case ColumnType_DECIMAL:
 		typ, size = encoding.Decimal, int(col.Type.Precision)
 	default:
-		panic(errors.Errorf("unknown column type: %s", col.Type.Kind))
+		panic(errors.Errorf("unknown column type: %s", col.Type.SemanticType))
 	}
 	return encoding.UpperBoundValueEncodingSize(uint32(col.ID), typ, size)
 }
@@ -1707,7 +1707,7 @@ func ColumnsSelectors(cols []ColumnDescriptor) parser.SelectExprs {
 
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
-	switch c.Kind {
+	switch c.SemanticType {
 	case ColumnType_INT:
 		if c.Width > 0 {
 			// A non-zero width indicates a bit array. The syntax "INT(N)"
@@ -1716,18 +1716,18 @@ func (c *ColumnType) SQLString() string {
 		}
 	case ColumnType_STRING:
 		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Width)
+			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
 		}
 	case ColumnType_FLOAT:
 		if c.Precision > 0 {
-			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Precision)
+			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
 	case ColumnType_DECIMAL:
 		if c.Precision > 0 {
 			if c.Width > 0 {
-				return fmt.Sprintf("%s(%d,%d)", c.Kind.String(), c.Precision, c.Width)
+				return fmt.Sprintf("%s(%d,%d)", c.SemanticType.String(), c.Precision, c.Width)
 			}
-			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Precision)
+			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
 	case ColumnType_TIMESTAMPTZ:
 		return "TIMESTAMP WITH TIME ZONE"
@@ -1742,14 +1742,14 @@ func (c *ColumnType) SQLString() string {
 	case ColumnType_INT_ARRAY:
 		return "INT[]"
 	}
-	return c.Kind.String()
+	return c.SemanticType.String()
 }
 
 // MaxCharacterLength returns the declared maximum length of characters if the
 // ColumnType is a character or bit string data type. Returns false if the data
 // type is not a character or bit string, or if the string's length is not bounded.
 func (c *ColumnType) MaxCharacterLength() (int32, bool) {
-	switch c.Kind {
+	switch c.SemanticType {
 	case ColumnType_INT, ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		if c.Width > 0 {
 			return c.Width, true
@@ -1762,7 +1762,7 @@ func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 // datum if the ColumnType is a character string. Returns false if the data type
 // is not a character string, or if the string's length is not bounded.
 func (c *ColumnType) MaxOctetLength() (int32, bool) {
-	switch c.Kind {
+	switch c.SemanticType {
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		if c.Width > 0 {
 			return c.Width * utf8.UTFMax, true
@@ -1775,7 +1775,7 @@ func (c *ColumnType) MaxOctetLength() (int32, bool) {
 // data types. Returns false if the data type is not numeric, or if the precision
 // of the numeric type is not bounded.
 func (c *ColumnType) NumericPrecision() (int32, bool) {
-	switch c.Kind {
+	switch c.SemanticType {
 	case ColumnType_INT:
 		return 64, true
 	case ColumnType_FLOAT:
@@ -1795,7 +1795,7 @@ func (c *ColumnType) NumericPrecision() (int32, bool) {
 // data types. Returns false if the data type is not an exact numeric, or if the
 // scale of the exact numeric type is not bounded.
 func (c *ColumnType) NumericScale() (int32, bool) {
-	switch c.Kind {
+	switch c.SemanticType {
 	case ColumnType_INT:
 		return 0, true
 	case ColumnType_DECIMAL:
@@ -1811,40 +1811,40 @@ func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 	var ctyp ColumnType
 	switch ptyp {
 	case parser.TypeBool:
-		ctyp.Kind = ColumnType_BOOL
+		ctyp.SemanticType = ColumnType_BOOL
 	case parser.TypeInt:
-		ctyp.Kind = ColumnType_INT
+		ctyp.SemanticType = ColumnType_INT
 	case parser.TypeFloat:
-		ctyp.Kind = ColumnType_FLOAT
+		ctyp.SemanticType = ColumnType_FLOAT
 	case parser.TypeDecimal:
-		ctyp.Kind = ColumnType_DECIMAL
+		ctyp.SemanticType = ColumnType_DECIMAL
 	case parser.TypeBytes:
-		ctyp.Kind = ColumnType_BYTES
+		ctyp.SemanticType = ColumnType_BYTES
 	case parser.TypeString:
-		ctyp.Kind = ColumnType_STRING
+		ctyp.SemanticType = ColumnType_STRING
 	case parser.TypeName:
-		ctyp.Kind = ColumnType_NAME
+		ctyp.SemanticType = ColumnType_NAME
 	case parser.TypeDate:
-		ctyp.Kind = ColumnType_DATE
+		ctyp.SemanticType = ColumnType_DATE
 	case parser.TypeTimestamp:
-		ctyp.Kind = ColumnType_TIMESTAMP
+		ctyp.SemanticType = ColumnType_TIMESTAMP
 	case parser.TypeTimestampTZ:
-		ctyp.Kind = ColumnType_TIMESTAMPTZ
+		ctyp.SemanticType = ColumnType_TIMESTAMPTZ
 	case parser.TypeInterval:
-		ctyp.Kind = ColumnType_INTERVAL
+		ctyp.SemanticType = ColumnType_INTERVAL
 	case parser.TypeUUID:
-		ctyp.Kind = ColumnType_UUID
+		ctyp.SemanticType = ColumnType_UUID
 	case parser.TypeOid:
-		ctyp.Kind = ColumnType_OID
+		ctyp.SemanticType = ColumnType_OID
 	case parser.TypeNull:
-		ctyp.Kind = ColumnType_NULL
+		ctyp.SemanticType = ColumnType_NULL
 	case parser.TypeIntArray:
-		ctyp.Kind = ColumnType_INT_ARRAY
+		ctyp.SemanticType = ColumnType_INT_ARRAY
 	case parser.TypeIntVector:
-		ctyp.Kind = ColumnType_INT2VECTOR
+		ctyp.SemanticType = ColumnType_INT2VECTOR
 	default:
 		if t, ok := ptyp.(parser.TCollatedString); ok {
-			ctyp.Kind = ColumnType_COLLATEDSTRING
+			ctyp.SemanticType = ColumnType_COLLATEDSTRING
 			ctyp.Locale = &t.Locale
 		} else {
 			panic(fmt.Sprintf("unsupported result type: %s", ptyp))
@@ -1856,7 +1856,7 @@ func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 // ToDatumType converts the ColumnType to the correct type, or nil if there is
 // no correspondence.
 func (c *ColumnType) ToDatumType() parser.Type {
-	switch c.Kind {
+	switch c.SemanticType {
 	case ColumnType_BOOL:
 		return parser.TypeBool
 	case ColumnType_INT:

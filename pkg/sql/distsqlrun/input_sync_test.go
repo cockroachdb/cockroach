@@ -32,7 +32,7 @@ import (
 func TestOrderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := &sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	columnTypeInt := &sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(i)))
@@ -144,7 +144,7 @@ func TestOrderedSync(t *testing.T) {
 func TestUnorderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	mrc := &MultiplexedRowChannel{}
 	mrc.Init(5, []sqlbase.ColumnType{columnTypeInt})
 	producerErr := make(chan error, 100)

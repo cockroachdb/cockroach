@@ -133,7 +133,7 @@ func newAggregator(
 			if col >= uint32(len(inputTypes)) {
 				return nil, errors.Errorf("FilterColIdx out of range (%d)", col)
 			}
-			t := inputTypes[col].Kind
+			t := inputTypes[col].SemanticType
 			if t != sqlbase.ColumnType_BOOL && t != sqlbase.ColumnType_NULL {
 				return nil, errors.Errorf(
 					"filter column %d must be of boolean type, not %s", *aggInfo.FilterColIdx, t,

@@ -268,7 +268,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 			return nil, err
 		}
 		oid := NewDOid(*d.(*DInt))
-		oid.kind = oidTypeToColType(typ)
+		oid.symanticType = oidTypeToColType(typ)
 		return oid, nil
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)

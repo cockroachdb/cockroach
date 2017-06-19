@@ -113,7 +113,7 @@ func TestJoinReader(t *testing.T) {
 			for _, row := range c.input {
 				encRow := make(sqlbase.EncDatumRow, len(row))
 				for i, d := range row {
-					encRow[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}, d)
+					encRow[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}, d)
 				}
 				if status := in.Push(encRow, ProducerMetadata{}); status != NeedMoreRows {
 					t.Fatalf("unexpected response: %d", status)
@@ -183,7 +183,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 	encRow := make(sqlbase.EncDatumRow, 1)
 	encRow[0] = sqlbase.DatumToEncDatum(
-		sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+		sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
 		parser.NewDInt(1),
 	)
 

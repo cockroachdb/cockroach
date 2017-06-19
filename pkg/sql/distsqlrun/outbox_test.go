@@ -73,7 +73,7 @@ func TestOutbox(t *testing.T) {
 		producerC <- func() error {
 			row := sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
 					parser.NewDInt(parser.DInt(0))),
 			}
 			if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != NeedMoreRows {
@@ -84,7 +84,7 @@ func TestOutbox(t *testing.T) {
 			for {
 				row = sqlbase.EncDatumRow{
 					sqlbase.DatumToEncDatum(
-						sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
 						parser.NewDInt(parser.DInt(-1))),
 				}
 				consumerStatus := outbox.Push(row, ProducerMetadata{})
@@ -99,7 +99,7 @@ func TestOutbox(t *testing.T) {
 			// Now send another row that the outbox will discard.
 			row = sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
 					parser.NewDInt(parser.DInt(2))),
 			}
 			if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != DrainRequested {
