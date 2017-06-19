@@ -172,6 +172,7 @@ ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
 	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/{metacheck,ncpus,returncheck} \
+		"./vendor/github.com/golang/dep/cmd/dep" \
 		"./vendor/github.com/client9/misspell/cmd/misspell" \
 		"./vendor/github.com/cockroachdb/crlfmt" \
 		"./vendor/github.com/cockroachdb/stress" \
