@@ -28,8 +28,25 @@ var noColumns = make(sqlbase.ResultColumns, 0)
 // length of the tuple returned by the planNode's Values() method
 // during local exeecution.
 //
+// The returned slice is *not* mutable. To modify the result column
+// set, implement a separate recursion (e.g. needed_columns.go) or use
+// planMutableColumns defined below.
+//
 // Available after newPlan().
 func planColumns(plan planNode) sqlbase.ResultColumns {
+	return getPlanColumns(plan, false)
+}
+
+// planMutableColumns is similar to planColumns() but returns a
+// ResultColumns slice that can be modified by the caller.
+func planMutableColumns(plan planNode) sqlbase.ResultColumns {
+	return getPlanColumns(plan, true)
+}
+
+// getPlanColumns implements the logic for the
+// planColumns/planMutableColumns functions. The mut argument
+// indicates whether the slice should be mutable (mut=true) or not.
+func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 	switch n := plan.(type) {
 
 	// Nodes that define their own schema.
@@ -63,22 +80,20 @@ func planColumns(plan planNode) sqlbase.ResultColumns {
 		return n.columns
 
 		// Nodes with a fixed schema.
-	case *emptyNode:
-		return noColumns
 	case *explainDebugNode:
-		return debugColumns
+		return n.getColumns(mut, debugColumns)
 	case *explainDistSQLNode:
-		return explainDistSQLColumns
+		return n.getColumns(mut, explainDistSQLColumns)
 	case *relocateNode:
-		return relocateNodeColumns
+		return n.getColumns(mut, relocateNodeColumns)
 	case *scatterNode:
-		return scatterNodeColumns
+		return n.getColumns(mut, scatterNodeColumns)
 	case *showRangesNode:
-		return showRangesColumns
+		return n.getColumns(mut, showRangesColumns)
 	case *showFingerprintsNode:
-		return showFingerprintsColumns
+		return n.getColumns(mut, showFingerprintsColumns)
 	case *splitNode:
-		return splitNodeColumns
+		return n.getColumns(mut, splitNodeColumns)
 
 		// Nodes using the RETURNING helper.
 	case *deleteNode:
@@ -91,18 +106,38 @@ func planColumns(plan planNode) sqlbase.ResultColumns {
 		// Nodes that have the same schema as their source or their
 		// valueNode helper.
 	case *distinctNode:
-		return planColumns(n.plan)
+		return getPlanColumns(n.plan, mut)
 	case *filterNode:
-		return planColumns(n.source.plan)
+		return getPlanColumns(n.source.plan, mut)
 	case *indexJoinNode:
-		return planColumns(n.table)
+		return getPlanColumns(n.table, mut)
 	case *limitNode:
-		return planColumns(n.plan)
+		return getPlanColumns(n.plan, mut)
 	case *unionNode:
-		return planColumns(n.left)
+		return getPlanColumns(n.left, mut)
 
 	}
 
 	// Every other node has no columns in their results.
 	return noColumns
+}
+
+// optColumnsSlot is a helper struct for nodes with a static signature
+// (e.g. explainDistSQLNode). It allows instances to reuse a common
+// (shared) ResultColumns slice as long as no read/write access is
+// requested to the slice via planMutableColumns.
+type optColumnsSlot struct {
+	columns sqlbase.ResultColumns
+}
+
+func (c *optColumnsSlot) getColumns(mut bool, cols sqlbase.ResultColumns) sqlbase.ResultColumns {
+	if c.columns != nil {
+		return c.columns
+	}
+	if !mut {
+		return cols
+	}
+	c.columns = make(sqlbase.ResultColumns, len(cols))
+	copy(c.columns, cols)
+	return c.columns
 }
