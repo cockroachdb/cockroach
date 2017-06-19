@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -541,7 +540,6 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 		// which means nothing should be stripped (aka appends 0). See
 		// EnsureSafeSplitKey for more context.
 		splitKey := append([]byte(nil), splitPoints[splitIdx]...)
-		splitKey = keys.MakeRowSentinelKey(splitKey)
 		if err := db.AdminSplit(ctx, splitPoints[splitIdx], splitKey); err != nil {
 			return err
 		}

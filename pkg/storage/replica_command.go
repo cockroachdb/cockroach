@@ -2639,13 +2639,6 @@ func (r *Replica) adminSplitWithDescriptor(
 			foundSplitKey = args.SplitKey
 		}
 
-		// Ensure the key falls between rows, not within one.
-		foundSplitKey, err := keys.EnsureSafeSplitKey(foundSplitKey)
-		if err != nil {
-			return reply, false, roachpb.NewErrorf("cannot split range at key %s: %v",
-				args.SplitKey, err)
-		}
-
 		// EnsureSafeSplitKey could have changed the key, so we must
 		// revalidate. But this time we must not return a
 		// RangeKeyMismatchError, because that would result in infinite
@@ -2659,6 +2652,7 @@ func (r *Replica) adminSplitWithDescriptor(
 					args.SplitKey, foundSplitKey, r)
 		}
 
+		var err error
 		splitKey, err = keys.Addr(foundSplitKey)
 		if err != nil {
 			return reply, false, roachpb.NewError(err)

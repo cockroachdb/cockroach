@@ -2305,9 +2305,13 @@ func MVCCFindSplitKey(
 		return nil, nil
 	}
 
-	// The key is an MVCC (versioned) key, so to avoid corrupting MVCC we only
-	// return the base portion, which is fine to split in front of.
-	return bestSplitKey.Key, nil
+	splitKey, err := keys.EnsureSafeSplitKey(bestSplitKey.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	// The key has been removed family ID now.
+	return splitKey, nil
 }
 
 // willOverflow returns true iff adding both inputs would under- or overflow
