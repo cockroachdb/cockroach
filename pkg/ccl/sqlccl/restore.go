@@ -498,19 +498,19 @@ func makeImportRequests(
 	return requestEntries, maxEndTime, nil
 }
 
-// presplitRanges concurrently creates the splits described by `input`. It does
+// PresplitRanges concurrently creates the splits described by `input`. It does
 // this by finding the middle key, splitting and recursively presplitting the
 // resulting left and right hand ranges. NB: The split code assumes that the LHS
 // of the resulting ranges is the smaller, so normally you'd split from the
 // left, but this method should only be called on empty keyranges, so it's okay.
 //
 // The `input` parameter expected to be sorted.
-func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) error {
+func PresplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) error {
 	// TODO(dan): This implementation does nothing to control the maximum
 	// parallelization or number of goroutines spawned. Revisit (possibly via a
 	// semaphore) if this becomes a problem in practice.
 
-	ctx, span := tracing.ChildSpan(baseCtx, "presplitRanges")
+	ctx, span := tracing.ChildSpan(baseCtx, "PresplitRanges")
 	defer tracing.FinishSpan(span)
 	log.Infof(ctx, "presplitting %d ranges", len(input))
 
@@ -714,7 +714,7 @@ func Restore(
 			return 0, errors.Errorf("failed to rewrite key: %s", r.Key)
 		}
 	}
-	if err := presplitRanges(ctx, db, splitKeys); err != nil {
+	if err := PresplitRanges(ctx, db, splitKeys); err != nil {
 		return 0, errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
 	}
 	{

@@ -6,28 +6,33 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
 
-package sqlccl
+package sqlccl_test
 
 import (
 	"bytes"
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-func bankStatementBuf(numAccounts int) *bytes.Buffer {
+func bankBuf(numAccounts int) *bytes.Buffer {
+	bankData := sampledataccl.BankRows(numAccounts)
 	var buf bytes.Buffer
-	buf.WriteString(bankCreateTable)
-	buf.WriteString(";\n")
-	stmts := bankDataInsertStmts(numAccounts)
-	for _, s := range stmts {
-		buf.WriteString(s)
-		buf.WriteString(";\n")
+	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name(), bankData.Schema())
+	for {
+		row, ok := bankData.NextRow()
+		if !ok {
+			break
+		}
+		fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name(), strings.Join(row, `,`))
 	}
 	return &buf
 }
@@ -37,16 +42,16 @@ func BenchmarkClusterBackup(b *testing.B) {
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanupFn()
-	sqlDB.Exec(`DROP TABLE bench.bank`)
+	sqlDB.Exec(`DROP TABLE data.bank`)
 
-	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
+	bankData := sampledataccl.BankRows(b.N)
 	loadDir := filepath.Join(dir, "load")
-	if _, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", loadDir, ts, 0, dir); err != nil {
+	if _, err := sampledataccl.ToBackup(b, bankData, loadDir); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`, loadDir))
+	sqlDB.Exec(fmt.Sprintf(`RESTORE data.* FROM '%s'`, loadDir))
 
 	// TODO(dan): Ideally, this would split and rebalance the ranges in a more
 	// controlled way. A previous version of this code did it manually with
@@ -58,7 +63,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 	b.ResetTimer()
 	var unused string
 	var dataSize int64
-	sqlDB.QueryRow(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir)).Scan(
+	sqlDB.QueryRow(fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, dir)).Scan(
 		&unused, &unused, &unused, &dataSize,
 	)
 	b.StopTimer()
@@ -70,18 +75,19 @@ func BenchmarkClusterRestore(b *testing.B) {
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
+	_, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
-	sqlDB.Exec(`DROP TABLE bench.bank`)
+	sqlDB.Exec(`DROP TABLE data.bank`)
 
-	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	backup, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0, dir)
+	bankData := sampledataccl.BankRows(b.N)
+	backup, err := sampledataccl.ToBackup(b, bankData, dir)
 	if err != nil {
 		b.Fatalf("%+v", err)
 	}
-	b.SetBytes(backup.DataSize / int64(b.N))
+	b.SetBytes(backup.Desc.DataSize / int64(b.N))
+
 	b.ResetTimer()
-	sqlDB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`, dir))
+	sqlDB.Exec(fmt.Sprintf(`RESTORE data.* FROM '%s'`, dir))
 	b.StopTimer()
 }
 
@@ -92,16 +98,16 @@ func BenchmarkLoadRestore(b *testing.B) {
 
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
-	sqlDB.Exec(`DROP TABLE bench.bank`)
+	sqlDB.Exec(`DROP TABLE data.bank`)
 
-	buf := bankStatementBuf(b.N)
+	buf := bankBuf(b.N)
 	b.SetBytes(int64(buf.Len() / b.N))
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
 	b.ResetTimer()
-	if _, err := Load(ctx, sqlDB.DB, buf, "bench", dir, ts, 0, dir); err != nil {
+	if _, err := sqlccl.Load(ctx, sqlDB.DB, buf, "data", dir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`, dir))
+	sqlDB.Exec(fmt.Sprintf(`RESTORE data.* FROM '%s'`, dir))
 	b.StopTimer()
 }
 
@@ -111,9 +117,9 @@ func BenchmarkLoadSQL(b *testing.B) {
 	// but this is not a pattern to cargo-cult.
 	_, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
-	sqlDB.Exec(`DROP TABLE bench.bank`)
+	sqlDB.Exec(`DROP TABLE data.bank`)
 
-	buf := bankStatementBuf(b.N)
+	buf := bankBuf(b.N)
 	b.SetBytes(int64(buf.Len() / b.N))
 	lines := make([]string, 0, b.N)
 	for {
@@ -136,24 +142,23 @@ func BenchmarkLoadSQL(b *testing.B) {
 func runEmptyIncrementalBackup(b *testing.B) {
 	const numStatements = 100000
 
-	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanupFn()
 
 	restoreDir := filepath.Join(dir, "restore")
 	fullDir := filepath.Join(dir, "full")
 
-	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	if _, err := Load(
-		ctx, sqlDB.DB, bankStatementBuf(numStatements), "bench", restoreDir, ts, 0, restoreDir,
-	); err != nil {
+	bankData := sampledataccl.BankRows(numStatements)
+	_, err := sampledataccl.ToBackup(b, bankData, restoreDir)
+	if err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(`DROP TABLE bench.bank`)
-	sqlDB.Exec(`RESTORE bench.* FROM $1`, restoreDir)
+	sqlDB.Exec(`DROP TABLE data.bank`)
+	sqlDB.Exec(`RESTORE data.* FROM $1`, restoreDir)
 
 	var unused string
 	var dataSize int64
-	sqlDB.QueryRow(`BACKUP DATABASE bench TO $1`, fullDir).Scan(
+	sqlDB.QueryRow(`BACKUP DATABASE data TO $1`, fullDir).Scan(
 		&unused, &unused, &unused, &dataSize,
 	)
 
@@ -163,7 +168,7 @@ func runEmptyIncrementalBackup(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		incrementalDir := filepath.Join(dir, fmt.Sprintf("incremental%d", i))
-		sqlDB.Exec(`BACKUP DATABASE bench TO $1 INCREMENTAL FROM $2`, incrementalDir, fullDir)
+		sqlDB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incrementalDir, fullDir)
 	}
 	b.StopTimer()
 
