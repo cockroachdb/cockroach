@@ -188,8 +188,15 @@ type Engine interface {
 	Flush() error
 	// GetStats retrieves stats from the engine.
 	GetStats() (*Stats, error)
-	// GetTempDir returns a path under which tempdirs or tempfiles can be created.
-	GetTempDir() string
+	// GetAuxiliaryDir returns a path under which files can be stored
+	// persistently, and from which data can be ingested by the engine.
+	//
+	// Not thread safe.
+	GetAuxiliaryDir() string
+	// SetAuxiliaryDir changes the path returned by GetAuxiliaryDir.
+	//
+	// Not thread safe.
+	SetAuxiliaryDir(string) error
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
@@ -214,8 +221,6 @@ type Engine interface {
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Reader
-	// SetTempDir overrides the tempdir path returned by GetTempDir.
-	SetTempDir(dir string) error
 	// IngestExternalFile links a file into the RocksDB log-structured
 	// merge-tree.
 	IngestExternalFile(ctx context.Context, path string, move bool) error

@@ -503,7 +503,7 @@ func (r *Replica) addSSTablePostApply(ctx context.Context, data []byte) {
 			panic(err)
 		}
 	} else {
-		path = filepath.Join(r.store.engine.GetTempDir(), fmt.Sprintf("addsstable-%x", checksum))
+		path = filepath.Join(r.store.engine.GetAuxiliaryDir(), fmt.Sprintf("addsstable-%x", checksum))
 		move = true
 		if err := ioutil.WriteFile(path, data, 0600); err != nil {
 			panic(err)
