@@ -140,14 +140,14 @@ const (
 	backupRestoreRowPayloadSize = 100
 
 	// TODO(mjibson): attempt to unify these with the identical ones in sqlccl.
-	bankCreateDatabase = `CREATE DATABASE bench`
-	bankCreateTable    = `CREATE TABLE bench.bank (
+	bankCreateDatabase = `CREATE DATABASE data`
+	bankCreateTable    = `CREATE TABLE data.bank (
 		id INT PRIMARY KEY,
 		balance INT,
 		payload STRING,
 		FAMILY (id, balance, payload)
 	)`
-	bankInsert = `INSERT INTO bench.bank VALUES (%d, %d, '%s')`
+	bankInsert = `INSERT INTO data.bank VALUES (%d, %d, '%s')`
 )
 
 func getAzureURI(t testing.TB) url.URL {
@@ -212,7 +212,7 @@ func BenchmarkRestoreBig(b *testing.B) {
 
 		ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
 		restoreURI := restoreBaseURI.String()
-		desc, err := sqlccl.Load(ctx, sqlDB, &buf, "bench", restoreURI, ts, 0, os.TempDir())
+		desc, err := sqlccl.Load(ctx, sqlDB, &buf, "data", restoreURI, ts, 0, os.TempDir())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -222,7 +222,7 @@ func BenchmarkRestoreBig(b *testing.B) {
 
 		b.ResetTimer()
 		log.Infof(ctx, "starting restore to %s", dbName)
-		r.Exec(fmt.Sprintf(`RESTORE TABLE bench.* FROM $1 WITH OPTIONS ('into_db'='%s')`, dbName), restoreURI)
+		r.Exec(fmt.Sprintf(`RESTORE TABLE data.* FROM $1 WITH OPTIONS ('into_db'='%s')`, dbName), restoreURI)
 		b.SetBytes(desc.DataSize / int64(b.N))
 		log.Infof(ctx, "restored %s", humanizeutil.IBytes(desc.DataSize))
 		b.StopTimer()
