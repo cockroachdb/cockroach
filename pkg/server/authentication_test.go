@@ -83,6 +83,9 @@ func TestSSLEnforcement(t *testing.T) {
 		ctx  ctxI
 		code int // http response code
 	}{
+		// Health endpoint is special-cased; allowed to serve on HTTP.
+		{"/health", insecureContext, http.StatusOK},
+
 		// /ui/: basic file server: no auth.
 		{"", rootCertsContext, http.StatusOK},
 		{"", nodeCertsContext, http.StatusOK},

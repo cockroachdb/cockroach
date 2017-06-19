@@ -468,9 +468,6 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	httpServer := netutil.MakeServer(s.stopper, tlsConfig, s)
-	plainRedirectServer := netutil.MakeServer(s.stopper, tlsConfig, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusPermanentRedirect)
-	}))
 
 	// The following code is a specialization of util/net.go's ListenAndServe
 	// which adds pgwire support. A single port is used to serve all protocols
@@ -554,6 +551,14 @@ func (s *Server) Start(ctx context.Context) error {
 		})
 
 		s.stopper.RunWorker(workersCtx, func(context.Context) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusPermanentRedirect)
+			})
+			mux.Handle("/health", s)
+
+			plainRedirectServer := netutil.MakeServer(s.stopper, tlsConfig, mux)
+
 			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
 		})
 
