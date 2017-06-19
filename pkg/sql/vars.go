@@ -280,6 +280,23 @@ var varGen = map[string]sessionVar{
 		Reset: func(*planner) error { return nil },
 	},
 
+	`datestyle`: {
+		Get: func(*planner) string {
+			return "ISO"
+		},
+		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
+			s, err := p.getStringVal(`datestyle`, values)
+			if err != nil {
+				return err
+			}
+			if strings.ToUpper(s) != "ISO" {
+				return fmt.Errorf("non-ISO date style %s not supported", s)
+			}
+			return nil
+		},
+		Reset: func(*planner) error { return nil },
+	},
+
 	`trace`: {
 		Get: func(p *planner) string {
 			if p.session.Tracing.Enabled() {
