@@ -46,7 +46,7 @@ func ResultColumnsFromColDescs(colDescs []ColumnDescriptor) ResultColumns {
 		// Convert the ColumnDescriptor to ResultColumn.
 		typ := colDesc.Type.ToDatumType()
 		if typ == nil {
-			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
+			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.SemanticType))
 		}
 
 		hidden := colDesc.Hidden

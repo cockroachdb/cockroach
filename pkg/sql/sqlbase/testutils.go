@@ -67,13 +67,13 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 
 // RandDatum generates a random Datum of the given type.
 // If null is true, the datum can be DNull.
-// Note that if typ.Kind is ColumnType_NULL, the datum will always be DNull,
+// Note that if typ.SemanticType is ColumnType_NULL, the datum will always be DNull,
 // regardless of the null flag.
 func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 	if null && rng.Intn(10) == 0 {
 		return parser.DNull
 	}
-	switch typ.Kind {
+	switch typ.SemanticType {
 	case ColumnType_BOOL:
 		return parser.MakeDBool(rng.Intn(2) == 1)
 	case ColumnType_INT:
@@ -149,13 +149,13 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 }
 
 var (
-	columnKinds      []ColumnType_Kind
+	columnSemanticTypes      []ColumnType_SemanticType
 	collationLocales = [...]string{"da", "de", "en"}
 )
 
 func init() {
-	for k := range ColumnType_Kind_name {
-		columnKinds = append(columnKinds, ColumnType_Kind(k))
+	for k := range ColumnType_SemanticType_name {
+		columnSemanticTypes = append(columnSemanticTypes, ColumnType_SemanticType(k))
 	}
 }
 
@@ -164,10 +164,10 @@ func RandCollationLocale(rng *rand.Rand) *string {
 	return &collationLocales[rng.Intn(len(collationLocales))]
 }
 
-// RandColumnType returns a random ColumnType_Kind value.
+// RandColumnType returns a random ColumnType_SemanticType value.
 func RandColumnType(rng *rand.Rand) ColumnType {
-	typ := ColumnType{Kind: columnKinds[rng.Intn(len(columnKinds))]}
-	if typ.Kind == ColumnType_COLLATEDSTRING {
+	typ := ColumnType{SemanticType: columnSemanticTypes[rng.Intn(len(columnSemanticTypes))]}
+	if typ.SemanticType == ColumnType_COLLATEDSTRING {
 		typ.Locale = RandCollationLocale(rng)
 	}
 	return typ

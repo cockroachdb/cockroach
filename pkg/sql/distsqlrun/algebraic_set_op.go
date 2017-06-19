@@ -68,10 +68,10 @@ func newAlgebraicSetOp(
 			len(lt), len(rt))
 	}
 	for i := 0; i < len(lt); i++ {
-		if lt[i].Kind != rt[i].Kind {
+		if lt[i].SemanticType != rt[i].SemanticType {
 			return nil, errors.Errorf(
 				"Left column index %d (%s) is not the same as right column index %d (%s)",
-				i, lt[i].Kind, i, rt[i].Kind)
+				i, lt[i].SemanticType, i, rt[i].SemanticType)
 		}
 	}
 

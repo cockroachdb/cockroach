@@ -287,11 +287,11 @@ func TestDistAggregationTable(t *testing.T) {
 			return []parser.Datum{
 				parser.NewDInt(parser.DInt(row)),
 				parser.NewDInt(parser.DInt(rng.Intn(numRows))),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}, true),
+				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}, true),
 				parser.MakeDBool(parser.DBool(rng.Intn(10) == 0)),
 				parser.MakeDBool(parser.DBool(rng.Intn(10) != 0)),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL}, false),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL}, true),
+				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}, false),
+				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}, true),
 				parser.NewDBytes(parser.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},
