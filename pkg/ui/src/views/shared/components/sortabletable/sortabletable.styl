@@ -8,7 +8,7 @@
       // Display the sort direction arrow in header cells.
       .sort-table__cell
         padding 18px 20px
-        color $lighter-blue
+        color $tooltip-color
 
         &--sortable:after
           display inline-block
@@ -20,13 +20,13 @@
           content "▼"
 
         &--descending
-          color $light-blue
+          color $body-color
 
         &--ascending
-          color $light-blue
+          color $body-color
           &:after
             content "▲"
 
   &__unbounded-column
-    whitespace normal
+    white-space normal
     word-break break-all

@@ -4,12 +4,12 @@
 // @stylint off
 .has-value.Select--single > .Select-control .Select-value .Select-value-label,
 .has-value.is-pseudo-focused.Select--single > .Select-control .Select-value .Select-value-label
-  color $secondary-blue-3 !important
+  color $link-color !important
 
 .Select-option
   padding 10px 25px !important
   &.is-selected
-    color $secondary-blue-3 !important
+    color $link-color !important
 
 .Select-value
   line-height inherit !important
@@ -55,7 +55,7 @@
   display block !important
 
 .Select-arrow
-  border-top-color $secondary-blue-3 !important
+  border-top-color $link-color !important
 
 .Select
   display inline-block
@@ -70,7 +70,7 @@
 // NVD3 Style overrides.
 .nvtooltip
   font-family Lato-Regular !important
-  color $light-blue !important
+  color $body-color !important
   padding 15px 20px !important
   background rgba(255, 255, 255, .98) !important
   border-radius 5px !important
@@ -97,22 +97,22 @@
   font-weight 400 !important
 
 .legend-subtext
-  color $light-gray !important
+  color $tooltip-color !important
   font-weight 300
 
 .nvd3 .nv-axis
   .tick line
-    stroke $lighter-gray
+    stroke $table-border-color
 
   text
-    fill $dark-blue
+    fill $headings-color
     font-family Lato-Regular
     font-size 11px
 
   .nv-axislabel
     text-transform lowercase
     font-family Lato-Regular
-    fill $lighter-blue
+    fill $button-border-color
 
 .nv-y .nv-axis .domain
   opacity 0

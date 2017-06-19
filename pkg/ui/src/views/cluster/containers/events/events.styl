@@ -7,7 +7,7 @@
     border-collapse collapse
     tr
       height 39px
-      border-bottom 1px solid $lighter-gray
+      border-bottom 1px solid $table-border-color
       &:last-child
         border 0
     td
@@ -21,7 +21,7 @@
 
 .events__message
   font-size 14
-  color $secondary-gray-11
+  color $body-color
   text-overflow ellipsis
   display block
   white-space nowrap
@@ -30,13 +30,13 @@
 
 .events__timestamp
   font-size 12
-  color $light-gray
+  color $tooltip-color
   margin-left 20px
   text-align right
 
 .events__more-link
   text-align center
-  color $secondary-blue
+  color $link-color
   font-family Lato-Bold
   text-transform uppercase
   font-size 12px
@@ -44,7 +44,7 @@
   cursor pointer
 
   a
-    color $secondary-blue
+    color $link-color
     text-decoration none
 
 .events-table .sort-table__cell
