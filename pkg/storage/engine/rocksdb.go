@@ -292,7 +292,7 @@ type RocksDB struct {
 	rdb          *C.DBEngine
 	attrs        roachpb.Attributes // Attributes for this engine
 	dir          string             // The data directory
-	tempDir      string             // A path for storing temp files (ideally under dir).
+	auxDir       string             // A path for storing auxiliary files (ideally under dir).
 	cache        RocksDBCache       // Shared cache.
 	maxSize      int64              // Used for calculating rebalancing and free space.
 	maxOpenFiles int                // The maximum number of open files this instance will use.
@@ -333,12 +333,8 @@ func NewRocksDB(
 		deallocated:  make(chan struct{}),
 	}
 
-	temp := filepath.Join(dir, "tmp")
-	if err := os.RemoveAll(temp); err != nil {
-		return nil, err
-	}
-
-	if err := r.SetTempDir(temp); err != nil {
+	auxDir := filepath.Join(dir, "auxiliary")
+	if err := r.SetAuxiliaryDir(auxDir); err != nil {
 		return nil, err
 	}
 
@@ -357,7 +353,7 @@ func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) 
 		deallocated: make(chan struct{}),
 	}
 
-	if err := r.SetTempDir(os.TempDir()); err != nil {
+	if err := r.SetAuxiliaryDir(os.TempDir()); err != nil {
 		return nil, err
 	}
 
@@ -1953,17 +1949,17 @@ func RunLDB(args []string) {
 	C.DBRunLDB(C.int(len(argv)), &argv[0])
 }
 
-// GetTempDir returns a temp path (usually under the store directory).
-func (r *RocksDB) GetTempDir() string {
-	return r.tempDir
+// GetAuxiliaryDir returns the auxiliary storage path for this engine.
+func (r *RocksDB) GetAuxiliaryDir() string {
+	return r.auxDir
 }
 
-// SetTempDir allows overriding the tempdir returned by GetTempDir.
-func (r *RocksDB) SetTempDir(d string) error {
+// SetAuxiliaryDir changes the auxiliary storage path for this engine.
+func (r *RocksDB) SetAuxiliaryDir(d string) error {
 	if err := os.MkdirAll(d, 0755); err != nil {
 		return err
 	}
-	r.tempDir = d
+	r.auxDir = d
 	return nil
 }
 
