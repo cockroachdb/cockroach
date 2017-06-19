@@ -17,11 +17,9 @@
 package server
 
 import (
-	"bytes"
 	"crypto/tls"
-	"fmt"
-	"io"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -32,33 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/gogo/protobuf/proto"
 )
-
-func doHTTPReq(
-	t *testing.T, client http.Client, method, url string, body proto.Message,
-) (*http.Response, error) {
-	var b io.Reader
-	if body != nil {
-		buf, err := protoutil.Marshal(body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		b = bytes.NewReader(buf)
-	}
-	req, err := http.NewRequest(method, url, b)
-	if err != nil {
-		t.Fatalf("%s %s: error building request: %s", method, url, err)
-	}
-	if b != nil {
-		req.Header.Add(httputil.ContentTypeHeader, httputil.ProtoContentType)
-	}
-
-	return client.Do(req)
-}
 
 type ctxI interface {
 	GetHTTPClient() (http.Client, error)
@@ -105,74 +78,74 @@ func TestSSLEnforcement(t *testing.T) {
 	kvGet := &roachpb.GetRequest{}
 	kvGet.Key = roachpb.Key("/")
 
-	testCases := []struct {
-		method, path string
-		body         proto.Message
-		ctx          ctxI
-		success      bool // request sent successfully (may be non-200)
-		code         int  // http response code
+	for _, tc := range []struct {
+		path string
+		ctx  ctxI
+		code int // http response code
 	}{
+		// Health endpoint is special-cased; allowed to serve on HTTP.
+		{"/health", insecureContext, http.StatusOK},
+
 		// /ui/: basic file server: no auth.
-		{"GET", "", nil, rootCertsContext, true, http.StatusOK},
-		{"GET", "", nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", "", nil, testCertsContext, true, http.StatusOK},
-		{"GET", "", nil, noCertsContext, true, http.StatusOK},
-		{"GET", "", nil, insecureContext, true, http.StatusPermanentRedirect},
+		{"", rootCertsContext, http.StatusOK},
+		{"", nodeCertsContext, http.StatusOK},
+		{"", testCertsContext, http.StatusOK},
+		{"", noCertsContext, http.StatusOK},
+		{"", insecureContext, http.StatusPermanentRedirect},
 
 		// /_admin/: server.adminServer: no auth.
-		{"GET", adminPrefix + "health", nil, rootCertsContext, true, http.StatusOK},
-		{"GET", adminPrefix + "health", nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", adminPrefix + "health", nil, testCertsContext, true, http.StatusOK},
-		{"GET", adminPrefix + "health", nil, noCertsContext, true, http.StatusOK},
-		{"GET", adminPrefix + "health", nil, insecureContext, true, http.StatusPermanentRedirect},
+		{adminPrefix + "health", rootCertsContext, http.StatusOK},
+		{adminPrefix + "health", nodeCertsContext, http.StatusOK},
+		{adminPrefix + "health", testCertsContext, http.StatusOK},
+		{adminPrefix + "health", noCertsContext, http.StatusOK},
+		{adminPrefix + "health", insecureContext, http.StatusPermanentRedirect},
 
 		// /debug/: server.adminServer: no auth.
-		{"GET", debugEndpoint + "vars", nil, rootCertsContext, true, http.StatusOK},
-		{"GET", debugEndpoint + "vars", nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", debugEndpoint + "vars", nil, testCertsContext, true, http.StatusOK},
-		{"GET", debugEndpoint + "vars", nil, noCertsContext, true, http.StatusOK},
-		{"GET", debugEndpoint + "vars", nil, insecureContext, true, http.StatusPermanentRedirect},
+		{debugEndpoint + "vars", rootCertsContext, http.StatusOK},
+		{debugEndpoint + "vars", nodeCertsContext, http.StatusOK},
+		{debugEndpoint + "vars", testCertsContext, http.StatusOK},
+		{debugEndpoint + "vars", noCertsContext, http.StatusOK},
+		{debugEndpoint + "vars", insecureContext, http.StatusPermanentRedirect},
 
 		// /_status/nodes: server.statusServer: no auth.
-		{"GET", statusPrefix + "nodes", nil, rootCertsContext, true, http.StatusOK},
-		{"GET", statusPrefix + "nodes", nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", statusPrefix + "nodes", nil, testCertsContext, true, http.StatusOK},
-		{"GET", statusPrefix + "nodes", nil, noCertsContext, true, http.StatusOK},
-		{"GET", statusPrefix + "nodes", nil, insecureContext, true, http.StatusPermanentRedirect},
+		{statusPrefix + "nodes", rootCertsContext, http.StatusOK},
+		{statusPrefix + "nodes", nodeCertsContext, http.StatusOK},
+		{statusPrefix + "nodes", testCertsContext, http.StatusOK},
+		{statusPrefix + "nodes", noCertsContext, http.StatusOK},
+		{statusPrefix + "nodes", insecureContext, http.StatusPermanentRedirect},
 
 		// /ts/: ts.Server: no auth.
-		{"GET", ts.URLPrefix, nil, rootCertsContext, true, http.StatusNotFound},
-		{"GET", ts.URLPrefix, nil, nodeCertsContext, true, http.StatusNotFound},
-		{"GET", ts.URLPrefix, nil, testCertsContext, true, http.StatusNotFound},
-		{"GET", ts.URLPrefix, nil, noCertsContext, true, http.StatusNotFound},
-		{"GET", ts.URLPrefix, nil, insecureContext, true, http.StatusPermanentRedirect},
-	}
+		{ts.URLPrefix, rootCertsContext, http.StatusNotFound},
+		{ts.URLPrefix, nodeCertsContext, http.StatusNotFound},
+		{ts.URLPrefix, testCertsContext, http.StatusNotFound},
+		{ts.URLPrefix, noCertsContext, http.StatusNotFound},
+		{ts.URLPrefix, insecureContext, http.StatusPermanentRedirect},
+	} {
+		t.Run("", func(t *testing.T) {
+			client, err := tc.ctx.GetHTTPClient()
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Avoid automatically following redirects.
+			client.CheckRedirect = func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			}
+			url := url.URL{
+				Scheme: tc.ctx.HTTPRequestScheme(),
+				Host:   s.(*TestServer).Cfg.HTTPAddr,
+				Path:   tc.path,
+			}
+			resp, err := client.Get(url.String())
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	for tcNum, tc := range testCases {
-		client, err := tc.ctx.GetHTTPClient()
-		if err != nil {
-			t.Fatalf("[%d]: failed to get http client: %v", tcNum, err)
-		}
-		// Avoid automatically following redirects.
-		client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
-		url := fmt.Sprintf(
-			"%s://%s%s", tc.ctx.HTTPRequestScheme(),
-			s.(*TestServer).Cfg.HTTPAddr, tc.path)
-		resp, err := doHTTPReq(t, client, tc.method, url, tc.body)
-		if (err == nil) != tc.success {
-			t.Errorf("[%d]: expected success=%t, got err=%v", tcNum, tc.success, err)
-		}
-		if err != nil {
-			continue
-		}
-
-		defer resp.Body.Close()
-		if resp.StatusCode != tc.code {
-			t.Errorf("[%d]: expected status code %d, got %d", tcNum, tc.code, resp.StatusCode)
-			u, _ := resp.Location()
-			t.Errorf("orig=%s url=%s", tc.path, u)
-		}
+			defer resp.Body.Close()
+			if resp.StatusCode != tc.code {
+				t.Errorf("expected status code %d, got %d", tc.code, resp.StatusCode)
+				u, err := resp.Location()
+				t.Errorf("orig=%s url=%s err=%v", tc.path, u, err)
+			}
+		})
 	}
 }
