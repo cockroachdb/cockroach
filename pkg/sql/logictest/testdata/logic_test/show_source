@@ -24,6 +24,7 @@ application_name
 client_encoding                UTF8
 client_min_messages
 database                       test
+datestyle                      ISO
 default_transaction_isolation  SERIALIZABLE
 distsql                        off
 extra_float_digits
@@ -146,7 +147,7 @@ query ITT colnames
 SELECT node_id, username, query FROM [SHOW QUERIES]
 ----
 node_id   username   query
-1         root       SELECT node_id, username, query FROM [SHOW CLUSTER QUERIES] 
+1         root       SELECT node_id, username, query FROM [SHOW CLUSTER QUERIES]
 
 
 query T colnames
