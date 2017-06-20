@@ -209,7 +209,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	defer importRequestLimiter.endLimitedRequest()
 	log.Infof(ctx, "import [%s,%s)", importStart, importEnd)
 
-	var dataSize int64
+	var rows rowCounter
 	var iters []engine.Iterator
 	for _, file := range args.Files {
 		if log.V(2) {
@@ -240,7 +240,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			return nil, errors.Wrapf(err, "fetching %q", file.Path)
 		}
 
-		dataSize += int64(len(fileContents))
+		rows.BulkOpSummary.DataSize += int64(len(fileContents))
 
 		if len(file.Sha512) > 0 {
 			checksum, err := sha512ChecksumData(fileContents)
@@ -292,6 +292,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: args.DataSpan.Key}, engine.MVCCKey{Key: args.DataSpan.EndKey}
 	iter := engineccl.MakeMultiIterator(iters)
 	var keyScratch, valueScratch []byte
+
 	for iter.Seek(startKeyMVCC); iter.Valid() && iter.UnsafeKey().Less(endKeyMVCC); iter.NextKey() {
 		if len(iter.UnsafeValue()) == 0 {
 			// Value is deleted.
@@ -325,6 +326,11 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		if log.V(3) {
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
+
+		if err := rows.count(key.Key); err != nil {
+			return nil, errors.Wrapf(err, "decoding %s", key.Key)
+		}
+
 		if err := batcher.Add(key, value.RawBytes); err != nil {
 			return nil, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
@@ -356,5 +362,5 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		return nil, err
 	}
 
-	return &roachpb.ImportResponse{DataSize: dataSize}, nil
+	return &roachpb.ImportResponse{Imported: rows.BulkOpSummary}, nil
 }

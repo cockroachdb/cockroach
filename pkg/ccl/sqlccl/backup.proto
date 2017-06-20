@@ -42,6 +42,7 @@ message BackupDescriptor {
   repeated File files = 4 [(gogoproto.nullable) = false];
   repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
   int64 data_size = 6;
+  roachpb.BulkOpSummary entry_counts = 12 [(gogoproto.nullable) = false];
 
   roachpb.ExportStorage dir = 7 [(gogoproto.nullable) = false];
 
