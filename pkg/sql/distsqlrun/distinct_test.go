@@ -31,7 +31,7 @@ func TestDistinct(t *testing.T) {
 
 	v := [15]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
 			parser.NewDInt(parser.DInt(i)))
 	}
 

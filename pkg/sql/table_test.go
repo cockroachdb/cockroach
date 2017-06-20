@@ -57,72 +57,72 @@ func TestMakeTableDescColumns(t *testing.T) {
 	}{
 		{
 			"BIT",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT, Width: 1},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 1},
 			true,
 		},
 		{
 			"BIT(3)",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT, Width: 3},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 3},
 			true,
 		},
 		{
 			"BOOLEAN",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_BOOL},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL},
 			true,
 		},
 		{
 			"INT",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
 			true,
 		},
 		{
 			"FLOAT(3)",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_FLOAT, Precision: 3},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT, Precision: 3},
 			true,
 		},
 		{
 			"DECIMAL(6,5)",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL, Precision: 6, Width: 5},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL, Precision: 6, Width: 5},
 			true,
 		},
 		{
 			"DATE",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_DATE},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DATE},
 			true,
 		},
 		{
 			"TIMESTAMP",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_TIMESTAMP},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMP},
 			true,
 		},
 		{
 			"INTERVAL",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INTERVAL},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INTERVAL},
 			true,
 		},
 		{
 			"CHAR",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_STRING},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
 			true,
 		},
 		{
 			"TEXT",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_STRING},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
 			true,
 		},
 		{
 			"BLOB",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_BYTES},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
 			true,
 		},
 		{
 			"INT NOT NULL",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
 			false,
 		},
 		{
 			"INT NULL",
-			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
 			true,
 		},
 	}

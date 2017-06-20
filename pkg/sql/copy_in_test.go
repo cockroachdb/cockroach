@@ -163,7 +163,7 @@ func TestCopyRandom(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewSource(0))
-	types := []sqlbase.ColumnType_Kind{
+	types := []sqlbase.ColumnType_SemanticType{
 		sqlbase.ColumnType_BOOL,
 		sqlbase.ColumnType_INT,
 		sqlbase.ColumnType_FLOAT,
@@ -189,7 +189,7 @@ func TestCopyRandom(t *testing.T) {
 
 		row[1] = d.String()
 		for j, t := range types {
-			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: t}, false)
+			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: t}, false)
 			ds := parser.AsStringWithFlags(d, parser.FmtBareStrings)
 			switch t {
 			case sqlbase.ColumnType_DECIMAL:
