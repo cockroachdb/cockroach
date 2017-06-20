@@ -2104,14 +2104,17 @@ func MVCCResolveWriteIntentRangeUsingIter(
 // MVCCGarbageCollect creates an iterator on the engine. In parallel
 // it iterates through the keys listed for garbage collection by the
 // keys slice. The engine iterator is seeked in turn to each listed
-// key, clearing all values with timestamps <= to expiration.
-// The timestamp parameter is used to compute the intent age on GC.
+// key, clearing all values with timestamps <= to expiration. The
+// timestamp parameter is used to compute the intent age on GC.
+// Garbage collection stops after clearing maxClears values
+// (to limit the size of the WriteBatch produced).
 func MVCCGarbageCollect(
 	ctx context.Context,
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	keys []roachpb.GCRequest_GCKey,
 	timestamp hlc.Timestamp,
+	maxClears int64,
 ) error {
 	// We're allowed to use a prefix iterator because we always Seek() the
 	// iterator when handling a new user key.
@@ -2161,6 +2164,10 @@ func MVCCGarbageCollect(
 				if err := engine.Clear(iter.UnsafeKey()); err != nil {
 					return err
 				}
+				maxClears--
+				if maxClears <= 0 {
+					return nil
+				}
 			}
 		}
 
@@ -2191,6 +2198,10 @@ func MVCCGarbageCollect(
 				}
 				if err := engine.Clear(unsafeIterKey); err != nil {
 					return err
+				}
+				maxClears--
+				if maxClears <= 0 {
+					return nil
 				}
 			}
 		}

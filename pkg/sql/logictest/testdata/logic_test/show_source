@@ -54,7 +54,7 @@ diagnostics.reporting.report_metrics               true           b     enable c
 diagnostics.reporting.send_crash_reports           true           b     send crash and panic reports
 kv.allocator.lease_rebalancing_aggressiveness      1E+00          f     set greater than 1.0 to rebalance leases toward load more aggressively, or between 0 and 1.0 to be more conservative about rebalancing leases
 kv.allocator.load_based_lease_rebalancing.enabled  true           b     set to enable rebalancing of range leases based on load and latency
-kv.raft.command.max_size                           64 MiB         z     maximum size of a raft command
+kv.gc.batch_size                                   100000         i     maximum number of keys in a batch for MVCC garbage collection                                       kv.raft.command.max_size                           64 MiB         z     maximum size of a raft command
 kv.raft_log.synchronize                            true           b     set to true to synchronize on Raft log writes to persistent storage
 kv.snapshot_rebalance.max_rate                     2.0 MiB        z     the rate limit (bytes/sec) to use for rebalance snapshots
 kv.snapshot_recovery.max_rate                      8.0 MiB        z     the rate limit (bytes/sec) to use for recovery snapshots

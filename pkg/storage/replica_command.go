@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -61,6 +62,15 @@ const (
 	// operation.
 	collectChecksumTimeout = 5 * time.Second
 )
+
+// gcBatchSize controls the amount of work done in a single pass of
+// MVCC GC. Setting this too high may block the range for too long
+// (especially a risk in the system ranges), while setting it too low
+// may allow ranges to grow too large if we are unable to keep up with
+// the amount of garbage generated.
+var gcBatchSize = settings.RegisterIntSetting("kv.gc.batch_size",
+	"maximum number of keys in a batch for MVCC garbage collection",
+	100000)
 
 // CommandArgs contains all the arguments to a command.
 // TODO(bdarnell): consider merging with storagebase.FilterArgs (which
@@ -1423,7 +1433,7 @@ func evalGC(
 	}
 
 	// Garbage collect the specified keys by expiration timestamps.
-	err := engine.MVCCGarbageCollect(ctx, batch, cArgs.Stats, keys, h.Timestamp)
+	err := engine.MVCCGarbageCollect(ctx, batch, cArgs.Stats, keys, h.Timestamp, gcBatchSize.Get())
 	if err != nil {
 		return EvalResult{}, err
 	}
