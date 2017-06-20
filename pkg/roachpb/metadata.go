@@ -227,6 +227,35 @@ func (r ReplicaDescriptor) Validate() error {
 	return nil
 }
 
+// PercentilesFromData derives percentiles from a slice of data points.
+// Sorts the input data if it isn't already sorted.
+func PercentilesFromData(data []float64) Percentiles {
+	sort.Float64s(data)
+
+	return Percentiles{
+		P10: percentileFromSortedData(data, 10),
+		P25: percentileFromSortedData(data, 25),
+		P50: percentileFromSortedData(data, 50),
+		P75: percentileFromSortedData(data, 75),
+		P90: percentileFromSortedData(data, 90),
+	}
+}
+
+func percentileFromSortedData(data []float64, percent float64) float64 {
+	if len(data) == 0 {
+		return 0
+	}
+	if percent < 0 {
+		percent = 0
+	}
+	if percent >= 100 {
+		return data[len(data)-1]
+	}
+	// TODO: Import round function from library?
+	idx := int(float64(len(data)) * percent / 100.0)
+	return data[idx]
+}
+
 // FractionUsed computes the fraction of storage capacity that is in use.
 func (sc StoreCapacity) FractionUsed() float64 {
 	if sc.Capacity == 0 {
