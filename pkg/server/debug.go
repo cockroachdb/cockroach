@@ -165,7 +165,7 @@ func init() {
       </tr>
       <tr>
         <td>problem ranges</td>
-        <td><a href="../#/debug/problemranges">on the cluster</a>, <a href="../#/debug/problemranges?node_id=1">on a specific node</a></td>
+        <td><a href="../#/reports/problemranges">on the cluster</a>, <a href="../#/reports/problemranges?node_id=1">on a specific node</a></td>
       </tr>
       <tr>
         <td>network status</td>
