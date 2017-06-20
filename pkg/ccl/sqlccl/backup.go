@@ -540,7 +540,7 @@ func backupPlanHook(
 			backup.Targets,
 			startTime, endTime,
 			backup.Options,
-			&jobLogger,
+			jobLogger,
 		)
 		if err != nil {
 			jobLogger.Failed(ctx, err)

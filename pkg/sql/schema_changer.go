@@ -656,7 +656,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 					return err
 				}
 				desc.MutationJobs[i].JobID = *jobLogger.JobID()
-				sc.jobLogger = &jobLogger
+				sc.jobLogger = jobLogger
 				break
 			}
 		}
