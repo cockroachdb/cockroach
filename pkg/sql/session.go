@@ -1275,11 +1275,7 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 			spanWithIndex := spanWithIndex{
 				RecordedSpan: &spans[spanIdx],
 				index:        spanIdx,
-				txnIdx:       -1,
-			}
-			// The first span in the transaction gets marked with the txnIdx.
-			if spanIdx == 0 {
-				spanWithIndex.txnIdx = txnIdx
+				txnIdx:       txnIdx,
 			}
 			msgs, err := getMessagesForSubtrace(spanWithIndex, spans, seenSpans)
 			if err != nil {
@@ -1299,12 +1295,6 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 		} else {
 			operation = parser.DNull
 		}
-		var txnIdx parser.Datum
-		if lrr.span.txnIdx != -1 && lrr.index == 0 {
-			txnIdx = parser.NewDInt(parser.DInt(lrr.span.txnIdx))
-		} else {
-			txnIdx = parser.DNull
-		}
 		var dur parser.Datum
 		if lrr.index == 0 && lrr.span.Duration != 0 {
 			dur = &parser.DInterval{
@@ -1318,7 +1308,7 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 		}
 
 		row := traceRow{
-			txnIdx, // txn_idx
+			parser.NewDInt(parser.DInt(lrr.span.txnIdx)),            // txn_idx
 			parser.NewDInt(parser.DInt(lrr.span.index)),             // span_idx
 			parser.NewDInt(parser.DInt(lrr.index)),                  // message_idx
 			parser.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond), // timestamp
@@ -1334,7 +1324,9 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 // getOrderedChildSpans returns all the spans in allSpans that are children of
 // spanID. It assumes the input is ordered by start time, in which case the
 // output is also ordered.
-func getOrderedChildSpans(spanID uint64, allSpans []tracing.RecordedSpan) []spanWithIndex {
+func getOrderedChildSpans(
+	spanID uint64, txnIdx int, allSpans []tracing.RecordedSpan,
+) []spanWithIndex {
 	children := make([]spanWithIndex, 0)
 	for i := range allSpans {
 		if allSpans[i].ParentSpanID == spanID {
@@ -1343,7 +1335,7 @@ func getOrderedChildSpans(spanID uint64, allSpans []tracing.RecordedSpan) []span
 				spanWithIndex{
 					RecordedSpan: &allSpans[i],
 					index:        i,
-					txnIdx:       -1,
+					txnIdx:       txnIdx,
 				})
 		}
 	}
@@ -1376,7 +1368,7 @@ func getMessagesForSubtrace(
 		})
 
 	seenSpans[span.SpanID] = struct{}{}
-	childSpans := getOrderedChildSpans(span.SpanID, allSpans)
+	childSpans := getOrderedChildSpans(span.SpanID, span.txnIdx, allSpans)
 	var i, j int
 	// Sentinel value - year 6000.
 	maxTime := time.Date(6000, 0, 0, 0, 0, 0, 0, time.UTC)
@@ -1428,7 +1420,6 @@ type spanWithIndex struct {
 	*tracing.RecordedSpan
 	index int
 	// txnIdx is the 0-based index of the transaction in which this span was
-	// recorded.  It's only filled on the top-level span in each transaction; -1
-	// otherwise.
+	// recorded.
 	txnIdx int
 }
