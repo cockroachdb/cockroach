@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -364,6 +365,31 @@ func (sc *SchemaChanger) getMutationToBackfill(
 	return mutation, err
 }
 
+// nRanges returns the number of ranges that cover a set of spans.
+func (sc *SchemaChanger) nRanges(
+	ctx context.Context, txn *client.Txn, spans []roachpb.Span,
+) (int, error) {
+	spanResolver := sc.distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
+	rangeIds := make(map[int64]bool)
+	for _, span := range spans {
+		// For each span, iterate the spanResolver until it's exhausted, storing
+		// the found range ids in the map to de-duplicate them.
+		spanResolver.Seek(ctx, span, kv.Ascending)
+		for {
+			if !spanResolver.Valid() {
+				return 0, spanResolver.Error()
+			}
+			rangeIds[int64(spanResolver.Desc().RangeID)] = true
+			if !spanResolver.NeedAnother() {
+				break
+			}
+			spanResolver.Next(ctx)
+		}
+	}
+
+	return len(rangeIds), nil
+}
+
 // distBackfill runs (or continues) a backfill for the first mutation
 // enqueued on the SchemaChanger's table descriptor that passes the input
 // MutationFilter.
@@ -382,6 +408,9 @@ func (sc *SchemaChanger) distBackfill(
 	}
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
+	origNRanges := -1
+	origFractionCompleted := sc.jobLogger.Payload().FractionCompleted
+	percentLeft := 1 - origFractionCompleted
 	for {
 		// Repeat until getMutationToBackfill returns a mutation with no remaining
 		// ResumeSpans, indicating that the backfill is complete.
@@ -396,7 +425,6 @@ func (sc *SchemaChanger) distBackfill(
 		if len(spans) <= 0 {
 			break
 		}
-
 		if err := sc.ExtendLease(ctx, lease); err != nil {
 			return err
 		}
@@ -448,6 +476,29 @@ func (sc *SchemaChanger) distBackfill(
 			if err := sc.distSQLPlanner.Run(&planCtx, txn, &plan, &recv, evalCtx); err != nil {
 				return err
 			}
+
+			// Report percent completion. We define percent completion at this point
+			// as the the fraction of fully-backfilled ranges of the primary index of
+			// the table being scanned. Since we may have already modified the
+			// percent completion of our job from a previous backfill attempt or for
+			// other reasons, we scale that fraction of ranges completed by the
+			// remaining fraction of the job's progress bar.
+			nRanges, err := sc.nRanges(ctx, txn, spans)
+			if err != nil {
+				return err
+			}
+			if origNRanges == -1 {
+				origNRanges = nRanges
+			}
+
+			if nRanges < origNRanges {
+				percentRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
+				fractionCompleted := origFractionCompleted + percentLeft*percentRangesFinished
+				if err := sc.jobLogger.Progressed(ctx, fractionCompleted); err != nil {
+					log.Infof(ctx, "Ignoring error reporting progress %%%f for job %d: %v", fractionCompleted, *sc.jobLogger.JobID(), err)
+				}
+			}
+
 			return recv.err
 		}); err != nil {
 			return err
