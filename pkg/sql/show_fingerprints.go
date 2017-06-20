@@ -129,7 +129,7 @@ func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
 		// TODO(dan): This is known to be a flawed way to fingerprint. Any datum
 		// with the same string representation is fingerprinted the same, even
 		// if they're different types.
-		switch col.Type.Kind {
+		switch col.Type.SemanticType {
 		case sqlbase.ColumnType_BYTES:
 			cols = append(cols, fmt.Sprintf("%s:::bytes", col.Name))
 		default:

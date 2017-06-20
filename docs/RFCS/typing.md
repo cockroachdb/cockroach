@@ -2019,9 +2019,9 @@ retain exact precision.
 
 Next, during type checking, ``NumVals`` will be evalutated as their
 logical `Datum` types. Here, they will be converted `int`, `float` or
-`decimal`, based on their `Value.Kind()` (e.g.  using
+`decimal`, based on their `Value.SemanticType()` (e.g.  using
 [Int64Val](https://golang.org/pkg/go/constant/#Int64Val) or
-`decimal.SetString(Value.String())`.  Some Kinds will result in a
+`decimal.SetString(Value.String())`.  Some Semantic Types will result in a
 panic because they should not be possible based on our
 parser. However, we could eventually introduce Complex literals using
 this approach.

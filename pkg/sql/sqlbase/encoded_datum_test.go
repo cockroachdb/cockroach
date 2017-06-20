@@ -42,7 +42,7 @@ func TestEncDatum(t *testing.T) {
 		t.Errorf("empty EncDatum has an encoding")
 	}
 
-	x := DatumToEncDatum(ColumnType{Kind: ColumnType_INT}, parser.NewDInt(5))
+	x := DatumToEncDatum(ColumnType{SemanticType: ColumnType_INT}, parser.NewDInt(5))
 	if x.IsUnset() {
 		t.Errorf("unset after DatumToEncDatum()")
 	}
@@ -55,7 +55,7 @@ func TestEncDatum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	y := EncDatumFromEncoded(ColumnType{Kind: ColumnType_INT}, DatumEncoding_ASCENDING_KEY, encoded)
+	y := EncDatumFromEncoded(ColumnType{SemanticType: ColumnType_INT}, DatumEncoding_ASCENDING_KEY, encoded)
 
 	if y.IsUnset() {
 		t.Errorf("unset after EncDatumFromEncoded")
@@ -86,7 +86,7 @@ func TestEncDatum(t *testing.T) {
 	} else if enc != DatumEncoding_ASCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
-	z := EncDatumFromEncoded(ColumnType{Kind: ColumnType_INT}, DatumEncoding_DESCENDING_KEY, enc2)
+	z := EncDatumFromEncoded(ColumnType{SemanticType: ColumnType_INT}, DatumEncoding_DESCENDING_KEY, enc2)
 	if enc, ok := z.Encoding(); !ok {
 		t.Error("no encoding")
 	} else if enc != DatumEncoding_DESCENDING_KEY {
@@ -112,7 +112,7 @@ func TestEncDatumNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Verify DNull is null.
-	n := DatumToEncDatum(ColumnType{Kind: ColumnType_INT}, parser.DNull)
+	n := DatumToEncDatum(ColumnType{SemanticType: ColumnType_INT}, parser.DNull)
 	if !n.IsNull() {
 		t.Error("DNull not null")
 	}
@@ -130,7 +130,7 @@ func TestEncDatumNull(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			b := EncDatumFromEncoded(ColumnType{Kind: ColumnType_INT}, DatumEncoding(enc), encoded)
+			b := EncDatumFromEncoded(ColumnType{SemanticType: ColumnType_INT}, DatumEncoding(enc), encoded)
 			if a.IsNull() != b.IsNull() {
 				t.Errorf("before: %s (null=%t) after: %s (null=%t)",
 					a.String(), a.IsNull(), b.String(), b.IsNull())
@@ -191,8 +191,8 @@ func TestEncDatumCompare(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
 
-	for kind := range ColumnType_Kind_name {
-		kind := ColumnType_Kind(kind)
+	for kind := range ColumnType_SemanticType_name {
+		kind := ColumnType_SemanticType(kind)
 		if kind == ColumnType_NULL {
 			continue
 		}
@@ -201,7 +201,7 @@ func TestEncDatumCompare(t *testing.T) {
 			kind == ColumnType_INT2VECTOR {
 			continue
 		}
-		typ := ColumnType{Kind: kind}
+		typ := ColumnType{SemanticType: kind}
 		if kind == ColumnType_COLLATEDSTRING {
 			typ.Locale = RandCollationLocale(rng)
 		}
@@ -267,7 +267,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		var buf []byte
 		enc := make([]DatumEncoding, len(ed))
 		for i := range ed {
-			if HasCompositeKeyEncoding(ed[i].Type.Kind) {
+			if HasCompositeKeyEncoding(ed[i].Type.SemanticType) {
 				// There's no way to reconstruct data from the key part of a composite
 				// encoding.
 				enc[i] = DatumEncoding_VALUE
@@ -309,7 +309,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 
 	v := [5]EncDatum{}
 	for i := range v {
-		v[i] = DatumToEncDatum(ColumnType{Kind: ColumnType_INT}, parser.NewDInt(parser.DInt(i)))
+		v[i] = DatumToEncDatum(ColumnType{SemanticType: ColumnType_INT}, parser.NewDInt(parser.DInt(i)))
 	}
 
 	asc := encoding.Ascending

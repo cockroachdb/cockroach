@@ -27,7 +27,7 @@ import "gogoproto/gogo.proto";
 message ColumnType {
   // These mirror the types supported by the sql/parser. See
   // sql/parser/col_types.go.
-  enum Kind {
+  enum SemanticType {
     BOOL = 0;
     INT = 1;        // INT(width)
     FLOAT = 2;      // FLOAT(precision)
@@ -65,7 +65,7 @@ message ColumnType {
     INT2VECTOR = 200;
   }
 
-  optional Kind kind = 1 [(gogoproto.nullable) = false];
+  optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
   // BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
   optional int32 width = 2 [(gogoproto.nullable) = false];
   // FLOAT and DECIMAL.
