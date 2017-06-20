@@ -18,9 +18,9 @@ import (
 
 const invalidIdxSentinel = -1
 
-// MultiIterator multiplexes iteration over a number of engine.Iterators.
-type MultiIterator struct {
-	iters []engine.Iterator
+// multiIterator multiplexes iteration over a number of engine.Iterators.
+type multiIterator struct {
+	iters []engine.SimpleIterator
 	// The index into `iters` of the iterator currently being pointed at.
 	currentIdx int
 	// The indexes of every iterator with the same key as the one in currentIdx.
@@ -32,23 +32,26 @@ type MultiIterator struct {
 	err error
 }
 
-// TODO(dan): The methods on MultiIterator intentionally have the same
-// signatures as the ones on engine.Iterator, though not all of them are
-// present. Consider making an interface that's a subset (SimpleIterator?) and
-// unexport MultiIterator.
+var _ engine.SimpleIterator = &multiIterator{}
 
-// MakeMultiIterator creates an iterator that multiplexes engine.Iterators.
-func MakeMultiIterator(iters []engine.Iterator) *MultiIterator {
-	return &MultiIterator{
+// MakeMultiIterator creates an iterator that multiplexes
+// engine.SimpleIterators. The caller is responsible for closing the passed
+// iterators after closing the returned multiIterator.
+func MakeMultiIterator(iters []engine.SimpleIterator) engine.SimpleIterator {
+	return &multiIterator{
 		iters:               iters,
 		currentIdx:          invalidIdxSentinel,
 		itersWithCurrentKey: make([]int, 0, len(iters)),
 	}
 }
 
+func (f *multiIterator) Close() {
+	// No-op, multiIterator doesn't close the underlying iterators.
+}
+
 // Seek advances the iterator to the first key in the engine which is >= the
 // provided key.
-func (f *MultiIterator) Seek(key engine.MVCCKey) {
+func (f *multiIterator) Seek(key engine.MVCCKey) {
 	for _, iter := range f.iters {
 		iter.Seek(key)
 	}
@@ -58,34 +61,33 @@ func (f *MultiIterator) Seek(key engine.MVCCKey) {
 	f.advance()
 }
 
-// Valid returns true if the iterator is currently valid. An iterator that
-// hasn't had Seek called on it or has gone past the end of the key range is
-// invalid.
-func (f *MultiIterator) Valid() bool {
-	return f.currentIdx != invalidIdxSentinel && f.err == nil
-}
-
-// Error returns the error, if any, which the iterator encountered.
-func (f *MultiIterator) Error() error {
-	return f.err
+// Valid must be called after any call to Seek(), Next(), or similar methods. It
+// returns (true, nil) if the iterator points to a valid key (it is undefined to
+// call UnsafeKey(), UnsafeValue(), or similar methods unless Valid() has
+// returned (true, nil)). It returns (false, nil) if the iterator has moved past
+// the end of the valid range, or (false, err) if an error has occurred. Valid()
+// will never return true with a non-nil error.
+func (f *multiIterator) Valid() (bool, error) {
+	valid := f.currentIdx != invalidIdxSentinel && f.err == nil
+	return valid, f.err
 }
 
 // UnsafeKey returns the current key, but the memory is invalidated on the next
 // call to {NextKey,Seek}.
-func (f *MultiIterator) UnsafeKey() engine.MVCCKey {
+func (f *multiIterator) UnsafeKey() engine.MVCCKey {
 	return f.iters[f.currentIdx].UnsafeKey()
 }
 
 // UnsafeValue returns the current value as a byte slice, but the memory is
 // invalidated on the next call to {NextKey,Seek}.
-func (f *MultiIterator) UnsafeValue() []byte {
+func (f *multiIterator) UnsafeValue() []byte {
 	return f.iters[f.currentIdx].UnsafeValue()
 }
 
 // Next advances the iterator to the next key/value in the iteration. After this
 // call, Valid() will be true if the iterator was not positioned at the last
 // key.
-func (f *MultiIterator) Next() {
+func (f *multiIterator) Next() {
 	// Advance the current iterator one and recompute currentIdx.
 	f.iters[f.currentIdx].Next()
 	f.advance()
@@ -95,7 +97,7 @@ func (f *MultiIterator) Next() {
 // distinct from Next which advances to the next version of the current key or
 // the next key if the iterator is currently located at the last version for a
 // key.
-func (f *MultiIterator) NextKey() {
+func (f *multiIterator) NextKey() {
 	// Advance each iterator at the current key to its next key, then recompute
 	// currentIdx.
 	for _, iterIdx := range f.itersWithCurrentKey {
@@ -104,7 +106,7 @@ func (f *MultiIterator) NextKey() {
 	f.advance()
 }
 
-func (f *MultiIterator) advance() {
+func (f *multiIterator) advance() {
 	// Loop through every iterator, storing the best next value for currentIdx
 	// in proposedNextIdx as we go. If it's still invalidIdxSentinel at the end,
 	// then all the underlying iterators are exhausted and so is this one.

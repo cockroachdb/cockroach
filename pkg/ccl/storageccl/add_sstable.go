@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -75,37 +76,46 @@ func evalAddSSTable(
 func verifySSTable(
 	data []byte, start, end engine.MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	sstReader := engine.MakeRocksDBSstFileReader()
-	if err := sstReader.IngestExternalFile(data); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	defer sstReader.Close()
-	iter := sstReader.NewIterator(false)
-	defer iter.Close()
-
-	iter.Seek(engine.MVCCKey{Key: keys.MinKey})
-	ok, err := iter.Valid()
-	for ; ok; ok, err = iter.Valid() {
-		unsafeKey := iter.UnsafeKey()
-		if unsafeKey.Less(start) || !unsafeKey.Less(end) {
-			// TODO(dan): Add a new field in roachpb.Error, so the client can
-			// catch this and retry. It can happen if the range splits between
-			// when the client constructs the file and sends the request.
-			return enginepb.MVCCStats{}, errors.Errorf("key %s not in request range [%s,%s)",
-				unsafeKey.Key, start.Key, end.Key)
-		}
-
-		v := roachpb.Value{RawBytes: iter.UnsafeValue()}
-		if err := v.Verify(unsafeKey.Key); err != nil {
+	{
+		iter, err := engineccl.NewMemSSTIterator(data)
+		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
-		iter.Next()
-	}
-	if err != nil {
-		return enginepb.MVCCStats{}, err
+		defer iter.Close()
+
+		iter.Seek(engine.MVCCKey{Key: keys.MinKey})
+		ok, err := iter.Valid()
+		for ; ok; ok, err = iter.Valid() {
+			unsafeKey := iter.UnsafeKey()
+			if unsafeKey.Less(start) || !unsafeKey.Less(end) {
+				// TODO(dan): Add a new field in roachpb.Error, so the client can
+				// catch this and retry. It can happen if the range splits between
+				// when the client constructs the file and sends the request.
+				return enginepb.MVCCStats{}, errors.Errorf("key %s not in request range [%s,%s)",
+					unsafeKey.Key, start.Key, end.Key)
+			}
+
+			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
+			if err := v.Verify(unsafeKey.Key); err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+			iter.Next()
+		}
+		if err != nil {
+			return enginepb.MVCCStats{}, err
+		}
 	}
 
-	return iter.ComputeStats(start, end, nowNanos)
+	{
+		// TODO(dan): Switch this to the cgo-free sst iterator, too.
+		sstReader := engine.MakeRocksDBSstFileReader()
+		if err := sstReader.IngestExternalFile(data); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		defer sstReader.Close()
+		iter := sstReader.NewIterator(false)
+		return iter.ComputeStats(start, end, nowNanos)
+	}
 }
 
 func clearExistingData(
