@@ -137,9 +137,9 @@ func (p *planner) createDescriptorWithID(
 	b := &client.Batch{}
 	descID := descriptor.GetID()
 	descDesc := sqlbase.WrapDescriptor(descriptor)
-	if log.V(2) {
-		log.Infof(ctx, "CPut %s -> %d", idKey, descID)
-		log.Infof(ctx, "CPut %s -> %s", descKey, descDesc)
+	if p.session.Tracing.KVTracingEnabled() {
+		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
+		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, descDesc)
 	}
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)

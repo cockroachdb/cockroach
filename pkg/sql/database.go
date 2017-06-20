@@ -274,6 +274,11 @@ func (p *planner) renameDatabase(
 	descDesc := sqlbase.WrapDescriptor(oldDesc)
 
 	b := &client.Batch{}
+	if p.session.Tracing.KVTracingEnabled() {
+		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, descID)
+		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
+		log.VEventf(ctx, 2, "Del %s", oldKey)
+	}
 	b.CPut(newKey, descID, nil)
 	b.Put(descKey, descDesc)
 	b.Del(oldKey)

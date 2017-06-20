@@ -394,7 +394,7 @@ func (tu *tableUpserter) flush(ctx context.Context, finalize, traceKV bool) erro
 
 // upsertRowPKs returns the primary keys of any rows with potential upsert
 // conflicts.
-func (tu *tableUpserter) upsertRowPKs(ctx context.Context) ([]roachpb.Key, error) {
+func (tu *tableUpserter) upsertRowPKs(ctx context.Context, traceKV bool) ([]roachpb.Key, error) {
 	upsertRowPKs := make([]roachpb.Key, len(tu.insertRows))
 
 	if tu.conflictIndex.ID == tu.tableDesc.PrimaryIndex.ID {
@@ -423,8 +423,8 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context) ([]roachpb.Key, error
 		if err != nil {
 			return nil, err
 		}
-		if log.V(2) {
-			log.Infof(ctx, "Get %s\n", entry.Key)
+		if traceKV {
+			log.VEventf(ctx, 2, "Get %s", entry.Key)
 		}
 		b.Get(entry.Key)
 	}
@@ -458,7 +458,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context) ([]roachpb.Key, error
 // ones in tu.insertRows. The returned slice is the same length as tu.insertRows
 // and a nil entry indicates no conflict.
 func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]parser.Datums, error) {
-	primaryKeys, err := tu.upsertRowPKs(ctx)
+	primaryKeys, err := tu.upsertRowPKs(ctx, traceKV)
 	if err != nil {
 		return nil, err
 	}
@@ -591,8 +591,9 @@ func (td *tableDeleter) fastDelete(
 ) (rowCount int, err error) {
 
 	for _, span := range scan.spans {
+		log.VEvent(ctx, 2, "fast delete: skipping scan")
 		if traceKV {
-			log.VEventf(ctx, 2, "Skipping scan and just deleting %s - %s", span.Key, span.EndKey)
+			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
 		}
 		td.b.DelRange(span.Key, span.EndKey, true)
 	}
