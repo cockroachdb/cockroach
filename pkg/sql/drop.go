@@ -165,10 +165,10 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 	zoneKey, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
 
 	b := &client.Batch{}
-	if log.V(2) {
-		log.Infof(ctx, "Del %s", descKey)
-		log.Infof(ctx, "Del %s", nameKey)
-		log.Infof(ctx, "Del %s", zoneKey)
+	if n.p.session.Tracing.KVTracingEnabled() {
+		log.VEventf(ctx, 2, "Del %s", descKey)
+		log.VEventf(ctx, 2, "Del %s", nameKey)
+		log.VEventf(ctx, 2, "Del %s", zoneKey)
 	}
 	b.Del(descKey)
 	b.Del(nameKey)
@@ -1006,6 +1006,9 @@ func truncateAndDropTable(
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := &client.Batch{}
 		// Use CPut because we want to remove a specific name -> id map.
+		if traceKV {
+			log.VEventf(ctx, 2, "CPut %s -> nil", nameKey)
+		}
 		b.CPut(nameKey, nil, tableDesc.ID)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
@@ -1033,6 +1036,10 @@ func truncateAndDropTable(
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Delete table descriptor
 		b := &client.Batch{}
+		if traceKV {
+			log.VEventf(ctx, 2, "Del %s", descKey)
+			log.VEventf(ctx, 2, "Del %s", zoneKey)
+		}
 		b.Del(descKey)
 		// Delete the zone config entry for this table.
 		b.Del(zoneKey)
