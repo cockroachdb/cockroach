@@ -3704,7 +3704,9 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		{Key: roachpb.Key("a-bad"), Timestamp: ts2},
 		{Key: roachpb.Key("inline-bad"), Timestamp: hlc.Timestamp{}},
 	}
-	if err := MVCCGarbageCollect(context.Background(), engine, ms, keys, ts3); err != nil {
+	if err := MVCCGarbageCollect(
+		context.Background(), engine, ms, keys, ts3, math.MaxInt64,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3792,7 +3794,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 		keys := []roachpb.GCRequest_GCKey{
 			{Key: test.key, Timestamp: ts2},
 		}
-		err := MVCCGarbageCollect(context.Background(), engine, nil, keys, ts2)
+		err := MVCCGarbageCollect(context.Background(), engine, nil, keys, ts2, math.MaxInt64)
 		if !testutils.IsError(err, test.expError) {
 			t.Fatalf("expected error %q when garbage collecting a non-deleted live value, found %v", test.expError, err)
 		}
@@ -3824,7 +3826,9 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	keys := []roachpb.GCRequest_GCKey{
 		{Key: key, Timestamp: ts2},
 	}
-	if err := MVCCGarbageCollect(context.Background(), engine, nil, keys, ts2); err == nil {
+	if err := MVCCGarbageCollect(
+		context.Background(), engine, nil, keys, ts2, math.MaxInt64,
+	); err == nil {
 		t.Fatal("expected error garbage collecting an intent")
 	}
 }
