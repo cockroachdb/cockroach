@@ -212,3 +212,94 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 		ord.unique = false
 	}
 }
+
+// computeMergeOrdering takes the ordering of two data sources that are to be
+// merged on a set of columns (specifically all values for column colA[i] for the
+// first source and all values for column colB[i] for the second source end up
+// in the same result column i). It computes an orderingInfo that can be
+// guaranteed on the merged data (if we interleave the rows correctly).
+//
+// In the resulting ordering, the equality columns are referenced by their index
+// in colA/colB. Specifically column i in the resulting ordering refers
+// to the column that contains colA[i] from A and colB[i] from B.
+func computeMergeOrdering(a, b orderingInfo, colA, colB []int) sqlbase.ColumnOrdering {
+	if len(colA) != len(colB) {
+		panic(fmt.Sprintf("invalid column lists %v; %v", colA, colB))
+	}
+	if a.isEmpty() || b.isEmpty() || len(colA) == 0 {
+		return nil
+	}
+
+	var result sqlbase.ColumnOrdering
+
+	used := make([]bool, len(colA))
+
+	// First, find any merged columns that are exact matches in both sources. This
+	// means that in each source, this column only sees one value. Note that this
+	// value can be different for the two sources, so the merged column is not
+	// necessarily an exact match column in the merged data.
+	for i := range colA {
+		if _, ok := a.exactMatchCols[colA[i]]; ok {
+			if _, ok := b.exactMatchCols[colB[i]]; ok {
+				used[i] = true
+				result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
+			}
+		}
+	}
+
+	eqMapA := make(map[int]int, len(colA))
+	for i, v := range colA {
+		eqMapA[v] = i
+	}
+	eqMapB := make(map[int]int, len(colB))
+	for i, v := range colB {
+		eqMapB[v] = i
+	}
+
+	for ordA, ordB := a.ordering, b.ordering; ; {
+		aDone, bDone := (len(ordA) == 0), (len(ordB) == 0)
+		// See if the first column in the orderings matches.
+		if !aDone && !bDone {
+			i, okA := eqMapA[ordA[0].ColIdx]
+			j, okB := eqMapB[ordB[0].ColIdx]
+			if okA && okB && i == j {
+				dir := ordA[0].Direction
+				if dir != ordB[0].Direction {
+					// Both orderings start with the same merged column, but the
+					// ordering is different. That's all, folks.
+					break
+				}
+				result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: dir})
+				ordA, ordB = ordA[1:], ordB[1:]
+				continue
+			}
+		}
+		// See if the first column in A is an exact match in B. Or, if we consumed B
+		// and it is "unique", then we are free to add any other columns in A.
+		if !aDone {
+			if i, ok := eqMapA[ordA[0].ColIdx]; ok {
+				if _, ok := b.exactMatchCols[colB[i]]; ok || (bDone && b.unique) {
+					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].Direction})
+					ordA = ordA[1:]
+					continue
+				}
+			}
+		}
+		// See if the first column in B is an exact match in A.  Or, if we consumed
+		// A and it is "unique", then we are free to add any other columns in B.
+		if !bDone {
+			if i, ok := eqMapB[ordB[0].ColIdx]; ok {
+				if _, ok := a.exactMatchCols[colA[i]]; ok || (aDone && a.unique) {
+					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].Direction})
+					ordB = ordB[1:]
+					continue
+				}
+			}
+		}
+		break
+	}
+	// TODO(radu): if we consumed an ordering and it is ".unique" (i.e. at most
+	// one row has the same set of values on those columns), then we can assume
+	// the remainder of that ordering
+	return result
+}
