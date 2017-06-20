@@ -172,23 +172,23 @@ ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
 	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/{metacheck,ncpus,returncheck} \
-		"./vendor/github.com/golang/dep/cmd/dep" \
-		"./vendor/github.com/client9/misspell/cmd/misspell" \
-		"./vendor/github.com/cockroachdb/crlfmt" \
-		"./vendor/github.com/cockroachdb/stress" \
-		"./vendor/github.com/golang/lint/golint" \
-		"./vendor/github.com/google/pprof" \
-		"./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway" \
-		"./vendor/github.com/jteeuwen/go-bindata/go-bindata" \
-		"./vendor/github.com/kisielk/errcheck" \
-		"./vendor/github.com/mattn/goveralls" \
-		"./vendor/github.com/mdempsky/unconvert" \
-		"./vendor/github.com/mibk/dupl" \
-		"./vendor/github.com/wadey/gocovmerge" \
-		"./vendor/golang.org/x/perf/cmd/benchstat" \
-		"./vendor/golang.org/x/tools/cmd/goimports" \
-		"./vendor/golang.org/x/tools/cmd/goyacc" \
-		"./vendor/golang.org/x/tools/cmd/stringer"
+		$(REPO_ROOT)/vendor/github.com/golang/dep/cmd/dep \
+		$(REPO_ROOT)/vendor/github.com/client9/misspell/cmd/misspell \
+		$(REPO_ROOT)/vendor/github.com/cockroachdb/crlfmt \
+		$(REPO_ROOT)/vendor/github.com/cockroachdb/stress \
+		$(REPO_ROOT)/vendor/github.com/golang/lint/golint \
+		$(REPO_ROOT)/vendor/github.com/google/pprof \
+		$(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
+		$(REPO_ROOT)/vendor/github.com/jteeuwen/go-bindata/go-bindata \
+		$(REPO_ROOT)/vendor/github.com/kisielk/errcheck \
+		$(REPO_ROOT)/vendor/github.com/mattn/goveralls \
+		$(REPO_ROOT)/vendor/github.com/mdempsky/unconvert \
+		$(REPO_ROOT)/vendor/github.com/mibk/dupl \
+		$(REPO_ROOT)/vendor/github.com/wadey/gocovmerge \
+		$(REPO_ROOT)/vendor/golang.org/x/perf/cmd/benchstat \
+		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/goimports \
+		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/goyacc \
+		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/stringer
 	touch $@
 
 # Make doesn't expose a list of the variables declared in a given file, so we
