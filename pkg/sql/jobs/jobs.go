@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -44,6 +45,11 @@ type JobLogger struct {
 	jobID *int64
 	Job   JobRecord
 	txn   *client.Txn
+
+	mu struct {
+		syncutil.Mutex
+		payload JobPayload
+	}
 }
 
 // JobDetails is a marker interface for job details proto structs.
@@ -74,8 +80,8 @@ const (
 )
 
 // NewJobLogger creates a new JobLogger.
-func NewJobLogger(db *client.DB, ex sqlutil.InternalExecutor, job JobRecord) JobLogger {
-	return JobLogger{
+func NewJobLogger(db *client.DB, ex sqlutil.InternalExecutor, job JobRecord) *JobLogger {
+	return &JobLogger{
 		db:  db,
 		ex:  ex,
 		Job: job,
@@ -110,6 +116,9 @@ func GetJobLogger(
 		default:
 			return errors.Errorf("JobLogger: unsupported job details type %T", d)
 		}
+		// Don't need to lock because we're the only one who has a handle on this
+		// JobLogger so far.
+		jl.mu.payload = *payload
 		return nil
 	}); err != nil {
 		return nil, err
@@ -243,6 +252,14 @@ func (jl *JobLogger) Succeeded(ctx context.Context) error {
 	})
 }
 
+// Payload returns the most recently sent JobPayload for this JobLogger. Will
+// return an empty JobPayload until Created() is called on a new JobLogger.
+func (jl *JobLogger) Payload() JobPayload {
+	jl.mu.Lock()
+	defer jl.mu.Unlock()
+	return jl.mu.payload
+}
+
 func (jl *JobLogger) insertJobRecord(ctx context.Context, payload *JobPayload) error {
 	if jl.jobID != nil {
 		// Already created - do nothing.
@@ -263,6 +280,7 @@ func (jl *JobLogger) insertJobRecord(ctx context.Context, payload *JobPayload) e
 	}); err != nil {
 		return err
 	}
+	jl.mu.payload = *payload
 	jl.jobID = (*int64)(row[0].(*parser.DInt))
 
 	return nil
@@ -285,8 +303,10 @@ func (jl *JobLogger) updateJobRecord(
 		return errors.New("JobLogger cannot update job: job not created")
 	}
 
-	return jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		payload, err := jl.retrieveJobPayload(ctx, txn)
+	var payload *JobPayload
+	if err := jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		payload, err = jl.retrieveJobPayload(ctx, txn)
 		if err != nil {
 			return err
 		}
@@ -312,9 +332,16 @@ func (jl *JobLogger) updateJobRecord(
 		if n != 1 {
 			return errors.Errorf("JobLogger: expected exactly one row affected, but %d rows affected by job update", n)
 		}
-
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	if payload != nil {
+		jl.mu.Lock()
+		jl.mu.payload = *payload
+		jl.mu.Unlock()
+	}
+	return nil
 }
 
 // Job types are named for the SQL query that creates them.

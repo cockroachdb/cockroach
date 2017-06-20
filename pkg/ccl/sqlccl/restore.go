@@ -867,7 +867,7 @@ func restorePlanHook(
 			from,
 			restore.Targets,
 			restore.Options,
-			&jobLogger,
+			jobLogger,
 		)
 		if err != nil {
 			jobLogger.Failed(ctx, err)
