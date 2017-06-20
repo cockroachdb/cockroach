@@ -229,34 +229,42 @@ message Transaction {
   // transaction will retry.
   //
   // This timestamp is the one at which all transactions will read. It is also,
-  // surprisingly, the timestamp at which transactions will _write_. This is
-  // ultimately because of correctness concerns around SNAPSHOT transactions.
-  // Note first that for SERIALIZABLE transactions, the original and commit
-  // timestamps must not diverge, and so an intent which may be committed is
-  // always written when both timestamps coincide.
+  // surprisingly, the timestamp at which transactions will provisionally
+  // _write_ (i.e. intents are written at this orig_timestamp and, after commit,
+  // when the intents are resolved, their timestamps are bumped to the to the
+  // commit timestamp).
+  // This is ultimately because of correctness concerns around SNAPSHOT
+  // transactions.  Note first that for SERIALIZABLE transactions, the original
+  // and commit timestamps must not diverge, and so an intent which may be
+  // committed is always written when both timestamps coincide.
   //
   // For a SNAPSHOT transaction however, this is not the case. Intuitively,
   // one could think that the timestamp at which intents should be written
   // should be the provisional commit timestamp, and while this is morally
   // true, consider the following scenario, where txn1 is a SNAPSHOT txn:
   //
-  // - txn1 at orig_timestamp=5 reads key1: {Amount: 1, Price: 10}
+  // - txn1 at orig_timestamp=5 reads key1: (value) 1.
   // - txn1 writes elsewhere, has its commit timestamp increased to 20.
-  // - txn2 at orig_timestamp=10 reads key1: {Amount: 1, Price: 10}
-  // - txn2 increases Price by 5: {Amount: 1, Price: 15} and commits
-  // - txn1 increases Amount by 1: {Amount: 2, Price: 10}, attempts commit
+  // - txn2 at orig_timestamp=10 reads key1: 1
+  // - txn2 increases the value by 5: key1: 6 and commits
+  // - txn1 increases the value by 1: key1: 2, attempts commit
   //
   // If txn1 uses its orig_timestamp for updating key1 (as it does), it
   // conflicts with txn2's committed value (which is at timestamp 10, in the
   // future of 5), and restarts.
   // Using instead its candidate commit timestamp, it wouldn't see a conflict
-  // and commit, but this is not the expected outcome {Amount: 2, Price: 15}
-  // and we are experiencing the Lost Update Anomaly.
+  // and commit, but this is not the expected outcome (the expected outcome is
+  // {key1: 6} (since txn2 is not expected to commit)) and we would be
+  // experiencing the Lost Update Anomaly.
   //
   // Note that in practice, before restarting, txn1 would still lay down an
   // intent (just above the committed value) not with the intent to commit it,
   // but to avoid being starved by short-lived transactions on that key which
   // would otherwise not have to go through conflict resolution with txn1.
+  //
+  // Again, keep in mind that, when the transaction commits, all the intents are
+  // bumped to the commit timestamp (otherwise, pushing a transaction wouldn't
+  // achieve anything).
   optional util.hlc.Timestamp orig_timestamp = 6 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between timestamp and max_timestamp trigger a txn
