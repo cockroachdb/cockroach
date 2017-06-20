@@ -13311,12 +13311,155 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
+        type Percentiles$Properties = {
+            p10?: number;
+            p25?: number;
+            p50?: number;
+            p75?: number;
+            p90?: number;
+        };
+
+        /**
+         * Constructs a new Percentiles.
+         * @exports cockroach.roachpb.Percentiles
+         * @constructor
+         * @param {cockroach.roachpb.Percentiles$Properties=} [properties] Properties to set
+         */
+        class Percentiles {
+
+            /**
+             * Constructs a new Percentiles.
+             * @exports cockroach.roachpb.Percentiles
+             * @constructor
+             * @param {cockroach.roachpb.Percentiles$Properties=} [properties] Properties to set
+             */
+            constructor(properties?: cockroach.roachpb.Percentiles$Properties);
+
+            /**
+             * Percentiles p10.
+             * @type {number}
+             */
+            public p10: number;
+
+            /**
+             * Percentiles p25.
+             * @type {number}
+             */
+            public p25: number;
+
+            /**
+             * Percentiles p50.
+             * @type {number}
+             */
+            public p50: number;
+
+            /**
+             * Percentiles p75.
+             * @type {number}
+             */
+            public p75: number;
+
+            /**
+             * Percentiles p90.
+             * @type {number}
+             */
+            public p90: number;
+
+            /**
+             * Creates a new Percentiles instance using the specified properties.
+             * @param {cockroach.roachpb.Percentiles$Properties=} [properties] Properties to set
+             * @returns {cockroach.roachpb.Percentiles} Percentiles instance
+             */
+            public static create(properties?: cockroach.roachpb.Percentiles$Properties): cockroach.roachpb.Percentiles;
+
+            /**
+             * Encodes the specified Percentiles message. Does not implicitly {@link cockroach.roachpb.Percentiles.verify|verify} messages.
+             * @param {cockroach.roachpb.Percentiles$Properties} message Percentiles message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encode(message: cockroach.roachpb.Percentiles$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified Percentiles message, length delimited. Does not implicitly {@link cockroach.roachpb.Percentiles.verify|verify} messages.
+             * @param {cockroach.roachpb.Percentiles$Properties} message Percentiles message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encodeDelimited(message: cockroach.roachpb.Percentiles$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a Percentiles message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.roachpb.Percentiles} Percentiles
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.roachpb.Percentiles;
+
+            /**
+             * Decodes a Percentiles message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.roachpb.Percentiles} Percentiles
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.roachpb.Percentiles;
+
+            /**
+             * Verifies a Percentiles message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): string;
+
+            /**
+             * Creates a Percentiles message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.Percentiles} Percentiles
+             */
+            public static fromObject(object: { [k: string]: any }): cockroach.roachpb.Percentiles;
+
+            /**
+             * Creates a Percentiles message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.roachpb.Percentiles.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.Percentiles} Percentiles
+             */
+            public static from(object: { [k: string]: any }): cockroach.roachpb.Percentiles;
+
+            /**
+             * Creates a plain object from a Percentiles message. Also converts values to other types if specified.
+             * @param {cockroach.roachpb.Percentiles} message Percentiles
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public static toObject(message: cockroach.roachpb.Percentiles, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Creates a plain object from this Percentiles message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this Percentiles to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            public toJSON(): { [k: string]: any };
+        }
+
         type StoreCapacity$Properties = {
             capacity?: Long;
             available?: Long;
             range_count?: number;
             lease_count?: number;
             writes_per_second?: number;
+            bytes_per_replica?: cockroach.roachpb.Percentiles$Properties;
+            writes_per_replica?: cockroach.roachpb.Percentiles$Properties;
         };
 
         /**
@@ -13364,6 +13507,18 @@ export namespace cockroach {
              * @type {number}
              */
             public writes_per_second: number;
+
+            /**
+             * StoreCapacity bytes_per_replica.
+             * @type {(cockroach.roachpb.Percentiles$Properties|null)}
+             */
+            public bytes_per_replica: (cockroach.roachpb.Percentiles$Properties|null);
+
+            /**
+             * StoreCapacity writes_per_replica.
+             * @type {(cockroach.roachpb.Percentiles$Properties|null)}
+             */
+            public writes_per_replica: (cockroach.roachpb.Percentiles$Properties|null);
 
             /**
              * Creates a new StoreCapacity instance using the specified properties.

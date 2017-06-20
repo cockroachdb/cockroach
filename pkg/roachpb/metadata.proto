@@ -92,6 +92,16 @@ message RangeDescriptor {
       (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }
 
+// Percentiles contains a handful of hard-coded percentiles meant to summarize
+// some sort of distribution.
+message Percentiles {
+  optional double p10 = 1 [(gogoproto.nullable) = false];
+  optional double p25 = 2 [(gogoproto.nullable) = false];
+  optional double p50 = 3 [(gogoproto.nullable) = false];
+  optional double p75 = 4 [(gogoproto.nullable) = false];
+  optional double p90 = 5 [(gogoproto.nullable) = false];
+}
+
 // StoreCapacity contains capacity information for a storage device.
 message StoreCapacity {
   optional int64 capacity = 1 [(gogoproto.nullable) = false];
@@ -104,6 +114,11 @@ message StoreCapacity {
   // TODO(a-robinson): We can currently only include writes, not reads served
   // by leaseholders. Should we record those too? This may be enabled by #7611.
   optional double writes_per_second = 5 [(gogoproto.nullable) = false];
+  // bytes_per_replica and writes_per_replica contain percentiles for the
+  // number of bytes and writes-per-second to each replica in the store.
+  // This information can be used for rebalancing decisions.
+  optional Percentiles bytes_per_replica = 6 [(gogoproto.nullable) = false];
+  optional Percentiles writes_per_replica = 7 [(gogoproto.nullable) = false];
 }
 
 // NodeDescriptor holds details on node physical/network topology.

@@ -24304,6 +24304,261 @@ export const cockroach = $root.cockroach = (() => {
             return RangeDescriptor;
         })();
 
+        roachpb.Percentiles = (function() {
+
+            /**
+             * Properties of a Percentiles.
+             * @typedef cockroach.roachpb.Percentiles$Properties
+             * @type {Object}
+             * @property {number} [p10] Percentiles p10.
+             * @property {number} [p25] Percentiles p25.
+             * @property {number} [p50] Percentiles p50.
+             * @property {number} [p75] Percentiles p75.
+             * @property {number} [p90] Percentiles p90.
+             */
+
+            /**
+             * Constructs a new Percentiles.
+             * @exports cockroach.roachpb.Percentiles
+             * @constructor
+             * @param {cockroach.roachpb.Percentiles$Properties=} [properties] Properties to set
+             */
+            function Percentiles(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * Percentiles p10.
+             * @type {number}
+             */
+            Percentiles.prototype.p10 = 0;
+
+            /**
+             * Percentiles p25.
+             * @type {number}
+             */
+            Percentiles.prototype.p25 = 0;
+
+            /**
+             * Percentiles p50.
+             * @type {number}
+             */
+            Percentiles.prototype.p50 = 0;
+
+            /**
+             * Percentiles p75.
+             * @type {number}
+             */
+            Percentiles.prototype.p75 = 0;
+
+            /**
+             * Percentiles p90.
+             * @type {number}
+             */
+            Percentiles.prototype.p90 = 0;
+
+            /**
+             * Creates a new Percentiles instance using the specified properties.
+             * @param {cockroach.roachpb.Percentiles$Properties=} [properties] Properties to set
+             * @returns {cockroach.roachpb.Percentiles} Percentiles instance
+             */
+            Percentiles.create = function create(properties) {
+                return new Percentiles(properties);
+            };
+
+            /**
+             * Encodes the specified Percentiles message. Does not implicitly {@link cockroach.roachpb.Percentiles.verify|verify} messages.
+             * @param {cockroach.roachpb.Percentiles$Properties} message Percentiles message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            Percentiles.encode = function encode(message, writer) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (message.p10 != null && message.hasOwnProperty("p10"))
+                    writer.uint32(/* id 1, wireType 1 =*/9).double(message.p10);
+                if (message.p25 != null && message.hasOwnProperty("p25"))
+                    writer.uint32(/* id 2, wireType 1 =*/17).double(message.p25);
+                if (message.p50 != null && message.hasOwnProperty("p50"))
+                    writer.uint32(/* id 3, wireType 1 =*/25).double(message.p50);
+                if (message.p75 != null && message.hasOwnProperty("p75"))
+                    writer.uint32(/* id 4, wireType 1 =*/33).double(message.p75);
+                if (message.p90 != null && message.hasOwnProperty("p90"))
+                    writer.uint32(/* id 5, wireType 1 =*/41).double(message.p90);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified Percentiles message, length delimited. Does not implicitly {@link cockroach.roachpb.Percentiles.verify|verify} messages.
+             * @param {cockroach.roachpb.Percentiles$Properties} message Percentiles message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            Percentiles.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a Percentiles message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.roachpb.Percentiles} Percentiles
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            Percentiles.decode = function decode(reader, length) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.roachpb.Percentiles();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    switch (tag >>> 3) {
+                    case 1:
+                        message.p10 = reader.double();
+                        break;
+                    case 2:
+                        message.p25 = reader.double();
+                        break;
+                    case 3:
+                        message.p50 = reader.double();
+                        break;
+                    case 4:
+                        message.p75 = reader.double();
+                        break;
+                    case 5:
+                        message.p90 = reader.double();
+                        break;
+                    default:
+                        reader.skipType(tag & 7);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a Percentiles message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.roachpb.Percentiles} Percentiles
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            Percentiles.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a Percentiles message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            Percentiles.verify = function verify(message) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (message.p10 != null && message.hasOwnProperty("p10"))
+                    if (typeof message.p10 !== "number")
+                        return "p10: number expected";
+                if (message.p25 != null && message.hasOwnProperty("p25"))
+                    if (typeof message.p25 !== "number")
+                        return "p25: number expected";
+                if (message.p50 != null && message.hasOwnProperty("p50"))
+                    if (typeof message.p50 !== "number")
+                        return "p50: number expected";
+                if (message.p75 != null && message.hasOwnProperty("p75"))
+                    if (typeof message.p75 !== "number")
+                        return "p75: number expected";
+                if (message.p90 != null && message.hasOwnProperty("p90"))
+                    if (typeof message.p90 !== "number")
+                        return "p90: number expected";
+                return null;
+            };
+
+            /**
+             * Creates a Percentiles message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.Percentiles} Percentiles
+             */
+            Percentiles.fromObject = function fromObject(object) {
+                if (object instanceof $root.cockroach.roachpb.Percentiles)
+                    return object;
+                let message = new $root.cockroach.roachpb.Percentiles();
+                if (object.p10 != null)
+                    message.p10 = Number(object.p10);
+                if (object.p25 != null)
+                    message.p25 = Number(object.p25);
+                if (object.p50 != null)
+                    message.p50 = Number(object.p50);
+                if (object.p75 != null)
+                    message.p75 = Number(object.p75);
+                if (object.p90 != null)
+                    message.p90 = Number(object.p90);
+                return message;
+            };
+
+            /**
+             * Creates a Percentiles message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.roachpb.Percentiles.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.Percentiles} Percentiles
+             */
+            Percentiles.from = Percentiles.fromObject;
+
+            /**
+             * Creates a plain object from a Percentiles message. Also converts values to other types if specified.
+             * @param {cockroach.roachpb.Percentiles} message Percentiles
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            Percentiles.toObject = function toObject(message, options) {
+                if (!options)
+                    options = {};
+                let object = {};
+                if (options.defaults) {
+                    object.p10 = 0;
+                    object.p25 = 0;
+                    object.p50 = 0;
+                    object.p75 = 0;
+                    object.p90 = 0;
+                }
+                if (message.p10 != null && message.hasOwnProperty("p10"))
+                    object.p10 = message.p10;
+                if (message.p25 != null && message.hasOwnProperty("p25"))
+                    object.p25 = message.p25;
+                if (message.p50 != null && message.hasOwnProperty("p50"))
+                    object.p50 = message.p50;
+                if (message.p75 != null && message.hasOwnProperty("p75"))
+                    object.p75 = message.p75;
+                if (message.p90 != null && message.hasOwnProperty("p90"))
+                    object.p90 = message.p90;
+                return object;
+            };
+
+            /**
+             * Creates a plain object from this Percentiles message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            Percentiles.prototype.toObject = function toObject(options) {
+                return this.constructor.toObject(this, options);
+            };
+
+            /**
+             * Converts this Percentiles to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            Percentiles.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            return Percentiles;
+        })();
+
         roachpb.StoreCapacity = (function() {
 
             /**
@@ -24315,6 +24570,8 @@ export const cockroach = $root.cockroach = (() => {
              * @property {number} [range_count] StoreCapacity range_count.
              * @property {number} [lease_count] StoreCapacity lease_count.
              * @property {number} [writes_per_second] StoreCapacity writes_per_second.
+             * @property {cockroach.roachpb.Percentiles$Properties} [bytes_per_replica] StoreCapacity bytes_per_replica.
+             * @property {cockroach.roachpb.Percentiles$Properties} [writes_per_replica] StoreCapacity writes_per_replica.
              */
 
             /**
@@ -24361,6 +24618,18 @@ export const cockroach = $root.cockroach = (() => {
             StoreCapacity.prototype.writes_per_second = 0;
 
             /**
+             * StoreCapacity bytes_per_replica.
+             * @type {(cockroach.roachpb.Percentiles$Properties|null)}
+             */
+            StoreCapacity.prototype.bytes_per_replica = null;
+
+            /**
+             * StoreCapacity writes_per_replica.
+             * @type {(cockroach.roachpb.Percentiles$Properties|null)}
+             */
+            StoreCapacity.prototype.writes_per_replica = null;
+
+            /**
              * Creates a new StoreCapacity instance using the specified properties.
              * @param {cockroach.roachpb.StoreCapacity$Properties=} [properties] Properties to set
              * @returns {cockroach.roachpb.StoreCapacity} StoreCapacity instance
@@ -24388,6 +24657,10 @@ export const cockroach = $root.cockroach = (() => {
                     writer.uint32(/* id 4, wireType 0 =*/32).int32(message.lease_count);
                 if (message.writes_per_second != null && message.hasOwnProperty("writes_per_second"))
                     writer.uint32(/* id 5, wireType 1 =*/41).double(message.writes_per_second);
+                if (message.bytes_per_replica != null && message.hasOwnProperty("bytes_per_replica"))
+                    $root.cockroach.roachpb.Percentiles.encode(message.bytes_per_replica, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
+                if (message.writes_per_replica != null && message.hasOwnProperty("writes_per_replica"))
+                    $root.cockroach.roachpb.Percentiles.encode(message.writes_per_replica, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
                 return writer;
             };
 
@@ -24430,6 +24703,12 @@ export const cockroach = $root.cockroach = (() => {
                         break;
                     case 5:
                         message.writes_per_second = reader.double();
+                        break;
+                    case 6:
+                        message.bytes_per_replica = $root.cockroach.roachpb.Percentiles.decode(reader, reader.uint32());
+                        break;
+                    case 7:
+                        message.writes_per_replica = $root.cockroach.roachpb.Percentiles.decode(reader, reader.uint32());
                         break;
                     default:
                         reader.skipType(tag & 7);
@@ -24475,6 +24754,16 @@ export const cockroach = $root.cockroach = (() => {
                 if (message.writes_per_second != null && message.hasOwnProperty("writes_per_second"))
                     if (typeof message.writes_per_second !== "number")
                         return "writes_per_second: number expected";
+                if (message.bytes_per_replica != null && message.hasOwnProperty("bytes_per_replica")) {
+                    let error = $root.cockroach.roachpb.Percentiles.verify(message.bytes_per_replica);
+                    if (error)
+                        return "bytes_per_replica." + error;
+                }
+                if (message.writes_per_replica != null && message.hasOwnProperty("writes_per_replica")) {
+                    let error = $root.cockroach.roachpb.Percentiles.verify(message.writes_per_replica);
+                    if (error)
+                        return "writes_per_replica." + error;
+                }
                 return null;
             };
 
@@ -24511,6 +24800,16 @@ export const cockroach = $root.cockroach = (() => {
                     message.lease_count = object.lease_count | 0;
                 if (object.writes_per_second != null)
                     message.writes_per_second = Number(object.writes_per_second);
+                if (object.bytes_per_replica != null) {
+                    if (typeof object.bytes_per_replica !== "object")
+                        throw TypeError(".cockroach.roachpb.StoreCapacity.bytes_per_replica: object expected");
+                    message.bytes_per_replica = $root.cockroach.roachpb.Percentiles.fromObject(object.bytes_per_replica);
+                }
+                if (object.writes_per_replica != null) {
+                    if (typeof object.writes_per_replica !== "object")
+                        throw TypeError(".cockroach.roachpb.StoreCapacity.writes_per_replica: object expected");
+                    message.writes_per_replica = $root.cockroach.roachpb.Percentiles.fromObject(object.writes_per_replica);
+                }
                 return message;
             };
 
@@ -24547,6 +24846,8 @@ export const cockroach = $root.cockroach = (() => {
                     object.range_count = 0;
                     object.lease_count = 0;
                     object.writes_per_second = 0;
+                    object.bytes_per_replica = null;
+                    object.writes_per_replica = null;
                 }
                 if (message.capacity != null && message.hasOwnProperty("capacity"))
                     if (typeof message.capacity === "number")
@@ -24564,6 +24865,10 @@ export const cockroach = $root.cockroach = (() => {
                     object.lease_count = message.lease_count;
                 if (message.writes_per_second != null && message.hasOwnProperty("writes_per_second"))
                     object.writes_per_second = message.writes_per_second;
+                if (message.bytes_per_replica != null && message.hasOwnProperty("bytes_per_replica"))
+                    object.bytes_per_replica = $root.cockroach.roachpb.Percentiles.toObject(message.bytes_per_replica, options);
+                if (message.writes_per_replica != null && message.hasOwnProperty("writes_per_replica"))
+                    object.writes_per_replica = $root.cockroach.roachpb.Percentiles.toObject(message.writes_per_replica, options);
                 return object;
             };
 

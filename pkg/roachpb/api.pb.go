@@ -147,6 +147,7 @@
 		ReplicaDescriptor
 		ReplicaIdent
 		RangeDescriptor
+		Percentiles
 		StoreCapacity
 		NodeDescriptor
 		StoreDescriptor
