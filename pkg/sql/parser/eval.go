@@ -1428,6 +1428,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(TypeInterval),
 		makeEvalTupleIn(TypeUUID),
 		makeEvalTupleIn(TypeTuple),
+		makeEvalTupleIn(TypeOid),
 	},
 
 	Like: {
