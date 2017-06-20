@@ -223,8 +223,8 @@ func BenchmarkRestoreBig(b *testing.B) {
 		b.ResetTimer()
 		log.Infof(ctx, "starting restore to %s", dbName)
 		r.Exec(fmt.Sprintf(`RESTORE TABLE data.* FROM $1 WITH OPTIONS ('into_db'='%s')`, dbName), restoreURI)
-		b.SetBytes(desc.DataSize / int64(b.N))
-		log.Infof(ctx, "restored %s", humanizeutil.IBytes(desc.DataSize))
+		b.SetBytes(desc.EntryCounts.DataSize / int64(b.N))
+		log.Infof(ctx, "restored %s", humanizeutil.IBytes(desc.EntryCounts.DataSize))
 		b.StopTimer()
 	})
 }
@@ -306,7 +306,7 @@ func BenchmarkBackup2TB(b *testing.B) {
 	row := db.QueryRow(`BACKUP DATABASE datablocks TO $1`, backupBaseURI.String())
 	var unused string
 	var dataSize int64
-	if err := row.Scan(&unused, &unused, &unused, &dataSize); err != nil {
+	if err := row.Scan(&unused, &unused, &unused, &unused, &unused, &unused, &dataSize); err != nil {
 		bt.b.Fatal(err)
 	}
 	b.SetBytes(dataSize)
