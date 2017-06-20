@@ -49,6 +49,9 @@ func TestPGError(t *testing.T) {
 	pErr := NewError(code, msg)
 	checkErr(pErr, msg)
 
+	pErr = NewError(code, "bad%format")
+	checkErr(pErr, "bad%format")
+
 	// Test NewErrorf.
 	const prefix = "prefix"
 	pErr = NewErrorf(code, "%s: %s", prefix, msg)
