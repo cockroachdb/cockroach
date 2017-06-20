@@ -992,7 +992,7 @@ opt_validate_behavior:
   }
 
 opt_collate_clause:
-  COLLATE unrestricted_name { return unimplementedWithIssue(sqllex, 2473) }
+  COLLATE unrestricted_name { return unimplementedWithIssue(sqllex, 9851) }
 | /* EMPTY */ {}
 
 alter_using:
@@ -2281,7 +2281,7 @@ index_elem:
 | '(' a_expr ')' opt_collate opt_asc_desc { return unimplemented(sqllex, "index_elem a_expr") }
 
 opt_collate:
-  COLLATE unrestricted_name { return unimplementedWithIssue(sqllex, 2473) }
+  COLLATE unrestricted_name { return unimplementedWithIssue(sqllex, 16619) }
 | /* EMPTY */ {}
 
 opt_asc_desc:

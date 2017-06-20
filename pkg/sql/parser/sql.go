@@ -6212,7 +6212,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:995
 		{
-			return unimplementedWithIssue(sqllex, 2473)
+			return unimplementedWithIssue(sqllex, 9851)
 		}
 	case 60:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
@@ -7777,7 +7777,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2258
 		{
-			return unimplementedWithIssue(sqllex, 2473)
+			return unimplementedWithIssue(sqllex, 16619)
 		}
 	case 337:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
