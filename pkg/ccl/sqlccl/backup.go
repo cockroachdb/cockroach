@@ -353,7 +353,7 @@ func Backup(
 	mu := struct {
 		syncutil.Mutex
 		files    []BackupDescriptor_File
-		dataSize int64
+		exported roachpb.BulkOpSummary
 	}{}
 
 	progressLogger := jobProgressLogger{
@@ -419,7 +419,7 @@ func Backup(
 					Path:   file.Path,
 					Sha512: file.Sha512,
 				})
-				mu.dataSize += file.DataSize
+				mu.exported.Add(file.Exported)
 			}
 			mu.Unlock()
 			if err := progressLogger.chunkFinished(ctx); err != nil {
@@ -435,7 +435,7 @@ func Backup(
 	if err = g.Wait(); err != nil {
 		return BackupDescriptor{}, errors.Wrapf(err, "exporting %d ranges", len(spans))
 	}
-	files, dataSize := mu.files, mu.dataSize // No more concurrency, so this is safe.
+	files, summary := mu.files, mu.exported // No more concurrency, so this is safe.
 
 	desc := BackupDescriptor{
 		StartTime:     startTime,
@@ -443,7 +443,7 @@ func Backup(
 		Descriptors:   sqlDescs,
 		Spans:         spans,
 		Files:         files,
-		DataSize:      dataSize,
+		EntryCounts:   summary,
 		FormatVersion: BackupFormatInitialVersion,
 		BuildInfo:     build.GetInfo(),
 		NodeID:        p.ExecCfg().NodeID.Get(),
@@ -491,6 +491,9 @@ func backupPlanHook(
 		{Name: "job_id", Typ: parser.TypeInt},
 		{Name: "status", Typ: parser.TypeString},
 		{Name: "fraction_completed", Typ: parser.TypeFloat},
+		{Name: "rows", Typ: parser.TypeInt},
+		{Name: "index_entries", Typ: parser.TypeInt},
+		{Name: "system_records", Typ: parser.TypeInt},
 		{Name: "bytes", Typ: parser.TypeInt},
 	}
 	fn := func() ([]parser.Datums, error) {
@@ -555,7 +558,10 @@ func backupPlanHook(
 			parser.NewDInt(parser.DInt(*jobLogger.JobID())),
 			parser.NewDString(string(jobs.JobStatusSucceeded)),
 			parser.NewDFloat(parser.DFloat(1.0)),
-			parser.NewDInt(parser.DInt(desc.DataSize)),
+			parser.NewDInt(parser.DInt(desc.EntryCounts.Rows)),
+			parser.NewDInt(parser.DInt(desc.EntryCounts.IndexEntries)),
+			parser.NewDInt(parser.DInt(desc.EntryCounts.SystemRecords)),
+			parser.NewDInt(parser.DInt(desc.EntryCounts.DataSize)),
 		}}
 		return ret, nil
 	}
