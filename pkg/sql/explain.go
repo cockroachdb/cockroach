@@ -137,7 +137,7 @@ func (p *planner) Explain(ctx context.Context, n *parser.Explain) (planNode, err
 	}
 	switch mode {
 	case explainDebug:
-		return &explainDebugNode{plan}, nil
+		return &explainDebugNode{plan: plan}, nil
 
 	case explainDistSQL:
 		return &explainDistSQLNode{
@@ -204,6 +204,7 @@ type debugValues struct {
 // explainDebugNode is a planNode that wraps another node and converts DebugValues() results to a
 // row of Values(). It is used as the top-level node for EXPLAIN (DEBUG) statements.
 type explainDebugNode struct {
+	optColumnsSlot
 	plan planNode
 }
 
@@ -241,6 +242,8 @@ func (*explainDebugNode) DebugValues() debugValues { return debugValues{} }
 // explainDistSQLNode is a planNode that wraps a plan and returns
 // information related to running that plan under DistSQL.
 type explainDistSQLNode struct {
+	optColumnsSlot
+
 	plan           planNode
 	distSQLPlanner *distSQLPlanner
 

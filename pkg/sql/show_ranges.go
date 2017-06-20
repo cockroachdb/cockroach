@@ -52,6 +52,8 @@ func (p *planner) ShowRanges(ctx context.Context, n *parser.ShowRanges) (planNod
 }
 
 type showRangesNode struct {
+	optColumnsSlot
+
 	p    *planner
 	span roachpb.Span
 
