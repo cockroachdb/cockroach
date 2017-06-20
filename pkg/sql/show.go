@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -573,22 +574,100 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 // ShowTrace shows the current stored session trace.
 // Privileges: None.
 func (p *planner) ShowTrace(ctx context.Context, n *parser.ShowTrace) (planNode, error) {
-	if n.Statement == nil {
-		// SHOW SESSION TRACE: just a regular query.
-		const getTrace = `TABLE crdb_internal.session_trace`
-		stmt, err := parser.ParseOne(getTrace)
-		if err != nil {
-			return nil, err
-		}
-		return p.newPlan(ctx, stmt, nil)
+	const traceClause = `
+SELECT timestamp,
+       timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
+       message,
+       context,
+       operation,
+       span
+  FROM (SELECT timestamp,
+               regexp_replace(message, e'^.*\\[[^]]*\\] ', '') AS message,
+               regexp_extract(message, e'^.*\\[[^]]*\\]') AS context,
+               first_value(operation) OVER (PARTITION BY txn_idx, span_idx ORDER BY message_idx) as operation,
+               (txn_idx, span_idx) AS span
+          FROM crdb_internal.session_trace)
+ %s
+ ORDER BY timestamp
+`
+	const kvWhereClause = `
+`
+	whereClause := ""
+	if n.OnlyKVTrace {
+		whereClause = `
+WHERE message LIKE 'fetched: %'
+   OR message LIKE 'CPut %'
+   OR message LIKE 'Put %'
+   OR message LIKE 'DelRange %'
+   OR message LIKE 'Del %'
+   OR message LIKE 'Get %'
+   OR message = 'consuming rows'
+   OR message = 'starting plan'
+   OR message LIKE 'fast path - %'
+   OR message LIKE 'querying next range at %'
+   OR message LIKE 'output row: %'
+   OR message LIKE 'execution failed: %'
+   OR message LIKE 'r%: sending batch %'
+`
 	}
 
-	// SHOW TRACE FOR SELECT ...
-	plan, err := p.newPlan(ctx, n.Statement, nil)
+	stmt, err := parser.ParseOne(fmt.Sprintf(traceClause, whereClause))
 	if err != nil {
 		return nil, err
 	}
-	return p.makeTraceNode(plan)
+
+	plan, err := p.newPlan(ctx, stmt, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if n.Statement == nil {
+		// SHOW SESSION TRACE ...
+		return plan, nil
+	}
+
+	// SHOW TRACE FOR SELECT ...
+	stmtPlan, err := p.newPlan(ctx, n.Statement, nil)
+	if err != nil {
+		plan.Close(ctx)
+		return nil, err
+	}
+	tracePlan, err := p.makeTraceNode(stmtPlan)
+	if err != nil {
+		plan.Close(ctx)
+		stmtPlan.Close(ctx)
+		return nil, err
+	}
+	// inject the tracePlan inside the SHOW query plan.
+	done := false
+	if s, ok := plan.(*sortNode); ok {
+		if w, ok := s.plan.(*windowNode); ok {
+			if r, ok := w.plan.(*renderNode); ok {
+				subPlan := r.source.plan
+				if f, ok := subPlan.(*filterNode); ok {
+					// The filter layer is only present when the KV modifier is
+					// specified.
+					subPlan = f.source.plan
+				}
+				if w, ok := subPlan.(*windowNode); ok {
+					if r, ok := w.plan.(*renderNode); ok {
+						if _, ok := r.source.plan.(*delayedNode); ok {
+							r.source.plan.Close(ctx)
+							r.source.plan = tracePlan
+							done = true
+						}
+					}
+				}
+			}
+		}
+	}
+	if !done {
+		plan.Close(ctx)
+		stmtPlan.Close(ctx)
+		tracePlan.Close(ctx)
+		return nil, pgerror.NewError(pgerror.CodeInternalError, "invalid logical plan structure")
+	}
+	return plan, nil
 }
 
 // ShowDatabases returns all the databases.

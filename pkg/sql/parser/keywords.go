@@ -132,6 +132,7 @@ var keywords = map[string]int{
 	"JOIN":                      JOIN,
 	"KEY":                       KEY,
 	"KEYS":                      KEYS,
+	"KV":                        KV,
 	"LATERAL":                   LATERAL,
 	"LC_COLLATE":                LC_COLLATE,
 	"LC_CTYPE":                  LC_CTYPE,
