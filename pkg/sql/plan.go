@@ -276,6 +276,10 @@ func (p *planner) newPlan(
 		return p.AlterTable(ctx, n)
 	case *parser.BeginTransaction:
 		return p.BeginTransaction(n)
+	case *parser.CancelQuery:
+		return p.CancelQuery(ctx, n)
+	case *parser.CancelJob:
+		return p.CancelJob(ctx, n)
 	case CopyDataBlock:
 		return p.CopyData(ctx, n)
 	case *parser.CopyFrom:
@@ -312,6 +316,8 @@ func (p *planner) newPlan(
 		return p.Insert(ctx, n, desiredTypes)
 	case *parser.ParenSelect:
 		return p.newPlan(ctx, n.Select, desiredTypes)
+	case *parser.PauseJob:
+		return p.PauseJob(ctx, n)
 	case *parser.Relocate:
 		return p.Relocate(ctx, n)
 	case *parser.RenameColumn:
@@ -322,6 +328,8 @@ func (p *planner) newPlan(
 		return p.RenameIndex(ctx, n)
 	case *parser.RenameTable:
 		return p.RenameTable(ctx, n)
+	case *parser.ResumeJob:
+		return p.ResumeJob(ctx, n)
 	case *parser.Revoke:
 		return p.Revoke(ctx, n)
 	case *parser.Scatter:
