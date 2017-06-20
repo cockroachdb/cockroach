@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -50,6 +51,46 @@ func declareKeysExport(
 ) {
 	storage.DefaultDeclareKeys(desc, header, req, spans)
 	spans.Add(storage.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+}
+
+type rowCounter struct {
+	prev roachpb.Key
+	roachpb.BulkOpSummary
+}
+
+func (r *rowCounter) count(key roachpb.Key) error {
+	row, err := keys.EnsureSafeSplitKey(key)
+	if err != nil {
+		return err
+	}
+
+	if bytes.Equal(row, r.prev) {
+		return nil // no change key prefix, uninteresting.
+	}
+
+	if len(key) == len(row) {
+		return nil // not a sql record, nothing more to count.
+	}
+
+	rest, tbl, err := keys.DecodeTablePrefix(row)
+	if err != nil {
+		return err
+	}
+
+	if tbl < keys.MaxReservedDescID {
+		r.SystemRecords++
+		return nil
+	}
+
+	if _, indexID, err := encoding.DecodeUvarintAscending(rest); err != nil {
+		return err
+	} else if indexID == 1 {
+		r.Rows++
+	} else {
+		r.IndexEntries++
+	}
+	r.prev = append(r.prev[:0], row...)
+	return nil
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges
@@ -97,6 +138,7 @@ func evalExport(
 	}
 	defer sst.Close()
 
+	var rows rowCounter
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
 	iter := engineccl.NewMVCCIncrementalIterator(batch, args.StartTime, h.Timestamp)
@@ -106,6 +148,10 @@ func evalExport(
 			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
 			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
 		}
+		if err := rows.count(iter.UnsafeKey().Key); err != nil {
+			return storage.EvalResult{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
+		}
+
 		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
 			return storage.EvalResult{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
 		}
@@ -121,7 +167,7 @@ func evalExport(
 		reply.Files = []roachpb.ExportResponse_File{}
 		return storage.EvalResult{}, nil
 	}
-	size := sst.DataSize
+	rows.BulkOpSummary.DataSize = sst.DataSize
 
 	sstContents, err := sst.Finish()
 	if err != nil {
@@ -142,7 +188,7 @@ func evalExport(
 	reply.Files = []roachpb.ExportResponse_File{{
 		Span:     args.Span,
 		Path:     filename,
-		DataSize: size,
+		Exported: rows.BulkOpSummary,
 		Sha512:   checksum,
 	}}
 

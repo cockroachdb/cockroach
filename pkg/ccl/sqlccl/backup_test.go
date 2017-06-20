@@ -140,7 +140,7 @@ func verifyBackupRestoreStatementResult(
 		return err
 	}
 	if e, a := columns, []string{
-		"job_id", "status", "fraction_completed", "bytes",
+		"job_id", "status", "fraction_completed", "rows", "index_entries", "system_records", "bytes",
 	}; !reflect.DeepEqual(e, a) {
 		return errors.Errorf("unexpected columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
 	}
@@ -158,7 +158,9 @@ func verifyBackupRestoreStatementResult(
 	if !rows.Next() {
 		return errors.New("zero rows in result")
 	}
-	if err := rows.Scan(&actualJob.id, &actualJob.status, &actualJob.fractionCompleted, &unused); err != nil {
+	if err := rows.Scan(
+		&actualJob.id, &actualJob.status, &actualJob.fractionCompleted, &unused, &unused, &unused, &unused,
+	); err != nil {
 		return err
 	}
 	if rows.Next() {
@@ -272,23 +274,29 @@ func backupAndRestore(
 		})
 
 		var unused string
-		var bytes int64
+		var exported struct {
+			rows, idx, sys, bytes int64
+		}
 		sqlDB.QueryRow(`BACKUP DATABASE data TO $1`, dest).Scan(
-			&unused, &unused, &unused, &bytes,
+			&unused, &unused, &unused, &exported.rows, &exported.idx, &exported.sys, &exported.bytes,
 		)
 		// When numAccounts == 0, our approxBytes formula breaks down because
 		// backups of no data still contain the system.users and system.descriptor
 		// tables. Just skip the check in this case.
 		if numAccounts > 0 {
 			approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
-			if max := approxBytes * 3; bytes < approxBytes || bytes > max {
-				t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, bytes)
+			if max := approxBytes * 3; exported.bytes < approxBytes || exported.bytes > max {
+				t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, exported.bytes)
 			}
+		}
+		// NB: < rather than ==, because e.g. tombstones add to "row" counts.
+		if expected := int64(numAccounts * 1); exported.rows < expected {
+			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, exported.rows)
 		}
 		if _, err := sqlDB.DB.Exec(`BACKUP DATABASE data TO $1`, dest); !testutils.IsError(err,
 			"already appears to exist",
 		) {
-			t.Fatalf("expeted to refused to overwrite, got %v", err)
+			t.Fatalf("expected to refuse to overwrite, got %v", err)
 		}
 	}
 
@@ -310,13 +318,22 @@ func backupAndRestore(
 		sqlDBRestore.Exec(`CREATE TABLE data.empty (a INT PRIMARY KEY)`)
 
 		var unused string
-		var bytes int64
+		var restored struct {
+			rows, idx, sys, bytes int64
+		}
+
 		sqlDBRestore.QueryRow(`RESTORE data.* FROM $1`, dest).Scan(
-			&unused, &unused, &unused, &bytes,
+			&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 		)
 		approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
-		if max := approxBytes * 3; bytes < approxBytes || bytes > max {
-			t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, bytes)
+		if max := approxBytes * 3; restored.bytes < approxBytes || restored.bytes > max {
+			t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, restored.bytes)
+		}
+		if expected := int64(numAccounts); restored.rows != expected {
+			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, restored.rows)
+		}
+		if expected := int64(numAccounts); restored.idx != expected {
+			t.Fatalf("expected %d idx rows for %d accounts, got %d", expected, numAccounts, restored.idx)
 		}
 
 		var rowCount int64
