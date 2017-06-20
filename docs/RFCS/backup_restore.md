@@ -207,6 +207,185 @@ output of `./cockroach dump` and `pgdump`.
 See [Alternatives](#overlapping-ingest-segments) for details on how we'll remove
 the restrictions that the segments be non-overlapping.
 
+## Resumability
+
+Since large backups and restores can take on the order of hours, if not days,
+automatically resuming the backup or restore when the coordinating node dies is
+essential for their reliability. At present, all knowledge of backup or restore
+progress is stored in memory on the coordinating node and vanishes when that
+node crashes, even though that progress would be immediately usable by another
+node in the cluster.
+
+Once we can tolerate coordinator failure, two other important improvements
+become trivial to implement:
+
+  * `PAUSE` and `RESUME` commands can be exposed to operators. Providing these
+    commands means minimizing the performance impact of backups and restores
+    less pressing, as operators can simply pause a disruptive job while the
+    cluster is busy, then resume it when the cluster has spare cycles.
+
+  * Cloud provider service outages can be weathered without chewing up system
+    resources by introducing an exponential backoff of several hours. Upon
+    observing multiple cloud provider errors, the coordinator can mark the job
+    as e.g. "paused until two hours from now" and clean up its goroutines,
+    relying on the job daemon (see below) to resume the job.
+
+The implementation of this feature will be similar to how schema changes
+implement resumability. In short, each node will run a job daemon that
+periodically adopts orphaned jobs by scanning the `system.jobs` table. At first,
+only backup and restore will use this job daemon, but we'll eventually port
+schema changes to use this job daemon too so that there's only one component in
+the system responsible for resuming long-running jobs.
+
+To prevent two nodes from attempting to adopt the same job, the `JobPayload`
+message will be extended with a `JobLease` field:
+
+```protobuf
+message JobLease {
+  optional uint32 node_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // The epoch of the lease holder's node liveness entry.
+  optional int64 epoch = 2 [(gogoproto.nullable) = false];
+}
+
+message JobPayload {
+  // ...
+  JobLease lease = 9;
+}
+```
+
+When a job is started or adopted, the coordinating node will install a
+`JobLease` with the node's liveness epoch. If the node's liveness lease expires,
+so does all of its job leases. This is how [epoch-based range leases
+work](range_leases.md).
+
+To find orphaned jobs, the job daemon periodically executes
+
+```sql
+SELECT id, payload FROM system.jobs WHERE status = 'running' ORDER BY created DESC;
+```
+
+which can use the secondary index on `status, created`, then decodes the
+`payload`, which contains the `JobLease`. The daemon will attempt to adopt the
+first job (i.e., the oldest job) whose lease have expired by writing a new
+job lease in the same transaction as the above `SELECT`. This ensures that two
+nodes do not acquire the same lease.
+
+Note that leases are a performance optimization only, as they are with schema
+changes, as a race condition still exists. The node which previously held the
+lease might still be performing work, having not yet realized that its lease has
+expired. This is extremely unlikely, but still possible—consider a network
+request that hangs for several minutes before completing, for example. Thus, it
+must be safe for two nodes to perform the work of the backup or restore
+simultaneously, but it need not be efficient.
+
+Once the daemon has acquired the lease of an orphaned job, it launches a new
+backup or restore coordinator that picks up where the old coordinator left off.
+How progress information is persisted between coordinators depends on the type
+of job.
+
+## Restore state
+
+The naïve implementation of restore progress would keep track of every completed
+`Import`. The worst-case space requirements of this approach are unfortunate:
+O(n) in the number of ranges in the restore. For a 2TB restore with
+2<sup>16</sup> ranges and 16-byte split keys, this would require storing several
+_megabytes_ of progress information. Storing this progress information in the
+`system.jobs` table would require rewriting this several-megabyte blob on every
+checkpoint, so we'd have to introduce a a separate SQL table, e.g. `CREATE TABLE
+system.jobs_progress (job_id INT, startKey BYTES, endKey BYTES)`.
+
+Instead, we'll rely on the fact that `ImportRequest`s are processed roughly in
+order and keep track of the low-water mark—the maximum key before which all
+`ImportRequests` have completed—in the `system.jobs` table. Whenever we update
+the job progress (currently, every second or every 5%), we'll also update the
+low-water mark. The logical place to store this low-water mark is the
+`RestoreJobDetails` message:
+
+```
+message RestoreJobDetails {
+  int64 table_id = 1;
+  bytes low_water_mark = 2;
+}
+```
+
+Resuming a restore, then, simply requires throwing away all `Import`s that refer
+to keys beneath the low-water mark. If this scheme proves problematic, e.g.
+because, with some regularity, early `Import`s get stuck and prevent the
+low-water mark from rising, we can move to a more complicated scheme, like a
+highly-compressed interval tree.
+
+Importantly, because of the race condition described above, we need to be sure
+that two restores can safely run concurrently. In short, this amounts to
+ensuring that all interleavings of identical `Import` commands against the same
+range are safe.
+
+`Import`s currently issue `WriteBatch` commands under the hood, but will soon
+issue `AddSSTable` commands instead. In both cases, these commands clear
+any existing data in the key span they touch. This is not dangerous in the
+current, non-resumable implementation because these commands are only issued on
+key spans that are inaccessible through SQL—the table descriptor that exposes
+these key spans to SQL is not installed until all `Import` commands have
+completed. With resumability, however, we can no longer guarantee that all
+`Import` commands have completed before writing the table descriptor.
+
+Consider a restore that wedges just before it issues its last `WriteBatch`
+command. After a few minutes, its lease expires, so another node adopts the
+restore, completes the `WriteBatch` command, and exposes the table to SQL.
+Suppose that the user, thankful to have their data back, immediately performs
+some `INSERT`s and `UPDATE`s on the restored table. It's possible that the
+original restore will unwedge and issue one last `WriteBatch` command before
+realizing its lease has expired. If we're unlucky, this `WriteBatch` will wipe
+out the data the user has just written.
+
+This is a rather tricky problem to solve, since neither `WriteBatch` or
+`AddSSTable` executes in the context of a transaction with commit
+deadlines. One heavyweight solution is to imbue each range with a
+`IsWriteBatchAllowed` flag, set the flag when the restore starts, and clear the
+flag before exposing the table to SQL. Then, a wedged restore would be unable to
+execute `WriteBatch` commands. This is quite a bit of overhead to prevent such
+an unlikely race condition.
+
+Instead, we propose to modify `WriteBatch` and/or `AddSSTable` to leave
+existing data untouched. With these semantics, even if a lagging restore issues
+a `WriteBatch`/`AddSSTable` against a range in an exposed table, it will
+harmlessly overwrite the restored data with exactly the same data, while leaving
+new user data alone.
+
+## Backup state
+
+Keeping track of backup state _requires_ O(n) space in the number of ranges in
+the backup, as the coordinator must know the name of each range's SST to write
+the final `BACKUP` descriptor. Since backups already require persistent remote
+storage, we can use this same remote storage to maintain progress information
+while the backup is in progress.
+
+While the backup is in progress, the coordinator will write all completed
+`ExportRequests` (i.e., `BackupDescriptor_File` messages) to a `PROGRESS` file
+in the backup directory every few minutes. Streaming these messages or appending
+them to an existing blob would avoid rewriting several megabytes on every
+checkpoint and allow for more frequent checkpoints, but a) this would greatly
+expand the `ExportStorage` interface, and b) most cloud storage providers don't
+support streaming uploads or append-only blobs anyway. These cloud storage
+providers, however, *are* more than than capable of handling rewriting several
+megabytes of data every few minutes.
+
+Resuming a backup, then, requires downloading the list of completed
+`ExportRequest`s from the `PROGRESS` file, then proceeding with all remaining
+`ExportRequest`s.
+
+Solving the resumability race condition for backups is easy: the race condition
+doesn't impact correctness. If two backups both attempt to write the `PROGRESS`
+file, one will clobber the other. This is fine: it just means the `PROGRESS`
+file is incomplete and a future coordinator may end up redoing more work than
+necessary. (On Azure, which has actual append support, the `PROGRESS` file will
+contain duplicate entries; we'll teach the coordinator to pick one at random.)
+If two backups both attempt to write the `BACKUP` file, one will clobber the
+other, but they're both valid `BACKUP` descriptors, so this is also fine.
+
 # Drawbacks
 
 - This is not realtime backup.
