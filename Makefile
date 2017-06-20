@@ -233,8 +233,8 @@ stress stressrace: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
 
 .PHONY: upload-coverage
 upload-coverage: $(BOOTSTRAP_TARGET)
-	$(GO) install ./vendor/github.com/wadey/gocovmerge
-	$(GO) install ./vendor/github.com/mattn/goveralls
+	$(GO) install $(REPO_ROOT)/vendor/github.com/wadey/gocovmerge
+	$(GO) install $(REPO_ROOT)/vendor/github.com/mattn/goveralls
 	@build/upload-coverage.sh
 
 .PHONY: acceptance
