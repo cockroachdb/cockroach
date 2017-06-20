@@ -1,0 +1,361 @@
+# Prepare a trace to be inspected below.
+
+statement ok
+SET trace = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET trace = off;
+
+# Inspect the trace: we exclude messages containing newlines as these
+# may contain non-deterministic txn object descriptions.
+# This also checks that the span column properly reports separate
+# SQL transactions.
+query TTT
+SELECT span, message, operation FROM [SHOW SESSION TRACE] WHERE message NOT LIKE e'%\n%'
+----
+(0,0)  === SPAN START: sql txn implicit ===  sql txn implicit
+(1,0)  === SPAN START: sql txn ===           sql txn implicit
+(1,0)  executing 1/5: BEGIN TRANSACTION      sql txn implicit
+(1,0)  executing 2/5: SELECT 1               sql txn implicit
+(1,0)  executing 3/5: COMMIT TRANSACTION     sql txn implicit
+(2,0)  === SPAN START: sql txn implicit ===  sql txn implicit
+(2,0)  executing 1/1: SELECT 2               sql txn implicit
+(3,0)  === SPAN START: sql txn implicit ===  sql txn implicit
+(3,0)  executing 1/1: SET trace = 'off'      sql txn implicit
+
+# Same, with SHOW TRACE FOR.
+# This also tests that sub-spans are reported properly.
+
+query TTT
+SELECT span, message, operation FROM [SHOW TRACE FOR SELECT 1]
+----
+(0,0)  === SPAN START: sql txn implicit ===  sql txn implicit
+(0,1)  === SPAN START: starting plan ===     starting plan
+(0,2)  === SPAN START: consuming rows ===    consuming rows
+(0,2)  output row: [1]                       consuming rows
+(0,2)  plan completed execution              consuming rows
+(0,2)  resources released, stopping trace    consuming rows
+
+# Check SHOW SESSION KV TRACE.
+
+statement ok
+SET trace = on,kv; CREATE DATABASE t; SET trace = off
+
+# Check the KV trace; we need to remove the eventlog entry since the
+# timestamp is non-deterministic.
+query TTT
+SELECT span, operation, message FROM [SHOW SESSION KV TRACE] WHERE message NOT LIKE '%Z/%'
+----
+(1,0)  sql txn implicit  querying next range at /Table/2/1/0/"t"/3/1
+(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn implicit  querying next range at /System/"desc-idgen"
+(1,0)  sql txn implicit  r1: sending batch 1 Inc, 1 BeginTxn to (n1,s1):1
+(1,0)  sql txn implicit  CPut /Table/2/1/0/"t"/3/1 -> 51
+(1,0)  sql txn implicit  CPut /Table/3/1/51/2/1 -> database:<name:"t" id:51 privileges:<users:<user:"root" privileges:2 > > >
+(1,0)  sql txn implicit  querying next range at /Table/2/1/0/"t"/3/1
+(1,0)  sql txn implicit  r1: sending batch 2 CPut to (n1,s1):1
+(1,0)  sql txn implicit  querying next range at /Table/2/1/0/"system"/3/1
+(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn implicit  querying next range at /Table/3/1/1/2/1
+(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn implicit  querying next range at /Table/2/1/1/"eventlog"/3/1
+(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn implicit  querying next range at /Table/3/1/12/2/1
+(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn implicit  querying next range at /Table/3/1/1/2/1
+(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn implicit  r1: sending batch 5 CPut to (n1,s1):1
+(1,0)  sql txn implicit  querying next range at /Table/0/0
+(1,0)  sql txn implicit  r1: sending batch 1 EndTxn to (n1,s1):1
+
+
+# More KV operations.
+
+query TTT
+SELECT span, operation, message FROM [SHOW KV TRACE FOR CREATE TABLE t.kv(k INT PRIMARY KEY, v INT)] WHERE message NOT LIKE '%Z/%'
+----
+(0,1)  starting plan  querying next range at /Table/2/1/51/"kv"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /System/"desc-idgen"
+(0,1)  starting plan  r1: sending batch 1 Inc, 1 BeginTxn to (n1,s1):1
+(0,1)  starting plan  CPut /Table/2/1/51/"kv"/3/1 -> 52
+(0,1)  starting plan  CPut /Table/3/1/52/2/1 -> table:<name:"kv" id:52 parent_id:51 version:1 up_version:false modification_time:<wall_time:0 logical:0 > columns:<name:"k" id:1 type:<kind:INT width:0 precision:0 > nullable:false hidden:false > columns:<name:"v" id:2 type:<kind:INT width:0 precision:0 > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 > interleave:<> > next_index_id:2 privileges:<users:<user:"root" privileges:2 > > next_mutation_id:1 format_version:InterleavedFormatVersion state:PUBLIC view_query:"" >
+(0,1)  starting plan  querying next range at /Table/2/1/51/"kv"/3/1
+(0,1)  starting plan  r1: sending batch 2 CPut to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/51/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/1/"eventlog"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/12/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  r1: sending batch 5 CPut to (n1,s1):1
+
+query TTT
+SELECT span, operation, regexp_replace(regexp_replace(message, 'mutationJobs:<[^>]*>', 'mutationJobs:<...>'), 'wall_time:\d+', 'wall_time:...') as message
+  FROM [SHOW KV TRACE FOR CREATE UNIQUE INDEX woo ON t.kv(v)] WHERE message NOT LIKE '%Z/%'
+----
+(0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/1/"jobs"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/15/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/0/0
+(0,1)  starting plan  r1: sending batch 2 CPut, 1 BeginTxn to (n1,s1):1
+(0,1)  starting plan  Put /Table/3/1/52/2/1 -> table:<name:"kv" id:52 parent_id:51 version:1 up_version:true modification_time:<wall_time:... logical:0 > columns:<name:"k" id:1 type:<kind:INT width:0 precision:0 > nullable:false hidden:false > columns:<name:"v" id:2 type:<kind:INT width:0 precision:0 > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 > interleave:<> > next_index_id:3 privileges:<users:<user:"root" privileges:2 > > mutations:<index:<name:"woo" id:2 unique:true column_names:"v" column_directions:ASC column_ids:2 extra_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 > interleave:<> > state:DELETE_ONLY direction:ADD mutation_id:1 resume_spans:<key:"\274\211" end_key:"\274\212" > > next_mutation_id:2 format_version:InterleavedFormatVersion state:PUBLIC view_query:"" mutationJobs:<...> >
+(0,1)  starting plan  querying next range at /Table/3/1/52/2/1
+(0,1)  starting plan  r1: sending batch 1 Put to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/1/"eventlog"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/12/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  r1: sending batch 5 CPut to (n1,s1):1
+
+query TTT
+SELECT span, operation, message FROM [SHOW KV TRACE FOR INSERT INTO t.kv(k, v) VALUES (1,2)]
+----
+(0,0)  sql txn implicit  CPut /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
+(0,0)  sql txn implicit  CPut /Table/52/2/2/0 -> /BYTES/‰
+(0,2)  consuming rows    output row: []
+(0,0)  sql txn implicit  querying next range at /Table/52/1/1/0
+(0,0)  sql txn implicit  r1: sending batch 2 CPut, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+
+query TTT
+SELECT span, operation, message FROM [SHOW KV TRACE FOR INSERT INTO t.kv(k, v) VALUES (1,2)]
+----
+(0,0)  sql txn implicit  CPut /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
+(0,0)  sql txn implicit  CPut /Table/52/2/2/0 -> /BYTES/‰
+(0,2)  consuming rows    output row: []
+(0,0)  sql txn implicit  querying next range at /Table/52/1/1/0
+(0,0)  sql txn implicit  r1: sending batch 2 CPut, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+(0,2)  consuming rows    execution failed: duplicate key value (k)=(1) violates unique constraint "primary"
+
+query TTT
+SELECT span, operation, message FROM [SHOW KV TRACE FOR INSERT INTO t.kv(k, v) VALUES (2,2)]
+----
+(0,0)  sql txn implicit  CPut /Table/52/1/2/0 -> /TUPLE/2:2:Int/2
+(0,0)  sql txn implicit  CPut /Table/52/2/2/0 -> /BYTES/Š
+(0,2)  consuming rows    output row: []
+(0,0)  sql txn implicit  querying next range at /Table/52/1/2/0
+(0,0)  sql txn implicit  r1: sending batch 2 CPut, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+(0,2)  consuming rows    execution failed: duplicate key value (v)=(2) violates unique constraint "woo"
+
+query TTT
+SELECT span, operation, message FROM [SHOW KV TRACE FOR UPSERT INTO t.kv(k, v) VALUES (2,3)]
+----
+(0,2)  consuming rows    output row: []
+(0,0)  sql txn implicit  querying next range at /Table/52/1/2
+(0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
+(0,0)  sql txn implicit  CPut /Table/52/1/2/0 -> /TUPLE/2:2:Int/3
+(0,0)  sql txn implicit  CPut /Table/52/2/3/0 -> /BYTES/Š
+(0,0)  sql txn implicit  querying next range at /Table/52/1/2/0
+(0,0)  sql txn implicit  r1: sending batch 2 CPut, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+
+query TTT
+SELECT span, operation, message FROM [SHOW KV TRACE FOR UPSERT INTO t.kv(k, v) VALUES (1,2)]
+----
+(0,2)  consuming rows    output row: []
+(0,0)  sql txn implicit  querying next range at /Table/52/1/1
+(0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
+(0,0)  sql txn implicit  fetched: /kv/primary/1/v -> /2
+(0,0)  sql txn implicit  Put /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
+(0,0)  sql txn implicit  querying next range at /Table/52/1/1/0
+(0,0)  sql txn implicit  r1: sending batch 1 Put, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+
+query TTT
+SELECT span, operation, message FROM [SHOW KV TRACE FOR UPSERT INTO t.kv(k, v) VALUES (2,2)]
+----
+(0,2)  consuming rows    output row: []
+(0,0)  sql txn implicit  querying next range at /Table/52/1/2
+(0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
+(0,0)  sql txn implicit  fetched: /kv/primary/2/v -> /3
+(0,0)  sql txn implicit  Put /Table/52/1/2/0 -> /TUPLE/2:2:Int/2
+(0,0)  sql txn implicit  Del /Table/52/2/3/0
+(0,0)  sql txn implicit  CPut /Table/52/2/2/0 -> /BYTES/Š
+(0,0)  sql txn implicit  querying next range at /Table/52/1/2/0
+(0,0)  sql txn implicit  r1: sending batch 1 Put, 1 CPut, 1 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+(0,2)  consuming rows    execution failed: duplicate key value (v)=(2) violates unique constraint "woo"
+
+query TTT
+SELECT span, operation, regexp_replace(message, '\d\d\d\d\d+', '...PK...') as message
+  FROM [SHOW KV TRACE FOR CREATE TABLE t.kv2 AS TABLE t.kv] WHERE message NOT LIKE '%Z/%'
+----
+(0,1)  starting plan  querying next range at /Table/2/1/51/"kv2"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /System/"desc-idgen"
+(0,1)  starting plan  r1: sending batch 1 Inc, 1 BeginTxn to (n1,s1):1
+(0,1)  starting plan  CPut /Table/2/1/51/"kv2"/3/1 -> 53
+(0,1)  starting plan  CPut /Table/3/1/53/2/1 -> table:<name:"kv2" id:53 parent_id:51 version:1 up_version:false modification_time:<wall_time:0 logical:0 > columns:<name:"k" id:1 type:<kind:INT width:0 precision:0 > nullable:true hidden:false > columns:<name:"v" id:2 type:<kind:INT width:0 precision:0 > nullable:true hidden:false > columns:<name:"rowid" id:3 type:<kind:INT width:0 precision:0 > nullable:false default_expr:"unique_rowid()" hidden:true > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"rowid" column_directions:ASC column_ids:3 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 > interleave:<> > next_index_id:2 privileges:<users:<user:"root" privileges:2 > > next_mutation_id:1 format_version:InterleavedFormatVersion state:PUBLIC view_query:"" >
+(0,1)  starting plan  querying next range at /Table/2/1/51/"kv2"/3/1
+(0,1)  starting plan  r1: sending batch 2 CPut to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/51/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/1/"eventlog"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/12/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  r1: sending batch 5 CPut to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/51/"kv2"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/53/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/1/"lease"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/11/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  r1: sending batch 1 CPut, 1 BeginTxn to (n1,s1):1
+(0,1)  starting plan  r1: sending batch 1 EndTxn to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/52/1
+(0,1)  starting plan  r1: sending batch 1 Scan to (n1,s1):1
+(0,1)  starting plan  fetched: /kv/primary/1/v -> /2
+(0,1)  starting plan  CPut /Table/53/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/2
+(0,1)  starting plan  fetched: /kv/primary/2/v -> /3
+(0,1)  starting plan  CPut /Table/53/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/3
+(0,1)  starting plan  querying next range at /Table/0/0
+(0,1)  starting plan  r1: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+
+query TTT
+SELECT span, operation, regexp_replace(message, '\d\d\d\d\d+', '...PK...') as message
+  FROM [SHOW KV TRACE FOR UPDATE t.kv2 SET v = v + 2]
+----
+(0,0)  sql txn implicit  querying next range at /Table/53/1
+(0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
+(0,0)  sql txn implicit  fetched: /kv2/primary/...PK.../k/v -> /1/2
+(0,0)  sql txn implicit  Put /Table/53/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/4
+(0,2)  consuming rows    output row: [...PK... 1 4]
+(0,0)  sql txn implicit  fetched: /kv2/primary/...PK.../k/v -> /2/3
+(0,0)  sql txn implicit  Put /Table/53/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/5
+(0,2)  consuming rows    output row: [...PK... 2 5]
+(0,0)  sql txn implicit  querying next range at /Table/53/1/...PK.../0
+(0,0)  sql txn implicit  r1: sending batch 2 Put, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+
+query TTT
+SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv2]
+----
+(0,1)  starting plan   querying next range at /Table/53/1
+(0,1)  starting plan   r1: sending batch 1 Scan to (n1,s1):1
+(0,1)  starting plan   DelRange /Table/53/1 - /Table/53/2
+(0,1)  starting plan   querying next range at /Table/53/1
+(0,1)  starting plan   r1: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+(0,6)  consuming rows  fast path - rows affected: 2
+
+query TTT
+SELECT span, operation, message FROM [SHOW KV TRACE FOR DROP TABLE t.kv2] WHERE message NOT LIKE '%Z/%'
+----
+(0,1)  starting plan  Put /Table/3/1/53/2/1 -> table:<name:"kv2" id:53 parent_id:51 version:1 up_version:true modification_time:<wall_time:0 logical:0 > columns:<name:"k" id:1 type:<kind:INT width:0 precision:0 > nullable:true hidden:false > columns:<name:"v" id:2 type:<kind:INT width:0 precision:0 > nullable:true hidden:false > columns:<name:"rowid" id:3 type:<kind:INT width:0 precision:0 > nullable:false default_expr:"unique_rowid()" hidden:true > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"rowid" column_directions:ASC column_ids:3 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 > interleave:<> > next_index_id:2 privileges:<users:<user:"root" privileges:2 > > next_mutation_id:1 format_version:InterleavedFormatVersion state:DROP view_query:"" >
+(0,1)  starting plan  querying next range at /Table/0/0
+(0,1)  starting plan  r1: sending batch 1 Put, 1 BeginTxn to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/1/"eventlog"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/12/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  r1: sending batch 5 CPut to (n1,s1):1
+
+query TTT
+SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv]
+----
+(0,0)  sql txn implicit  querying next range at /Table/52/1
+(0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
+(0,0)  sql txn implicit  fetched: /kv/primary/1/v -> /2
+(0,0)  sql txn implicit  Del /Table/52/2/2/0
+(0,0)  sql txn implicit  DelRange /Table/52/1/1 - /Table/52/1/1/#
+(0,2)  consuming rows    output row: [1 2]
+(0,0)  sql txn implicit  fetched: /kv/primary/2/v -> /3
+(0,0)  sql txn implicit  Del /Table/52/2/3/0
+(0,0)  sql txn implicit  DelRange /Table/52/1/2 - /Table/52/1/2/#
+(0,2)  consuming rows    output row: [2 3]
+(0,0)  sql txn implicit  querying next range at /Table/52/1/1
+(0,0)  sql txn implicit  r1: sending batch 2 Del, 2 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+
+query TTT
+SELECT span, operation, regexp_replace(regexp_replace(message, 'mutationJobs:<[^>]*>', 'mutationJobs:<...>'), 'wall_time:\d+', 'wall_time:...') as message
+  FROM [SHOW KV TRACE FOR DROP INDEX t.kv@woo] WHERE message NOT LIKE '%Z/%'
+----
+(0,1)  starting plan  querying next range at /Table/2/1/0/"t"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/51/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/51/"kv"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/52/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/51/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/51/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/1/"jobs"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/15/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/0/0
+(0,1)  starting plan  r1: sending batch 2 CPut, 1 BeginTxn to (n1,s1):1
+(0,1)  starting plan  Put /Table/3/1/52/2/1 -> table:<name:"kv" id:52 parent_id:51 version:4 up_version:true modification_time:<wall_time:... logical:0 > columns:<name:"k" id:1 type:<kind:INT width:0 precision:0 > nullable:false hidden:false > columns:<name:"v" id:2 type:<kind:INT width:0 precision:0 > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 > interleave:<> > next_index_id:3 privileges:<users:<user:"root" privileges:2 > > mutations:<index:<name:"woo" id:2 unique:true column_names:"v" column_directions:ASC column_ids:2 extra_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 > interleave:<> > state:DELETE_AND_WRITE_ONLY direction:DROP mutation_id:2 resume_spans:<key:"\274\211" end_key:"\274\212" > > next_mutation_id:3 format_version:InterleavedFormatVersion state:PUBLIC view_query:"" mutationJobs:<...> >
+(0,1)  starting plan  querying next range at /Table/3/1/52/2/1
+(0,1)  starting plan  r1: sending batch 1 Put to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/1/"eventlog"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/12/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  r1: sending batch 5 CPut to (n1,s1):1
+
+query TTT
+SELECT span, operation, regexp_replace(regexp_replace(message, 'mutationJobs:<[^>]*>', 'mutationJobs:<...>'), 'wall_time:\d+', 'wall_time:...') as message
+  FROM [SHOW KV TRACE FOR DROP TABLE t.kv] WHERE message NOT LIKE '%Z/%'
+----
+(0,1)  starting plan  Put /Table/3/1/52/2/1 -> table:<name:"kv" id:52 parent_id:51 version:7 up_version:true modification_time:<wall_time:... logical:0 > columns:<name:"k" id:1 type:<kind:INT width:0 precision:0 > nullable:false hidden:false > columns:<name:"v" id:2 type:<kind:INT width:0 precision:0 > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 > interleave:<> > next_index_id:3 privileges:<users:<user:"root" privileges:2 > > next_mutation_id:3 format_version:InterleavedFormatVersion state:DROP view_query:"" >
+(0,1)  starting plan  querying next range at /Table/0/0
+(0,1)  starting plan  r1: sending batch 1 Put, 1 BeginTxn to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/2/1/1/"eventlog"/3/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/12/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  querying next range at /Table/3/1/1/2/1
+(0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
+(0,1)  starting plan  r1: sending batch 5 CPut to (n1,s1):1
