@@ -210,7 +210,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	log.Infof(ctx, "import [%s,%s)", importStart, importEnd)
 
 	var rows rowCounter
-	var iters []engine.Iterator
+	var iters []engine.SimpleIterator
 	for _, file := range args.Files {
 		if log.V(2) {
 			log.Infof(ctx, "import file [%s,%s) %s", importStart, importEnd, file.Path)
@@ -252,17 +252,10 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			}
 		}
 
-		sst := engine.MakeRocksDBSstFileReader()
-		defer sst.Close()
-
-		// Add each file in its own sst reader because IngestExternalFile
-		// requires the affected keyrange be empty and the keys in these files
-		// might overlap.
-		if err := sst.IngestExternalFile(fileContents); err != nil {
+		iter, err := engineccl.NewMemSSTIterator(fileContents)
+		if err != nil {
 			return nil, err
 		}
-
-		iter := sst.NewIterator(false)
 		defer iter.Close()
 		iters = append(iters, iter)
 	}
@@ -291,9 +284,16 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	g, gCtx := errgroup.WithContext(ctx)
 	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: args.DataSpan.Key}, engine.MVCCKey{Key: args.DataSpan.EndKey}
 	iter := engineccl.MakeMultiIterator(iters)
+	defer iter.Close()
 	var keyScratch, valueScratch []byte
-
-	for iter.Seek(startKeyMVCC); iter.Valid() && iter.UnsafeKey().Less(endKeyMVCC); iter.NextKey() {
+	for iter.Seek(startKeyMVCC); ; iter.NextKey() {
+		ok, err := iter.Valid()
+		if err != nil {
+			return nil, err
+		}
+		if !ok || !iter.UnsafeKey().Less(endKeyMVCC) {
+			break
+		}
 		if len(iter.UnsafeValue()) == 0 {
 			// Value is deleted.
 			continue
@@ -304,8 +304,6 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		key := engine.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
 		value := roachpb.Value{RawBytes: valueScratch}
 
-		var ok bool
-		var err error
 		key.Key, ok, err = kr.RewriteKey(key.Key)
 		if err != nil {
 			return nil, err
@@ -346,9 +344,6 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 				return nil, err
 			}
 		}
-	}
-	if err := iter.Error(); err != nil {
-		return nil, err
 	}
 	// Flush out the last batch.
 	if batcher.Size() > 0 {
