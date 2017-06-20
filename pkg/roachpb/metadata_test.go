@@ -65,6 +65,47 @@ func TestAttributesSortedString(t *testing.T) {
 	}
 }
 
+func TestPercentilesFromData(t *testing.T) {
+	testCases := []struct {
+		data      []float64
+		percents  []float64
+		expecteds []float64
+	}{
+		{
+			[]float64{},
+			[]float64{-10, 0, 10, 25, 50, 75, 90, 100, 110},
+			[]float64{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		},
+		{
+			[]float64{5},
+			[]float64{-10, 0, 10, 25, 50, 75, 90, 100, 110},
+			[]float64{5, 5, 5, 5, 5, 5, 5, 5, 5},
+		},
+		{
+			[]float64{1, 2},
+			[]float64{-10, 0, 10, 25, 50, 75, 90, 100, 110},
+			[]float64{1, 1, 1, 1, 2, 2, 2, 2, 2},
+		},
+		{
+			[]float64{1, 2, 3},
+			[]float64{-10, 0, 10, 25, 50, 75, 90, 100, 110},
+			[]float64{1, 1, 1, 1, 2, 3, 3, 3, 3},
+		},
+		{
+			[]float64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			[]float64{-10, 0, 10, 25, 50, 75, 90, 100, 110},
+			[]float64{0, 0, 1, 2, 5, 8, 9, 10, 10},
+		},
+	}
+	for _, tc := range testCases {
+		for i := range tc.percents {
+			if actual := percentileFromSortedData(tc.data, tc.percents[i]); actual != tc.expecteds[i] {
+				t.Errorf("percentile(%v, %f) got %f, want %f", tc.data, tc.percents[i], actual, tc.expecteds[i])
+			}
+		}
+	}
+}
+
 func TestRangeDescriptorFindReplica(t *testing.T) {
 	desc := RangeDescriptor{
 		Replicas: []ReplicaDescriptor{

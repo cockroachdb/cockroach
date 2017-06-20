@@ -41,6 +41,9 @@ extern LocalityDefaultTypeInternal _Locality_default_instance_;
 class NodeDescriptor;
 class NodeDescriptorDefaultTypeInternal;
 extern NodeDescriptorDefaultTypeInternal _NodeDescriptor_default_instance_;
+class Percentiles;
+class PercentilesDefaultTypeInternal;
+extern PercentilesDefaultTypeInternal _Percentiles_default_instance_;
 class RangeDescriptor;
 class RangeDescriptorDefaultTypeInternal;
 extern RangeDescriptorDefaultTypeInternal _RangeDescriptor_default_instance_;
@@ -643,6 +646,131 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
 };
 // -------------------------------------------------------------------
 
+class Percentiles : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Percentiles) */ {
+ public:
+  Percentiles();
+  virtual ~Percentiles();
+
+  Percentiles(const Percentiles& from);
+
+  inline Percentiles& operator=(const Percentiles& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::std::string& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::std::string* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const Percentiles& default_instance();
+
+  static inline const Percentiles* internal_default_instance() {
+    return reinterpret_cast<const Percentiles*>(
+               &_Percentiles_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    5;
+
+  void Swap(Percentiles* other);
+
+  // implements Message ----------------------------------------------
+
+  inline Percentiles* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  Percentiles* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    PROTOBUF_FINAL;
+  void CopyFrom(const Percentiles& from);
+  void MergeFrom(const Percentiles& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  void DiscardUnknownFields();
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(Percentiles* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_p10() const;
+  void clear_p10();
+  static const int kP10FieldNumber = 1;
+  double p10() const;
+  void set_p10(double value);
+
+  bool has_p25() const;
+  void clear_p25();
+  static const int kP25FieldNumber = 2;
+  double p25() const;
+  void set_p25(double value);
+
+  bool has_p50() const;
+  void clear_p50();
+  static const int kP50FieldNumber = 3;
+  double p50() const;
+  void set_p50(double value);
+
+  bool has_p75() const;
+  void clear_p75();
+  static const int kP75FieldNumber = 4;
+  double p75() const;
+  void set_p75(double value);
+
+  bool has_p90() const;
+  void clear_p90();
+  static const int kP90FieldNumber = 5;
+  double p90() const;
+  void set_p90(double value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.Percentiles)
+ private:
+  void set_has_p10();
+  void clear_has_p10();
+  void set_has_p25();
+  void clear_has_p25();
+  void set_has_p50();
+  void clear_has_p50();
+  void set_has_p75();
+  void clear_has_p75();
+  void set_has_p90();
+  void clear_has_p90();
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::HasBits<1> _has_bits_;
+  mutable int _cached_size_;
+  double p10_;
+  double p25_;
+  double p50_;
+  double p75_;
+  double p90_;
+  friend struct protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.StoreCapacity) */ {
  public:
   StoreCapacity();
@@ -670,7 +798,7 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_StoreCapacity_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    5;
+    6;
 
   void Swap(StoreCapacity* other);
 
@@ -712,6 +840,22 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   // nested types ----------------------------------------------------
 
   // accessors -------------------------------------------------------
+
+  bool has_bytes_per_replica() const;
+  void clear_bytes_per_replica();
+  static const int kBytesPerReplicaFieldNumber = 6;
+  const ::cockroach::roachpb::Percentiles& bytes_per_replica() const;
+  ::cockroach::roachpb::Percentiles* mutable_bytes_per_replica();
+  ::cockroach::roachpb::Percentiles* release_bytes_per_replica();
+  void set_allocated_bytes_per_replica(::cockroach::roachpb::Percentiles* bytes_per_replica);
+
+  bool has_writes_per_replica() const;
+  void clear_writes_per_replica();
+  static const int kWritesPerReplicaFieldNumber = 7;
+  const ::cockroach::roachpb::Percentiles& writes_per_replica() const;
+  ::cockroach::roachpb::Percentiles* mutable_writes_per_replica();
+  ::cockroach::roachpb::Percentiles* release_writes_per_replica();
+  void set_allocated_writes_per_replica(::cockroach::roachpb::Percentiles* writes_per_replica);
 
   bool has_capacity() const;
   void clear_capacity();
@@ -755,10 +899,16 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   void clear_has_lease_count();
   void set_has_writes_per_second();
   void clear_has_writes_per_second();
+  void set_has_bytes_per_replica();
+  void clear_has_bytes_per_replica();
+  void set_has_writes_per_replica();
+  void clear_has_writes_per_replica();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable int _cached_size_;
+  ::cockroach::roachpb::Percentiles* bytes_per_replica_;
+  ::cockroach::roachpb::Percentiles* writes_per_replica_;
   ::google::protobuf::int64 capacity_;
   ::google::protobuf::int64 available_;
   ::google::protobuf::int32 range_count_;
@@ -795,7 +945,7 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_NodeDescriptor_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    6;
+    7;
 
   void Swap(NodeDescriptor* other);
 
@@ -917,7 +1067,7 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_StoreDescriptor_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    7;
+    8;
 
   void Swap(StoreDescriptor* other);
 
@@ -1039,7 +1189,7 @@ class StoreDeadReplicas : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_StoreDeadReplicas_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    8;
+    9;
 
   void Swap(StoreDeadReplicas* other);
 
@@ -1140,7 +1290,7 @@ class Locality : public ::google::protobuf::MessageLite /* @@protoc_insertion_po
                &_Locality_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    9;
+    10;
 
   void Swap(Locality* other);
 
@@ -1232,7 +1382,7 @@ class Tier : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(
                &_Tier_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    10;
+    11;
 
   void Swap(Tier* other);
 
@@ -1792,16 +1942,135 @@ inline void RangeDescriptor::set_next_replica_id(::google::protobuf::int32 value
 
 // -------------------------------------------------------------------
 
+// Percentiles
+
+inline bool Percentiles::has_p10() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void Percentiles::set_has_p10() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void Percentiles::clear_has_p10() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void Percentiles::clear_p10() {
+  p10_ = 0;
+  clear_has_p10();
+}
+inline double Percentiles::p10() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Percentiles.p10)
+  return p10_;
+}
+inline void Percentiles::set_p10(double value) {
+  set_has_p10();
+  p10_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Percentiles.p10)
+}
+
+inline bool Percentiles::has_p25() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void Percentiles::set_has_p25() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void Percentiles::clear_has_p25() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void Percentiles::clear_p25() {
+  p25_ = 0;
+  clear_has_p25();
+}
+inline double Percentiles::p25() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Percentiles.p25)
+  return p25_;
+}
+inline void Percentiles::set_p25(double value) {
+  set_has_p25();
+  p25_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Percentiles.p25)
+}
+
+inline bool Percentiles::has_p50() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void Percentiles::set_has_p50() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void Percentiles::clear_has_p50() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void Percentiles::clear_p50() {
+  p50_ = 0;
+  clear_has_p50();
+}
+inline double Percentiles::p50() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Percentiles.p50)
+  return p50_;
+}
+inline void Percentiles::set_p50(double value) {
+  set_has_p50();
+  p50_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Percentiles.p50)
+}
+
+inline bool Percentiles::has_p75() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void Percentiles::set_has_p75() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void Percentiles::clear_has_p75() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void Percentiles::clear_p75() {
+  p75_ = 0;
+  clear_has_p75();
+}
+inline double Percentiles::p75() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Percentiles.p75)
+  return p75_;
+}
+inline void Percentiles::set_p75(double value) {
+  set_has_p75();
+  p75_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Percentiles.p75)
+}
+
+inline bool Percentiles::has_p90() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void Percentiles::set_has_p90() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void Percentiles::clear_has_p90() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void Percentiles::clear_p90() {
+  p90_ = 0;
+  clear_has_p90();
+}
+inline double Percentiles::p90() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Percentiles.p90)
+  return p90_;
+}
+inline void Percentiles::set_p90(double value) {
+  set_has_p90();
+  p90_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Percentiles.p90)
+}
+
+// -------------------------------------------------------------------
+
 // StoreCapacity
 
 inline bool StoreCapacity::has_capacity() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void StoreCapacity::set_has_capacity() {
-  _has_bits_[0] |= 0x00000001u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void StoreCapacity::clear_has_capacity() {
-  _has_bits_[0] &= ~0x00000001u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void StoreCapacity::clear_capacity() {
   capacity_ = GOOGLE_LONGLONG(0);
@@ -1818,13 +2087,13 @@ inline void StoreCapacity::set_capacity(::google::protobuf::int64 value) {
 }
 
 inline bool StoreCapacity::has_available() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void StoreCapacity::set_has_available() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void StoreCapacity::clear_has_available() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void StoreCapacity::clear_available() {
   available_ = GOOGLE_LONGLONG(0);
@@ -1841,13 +2110,13 @@ inline void StoreCapacity::set_available(::google::protobuf::int64 value) {
 }
 
 inline bool StoreCapacity::has_range_count() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void StoreCapacity::set_has_range_count() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void StoreCapacity::clear_has_range_count() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void StoreCapacity::clear_range_count() {
   range_count_ = 0;
@@ -1864,13 +2133,13 @@ inline void StoreCapacity::set_range_count(::google::protobuf::int32 value) {
 }
 
 inline bool StoreCapacity::has_lease_count() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void StoreCapacity::set_has_lease_count() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void StoreCapacity::clear_has_lease_count() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void StoreCapacity::clear_lease_count() {
   lease_count_ = 0;
@@ -1887,13 +2156,13 @@ inline void StoreCapacity::set_lease_count(::google::protobuf::int32 value) {
 }
 
 inline bool StoreCapacity::has_writes_per_second() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
 inline void StoreCapacity::set_has_writes_per_second() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000040u;
 }
 inline void StoreCapacity::clear_has_writes_per_second() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000040u;
 }
 inline void StoreCapacity::clear_writes_per_second() {
   writes_per_second_ = 0;
@@ -1907,6 +2176,94 @@ inline void StoreCapacity::set_writes_per_second(double value) {
   set_has_writes_per_second();
   writes_per_second_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.writes_per_second)
+}
+
+inline bool StoreCapacity::has_bytes_per_replica() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void StoreCapacity::set_has_bytes_per_replica() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void StoreCapacity::clear_has_bytes_per_replica() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void StoreCapacity::clear_bytes_per_replica() {
+  if (bytes_per_replica_ != NULL) bytes_per_replica_->::cockroach::roachpb::Percentiles::Clear();
+  clear_has_bytes_per_replica();
+}
+inline const ::cockroach::roachpb::Percentiles& StoreCapacity::bytes_per_replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.bytes_per_replica)
+  return bytes_per_replica_ != NULL ? *bytes_per_replica_
+                         : *::cockroach::roachpb::Percentiles::internal_default_instance();
+}
+inline ::cockroach::roachpb::Percentiles* StoreCapacity::mutable_bytes_per_replica() {
+  set_has_bytes_per_replica();
+  if (bytes_per_replica_ == NULL) {
+    bytes_per_replica_ = new ::cockroach::roachpb::Percentiles;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.StoreCapacity.bytes_per_replica)
+  return bytes_per_replica_;
+}
+inline ::cockroach::roachpb::Percentiles* StoreCapacity::release_bytes_per_replica() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.StoreCapacity.bytes_per_replica)
+  clear_has_bytes_per_replica();
+  ::cockroach::roachpb::Percentiles* temp = bytes_per_replica_;
+  bytes_per_replica_ = NULL;
+  return temp;
+}
+inline void StoreCapacity::set_allocated_bytes_per_replica(::cockroach::roachpb::Percentiles* bytes_per_replica) {
+  delete bytes_per_replica_;
+  bytes_per_replica_ = bytes_per_replica;
+  if (bytes_per_replica) {
+    set_has_bytes_per_replica();
+  } else {
+    clear_has_bytes_per_replica();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.StoreCapacity.bytes_per_replica)
+}
+
+inline bool StoreCapacity::has_writes_per_replica() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void StoreCapacity::set_has_writes_per_replica() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void StoreCapacity::clear_has_writes_per_replica() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void StoreCapacity::clear_writes_per_replica() {
+  if (writes_per_replica_ != NULL) writes_per_replica_->::cockroach::roachpb::Percentiles::Clear();
+  clear_has_writes_per_replica();
+}
+inline const ::cockroach::roachpb::Percentiles& StoreCapacity::writes_per_replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.writes_per_replica)
+  return writes_per_replica_ != NULL ? *writes_per_replica_
+                         : *::cockroach::roachpb::Percentiles::internal_default_instance();
+}
+inline ::cockroach::roachpb::Percentiles* StoreCapacity::mutable_writes_per_replica() {
+  set_has_writes_per_replica();
+  if (writes_per_replica_ == NULL) {
+    writes_per_replica_ = new ::cockroach::roachpb::Percentiles;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.StoreCapacity.writes_per_replica)
+  return writes_per_replica_;
+}
+inline ::cockroach::roachpb::Percentiles* StoreCapacity::release_writes_per_replica() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.StoreCapacity.writes_per_replica)
+  clear_has_writes_per_replica();
+  ::cockroach::roachpb::Percentiles* temp = writes_per_replica_;
+  writes_per_replica_ = NULL;
+  return temp;
+}
+inline void StoreCapacity::set_allocated_writes_per_replica(::cockroach::roachpb::Percentiles* writes_per_replica) {
+  delete writes_per_replica_;
+  writes_per_replica_ = writes_per_replica;
+  if (writes_per_replica) {
+    set_has_writes_per_replica();
+  } else {
+    clear_has_writes_per_replica();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.StoreCapacity.writes_per_replica)
 }
 
 // -------------------------------------------------------------------
@@ -2445,6 +2802,8 @@ inline void Tier::set_allocated_value(::std::string* value) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
