@@ -406,7 +406,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %token <str>   JOIN
 
-%token <str>   KEY KEYS
+%token <str>   KEY KEYS KV
 
 %token <str>   LATERAL LC_CTYPE LC_COLLATE
 %token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOCAL
@@ -1703,9 +1703,17 @@ show_stmt:
   {
     $$.val = &ShowTrace{Statement: nil}
   }
+| SHOW SESSION KV TRACE
+  {
+    $$.val = &ShowTrace{Statement: nil, OnlyKVTrace: true}
+  }
 | SHOW TRACE FOR preparable_stmt
   {
     $$.val = &ShowTrace{Statement: $4.stmt()}
+  }
+| SHOW KV TRACE FOR preparable_stmt
+  {
+    $$.val = &ShowTrace{Statement: $5.stmt(), OnlyKVTrace: true }
   }
 | SHOW SESSIONS
   {
@@ -5343,6 +5351,7 @@ unreserved_keyword:
 | ISOLATION
 | KEY
 | KEYS
+| KV
 | LC_COLLATE
 | LC_CTYPE
 | LEVEL

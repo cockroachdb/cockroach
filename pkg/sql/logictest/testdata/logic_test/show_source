@@ -223,27 +223,12 @@ CREATE INDEX ix ON foo(x); SELECT * FROM [SHOW TESTING_RANGES FROM INDEX foo@ix]
 Start Key  End Key  Replicas  Lease Holder
 NULL       NULL     {1}       1
 
-query IIITTTT colnames
+query TTTTTT colnames
 SELECT * FROM [SHOW SESSION TRACE]
 ----
-txn_idx  span_idx  message_idx  timestamp  duration  operation  message
+timestamp age message context operation span
 
-# Tracing
-
-# Prepare a trace to be inspected below.
-# We set up the transaction explicitly outside of the trace
-# so as to avoid txn set-up and tear-down noise in this test.
-statement ok
-BEGIN; SET trace = on; SELECT 1; SET trace = off; COMMIT
-
-query IIIT
-SELECT txn_idx, span_idx, message_idx, operation FROM [SHOW SESSION TRACE]
+query TTTTTT colnames
+SELECT * FROM [SHOW TRACE FOR SELECT 1] LIMIT 0
 ----
-0     0  0  sql txn
-NULL  0  1  NULL
-NULL  0  2  NULL
-
-query IIITT
-SELECT txn_idx, span_idx, message_idx, operation, message FROM [SHOW SESSION TRACE] LIMIT 1
-----
-0  0  0  sql txn  === SPAN START: sql txn ===
+timestamp age message context operation span

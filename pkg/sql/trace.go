@@ -79,6 +79,12 @@ func (n *traceNode) Close(ctx context.Context) {
 		n.plan.Close(ctx)
 	}
 	n.traceRows = nil
+	if n.p.session.Tracing.Enabled() {
+		// Start has already ran and enabled tracing. Stop it.
+		if err := stopTracing(n.p.session); err != nil {
+			log.Errorf(ctx, "error stopping tracing at end of SHOW TRACE FOR: %v", err)
+		}
+	}
 }
 
 func (n *traceNode) Next(ctx context.Context) (bool, error) {
@@ -90,18 +96,27 @@ func (n *traceNode) Next(ctx context.Context) (bool, error) {
 			consumeCtx, sp := tracing.ChildSpan(ctx, "consuming rows")
 			defer sp.Finish()
 
-			for {
-				hasNext, err := n.plan.Next(ctx)
-				if err != nil {
-					log.VEventf(consumeCtx, 2, "execution failed: %v", err)
-					break
+			slowPath := true
+			if a, ok := n.plan.(planNodeFastPath); ok {
+				if count, res := a.FastPathResults(); res {
+					log.VEventf(consumeCtx, 2, "fast path - rows affected: %d", count)
+					slowPath = false
 				}
-				if !hasNext {
-					break
-				}
+			}
+			if slowPath {
+				for {
+					hasNext, err := n.plan.Next(ctx)
+					if err != nil {
+						log.VEventf(consumeCtx, 2, "execution failed: %v", err)
+						break
+					}
+					if !hasNext {
+						break
+					}
 
-				values := n.plan.Values()
-				log.VEventf(consumeCtx, 2, "output row: %s", values)
+					values := n.plan.Values()
+					log.VEventf(consumeCtx, 2, "output row: %s", values)
+				}
 			}
 			log.VEventf(consumeCtx, 2, "plan completed execution")
 

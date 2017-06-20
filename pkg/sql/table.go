@@ -503,9 +503,12 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	// done.
 	p.session.setTestingVerifyMetadata(nil)
 
-	return p.txn.Put(
-		ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
-	)
+	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
+	descVal := sqlbase.WrapDescriptor(tableDesc)
+	if p.session.Tracing.KVTracingEnabled() {
+		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descVal)
+	}
+	return p.txn.Put(ctx, descKey, descVal)
 }
 
 // expandTableGlob expands pattern into a list of tables represented
