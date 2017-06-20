@@ -1407,6 +1407,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(TypeTimestampTZ),
 		makeEvalTupleIn(TypeInterval),
 		makeEvalTupleIn(TypeTuple),
+		makeEvalTupleIn(TypeOid),
 	},
 
 	Like: {
