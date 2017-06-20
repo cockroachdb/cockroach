@@ -766,7 +766,9 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 			gcKeys := setup(engine, keySize, valSize, numKeys, numVersions, deleteVersions)
 
 			b.StartTimer()
-			if err := MVCCGarbageCollect(ctx, engine, &enginepb.MVCCStats{}, gcKeys, now); err != nil {
+			if err := MVCCGarbageCollect(
+				ctx, engine, &enginepb.MVCCStats{}, gcKeys, now, math.MaxInt64,
+			); err != nil {
 				b.Fatal(err)
 			}
 		}
