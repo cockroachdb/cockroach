@@ -31,7 +31,7 @@ func (pg *Error) Error() string {
 
 // NewError creates an Error.
 func NewError(code string, msg string) error {
-	return NewErrorf(code, msg)
+	return NewErrorf(code, "%s", msg)
 }
 
 // NewErrorf creates an Error with a format string.

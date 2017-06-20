@@ -458,6 +458,8 @@ func TestStyle(t *testing.T) {
 				"Eventf:1",
 				"ErrEvent:1",
 				"ErrEventf:1",
+				"NewError:1",
+				"NewErrorf:1",
 				"VEvent:2",
 				"VEventf:2",
 				"UnimplementedWithIssueErrorf:1",
