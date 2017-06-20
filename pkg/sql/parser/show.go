@@ -22,7 +22,10 @@
 
 package parser
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+)
 
 // Show represents a SHOW statement.
 type Show struct {
@@ -72,15 +75,20 @@ func (node *ShowDatabases) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // ShowTrace represents a SHOW SESSION TRACE statement.
 type ShowTrace struct {
-	Statement Statement
+	Statement   Statement
+	OnlyKVTrace bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTrace) Format(buf *bytes.Buffer, f FmtFlags) {
+	onlyKV := ""
+	if node.OnlyKVTrace {
+		onlyKV = " KV"
+	}
 	if node.Statement == nil {
-		buf.WriteString("SHOW SESSION TRACE")
+		fmt.Fprintf(buf, "SHOW SESSION%s TRACE", onlyKV)
 	} else {
-		buf.WriteString("SHOW TRACE FOR ")
+		fmt.Fprintf(buf, "SHOW%s TRACE FOR ", onlyKV)
 		FormatNode(buf, f, node.Statement)
 	}
 }
