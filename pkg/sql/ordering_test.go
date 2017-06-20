@@ -18,6 +18,7 @@ package sql
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -255,5 +256,126 @@ func TestTrimOrdering(t *testing.T) {
 		if !reflect.DeepEqual(tc.ord, tc.expected) {
 			t.Errorf("%d: expected %v, got %v", i, tc.expected, tc.ord)
 		}
+	}
+}
+
+func TestComputeMergeJoinOrdering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Helper function to create a ColumnOrderInfo. The "simple" composite
+	// literal syntax causes vet to warn about unkeyed literals and the explicit
+	// syntax is too verbose.
+	o := func(colIdx int, direction encoding.Direction) sqlbase.ColumnOrderInfo {
+		return sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: direction}
+	}
+
+	e := struct{}{}
+	asc := encoding.Ascending
+	desc := encoding.Descending
+	testCases := []struct {
+		a, b       orderingInfo
+		colA, colB []int
+		expected   sqlbase.ColumnOrdering
+	}{
+		{
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc), o(3, asc)},
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+		},
+		{
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc), o(3, asc)},
+			},
+			b: orderingInfo{
+				exactMatchCols: map[int]struct{}{3: e, 4: e},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+		},
+		{
+			a: orderingInfo{
+				exactMatchCols: map[int]struct{}{1: e, 2: e},
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+		},
+		{
+			a: orderingInfo{
+				ordering:       sqlbase.ColumnOrdering{o(2, desc)},
+				exactMatchCols: map[int]struct{}{1: e},
+			},
+			b: orderingInfo{
+				ordering:       sqlbase.ColumnOrdering{o(3, asc)},
+				exactMatchCols: map[int]struct{}{4: e},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(1, desc), o(0, asc)},
+		},
+		{
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc)},
+				unique:   true,
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+		},
+		{
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc)},
+				unique:   true,
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+		},
+		{
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(3, asc), o(2, desc)},
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc)},
+		},
+		{
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc), o(3, asc)},
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc), o(5, desc), o(4, desc)},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc)},
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			result := computeMergeJoinOrdering(tc.a, tc.b, tc.colA, tc.colB)
+			if !reflect.DeepEqual(tc.expected, result) {
+				t.Errorf("expected %v, got %v", tc.expected, result)
+			}
+		})
 	}
 }
