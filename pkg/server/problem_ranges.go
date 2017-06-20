@@ -65,7 +65,7 @@ func (s *statusServer) ProblemRanges(
 	defer cancel()
 	for nodeID, alive := range isLiveMap {
 		if !alive {
-			response.Failures = append(response.Failures, serverpb.ProblemRangesResponse_Failures{
+			response.Failures = append(response.Failures, serverpb.Failure{
 				NodeID:       nodeID,
 				ErrorMessage: "node liveness reports that the node is not alive",
 			})
@@ -102,7 +102,7 @@ func (s *statusServer) ProblemRanges(
 		select {
 		case resp := <-responses:
 			if resp.err != nil {
-				response.Failures = append(response.Failures, serverpb.ProblemRangesResponse_Failures{
+				response.Failures = append(response.Failures, serverpb.Failure{
 					NodeID:       resp.nodeID,
 					ErrorMessage: resp.err.Error(),
 				})
@@ -110,7 +110,7 @@ func (s *statusServer) ProblemRanges(
 			}
 			for _, info := range resp.resp.Ranges {
 				if len(info.ErrorMessage) != 0 {
-					response.Failures = append(response.Failures, serverpb.ProblemRangesResponse_Failures{
+					response.Failures = append(response.Failures, serverpb.Failure{
 						NodeID:       info.SourceNodeID,
 						ErrorMessage: info.ErrorMessage,
 					})

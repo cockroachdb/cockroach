@@ -75,6 +75,7 @@
 		SpanStatsRequest
 		SpanStatsResponse
 		ProblemRangesRequest
+		Failure
 		ProblemRangesResponse
 		PrettySpan
 */
