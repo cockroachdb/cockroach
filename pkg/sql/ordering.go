@@ -212,3 +212,148 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 		ord.unique = false
 	}
 }
+
+// computeMergeJoinOrdering determines if merge-join can be used to perform a join.
+//
+// It takes the orderings of the two data sources that are to be joined on a set
+// of equality columns (the join condition is that the value for the column
+// colA[i] equals the value for column colB[i]).
+//
+// If merge-join can be used, the function returns a ColumnOrdering that refers
+// to the equality columns by their index in colA/ColB. Specifically column i in
+// the returned ordering refers to column colA[i] for A and colB[i] for B. This
+// is the ordering that must be used by the merge-join.
+//
+// The returned ordering can be partial, i.e. only contains a subset of the
+// equality columns. This indicates that a hybrid merge/hash join can be used
+// (or alternatively, an extra sorting step to complete the ordering followed by
+// a merge-join). See example below.
+//
+// Note that this function is not intended to calculate the output orderingInfo
+// of joins (this is a separate problem with other complications).
+//
+// Examples:
+//  -  natural join between
+//       table A with columns (u, v, x, y)  primary key x+,y+,u+
+//       table B with columns (x, y, w)     primary key x+,y+
+//     equality columns are x, y
+//     a orderingInfo is 2+,3+,0+
+//     b orderingInfo is 0+,1+
+//     colA is {2, 3}   // column indices of x,y in table A
+//     colB is {0, 1}   // column indices of x,y in table B
+//
+//     The function returns 0+,1+. This result maps to ordering 2+,3+ for A and
+//     0+,1+ for B; this is what the merge-join will use: it will interleave
+//     rows by comparing column A2 with column B0, breaking equalities by
+//     comparing column A3 with column B1.
+//
+//  -  natural join between
+//       table A with columns (u, v, x, y)  primary key x+
+//       table B with columns (x, y, w)     primary key x+,y+
+//     equality columns are x, y
+//     a orderingInfo is 2+
+//     b orderingInfo is 0+,1+
+//     colA is {2, 3}   // column indices of x,y in table A
+//     colB is {0, 1}   // column indices of x,y in table B
+//
+//     The function returns 0+. This maps to ordering 2+ for A and 0+ for B.
+//     This is a partial ordering, so a hybrid merge-join can be used: groups of
+//     rows that are equal on columns a2 and b0 are loaded and a hash-join is
+//     performed on this group. Alternatively, an extra sorting step could be
+//     used to refine the ordering (this sorting step would also use the partial
+//     ordering to only sort within groups) followed by a regular merge-join.
+func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.ColumnOrdering {
+	if len(colA) != len(colB) {
+		panic(fmt.Sprintf("invalid column lists %v; %v", colA, colB))
+	}
+	if a.isEmpty() || b.isEmpty() || len(colA) == 0 {
+		return nil
+	}
+
+	var result sqlbase.ColumnOrdering
+
+	// First, find any merged columns that are exact matches in both sources. This
+	// means that in each source, this column only sees one value.
+	for i := range colA {
+		if _, ok := a.exactMatchCols[colA[i]]; ok {
+			if _, ok := b.exactMatchCols[colB[i]]; ok {
+				// The direction here is arbitrary - the orderings guarantee that either works.
+				// TODO(radu): perhaps the correct thing would be to return an
+				// orderingInfo with this as an exact-match column.
+				result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
+			}
+		}
+	}
+
+	// eqMapA/B maps a column index in A/B to the index of the equality column
+	// (0 to len(colA)-1).
+	eqMapA := make(map[int]int, len(colA))
+	for i, v := range colA {
+		eqMapA[v] = i
+	}
+	eqMapB := make(map[int]int, len(colB))
+	for i, v := range colB {
+		eqMapB[v] = i
+	}
+
+	// To understand what's going on, it's useful to first think of the easy
+	// case: there are no equality columns, we just have simple orderings. In this
+	// case we need to check that:
+	//  - the first column in A's ordering is an equality column, and
+	//  - the first column in B's ordering is the same equality column.
+	//    If this is the case, we can check the same for the second column, and so
+	//    on. If not, we stop.
+	//
+	// This gets more complicated because of "exact match" columns. If the first
+	// column in A's ordering is an equality column and the corresponding B column
+	// is an "exact match", this pairing also works. This means that we will not
+	// necessarily consume the orderings at the same rate. The remaining parts of
+	// the orderings are maintained in ordA/ordB.
+	//
+	// Another complication is the "unique" flag: such an ordering remains correct
+	// when appending arbitrary columns to it.
+	for ordA, ordB := a.ordering, b.ordering; ; {
+		doneA, doneB := (len(ordA) == 0), (len(ordB) == 0)
+		// See if the first column in the orderings are both the same equality
+		// column.
+		if !doneA && !doneB {
+			i, okA := eqMapA[ordA[0].ColIdx]
+			j, okB := eqMapB[ordB[0].ColIdx]
+			if okA && okB && i == j {
+				dir := ordA[0].Direction
+				if dir != ordB[0].Direction {
+					// Both orderings start with the same merged column, but the
+					// ordering is different. That's all, folks.
+					break
+				}
+				result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: dir})
+				ordA, ordB = ordA[1:], ordB[1:]
+				continue
+			}
+		}
+		// See if the first column in A is an exact match in B. Or, if we consumed B
+		// and it is "unique", then we are free to add any other columns in A.
+		if !doneA {
+			if i, ok := eqMapA[ordA[0].ColIdx]; ok {
+				if _, ok := b.exactMatchCols[colB[i]]; ok || (doneB && b.unique) {
+					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].Direction})
+					ordA = ordA[1:]
+					continue
+				}
+			}
+		}
+		// See if the first column in B is an exact match in A.  Or, if we consumed
+		// A and it is "unique", then we are free to add any other columns in B.
+		if !doneB {
+			if i, ok := eqMapB[ordB[0].ColIdx]; ok {
+				if _, ok := a.exactMatchCols[colA[i]]; ok || (doneA && a.unique) {
+					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].Direction})
+					ordB = ordB[1:]
+					continue
+				}
+			}
+		}
+		break
+	}
+	return result
+}
