@@ -232,7 +232,7 @@ func BenchmarkSortAll(b *testing.B) {
 	}
 
 	// One column integer rows.
-	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	types := []sqlbase.ColumnType{columnTypeInt}
 	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
 
@@ -273,7 +273,7 @@ func BenchmarkSortLimit(b *testing.B) {
 	}
 
 	// One column integer rows.
-	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	types := []sqlbase.ColumnType{columnTypeInt}
 	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
 
