@@ -174,8 +174,10 @@ export function getEvents(req: EventsRequestMessage, timeout?: moment.Duration):
 }
 
 // getNodes gets node data
-export function getNodes(_req: NodesRequestMessage, timeout?: moment.Duration): Promise<NodesResponseMessage> {
-  return timeoutFetch(serverpb.NodesResponse, `${STATUS_PREFIX}/nodes`, null, timeout);
+export function getNodes(req: NodesRequestMessage, timeout?: moment.Duration): Promise<NodesResponseMessage> {
+  const nodeIds = (!_.isUndefined(req) && !_.isEmpty(req.node_ids)) ? req.node_ids : "";
+  const locality = (!_.isUndefined(req) && !_.isEmpty(req.locality)) ? req.locality : "";
+  return timeoutFetch(serverpb.NodesResponse, `${STATUS_PREFIX}/nodes?node_ids=${nodeIds}&locality=${locality}`, null, timeout);
 }
 
 export function raftDebug(_req: RaftDebugRequestMessage): Promise<RaftDebugResponseMessage> {

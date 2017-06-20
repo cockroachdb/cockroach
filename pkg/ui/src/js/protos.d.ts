@@ -5479,7 +5479,10 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            type NodesRequest$Properties = {};
+            type NodesRequest$Properties = {
+                node_ids?: string;
+                locality?: string;
+            };
 
             /**
              * Constructs a new NodesRequest.
@@ -5496,6 +5499,18 @@ export namespace cockroach {
                  * @param {cockroach.server.serverpb.NodesRequest$Properties=} [properties] Properties to set
                  */
                 constructor(properties?: cockroach.server.serverpb.NodesRequest$Properties);
+
+                /**
+                 * NodesRequest node_ids.
+                 * @type {string}
+                 */
+                public node_ids: string;
+
+                /**
+                 * NodesRequest locality.
+                 * @type {string}
+                 */
+                public locality: string;
 
                 /**
                  * Creates a new NodesRequest instance using the specified properties.
@@ -5586,6 +5601,7 @@ export namespace cockroach {
 
             type NodesResponse$Properties = {
                 nodes?: cockroach.server.status.NodeStatus$Properties[];
+                filters?: string[];
             };
 
             /**
@@ -5609,6 +5625,12 @@ export namespace cockroach {
                  * @type {Array.<cockroach.server.status.NodeStatus$Properties>}
                  */
                 public nodes: cockroach.server.status.NodeStatus$Properties[];
+
+                /**
+                 * NodesResponse filters.
+                 * @type {Array.<string>}
+                 */
+                public filters: string[];
 
                 /**
                  * Creates a new NodesResponse instance using the specified properties.

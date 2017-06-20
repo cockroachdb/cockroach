@@ -78,10 +78,15 @@ message DetailsResponse {
 }
 
 message NodesRequest {
+  // This should be a comma separated list of node ids.
+  string node_ids = 1 [(gogoproto.customname) = "NodeIDs"];
+  // A regex used to filter nodes based on locality.
+  string locality = 2;
 }
 
 message NodesResponse {
   repeated status.NodeStatus nodes = 1 [(gogoproto.nullable) = false];
+  repeated string filters = 2;
 }
 
 message NodeRequest {
