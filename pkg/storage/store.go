@@ -2294,14 +2294,52 @@ func (s *Store) Attrs() roachpb.Attributes {
 
 // Capacity returns the capacity of the underlying storage engine. Note that
 // this does not include reservations.
+// Note that Capacity() has the side effect of updating some of the store's
+// internal statistics about its replicas.
 func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	capacity, err := s.engine.Capacity()
-	if err == nil {
-		capacity.RangeCount = int32(s.ReplicaCount())
-		capacity.LeaseCount = int32(s.LeaseCount())
-		capacity.WritesPerSecond = s.WritesPerSecond()
+	if err != nil {
+		return capacity, err
 	}
-	return capacity, err
+
+	capacity.RangeCount = int32(s.ReplicaCount())
+
+	now := s.cfg.Clock.Now()
+	var leaseCount int32
+	var totalWritesPerSecond float64
+	bytesPerReplica := make([]float64, 0, capacity.RangeCount)
+	writesPerReplica := make([]float64, 0, capacity.RangeCount)
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		if r.ownsValidLease(now) {
+			leaseCount++
+		}
+		bytesPerReplica = append(bytesPerReplica, float64(r.GetMVCCStats().LiveBytes))
+		// TODO(a-robinson): How dangerous is it that this number will be incorrectly
+		// low the first time or two it gets gossiped when a store starts? We can't
+		// easily have a countdown as its value changes like for leases/replicas.
+		qps, _ := r.writeStats.avgQPS()
+		totalWritesPerSecond += qps
+		writesPerReplica = append(writesPerReplica, qps)
+		return true
+	})
+	capacity.LeaseCount = leaseCount
+	capacity.WritesPerSecond = totalWritesPerSecond
+	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
+	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
+
+	return capacity, nil
+}
+
+// ReplicaCount returns the number of replicas contained by this store. This
+// method is O(n) in the number of replicas and should not be called from
+// performance critical code.
+func (s *Store) ReplicaCount() int {
+	var count int
+	s.mu.replicas.Range(func(k, v interface{}) bool {
+		count++
+		return true
+	})
+	return count
 }
 
 // Registry returns the store registry.
@@ -2366,49 +2404,6 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 		StoreID:  s.Ident.StoreID,
 		Replicas: deadReplicas,
 	}
-}
-
-// ReplicaCount returns the number of replicas contained by this store. This
-// method is O(n) in the number of replicas and should not be called from
-// performance critical code.
-func (s *Store) ReplicaCount() int {
-	var count int
-	s.mu.replicas.Range(func(k, v interface{}) bool {
-		count++
-		return true
-	})
-	return count
-}
-
-// LeaseCount returns the number of replicas this store holds leases for.
-func (s *Store) LeaseCount() int {
-	now := s.cfg.Clock.Now()
-
-	var leaseCount int
-	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		if r.ownsValidLease(now) {
-			leaseCount++
-		}
-		return true
-	})
-
-	return leaseCount
-}
-
-// WritesPerSecond returns the approximate number of keys the store is writing
-// per second.
-//
-// TODO(a-robinson): How dangerous is it that this number will be incorrectly
-// low the first time or two it gets gossiped when a store starts? We can't
-// easily have a countdown as its value changes like we can for leases/replicas.
-func (s *Store) WritesPerSecond() float64 {
-	var writeCount float64
-	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		qps, _ := r.writeStats.avgQPS()
-		writeCount += qps
-		return true
-	})
-	return writeCount
 }
 
 // Send fetches a range based on the header's replica, assembles method, args &
