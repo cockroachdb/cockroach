@@ -509,6 +509,8 @@ func writeInitialState(
 	desc roachpb.RangeDescriptor,
 	oldHS raftpb.HardState,
 	lease roachpb.Lease,
+	gcThreshold hlc.Timestamp,
+	txnSpanGCThreshold hlc.Timestamp,
 ) (enginepb.MVCCStats, error) {
 	rsl := makeReplicaStateLoader(desc.RangeID)
 
@@ -523,11 +525,25 @@ func writeInitialState(
 	}
 	s.Stats = ms
 	s.Lease = &lease
+	s.GCThreshold = gcThreshold
+	s.TxnSpanGCThreshold = txnSpanGCThreshold
 
 	if existingLease, err := rsl.loadLease(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
 	} else if (existingLease != roachpb.Lease{}) {
 		log.Fatalf(ctx, "expected trivial lease, but found %+v", existingLease)
+	}
+
+	if existingGCThreshold, err := rsl.loadGCThreshold(ctx, eng); err != nil {
+		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
+	} else if (existingGCThreshold != hlc.Timestamp{}) {
+		log.Fatalf(ctx, "expected trivial GChreshold, but found %+v", existingGCThreshold)
+	}
+
+	if existingTxnSpanGCThreshold, err := rsl.loadTxnSpanGCThreshold(ctx, eng); err != nil {
+		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading TxnSpanGCThreshold")
+	} else if (existingTxnSpanGCThreshold != hlc.Timestamp{}) {
+		log.Fatalf(ctx, "expected trivial TxnSpanGCThreshold, but found %+v", existingTxnSpanGCThreshold)
 	}
 
 	newMS, err := rsl.save(ctx, eng, s)

@@ -201,6 +201,8 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 				*testDesc,
 				raftpb.HardState{},
 				roachpb.Lease{},
+				hlc.Timestamp{},
+				hlc.Timestamp{},
 			); err != nil {
 				t.Fatal(err)
 			}
