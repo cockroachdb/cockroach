@@ -66,7 +66,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 	var unused string
 	var dataSize int64
 	sqlDB.QueryRow(fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, dir)).Scan(
-		&unused, &unused, &unused, &dataSize,
+		&unused, &unused, &unused, &unused, &unused, &unused, &dataSize,
 	)
 	b.StopTimer()
 	b.SetBytes(dataSize / int64(b.N))
@@ -98,7 +98,7 @@ func runBenchmarkClusterRestore(b *testing.B) {
 	if err != nil {
 		b.Fatalf("%+v", err)
 	}
-	b.SetBytes(backup.Desc.DataSize / int64(b.N))
+	b.SetBytes(backup.Desc.EntryCounts.DataSize / int64(b.N))
 
 	b.ResetTimer()
 	sqlDB.Exec(fmt.Sprintf(`RESTORE data.* FROM '%s'`, dir))
@@ -173,7 +173,7 @@ func runEmptyIncrementalBackup(b *testing.B) {
 	var unused string
 	var dataSize int64
 	sqlDB.QueryRow(`BACKUP DATABASE data TO $1`, fullDir).Scan(
-		&unused, &unused, &unused, &dataSize,
+		&unused, &unused, &unused, &unused, &unused, &unused, &dataSize,
 	)
 
 	// We intentionally don't write anything to the database between the full and
