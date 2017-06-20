@@ -217,7 +217,7 @@ func runBenchmarkImport(b *testing.B) {
 				if pErr != nil {
 					b.Fatalf("%+v", pErr.GoError())
 				}
-				totalLen += res.(*roachpb.ImportResponse).DataSize
+				totalLen += res.(*roachpb.ImportResponse).Imported.DataSize
 			}
 			b.StopTimer()
 			b.SetBytes(totalLen / int64(b.N))

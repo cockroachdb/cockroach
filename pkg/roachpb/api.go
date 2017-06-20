@@ -958,3 +958,11 @@ func InsertRangeInfo(ris []RangeInfo, ri RangeInfo) []RangeInfo {
 	}
 	return append(ris, ri)
 }
+
+// Add combines the values from other, for use on an accumulator BulkOpSummary.
+func (b *BulkOpSummary) Add(other BulkOpSummary) {
+	b.DataSize += other.DataSize
+	b.Rows += other.Rows
+	b.IndexEntries += other.IndexEntries
+	b.SystemRecords += other.SystemRecords
+}

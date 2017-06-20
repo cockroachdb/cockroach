@@ -362,6 +362,6 @@ func writeSST(
 		},
 		Path: filename,
 	})
-	backup.DataSize += sst.DataSize
+	backup.EntryCounts.DataSize += sst.DataSize
 	return nil
 }

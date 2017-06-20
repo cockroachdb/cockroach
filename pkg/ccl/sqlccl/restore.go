@@ -619,18 +619,20 @@ func Restore(
 	targets parser.TargetList,
 	opt parser.KVOptions,
 	jobLogger *jobs.JobLogger,
-) (dataSize int64, err error) {
+) (roachpb.BulkOpSummary, error) {
 
 	db := *p.ExecCfg().DB
 
+	failed := roachpb.BulkOpSummary{}
+
 	if len(targets.Databases) > 0 {
-		return 0, errors.Errorf("RESTORE DATABASE is not yet supported " +
+		return failed, errors.Errorf("RESTORE DATABASE is not yet supported " +
 			"(but you can use 'RESTORE somedb.*' to restore all backed up tables for a given DB).")
 	}
 
 	backupDescs, err := loadBackupDescs(ctx, uris)
 	if err != nil {
-		return 0, err
+		return failed, err
 	}
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
 
@@ -642,7 +644,7 @@ func Restore(
 		sqlDescs := lastBackupDesc.Descriptors
 		var err error
 		if sqlDescs, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
-			return 0, err
+			return failed, err
 		}
 		for _, desc := range sqlDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
@@ -652,7 +654,7 @@ func Restore(
 			}
 		}
 		if len(tables) == 0 {
-			return 0, errors.Errorf("no tables found: %s", parser.AsString(targets))
+			return failed, errors.Errorf("no tables found: %s", parser.AsString(targets))
 		}
 	}
 
@@ -661,7 +663,7 @@ func Restore(
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		return reassignParentIDs(ctx, txn, p, databasesByID, tables, opt)
 	}); err != nil {
-		return 0, err
+		return failed, err
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
@@ -678,24 +680,24 @@ func Restore(
 	newTableIDs, kr, rekeys, err := reassignTableIDs(ctx, db, tables, opt)
 	if err != nil {
 		// We expect user-facing usage errors here, so don't wrapf.
-		return 0, err
+		return failed, err
 	}
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	importRequests, _, err := makeImportRequests(spans, backupDescs)
 	if err != nil {
-		return 0, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
+		return failed, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
 	for _, desc := range newTableIDs {
 		jobLogger.Job.DescriptorIDs = append(jobLogger.Job.DescriptorIDs, desc)
 	}
 	if err := jobLogger.Created(ctx); err != nil {
-		return 0, err
+		return failed, err
 	}
 	if err := jobLogger.Started(ctx); err != nil {
-		return 0, err
+		return failed, err
 	}
 
 	progressLogger := jobProgressLogger{
@@ -711,11 +713,11 @@ func Restore(
 		var ok bool
 		splitKeys[i], ok, _ = kr.RewriteKey(append([]byte(nil), r.Key...))
 		if !ok {
-			return 0, errors.Errorf("failed to rewrite key: %s", r.Key)
+			return failed, errors.Errorf("failed to rewrite key: %s", r.Key)
 		}
 	}
 	if err := PresplitRanges(ctx, db, splitKeys); err != nil {
-		return 0, errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
+		return failed, errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
 	}
 	{
 		newSpans := spansForAllTableIndexes(tables)
@@ -742,7 +744,7 @@ func Restore(
 			})
 		}
 		if err := g.Wait(); err != nil {
-			return 0, errors.Wrapf(err, "scattering %d ranges", len(importRequests))
+			return failed, errors.Wrapf(err, "scattering %d ranges", len(importRequests))
 		}
 	}
 
@@ -764,7 +766,7 @@ func Restore(
 
 	mu := struct {
 		syncutil.Mutex
-		dataSize int64
+		res roachpb.BulkOpSummary
 	}{}
 
 	g, gCtx := errgroup.WithContext(ctx)
@@ -772,7 +774,7 @@ func Restore(
 		select {
 		case importsSem <- struct{}{}:
 		case <-ctx.Done():
-			return 0, ctx.Err()
+			return failed, ctx.Err()
 		}
 
 		ir := importRequests[i]
@@ -784,7 +786,7 @@ func Restore(
 				return err
 			}
 			mu.Lock()
-			mu.dataSize += res.DataSize
+			mu.res.Add(res.Imported)
 			mu.Unlock()
 			if err := progressLogger.chunkFinished(gCtx); err != nil {
 				// Errors while updating progress are not important enough to merit
@@ -800,21 +802,21 @@ func Restore(
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return 0, errors.Wrapf(err, "importing %d ranges", len(importRequests))
+		return failed, errors.Wrapf(err, "importing %d ranges", len(importRequests))
 	}
 
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
 	if err := restoreTableDescs(ctx, db, tables); err != nil {
-		return 0, errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
+		return failed, errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
 	}
 
 	// TODO(dan): Delete any old table data here. The first version of restore
 	// assumes that it's operating on a new cluster. If it's not empty,
 	// everything works but the table data is left abandoned.
 
-	return mu.dataSize, nil
+	return mu.res, nil
 }
 
 func restorePlanHook(
@@ -841,6 +843,9 @@ func restorePlanHook(
 		{Name: "job_id", Typ: parser.TypeInt},
 		{Name: "status", Typ: parser.TypeString},
 		{Name: "fraction_completed", Typ: parser.TypeFloat},
+		{Name: "rows", Typ: parser.TypeInt},
+		{Name: "index_entries", Typ: parser.TypeInt},
+		{Name: "system_records", Typ: parser.TypeInt},
 		{Name: "bytes", Typ: parser.TypeInt},
 	}
 	fn := func() ([]parser.Datums, error) {
@@ -861,7 +866,7 @@ func restorePlanHook(
 			Username:    p.User(),
 			Details:     jobs.RestoreJobDetails{},
 		})
-		dataSize, err := Restore(
+		res, err := Restore(
 			ctx,
 			p,
 			from,
@@ -885,7 +890,10 @@ func restorePlanHook(
 			parser.NewDInt(parser.DInt(*jobLogger.JobID())),
 			parser.NewDString(string(jobs.JobStatusSucceeded)),
 			parser.NewDFloat(parser.DFloat(1.0)),
-			parser.NewDInt(parser.DInt(dataSize)),
+			parser.NewDInt(parser.DInt(res.Rows)),
+			parser.NewDInt(parser.DInt(res.IndexEntries)),
+			parser.NewDInt(parser.DInt(res.SystemRecords)),
+			parser.NewDInt(parser.DInt(res.DataSize)),
 		}}
 		return ret, nil
 	}
