@@ -99,6 +99,8 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 }
 
 type splitNode struct {
+	optColumnsSlot
+
 	p            *planner
 	tableDesc    *sqlbase.TableDescriptor
 	index        *sqlbase.IndexDescriptor
@@ -217,6 +219,8 @@ func (p *planner) Relocate(ctx context.Context, n *parser.Relocate) (planNode, e
 }
 
 type relocateNode struct {
+	optColumnsSlot
+
 	p                 *planner
 	tableDesc         *sqlbase.TableDescriptor
 	index             *sqlbase.IndexDescriptor
@@ -427,6 +431,8 @@ func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, err
 }
 
 type scatterNode struct {
+	optColumnsSlot
+
 	p    *planner
 	span roachpb.Span
 
