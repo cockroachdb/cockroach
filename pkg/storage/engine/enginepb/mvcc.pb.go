@@ -87,6 +87,13 @@ type TxnMeta struct {
 	Epoch uint32 `protobuf:"varint,4,opt,name=epoch" json:"epoch"`
 	// The proposed timestamp for the transaction. This starts as
 	// the current wall time on the txn coordinator.
+	// This is the timestamp at which all of the transaction's writes are
+	// performed: even if intents have been laid down at different timestamps,
+	// the process of resolving them (e.g. when the txn commits) will bump them to
+	// this timestamp. SERIALIZABLE transactions only commit when timestamp ==
+	// orig_timestamp. SNAPSHOT transactions can commit even when they've
+	// performed their reads (at orig_timestamp) at a different timestamp than
+	// their writes (at timestamp).
 	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=timestamp" json:"timestamp"`
 	Priority  int32                        `protobuf:"varint,6,opt,name=priority" json:"priority"`
 	// A one-indexed sequence number which is increased on each batch
