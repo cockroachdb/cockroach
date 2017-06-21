@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"net/url"
 	"reflect"
 	"runtime"
 	"strings"
@@ -92,14 +93,18 @@ func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	// is replaced with your local Cockroach source directory.
 	// Be sure to restart Postgres for this to take effect.
 
-	const addr = "localhost:5432"
-	if conn, err := net.Dial("tcp", addr); err != nil {
-		b.Skipf("unable to connect to postgres server on %s: %s", addr, err)
+	pgURL := url.URL{
+		Scheme:   "postgres",
+		Host:     "localhost:5432",
+		RawQuery: "sslmode=require&dbname=postgres",
+	}
+	if conn, err := net.Dial("tcp", pgURL.Host); err != nil {
+		b.Skipf("unable to connect to postgres server on %s: %s", pgURL.Host, err)
 	} else {
 		conn.Close()
 	}
 
-	db, err := gosql.Open("postgres", "sslmode=require host=localhost port=5432 dbname=postgres")
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -120,7 +125,7 @@ func benchmarkMySQL(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 		conn.Close()
 	}
 
-	db, err := gosql.Open("mysql", "root@tcp(localhost:3306)/")
+	db, err := gosql.Open("mysql", fmt.Sprintf("root@tcp(%s)/", addr))
 	if err != nil {
 		b.Fatal(err)
 	}
