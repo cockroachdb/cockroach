@@ -20,6 +20,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"net"
 	"net/url"
 	"os/exec"
 	"testing"
@@ -128,6 +129,11 @@ func BenchmarkPgbenchExec(b *testing.B) {
 			Scheme:   "postgres",
 			Host:     "localhost:5432",
 			RawQuery: "sslmode=disable&dbname=postgres",
+		}
+		if conn, err := net.Dial("tcp", pgURL.Host); err != nil {
+			b.Skipf("unable to connect to postgres server on %s: %s", pgURL.Host, err)
+		} else {
+			conn.Close()
 		}
 		execPgbench(b, pgURL)
 	})
