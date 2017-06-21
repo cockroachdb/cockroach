@@ -966,3 +966,23 @@ func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	b.IndexEntries += other.IndexEntries
 	b.SystemRecords += other.SystemRecords
 }
+
+// Equal method is just used to verify whether two ComputeChecksumRequest is equal.
+func (ccr *ComputeChecksumRequest) Equal(cr *ComputeChecksumRequest) bool {
+	if cr == nil {
+		return ccr == nil
+	}
+	if !ccr.Span.Equal(cr.Span) {
+		return false
+	}
+	if ccr.Version != cr.Version {
+		return false
+	}
+	if !ccr.ChecksumID.Equal(cr.ChecksumID) {
+		return false
+	}
+	if ccr.Snapshot != cr.Snapshot {
+		return false
+	}
+	return true
+}
