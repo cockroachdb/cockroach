@@ -1916,14 +1916,11 @@ func (r *Replica) beginCmds(
 		// (which costs a goroutine, and slightly increases the cost of
 		// other commands that might wait on our keys), so it's good to
 		// bail out early if we can.
-		select {
-		case <-ctx.Done():
-			err := ctx.Err()
+		if err := ctx.Err(); err != nil {
 			errStr := fmt.Sprintf("%s before command queue: %s", err, ba.Summary())
 			log.Warning(ctx, errStr)
 			log.ErrEvent(ctx, errStr)
 			return nil, err
-		default:
 		}
 
 		// Get the requested timestamp. This is used for non-interference
