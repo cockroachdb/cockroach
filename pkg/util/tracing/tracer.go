@@ -289,10 +289,11 @@ func (t *Tracer) StartSpan(
 		s.SetTag(k, v)
 	}
 
-	var parentLightstepCtx opentracing.SpanContext
+	// If we are using lightstep, we create a new Lightstep span and use the
+	// metadata (TraceID, SpanID, Baggage) from that span.
+	// If not using Lightstep, we generate our own IDs.
 	if lsTr != nil {
-		// If we are using lightstep, we create a new Lightstep span and use the
-		// metadata (TraceID, SpanID, Baggage) from that span.
+		var parentLightstepCtx opentracing.SpanContext
 		if hasParent {
 			if parentCtx.lightstep == nil {
 				panic("lightstep span derived from non-lightstep span")
@@ -302,7 +303,6 @@ func (t *Tracer) StartSpan(
 		}
 		t.linkLightstepSpan(s, lsTr, parentLightstepCtx, parentType)
 	} else {
-		// If not using Lightstep, we generate our own IDs.
 		s.SpanID = uint64(rand.Int63())
 		if !hasParent {
 			// No parent Span; allocate new trace id.
