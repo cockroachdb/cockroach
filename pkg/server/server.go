@@ -139,6 +139,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry: metric.NewRegistry(),
 	}
 
+	stopper.AddCloser(stop.CloserFn(func() {
+		tracing.FlushTracer()
+	}))
+
 	// Attempt to load TLS configs right away, failures are permanent.
 	if certMgr, err := cfg.InitializeNodeTLSConfigs(stopper); err != nil {
 		return nil, err

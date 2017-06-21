@@ -75,6 +75,12 @@ var lightstepToken = settings.RegisterStringSetting(
 // loop" compile error.
 var _ = lightstepToken.OnChange(updateLightstep)
 
+func init() {
+	// If we want to hardcode a lighstep token (for testing), the OnChange
+	// callback won't fire.
+	updateLightstep()
+}
+
 // Atomic pointer of type *opentracing.Tracer which itself points to a lightstep
 // tracer. We don't use sync.Value because we can't set it to nil.
 var lightstepPtr unsafe.Pointer
@@ -87,9 +93,10 @@ func updateLightstep() {
 		atomic.StorePointer(&lightstepPtr, nil)
 	} else {
 		lsTr := lightstep.NewTracer(lightstep.Options{
-			AccessToken:    token,
-			MaxLogsPerSpan: maxLogsPerSpan,
-			UseGRPC:        true,
+			AccessToken:      token,
+			MaxLogsPerSpan:   maxLogsPerSpan,
+			MaxBufferedSpans: 10000,
+			UseGRPC:          true,
 		})
 		atomic.StorePointer(&lightstepPtr, unsafe.Pointer(&lsTr))
 	}
@@ -633,6 +640,13 @@ func StartSnowballTrace(
 	}
 	StartRecording(span, SnowballRecording)
 	return opentracing.ContextWithSpan(ctx, span), span, nil
+}
+
+// FlushTracer flushes any lightstep tracer that is in use.
+func FlushTracer() {
+	if lsTr := getLightstep(); lsTr != nil {
+		_ = lightstep.FlushLightStepTracer(lsTr)
+	}
 }
 
 // TestingCheckRecordedSpans checks whether a recording looks like an expected
