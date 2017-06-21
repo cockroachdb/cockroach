@@ -343,8 +343,8 @@ func TestParse(t *testing.T) {
 		{`INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2) RETURNING NOTHING`},
 
 		{`SELECT 1 + 1`},
-		{`SELECT - 1`},
-		{`SELECT + 1`},
+		{`SELECT -1`},
+		{`SELECT +1`},
 		{`SELECT .1`},
 		{`SELECT 1.2e1`},
 		{`SELECT 1.2e+1`},
@@ -744,8 +744,8 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t WHERE a IS UNKNOWN`, `SELECT a FROM t WHERE a IS NULL`},
 		{`SELECT a FROM t WHERE a IS NOT UNKNOWN`, `SELECT a FROM t WHERE a IS NOT NULL`},
 
-		{`SELECT - - 5`, `SELECT - (- 5)`},
-		{`SELECT a FROM t WHERE b = - 2`, `SELECT a FROM t WHERE b = (- 2)`},
+		{`SELECT - - 5`, `SELECT -(-5)`},
+		{`SELECT a FROM t WHERE b = - 2`, `SELECT a FROM t WHERE b = (-2)`},
 		{`SELECT a FROM t WHERE a = b AND a = c`, `SELECT a FROM t WHERE (a = b) AND (a = c)`},
 		{`SELECT a FROM t WHERE a = b OR a = c`, `SELECT a FROM t WHERE (a = b) OR (a = c)`},
 		{`SELECT a FROM t WHERE NOT a = b`, `SELECT a FROM t WHERE NOT (a = b)`},
@@ -760,9 +760,9 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t WHERE a = b / c`, `SELECT a FROM t WHERE a = (b / c)`},
 		{`SELECT a FROM t WHERE a = b % c`, `SELECT a FROM t WHERE a = (b % c)`},
 		{`SELECT a FROM t WHERE a = b || c`, `SELECT a FROM t WHERE a = (b || c)`},
-		{`SELECT a FROM t WHERE a = + b`, `SELECT a FROM t WHERE a = (+ b)`},
-		{`SELECT a FROM t WHERE a = - b`, `SELECT a FROM t WHERE a = (- b)`},
-		{`SELECT a FROM t WHERE a = ~ b`, `SELECT a FROM t WHERE a = (~ b)`},
+		{`SELECT a FROM t WHERE a = + b`, `SELECT a FROM t WHERE a = (+b)`},
+		{`SELECT a FROM t WHERE a = - b`, `SELECT a FROM t WHERE a = (-b)`},
+		{`SELECT a FROM t WHERE a = ~ b`, `SELECT a FROM t WHERE a = (~b)`},
 
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to
@@ -840,18 +840,18 @@ func TestParse2(t *testing.T) {
 			`SELECT a FROM t LIMIT 2 * a OFFSET b`},
 		// Double negation. See #1800.
 		{`SELECT *,-/* comment */-5`,
-			`SELECT *, - (- 5)`},
+			`SELECT *, -(-5)`},
 		{"SELECT -\n-5",
-			`SELECT - (- 5)`},
+			`SELECT -(-5)`},
 		{`SELECT -0.-/*test*/-1`,
-			`SELECT (- 0.) - (- 1)`,
+			`SELECT (-0.) - (-1)`,
 		},
 		// See #1948.
 		{`SELECT~~+~++~bd(*)`,
-			`SELECT ~ (~ (+ (~ (+ (+ (~ bd(*)))))))`},
+			`SELECT ~(~(+(~(+(+(~bd(*)))))))`},
 		// See #1957.
 		{`SELECT+y[array[]]`,
-			`SELECT + y[ARRAY[]]`},
+			`SELECT +y[ARRAY[]]`},
 		{`SELECT a FROM t UNION DISTINCT SELECT 1 FROM t`,
 			`SELECT a FROM t UNION SELECT 1 FROM t`},
 		{`SELECT a FROM t EXCEPT DISTINCT SELECT 1 FROM t`,

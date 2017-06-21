@@ -869,7 +869,6 @@ func (*UnaryExpr) operatorExpr() {}
 // Format implements the NodeFormatter interface.
 func (node *UnaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Operator.String())
-	buf.WriteByte(' ')
 	exprFmtWithParen(buf, f, node.Expr)
 }
 

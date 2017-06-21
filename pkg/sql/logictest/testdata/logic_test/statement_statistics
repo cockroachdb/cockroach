@@ -102,7 +102,7 @@ INSERT INTO test VALUES (_, _, _)
 SELECT ROW(_, _, _, _, _) FROM test WHERE _
 SELECT key FROM crdb_internal.node_statement_statistics
 SELECT sin(_)
-SELECT sqrt(- _)                                         !
+SELECT sqrt(-_)                                          !
 SELECT x FROM (VALUES (_, _, _)) AS t (x)
 SELECT x FROM test WHERE y = (_ / z)                     !+
 SELECT x FROM test WHERE y IN (_, _)
@@ -120,7 +120,7 @@ INSERT INTO _ VALUES (_, _, _)
 SELECT ROW(_, _, _, _, _) FROM _ WHERE _
 SELECT _ FROM crdb_internal.node_statement_statistics
 SELECT sin(_)
-SELECT sqrt(- _)
+SELECT sqrt(-_)
 SELECT _ FROM (VALUES (_, _, _)) AS _ (_)
 SELECT _ FROM _ WHERE _ = (_ / _)
 SELECT _ FROM _ WHERE _ IN (_, _)
