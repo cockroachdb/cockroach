@@ -820,8 +820,8 @@ func Restore(
 }
 
 func restorePlanHook(
-	baseCtx context.Context, stmt parser.Statement, p sql.PlanHookState,
-) (func() ([]parser.Datums, error), sqlbase.ResultColumns, error) {
+	stmt parser.Statement, p sql.PlanHookState,
+) (func(context.Context) ([]parser.Datums, error), sqlbase.ResultColumns, error) {
 	restore, ok := stmt.(*parser.Restore)
 	if !ok {
 		return nil, nil, nil
@@ -848,9 +848,9 @@ func restorePlanHook(
 		{Name: "system_records", Typ: parser.TypeInt},
 		{Name: "bytes", Typ: parser.TypeInt},
 	}
-	fn := func() ([]parser.Datums, error) {
+	fn := func(ctx context.Context) ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
-		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
+		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
 		from, err := fromFn()

@@ -40,8 +40,8 @@ import (
 // 'planhook'.
 func init() {
 	testingPlanHook := func(
-		ctx context.Context, stmt parser.Statement, state sql.PlanHookState,
-	) (func() ([]parser.Datums, error), sqlbase.ResultColumns, error) {
+		stmt parser.Statement, state sql.PlanHookState,
+	) (func(context.Context) ([]parser.Datums, error), sqlbase.ResultColumns, error) {
 		show, ok := stmt.(*parser.Show)
 		if !ok || show.Name != "planhook" {
 			return nil, nil, nil
@@ -49,7 +49,7 @@ func init() {
 		header := sqlbase.ResultColumns{
 			{Name: "value", Typ: parser.TypeString},
 		}
-		return func() ([]parser.Datums, error) {
+		return func(_ context.Context) ([]parser.Datums, error) {
 			return []parser.Datums{
 				{parser.NewDString(show.Name)},
 			}, nil
