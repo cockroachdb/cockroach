@@ -1123,7 +1123,7 @@ func (ds *DistSender) sendToReplicas(
 				len(replicas), 1))
 	}
 
-	var ambiguousResult bool
+	var ambiguousError error
 	var haveCommit bool
 	// We only check for committed txns, not aborts because aborts may
 	// be retried without any risk of inconsistencies.
@@ -1242,7 +1242,7 @@ func (ds *DistSender) sendToReplicas(
 								pending--
 								if err := pendingCall.Err; err != nil {
 									if grpc.Code(err) != codes.Unavailable {
-										ambiguousResult = true
+										ambiguousError = err
 									}
 								} else if pendingCall.Reply.Error == nil {
 									return pendingCall.Reply, nil
@@ -1261,10 +1261,10 @@ func (ds *DistSender) sendToReplicas(
 					// return an ambiguous commit error instead of the
 					// returned error.
 					if haveCommit {
-						if pending > 0 || ambiguousResult {
-							log.ErrEventf(ctx, "returning ambiguous result (pending=%d)", pending)
+						if pending > 0 || ambiguousError != nil {
+							log.ErrEventf(ctx, "returning ambiguous result (error=%v pending=%d)", ambiguousError, pending)
 							return nil, roachpb.NewAmbiguousResultError(
-								fmt.Sprintf("error=%s, pending RPCs=%d", call.Reply.Error, pending))
+								fmt.Sprintf("error=%v pending=%d", ambiguousError, pending))
 						}
 					}
 					return call.Reply, nil
@@ -1302,7 +1302,7 @@ func (ds *DistSender) sendToReplicas(
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/stream.go#L158
 				if haveCommit && grpc.Code(err) != codes.Unavailable {
 					log.ErrEventf(ctx, "txn may have committed despite RPC error: %s", err)
-					ambiguousResult = true
+					ambiguousError = err
 				} else {
 					log.ErrEventf(ctx, "RPC error: %s", err)
 				}
@@ -1316,13 +1316,17 @@ func (ds *DistSender) sendToReplicas(
 				transport.SendNext(ctx, done)
 			}
 			if pending == 0 {
-				if ambiguousResult {
+				if ambiguousError != nil {
 					err = roachpb.NewAmbiguousResultError(
-						fmt.Sprintf("sending to all %d replicas failed; last error: %v, "+
-							"but RPC failure may have masked txn commit", len(replicas), err))
+						fmt.Sprintf(
+							"sending to all %d replicas failed, but txn commit was possibly masked by: %s",
+							len(replicas),
+							ambiguousError,
+						),
+					)
 				} else {
 					err = roachpb.NewSendError(
-						fmt.Sprintf("sending to all %d replicas failed; last error: %v", len(replicas), err),
+						fmt.Sprintf("sending to all %d replicas failed; last error: %s", len(replicas), err),
 					)
 				}
 				log.ErrEvent(ctx, err.Error())
