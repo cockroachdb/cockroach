@@ -2412,6 +2412,10 @@ func (r *Replica) tryExecuteWriteBatch(
 		if err != nil {
 			return nil, roachpb.NewError(err), proposalNoRetry
 		}
+	} else {
+		if err := ctx.Err(); err != nil {
+			return nil, roachpb.NewError(err), proposalNoRetry
+		}
 	}
 
 	// Guarantee we remove the commands from the command queue. This is
