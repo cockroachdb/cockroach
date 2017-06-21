@@ -32,4 +32,5 @@ message Liveness {
   // The timestamp at which this liveness record expires.
   util.hlc.Timestamp expiration = 3 [(gogoproto.nullable) = false];
   bool draining = 4;
+  bool decommissioning = 5;
 }
