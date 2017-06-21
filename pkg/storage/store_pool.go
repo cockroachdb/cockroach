@@ -389,18 +389,13 @@ func (sp *StorePool) liveAndDeadReplicas(
 
 // stat provides a running sample size and running stats.
 type stat struct {
-	n, mean, s float64
+	n, mean float64
 }
 
 // Update adds the specified value to the stat, augmenting the running stats.
 func (s *stat) update(x float64) {
 	s.n++
-	oldMean := s.mean
 	s.mean += (x - s.mean) / s.n
-
-	// Update variable used to calculate running standard deviation. See: Knuth
-	// TAOCP, vol 2, 3rd ed, page 232.
-	s.s = s.s + (x-oldMean)*(x-s.mean)
 }
 
 // StoreList holds a list of store descriptors and associated count and used
