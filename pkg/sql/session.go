@@ -1022,7 +1022,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 			evalCtx := createSchemaChangeEvalCtx(e.cfg.Clock.Now())
 			if err := sc.exec(ctx, evalCtx); err != nil {
 				if shouldLogSchemaChangeError(err) {
-					log.Warningf(ctx, "Error executing schema change: %s", err)
+					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
 				if err == sqlbase.ErrDescriptorNotFound {
 				} else if sqlbase.IsPermanentSchemaChangeError(err) {
