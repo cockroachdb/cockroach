@@ -20,8 +20,11 @@ import (
 )
 
 func TestLicense(t *testing.T) {
-	clusterA, _ := uuid.FromString("A0000000-0000-0000-0000-00000000000A")
-	clusterB, _ := uuid.FromString("B0000000-0000-0000-0000-00000000000B")
+	idA, _ := uuid.FromString("A0000000-0000-0000-0000-00000000000A")
+	idB, _ := uuid.FromString("B0000000-0000-0000-0000-00000000000B")
+	idC, _ := uuid.FromString("C0000000-0000-0000-0000-00000000000C")
+	grantToA := []uuid.UUID{idA}
+	grantToB := []uuid.UUID{idB}
 
 	epoch := time.Unix(0, 0)
 	after := epoch.Add(time.Hour * 24)
@@ -30,34 +33,42 @@ func TestLicense(t *testing.T) {
 
 	for i, tc := range []struct {
 		licType      License_Type
-		grantedTo    uuid.UUID
+		grantedTo    []uuid.UUID
 		expiration   time.Time
 		checkCluster uuid.UUID
 		checkTime    time.Time
 		err          string
 	}{
 		{licType: -1, err: "requires an enterprise license"},
-		{License_Evaluation, clusterA, epoch, clusterA, epoch, ""},
-		{License_Enterprise, clusterA, epoch, clusterA, epoch, ""},
-		{License_NonCommercial, clusterA, epoch, clusterA, epoch, ""},
-		{License_Evaluation, clusterA, after, clusterA, epoch, ""},
-		{License_Evaluation, clusterA, epoch, clusterA, before, ""},
-		{License_Evaluation, clusterA, wayAfter, clusterA, epoch, ""},
+		{License_Evaluation, grantToA, epoch, idA, epoch, ""},
+		{License_Enterprise, grantToA, epoch, idA, epoch, ""},
+		{License_NonCommercial, grantToA, epoch, idA, epoch, ""},
+		{License_Evaluation, grantToA, after, idA, epoch, ""},
+		{License_Evaluation, grantToA, epoch, idA, before, ""},
+		{License_Evaluation, grantToA, wayAfter, idA, epoch, ""},
 
 		// clear existing.
 		{licType: -1, err: "requires an enterprise license"},
 
 		// expirations.
-		{License_Evaluation, clusterA, epoch, clusterA, after, "expired"},
-		{License_Evaluation, clusterA, after, clusterA, wayAfter, "expired"},
-		{License_NonCommercial, clusterA, after, clusterA, wayAfter, "expired"},
+		{License_Evaluation, grantToA, epoch, idA, after, "expired"},
+		{License_Evaluation, grantToA, after, idA, wayAfter, "expired"},
+		{License_NonCommercial, grantToA, after, idA, wayAfter, "expired"},
 
 		// grace period.
-		{License_Enterprise, clusterA, after, clusterA, wayAfter, ""},
+		{License_Enterprise, grantToA, after, idA, wayAfter, ""},
 
-		// mismatch.
-		{License_Enterprise, clusterA, epoch, clusterB, epoch, "not valid for cluster"},
-		{License_Enterprise, clusterB, epoch, clusterA, epoch, "not valid for cluster"},
+		// cluster match and mismatch.
+		{License_Enterprise, grantToA, epoch, idA, epoch, ""},
+		{License_Enterprise, grantToA, epoch, idB, epoch, "not valid for cluster"},
+		{License_Enterprise, grantToB, epoch, idB, epoch, ""},
+		{License_Enterprise, grantToB, epoch, idA, epoch, "not valid for cluster"},
+		{License_Enterprise, nil, epoch, idA, epoch, ""},
+		{License_Enterprise, nil, epoch, idB, epoch, ""},
+		{License_Enterprise, nil, epoch, idC, epoch, ""},
+		{License_Enterprise, append(grantToA, idB), epoch, idA, epoch, ""},
+		{License_Enterprise, append(grantToA, idB), epoch, idB, epoch, ""},
+		{License_Enterprise, append(grantToA, idB), epoch, idC, epoch, "not valid for cluster"},
 
 		// clear existing, even if invalid.
 		{licType: -1, err: "requires an enterprise license"},
@@ -65,7 +76,7 @@ func TestLicense(t *testing.T) {
 		licStr := ""
 		if tc.licType != -1 {
 			licStr, _ = License{
-				[]uuid.UUID{tc.grantedTo},
+				tc.grantedTo,
 				tc.expiration.Unix(),
 				tc.licType,
 				fmt.Sprintf("tc-%d", i),
@@ -77,8 +88,8 @@ func TestLicense(t *testing.T) {
 
 		err := checkEnterpriseEnabledAt(tc.checkCluster, tc.checkTime, "")
 		if !testutils.IsError(err, tc.err) {
-			t.Fatalf("%d: lic for %s to %s, checked by %s at %s.\n got %q", i,
-				tc.grantedTo.Short(), tc.expiration, tc.checkCluster.Short(), tc.checkTime, err)
+			t.Fatalf("%d: lic for %v to %s, checked by %s at %s.\n got %q", i,
+				tc.grantedTo, tc.expiration, tc.checkCluster, tc.checkTime, err)
 		}
 	}
 }
