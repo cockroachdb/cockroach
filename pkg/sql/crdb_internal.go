@@ -222,7 +222,6 @@ CREATE TABLE crdb_internal.leases (
   name        STRING NOT NULL,
   parent_id   INT NOT NULL,
   expiration  TIMESTAMP NOT NULL,
-  released    BOOL NOT NULL,
   deleted     BOOL NOT NULL
 );
 `,
@@ -246,7 +245,7 @@ CREATE TABLE crdb_internal.leases (
 					if !userCanSeeDescriptor(&state.TableDescriptor, p.session.User) {
 						continue
 					}
-					if state.lease == nil {
+					if state.lease == nil || state.invalid {
 						continue
 					}
 					expCopy := state.lease.expiration
@@ -256,7 +255,6 @@ CREATE TABLE crdb_internal.leases (
 						parser.NewDString(state.Name),
 						parser.NewDInt(parser.DInt(int64(state.ParentID))),
 						&expCopy,
-						parser.MakeDBool(parser.DBool(state.released)),
 						dropped,
 					); err != nil {
 						return err

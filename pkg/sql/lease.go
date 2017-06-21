@@ -74,13 +74,13 @@ type tableVersionState struct {
 	// Care must be taken to not modify it.
 	sqlbase.TableDescriptor
 
-	// mu protects refcount and released
+	// mu protects refcount and invalid.
 	mu       syncutil.Mutex
 	refcount int
-	// Set if the lease has been released and cannot be handed out any more. The
-	// table name cache can have references to such tables since releasing a lease
-	// and updating the cache is not atomic.
-	released bool
+	// Set if the lease has been released and cannot be handed out any more.
+	// The table name cache can have references to such tables because we
+	// don't atomically releasing a lease and update the cache.
+	invalid bool
 
 	// A lease for the table version if needed. Normally a table descriptor is associated
 	// with a lease. For a table descriptor at version "v" its expiration time is the
@@ -116,7 +116,7 @@ func (s *tableVersionState) incRefcount() {
 }
 
 func (s *tableVersionState) incRefcountLocked() {
-	if s.released {
+	if s.invalid {
 		panic(fmt.Sprintf("trying to incRefcount on released lease: %+v", s))
 	}
 	s.refcount++
@@ -670,7 +670,7 @@ func (t *tableState) upsertLocked(ctx context.Context, table *tableVersionState,
 	// subsume the refcount of the older lease.
 	table.refcount += s.refcount
 	s.refcount = 0
-	s.released = true
+	s.invalid = true
 	table.mu.Unlock()
 	s.mu.Unlock()
 	log.VEventf(ctx, 2, "replaced lease: %s with %s", s, table)
@@ -761,7 +761,7 @@ func (t *tableState) release(table sqlbase.TableDescriptor, m *LeaseManager) err
 	decRefcount := func(s *tableVersionState) bool {
 		// Figure out if we'd like to remove the lease from the store asap (i.e.
 		// when the refcount drops to 0). If so, we'll need to mark the lease as
-		// released.
+		// invalid.
 		removeOnceDereferenced := m.LeaseStore.testingKnobs.RemoveOnceDereferenced ||
 			// Release from the store if the table has been dropped; no leases
 			// can be acquired any more.
@@ -780,9 +780,9 @@ func (t *tableState) release(table sqlbase.TableDescriptor, m *LeaseManager) err
 			panic(fmt.Sprintf("negative ref count: %s", s))
 		}
 		if s.refcount == 0 && removeOnceDereferenced {
-			s.released = true
+			s.invalid = true
 		}
-		return s.released
+		return s.invalid
 	}
 	if decRefcount(s) {
 		t.removeTable(s, m)
@@ -947,7 +947,7 @@ func (c *tableNameCache) get(
 		// Expired, or almost expired, table. Don't hand it out.
 		return nil
 	}
-	if table.released {
+	if table.invalid {
 		// This get() raced with a release operation. The leaseManager should remove
 		// this cache entry soon.
 		return nil
