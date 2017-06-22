@@ -3981,7 +3981,8 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 				atomic.AddInt64(&count, 1)
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			} else if filterArgs.Req.Method() == roachpb.GC {
-				t.Fatalf("unexpected GCRequest: %+v", filterArgs.Req)
+				// Can't fatal since we're on a goroutine. This'll do it.
+				t.Error(errors.Errorf("unexpected GCRequest: %+v", filterArgs.Req))
 			}
 			return nil
 		}
