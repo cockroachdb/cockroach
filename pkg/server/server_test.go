@@ -535,3 +535,29 @@ func TestListenURLFileCreation(t *testing.T) {
 		t.Fatalf("expected URL %s to match host %s", u, s.ServingAddr())
 	}
 }
+
+func TestHeartbeatCallbackForDecommissioning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	ts := s.(*TestServer)
+	nodeLiveness := ts.nodeLiveness
+	var liveness *storage.Liveness
+	var err error
+	if liveness, err = nodeLiveness.Self(); err != nil {
+		t.Fatal(err)
+	}
+	if liveness.Decommissioning {
+		t.Fatal("Decommissioning set already")
+	}
+	nodeLiveness.SetDecommissioning(context.Background(), ts.nodeIDContainer.Get(), true)
+	// verify Draining is set by callback
+	testutils.SucceedsSoon(t, func() error {
+		if liveness, err := nodeLiveness.Self(); err != nil {
+			return err
+		} else if !liveness.Decommissioning || !liveness.Draining {
+			return errors.Errorf("either Draining or Decommissioning not set")
+		}
+		return nil
+	})
+}
