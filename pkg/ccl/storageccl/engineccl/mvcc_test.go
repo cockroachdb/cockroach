@@ -151,7 +151,8 @@ func runMVCCIterateIncremental(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustFlush()
-	t.Run("del", assertEqualKVs(e, keyMin, keyMax, ts0, tsMax, kvs(kv1_3Deleted, kv2_2_2)))
+	t.Run("del", assertEqualKVs(e, keyMin, keyMax, ts1, tsMax, kvs(kv1_3Deleted, kv2_2_2)))
+	t.Run("no-tombstone", assertEqualKVs(e, keyMin, keyMax, hlc.Timestamp{}, tsMax, kvs(kv2_2_2)))
 
 	// Exercise intent handling.
 	txn1ID := uuid.MakeV4()
