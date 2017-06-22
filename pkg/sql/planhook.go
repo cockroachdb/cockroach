@@ -32,8 +32,8 @@ import (
 // return (if any). `fn` will be called during the `Start` phase of plan
 // execution.
 type planHookFn func(
-	context.Context, parser.Statement, PlanHookState,
-) (fn func() ([]parser.Datums, error), header sqlbase.ResultColumns, err error)
+	parser.Statement, PlanHookState,
+) (fn func(context.Context) ([]parser.Datums, error), header sqlbase.ResultColumns, err error)
 
 var planHooks []planHookFn
 
@@ -60,7 +60,7 @@ func AddPlanHook(f planHookFn) {
 // hookFnNode is a planNode implemented in terms of a function. It runs the
 // provided function during Start and serves the results it returned.
 type hookFnNode struct {
-	f func() ([]parser.Datums, error)
+	f func(context.Context) ([]parser.Datums, error)
 
 	header sqlbase.ResultColumns
 
@@ -71,9 +71,9 @@ type hookFnNode struct {
 func (*hookFnNode) MarkDebug(_ explainMode) {}
 func (*hookFnNode) Close(context.Context)   {}
 
-func (f *hookFnNode) Start(context.Context) error {
+func (f *hookFnNode) Start(ctx context.Context) error {
 	var err error
-	f.res, err = f.f()
+	f.res, err = f.f(ctx)
 	f.resIdx = -1
 	return err
 }
