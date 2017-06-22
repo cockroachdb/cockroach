@@ -21,17 +21,11 @@ Level  Type     Field  Description  Columns  Ordering
 0      render                       ("1")    ="1"
 1      nullrow                      ()
 
-query ITTT colnames
-EXPLAIN (DEBUG) SELECT 1
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT 1]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-RowIdx  Key  Value  Disposition
-0       NULL NULL   ROW
-
-query ITTT colnames
-EXPLAIN (DEBUG,METADATA) SELECT 1
-----
-RowIdx  Key  Value  Disposition
-0       NULL NULL   ROW
+output row: [1]
 
 query ITTTTT colnames
 EXPLAIN (TYPES) SELECT 1
@@ -43,9 +37,6 @@ Level  Type     Field     Description  Columns    Ordering
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (PLAN,PLAN) SELECT 1
-
-statement error cannot set EXPLAIN mode more than once
-EXPLAIN (PLAN,DEBUG) SELECT 1
 
 statement error unsupported EXPLAIN option
 EXPLAIN (PLAN,UNKNOWN) SELECT 1

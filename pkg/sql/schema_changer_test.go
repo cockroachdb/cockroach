@@ -2010,11 +2010,16 @@ CREATE TABLE d.t (
 	}
 	// Ensure that the decoder sees the old encoding.
 	for indexName, expExplainRow := range map[string]string{
-		"i": "0 /t/i/1/11/2 NULL ROW",
-		"u": "0 /t/u/1 /11/2 ROW",
+		"i": "fetched: /t/i/1/11/2 -> NULL",
+		"u": "fetched: /t/u/1 -> /11/2",
 	} {
 		{
-			rows, err := sqlDB.Query(fmt.Sprintf(`EXPLAIN (DEBUG) SELECT k, a, b FROM d.t@%s;`, indexName))
+			rows, err := sqlDB.Query(
+				fmt.Sprintf(
+					`SELECT message FROM [SHOW KV TRACE FOR SELECT k, a, b FROM d.t@%s] `+
+						`WHERE message LIKE 'fetched:%%'`,
+					indexName,
+				))
 			if err != nil {
 				t.Error(err)
 				continue
@@ -2022,15 +2027,13 @@ CREATE TABLE d.t (
 			defer rows.Close()
 			count := 0
 			for ; rows.Next(); count++ {
-				var i1 *int
-				var t2, t3, t4 *string
-				if err := rows.Scan(&i1, &t2, &t3, &t4); err != nil {
+				var msg string
+				if err := rows.Scan(&msg); err != nil {
 					t.Errorf("row %d scan failed: %s", count, err)
 					continue
 				}
-				row := fmt.Sprintf("%d %s %s %s", *i1, *t2, *t3, *t4)
-				if row != expExplainRow {
-					t.Errorf("expected %q but read %q", expExplainRow, row)
+				if msg != expExplainRow {
+					t.Errorf("expected %q but read %q", expExplainRow, msg)
 				}
 			}
 			if err := rows.Err(); err != nil {

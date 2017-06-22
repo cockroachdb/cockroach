@@ -389,13 +389,16 @@ SELECT d FROM abc ORDER BY LOWER(d)
 one
 Two
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc ORDER BY a]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /abc/primary/1/2/3   NULL  PARTIAL
-0 /abc/primary/1/2/3/d 'one' ROW
-1 /abc/primary/4/5/6   NULL  PARTIAL
-1 /abc/primary/4/5/6/d 'Two' ROW
+fetched: /abc/primary/1/2/3 -> NULL
+fetched: /abc/primary/1/2/3/d -> 'one'
+output row: [1 2 3 'one']
+fetched: /abc/primary/4/5/6 -> NULL
+fetched: /abc/primary/4/5/6/d -> 'Two'
+output row: [4 5 6 'Two']
 
 query ITTT
 EXPLAIN SELECT * FROM abc ORDER BY a
@@ -404,11 +407,14 @@ EXPLAIN SELECT * FROM abc ORDER BY a
 0        table  abc@primary
 0        spans  ALL
 
-query ITTT
-EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM abc ORDER BY b, a]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /abc/ba/2/1/3 NULL ROW
-1 /abc/ba/5/4/6 NULL ROW
+fetched: /abc/ba/2/1/3 -> NULL
+output row: [1 2]
+fetched: /abc/ba/5/4/6 -> NULL
+output row: [4 5]
 
 query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, a
@@ -496,25 +502,34 @@ EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 2          table  abc@bc
 2          spans  ALL
 
-query ITTT
-EXPLAIN (DEBUG) SELECT b, c FROM abc ORDER BY b, c
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT b, c FROM abc ORDER BY b, c]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /abc/bc/2/3 /1 ROW
-1 /abc/bc/5/6 /4 ROW
+fetched: /abc/bc/2/3 -> /1
+output row: [2 3]
+fetched: /abc/bc/5/6 -> /4
+output row: [5 6]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT a, b, c FROM abc ORDER BY b
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT a, b, c FROM abc ORDER BY b]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /abc/bc/2/3 /1 ROW
-1 /abc/bc/5/6 /4 ROW
+fetched: /abc/bc/2/3 -> /1
+output row: [1 2 3]
+fetched: /abc/bc/5/6 -> /4
+output row: [4 5 6]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM abc ORDER BY a DESC]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /abc/primary/4/5/6/d 'Two' PARTIAL
-0 /abc/primary/4/5/6   NULL  ROW
-1 /abc/primary/1/2/3/d 'one' PARTIAL
-1 /abc/primary/1/2/3   NULL  ROW
+fetched: /abc/primary/4/5/6/d -> 'Two'
+fetched: /abc/primary/4/5/6 -> NULL
+output row: [4]
+fetched: /abc/primary/1/2/3/d -> 'one'
+fetched: /abc/primary/1/2/3 -> NULL
+output row: [1]
 
 query ITTT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC

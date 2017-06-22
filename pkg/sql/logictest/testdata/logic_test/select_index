@@ -21,93 +21,125 @@ INSERT INTO t VALUES
   (2, 'two', 22, 'bar'),
   (3, 'three', 33, 'blah')
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 2
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 2]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/primary/2/'two'   NULL  PARTIAL
-0 /t/primary/2/'two'/c 22    PARTIAL
-0 /t/primary/2/'two'/d 'bar' ROW
+fetched: /t/primary/2/'two' -> NULL
+fetched: /t/primary/2/'two'/c -> 22
+fetched: /t/primary/2/'two'/d -> 'bar'
+output row: [2 'two' 22 'bar']
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE a IN (1, 3)
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a IN (1, 3)]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/primary/1/'one'     NULL   PARTIAL
-0 /t/primary/1/'one'/c   11     PARTIAL
-0 /t/primary/1/'one'/d   'foo'  ROW
-1 /t/primary/3/'three'   NULL   PARTIAL
-1 /t/primary/3/'three'/c 33     PARTIAL
-1 /t/primary/3/'three'/d 'blah' ROW
+fetched: /t/primary/1/'one' -> NULL
+fetched: /t/primary/1/'one'/c -> 11
+fetched: /t/primary/1/'one'/d -> 'foo'
+output row: [1 'one' 11 'foo']
+fetched: /t/primary/3/'three' -> NULL
+fetched: /t/primary/3/'three'/c -> 33
+fetched: /t/primary/3/'three'/d -> 'blah'
+output row: [3 'three' 33 'blah']
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE d = 'foo' OR d = 'bar'
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE d = 'foo' OR d = 'bar']
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/dc/'bar'/22/2/'two' NULL ROW
-1 /t/dc/'foo'/11/1/'one' NULL ROW
+fetched: /t/dc/'bar'/22/2/'two' -> NULL
+output row: [2 'two' 22 'bar']
+fetched: /t/dc/'foo'/11/1/'one' -> NULL
+output row: [1 'one' 11 'foo']
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22))
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22))]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/dc/'bar'/22/2/'two' NULL ROW
-1 /t/dc/'foo'/11/1/'one' NULL ROW
+fetched: /t/dc/'bar'/22/2/'two' -> NULL
+output row: [2 'two' 22 'bar']
+fetched: /t/dc/'foo'/11/1/'one' -> NULL
+output row: [1 'one' 11 'foo']
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE (d, c) = ('foo', 11)
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE (d, c) = ('foo', 11)]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/dc/'foo'/11/1/'one' NULL ROW
+fetched: /t/dc/'foo'/11/1/'one' -> NULL
+output row: [1 'one' 11 'foo']
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE a < 2
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a < 2]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/primary/1/'one'   NULL  PARTIAL
-0 /t/primary/1/'one'/c 11    PARTIAL
-0 /t/primary/1/'one'/d 'foo' ROW
+fetched: /t/primary/1/'one' -> NULL
+fetched: /t/primary/1/'one'/c -> 11
+fetched: /t/primary/1/'one'/d -> 'foo'
+output row: [1 'one' 11 'foo']
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE a <= (1 + 1)
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a <= (1 + 1)]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/primary/1/'one'   NULL  PARTIAL
-0 /t/primary/1/'one'/c 11    PARTIAL
-0 /t/primary/1/'one'/d 'foo' ROW
-1 /t/primary/2/'two'   NULL  PARTIAL
-1 /t/primary/2/'two'/c 22    PARTIAL
-1 /t/primary/2/'two'/d 'bar' ROW
+fetched: /t/primary/1/'one' -> NULL
+fetched: /t/primary/1/'one'/c -> 11
+fetched: /t/primary/1/'one'/d -> 'foo'
+output row: [1 'one' 11 'foo']
+fetched: /t/primary/2/'two' -> NULL
+fetched: /t/primary/2/'two'/c -> 22
+fetched: /t/primary/2/'two'/d -> 'bar'
+output row: [2 'two' 22 'bar']
 
-query ITTT
-EXPLAIN (DEBUG) SELECT a, b FROM t WHERE b > 't'
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM t WHERE b > 't']
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/bc/'three'/33/3 NULL ROW
-1 /t/bc/'two'/22/2   NULL ROW
+fetched: /t/bc/'three'/33/3 -> NULL
+output row: [3 'three']
+fetched: /t/bc/'two'/22/2 -> NULL
+output row: [2 'two']
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE d < ('b' || 'l')
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE d < ('b' || 'l')]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/dc/'bar'/22/2/'two' NULL ROW
+fetched: /t/dc/'bar'/22/2/'two' -> NULL
+output row: [2 'two' 22 'bar']
 
 # The where-clause does not contain columns matching a prefix of any
 # index. Note that the index "dc" was chosen because it contains fewer
 # keys per row than the primary key index while still containing all
 # of the needed columns.
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE c = 22
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE c = 22]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/dc/'bar'/22/2/'two'    NULL ROW
-1 /t/dc/'blah'/33/3/'three' NULL FILTERED
-2 /t/dc/'foo'/11/1/'one'    NULL FILTERED
+fetched: /t/dc/'bar'/22/2/'two' -> NULL
+output row: [2 'two' 22 'bar']
+fetched: /t/dc/'blah'/33/3/'three' -> NULL
+fetched: /t/dc/'foo'/11/1/'one' -> NULL
 
 # Use the descending index
-query ITTT
-EXPLAIN (DEBUG) SELECT a FROM t ORDER BY a DESC
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM t ORDER BY a DESC]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /t/a_desc/3/'three'  NULL  ROW
-1  /t/a_desc/2/'two'    NULL  ROW
-2  /t/a_desc/1/'one'    NULL  ROW
+fetched: /t/a_desc/3/'three' -> NULL
+output row: [3]
+fetched: /t/a_desc/2/'two' -> NULL
+output row: [2]
+fetched: /t/a_desc/1/'one' -> NULL
+output row: [1]
 
 # Use the descending index with multiple spans.
-query ITTT
-EXPLAIN (DEBUG) SELECT a FROM t WHERE a in (2, 3) ORDER BY a DESC
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM t WHERE a in (2, 3) ORDER BY a DESC]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /t/a_desc/3/'three'  NULL  ROW
-1  /t/a_desc/2/'two'    NULL  ROW
+fetched: /t/a_desc/3/'three' -> NULL
+output row: [3]
+fetched: /t/a_desc/2/'two' -> NULL
+output row: [2]
 
 # Index selection occurs in direct join operands too.
 query ITTT
@@ -136,18 +168,23 @@ INSERT INTO t VALUES
   (1, 'b', NULL, NULL),
   (1, 'c', NULL, NULL)
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND b > 'b'
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 1 AND b > 'b']
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/primary/1/'c' NULL ROW
+fetched: /t/primary/1/'c' -> NULL
+output row: [1 'c' NULL NULL]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 0 AND b > 'b'
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a > 0 AND b > 'b']
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/primary/1/'c' NULL ROW
+fetched: /t/primary/1/'c' -> NULL
+output row: [1 'c' NULL NULL]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 1 AND b > 'b'
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a > 1 AND b > 'b']
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 
 query ITTT
@@ -156,10 +193,12 @@ EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 0 render
 1 empty
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/primary/1/'b' NULL ROW
+fetched: /t/primary/1/'b' -> NULL
+output row: [1 'b' NULL NULL]
 
 statement ok
 DROP TABLE t
@@ -174,69 +213,99 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1, 2), (3, 4), (5, 6)
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a >= 3 AND a < 5
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a >= 3 AND a < 5]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/3/4 NULL ROW
+fetched: /t/ab/3/4 -> NULL
+output row: [3 4]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a BETWEEN 3 AND 4
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a BETWEEN 3 AND 4]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/3/4 NULL ROW
+fetched: /t/ab/3/4 -> NULL
+output row: [3 4]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a BETWEEN 3 AND 5
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a BETWEEN 3 AND 5]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/3/4 NULL ROW
-1 /t/ab/5/6 NULL ROW
+fetched: /t/ab/3/4 -> NULL
+output row: [3 4]
+fetched: /t/ab/5/6 -> NULL
+output row: [5 6]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 2 OR a < 4
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a < 2 OR a < 4]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/1/2 NULL ROW
-1 /t/ab/3/4 NULL ROW
+fetched: /t/ab/1/2 -> NULL
+output row: [1 2]
+fetched: /t/ab/3/4 -> NULL
+output row: [3 4]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 3 OR a <= 3
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a < 3 OR a <= 3]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/1/2 NULL ROW
-1 /t/ab/3/4 NULL ROW
+fetched: /t/ab/1/2 -> NULL
+output row: [1 2]
+fetched: /t/ab/3/4 -> NULL
+output row: [3 4]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a <= 3 OR a < 3
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a <= 3 OR a < 3]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/1/2 NULL ROW
-1 /t/ab/3/4 NULL ROW
+fetched: /t/ab/1/2 -> NULL
+output row: [1 2]
+fetched: /t/ab/3/4 -> NULL
+output row: [3 4]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a > 3 OR a >= 3
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a > 3 OR a >= 3]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/3/4 NULL ROW
-1 /t/ab/5/6 NULL ROW
+fetched: /t/ab/3/4 -> NULL
+output row: [3 4]
+fetched: /t/ab/5/6 -> NULL
+output row: [5 6]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a >= 3 OR a > 3
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a >= 3 OR a > 3]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/3/4 NULL ROW
-1 /t/ab/5/6 NULL ROW
+fetched: /t/ab/3/4 -> NULL
+output row: [3 4]
+fetched: /t/ab/5/6 -> NULL
+output row: [5 6]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a = 3 OR a = 5
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a = 3 OR a = 5]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/3/4 NULL ROW
-1 /t/ab/5/6 NULL ROW
+fetched: /t/ab/3/4 -> NULL
+output row: [3 4]
+fetched: /t/ab/5/6 -> NULL
+output row: [5 6]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a < 3 OR a > 3
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a < 3 OR a > 3]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/1/2 NULL ROW
-1 /t/ab/3/4 NULL FILTERED
-2 /t/ab/5/6 NULL ROW
+fetched: /t/ab/1/2 -> NULL
+output row: [1 2]
+fetched: /t/ab/3/4 -> NULL
+fetched: /t/ab/5/6 -> NULL
+output row: [5 6]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a + 1 = 4
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a + 1 = 4]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /t/ab/3/4 NULL ROW
+fetched: /t/ab/3/4 -> NULL
+output row: [3 4]
 
 query ITTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false

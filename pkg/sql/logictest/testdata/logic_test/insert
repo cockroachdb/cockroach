@@ -43,140 +43,224 @@ SELECT v || 'hello' FROM [INSERT INTO kv VALUES ('e', 'f'), ('g', '') RETURNING 
 fhello
 hello
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv/primary/'A'     NULL  ROW
-1  /kv/primary/'a'     NULL  PARTIAL
-1  /kv/primary/'a'/v   'b'   ROW
-2  /kv/primary/'c'     NULL  PARTIAL
-2  /kv/primary/'c'/v   'd'   ROW
-3  /kv/primary/'e'     NULL  PARTIAL
-3  /kv/primary/'e'/v   'f'   ROW
-4  /kv/primary/'g'     NULL  PARTIAL
-4  /kv/primary/'g'/v   ''    ROW
-5  /kv/primary/'nil1'  NULL  ROW
-6  /kv/primary/'nil2'  NULL  ROW
-7  /kv/primary/'nil3'  NULL  ROW
-8  /kv/primary/'nil4'  NULL  ROW
+fetched: /kv/primary/'A' -> NULL
+output row: ['A' NULL]
+fetched: /kv/primary/'a' -> NULL
+fetched: /kv/primary/'a'/v -> 'b'
+output row: ['a' 'b']
+fetched: /kv/primary/'c' -> NULL
+fetched: /kv/primary/'c'/v -> 'd'
+output row: ['c' 'd']
+fetched: /kv/primary/'e' -> NULL
+fetched: /kv/primary/'e'/v -> 'f'
+output row: ['e' 'f']
+fetched: /kv/primary/'g' -> NULL
+fetched: /kv/primary/'g'/v -> ''
+output row: ['g' '']
+fetched: /kv/primary/'nil1' -> NULL
+output row: ['nil1' NULL]
+fetched: /kv/primary/'nil2' -> NULL
+output row: ['nil2' NULL]
+fetched: /kv/primary/'nil3' -> NULL
+output row: ['nil3' NULL]
+fetched: /kv/primary/'nil4' -> NULL
+output row: ['nil4' NULL]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv@a
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@a]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv/a/NULL /'A'     ROW
-1  /kv/a/NULL /'nil1'  ROW
-2  /kv/a/NULL /'nil2'  ROW
-3  /kv/a/NULL /'nil3'  ROW
-4  /kv/a/NULL /'nil4'  ROW
-5  /kv/a/''   /'g'     ROW
-6  /kv/a/'b'  /'a'     ROW
-7  /kv/a/'d'  /'c'     ROW
-8  /kv/a/'f'  /'e'     ROW
+fetched: /kv/a/NULL -> /'A'
+output row: ['A' NULL]
+fetched: /kv/a/NULL -> /'nil1'
+output row: ['nil1' NULL]
+fetched: /kv/a/NULL -> /'nil2'
+output row: ['nil2' NULL]
+fetched: /kv/a/NULL -> /'nil3'
+output row: ['nil3' NULL]
+fetched: /kv/a/NULL -> /'nil4'
+output row: ['nil4' NULL]
+fetched: /kv/a/'' -> /'g'
+output row: ['g' '']
+fetched: /kv/a/'b' -> /'a'
+output row: ['a' 'b']
+fetched: /kv/a/'d' -> /'c'
+output row: ['c' 'd']
+fetched: /kv/a/'f' -> /'e'
+output row: ['e' 'f']
 
 statement error pgcode 23505 duplicate key value \(v\)=\('f'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('h', 'f')
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv/primary/'A'     NULL  ROW
-1  /kv/primary/'a'     NULL  PARTIAL
-1  /kv/primary/'a'/v   'b'   ROW
-2  /kv/primary/'c'     NULL  PARTIAL
-2  /kv/primary/'c'/v   'd'   ROW
-3  /kv/primary/'e'     NULL  PARTIAL
-3  /kv/primary/'e'/v   'f'   ROW
-4  /kv/primary/'g'     NULL  PARTIAL
-4  /kv/primary/'g'/v   ''    ROW
-5  /kv/primary/'nil1'  NULL  ROW
-6  /kv/primary/'nil2'  NULL  ROW
-7  /kv/primary/'nil3'  NULL  ROW
-8  /kv/primary/'nil4'  NULL  ROW
+fetched: /kv/primary/'A' -> NULL
+output row: ['A' NULL]
+fetched: /kv/primary/'a' -> NULL
+fetched: /kv/primary/'a'/v -> 'b'
+output row: ['a' 'b']
+fetched: /kv/primary/'c' -> NULL
+fetched: /kv/primary/'c'/v -> 'd'
+output row: ['c' 'd']
+fetched: /kv/primary/'e' -> NULL
+fetched: /kv/primary/'e'/v -> 'f'
+output row: ['e' 'f']
+fetched: /kv/primary/'g' -> NULL
+fetched: /kv/primary/'g'/v -> ''
+output row: ['g' '']
+fetched: /kv/primary/'nil1' -> NULL
+output row: ['nil1' NULL]
+fetched: /kv/primary/'nil2' -> NULL
+output row: ['nil2' NULL]
+fetched: /kv/primary/'nil3' -> NULL
+output row: ['nil3' NULL]
+fetched: /kv/primary/'nil4' -> NULL
+output row: ['nil4' NULL]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv@a
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@a]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv/a/NULL /'A'     ROW
-1  /kv/a/NULL /'nil1'  ROW
-2  /kv/a/NULL /'nil2'  ROW
-3  /kv/a/NULL /'nil3'  ROW
-4  /kv/a/NULL /'nil4'  ROW
-5  /kv/a/''   /'g'     ROW
-6  /kv/a/'b'  /'a'     ROW
-7  /kv/a/'d'  /'c'     ROW
-8  /kv/a/'f'  /'e'     ROW
+fetched: /kv/a/NULL -> /'A'
+output row: ['A' NULL]
+fetched: /kv/a/NULL -> /'nil1'
+output row: ['nil1' NULL]
+fetched: /kv/a/NULL -> /'nil2'
+output row: ['nil2' NULL]
+fetched: /kv/a/NULL -> /'nil3'
+output row: ['nil3' NULL]
+fetched: /kv/a/NULL -> /'nil4'
+output row: ['nil4' NULL]
+fetched: /kv/a/'' -> /'g'
+output row: ['g' '']
+fetched: /kv/a/'b' -> /'a'
+output row: ['a' 'b']
+fetched: /kv/a/'d' -> /'c'
+output row: ['c' 'd']
+fetched: /kv/a/'f' -> /'e'
+output row: ['e' 'f']
 
 statement ok
 INSERT INTO kv VALUES ('f', 'g')
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv/primary/'A'     NULL  ROW
-1  /kv/primary/'a'     NULL  PARTIAL
-1  /kv/primary/'a'/v   'b'   ROW
-2  /kv/primary/'c'     NULL  PARTIAL
-2  /kv/primary/'c'/v   'd'   ROW
-3  /kv/primary/'e'     NULL  PARTIAL
-3  /kv/primary/'e'/v   'f'   ROW
-4  /kv/primary/'f'     NULL  PARTIAL
-4  /kv/primary/'f'/v   'g'   ROW
-5  /kv/primary/'g'     NULL  PARTIAL
-5  /kv/primary/'g'/v   ''    ROW
-6  /kv/primary/'nil1'  NULL  ROW
-7  /kv/primary/'nil2'  NULL  ROW
-8  /kv/primary/'nil3'  NULL  ROW
-9  /kv/primary/'nil4'  NULL  ROW
+fetched: /kv/primary/'A' -> NULL
+output row: ['A' NULL]
+fetched: /kv/primary/'a' -> NULL
+fetched: /kv/primary/'a'/v -> 'b'
+output row: ['a' 'b']
+fetched: /kv/primary/'c' -> NULL
+fetched: /kv/primary/'c'/v -> 'd'
+output row: ['c' 'd']
+fetched: /kv/primary/'e' -> NULL
+fetched: /kv/primary/'e'/v -> 'f'
+output row: ['e' 'f']
+fetched: /kv/primary/'f' -> NULL
+fetched: /kv/primary/'f'/v -> 'g'
+output row: ['f' 'g']
+fetched: /kv/primary/'g' -> NULL
+fetched: /kv/primary/'g'/v -> ''
+output row: ['g' '']
+fetched: /kv/primary/'nil1' -> NULL
+output row: ['nil1' NULL]
+fetched: /kv/primary/'nil2' -> NULL
+output row: ['nil2' NULL]
+fetched: /kv/primary/'nil3' -> NULL
+output row: ['nil3' NULL]
+fetched: /kv/primary/'nil4' -> NULL
+output row: ['nil4' NULL]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv@a
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@a]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv/a/NULL /'A'     ROW
-1  /kv/a/NULL /'nil1'  ROW
-2  /kv/a/NULL /'nil2'  ROW
-3  /kv/a/NULL /'nil3'  ROW
-4  /kv/a/NULL /'nil4'  ROW
-5  /kv/a/''   /'g'     ROW
-6  /kv/a/'b'  /'a'     ROW
-7  /kv/a/'d'  /'c'     ROW
-8  /kv/a/'f'  /'e'     ROW
-9  /kv/a/'g'  /'f'     ROW
+fetched: /kv/a/NULL -> /'A'
+output row: ['A' NULL]
+fetched: /kv/a/NULL -> /'nil1'
+output row: ['nil1' NULL]
+fetched: /kv/a/NULL -> /'nil2'
+output row: ['nil2' NULL]
+fetched: /kv/a/NULL -> /'nil3'
+output row: ['nil3' NULL]
+fetched: /kv/a/NULL -> /'nil4'
+output row: ['nil4' NULL]
+fetched: /kv/a/'' -> /'g'
+output row: ['g' '']
+fetched: /kv/a/'b' -> /'a'
+output row: ['a' 'b']
+fetched: /kv/a/'d' -> /'c'
+output row: ['c' 'd']
+fetched: /kv/a/'f' -> /'e'
+output row: ['e' 'f']
+fetched: /kv/a/'g' -> /'f'
+output row: ['f' 'g']
 
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('h', 'g')
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv/primary/'A'     NULL  ROW
-1  /kv/primary/'a'     NULL  PARTIAL
-1  /kv/primary/'a'/v   'b'   ROW
-2  /kv/primary/'c'     NULL  PARTIAL
-2  /kv/primary/'c'/v   'd'   ROW
-3  /kv/primary/'e'     NULL  PARTIAL
-3  /kv/primary/'e'/v   'f'   ROW
-4  /kv/primary/'f'     NULL  PARTIAL
-4  /kv/primary/'f'/v   'g'   ROW
-5  /kv/primary/'g'     NULL  PARTIAL
-5  /kv/primary/'g'/v   ''    ROW
-6  /kv/primary/'nil1'  NULL  ROW
-7  /kv/primary/'nil2'  NULL  ROW
-8  /kv/primary/'nil3'  NULL  ROW
-9  /kv/primary/'nil4'  NULL  ROW
+fetched: /kv/primary/'A' -> NULL
+output row: ['A' NULL]
+fetched: /kv/primary/'a' -> NULL
+fetched: /kv/primary/'a'/v -> 'b'
+output row: ['a' 'b']
+fetched: /kv/primary/'c' -> NULL
+fetched: /kv/primary/'c'/v -> 'd'
+output row: ['c' 'd']
+fetched: /kv/primary/'e' -> NULL
+fetched: /kv/primary/'e'/v -> 'f'
+output row: ['e' 'f']
+fetched: /kv/primary/'f' -> NULL
+fetched: /kv/primary/'f'/v -> 'g'
+output row: ['f' 'g']
+fetched: /kv/primary/'g' -> NULL
+fetched: /kv/primary/'g'/v -> ''
+output row: ['g' '']
+fetched: /kv/primary/'nil1' -> NULL
+output row: ['nil1' NULL]
+fetched: /kv/primary/'nil2' -> NULL
+output row: ['nil2' NULL]
+fetched: /kv/primary/'nil3' -> NULL
+output row: ['nil3' NULL]
+fetched: /kv/primary/'nil4' -> NULL
+output row: ['nil4' NULL]
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv@a
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@a]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv/a/NULL /'A'     ROW
-1  /kv/a/NULL /'nil1'  ROW
-2  /kv/a/NULL /'nil2'  ROW
-3  /kv/a/NULL /'nil3'  ROW
-4  /kv/a/NULL /'nil4'  ROW
-5  /kv/a/''   /'g'     ROW
-6  /kv/a/'b'  /'a'     ROW
-7  /kv/a/'d'  /'c'     ROW
-8  /kv/a/'f'  /'e'     ROW
-9  /kv/a/'g'  /'f'     ROW
+fetched: /kv/a/NULL -> /'A'
+output row: ['A' NULL]
+fetched: /kv/a/NULL -> /'nil1'
+output row: ['nil1' NULL]
+fetched: /kv/a/NULL -> /'nil2'
+output row: ['nil2' NULL]
+fetched: /kv/a/NULL -> /'nil3'
+output row: ['nil3' NULL]
+fetched: /kv/a/NULL -> /'nil4'
+output row: ['nil4' NULL]
+fetched: /kv/a/'' -> /'g'
+output row: ['g' '']
+fetched: /kv/a/'b' -> /'a'
+output row: ['a' 'b']
+fetched: /kv/a/'d' -> /'c'
+output row: ['c' 'd']
+fetched: /kv/a/'f' -> /'e'
+output row: ['e' 'f']
+fetched: /kv/a/'g' -> /'f'
+output row: ['f' 'g']
 
 query TT
 SELECT * FROM kv ORDER BY k
@@ -288,10 +372,12 @@ CREATE TABLE kv5 (
 statement ok
 INSERT INTO kv5 VALUES('a', NULL)
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv5@a
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv5@a]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0 /kv5/a/NULL/'a' NULL ROW
+fetched: /kv5/a/NULL/'a' -> NULL
+output row: ['a' NULL]
 
 query TT
 SELECT v, k FROM kv5@a

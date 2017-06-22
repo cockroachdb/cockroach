@@ -23,21 +23,34 @@ ui
 users
 zones
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM system.namespace
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM system.namespace]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /namespace/primary/0/'system'/id     1    ROW
-1  /namespace/primary/0/'test'/id       50   ROW
-2  /namespace/primary/1/'descriptor'/id 3    ROW
-3  /namespace/primary/1/'eventlog'/id   12   ROW
-4  /namespace/primary/1/'jobs'/id       15   ROW
-5  /namespace/primary/1/'lease'/id      11   ROW
-6  /namespace/primary/1/'namespace'/id  2    ROW
-7  /namespace/primary/1/'rangelog'/id   13   ROW
-8  /namespace/primary/1/'settings'/id   6    ROW
-9  /namespace/primary/1/'ui'/id         14   ROW
-10 /namespace/primary/1/'users'/id      4    ROW
-11 /namespace/primary/1/'zones'/id      5    ROW
+fetched: /namespace/primary/0/'system'/id -> 1
+output row: [0 'system' 1]
+fetched: /namespace/primary/0/'test'/id -> 50
+output row: [0 'test' 50]
+fetched: /namespace/primary/1/'descriptor'/id -> 3
+output row: [1 'descriptor' 3]
+fetched: /namespace/primary/1/'eventlog'/id -> 12
+output row: [1 'eventlog' 12]
+fetched: /namespace/primary/1/'jobs'/id -> 15
+output row: [1 'jobs' 15]
+fetched: /namespace/primary/1/'lease'/id -> 11
+output row: [1 'lease' 11]
+fetched: /namespace/primary/1/'namespace'/id -> 2
+output row: [1 'namespace' 2]
+fetched: /namespace/primary/1/'rangelog'/id -> 13
+output row: [1 'rangelog' 13]
+fetched: /namespace/primary/1/'settings'/id -> 6
+output row: [1 'settings' 6]
+fetched: /namespace/primary/1/'ui'/id -> 14
+output row: [1 'ui' 14]
+fetched: /namespace/primary/1/'users'/id -> 4
+output row: [1 'users' 4]
+fetched: /namespace/primary/1/'zones'/id -> 5
+output row: [1 'zones' 5]
 
 query ITI rowsort
 SELECT * FROM system.namespace
