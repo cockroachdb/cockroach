@@ -134,7 +134,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	ctx = log.WithLogTag(ctx, "HashJoiner", nil)
-	ctx, span := tracing.ChildSpan(ctx, "hash joiner")
+	ctx, span := processorSpan(ctx, "hash joiner")
 	defer tracing.FinishSpan(span)
 
 	if log.V(2) {
@@ -449,6 +449,7 @@ func (h *hashJoiner) probePhase(ctx context.Context) (earlyExit bool, _ error) {
 		}
 	}
 
+	sendTraceData(ctx, h.out.output)
 	h.out.close()
 	return false, nil
 }

@@ -139,12 +139,28 @@ func TestStartChildSpan(t *testing.T) {
 	tr := NewTracer()
 	sp1 := tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 := StartChildSpan("child", sp1)
+	sp2 := StartChildSpan("child", sp1, false /*!separateRecording*/)
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
 		span parent:
 			span child:
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	sp1 = tr.StartSpan("parent", Recordable)
+	StartRecording(sp1, SingleNodeRecording)
+	sp2 = StartChildSpan("child", sp1, true /*separateRecording*/)
+	sp2.Finish()
+	sp1.Finish()
+	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
+		span parent:
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if err := TestingCheckRecordedSpans(GetRecording(sp2), `
+		span child:
 	`); err != nil {
 		t.Fatal(err)
 	}
