@@ -3974,6 +3974,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	splitKey := roachpb.RKey(key).Next()
 	var count int64
 	tsc := TestStoreConfig(nil)
+	errs := make(chan error, 1)
 	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
@@ -3981,7 +3982,14 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 				atomic.AddInt64(&count, 1)
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			} else if filterArgs.Req.Method() == roachpb.GC {
-				t.Fatalf("unexpected GCRequest: %+v", filterArgs.Req)
+				err := errors.Errorf("unexpected GCRequest: %+v", filterArgs.Req)
+				select {
+				case errs <- err:
+					// If we don't error here, the test actually passes erroneously.
+					// Can't fatal, not the main goroutine!
+					t.Error(err)
+				default:
+				}
 			}
 			return nil
 		}
@@ -3997,6 +4005,11 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	// into Raft only after a rogue GCRequest (at least sporadically), which
 	// would trigger a Fatal from the command filter.
 	testutils.SucceedsSoon(t, func() error {
+		select {
+		case err := <-errs:
+			t.Fatal(err)
+		default:
+		}
 		if atomic.LoadInt64(&count) == 0 {
 			return errors.Errorf("intent resolution not attempted yet")
 		} else if err := tc.store.DB().Put(context.TODO(), "panama", "banana"); err != nil {
