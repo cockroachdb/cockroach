@@ -27,4 +27,5 @@ Not to introduce a new syntax for jobs monitoring and instead, keep the `system.
 Perhaps, the need for introducing a special syntax has not arisen yet, although at least one current customer has requested the ability to query job status from SQL directly, basic status information is already available directly through SQL without introducing new syntax.
 
 # Unresolved questions
-None. This RFC discusses if a new syntax for jobs monitoring should be introduced, how it will actually be implemented is out of scope.
+The future of the `system.jobs` table.  
+This RFC discusses if a new syntax for jobs monitoring should be introduced, how it will actually be implemented is out of scope.
