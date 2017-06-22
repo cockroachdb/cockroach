@@ -457,13 +457,14 @@ func (ir *intentResolver) resolveIntents(
 		}
 		wg.Add(1)
 		action := func() error {
-			defer wg.Done()
 			// TODO(tschottdorf): no tracing here yet.
 			return ir.store.DB().Run(ctx, b)
 		}
 		if ir.store.Stopper().RunLimitedAsyncTask(
 			ctx, "storage.intentResolve: resolving intents", ir.sem, true, /* wait */
 			func(ctx context.Context) {
+				defer wg.Done()
+
 				if err := action(); err != nil {
 					// If we have a waiting caller, pass the first non-nil
 					// error out on the channel.
@@ -476,6 +477,7 @@ func (ir *intentResolver) resolveIntents(
 					log.Warningf(ctx, "unable to resolve external intents: %s", err)
 				}
 			}) != nil {
+			wg.Done()
 			// Try async to not keep the caller waiting, but when draining
 			// just go ahead and do it synchronously. See #1684.
 			// TODO(tschottdorf): This is ripe for removal.
