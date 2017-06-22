@@ -66,21 +66,21 @@ type cliTestParams struct {
 	storeSpecs []base.StoreSpec
 }
 
+func (c *cliTest) fail(err interface{}) {
+	if c.t != nil {
+		defer c.logScope.Close(c.t)
+		c.t.Fatal(err)
+	} else {
+		panic(err)
+	}
+}
+
 func newCLITest(params cliTestParams) cliTest {
 	c := cliTest{t: params.t}
 
-	fail := func(err interface{}) {
-		if c.t != nil {
-			defer c.logScope.Close(c.t)
-			c.t.Fatal(err)
-		} else {
-			panic(err)
-		}
-	}
-
 	certsDir, err := ioutil.TempDir("", "cli-test")
 	if err != nil {
-		fail(err)
+		c.fail(err)
 	}
 	c.certsDir = certsDir
 
@@ -120,19 +120,21 @@ func newCLITest(params cliTestParams) cliTest {
 
 			c.cleanupFunc = func() error {
 				security.SetAssetLoader(securitytest.EmbeddedAssets)
-				return os.RemoveAll(certsDir)
+				return os.RemoveAll(c.certsDir)
 			}
 		}
 
 		s, err := serverutils.StartServerRaw(base.TestServerArgs{
 			Insecure:    params.insecure,
-			SSLCertsDir: certsDir,
+			SSLCertsDir: c.certsDir,
 			StoreSpecs:  params.storeSpecs,
 		})
 		if err != nil {
-			fail(err)
+			c.fail(err)
 		}
 		c.TestServer = s.(*server.TestServer)
+
+		log.Infof(context.TODO(), "server started at %s", c.ServingAddr())
 	}
 
 	baseCfg.User = security.NodeUser
@@ -145,17 +147,10 @@ func newCLITest(params cliTestParams) cliTest {
 	return c
 }
 
-// cleanup cleans up after the test, stopping the server if necessary.
-// The log files are removed if the test has succeeded.
-func (c cliTest) cleanup() {
-	if c.t != nil {
-		defer c.logScope.Close(c.t)
-	}
-
-	// Restore stderr.
-	stderr = log.OrigStderr
-
+// stopServer stops the test server.
+func (c *cliTest) stopServer() {
 	if c.TestServer != nil {
+		log.Infof(context.TODO(), "stopping server at %s", c.ServingAddr())
 		select {
 		case <-c.Stopper().ShouldStop():
 			// If ShouldStop() doesn't block, that means someone has already
@@ -165,6 +160,38 @@ func (c cliTest) cleanup() {
 			c.Stopper().Stop(context.TODO())
 		}
 	}
+}
+
+// restartServer stops and restarts the test server. The ServingAddr() may
+// have changed after this method returns.
+func (c *cliTest) restartServer(params cliTestParams) {
+	c.stopServer()
+	log.Info(context.TODO(), "restarting server")
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{
+		Insecure:    params.insecure,
+		SSLCertsDir: c.certsDir,
+		StoreSpecs:  params.storeSpecs,
+	})
+	if err != nil {
+		c.fail(err)
+	}
+	c.TestServer = s.(*server.TestServer)
+	log.Infof(context.TODO(), "restarted server at %s", c.ServingAddr())
+}
+
+// cleanup cleans up after the test, stopping the server if necessary.
+// The log files are removed if the test has succeeded.
+func (c *cliTest) cleanup() {
+	if c.t != nil {
+		defer c.logScope.Close(c.t)
+	}
+
+	// Restore stderr.
+	stderr = log.OrigStderr
+
+	log.Info(context.TODO(), "stopping server and cleaning up CLI test")
+
+	c.stopServer()
 
 	if err := c.cleanupFunc(); err != nil {
 		panic(err)
