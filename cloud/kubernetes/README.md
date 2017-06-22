@@ -110,25 +110,25 @@ $ kubectl get csr
 NAME                 AGE       REQUESTOR                               CONDITION
 node-cockroachdb-0   4s        system:serviceaccount:default:default   Pending
 
-# Decode and examine the requested certificate:
-$ kubectl get csr node-cockroachdb-0 -o jsonpath='{.spec.request}' | base64 -d | openssl req -text -noout
-Certificate Request:
-    Data:
-        Version: 0 (0x0)
-        Subject: O=Cockroach, CN=node
-        Subject Public Key Info:
-            Public Key Algorithm: rsaEncryption
-                Public-Key: (2048 bit)
-                Modulus:
-									<snip>
-                Exponent: 65537 (0x10001)
-        Attributes:
-        Requested Extensions:
-            X509v3 Subject Alternative Name:
-                DNS:localhost, DNS:cockroachdb-0.cockroachdb.default.svc.cluster.local, DNS:cockroachdb-public, IP Address:127.0.0.1, IP Address:10.20.1.39
-    Signature Algorithm: sha256WithRSAEncryption
-      <snip>
-
+# Examine the CSR:
+$ kubecrtl describe csr node-cockroachdb-0
+Name:                   node-cockroachdb-0
+Labels:                 <none>
+Annotations:            <none>
+CreationTimestamp:      Thu, 22 Jun 2017 09:56:49 -0400
+Requesting User:        system:serviceaccount:default:default
+Status:                 Pending
+Subject:
+        Common Name:    node
+        Serial Number:
+        Organization:   Cockroach
+Subject Alternative Names:
+        DNS Names:      localhost
+                        cockroachdb-0.cockroachdb.default.svc.cluster.local
+                        cockroachdb-public
+        IP Addresses:   127.0.0.1
+                        172.17.0.5
+Events: <none>
 
 # If everything checks out, approve the CSR:
 $ kubectl certificate approve node-cockroachdb-0
