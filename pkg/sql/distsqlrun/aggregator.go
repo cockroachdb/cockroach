@@ -181,7 +181,7 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 
 	ctx = log.WithLogTag(ctx, "Agg", nil)
-	ctx, span := tracing.ChildSpan(ctx, "aggregator")
+	ctx, span := processorSpan(ctx, "aggregator")
 	defer tracing.FinishSpan(span)
 
 	if log.V(2) {
@@ -228,6 +228,7 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 	// If the consumer has been found to be done, emitHelper() already closed the
 	// output.
 	if !consumerDone {
+		sendTraceData(ctx, ag.out.output)
 		ag.out.close()
 	}
 }

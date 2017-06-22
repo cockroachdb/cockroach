@@ -19,6 +19,9 @@ package sql
 import (
 	"golang.org/x/net/context"
 
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -304,6 +308,14 @@ func (r *distSQLReceiver) Push(
 		if len(meta.Ranges) > 0 {
 			if err := r.updateCaches(r.ctx, meta.Ranges); err != nil && r.err == nil {
 				r.err = err
+			}
+		}
+		if len(meta.TraceData) > 0 {
+			span := opentracing.SpanFromContext(r.ctx)
+			if span == nil {
+				r.err = errors.New("trying to ingest remote spans but there is no recording span set up")
+			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
+				r.err = errors.Errorf("error ingesting remote spans: %s", err)
 			}
 		}
 		return r.status

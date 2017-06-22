@@ -129,7 +129,7 @@ func (ds *ServerImpl) Start() {
 // must be finished through Flow.Cleanup.
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context,
-	spanCtx opentracing.SpanContext,
+	parentSpan opentracing.Span,
 	req *SetupFlowRequest,
 	syncFlowConsumer RowReceiver,
 ) (context.Context, *Flow, error) {
@@ -149,11 +149,11 @@ func (ds *ServerImpl) setupFlow(
 
 	const opName = "flow"
 	var sp opentracing.Span
-	if spanCtx == nil {
+	if parentSpan == nil {
 		sp = ds.Tracer.StartSpan(opName)
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
-		sp = ds.Tracer.StartSpan(opName, opentracing.FollowsFrom(spanCtx))
+		sp = ds.Tracer.StartSpan(opName, opentracing.FollowsFrom(parentSpan.Context()))
 	}
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
@@ -222,11 +222,7 @@ func (ds *ServerImpl) setupFlow(
 func (ds *ServerImpl) SetupSyncFlow(
 	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
 ) (context.Context, *Flow, error) {
-	var spanCtx opentracing.SpanContext
-	if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
-		spanCtx = parentSp.Context()
-	}
-	return ds.setupFlow(ds.AnnotateCtx(ctx), spanCtx, req, output)
+	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), req, output)
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
@@ -264,15 +260,12 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *SetupFlowRequest,
 ) (*SimpleResponse, error) {
-	var spanCtx opentracing.SpanContext
-	if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
-		spanCtx = parentSp.Context()
-	}
+	parentSpan := opentracing.SpanFromContext(ctx)
 
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, err := ds.setupFlow(ctx, spanCtx, req, nil)
+	ctx, f, err := ds.setupFlow(ctx, parentSpan, req, nil)
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}
