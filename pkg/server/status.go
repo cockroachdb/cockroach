@@ -24,7 +24,9 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/coreos/etcd/raft"
@@ -484,6 +486,48 @@ func (s *statusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
+
+	response := &serverpb.NodesResponse{}
+	requestedNodeIDs := make(map[roachpb.NodeID]struct{})
+	if req != nil && len(req.NodeIDs) > 0 {
+		for _, nodeIDString := range strings.Split(req.NodeIDs, ",") {
+			nodeID, _, err := s.parseNodeID(nodeIDString)
+			if err != nil {
+				return nil, grpc.Errorf(codes.InvalidArgument, errors.Wrapf(err,
+					"could not parse node_ids parameter, it must be a comma separated list of node ids: %s",
+					req.NodeIDs,
+				).Error())
+			}
+			requestedNodeIDs[nodeID] = struct{}{}
+		}
+		var requestedNodeIDValues []roachpb.NodeID
+		for requestedNodeID := range requestedNodeIDs {
+			requestedNodeIDValues = append(requestedNodeIDValues, requestedNodeID)
+		}
+		sort.Slice(requestedNodeIDValues, func(i, j int) bool {
+			return requestedNodeIDValues[i] < requestedNodeIDValues[j]
+		})
+		requestedNodeIDStrings := make([]string, len(requestedNodeIDValues))
+		for i, requestedNodeID := range requestedNodeIDValues {
+			requestedNodeIDStrings[i] = fmt.Sprintf("n%d", requestedNodeID)
+		}
+		response.Filters = []string{fmt.Sprintf("only nodes: %s", strings.Join(requestedNodeIDStrings, ","))}
+	}
+
+	var localityRegex *regexp.Regexp
+	if req != nil && len(req.Locality) > 0 {
+		var err error
+		localityRegex, err = regexp.Compile(req.Locality)
+		if err != nil {
+			return nil, grpc.Errorf(codes.InvalidArgument, errors.Wrapf(err,
+				"could not compile regex for locality parameter: %s",
+				req.Locality,
+			).Error())
+		}
+		response.Filters = append(response.Filters,
+			fmt.Sprintf("locality regex: %s", localityRegex.String()))
+	}
+
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -493,18 +537,31 @@ func (s *statusServer) Nodes(
 		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
-	rows := b.Results[0].Rows
 
-	resp := serverpb.NodesResponse{
-		Nodes: make([]status.NodeStatus, len(rows)),
+	if len(b.Results) != 1 {
+		return nil, grpc.Errorf(codes.Internal, "could not retrieve node statuses")
 	}
-	for i, row := range rows {
-		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
+	for _, row := range b.Results[0].Rows {
+		var nodeStatus status.NodeStatus
+		if err := row.ValueProto(&nodeStatus); err != nil {
 			log.Error(ctx, err)
 			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}
+		if len(requestedNodeIDs) > 0 {
+			// If a subset of nodes have been requested, skip all those that are not
+			// in that list.
+			if _, ok := requestedNodeIDs[nodeStatus.Desc.NodeID]; !ok {
+				continue
+			}
+		}
+		if localityRegex != nil {
+			if !localityRegex.MatchString(nodeStatus.Desc.Locality.String()) {
+				continue
+			}
+		}
+		response.Nodes = append(response.Nodes, nodeStatus)
 	}
-	return &resp, nil
+	return response, nil
 }
 
 // handleNodeStatus handles GET requests for a single node's status.

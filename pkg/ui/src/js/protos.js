@@ -9666,6 +9666,8 @@ export const cockroach = $root.cockroach = (() => {
                  * Properties of a NodesRequest.
                  * @typedef cockroach.server.serverpb.NodesRequest$Properties
                  * @type {Object}
+                 * @property {string} [node_ids] NodesRequest node_ids.
+                 * @property {string} [locality] NodesRequest locality.
                  */
 
                 /**
@@ -9680,6 +9682,18 @@ export const cockroach = $root.cockroach = (() => {
                             if (properties[keys[i]] != null)
                                 this[keys[i]] = properties[keys[i]];
                 }
+
+                /**
+                 * NodesRequest node_ids.
+                 * @type {string}
+                 */
+                NodesRequest.prototype.node_ids = "";
+
+                /**
+                 * NodesRequest locality.
+                 * @type {string}
+                 */
+                NodesRequest.prototype.locality = "";
 
                 /**
                  * Creates a new NodesRequest instance using the specified properties.
@@ -9699,6 +9713,10 @@ export const cockroach = $root.cockroach = (() => {
                 NodesRequest.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
+                    if (message.node_ids != null && message.hasOwnProperty("node_ids"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.node_ids);
+                    if (message.locality != null && message.hasOwnProperty("locality"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.locality);
                     return writer;
                 };
 
@@ -9727,6 +9745,12 @@ export const cockroach = $root.cockroach = (() => {
                     while (reader.pos < end) {
                         let tag = reader.uint32();
                         switch (tag >>> 3) {
+                        case 1:
+                            message.node_ids = reader.string();
+                            break;
+                        case 2:
+                            message.locality = reader.string();
+                            break;
                         default:
                             reader.skipType(tag & 7);
                             break;
@@ -9756,6 +9780,12 @@ export const cockroach = $root.cockroach = (() => {
                 NodesRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
+                    if (message.node_ids != null && message.hasOwnProperty("node_ids"))
+                        if (!$util.isString(message.node_ids))
+                            return "node_ids: string expected";
+                    if (message.locality != null && message.hasOwnProperty("locality"))
+                        if (!$util.isString(message.locality))
+                            return "locality: string expected";
                     return null;
                 };
 
@@ -9767,7 +9797,12 @@ export const cockroach = $root.cockroach = (() => {
                 NodesRequest.fromObject = function fromObject(object) {
                     if (object instanceof $root.cockroach.server.serverpb.NodesRequest)
                         return object;
-                    return new $root.cockroach.server.serverpb.NodesRequest();
+                    let message = new $root.cockroach.server.serverpb.NodesRequest();
+                    if (object.node_ids != null)
+                        message.node_ids = String(object.node_ids);
+                    if (object.locality != null)
+                        message.locality = String(object.locality);
+                    return message;
                 };
 
                 /**
@@ -9785,8 +9820,19 @@ export const cockroach = $root.cockroach = (() => {
                  * @param {$protobuf.ConversionOptions} [options] Conversion options
                  * @returns {Object.<string,*>} Plain object
                  */
-                NodesRequest.toObject = function toObject() {
-                    return {};
+                NodesRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.node_ids = "";
+                        object.locality = "";
+                    }
+                    if (message.node_ids != null && message.hasOwnProperty("node_ids"))
+                        object.node_ids = message.node_ids;
+                    if (message.locality != null && message.hasOwnProperty("locality"))
+                        object.locality = message.locality;
+                    return object;
                 };
 
                 /**
@@ -9816,6 +9862,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @typedef cockroach.server.serverpb.NodesResponse$Properties
                  * @type {Object}
                  * @property {Array.<cockroach.server.status.NodeStatus$Properties>} [nodes] NodesResponse nodes.
+                 * @property {Array.<string>} [filters] NodesResponse filters.
                  */
 
                 /**
@@ -9826,6 +9873,7 @@ export const cockroach = $root.cockroach = (() => {
                  */
                 function NodesResponse(properties) {
                     this.nodes = [];
+                    this.filters = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                             if (properties[keys[i]] != null)
@@ -9837,6 +9885,12 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {Array.<cockroach.server.status.NodeStatus$Properties>}
                  */
                 NodesResponse.prototype.nodes = $util.emptyArray;
+
+                /**
+                 * NodesResponse filters.
+                 * @type {Array.<string>}
+                 */
+                NodesResponse.prototype.filters = $util.emptyArray;
 
                 /**
                  * Creates a new NodesResponse instance using the specified properties.
@@ -9859,6 +9913,9 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.nodes != null && message.nodes.length)
                         for (let i = 0; i < message.nodes.length; ++i)
                             $root.cockroach.server.status.NodeStatus.encode(message.nodes[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    if (message.filters != null && message.filters.length)
+                        for (let i = 0; i < message.filters.length; ++i)
+                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.filters[i]);
                     return writer;
                 };
 
@@ -9891,6 +9948,11 @@ export const cockroach = $root.cockroach = (() => {
                             if (!(message.nodes && message.nodes.length))
                                 message.nodes = [];
                             message.nodes.push($root.cockroach.server.status.NodeStatus.decode(reader, reader.uint32()));
+                            break;
+                        case 2:
+                            if (!(message.filters && message.filters.length))
+                                message.filters = [];
+                            message.filters.push(reader.string());
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -9930,6 +9992,13 @@ export const cockroach = $root.cockroach = (() => {
                                 return "nodes." + error;
                         }
                     }
+                    if (message.filters != null && message.hasOwnProperty("filters")) {
+                        if (!Array.isArray(message.filters))
+                            return "filters: array expected";
+                        for (let i = 0; i < message.filters.length; ++i)
+                            if (!$util.isString(message.filters[i]))
+                                return "filters: string[] expected";
+                    }
                     return null;
                 };
 
@@ -9951,6 +10020,13 @@ export const cockroach = $root.cockroach = (() => {
                                 throw TypeError(".cockroach.server.serverpb.NodesResponse.nodes: object expected");
                             message.nodes[i] = $root.cockroach.server.status.NodeStatus.fromObject(object.nodes[i]);
                         }
+                    }
+                    if (object.filters) {
+                        if (!Array.isArray(object.filters))
+                            throw TypeError(".cockroach.server.serverpb.NodesResponse.filters: array expected");
+                        message.filters = [];
+                        for (let i = 0; i < object.filters.length; ++i)
+                            message.filters[i] = String(object.filters[i]);
                     }
                     return message;
                 };
@@ -9974,12 +10050,19 @@ export const cockroach = $root.cockroach = (() => {
                     if (!options)
                         options = {};
                     let object = {};
-                    if (options.arrays || options.defaults)
+                    if (options.arrays || options.defaults) {
                         object.nodes = [];
+                        object.filters = [];
+                    }
                     if (message.nodes && message.nodes.length) {
                         object.nodes = [];
                         for (let j = 0; j < message.nodes.length; ++j)
                             object.nodes[j] = $root.cockroach.server.status.NodeStatus.toObject(message.nodes[j], options);
+                    }
+                    if (message.filters && message.filters.length) {
+                        object.filters = [];
+                        for (let j = 0; j < message.filters.length; ++j)
+                            object.filters[j] = message.filters[j];
                     }
                     return object;
                 };
