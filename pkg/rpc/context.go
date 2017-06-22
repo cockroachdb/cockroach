@@ -91,8 +91,10 @@ func NewServer(ctx *Context) *grpc.Server {
 		// The limiting factor for lowering the max message size is the fact
 		// that a single large kv can be sent over the network in one message.
 		// Our maximum kv size is unlimited, so we need this to be very large.
-		// TODO(peter,tamird): need tests before lowering
-		grpc.MaxMsgSize(math.MaxInt32),
+		//
+		// TODO(peter,tamird): need tests before lowering.
+		grpc.MaxRecvMsgSize(math.MaxInt32),
+		grpc.MaxSendMsgSize(math.MaxInt32),
 		// Adjust the stream and connection window sizes. The gRPC defaults are too
 		// low for high latency connections.
 		grpc.InitialWindowSize(initialWindowSize),
@@ -273,6 +275,15 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 
 		var dialOpts []grpc.DialOption
 		dialOpts = append(dialOpts, dialOpt)
+		// The limiting factor for lowering the max message size is the fact
+		// that a single large kv can be sent over the network in one message.
+		// Our maximum kv size is unlimited, so we need this to be very large.
+		//
+		// TODO(peter,tamird): need tests before lowering.
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(math.MaxInt32),
+			grpc.MaxCallSendMsgSize(math.MaxInt32),
+		))
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
 		dialOpts = append(dialOpts, grpc.WithDecompressor(snappyDecompressor{}))
 		// Compression is enabled separately from decompression to allow staged
