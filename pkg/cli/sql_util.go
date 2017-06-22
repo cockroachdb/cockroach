@@ -46,16 +46,28 @@ type sqlConn struct {
 	url          string
 	conn         sqlConnI
 	reconnecting bool
+
+	// dbName is the last known current database, to be reconfigured in
+	// case of automatic reconnects.
+	dbName string
 }
 
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
 		if c.reconnecting && isInteractive {
-			fmt.Fprintf(stderr, "connection lost; opening new connection and resetting session parameters...\n")
+			fmt.Fprintf(stderr, "connection lost; opening new connection: all session settings will be lost\n")
 		}
 		conn, err := pq.Open(c.url)
 		if err != nil {
 			return err
+		}
+		if c.reconnecting && c.dbName != "" {
+			// Attempt to reset the current database.
+			if _, err := conn.(sqlConnI).Exec(
+				`SET DATABASE = `+parser.Name(c.dbName).String(), nil,
+			); err != nil {
+				fmt.Fprintf(stderr, "unable to restore current database: %v\n", err)
+			}
 		}
 		c.reconnecting = false
 		c.conn = conn.(sqlConnI)
@@ -122,6 +134,10 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 		return err
 	}
 	_, err := c.conn.Exec(query, args)
+	if err == driver.ErrBadConn {
+		c.reconnecting = true
+		c.Close()
+	}
 	return err
 }
 
