@@ -73,16 +73,19 @@ query II
 SELECT * FROM kv
 ----
 
-query TTTT
-EXPLAIN (DEBUG) SELECT * FROM kv
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 
-query TTTT
-EXPLAIN (DEBUG) SELECT * FROM kv@foo
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@foo]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 
-query TTTT
-EXPLAIN (DEBUG) SELECT * FROM kv@bar
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@bar]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 
 statement error column name "nonexistent" not found

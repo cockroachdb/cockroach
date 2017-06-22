@@ -27,20 +27,24 @@ t      c_idx    true    4    d       N/A        true     false
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@b_idx
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /t/b_idx/2/1/c/d  /3/4  ROW
+fetched: /t/b_idx/2/1/c/d -> /3/4
+output row: [1 2 3 4]
 
 query IIII
 SELECT a, b, c, d FROM t@b_idx
 ----
 1 2 3 4
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@c_idx
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@c_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /t/c_idx/3  /1/2/4  ROW
+fetched: /t/c_idx/3 -> /1/2/4
+output row: [1 2 3 4]
 
 query IIII
 SELECT a, b, c, d FROM t@c_idx
@@ -52,10 +56,12 @@ SELECT a, b, c, d FROM t@c_idx
 statement ok
 CREATE INDEX d_idx ON t (d) STORING (a, b)
 
-query ITTT
-EXPLAIN (DEBUG) SELECT a, b, d FROM t@d_idx
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT a, b, d FROM t@d_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /t/d_idx/4/1/b  /2  ROW
+fetched: /t/d_idx/4/1/b -> /2
+output row: [1 2 4]
 
 query III
 SELECT a, b, d FROM t@d_idx
@@ -68,10 +74,12 @@ CREATE INDEX error ON t (d) STORING (d)
 statement ok
 CREATE UNIQUE INDEX a_idx ON t (a) STORING (b)
 
-query ITTT
-EXPLAIN (DEBUG) SELECT a, b FROM t@a_idx
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM t@a_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /t/a_idx/1/b  /2  ROW
+fetched: /t/a_idx/1/b -> /2
+output row: [1 2]
 
 # Regression test for #14601.
 
