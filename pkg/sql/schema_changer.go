@@ -369,7 +369,7 @@ func (sc *SchemaChanger) exec(ctx context.Context, evalCtx parser.EvalContext) e
 	if !foundJobID {
 		// No job means we've already run and completed this schema change
 		// successfully, so we can just exit.
-		return errDidntUpdateDescriptor
+		return nil
 	}
 
 	if err := sc.jobLogger.Started(ctx); err != nil {
