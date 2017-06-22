@@ -2,7 +2,7 @@
 - Status: draft
 - Start Date: 2017-06-22
 - Authors: Julian Gilyadov
-- RFC PR: to be added
+- RFC PR: [#16688](https://github.com/cockroachdb/cockroach/pull/16688)
 - Cockroach Issue: None
 
 # Motivation
@@ -15,17 +15,29 @@ In addition to consistent interface, the current interface to jobs monitoring vi
 It is also worthy to note that at least one current customer has requested the ability to query job status from SQL directly.
 
 # Design
-For consistency, it is best to follow the `SHOW [LOCAL|CLUSTER] [QUERIES|SESSIONS]` syntax ([RFC](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/monitoring_queries_and_sessions.md)):  
-`SHOW [LOCAL|CLUSTER] JOBS`  
-Where `CLUSTER` is the default when unspecified.
+For consistency, it is best to follow the `SHOW [QUERIES|SESSIONS]` syntax ([RFC](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/monitoring_queries_and_sessions.md)):  
+`SHOW JOBS`  
+Since all jobs are cluster jobs there's no need to specify `LOCAL` or `CLUSTER` (like in the RFC above).
+
+The proposed columns to return from `SHOW JOBS` ([`crdb_internal.jobs` table](https://github.com/cockroachdb/docs/issues/1293)):
+* `id` — the ID of the job
+* `type` — the type of the job (currently BACKUP or RESTORE)
+* `description` — the query used to create the job
+* `username` — the user who created the job
+* `descriptor_ids` — the IDs of the tables impacted by the job
+* `status` — pending, running, succeeded, failed (aborted soon)
+* `created, started, finished` — the time of state transitions
+* `modified` — the last time this row was updated
+* `fraction_completed` — the approximate progress of this job
+* `error` — the error that caused the job to fail, if it failed
 
 # Drawbacks
 Additional SQL syntax with no direct basis in another SQL dialect.
 
 # Alternatives
-Not to introduce a new syntax for jobs monitoring and instead, keep the `system.jobs` table as the way to track the status of these long-running backup, restore, and schema change jobs.  
+Not to introduce a new syntax for jobs monitoring and instead, keep the `crdb_internal.jobs` table as the way to track the status of these long-running backup, restore, and schema change jobs.  
 Perhaps, the need for introducing a special syntax has not arisen yet, although at least one current customer has requested the ability to query job status from SQL directly, basic status information is already available directly through SQL without introducing new syntax.
 
 # Unresolved questions
-The future of the `system.jobs` table.  
+The future of the `system.jobs` and `crdb_internal.jobs` tables.  
 This RFC discusses if a new syntax for jobs monitoring should be introduced, how it will actually be implemented is out of scope.
