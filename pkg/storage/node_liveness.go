@@ -82,7 +82,7 @@ type IsLiveCallback func(nodeID roachpb.NodeID)
 
 // HeartbeatCallback is invoked whenever this node updates its own liveness status,
 // indicating that it is alive.
-type HeartbeatCallback func(context.Context) error
+type HeartbeatCallback func(context.Context)
 
 // NodeLiveness encapsulates information on node liveness and provides
 // an API for querying, updating, and invalidating node
@@ -609,7 +609,7 @@ func (nl *NodeLiveness) updateLiveness(
 	cb := nl.mu.heartbeatCallback
 	nl.mu.Unlock()
 	if cb != nil {
-		return cb(ctx)
+		cb(ctx)
 	}
 	return nil
 }

@@ -818,15 +818,16 @@ func (s *Server) Start(ctx context.Context) error {
 	//    liveness record is updated.
 	// 2. sets Draining if Decommissioning is set in the liveness record
 	sem := make(chan struct{}, 1)
-	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, func(ctx context.Context) error {
+	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, func(ctx context.Context) {
 		now := s.clock.Now()
 		if err := s.node.stores.VisitStores(func(s *storage.Store) error {
 			return s.WriteLastUpTimestamp(ctx, now)
 		}); err != nil {
-			return err
+			log.Warning(ctx, errors.Wrap(err, "writing last up timestamp"))
 		}
-		if liveness, err := s.nodeLiveness.Self(); err != nil {
-			return err
+
+		if liveness, err := s.nodeLiveness.Self(); err != nil && err != storage.ErrNoLivenessRecord {
+			log.Warning(ctx, errors.Wrap(err, "retrieving own liveness record"))
 		} else if liveness != nil && liveness.Decommissioning && !liveness.Draining {
 			s.stopper.RunWorker(ctx, func(context.Context) {
 				select {
@@ -843,7 +844,6 @@ func (s *Server) Start(ctx context.Context) error {
 			})
 
 		}
-		return nil
 	})
 
 	// Initialize grpc-gateway mux and context.
