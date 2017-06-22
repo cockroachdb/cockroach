@@ -18,7 +18,6 @@ package sql
 
 import (
 	"bytes"
-	"fmt"
 
 	"golang.org/x/net/context"
 
@@ -34,9 +33,6 @@ type filterNode struct {
 	source     planDataSource
 	filter     parser.TypedExpr
 	ivarHelper parser.IndexedVarHelper
-	// support attributes for EXPLAIN(DEBUG)
-	explain   explainMode
-	debugVals debugValues
 }
 
 // IndexedVarEval implements the parser.IndexedVarContainer interface.
@@ -66,15 +62,6 @@ func (f *filterNode) Next(ctx context.Context) (bool, error) {
 			return false, err
 		}
 
-		if f.explain == explainDebug {
-			f.debugVals = f.source.plan.DebugValues()
-
-			if f.debugVals.output != debugValueRow {
-				// Let the debug values pass through.
-				return true, nil
-			}
-		}
-
 		passesFilter, err := sqlbase.RunFilter(f.filter, &f.p.evalCtx)
 		if err != nil {
 			return false, err
@@ -82,28 +69,9 @@ func (f *filterNode) Next(ctx context.Context) (bool, error) {
 
 		if passesFilter {
 			return true, nil
-		} else if f.explain == explainDebug {
-			// Mark the row as filtered out.
-			f.debugVals.output = debugValueFiltered
-			return true, nil
 		}
 		// Row was filtered out; grab the next row.
 	}
-}
-
-func (f *filterNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	f.explain = mode
-	f.source.plan.MarkDebug(mode)
-}
-
-func (f *filterNode) DebugValues() debugValues {
-	if f.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", f.explain))
-	}
-	return f.debugVals
 }
 
 func (f *filterNode) Close(ctx context.Context) {

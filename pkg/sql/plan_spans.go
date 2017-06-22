@@ -54,8 +54,6 @@ func collectSpans(ctx context.Context, plan planNode) (reads, writes roachpb.Spa
 		return collectSpans(ctx, n.plan)
 	case *distinctNode:
 		return collectSpans(ctx, n.plan)
-	case *explainDebugNode:
-		return collectSpans(ctx, n.plan)
 	case *explainDistSQLNode:
 		return collectSpans(ctx, n.plan)
 	case *explainPlanNode:

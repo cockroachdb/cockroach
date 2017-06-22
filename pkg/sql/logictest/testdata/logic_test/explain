@@ -38,6 +38,9 @@ Level  Type     Field     Description  Columns    Ordering
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (PLAN,PLAN) SELECT 1
 
+statement error cannot set EXPLAIN mode more than once
+EXPLAIN (PLAN,DISTSQL) SELECT 1
+
 statement error unsupported EXPLAIN option
 EXPLAIN (PLAN,UNKNOWN) SELECT 1
 

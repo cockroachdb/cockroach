@@ -69,9 +69,7 @@ type scanNode struct {
 	reverse          bool
 	ordering         orderingInfo
 
-	explain   explainMode
-	rowIndex  int64 // the index of the current row
-	debugVals debugValues
+	rowIndex int64 // the index of the current row
 
 	// filter that can be evaluated using only this table/index; it contains
 	// parser.IndexedVar leaves generated using filterVars.
@@ -107,20 +105,6 @@ func (p *planner) Scan() *scanNode {
 
 func (n *scanNode) Values() parser.Datums {
 	return n.row
-}
-
-func (n *scanNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-}
-
-func (n *scanNode) DebugValues() debugValues {
-	if n.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
-	}
-	return n.debugVals
 }
 
 // disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
@@ -166,55 +150,12 @@ func (n *scanNode) limitHint() int64 {
 	return limitHint
 }
 
-// debugNext is a helper function used by Next() when in explainDebug mode.
-func (n *scanNode) debugNext(ctx context.Context) (bool, error) {
-	if n.hardLimit > 0 && n.rowIndex >= n.hardLimit {
-		return false, nil
-	}
-
-	// In debug mode, we output a set of debug values for each key.
-	n.debugVals.rowIdx = int(n.rowIndex)
-	var err error
-	var encRow sqlbase.EncDatumRow
-	n.debugVals.key, n.debugVals.value, encRow, err = n.fetcher.NextKeyDebug(ctx)
-	if err != nil || n.debugVals.key == "" {
-		return false, err
-	}
-	if encRow == nil {
-		n.row = nil
-		n.debugVals.output = debugValuePartial
-		return true, nil
-	}
-	datums := make(parser.Datums, len(encRow))
-	var da sqlbase.DatumAlloc
-
-	if err := sqlbase.EncDatumRowToDatums(datums, encRow, &da); err != nil {
-		return false, errors.Errorf("Could not decode row: %v", err)
-	}
-	n.row = datums
-	passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
-	if err != nil {
-		return false, err
-	}
-	if passesFilter {
-		n.debugVals.output = debugValueRow
-	} else {
-		n.debugVals.output = debugValueFiltered
-	}
-	n.rowIndex++
-	return true, nil
-}
-
 func (n *scanNode) Next(ctx context.Context) (bool, error) {
 	tracing.AnnotateTrace()
 	if !n.scanInitialized {
 		if err := n.initScan(ctx); err != nil {
 			return false, err
 		}
-	}
-
-	if n.explain == explainDebug {
-		return n.debugNext(ctx)
 	}
 
 	// We fetch one row at a time until we find one that passes the filter.
