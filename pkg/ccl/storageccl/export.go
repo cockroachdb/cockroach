@@ -151,11 +151,8 @@ func evalExport(
 			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
 		}
 
-		// Pass only non-tombstone KVs to the row counter.
-		if len(iter.UnsafeValue()) != 0 {
-			if err := rows.count(iter.UnsafeKey().Key); err != nil {
-				return storage.EvalResult{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
-			}
+		if err := rows.count(iter.UnsafeKey().Key); err != nil {
+			return storage.EvalResult{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
 		}
 		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
 			return storage.EvalResult{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())

@@ -162,6 +162,11 @@ func (i *MVCCIncrementalIterator) Next() {
 			continue
 		}
 
+		if (i.startTime == hlc.Timestamp{}) && len(i.iter.UnsafeValue()) == 0 {
+			i.iter.NextKey()
+			continue
+		}
+
 		i.nextkey = true
 		break
 	}

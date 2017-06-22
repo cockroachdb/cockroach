@@ -120,7 +120,7 @@ func TestExport(t *testing.T) {
 	if expected := 2; len(paths5) != expected {
 		t.Fatalf("expected %d files in export got %d", expected, len(paths5))
 	}
-	if expected := 3; len(kvs5) != expected {
+	if expected := 2; len(kvs5) != expected {
 		t.Fatalf("expected %d kvs in export got %d", expected, len(kvs5))
 	}
 }
