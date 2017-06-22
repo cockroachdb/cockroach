@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Andrei Matei (andrei@cockroachlabs.com)
 
 package sql_test
 

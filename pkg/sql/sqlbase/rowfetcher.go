@@ -565,30 +565,6 @@ func (rf *RowFetcher) NextRowDecoded(ctx context.Context, traceKV bool) (parser.
 	return rf.decodedRow, nil
 }
 
-// NextKeyDebug processes one key at a time and returns a pretty printed key and
-// value. If we completed a row, the row is returned as well (see nextRow). If
-// there are no more keys, prettyKey is "".
-func (rf *RowFetcher) NextKeyDebug(
-	ctx context.Context,
-) (prettyKey string, prettyValue string, row EncDatumRow, err error) {
-	if rf.kvEnd {
-		return "", "", nil, nil
-	}
-	prettyKey, prettyValue, err = rf.processKV(ctx, rf.kv, true)
-	if err != nil {
-		return "", "", nil, err
-	}
-	rowDone, err := rf.NextKey(ctx)
-	if err != nil {
-		return "", "", nil, err
-	}
-	if rowDone {
-		rf.finalizeRow()
-		row = rf.row
-	}
-	return prettyKey, prettyValue, row, nil
-}
-
 func (rf *RowFetcher) finalizeRow() {
 	// Fill in any missing values with NULLs
 	for i := range rf.cols {

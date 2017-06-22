@@ -1,8 +1,10 @@
 - Feature Name: explain_debug
-- Status: completed
+- Status: obsolete
 - Start Date: 2015-08-10
 - RFC PR: [#2047](https://github.com/cockroachdb/cockroach/pull/2047)
 - Cockroach Issue:
+
+**Note: obsoleted in favor of session tracing.**
 
 # Summary
 

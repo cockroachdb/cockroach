@@ -149,6 +149,3 @@ func (n *traceNode) Next(ctx context.Context) (bool, error) {
 func (n *traceNode) Values() parser.Datums {
 	return n.traceRows[n.curRow-1][:]
 }
-
-func (*traceNode) MarkDebug(_ explainMode)  {}
-func (*traceNode) DebugValues() debugValues { return debugValues{} }
