@@ -429,6 +429,9 @@ func print(key roachpb.Key) string {
 }
 
 func decodeKeyPrint(key roachpb.Key) string {
+	if key.Equal(SystemConfigSpan.Key) {
+		return "/SystemConfigSpan/Start"
+	}
 	return encoding.PrettyPrintValue(key, "/")
 }
 
