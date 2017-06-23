@@ -99,7 +99,7 @@ func MakeColumnDefDescs(
 	switch t := d.Type.(type) {
 	case *parser.BoolColType:
 	case *parser.IntColType:
-		col.Type.Width = int32(t.N)
+		col.Type.Width = int32(t.Width)
 		if t.IsSerial() {
 			if d.HasDefaultExpr() {
 				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", col.Name)
@@ -116,6 +116,9 @@ func MakeColumnDefDescs(
 			return nil, nil, errors.New("precision for type float must be at least 1 bit")
 		}
 		col.Type.Precision = int32(t.Prec)
+		if val, present := visibleTypeMap[t.Name]; present {
+			col.Type.VisibleType = ColumnType_VisibleType(val)
+		}
 	case *parser.DecimalColType:
 		col.Type.Width = int32(t.Scale)
 		col.Type.Precision = int32(t.Prec)
@@ -1615,22 +1618,32 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 	case ColumnType_INT:
 		if v, ok := parser.AsDInt(val); ok {
 			if col.Type.Width > 0 {
-				// https://www.postgresql.org/docs/9.5/static/datatype-bit.html
-				// "bit type data must match the length n exactly; it is an error
-				// to attempt to store shorter or longer bit strings. bit varying
-				// data is of variable length up to the maximum length n; longer
-				// strings will be rejected."
-				//
-				// TODO(nvanbenschoten): Because we do not propagate the "varying"
-				// flag on the column type, the best we can do here is conservatively
-				// assume the varying bit type and error only on longer bit strings.
-				mostSignificantBit := int32(0)
-				for bits := uint64(v); bits != 0; mostSignificantBit++ {
-					bits >>= 1
-				}
-				if mostSignificantBit > col.Type.Width {
-					return fmt.Errorf("bit string too long for type %s (column %q)",
-						col.Type.SQLString(), col.Name)
+				if col.Type.VisibleType == ColumnType_NONE {
+					// https://www.postgresql.org/docs/9.5/static/datatype-bit.html
+					// "bit type data must match the length n exactly; it is an error
+					// to attempt to store shorter or longer bit strings. bit varying
+					// data is of variable length up to the maximum length n; longer
+					// strings will be rejected."
+					//
+					// TODO(nvanbenschoten): Because we do not propagate the "varying"
+					// flag on the column type, the best we can do here is conservatively
+					// assume the varying bit type and error only on longer bit strings.
+					bits := uint64(v)
+					shiftedBits := bits >> uint(col.Type.Width)
+
+					if shiftedBits != 0 {
+						return fmt.Errorf("bit string too long for type %s (column %q)",
+							col.Type.SQLString(), col.Name)
+					}
+				} else {
+					// https://www.postgresql.org/docs/9.6/static/datatype-numeric.html#DATATYPE-NUMERIC-TABLE
+					// Width is defined in bits, so we're performing bounds checks inline with Go's
+					// implementation of min and max ints in Math.go.
+					width := uint(col.Type.Width - 1)
+					if v < (-1<<width) || v > (1<<width-1) {
+						return fmt.Errorf("integer out of range for type %s (column %q)",
+							col.Type.VisibleType, col.Name)
+					}
 				}
 			}
 		}
