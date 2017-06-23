@@ -434,7 +434,7 @@ func (n *createViewNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	id, err := GenerateUniqueDescID(ctx, n.p.txn)
+	id, err := GenerateUniqueDescID(ctx, n.p.session.execCfg.DB)
 	if err != nil {
 		return nil
 	}
@@ -605,7 +605,7 @@ func (n *createTableNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	id, err := GenerateUniqueDescID(ctx, n.p.txn)
+	id, err := GenerateUniqueDescID(ctx, n.p.session.execCfg.DB)
 	if err != nil {
 		return err
 	}

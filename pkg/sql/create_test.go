@@ -82,6 +82,10 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
+	// Even though the CREATE above failed, the counter is still incremented
+	// (that's performed non-transactionally).
+	expectedCounter++
+
 	if ir, err := kvDB.Get(ctx, keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
 	} else if actual := ir.ValueInt(); actual != expectedCounter {
@@ -107,6 +111,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	dbDescKey = sqlbase.MakeDescMetadataKey(sqlbase.ID(expectedCounter))
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}

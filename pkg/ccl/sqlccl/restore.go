@@ -197,7 +197,7 @@ func reassignTableIDs(
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		newTableIDs = make(map[sqlbase.ID]sqlbase.ID, len(tables))
 		for _, table := range tables {
-			newTableID, err := sql.GenerateUniqueDescID(ctx, txn)
+			newTableID, err := sql.GenerateUniqueDescID(ctx, &db)
 			if err != nil {
 				return err
 			}
