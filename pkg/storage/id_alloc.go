@@ -34,6 +34,9 @@ import (
 
 // An idAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
+//
+// Note: if all you want is to increment a key and retry on retryable errors,
+// see client.IncrementValRetryable().
 type idAllocator struct {
 	log.AmbientContext
 

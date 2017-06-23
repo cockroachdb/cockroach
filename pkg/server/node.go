@@ -146,7 +146,7 @@ type Node struct {
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
 func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) {
-	val, err := incVal(ctx, db, keys.NodeIDGenerator, 1)
+	val, err := client.IncrementValRetryable(ctx, db, keys.NodeIDGenerator, 1)
 	if err != nil {
 		return 0, errors.Wrap(err, "unable to allocate node ID")
 	}
@@ -159,29 +159,11 @@ func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) 
 func allocateStoreIDs(
 	ctx context.Context, nodeID roachpb.NodeID, inc int64, db *client.DB,
 ) (roachpb.StoreID, error) {
-	val, err := incVal(ctx, db, keys.StoreIDGenerator, inc)
+	val, err := client.IncrementValRetryable(ctx, db, keys.StoreIDGenerator, inc)
 	if err != nil {
 		return 0, errors.Wrapf(err, "unable to allocate %d store IDs for node %d", inc, nodeID)
 	}
 	return roachpb.StoreID(val - inc + 1), nil
-}
-
-// incVal increments a key's value by a specified amount and returns the new
-// value.
-// It performs the increment as a retryable non-transactional increment. The key
-// might be incremented multiple times because of the retries.
-func incVal(ctx context.Context, db *client.DB, key roachpb.Key, inc int64) (int64, error) {
-	var err error
-	var res client.KeyValue
-	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-		res, err = db.Inc(ctx, key, inc)
-		switch err.(type) {
-		case *roachpb.UnhandledRetryableError, *roachpb.AmbiguousResultError:
-			continue
-		}
-		break
-	}
-	return res.ValueInt(), err
 }
 
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new

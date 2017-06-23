@@ -65,14 +65,15 @@ func (d descriptorAlreadyExistsErr) Error() string {
 }
 
 // GenerateUniqueDescID returns the next available Descriptor ID and increments
-// the counter.
-func GenerateUniqueDescID(ctx context.Context, txn *client.Txn) (sqlbase.ID, error) {
+// the counter. The incrementing is non-transactional, and the counter could be
+// incremented multiple times because of retries.
+func GenerateUniqueDescID(ctx context.Context, db *client.DB) (sqlbase.ID, error) {
 	// Increment unique descriptor counter.
-	ir, err := txn.Inc(ctx, keys.DescIDGenerator, 1)
+	newVal, err := client.IncrementValRetryable(ctx, db, keys.DescIDGenerator, 1)
 	if err != nil {
 		return 0, err
 	}
-	return sqlbase.ID(ir.ValueInt() - 1), nil
+	return sqlbase.ID(newVal - 1), nil
 }
 
 // createDescriptor implements the DescriptorAccessor interface.
@@ -102,7 +103,7 @@ func (p *planner) createDescriptor(
 		return false, err
 	}
 
-	id, err := GenerateUniqueDescID(ctx, p.txn)
+	id, err := GenerateUniqueDescID(ctx, p.session.execCfg.DB)
 	if err != nil {
 		return false, err
 	}
