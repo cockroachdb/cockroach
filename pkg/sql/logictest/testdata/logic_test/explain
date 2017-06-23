@@ -60,7 +60,7 @@ EXPLAIN (METADATA) SHOW TRACE FOR SELECT 1
 2  render                               ("timestamp", "timestamp", message, context, operation, span)
 3  window                               ("timestamp", message, context, operation, span)
 4  render                               ("timestamp", message, context, operation, span, txn_idx, span_idx, message_idx)
-5  show trace for                       (txn_idx, span_idx, message_idx, "timestamp", duration, operation, message)
+5  show trace for                       (txn_idx, span_idx, message_idx, "timestamp", duration, operation, context, message)
 6  render                               ("1")                                                                             ="1"
 7  nullrow                              ()
 

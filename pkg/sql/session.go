@@ -23,10 +23,13 @@ import (
 	"strings"
 	"time"
 
+	wrapper "github.com/olekukonko/tablewriter"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
+
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -1222,7 +1225,11 @@ func extractMsgFromRecord(rec tracing.RecordedSpan_LogRecord) string {
 	return "<event missing in trace message>"
 }
 
-type traceRow [7]parser.Datum
+type traceRow [8]parser.Datum
+
+// contextRegexp matches log lines like "[n1,s1] foo blah", returning a match
+// for the context (everything in square brackets) and for everything else.
+var contextRegexp = regexp.MustCompile(`^(.*\[[^\[\]]*\]) (.*)$`)
 
 // generateSessionTraceVTable generates the rows of said table by using the log
 // messages from the session's trace (i.e. the ongoing trace, if any, or the
@@ -1308,14 +1315,29 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 			dur = parser.DNull
 		}
 
+		// Separate message into context (e.g. [n1,s1]) and the rest, if possible.
+		contextCol := parser.DNull
+		unwrappedMsg := lrr.msg
+
+		matches := contextRegexp.FindStringSubmatch(lrr.msg)
+		if len(matches) == 3 {
+			contextCol = parser.NewDString(matches[1])
+			unwrappedMsg = matches[2]
+		}
+
+		// Wrap long log messages to make traces easier to read on the command line.
+		strs, _ := wrapper.WrapString(unwrappedMsg, 80)
+		msg := strings.Join(strs, "\n")
+
 		row := traceRow{
 			parser.NewDInt(parser.DInt(lrr.span.txnIdx)),            // txn_idx
 			parser.NewDInt(parser.DInt(lrr.span.index)),             // span_idx
 			parser.NewDInt(parser.DInt(lrr.index)),                  // message_idx
 			parser.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond), // timestamp
-			dur,                        // duration
-			operation,                  // operation
-			parser.NewDString(lrr.msg), // message
+			dur,                    // duration
+			operation,              // operation
+			contextCol,             // context
+			parser.NewDString(msg), // message
 		}
 		res = append(res, row)
 	}
