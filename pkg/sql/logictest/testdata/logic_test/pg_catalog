@@ -1134,3 +1134,13 @@ query I
 SELECT COUNT(*) FROM pg_catalog.pg_index WHERE indkey[0] IS NULL;
 ----
 0
+
+## TODO(masha): #16769
+#statement ok
+#CREATE TABLE types(a int8, b int2);
+
+#query I
+#SELECT attname, atttypid, typname FROM pg_attribute a JOIN pg_type t ON a.atttypid=t.oid WHERE attrelid = 'types'::REGCLASS;
+#attname   atttypid  typname
+#a         20        int8
+#b         20        int2
