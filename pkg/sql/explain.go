@@ -32,7 +32,6 @@ type explainMode int
 
 const (
 	explainNone explainMode = iota
-	explainDebug
 	explainPlan
 	// explainDistSQL shows the physical distsql plan for a query and whether a
 	// query would be run in "auto" DISTSQL mode. See explainDistSQLNode for
@@ -41,7 +40,6 @@ const (
 )
 
 var explainStrings = map[explainMode]string{
-	explainDebug:   "debug",
 	explainPlan:    "plan",
 	explainDistSQL: "distsql",
 }
@@ -136,9 +134,6 @@ func (p *planner) Explain(ctx context.Context, n *parser.Explain) (planNode, err
 		return nil, err
 	}
 	switch mode {
-	case explainDebug:
-		return &explainDebugNode{plan: plan}, nil
-
 	case explainDistSQL:
 		return &explainDistSQLNode{
 			plan:           plan,
@@ -156,88 +151,6 @@ func (p *planner) Explain(ctx context.Context, n *parser.Explain) (planNode, err
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
 	}
 }
-
-type debugValueType int
-
-const (
-	// The debug values do not refer to a full result row.
-	debugValuePartial debugValueType = iota
-
-	// The debug values refer to a full result row but the row was filtered out.
-	debugValueFiltered
-
-	// The debug value refers to a full result row that has been stored in a buffer
-	// and will be emitted later.
-	debugValueBuffered
-
-	// The debug values refer to a full result row.
-	debugValueRow
-)
-
-func (t debugValueType) String() string {
-	switch t {
-	case debugValuePartial:
-		return "PARTIAL"
-
-	case debugValueFiltered:
-		return "FILTERED"
-
-	case debugValueBuffered:
-		return "BUFFERED"
-
-	case debugValueRow:
-		return "ROW"
-
-	default:
-		panic(fmt.Sprintf("invalid debugValueType %d", t))
-	}
-}
-
-// debugValues is a set of values used to implement EXPLAIN (DEBUG).
-type debugValues struct {
-	rowIdx int
-	key    string
-	value  string
-	output debugValueType
-}
-
-// explainDebugNode is a planNode that wraps another node and converts DebugValues() results to a
-// row of Values(). It is used as the top-level node for EXPLAIN (DEBUG) statements.
-type explainDebugNode struct {
-	optColumnsSlot
-	plan planNode
-}
-
-// Columns for explainDebug mode.
-var debugColumns = sqlbase.ResultColumns{
-	{Name: "RowIdx", Typ: parser.TypeInt},
-	{Name: "Key", Typ: parser.TypeString},
-	{Name: "Value", Typ: parser.TypeString},
-	{Name: "Disposition", Typ: parser.TypeString},
-}
-
-func (n *explainDebugNode) Start(ctx context.Context) error        { return n.plan.Start(ctx) }
-func (n *explainDebugNode) Next(ctx context.Context) (bool, error) { return n.plan.Next(ctx) }
-func (n *explainDebugNode) Close(ctx context.Context)              { n.plan.Close(ctx) }
-
-func (n *explainDebugNode) Values() parser.Datums {
-	vals := n.plan.DebugValues()
-
-	keyVal := parser.DNull
-	if vals.key != "" {
-		keyVal = parser.NewDString(vals.key)
-	}
-
-	return parser.Datums{
-		parser.NewDInt(parser.DInt(vals.rowIdx)),
-		keyVal,
-		parser.NewDString(vals.value),
-		parser.NewDString(vals.output.String()),
-	}
-}
-
-func (*explainDebugNode) MarkDebug(_ explainMode)  {}
-func (*explainDebugNode) DebugValues() debugValues { return debugValues{} }
 
 // explainDistSQLNode is a planNode that wraps a plan and returns
 // information related to running that plan under DistSQL.
@@ -257,9 +170,7 @@ type explainDistSQLNode struct {
 	done bool
 }
 
-func (*explainDistSQLNode) MarkDebug(_ explainMode)  {}
-func (*explainDistSQLNode) DebugValues() debugValues { return debugValues{} }
-func (*explainDistSQLNode) Close(context.Context)    {}
+func (*explainDistSQLNode) Close(context.Context) {}
 
 var explainDistSQLColumns = sqlbase.ResultColumns{
 	{Name: "Automatic", Typ: parser.TypeBool},

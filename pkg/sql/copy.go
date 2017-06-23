@@ -54,20 +54,10 @@ type copyNode struct {
 }
 
 func (*copyNode) Values() parser.Datums              { return nil }
-func (*copyNode) MarkDebug(_ explainMode)            {}
 func (*copyNode) Next(context.Context) (bool, error) { return false, nil }
 
 func (n *copyNode) Close(ctx context.Context) {
 	n.rowsMemAcc.Wsession(n.p.session).Close(ctx)
-}
-
-func (*copyNode) DebugValues() debugValues {
-	return debugValues{
-		rowIdx: 0,
-		key:    "",
-		value:  parser.DNull.String(),
-		output: debugValueRow,
-	}
 }
 
 // CopyFrom begins a COPY.

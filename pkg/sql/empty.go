@@ -33,17 +33,7 @@ type emptyNode struct {
 
 func (*emptyNode) Values() parser.Datums       { return nil }
 func (*emptyNode) Start(context.Context) error { return nil }
-func (*emptyNode) MarkDebug(_ explainMode)     {}
 func (*emptyNode) Close(context.Context)       {}
-
-func (e *emptyNode) DebugValues() debugValues {
-	return debugValues{
-		rowIdx: 0,
-		key:    "",
-		value:  parser.DNull.String(),
-		output: debugValueRow,
-	}
-}
 
 func (e *emptyNode) Next(context.Context) (bool, error) {
 	r := e.results

@@ -36,8 +36,6 @@ type limitNode struct {
 	count      int64
 	offset     int64
 	rowIndex   int64
-	explain    explainMode
-	debugVals  debugValues
 }
 
 // limit constructs a limitNode based on the LIMIT and OFFSET clauses.
@@ -149,21 +147,6 @@ func (n *limitNode) evalLimit() error {
 
 func (n *limitNode) Values() parser.Datums { return n.plan.Values() }
 
-func (n *limitNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-	n.plan.MarkDebug(mode)
-}
-
-func (n *limitNode) DebugValues() debugValues {
-	if n.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
-	}
-	return n.debugVals
-}
-
 func (n *limitNode) Next(ctx context.Context) (bool, error) {
 	// n.rowIndex is the 0-based index of the next row.
 	// We don't do (n.rowIndex >= n.offset + n.count) to avoid overflow (count can be MaxInt64).
@@ -176,25 +159,12 @@ func (n *limitNode) Next(ctx context.Context) (bool, error) {
 			return false, err
 		}
 
-		if n.explain == explainDebug {
-			n.debugVals = n.plan.DebugValues()
-			if n.debugVals.output != debugValueRow {
-				// Let the non-row debug values pass through.
-				break
-			}
-		}
-
 		n.rowIndex++
 		if n.rowIndex > n.offset {
 			// Row within limits, return it.
 			break
 		}
 
-		if n.explain == explainDebug {
-			// Return as a filtered row.
-			n.debugVals.output = debugValueFiltered
-			break
-		}
 		// Fetch the next row.
 	}
 	return true, nil

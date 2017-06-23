@@ -203,12 +203,12 @@ allows embedding a `trace.EventLog` in a `Context` ; events go to that
 `EventLog` automatically unless a span is also embedded in the
 context.
 
-There’s also `EXPLAIN(TRACE)SELECT …` that uses “snowball tracing” for
+There’s also `SET TRACE = on` that uses “snowball tracing” for
 collecting the distributed trace of one query and displaying it as SQL
 result rows. Snowball tracing is trace mode where trace information is
 stored in-memory, instead of being sent to a trace collector, so that
 the application can inspect its own trace later; this is the
-mechanism used by `EXPLAIN(TRACE)` to present the execution
+mechanism used by session tracing to present the execution
 trace back to the SQL client.
 
 There’s also the
@@ -363,7 +363,7 @@ response protos. We call this **“snowball tracing”** (a high-level
 client enables it by marking a request as “traced”, and then lower
 level rpc clients propagate this marker with their calls, and the
 trace grows like a snowball… Or something.). This mechanism enables
-`EXPLAIN(TRACE)` and all the other trace collection features.
+session tracing and all the other trace collection features.
 
 If the Lightstep integration is enabled, crdb uses both the Lightstep
 and the internal tracers simultaneously - through a
@@ -432,7 +432,7 @@ a single trace, so we do it at the txn level. It hasn’t been a problem
 yet… When you’re using Lightstep for collection (or also the net.trace
 integrations), you’re relying on it to be fast and asynchronous and
 maybe drop log messages when too many have been accumulated.  When we
-talk about other trace collection mechanisms (e.g. `EXPLAIN(TRACE)`),
+talk about other trace collection mechanisms (e.g. session tracing),
 we’re assuming that the user is going to be judicious about not
 tracing operations that are too massive. ]
 

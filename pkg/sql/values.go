@@ -158,18 +158,6 @@ func (n *valuesNode) Values() parser.Datums {
 	return n.rows.At(n.nextRow - 1)
 }
 
-func (*valuesNode) MarkDebug(_ explainMode) {}
-
-func (n *valuesNode) DebugValues() debugValues {
-	val := n.rows.At(n.nextRow - 1)
-	return debugValues{
-		rowIdx: n.nextRow - 1,
-		key:    fmt.Sprintf("%d", n.nextRow-1),
-		value:  val.String(),
-		output: debugValueRow,
-	}
-}
-
 func (n *valuesNode) Next(context.Context) (bool, error) {
 	if n.nextRow >= n.rows.Len() {
 		return false, nil
