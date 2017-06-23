@@ -89,6 +89,7 @@ func TestPrettyPrint(t *testing.T) {
 		{RangeMetaKey(roachpb.RKey(makeKey(Meta2Prefix, roachpb.Key("foo")))), `/Meta1/"foo"`},
 
 		// table
+		{SystemConfigSpan.Key, "/Table/SystemConfigSpan/Start"},
 		{UserTableDataMin, "/Table/50"},
 		{MakeTablePrefix(111), "/Table/111"},
 		{makeKey(MakeTablePrefix(42), roachpb.RKey("foo")), `/Table/42/"foo"`},
