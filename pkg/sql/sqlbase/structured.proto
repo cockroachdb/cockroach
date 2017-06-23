@@ -69,6 +69,12 @@ message ColumnType {
     NONE = 0;
     INT8 = 1;
     INT64 = 2;
+    INT2 = 3;
+    INT4 = 4;
+    SMALLINT = 5;
+    FLOAT4 = 6;
+    FLOAT8 = 7;
+    BIT = 8;
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];

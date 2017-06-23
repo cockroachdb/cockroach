@@ -1709,7 +1709,7 @@ func ColumnsSelectors(cols []ColumnDescriptor) parser.SelectExprs {
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {
 	case ColumnType_INT:
-		if c.Width > 0 {
+		if c.Width > 0 && c.VisibleType == ColumnType_BIT {
 			// A non-zero width indicates a bit array. The syntax "INT(N)"
 			// is invalid so be sure to use "BIT".
 			return fmt.Sprintf("BIT(%d)", c.Width)
