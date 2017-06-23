@@ -1719,7 +1719,7 @@ func (c *ColumnType) SQLString() string {
 			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
 		}
 	case ColumnType_FLOAT:
-		if c.Precision > 0 {
+		if c.Precision > 0 && c.VisibleType == ColumnType_NONE {
 			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
 	case ColumnType_DECIMAL:

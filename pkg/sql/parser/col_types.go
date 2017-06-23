@@ -96,10 +96,12 @@ func (node *BoolColType) Format(buf *bytes.Buffer, f FmtFlags) {
 var (
 	intColTypeBit         = &IntColType{Name: "BIT", N: 1, ImplicitWidth: true}
 	intColTypeInt         = &IntColType{Name: "INT"}
+	intColTypeInt2        = &IntColType{Name: "INT2", Precision: 16}
+	intColTypeInt4        = &IntColType{Name: "INT4", Precision: 32}
 	intColTypeInt8        = &IntColType{Name: "INT8"}
 	intColTypeInt64       = &IntColType{Name: "INT64"}
 	intColTypeInteger     = &IntColType{Name: "INTEGER"}
-	intColTypeSmallInt    = &IntColType{Name: "SMALLINT"}
+	intColTypeSmallInt    = &IntColType{Name: "SMALLINT", Precision: 16}
 	intColTypeBigInt      = &IntColType{Name: "BIGINT"}
 	intColTypeSerial      = &IntColType{Name: "SERIAL"}
 	intColTypeSmallSerial = &IntColType{Name: "SMALLSERIAL"}
@@ -119,6 +121,7 @@ func newIntBitType(n int) (*IntColType, error) {
 type IntColType struct {
 	Name          string
 	N             int
+	Precision     int
 	ImplicitWidth bool
 }
 
@@ -141,6 +144,8 @@ func (node *IntColType) IsSerial() bool {
 var (
 	floatColTypeReal   = &FloatColType{Name: "REAL"}
 	floatColTypeFloat  = &FloatColType{Name: "FLOAT"}
+	floatColTypeFloat4 = &FloatColType{Name: "FLOAT4", Prec: 4, PrecSpecified: true}
+	floatColTypeFloat8 = &FloatColType{Name: "FLOAT8", Prec: 8, PrecSpecified: true}
 	floatColTypeDouble = &FloatColType{Name: "DOUBLE PRECISION"}
 )
 
@@ -163,7 +168,7 @@ func NewFloatColType(prec int, precSpecified bool) *FloatColType {
 // Format implements the NodeFormatter interface.
 func (node *FloatColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
-	if node.Prec > 0 {
+	if node.Prec > 0 && node.Name == "FLOAT" {
 		fmt.Fprintf(buf, "(%d)", node.Prec)
 	}
 }

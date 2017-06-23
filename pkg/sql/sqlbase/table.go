@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"math"
 )
 
 func exprContainsVarsError(context string, Expr parser.Expr) error {
@@ -100,6 +101,7 @@ func MakeColumnDefDescs(
 	case *parser.BoolColType:
 	case *parser.IntColType:
 		col.Type.Width = int32(t.N)
+		col.Type.Precision = int32(t.Precision)
 		if t.IsSerial() {
 			if d.HasDefaultExpr() {
 				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", col.Name)
@@ -116,6 +118,9 @@ func MakeColumnDefDescs(
 			return nil, nil, errors.New("precision for type float must be at least 1 bit")
 		}
 		col.Type.Precision = int32(t.Prec)
+		if val, present := visibleTypeMap[t.Name]; present {
+			col.Type.VisibleType = ColumnType_VisibleType(val)
+		}
 	case *parser.DecimalColType:
 		col.Type.Width = int32(t.Scale)
 		col.Type.Precision = int32(t.Prec)
@@ -1631,6 +1636,13 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 				if mostSignificantBit > col.Type.Width {
 					return fmt.Errorf("bit string too long for type %s (column %q)",
 						col.Type.SQLString(), col.Name)
+				}
+			}
+			if col.Type.Precision > 0 {
+				prec := col.Type.Precision - 1
+				if (float64(v) < -(math.Pow(2, float64(prec)))) || (float64(v) > (math.Pow(2, float64(prec)))-1) {
+					return fmt.Errorf("integer out of range for type %s (column %q)",
+						col.Type.VisibleType, col.Name)
 				}
 			}
 		}

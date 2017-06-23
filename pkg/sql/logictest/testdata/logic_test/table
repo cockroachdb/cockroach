@@ -308,86 +308,94 @@ statement ok
 CREATE TABLE test.alltypes (
   a BOOL,
   b INT,
-  c INT8,
-  d INT64,
-  e INTEGER,
-  f SMALLINT,
-  g BIGINT,
-  h SERIAL,
-  i SMALLSERIAL,
-  j BIGSERIAL,
-  k BIT,
-  l BIT(12),
-  m CHAR,
-  n CHAR(12),
-  o VARCHAR,
-  p VARCHAR(12),
-  q REAL,
-  r FLOAT,
-  s DOUBLE PRECISION,
-  t DEC,
-  u DEC(1),
-  v DEC(2,1),
-  w DECIMAL,
-  x DECIMAL(1),
-  y DECIMAL(2,1),
-  z NUMERIC,
-  aa NUMERIC(1),
-  ab NUMERIC(2,1),
-  ac DATE,
-  ad TIMESTAMP,
-  ae TIMESTAMP WITH TIME ZONE,
-  af STRING,
-  ag STRING(12),
-  ah TEXT,
-  ai BLOB,
-  aj BYTES,
-  ak BYTEA,
-  al INTERVAL
+  c INT2,
+  d INT4,
+  e INT8,
+  f INT64,
+  g INTEGER,
+  h SMALLINT,
+  i BIGINT,
+  j SERIAL,
+  k SMALLSERIAL,
+  l BIGSERIAL,
+  m BIT,
+  n BIT(12),
+  o CHAR,
+  p CHAR(12),
+  q VARCHAR,
+  r VARCHAR(12),
+  s REAL,
+  t FLOAT,
+  u FLOAT4,
+  v FLOAT8,
+  w DOUBLE PRECISION,
+  x DEC,
+  y DEC(1),
+  z DEC(2,1),
+  aa DECIMAL,
+  ab DECIMAL(1),
+  ac DECIMAL(2,1),
+  ad NUMERIC,
+  ae NUMERIC(1),
+  af NUMERIC(2,1),
+  ag DATE,
+  ah TIMESTAMP,
+  ai TIMESTAMP WITH TIME ZONE,
+  aj STRING,
+  ak STRING(12),
+  al TEXT,
+  am BLOB,
+  an BYTES,
+  ao BYTEA,
+  ap INTERVAL
   )
 
 query TTBTT colnames
 SHOW COLUMNS FROM test.alltypes
 ----
-Field  Type                      Null   Default         Indices
-a      BOOL                      true   NULL            {}
-b      INT                       true   NULL			{}
-c      INT8                      true   NULL			{}
-d      INT64                     true   NULL			{}
-e      INT                       true   NULL			{}
-f      INT                       true   NULL			{}
-g      INT                       true   NULL			{}
-h      INT                       true   unique_rowid()	{}
-i      INT                       true   unique_rowid()	{}
-j      INT                       true   unique_rowid()	{}
-k      BIT(1)                    true   NULL			{}
-l      BIT(12)                   true   NULL			{}
-m      STRING                    true   NULL			{}
-n      STRING(12)                true   NULL			{}
-o      STRING                    true   NULL			{}
-p      STRING(12)                true   NULL			{}
-q      FLOAT                     true   NULL			{}
-r      FLOAT                     true   NULL			{}
-s      FLOAT                     true   NULL			{}
-t      DECIMAL                   true   NULL			{}
-u      DECIMAL(1)                true   NULL			{}
-v      DECIMAL(2,1)              true   NULL			{}
-w      DECIMAL                   true   NULL			{}
-x      DECIMAL(1)                true   NULL			{}
-y      DECIMAL(2,1)              true   NULL			{}
-z      DECIMAL                   true   NULL			{}
-aa     DECIMAL(1)                true   NULL			{}
-ab     DECIMAL(2,1)              true   NULL			{}
-ac     DATE                      true   NULL			{}
-ad     TIMESTAMP                 true   NULL			{}
-ae     TIMESTAMP WITH TIME ZONE  true   NULL			{}
-af     STRING                    true   NULL			{}
-ag     STRING(12)                true   NULL			{}
-ah     STRING                    true   NULL			{}
-ai     BYTES                     true   NULL			{}
-aj     BYTES                     true   NULL			{}
-ak     BYTES                     true   NULL			{}
-al     INTERVAL                  true   NULL            {}
+Field  Type                      Null  Default         Indices
+a      BOOL                      true  NULL            {}
+b      INT                       true  NULL            {}
+c      INT2                      true  NULL            {}
+d      INT4                      true  NULL            {}
+e      INT8                      true  NULL            {}
+f      INT64                     true  NULL            {}
+g      INT                       true  NULL            {}
+h      SMALLINT                  true  NULL            {}
+i      INT                       true  NULL            {}
+j      INT                       true  unique_rowid()  {}
+k      INT                       true  unique_rowid()  {}
+l      INT                       true  unique_rowid()  {}
+m      BIT(1)                    true  NULL            {}
+n      BIT(12)                   true  NULL            {}
+o      STRING                    true  NULL            {}
+p      STRING(12)                true  NULL            {}
+q      STRING                    true  NULL            {}
+r      STRING(12)                true  NULL            {}
+s      FLOAT                     true  NULL            {}
+t      FLOAT                     true  NULL            {}
+u      FLOAT4                    true  NULL            {}
+v      FLOAT8                    true  NULL            {}
+w      FLOAT                     true  NULL            {}
+x      DECIMAL                   true  NULL            {}
+y      DECIMAL(1)                true  NULL            {}
+z      DECIMAL(2,1)              true  NULL            {}
+aa     DECIMAL                   true  NULL            {}
+ab     DECIMAL(1)                true  NULL            {}
+ac     DECIMAL(2,1)              true  NULL            {}
+ad     DECIMAL                   true  NULL            {}
+ae     DECIMAL(1)                true  NULL            {}
+af     DECIMAL(2,1)              true  NULL            {}
+ag     DATE                      true  NULL            {}
+ah     TIMESTAMP                 true  NULL            {}
+ai     TIMESTAMP WITH TIME ZONE  true  NULL            {}
+aj     STRING                    true  NULL            {}
+ak     STRING(12)                true  NULL            {}
+al     STRING                    true  NULL            {}
+am     BYTES                     true  NULL            {}
+an     BYTES                     true  NULL            {}
+ao     BYTES                     true  NULL            {}
+ap     INTERVAL                  true  NULL            {}
 
 statement ok
 CREATE DATABASE IF NOT EXISTS smtng
