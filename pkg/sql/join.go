@@ -156,14 +156,6 @@ type joinNode struct {
 	// full outer joins when the on condition fails.
 	emptyLeft parser.Datums
 
-	// explain indicates whether this node is running on behalf of
-	// EXPLAIN(DEBUG).
-	explain explainMode
-
-	// doneReadingRight is used by debugNext() and DebugValues() when
-	// explain == explainDebug.
-	doneReadingRight bool
-
 	// finishedOutput indicates that we've finished writing all of the rows for
 	// this join and that we can quit as soon as our buffer is empty.
 	finishedOutput bool
@@ -286,18 +278,6 @@ func (p *planner) makeJoin(
 	}, nil
 }
 
-// Ordering implements the planNode interface.
-
-// MarkDebug implements the planNode interface.
-func (n *joinNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-	n.left.plan.MarkDebug(mode)
-	n.right.plan.MarkDebug(mode)
-}
-
 // Start implements the planNode interface.
 func (n *joinNode) Start(ctx context.Context) error {
 	if err := n.left.plan.Start(ctx); err != nil {
@@ -307,10 +287,8 @@ func (n *joinNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	if n.explain != explainDebug {
-		if err := n.hashJoinStart(ctx); err != nil {
-			return err
-		}
+	if err := n.hashJoinStart(ctx); err != nil {
+		return err
 	}
 
 	// Pre-allocate the space for output rows.
@@ -364,27 +342,8 @@ func (n *joinNode) hashJoinStart(ctx context.Context) error {
 	return nil
 }
 
-func (n *joinNode) debugNext(ctx context.Context) (bool, error) {
-	if !n.doneReadingRight {
-		hasRightRow, err := n.right.plan.Next(ctx)
-		if err != nil {
-			return false, err
-		}
-		if hasRightRow {
-			return true, nil
-		}
-		n.doneReadingRight = true
-	}
-
-	return n.left.plan.Next(ctx)
-}
-
 // Next implements the planNode interface.
 func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
-	if n.explain == explainDebug {
-		return n.debugNext(ctx)
-	}
-
 	// If results available from from previously computed results, we just
 	// return true.
 	if n.buffer.Next() {
@@ -560,20 +519,6 @@ func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
 // Values implements the planNode interface.
 func (n *joinNode) Values() parser.Datums {
 	return n.buffer.Values()
-}
-
-// DebugValues implements the planNode interface.
-func (n *joinNode) DebugValues() debugValues {
-	var res debugValues
-	if !n.doneReadingRight {
-		res = n.right.plan.DebugValues()
-	} else {
-		res = n.left.plan.DebugValues()
-	}
-	if res.output == debugValueRow {
-		res.output = debugValueBuffered
-	}
-	return res
 }
 
 // Close implements the planNode interface.

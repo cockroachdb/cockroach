@@ -106,9 +106,6 @@ type indexJoinNode struct {
 	// may produce more values than this, e.g. when its filter expression
 	// uses more columns than the PK.
 	primaryKeyColumns []bool
-
-	explain   explainMode
-	debugVals debugValues
 }
 
 // makeIndexJoin build an index join node.
@@ -214,23 +211,6 @@ func (n *indexJoinNode) Values() parser.Datums {
 	return n.table.Values()
 }
 
-func (n *indexJoinNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-	// Mark both the index and the table scan nodes as debug.
-	n.index.MarkDebug(mode)
-	n.table.MarkDebug(mode)
-}
-
-func (n *indexJoinNode) DebugValues() debugValues {
-	if n.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
-	}
-	return n.debugVals
-}
-
 func (n *indexJoinNode) Start(ctx context.Context) error {
 	if err := n.table.Start(ctx); err != nil {
 		return err
@@ -252,9 +232,6 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 				return false, err
 			}
 			if next {
-				if n.explain == explainDebug {
-					n.debugVals = n.table.DebugValues()
-				}
 				return true, nil
 			}
 		}
@@ -276,13 +253,6 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 				break
 			}
 
-			if n.explain == explainDebug {
-				n.debugVals = n.index.DebugValues()
-				if n.debugVals.output != debugValueRow {
-					return true, nil
-				}
-			}
-
 			vals := n.index.Values()
 			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
 				&n.table.desc, n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
@@ -294,12 +264,6 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 				Key:    key,
 				EndKey: key.PrefixEnd(),
 			})
-
-			if n.explain == explainDebug {
-				// In debug mode, return the index information as a "partial" row.
-				n.debugVals.output = debugValuePartial
-				return true, nil
-			}
 		}
 
 		if log.V(3) {

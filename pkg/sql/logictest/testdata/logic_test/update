@@ -97,49 +97,69 @@ c   d
 e   f
 f   g
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv2
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv2/primary/'a'    NULL  PARTIAL
-0  /kv2/primary/'a'/v  'b'   ROW
-1  /kv2/primary/'c'    NULL  PARTIAL
-1  /kv2/primary/'c'/v  'd'   ROW
-2  /kv2/primary/'e'    NULL  PARTIAL
-2  /kv2/primary/'e'/v  'f'   ROW
-3  /kv2/primary/'f'    NULL  PARTIAL
-3  /kv2/primary/'f'/v  'g'   ROW
+fetched: /kv2/primary/'a' -> NULL
+fetched: /kv2/primary/'a'/v -> 'b'
+output row: ['a' 'b']
+fetched: /kv2/primary/'c' -> NULL
+fetched: /kv2/primary/'c'/v -> 'd'
+output row: ['c' 'd']
+fetched: /kv2/primary/'e' -> NULL
+fetched: /kv2/primary/'e'/v -> 'f'
+output row: ['e' 'f']
+fetched: /kv2/primary/'f' -> NULL
+fetched: /kv2/primary/'f'/v -> 'g'
+output row: ['f' 'g']
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv2@a
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2@a]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv2/a/'b'  /'a'  ROW
-1  /kv2/a/'d'  /'c'  ROW
-2  /kv2/a/'f'  /'e'  ROW
-3  /kv2/a/'g'  /'f'  ROW
+fetched: /kv2/a/'b' -> /'a'
+output row: ['a' 'b']
+fetched: /kv2/a/'d' -> /'c'
+output row: ['c' 'd']
+fetched: /kv2/a/'f' -> /'e'
+output row: ['e' 'f']
+fetched: /kv2/a/'g' -> /'f'
+output row: ['f' 'g']
 
 
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 UPDATE kv2 SET v = 'g' WHERE k IN ('a')
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv2
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv2/primary/'a'    NULL  PARTIAL
-0  /kv2/primary/'a'/v  'b'   ROW
-1  /kv2/primary/'c'    NULL  PARTIAL
-1  /kv2/primary/'c'/v  'd'   ROW
-2  /kv2/primary/'e'    NULL  PARTIAL
-2  /kv2/primary/'e'/v  'f'   ROW
-3  /kv2/primary/'f'    NULL  PARTIAL
-3  /kv2/primary/'f'/v  'g'   ROW
+fetched: /kv2/primary/'a' -> NULL
+fetched: /kv2/primary/'a'/v -> 'b'
+output row: ['a' 'b']
+fetched: /kv2/primary/'c' -> NULL
+fetched: /kv2/primary/'c'/v -> 'd'
+output row: ['c' 'd']
+fetched: /kv2/primary/'e' -> NULL
+fetched: /kv2/primary/'e'/v -> 'f'
+output row: ['e' 'f']
+fetched: /kv2/primary/'f' -> NULL
+fetched: /kv2/primary/'f'/v -> 'g'
+output row: ['f' 'g']
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM kv2@a
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv2@a]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /kv2/a/'b'  /'a'  ROW
-1  /kv2/a/'d'  /'c'  ROW
-2  /kv2/a/'f'  /'e'  ROW
-3  /kv2/a/'g'  /'f'  ROW
+fetched: /kv2/a/'b' -> /'a'
+output row: ['a' 'b']
+fetched: /kv2/a/'d' -> /'c'
+output row: ['c' 'd']
+fetched: /kv2/a/'f' -> /'e'
+output row: ['e' 'f']
+fetched: /kv2/a/'g' -> /'f'
+output row: ['f' 'g']
 
 statement ok
 UPDATE kv2 SET v = 'i' WHERE k IN ('a')
@@ -405,8 +425,10 @@ UPDATE pks SET k2 = 5 where k1 = 1
 statement ok
 UPDATE pks SET k1 = 2 WHERE k1 = 1
 
-query ITTT
-EXPLAIN (DEBUG) SELECT * FROM pks WHERE k1 = 2
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM pks WHERE k1 = 2]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-0  /pks/primary/2/2    NULL  PARTIAL
-0  /pks/primary/2/2/v  3     ROW
+fetched: /pks/primary/2/2 -> NULL
+fetched: /pks/primary/2/2/v -> 3
+output row: [2 2 3]

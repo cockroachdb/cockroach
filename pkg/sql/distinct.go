@@ -18,7 +18,6 @@ package sql
 
 import (
 	"bytes"
-	"fmt"
 
 	"golang.org/x/net/context"
 
@@ -41,9 +40,6 @@ type distinctNode struct {
 	// prefixSeen value.
 	suffixSeen   map[string]struct{}
 	suffixMemAcc WrappableMemoryAccount
-
-	explain   explainMode
-	debugVals debugValues
 }
 
 // distinct constructs a distinctNode.
@@ -63,21 +59,6 @@ func (n *distinctNode) Start(ctx context.Context) error {
 }
 
 func (n *distinctNode) Values() parser.Datums { return n.plan.Values() }
-
-func (n *distinctNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-	n.plan.MarkDebug(mode)
-}
-
-func (n *distinctNode) DebugValues() debugValues {
-	if n.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
-	}
-	return n.debugVals
-}
 
 func (n *distinctNode) addSuffixSeen(
 	ctx context.Context, acc WrappedMemoryAccount, sKey string,
@@ -100,13 +81,7 @@ func (n *distinctNode) Next(ctx context.Context) (bool, error) {
 		if !next {
 			return false, err
 		}
-		if n.explain == explainDebug {
-			n.debugVals = n.plan.DebugValues()
-			if n.debugVals.output != debugValueRow {
-				// Let the non-row debug values pass through.
-				return true, nil
-			}
-		}
+
 		// Detect duplicates
 		prefix, suffix, err := n.encodeValues(n.Values())
 		if err != nil {
@@ -142,13 +117,6 @@ func (n *distinctNode) Next(ctx context.Context) (bool, error) {
 				}
 				return true, nil
 			}
-		}
-
-		// The row is a duplicate
-		if n.explain == explainDebug {
-			// Return as a filtered row.
-			n.debugVals.output = debugValueFiltered
-			return true, nil
 		}
 	}
 }

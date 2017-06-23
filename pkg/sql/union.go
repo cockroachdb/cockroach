@@ -137,8 +137,6 @@ type unionNode struct {
 	emitAll     bool // emitAll is a performance optimization for UNION ALL.
 	emit        unionNodeEmit
 	scratch     []byte
-	explain     explainMode
-	debugVals   debugValues
 }
 
 func (n *unionNode) Values() parser.Datums {
@@ -152,30 +150,9 @@ func (n *unionNode) Values() parser.Datums {
 	}
 }
 
-func (n *unionNode) MarkDebug(mode explainMode) {
-	if mode != explainDebug {
-		panic(fmt.Sprintf("unknown debug mode %d", mode))
-	}
-	n.explain = mode
-	n.left.MarkDebug(mode)
-	n.right.MarkDebug(mode)
-}
-
-func (n *unionNode) DebugValues() debugValues {
-	return n.debugVals
-}
-
 func (n *unionNode) readRight(ctx context.Context) (bool, error) {
 	next, err := n.right.Next(ctx)
 	for ; next; next, err = n.right.Next(ctx) {
-		if n.explain == explainDebug {
-			n.debugVals = n.right.DebugValues()
-			if n.debugVals.output != debugValueRow {
-				// Pass through any non-row debug info.
-				return true, nil
-			}
-		}
-
 		if n.emitAll {
 			return true, nil
 		}
@@ -187,11 +164,6 @@ func (n *unionNode) readRight(ctx context.Context) (bool, error) {
 		// use a lot of memory for big rows or big resultsets. Consider using a hash
 		// of the bytes instead.
 		if n.emit.emitRight(n.scratch) {
-			return true, nil
-		}
-		if n.explain == explainDebug {
-			// Mark the row as filtered out.
-			n.debugVals.output = debugValueFiltered
 			return true, nil
 		}
 	}
@@ -207,14 +179,6 @@ func (n *unionNode) readRight(ctx context.Context) (bool, error) {
 func (n *unionNode) readLeft(ctx context.Context) (bool, error) {
 	next, err := n.left.Next(ctx)
 	for ; next; next, err = n.left.Next(ctx) {
-		if n.explain == explainDebug {
-			n.debugVals = n.left.DebugValues()
-			if n.debugVals.output != debugValueRow {
-				// Pass through any non-row debug info.
-				return true, nil
-			}
-		}
-
 		if n.emitAll {
 			return true, nil
 		}
@@ -223,11 +187,6 @@ func (n *unionNode) readLeft(ctx context.Context) (bool, error) {
 			return false, err
 		}
 		if n.emit.emitLeft(n.scratch) {
-			return true, nil
-		}
-		if n.explain == explainDebug {
-			// Mark the row as filtered out.
-			n.debugVals.output = debugValueFiltered
 			return true, nil
 		}
 	}
