@@ -61,8 +61,21 @@ We also do not support the Postgres feature of lower bounds on dimensions
 other than 1.
 
 Like Postgres, we do not support nested array types.
+This is somewhat obscured by Postgres' use of syntax, which appear to
+describe nested arrays, but actually describe multidimensional arrays:
+```sql
+SELECT ARRAY[ARRAY[1,2,3], ARRAY[4,5,6]];
+```
+It's of note that this is not describing an array of arrays.
+Rather, it's describing a two dimensional array. This is an
+important distinction because it means that Postgres can't support
+subarrays of different lengths:
+```sql
+SELECT ARRAY[ARRAY[1,2,3], ARRAY[4,5]];
+```
+is invalid.
 
-Arrays are limited to at most 2^32 elements, although it's likely that the 64MB
+Arrays are limited to at most 2^31-1 elements, although it's likely that the 64MB
 row size limit will be the proximal limiting factor to large arrays.
 
 ## Schema Definition
@@ -100,8 +113,10 @@ implementation.
 Array values will be encoded using a format very similar to the one used in
 Postgres. The format is:
 
-* Array type tag
-* Element type tag
+* Byte type tag
+* Length in bytes
+* Length of the array, in bytes
+* Value type tag
 * A byte, encoding:
     * The number of dimensions in the array as the high 4 bits
     * A 4-bit flag bitmap, having all but the lowest bit reserved, with the lowest bit representing whether we have a NULL bitmap.
