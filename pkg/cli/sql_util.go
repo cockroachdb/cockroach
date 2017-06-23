@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"reflect"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -29,8 +30,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/lib/pq"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,6 +53,13 @@ type sqlConn struct {
 	// dbName is the last known current database, to be reconfigured in
 	// case of automatic reconnects.
 	dbName string
+
+	// clusterID, nodeID and serverBuildInfo are the last known
+	// corresponding values from the server, used to report any changes
+	// upon (re)connects.
+	clusterID       string
+	nodeID          string
+	serverBuildInfo build.Info
 }
 
 func (c *sqlConn) ensureConn() error {
@@ -69,9 +79,130 @@ func (c *sqlConn) ensureConn() error {
 				fmt.Fprintf(stderr, "unable to restore current database: %v\n", err)
 			}
 		}
+		if err := c.checkServerMetadata(); err != nil {
+			return err
+		}
 		c.reconnecting = false
 		c.conn = conn.(sqlConnI)
 	}
+	return nil
+}
+
+// clientVersionShort identifies the client version.
+var clientVersionShort = computeVersionFromInfo(build.GetInfo())
+
+// computeVersionFromInfo returns a value that identifies a particular
+// version number.
+// We use both Revision and tag here because:
+// - Revision is insufficient to determine whether the source code was modified
+//   since the last commit, whereas tag contains `-dirty` in that case;
+// - Tag only has few bits from the revision, and will thus
+//   become more sensitive to silent version mismatches over time.
+func computeVersionFromInfo(info build.Info) string {
+	return info.Revision + info.Tag
+}
+
+var unknownServerBuild = build.Info{
+	GoVersion:    "?",
+	Tag:          "?",
+	Time:         "?",
+	Revision:     "?",
+	CgoCompiler:  "?",
+	Platform:     "?",
+	Distribution: "?",
+	Type:         "?",
+	Dependencies: nil,
+}
+
+// checkServerMetadata reports the server version, cluster ID and the
+// node ID upon the initial connection or if either has changed since
+// the last connection, based on the last known values in the sqlConn
+// struct.
+func (c *sqlConn) checkServerMetadata() error {
+	if !isInteractive {
+		// Version reporting is just noise in non-interactive sessions.
+		return nil
+	}
+
+	newNodeID := ""
+	newServerBuildInfo := unknownServerBuild
+	newClusterID := ""
+
+	// Retrieve the cluster ID.
+	clusterVal, _ := c.getServerValue("cluster ID", "SELECT crdb_internal.cluster_id()::STRING")
+	if s, ok := clusterVal.(string); ok {
+		newClusterID = s
+	}
+
+	// Report the cluster ID only if it it could be fetched
+	// successfully, and it has changed since the last connection.
+	if newClusterID != c.clusterID && newClusterID != "" {
+		defer func() { c.clusterID = newClusterID }()
+
+		// As a special case, we complain loudly if the cluster ID
+		// actually changes. This is sign of a potentially very bad load
+		// balancer configuration.
+		if c.clusterID != "" {
+			return errors.Errorf("the cluster ID has changed!\nPrevious ID: %s\nNew ID: %s",
+				c.clusterID, newClusterID)
+		}
+		fmt.Println("# Cluster ID:", newClusterID)
+	}
+
+	// Retrieve the node ID and server build info.
+	rows, err := c.Query("SELECT * FROM crdb_internal.node_build_info", nil)
+	if err == driver.ErrBadConn {
+		return err
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, "unable to retrieve the server's version")
+	} else {
+		defer func() { _ = rows.Close() }()
+
+		// Read the node_build_info table as an array of strings.
+		rowVals, err := getAllRowStrings(rows, true /* showMoreChars */)
+		if err != nil || len(rowVals) == 0 || len(rowVals[0]) != 3 {
+			fmt.Fprintln(stderr, "error while rerieving the server's version")
+			// It is not an error that the server version cannot be retrieved.
+			return nil
+		}
+
+		// Extract the build.Info fields from the query results.
+		var zeroValue reflect.Value
+		infoStruct := reflect.ValueOf(&newServerBuildInfo).Elem()
+		for _, row := range rowVals {
+			newNodeID = row[0]
+			if vField := infoStruct.FieldByName(row[1]); vField != zeroValue {
+				vField.Set(reflect.ValueOf(row[2]))
+			}
+		}
+	}
+
+	// Report the server version only if it the revision has been
+	// fetched successfully, and the revision has changed since the last
+	// connection.
+	if newServerBuildInfo != c.serverBuildInfo && newServerBuildInfo.Revision != "?" {
+		c.serverBuildInfo = newServerBuildInfo
+
+		serverVersionShort := computeVersionFromInfo(newServerBuildInfo)
+		isSame := ""
+		if serverVersionShort == clientVersionShort {
+			isSame = " (same version as client)"
+		}
+
+		if isSame == "" {
+			fmt.Println("# Client version:", clientVersionShort)
+		}
+		fmt.Printf("# Server version: %s%s\n", serverVersionShort, isSame)
+	}
+
+	// Report the node ID only if it it could be fetched successfully,
+	// and it has changed since the last connection.
+	if newNodeID != c.nodeID && newNodeID != "" {
+		c.nodeID = newNodeID
+		fmt.Println("# Node ID:", newNodeID)
+	}
+
 	return nil
 }
 

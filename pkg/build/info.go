@@ -21,6 +21,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 // const char* compilerVersion() {
@@ -54,6 +56,14 @@ var (
 // IsRelease returns true if the binary was produced by a "release" build.
 func IsRelease() bool {
 	return strings.HasPrefix(typ, "release")
+}
+
+func init() {
+	// Allow tests to override the tag.
+	if tagOverride := envutil.EnvOrDefaultString(
+		"COCKROACH_TESTING_VERSION_TAG", ""); tagOverride != "" {
+		tag = tagOverride
+	}
 }
 
 // Short returns a pretty printed build and version summary.
