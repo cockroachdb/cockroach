@@ -125,6 +125,51 @@ type createIndexNode struct {
 	tableDesc *sqlbase.TableDescriptor
 }
 
+func columnTypeIsIndexable(t sqlbase.ColumnType) bool {
+	return t.SemanticType != sqlbase.ColumnType_ARRAY
+}
+
+func notIndexableError(cols []sqlbase.ColumnDescriptor) error {
+	if len(cols) == 0 {
+		return nil
+	}
+	if len(cols) == 1 {
+		col := cols[0]
+		return errors.Errorf(
+			"column %s is of type %s and thus is not indexable",
+			col.Name,
+			col.Type.SemanticType,
+		)
+	}
+	result := "the following columns are not indexable due to their type: "
+	for i, col := range cols {
+		result += fmt.Sprintf("%s (type %s)", col.Name, col.Type.SemanticType)
+		if i != len(cols)-1 {
+			result += ", "
+		}
+	}
+	return errors.New(result)
+}
+
+func checkColumnsValidForIndex(
+	tableDesc *sqlbase.TableDescriptor, indexCols parser.IndexElemList,
+) error {
+	invalidColumns := make([]sqlbase.ColumnDescriptor, 0, len(indexCols))
+	for _, indexCol := range indexCols {
+		for _, col := range tableDesc.Columns {
+			if col.Name == string(indexCol.Column) {
+				if !columnTypeIsIndexable(col.Type) {
+					invalidColumns = append(invalidColumns, col)
+				}
+			}
+		}
+	}
+	if len(invalidColumns) > 0 {
+		return notIndexableError(invalidColumns)
+	}
+	return nil
+}
+
 // CreateIndex creates an index.
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
@@ -141,6 +186,10 @@ func (p *planner) CreateIndex(ctx context.Context, n *parser.CreateIndex) (planN
 	}
 
 	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	if err := checkColumnsValidForIndex(tableDesc, n.Columns); err != nil {
 		return nil, err
 	}
 
@@ -1221,23 +1270,28 @@ func MakeTableDesc(
 	}
 	desc.Name = tableName.Table()
 
+	invalidColumns := make([]sqlbase.ColumnDescriptor, 0, len(n.Defs))
+
 	for _, def := range n.Defs {
 		if d, ok := def.(*parser.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
-				if _, ok := d.Type.(*parser.ArrayColType); ok {
-					return desc, pgerror.UnimplementedWithIssueErrorf(2115, "ARRAY column types are unsupported")
-				}
 				if _, ok := d.Type.(*parser.VectorColType); ok {
-					return desc, pgerror.UnimplementedWithIssueErrorf(2115, "VECTOR column types are unsupported")
+					return desc, pgerror.NewErrorf(
+						pgerror.CodeFeatureNotSupportedError,
+						"VECTOR column types are unsupported",
+					)
 				}
 			}
-
 			col, idx, err := sqlbase.MakeColumnDefDescs(d, searchPath, evalCtx)
 			if err != nil {
 				return desc, err
 			}
+
 			desc.AddColumn(*col)
 			if idx != nil {
+				if !columnTypeIsIndexable(col.Type) {
+					invalidColumns = append(invalidColumns, *col)
+				}
 				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
 					return desc, err
 				}
@@ -1254,6 +1308,10 @@ func MakeTableDesc(
 		}
 	}
 
+	if len(invalidColumns) > 0 {
+		return sqlbase.TableDescriptor{}, notIndexableError(invalidColumns)
+	}
+
 	var primaryIndexColumnSet map[string]struct{}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
@@ -1261,6 +1319,9 @@ func MakeTableDesc(
 			// pass, handled above.
 
 		case *parser.IndexTableDef:
+			if err := checkColumnsValidForIndex(&desc, d.Columns); err != nil {
+				return desc, err
+			}
 			idx := sqlbase.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
@@ -1275,6 +1336,9 @@ func MakeTableDesc(
 				return desc, pgerror.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *parser.UniqueConstraintTableDef:
+			if err := checkColumnsValidForIndex(&desc, d.Columns); err != nil {
+				return desc, err
+			}
 			idx := sqlbase.IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,

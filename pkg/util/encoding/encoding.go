@@ -860,6 +860,7 @@ const (
 	True
 	False
 	UUID
+	Array
 	SentinelType Type = 15 // Used in the Value encoding.
 )
 
@@ -1224,6 +1225,13 @@ func EncodeUntaggedBytesValue(appendTo []byte, data []byte) []byte {
 	return append(appendTo, data...)
 }
 
+// EncodeArrayValue encodes a byte array value with its value tag, appends it to
+// the supplied buffer, and returns the final buffer.
+func EncodeArrayValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = encodeValueTag(appendTo, colID, Array)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
 // EncodeTimeValue encodes a time.Time value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
 func EncodeTimeValue(appendTo []byte, colID uint32, t time.Time) []byte {
@@ -1449,7 +1457,7 @@ func DecodeUntaggedDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err 
 	return b[int(i):], d, err
 }
 
-// DecodeDurationValue decodes a value encoded by EncodeDurationValue.
+// DecodeDurationValue decodes a value encoded by EncodeUntaggedDurationValue.
 func DecodeDurationValue(b []byte) (remaining []byte, d duration.Duration, err error) {
 	b, err = decodeValueTypeAssert(b, Duration)
 	if err != nil {
@@ -1541,7 +1549,7 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		return typeOffset, dataOffset + n, err
 	case Float:
 		return typeOffset, dataOffset + floatValueEncodedLength, nil
-	case Bytes:
+	case Bytes, Array:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return typeOffset, dataOffset + n + int(i), err
 	case Decimal:

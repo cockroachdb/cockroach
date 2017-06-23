@@ -357,11 +357,22 @@ CREATE TABLE t2 AS SELECT d, t FROM t AS OF SYSTEM TIME '2017-02-13 21:30:00'
 statement ok
 DROP TABLE t CASCADE
 
-statement error cannot make array for column type BOOL
-CREATE VIEW fail AS SELECT ARRAY[true]
+statement ok
+CREATE TABLE t (a INT[])
 
-statement error arrays of type STRING are unsupported
-CREATE VIEW fail AS SELECT ARRAY['foo']
+statement ok
+INSERT INTO t VALUES (array[1,2,3])
+
+statement ok
+CREATE VIEW b AS SELECT a[1] FROM t
+
+query I
+SELECT * FROM b
+----
+1
+
+statement ok
+DROP TABLE t CASCADE
 
 statement ok
 CREATE VIEW arr(a) AS SELECT ARRAY[3]

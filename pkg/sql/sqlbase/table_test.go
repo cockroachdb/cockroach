@@ -244,3 +244,87 @@ func TestIndexKey(t *testing.T) {
 		checkEntry(&tableDesc.Indexes[0], secondaryIndexKV)
 	}
 }
+
+type arrayEncodingTest struct {
+	name     string
+	datum    parser.DArray
+	encoding []byte
+}
+
+func TestArrayEncoding(t *testing.T) {
+	tests := []arrayEncodingTest{
+		{
+			"empty int array",
+			parser.DArray{
+				ParamTyp: parser.TypeInt,
+				Array:    parser.Datums{},
+			},
+			[]byte{16, 0},
+		}, {
+			"single int array",
+			parser.DArray{
+				ParamTyp: parser.TypeInt,
+				Array:    parser.Datums{parser.NewDInt(1)},
+			},
+			[]byte{16, 1, 2},
+		}, {
+			"multiple int array",
+			parser.DArray{
+				ParamTyp: parser.TypeInt,
+				Array:    parser.Datums{parser.NewDInt(1), parser.NewDInt(2), parser.NewDInt(3)},
+			},
+			[]byte{16, 3, 2, 4, 6},
+		}, {
+			"string array",
+			parser.DArray{
+				ParamTyp: parser.TypeString,
+				Array:    parser.Datums{parser.NewDString("foo"), parser.NewDString("bar"), parser.NewDString("baz")},
+			},
+			[]byte{16, 3, 3, 102, 111, 111, 3, 98, 97, 114, 3, 98, 97, 122},
+		}, {
+			"bool array",
+			parser.DArray{
+				ParamTyp: parser.TypeBool,
+				Array:    parser.Datums{parser.MakeDBool(true), parser.MakeDBool(false)},
+			},
+			[]byte{16, 2, 10, 11},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run("encode "+test.name, func(t *testing.T) {
+			enc, err := encodeArray(&test.datum, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(enc, test.encoding) {
+				t.Fatalf("expected %s to encode to %v, got %v", test.datum.String(), test.encoding, enc)
+			}
+		})
+
+		t.Run("decode "+test.name, func(t *testing.T) {
+			enc := make([]byte, 0)
+			enc = append(enc, byte(len(test.encoding)))
+			enc = append(enc, test.encoding...)
+			d, _, err := decodeArray(&DatumAlloc{}, test.datum.ParamTyp, enc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if d.Compare(parser.NewTestingEvalContext(), &test.datum) != 0 {
+				t.Fatalf("expected %v to decode to %s, got %s", enc, test.datum.String(), d.String())
+			}
+		})
+	}
+}
+
+func BenchmarkArrayEncoding(b *testing.B) {
+	ary := parser.DArray{ParamTyp: parser.TypeInt, Array: parser.Datums{}}
+	for i := 0; i < 10000; i++ {
+		ary.Append(parser.NewDInt(1))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		encodeArray(&ary, nil)
+	}
+}

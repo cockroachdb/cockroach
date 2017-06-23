@@ -1742,8 +1742,8 @@ func (c *ColumnType) SQLString() string {
 			return fmt.Sprintf("%s(%d) COLLATE %s", ColumnType_STRING.String(), c.Width, *c.Locale)
 		}
 		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
-	case ColumnType_INT_ARRAY:
-		return "INT[]"
+	case ColumnType_ARRAY:
+		return c.ArrayContents.String() + "[]"
 	}
 	if c.VisibleType != ColumnType_NONE {
 		return c.VisibleType.String()
@@ -1812,57 +1812,63 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 	return 0, false
 }
 
+// DatumTypeToColumnSemanticType converts a parser.Type to a SemanticType.
+func DatumTypeToColumnSemanticType(ptyp parser.Type) ColumnType_SemanticType {
+	switch ptyp {
+	case parser.TypeBool:
+		return ColumnType_BOOL
+	case parser.TypeInt:
+		return ColumnType_INT
+	case parser.TypeFloat:
+		return ColumnType_FLOAT
+	case parser.TypeDecimal:
+		return ColumnType_DECIMAL
+	case parser.TypeBytes:
+		return ColumnType_BYTES
+	case parser.TypeString:
+		return ColumnType_STRING
+	case parser.TypeName:
+		return ColumnType_NAME
+	case parser.TypeDate:
+		return ColumnType_DATE
+	case parser.TypeTimestamp:
+		return ColumnType_TIMESTAMP
+	case parser.TypeTimestampTZ:
+		return ColumnType_TIMESTAMPTZ
+	case parser.TypeInterval:
+		return ColumnType_INTERVAL
+	case parser.TypeUUID:
+		return ColumnType_UUID
+	case parser.TypeOid:
+		return ColumnType_OID
+	case parser.TypeNull:
+		return ColumnType_NULL
+	case parser.TypeIntVector:
+		return ColumnType_INT2VECTOR
+	default:
+		panic(fmt.Sprintf("unsupported result type: %s", ptyp))
+	}
+}
+
 // DatumTypeToColumnType converts a parser Type to a ColumnType.
 func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 	var ctyp ColumnType
-	switch ptyp {
-	case parser.TypeBool:
-		ctyp.SemanticType = ColumnType_BOOL
-	case parser.TypeInt:
-		ctyp.SemanticType = ColumnType_INT
-	case parser.TypeFloat:
-		ctyp.SemanticType = ColumnType_FLOAT
-	case parser.TypeDecimal:
-		ctyp.SemanticType = ColumnType_DECIMAL
-	case parser.TypeBytes:
-		ctyp.SemanticType = ColumnType_BYTES
-	case parser.TypeString:
-		ctyp.SemanticType = ColumnType_STRING
-	case parser.TypeName:
-		ctyp.SemanticType = ColumnType_NAME
-	case parser.TypeDate:
-		ctyp.SemanticType = ColumnType_DATE
-	case parser.TypeTimestamp:
-		ctyp.SemanticType = ColumnType_TIMESTAMP
-	case parser.TypeTimestampTZ:
-		ctyp.SemanticType = ColumnType_TIMESTAMPTZ
-	case parser.TypeInterval:
-		ctyp.SemanticType = ColumnType_INTERVAL
-	case parser.TypeUUID:
-		ctyp.SemanticType = ColumnType_UUID
-	case parser.TypeOid:
-		ctyp.SemanticType = ColumnType_OID
-	case parser.TypeNull:
-		ctyp.SemanticType = ColumnType_NULL
-	case parser.TypeIntArray:
-		ctyp.SemanticType = ColumnType_INT_ARRAY
-	case parser.TypeIntVector:
-		ctyp.SemanticType = ColumnType_INT2VECTOR
+	switch t := ptyp.(type) {
+	case parser.TCollatedString:
+		ctyp.SemanticType = ColumnType_COLLATEDSTRING
+		ctyp.Locale = &t.Locale
+	case parser.TArray:
+		ctyp.SemanticType = ColumnType_ARRAY
+		contents := DatumTypeToColumnSemanticType(t.Typ)
+		ctyp.ArrayContents = &contents
 	default:
-		if t, ok := ptyp.(parser.TCollatedString); ok {
-			ctyp.SemanticType = ColumnType_COLLATEDSTRING
-			ctyp.Locale = &t.Locale
-		} else {
-			panic(fmt.Sprintf("unsupported result type: %s", ptyp))
-		}
+		ctyp.SemanticType = DatumTypeToColumnSemanticType(ptyp)
 	}
 	return ctyp
 }
 
-// ToDatumType converts the ColumnType to the correct type, or nil if there is
-// no correspondence.
-func (c *ColumnType) ToDatumType() parser.Type {
-	switch c.SemanticType {
+func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) parser.Type {
+	switch k {
 	case ColumnType_BOOL:
 		return parser.TypeBool
 	case ColumnType_INT:
@@ -1896,12 +1902,21 @@ func (c *ColumnType) ToDatumType() parser.Type {
 		return parser.TypeOid
 	case ColumnType_NULL:
 		return parser.TypeNull
-	case ColumnType_INT_ARRAY:
-		return parser.TypeIntArray
 	case ColumnType_INT2VECTOR:
 		return parser.TypeIntVector
 	}
 	return nil
+}
+
+// ToDatumType converts the ColumnType to the correct type, or nil if there is
+// no correspondence.
+func (c *ColumnType) ToDatumType() parser.Type {
+	switch c.SemanticType {
+	case ColumnType_ARRAY:
+		return parser.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
+	default:
+		return columnSemanticTypeToDatumType(c, c.SemanticType)
+	}
 }
 
 // SetID implements the DescriptorProto interface.
