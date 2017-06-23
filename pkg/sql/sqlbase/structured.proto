@@ -67,8 +67,12 @@ message ColumnType {
 
   enum VisibleType {
     NONE = 0;
-    INT8 = 1;
-    INT64 = 2;
+    INTEGER = 1;
+    SMALLINT = 2;
+    BIGINT = 3;
+    BIT = 4;
+    REAL = 5;
+    DOUBLE_PRECISON = 6;
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
