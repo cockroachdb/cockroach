@@ -193,12 +193,7 @@ func TestEncDatumCompare(t *testing.T) {
 
 	for kind := range ColumnType_SemanticType_name {
 		kind := ColumnType_SemanticType(kind)
-		if kind == ColumnType_NULL {
-			continue
-		}
-		// TODO(cuongdo): we don't support persistence for arrays yet.
-		if kind == ColumnType_INT_ARRAY ||
-			kind == ColumnType_INT2VECTOR {
+		if kind == ColumnType_NULL || kind == ColumnType_ARRAY || kind == ColumnType_INT2VECTOR {
 			continue
 		}
 		typ := ColumnType{SemanticType: kind}

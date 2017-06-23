@@ -74,7 +74,7 @@ var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
 
 // FmtArrays instructs the pretty-printer to print strings without
 // wrapping quotes, if the string contains no special characters.
-var FmtArrays FmtFlags = &fmtFlags{withinArray: true}
+var FmtArrays FmtFlags = &fmtFlags{withinArray: true, bareStrings: true}
 
 // FmtBareIdentifiers instructs the pretty-printer to print
 // identifiers without wrapping quotes in any case.
