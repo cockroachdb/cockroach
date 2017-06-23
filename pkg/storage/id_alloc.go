@@ -34,6 +34,9 @@ import (
 
 // An idAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
+//
+// Note: if all you want is to increment a key and retry on retryable errors,
+// see IncrementValRetryable().
 type idAllocator struct {
 	log.AmbientContext
 
@@ -138,4 +141,25 @@ func (ia *idAllocator) start() {
 			}
 		}
 	})
+}
+
+// IncrementValRetryable increments a key's value by a specified amount and
+// returns the new value.
+//
+// It performs the increment as a retryable non-transactional increment. The key
+// might be incremented multiple times because of the retries.
+func IncrementValRetryable(
+	ctx context.Context, db *client.DB, key roachpb.Key, inc int64,
+) (int64, error) {
+	var err error
+	var res client.KeyValue
+	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+		res, err = db.Inc(ctx, key, inc)
+		switch err.(type) {
+		case *roachpb.UnhandledRetryableError, *roachpb.AmbiguousResultError:
+			continue
+		}
+		break
+	}
+	return res.ValueInt(), err
 }

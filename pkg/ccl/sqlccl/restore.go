@@ -194,32 +194,27 @@ func reassignTableIDs(
 	var newTableIDs map[sqlbase.ID]sqlbase.ID
 	var rekeys []roachpb.ImportRequest_TableRekey
 
-	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		newTableIDs = make(map[sqlbase.ID]sqlbase.ID, len(tables))
-		for _, table := range tables {
-			newTableID, err := sql.GenerateUniqueDescID(ctx, txn)
-			if err != nil {
-				return err
-			}
-			newTableIDs[table.ID] = newTableID
-			oldID := table.ID
-			table.ID = newTableID
-
-			desc := sqlbase.Descriptor{
-				Union: &sqlbase.Descriptor_Table{Table: table},
-			}
-			newDescBytes, err := desc.Marshal()
-			if err != nil {
-				return errors.Wrap(err, "marshalling descriptor")
-			}
-			rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
-				OldID:   uint32(oldID),
-				NewDesc: newDescBytes,
-			})
+	newTableIDs = make(map[sqlbase.ID]sqlbase.ID, len(tables))
+	for _, table := range tables {
+		newTableID, err := sql.GenerateUniqueDescID(ctx, &db)
+		if err != nil {
+			return nil, nil, nil, err
 		}
-		return nil
-	}); err != nil {
-		return nil, nil, nil, err
+		newTableIDs[table.ID] = newTableID
+		oldID := table.ID
+		table.ID = newTableID
+
+		desc := sqlbase.Descriptor{
+			Union: &sqlbase.Descriptor_Table{Table: table},
+		}
+		newDescBytes, err := desc.Marshal()
+		if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "marshalling descriptor")
+		}
+		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
+			OldID:   uint32(oldID),
+			NewDesc: newDescBytes,
+		})
 	}
 
 	if err := reassignReferencedTables(tables, newTableIDs, opt); err != nil {
