@@ -69,6 +69,10 @@ func newReplicaStats(clock *hlc.Clock, getNodeLocality localityOracle) *replicaS
 }
 
 func (rs *replicaStats) record(nodeID roachpb.NodeID) {
+	rs.recordCount(1, nodeID)
+}
+
+func (rs *replicaStats) recordCount(count float64, nodeID roachpb.NodeID) {
 	var locality string
 	if rs.getNodeLocality != nil {
 		locality = rs.getNodeLocality(nodeID)
@@ -79,7 +83,7 @@ func (rs *replicaStats) record(nodeID roachpb.NodeID) {
 	defer rs.mu.Unlock()
 
 	rs.maybeRotateLocked(now)
-	rs.mu.requests[rs.mu.idx][locality]++
+	rs.mu.requests[rs.mu.idx][locality] += count
 }
 
 func (rs *replicaStats) maybeRotateLocked(now time.Time) {

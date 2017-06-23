@@ -222,8 +222,12 @@ type Replica struct {
 	abortCache   *AbortCache   // Avoids anomalous reads after abort
 	pushTxnQueue *pushTxnQueue // Queues push txn attempts by txn ID
 
+	// leaseholderStats tracks all incoming BatchRequests to the replica and which
+	// localities they come from in order to aid in lease rebalancing decisions.
 	leaseholderStats *replicaStats
-	applyStats       *replicaStats
+	// writeStats tracks the number of keys written by applied raft commands
+	// in order to aid in replica rebalancing decisions.
+	writeStats *replicaStats
 
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
@@ -565,7 +569,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	if store.cfg.StorePool != nil {
 		r.leaseholderStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
 	}
-	r.applyStats = newReplicaStats(store.Clock(), nil)
+	r.writeStats = newReplicaStats(store.Clock(), nil)
 
 	// Init rangeStr with the range ID.
 	r.rangeStr.store(0, &roachpb.RangeDescriptor{RangeID: rangeID})
@@ -4164,7 +4168,7 @@ func (r *Replica) applyRaftCommand(
 	if rResult.State.RaftAppliedIndex <= 0 {
 		log.Fatalf(ctx, "raft command index is <= 0")
 	}
-	r.applyStats.record(0)
+	r.writeStats.recordCount(math.Max(float64(rResult.Delta.KeyCount), 1), 0)
 
 	r.mu.Lock()
 	oldRaftAppliedIndex := r.mu.state.RaftAppliedIndex
