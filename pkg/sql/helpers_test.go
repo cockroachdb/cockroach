@@ -19,7 +19,6 @@ package sql
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -103,11 +102,7 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 
 	m.tableNames.mu.Lock()
 	for _, table := range m.tableNames.tables {
-		if table.lease != nil {
-			table.lease.expiration = parser.DTimestamp{
-				Time: past,
-			}
-		}
+		table.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
 	}
 	m.tableNames.mu.Unlock()
 }

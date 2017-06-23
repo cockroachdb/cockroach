@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -86,18 +85,18 @@ func TestTableSet(t *testing.T) {
 		case insert:
 			s := &tableVersionState{lease: &leaseState{}}
 			s.Version = op.version
-			s.lease.expiration.Time = time.Unix(0, op.expiration)
+			s.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.insert(s)
 		case remove:
 			s := &tableVersionState{lease: &leaseState{}}
 			s.Version = op.version
-			s.lease.expiration.Time = time.Unix(0, op.expiration)
+			s.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.remove(s)
 		case newest:
 			n := set.findNewest(op.version)
 			s := "<nil>"
 			if n != nil {
-				s = fmt.Sprintf("%d:%d", n.Version, n.Expiration().UnixNano())
+				s = fmt.Sprintf("%d:%d", n.Version, n.expiration.WallTime)
 			}
 			if d.expected != s {
 				t.Fatalf("%d: expected %s, but found %s", i, d.expected, s)
@@ -199,7 +198,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ts.mu.Lock()
 	correctLease := ts.active.data[0].TableDescriptor.ID == tables[5].ID &&
 		ts.active.data[0].TableDescriptor.Version == tables[5].Version
-	correctExpiration := ts.active.data[0].expirationToHLC() == expiration
+	correctExpiration := ts.active.data[0].expiration == expiration
 	ts.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
