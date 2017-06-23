@@ -55,15 +55,8 @@ message ColumnType {
     NULL = 13;
 
     UUID = 14;
+    ARRAY = 15;
 
-    // Array and vector types.
-    //
-    // TODO(cuongdo): Fix this before allowing persistence of array/vector types
-    // It would be cleaner if when array_dimensions are specified, Kind is
-    // simply the parameterized type of the array. However, because Kind is used
-    // to determine type information elsewhere, it isn't possible to take the
-    // cleaner approach without an extensive refactoring.
-    INT_ARRAY = 100;
     INT2VECTOR = 200;
   }
 
@@ -91,6 +84,8 @@ message ColumnType {
   // the user specification. Examples are INT4, FLOAT4, etc. Mostly for Postgres
   // compatibility.
   optional VisibleType visible_type = 6 [(gogoproto.nullable) = false];
+  // Only used if the kind is ARRAY.
+  optional SemanticType array_contents = 7;
 }
 
 enum ConstraintValidity {

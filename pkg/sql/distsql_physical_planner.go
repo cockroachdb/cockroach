@@ -225,8 +225,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *renderNode:
 		for i, e := range n.render {
 			if typ := n.columns[i].Typ; typ.FamilyEqual(parser.TypeTuple) ||
-				typ.FamilyEqual(parser.TypeStringArray) ||
-				typ.FamilyEqual(parser.TypeIntArray) {
+				typ.FamilyEqual(parser.TypeArray) {
 				return 0, newQueryNotSupportedErrorf("unsupported render type %s", typ)
 			}
 			if err := dsp.checkExpr(e); err != nil {

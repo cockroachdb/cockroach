@@ -1633,7 +1633,7 @@ func TestValueEncodingTags(t *testing.T) {
 	for i := 0; i < len(tests); i++ {
 		tests[i].colID = uint32(rng.Int63())
 		tests[i].typ = Type(rng.Intn(1000))
-		buf = encodeValueTag(buf, tests[i].colID, tests[i].typ)
+		buf = EncodeValueTag(buf, tests[i].colID, tests[i].typ)
 		tests[i].length = len(buf) - lastLen
 		lastLen = len(buf)
 	}

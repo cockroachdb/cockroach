@@ -93,17 +93,13 @@ var (
 	TypeUUID Type = tUUID{}
 	// TypeTuple is the type family of a DTuple. CANNOT be compared with ==.
 	TypeTuple Type = TTuple(nil)
+	// TypeArray is the type family of a DArray. CANNOT be compared with ==.
+	TypeArray Type = TArray{}
 	// TypeTable is the type family of a DTable. CANNOT be compared with ==.
 	TypeTable Type = TTable{}
 	// TypePlaceholder is the type family of a placeholder. CANNOT be compared
 	// with ==.
 	TypePlaceholder Type = TPlaceholder{}
-	// TypeStringArray is the type family of a DArray containing strings. Can be
-	// compared with ==.
-	TypeStringArray Type = TArray{TypeString}
-	// TypeIntArray is the type family of a DArray containing ints. Can be
-	// compared with ==.
-	TypeIntArray Type = TArray{TypeInt}
 	// TypeAnyArray is the type of a DArray with a wildcard parameterized type.
 	// Can be compared with ==.
 	TypeAnyArray Type = TArray{TypeAny}
@@ -128,7 +124,7 @@ var (
 	TypeName = wrapTypeWithOid(TypeString, oid.T_name)
 	// TypeIntVector is a type-alias for a TypeIntArray with a different OID. Can
 	// be compared with ==.
-	TypeIntVector = wrapTypeWithOid(TypeIntArray, oid.T_int2vector)
+	TypeIntVector = wrapTypeWithOid(TArray{TypeInt}, oid.T_int2vector)
 	// TypeNameArray is the type family of a DArray containing the Name alias type.
 	// Can be compared with ==.
 	TypeNameArray Type = TArray{TypeName}
@@ -181,10 +177,10 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_regproc:      TypeRegProc,
 	oid.T_regprocedure: TypeRegProcedure,
 	oid.T_regtype:      TypeRegType,
-	oid.T__text:        TypeStringArray,
+	oid.T__text:        TArray{TypeString},
 	oid.T__int2:        typeInt2Array,
 	oid.T__int4:        typeInt4Array,
-	oid.T__int8:        TypeIntArray,
+	oid.T__int8:        TArray{TypeInt},
 	oid.T_record:       TypeTuple,
 	oid.T_text:         TypeString,
 	oid.T_timestamp:    TypeTimestamp,

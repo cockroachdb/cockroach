@@ -151,6 +151,7 @@ type RowInserter struct {
 	marshalled []roachpb.Value
 	key        roachpb.Key
 	valueBuf   []byte
+	scratch    []byte
 	value      roachpb.Value
 }
 
@@ -323,7 +324,7 @@ func (ri *RowInserter) InsertRow(
 			}
 			colIDDiff := col.ID - lastColID
 			lastColID = col.ID
-			ri.valueBuf, err = EncodeTableValue(ri.valueBuf, colIDDiff, values[idx])
+			ri.valueBuf, err = EncodeTableValue(ri.valueBuf, colIDDiff, values[idx], ri.scratch)
 			if err != nil {
 				return err
 			}
@@ -369,6 +370,7 @@ type RowUpdater struct {
 	key             roachpb.Key
 	indexEntriesBuf []IndexEntry
 	valueBuf        []byte
+	scratch         []byte
 	value           roachpb.Value
 }
 
@@ -703,7 +705,7 @@ func (ru *RowUpdater) UpdateRow(
 			}
 			colIDDiff := col.ID - lastColID
 			lastColID = col.ID
-			ru.valueBuf, err = EncodeTableValue(ru.valueBuf, colIDDiff, ru.newValues[idx])
+			ru.valueBuf, err = EncodeTableValue(ru.valueBuf, colIDDiff, ru.newValues[idx], ru.scratch)
 			if err != nil {
 				return nil, err
 			}

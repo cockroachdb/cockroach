@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -1262,6 +1263,51 @@ func fitColumnToFamily(desc TableDescriptor, col ColumnDescriptor) (int, bool) {
 	return 0, true
 }
 
+// columnTypeIsIndexable returns whether the type t is valid as an indexed column.
+func columnTypeIsIndexable(t ColumnType) bool {
+	return t.SemanticType != ColumnType_ARRAY
+}
+
+func notIndexableError(cols []ColumnDescriptor) error {
+	if len(cols) == 0 {
+		return nil
+	}
+	if len(cols) == 1 {
+		col := cols[0]
+		return pgerror.UnimplementedWithIssueErrorf(
+			17154,
+			"column %s is of type %s and thus is not indexable",
+			col.Name,
+			col.Type.SemanticType,
+		)
+	}
+	result := "the following columns are not indexable due to their type: "
+	for i, col := range cols {
+		result += fmt.Sprintf("%s (type %s)", col.Name, col.Type.SemanticType)
+		if i != len(cols)-1 {
+			result += ", "
+		}
+	}
+	return errors.New(result)
+}
+
+func checkColumnsValidForIndex(tableDesc *TableDescriptor, indexColNames []string) error {
+	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
+	for _, indexCol := range indexColNames {
+		for _, col := range tableDesc.Columns {
+			if col.Name == indexCol {
+				if !columnTypeIsIndexable(col.Type) {
+					invalidColumns = append(invalidColumns, col)
+				}
+			}
+		}
+	}
+	if len(invalidColumns) > 0 {
+		return notIndexableError(invalidColumns)
+	}
+	return nil
+}
+
 // AddColumn adds a column to the table.
 func (desc *TableDescriptor) AddColumn(col ColumnDescriptor) {
 	desc.Columns = append(desc.Columns, col)
@@ -1274,6 +1320,9 @@ func (desc *TableDescriptor) AddFamily(fam ColumnFamilyDescriptor) {
 
 // AddIndex adds an index to the table.
 func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
+	if err := checkColumnsValidForIndex(desc, idx.ColumnNames); err != nil {
+		return err
+	}
 	if primary {
 		// PrimaryIndex is unset.
 		if desc.PrimaryIndex.Name == "" {
@@ -1597,10 +1646,14 @@ func (desc *TableDescriptor) AddColumnMutation(
 // AddIndexMutation adds an index mutation to desc.Mutations.
 func (desc *TableDescriptor) AddIndexMutation(
 	idx IndexDescriptor, direction DescriptorMutation_Direction,
-) {
+) error {
+	if err := checkColumnsValidForIndex(desc, idx.ColumnNames); err != nil {
+		return err
+	}
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
 	m.ResumeSpans = append(m.ResumeSpans, desc.PrimaryIndexSpan())
 	desc.addMutation(m)
+	return nil
 }
 
 func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
@@ -1714,8 +1767,8 @@ func (c *ColumnType) SQLString() string {
 			return fmt.Sprintf("%s(%d) COLLATE %s", ColumnType_STRING.String(), c.Width, *c.Locale)
 		}
 		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
-	case ColumnType_INT_ARRAY:
-		return "INT[]"
+	case ColumnType_ARRAY:
+		return c.ArrayContents.String() + "[]"
 	}
 	if c.VisibleType != ColumnType_NONE {
 		return c.VisibleType.String()
@@ -1784,57 +1837,63 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 	return 0, false
 }
 
+// DatumTypeToColumnSemanticType converts a parser.Type to a SemanticType.
+func DatumTypeToColumnSemanticType(ptyp parser.Type) ColumnType_SemanticType {
+	switch ptyp {
+	case parser.TypeBool:
+		return ColumnType_BOOL
+	case parser.TypeInt:
+		return ColumnType_INT
+	case parser.TypeFloat:
+		return ColumnType_FLOAT
+	case parser.TypeDecimal:
+		return ColumnType_DECIMAL
+	case parser.TypeBytes:
+		return ColumnType_BYTES
+	case parser.TypeString:
+		return ColumnType_STRING
+	case parser.TypeName:
+		return ColumnType_NAME
+	case parser.TypeDate:
+		return ColumnType_DATE
+	case parser.TypeTimestamp:
+		return ColumnType_TIMESTAMP
+	case parser.TypeTimestampTZ:
+		return ColumnType_TIMESTAMPTZ
+	case parser.TypeInterval:
+		return ColumnType_INTERVAL
+	case parser.TypeUUID:
+		return ColumnType_UUID
+	case parser.TypeOid:
+		return ColumnType_OID
+	case parser.TypeNull:
+		return ColumnType_NULL
+	case parser.TypeIntVector:
+		return ColumnType_INT2VECTOR
+	default:
+		panic(fmt.Sprintf("unsupported result type: %s", ptyp))
+	}
+}
+
 // DatumTypeToColumnType converts a parser Type to a ColumnType.
 func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 	var ctyp ColumnType
-	switch ptyp {
-	case parser.TypeBool:
-		ctyp.SemanticType = ColumnType_BOOL
-	case parser.TypeInt:
-		ctyp.SemanticType = ColumnType_INT
-	case parser.TypeFloat:
-		ctyp.SemanticType = ColumnType_FLOAT
-	case parser.TypeDecimal:
-		ctyp.SemanticType = ColumnType_DECIMAL
-	case parser.TypeBytes:
-		ctyp.SemanticType = ColumnType_BYTES
-	case parser.TypeString:
-		ctyp.SemanticType = ColumnType_STRING
-	case parser.TypeName:
-		ctyp.SemanticType = ColumnType_NAME
-	case parser.TypeDate:
-		ctyp.SemanticType = ColumnType_DATE
-	case parser.TypeTimestamp:
-		ctyp.SemanticType = ColumnType_TIMESTAMP
-	case parser.TypeTimestampTZ:
-		ctyp.SemanticType = ColumnType_TIMESTAMPTZ
-	case parser.TypeInterval:
-		ctyp.SemanticType = ColumnType_INTERVAL
-	case parser.TypeUUID:
-		ctyp.SemanticType = ColumnType_UUID
-	case parser.TypeOid:
-		ctyp.SemanticType = ColumnType_OID
-	case parser.TypeNull:
-		ctyp.SemanticType = ColumnType_NULL
-	case parser.TypeIntArray:
-		ctyp.SemanticType = ColumnType_INT_ARRAY
-	case parser.TypeIntVector:
-		ctyp.SemanticType = ColumnType_INT2VECTOR
+	switch t := ptyp.(type) {
+	case parser.TCollatedString:
+		ctyp.SemanticType = ColumnType_COLLATEDSTRING
+		ctyp.Locale = &t.Locale
+	case parser.TArray:
+		ctyp.SemanticType = ColumnType_ARRAY
+		contents := DatumTypeToColumnSemanticType(t.Typ)
+		ctyp.ArrayContents = &contents
 	default:
-		if t, ok := ptyp.(parser.TCollatedString); ok {
-			ctyp.SemanticType = ColumnType_COLLATEDSTRING
-			ctyp.Locale = &t.Locale
-		} else {
-			panic(fmt.Sprintf("unsupported result type: %s", ptyp))
-		}
+		ctyp.SemanticType = DatumTypeToColumnSemanticType(ptyp)
 	}
 	return ctyp
 }
 
-// ToDatumType converts the ColumnType to the correct type, or nil if there is
-// no correspondence.
-func (c *ColumnType) ToDatumType() parser.Type {
-	switch c.SemanticType {
+func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) parser.Type {
+	switch k {
 	case ColumnType_BOOL:
 		return parser.TypeBool
 	case ColumnType_INT:
@@ -1868,12 +1927,21 @@ func (c *ColumnType) ToDatumType() parser.Type {
 		return parser.TypeOid
 	case ColumnType_NULL:
 		return parser.TypeNull
-	case ColumnType_INT_ARRAY:
-		return parser.TypeIntArray
 	case ColumnType_INT2VECTOR:
 		return parser.TypeIntVector
 	}
 	return nil
+}
+
+// ToDatumType converts the ColumnType to the correct type, or nil if there is
+// no correspondence.
+func (c *ColumnType) ToDatumType() parser.Type {
+	switch c.SemanticType {
+	case ColumnType_ARRAY:
+		return parser.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
+	default:
+		return columnSemanticTypeToDatumType(c, c.SemanticType)
+	}
 }
 
 // SetID implements the DescriptorProto interface.

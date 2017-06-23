@@ -860,6 +860,7 @@ const (
 	True
 	False
 	UUID
+	Array
 	SentinelType Type = 15 // Used in the Value encoding.
 )
 
@@ -1137,7 +1138,7 @@ func PeekLengthNonsortingUvarint(buf []byte) int {
 // invalid column id.
 const NoColumnID uint32 = 0
 
-// encodeValueTag encodes the prefix that is used by each of the EncodeFooValue
+// EncodeValueTag encodes the prefix that is used by each of the EncodeFooValue
 // methods.
 //
 // The prefix uses varints to encode a column id and type, packing them into a
@@ -1153,13 +1154,13 @@ const NoColumnID uint32 = 0
 //
 // Together, this means the everything but the last byte of the first uvarint
 // can be dropped if the column id isn't needed.
-func encodeValueTag(appendTo []byte, colID uint32, typ Type) []byte {
+func EncodeValueTag(appendTo []byte, colID uint32, typ Type) []byte {
 	if typ >= SentinelType {
 		appendTo = EncodeNonsortingUvarint(appendTo, uint64(colID)<<4|uint64(SentinelType))
 		return EncodeNonsortingUvarint(appendTo, uint64(typ))
 	}
 	if colID == NoColumnID {
-		// TODO(dan): encodeValueTag is not inlined by the compiler. Copying this
+		// TODO(dan): EncodeValueTag is not inlined by the compiler. Copying this
 		// special case into one of the EncodeFooValue functions speeds it up by
 		// ~4ns.
 		return append(appendTo, byte(typ))
@@ -1170,22 +1171,22 @@ func encodeValueTag(appendTo []byte, colID uint32, typ Type) []byte {
 // EncodeNullValue encodes a null value, appends it to the supplied buffer, and
 // returns the final buffer.
 func EncodeNullValue(appendTo []byte, colID uint32) []byte {
-	return encodeValueTag(appendTo, colID, Null)
+	return EncodeValueTag(appendTo, colID, Null)
 }
 
 // EncodeBoolValue encodes a bool value, appends it to the supplied buffer, and
 // returns the final buffer.
 func EncodeBoolValue(appendTo []byte, colID uint32, b bool) []byte {
 	if b {
-		return encodeValueTag(appendTo, colID, True)
+		return EncodeValueTag(appendTo, colID, True)
 	}
-	return encodeValueTag(appendTo, colID, False)
+	return EncodeValueTag(appendTo, colID, False)
 }
 
 // EncodeIntValue encodes an int value with its value tag, appends it to the
 // supplied buffer, and returns the final buffer.
 func EncodeIntValue(appendTo []byte, colID uint32, i int64) []byte {
-	appendTo = encodeValueTag(appendTo, colID, Int)
+	appendTo = EncodeValueTag(appendTo, colID, Int)
 	return EncodeUntaggedIntValue(appendTo, i)
 }
 
@@ -1200,7 +1201,7 @@ const floatValueEncodedLength = uint64AscendingEncodedLength
 // EncodeFloatValue encodes a float value with its value tag, appends it to the
 // supplied buffer, and returns the final buffer.
 func EncodeFloatValue(appendTo []byte, colID uint32, f float64) []byte {
-	appendTo = encodeValueTag(appendTo, colID, Float)
+	appendTo = EncodeValueTag(appendTo, colID, Float)
 	return EncodeUntaggedFloatValue(appendTo, f)
 }
 
@@ -1213,7 +1214,7 @@ func EncodeUntaggedFloatValue(appendTo []byte, f float64) []byte {
 // EncodeBytesValue encodes a byte array value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
 func EncodeBytesValue(appendTo []byte, colID uint32, data []byte) []byte {
-	appendTo = encodeValueTag(appendTo, colID, Bytes)
+	appendTo = EncodeValueTag(appendTo, colID, Bytes)
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
@@ -1224,10 +1225,17 @@ func EncodeUntaggedBytesValue(appendTo []byte, data []byte) []byte {
 	return append(appendTo, data...)
 }
 
+// EncodeArrayValue encodes a byte array value with its value tag, appends it to
+// the supplied buffer, and returns the final buffer.
+func EncodeArrayValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, Array)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
 // EncodeTimeValue encodes a time.Time value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
 func EncodeTimeValue(appendTo []byte, colID uint32, t time.Time) []byte {
-	appendTo = encodeValueTag(appendTo, colID, Time)
+	appendTo = EncodeValueTag(appendTo, colID, Time)
 	return EncodeUntaggedTimeValue(appendTo, t)
 }
 
@@ -1241,7 +1249,7 @@ func EncodeUntaggedTimeValue(appendTo []byte, t time.Time) []byte {
 // EncodeDecimalValue encodes an apd.Decimal value with its value tag, appends
 // it to the supplied buffer, and returns the final buffer.
 func EncodeDecimalValue(appendTo []byte, colID uint32, d *apd.Decimal) []byte {
-	appendTo = encodeValueTag(appendTo, colID, Decimal)
+	appendTo = EncodeValueTag(appendTo, colID, Decimal)
 	return EncodeUntaggedDecimalValue(appendTo, d)
 }
 
@@ -1265,7 +1273,7 @@ func EncodeUntaggedDecimalValue(appendTo []byte, d *apd.Decimal) []byte {
 // EncodeDurationValue encodes a duration.Duration value with its value tag,
 // appends it to the supplied buffer, and returns the final buffer.
 func EncodeDurationValue(appendTo []byte, colID uint32, d duration.Duration) []byte {
-	appendTo = encodeValueTag(appendTo, colID, Duration)
+	appendTo = EncodeValueTag(appendTo, colID, Duration)
 	return EncodeUntaggedDurationValue(appendTo, d)
 }
 
@@ -1280,7 +1288,7 @@ func EncodeUntaggedDurationValue(appendTo []byte, d duration.Duration) []byte {
 // EncodeUUIDValue encodes a uuid.UUID value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
 func EncodeUUIDValue(appendTo []byte, colID uint32, u uuid.UUID) []byte {
-	appendTo = encodeValueTag(appendTo, colID, UUID)
+	appendTo = EncodeValueTag(appendTo, colID, UUID)
 	return EncodeUntaggedUUIDValue(appendTo, u)
 }
 
@@ -1290,7 +1298,7 @@ func EncodeUntaggedUUIDValue(appendTo []byte, u uuid.UUID) []byte {
 	return append(appendTo, u.GetBytes()...)
 }
 
-// DecodeValueTag decodes a value encoded by encodeValueTag, used as a prefix in
+// DecodeValueTag decodes a value encoded by EncodeValueTag, used as a prefix in
 // each of the other EncodeFooValue methods.
 //
 // The tag is structured such that the encoded column id can be dropped from the
@@ -1449,7 +1457,7 @@ func DecodeUntaggedDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err 
 	return b[int(i):], d, err
 }
 
-// DecodeDurationValue decodes a value encoded by EncodeDurationValue.
+// DecodeDurationValue decodes a value encoded by EncodeUntaggedDurationValue.
 func DecodeDurationValue(b []byte) (remaining []byte, d duration.Duration, err error) {
 	b, err = decodeValueTypeAssert(b, Duration)
 	if err != nil {
@@ -1541,7 +1549,7 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		return typeOffset, dataOffset + n, err
 	case Float:
 		return typeOffset, dataOffset + floatValueEncodedLength, nil
-	case Bytes:
+	case Bytes, Array:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return typeOffset, dataOffset + n + int(i), err
 	case Decimal:
@@ -1564,7 +1572,7 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 // datum type using the "value" encoding, including the tag. If the size is
 // unbounded, false is returned.
 func UpperBoundValueEncodingSize(colID uint32, typ Type, size int) (int, bool) {
-	encodedTag := encodeValueTag(nil, colID, typ)
+	encodedTag := EncodeValueTag(nil, colID, typ)
 	switch typ {
 	case Null, True, False:
 		// The data is encoded in the type.

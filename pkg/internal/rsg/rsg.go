@@ -241,9 +241,7 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 	case parser.TypeUUID:
 		u := uuid.MakeV4()
 		v = fmt.Sprintf(`'%s'`, u)
-	case parser.TypeIntArray,
-		parser.TypeStringArray,
-		parser.TypeOid,
+	case parser.TypeOid,
 		parser.TypeRegClass,
 		parser.TypeRegNamespace,
 		parser.TypeRegProc,
@@ -253,8 +251,10 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 		parser.TypeAny:
 		v = "NULL"
 	default:
+		// Check types that can't be compared using equality
 		switch typ.(type) {
-		case parser.TTuple:
+		case parser.TTuple,
+			parser.TArray:
 			v = "NULL"
 		default:
 			panic(fmt.Errorf("unknown arg type: %s (%T)", typ, typ))

@@ -1511,7 +1511,7 @@ func typByVal(typ parser.Type) parser.Datum {
 func typColl(typ parser.Type, h oidHasher) parser.Datum {
 	if typ.FamilyEqual(parser.TypeAny) {
 		return oidZero
-	} else if typ.Equivalent(parser.TypeString) || typ.Equivalent(parser.TypeStringArray) {
+	} else if typ.Equivalent(parser.TypeString) || typ.Equivalent(parser.TArray{Typ: parser.TypeString}) {
 		return h.CollationOid(defaultCollationTag)
 	} else if typ.FamilyEqual(parser.TypeCollatedString) {
 		return h.CollationOid(typ.(parser.TCollatedString).Locale)
@@ -1522,8 +1522,6 @@ func typColl(typ parser.Type, h oidHasher) parser.Datum {
 // This mapping should be kept sync with PG's categorization.
 var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(parser.TypeAny):         typCategoryPseudo,
-	reflect.TypeOf(parser.TypeStringArray): typCategoryArray,
-	reflect.TypeOf(parser.TypeIntArray):    typCategoryArray,
 	reflect.TypeOf(parser.TypeBool):        typCategoryBoolean,
 	reflect.TypeOf(parser.TypeBytes):       typCategoryUserDefined,
 	reflect.TypeOf(parser.TypeDate):        typCategoryDateTime,
@@ -1541,6 +1539,9 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 }
 
 func typCategory(typ parser.Type) parser.Datum {
+	if typ.FamilyEqual(parser.TypeArray) {
+		return typCategoryArray
+	}
 	return datumToTypeCategory[reflect.TypeOf(parser.UnwrapType(typ))]
 }
 

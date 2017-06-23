@@ -2141,6 +2141,19 @@ func (d *DArray) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte(']')
 }
 
+const maxArrayLength = math.MaxInt32
+
+var arrayTooLongError = errors.Errorf("ARRAYs can be at most 2^31-1 elements long")
+
+// Validate checks that the given array is valid,
+// for example, that it's not too big.
+func (d *DArray) Validate() error {
+	if d.Len() > maxArrayLength {
+		return arrayTooLongError
+	}
+	return nil
+}
+
 // Len returns the length of the Datum array.
 func (d *DArray) Len() int {
 	return len(d.Array)
@@ -2165,6 +2178,9 @@ func (d *DArray) Append(v Datum) error {
 		return errors.Errorf("cannot append %s to array containing %s", d.ParamTyp,
 			v.ResolvedType())
 	}
+	if d.Len() >= maxArrayLength {
+		return arrayTooLongError
+	}
 	if _, ok := d.ParamTyp.(TArray); ok {
 		if v == DNull {
 			return errNonHomogeneousArray
@@ -2184,7 +2200,7 @@ func (d *DArray) Append(v Datum) error {
 		d.HasNulls = true
 	}
 	d.Array = append(d.Array, v)
-	return nil
+	return d.Validate()
 }
 
 // DTable is the table Datum. It is used for datums that hold an

@@ -352,7 +352,9 @@ func (p *planner) dropIndexByName(
 	found := false
 	for i := range tableDesc.Indexes {
 		if tableDesc.Indexes[i].ID == idx.ID {
-			tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
+			if err := tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP); err != nil {
+				return err
+			}
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
 			found = true
 			break
