@@ -737,11 +737,11 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::google::protobuf::int32 lease_count() const;
   void set_lease_count(::google::protobuf::int32 value);
 
-  bool has_applies_per_second() const;
-  void clear_applies_per_second();
-  static const int kAppliesPerSecondFieldNumber = 5;
-  double applies_per_second() const;
-  void set_applies_per_second(double value);
+  bool has_writes_per_second() const;
+  void clear_writes_per_second();
+  static const int kWritesPerSecondFieldNumber = 5;
+  double writes_per_second() const;
+  void set_writes_per_second(double value);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.StoreCapacity)
  private:
@@ -753,8 +753,8 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   void clear_has_range_count();
   void set_has_lease_count();
   void clear_has_lease_count();
-  void set_has_applies_per_second();
-  void clear_has_applies_per_second();
+  void set_has_writes_per_second();
+  void clear_has_writes_per_second();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -763,7 +763,7 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::google::protobuf::int64 available_;
   ::google::protobuf::int32 range_count_;
   ::google::protobuf::int32 lease_count_;
-  double applies_per_second_;
+  double writes_per_second_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1886,27 +1886,27 @@ inline void StoreCapacity::set_lease_count(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.lease_count)
 }
 
-inline bool StoreCapacity::has_applies_per_second() const {
+inline bool StoreCapacity::has_writes_per_second() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
-inline void StoreCapacity::set_has_applies_per_second() {
+inline void StoreCapacity::set_has_writes_per_second() {
   _has_bits_[0] |= 0x00000010u;
 }
-inline void StoreCapacity::clear_has_applies_per_second() {
+inline void StoreCapacity::clear_has_writes_per_second() {
   _has_bits_[0] &= ~0x00000010u;
 }
-inline void StoreCapacity::clear_applies_per_second() {
-  applies_per_second_ = 0;
-  clear_has_applies_per_second();
+inline void StoreCapacity::clear_writes_per_second() {
+  writes_per_second_ = 0;
+  clear_has_writes_per_second();
 }
-inline double StoreCapacity::applies_per_second() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.applies_per_second)
-  return applies_per_second_;
+inline double StoreCapacity::writes_per_second() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.writes_per_second)
+  return writes_per_second_;
 }
-inline void StoreCapacity::set_applies_per_second(double value) {
-  set_has_applies_per_second();
-  applies_per_second_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.applies_per_second)
+inline void StoreCapacity::set_writes_per_second(double value) {
+  set_has_writes_per_second();
+  writes_per_second_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.writes_per_second)
 }
 
 // -------------------------------------------------------------------

@@ -1991,8 +1991,8 @@ func (s *Store) MergeRange(
 	if subsumingRng.leaseholderStats != nil {
 		subsumingRng.leaseholderStats.resetRequestCounts()
 	}
-	if subsumingRng.applyStats != nil {
-		subsumingRng.applyStats.resetRequestCounts()
+	if subsumingRng.writeStats != nil {
+		subsumingRng.writeStats.resetRequestCounts()
 	}
 
 	if err := s.maybeMergeTimestampCaches(ctx, subsumingRng, subsumedRng); err != nil {
@@ -2292,7 +2292,7 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	if err == nil {
 		capacity.RangeCount = int32(s.ReplicaCount())
 		capacity.LeaseCount = int32(s.LeaseCount())
-		capacity.AppliesPerSecond = s.AppliesPerSecond()
+		capacity.WritesPerSecond = s.WritesPerSecond()
 	}
 	return capacity, err
 }
@@ -2390,23 +2390,20 @@ func (s *Store) LeaseCount() int {
 	return leaseCount
 }
 
-// AppliesPerSecond returns the approximate number of raft commands the store
-// is applying per second.
+// WritesPerSecond returns the approximate number of keys the store is writing
+// per second.
 //
 // TODO(a-robinson): How dangerous is it that this number will be incorrectly
 // low the first time or two it gets gossiped when a store starts? We can't
 // easily have a countdown as its value changes like we can for leases/replicas.
-func (s *Store) AppliesPerSecond() float64 {
-	var applyCount float64
+func (s *Store) WritesPerSecond() float64 {
+	var writeCount float64
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		// TODO(a-robinson): This currently only includes writes, not reads served
-		// by leaseholders. Should we take those into account too? This may be
-		// enabled by #7611.
-		qps, _ := r.applyStats.avgQPS()
-		applyCount += qps
+		qps, _ := r.writeStats.avgQPS()
+		writeCount += qps
 		return true
 	})
-	return applyCount
+	return writeCount
 }
 
 // Send fetches a range based on the header's replica, assembles method, args &
