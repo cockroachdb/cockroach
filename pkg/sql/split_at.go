@@ -173,7 +173,7 @@ func (p *planner) TestingRelocate(
 	//  - column values; it is OK if the select statement returns fewer columns
 	//  (the relevant prefix is used).
 	desiredTypes := make([]parser.Type, len(index.ColumnIDs)+1)
-	desiredTypes[0] = parser.TypeIntArray
+	desiredTypes[0] = parser.TArray{Typ: parser.TypeInt}
 	for i, colID := range index.ColumnIDs {
 		c, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
@@ -269,7 +269,7 @@ func (n *testingRelocateNode) Next(ctx context.Context) (bool, error) {
 	// table/index row.
 	data := n.rows.Values()
 
-	if !data[0].ResolvedType().Equivalent(parser.TypeIntArray) {
+	if !data[0].ResolvedType().Equivalent(parser.TArray{Typ: parser.TypeInt}) {
 		return false, errors.Errorf(
 			"expected int array in the first TESTING_RELOCATE data column; got %s",
 			data[0].ResolvedType(),

@@ -2141,6 +2141,15 @@ func (d *DArray) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte(']')
 }
 
+// Validate checks that the given array is valid,
+// for example, that it's not too big.
+func (d *DArray) Validate() error {
+	if d.Len() > 1<<32 {
+		return errors.Errorf("ARRAYs can be at most 2^32 elements long")
+	}
+	return nil
+}
+
 // Len returns the length of the Datum array.
 func (d *DArray) Len() int {
 	return len(d.Array)
@@ -2184,7 +2193,7 @@ func (d *DArray) Append(v Datum) error {
 		d.HasNulls = true
 	}
 	d.Array = append(d.Array, v)
-	return nil
+	return d.Validate()
 }
 
 // DTable is the table Datum. It is used for datums that hold an

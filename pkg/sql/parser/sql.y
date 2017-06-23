@@ -3726,8 +3726,10 @@ cast_target:
   }
 
 opt_array_bounds:
-  opt_array_bounds '[' ']' { $$.val = Exprs{NewDInt(DInt(-1))} }
-| opt_array_bounds '[' ICONST ']' { return unimplementedWithIssue(sqllex, 2115) }
+  // TODO(justin): reintroduce multiple array bounds
+  // opt_array_bounds '[' ']' { $$.val = Exprs{NewDInt(DInt(-1))} }
+  '[' ']' { $$.val = Exprs{NewDInt(DInt(-1))} }
+| '[' ICONST ']' { return unimplementedWithIssue(sqllex, 17156) }
 | /* EMPTY */ { $$.val = Exprs(nil) }
 
 simple_typename:

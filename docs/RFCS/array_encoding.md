@@ -100,8 +100,10 @@ implementation.
 Array values will be encoded using a format very similar to the one used in
 Postgres. The format is:
 
-* Array type tag
-* Element type tag
+* Byte type tag
+* Length in bytes
+* Length of the array, in bytes
+* Value type tag
 * A byte, encoding:
     * The number of dimensions in the array as the high 4 bits
     * A 4-bit flag bitmap, having all but the lowest bit reserved, with the lowest bit representing whether we have a NULL bitmap.
