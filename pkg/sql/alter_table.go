@@ -97,7 +97,9 @@ func (n *alterTableNode) Start(params runParams) error {
 
 			n.tableDesc.AddColumnMutation(*col, sqlbase.DescriptorMutation_ADD)
 			if idx != nil {
-				n.tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD)
+				if err := n.tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD); err != nil {
+					return err
+				}
 			}
 			if d.HasColumnFamily() {
 				err := n.tableDesc.AddColumnToFamilyMaybeCreate(
@@ -136,7 +138,9 @@ func (n *alterTableNode) Start(params runParams) error {
 						return fmt.Errorf("index %q being dropped, try again later", d.Name)
 					}
 				}
-				n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD)
+				if err := n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD); err != nil {
+					return err
+				}
 
 			case *parser.CheckConstraintTableDef:
 				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, params.p.session.SearchPath)
