@@ -73,10 +73,6 @@ const (
 	// certificatesDebugEndpoint lists the certificates on a node.
 	certificatesDebugEndpoint = "/debug/certificates"
 
-	// networkDebugEndpoint exposes an html page that contains diagnostic
-	// information about network connections.
-	networkDebugEndpoint = "/debug/network"
-
 	// nodesDebugEndpoint exposes an html page with a list of active nodes
 	// and their statuses.
 	nodesDebugEndpoint = "/debug/nodes"
