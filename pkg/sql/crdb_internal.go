@@ -248,7 +248,7 @@ CREATE TABLE crdb_internal.leases (
 					if state.lease == nil || state.invalid {
 						continue
 					}
-					expCopy := state.lease.expiration
+					expCopy := leaseExpiration(state.expiration)
 					if err := addRow(
 						nodeID,
 						tableID,
