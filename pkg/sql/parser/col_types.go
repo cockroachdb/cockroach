@@ -374,14 +374,7 @@ func (node *ArrayColType) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
-	switch colType {
-	case intColTypeInt:
-		return &ArrayColType{Name: "INT[]", ParamType: intColTypeInt, BoundsExprs: boundsExprs}, nil
-	case stringColTypeString:
-		return &ArrayColType{Name: "STRING[]", ParamType: stringColTypeString, BoundsExprs: boundsExprs}, nil
-	default:
-		return nil, errors.Errorf("cannot make array for column type %s", colType)
-	}
+	return &ArrayColType{Name: colType.String() + "[]", ParamType: colType, BoundsExprs: boundsExprs}, nil
 }
 
 // VectorColType is the base for VECTOR column types, which are Postgres's

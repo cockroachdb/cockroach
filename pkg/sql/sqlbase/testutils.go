@@ -140,8 +140,10 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 		return parser.NewDOid(parser.DInt(rng.Int63()))
 	case ColumnType_NULL:
 		return parser.DNull
-	case ColumnType_INT_ARRAY, ColumnType_INT2VECTOR:
-		// TODO(cuongdo): we don't support for persistence of arrays or vectors yet
+	case ColumnType_ARRAY:
+		// TODO(justin)
+		return parser.DNull
+	case ColumnType_INT2VECTOR:
 		return parser.DNull
 	default:
 		panic(fmt.Sprintf("invalid type %s", typ.String()))
@@ -169,6 +171,14 @@ func RandColumnType(rng *rand.Rand) ColumnType {
 	typ := ColumnType{SemanticType: columnSemanticTypes[rng.Intn(len(columnSemanticTypes))]}
 	if typ.SemanticType == ColumnType_COLLATEDSTRING {
 		typ.Locale = RandCollationLocale(rng)
+	}
+	if typ.SemanticType == ColumnType_ARRAY {
+		typ.ArrayContents = &columnSemanticTypes[rng.Intn(len(columnSemanticTypes))]
+		if *typ.ArrayContents == ColumnType_COLLATEDSTRING {
+			// TODO(justin): change this when collated arrays are supported.
+			s := ColumnType_STRING
+			typ.ArrayContents = &s
+		}
 	}
 	return typ
 }

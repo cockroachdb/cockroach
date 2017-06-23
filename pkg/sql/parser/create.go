@@ -232,6 +232,8 @@ func newColumnTableDef(
 				d.Type = &CollatedStringColType{s.Name, s.N, locale}
 			case *CollatedStringColType:
 				return nil, errors.Errorf("multiple COLLATE declarations for column %q", name)
+			case *ArrayColType:
+				return nil, errors.Errorf("collated strings currently not allowed as array contents for column %q", name)
 			default:
 				return nil, errors.Errorf("COLLATE declaration for non-string-typed column %q", name)
 			}

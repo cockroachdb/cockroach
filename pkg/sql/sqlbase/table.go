@@ -80,16 +80,6 @@ func MakeColumnDefDescs(
 		Nullable: d.Nullable.Nullability != parser.NotNull && !d.PrimaryKey,
 	}
 
-	// Prevent unsupported array types from falling through.
-	// TODO(jordan): This is ugly and a workaround for incompatibility between
-	// CastTargetToDatumType and structured.go's DatumTypeToColumnType. See #15813
-	switch t := d.Type.(type) {
-	case *parser.ArrayColType:
-		if _, ok := t.ParamType.(*parser.IntColType); !ok {
-			return nil, nil, errors.Errorf("arrays of type %s are unsupported", t.ParamType)
-		}
-	}
-
 	// Set Type.SemanticType and Type.Locale.
 	colDatumType := parser.CastTargetToDatumType(d.Type)
 	col.Type = DatumTypeToColumnType(colDatumType)
@@ -140,9 +130,6 @@ func MakeColumnDefDescs(
 	case *parser.CollatedStringColType:
 		col.Type.Width = int32(t.N)
 	case *parser.ArrayColType:
-		if _, ok := t.ParamType.(*parser.IntColType); !ok {
-			return nil, nil, errors.Errorf("arrays of type %s are unsupported", t.ParamType)
-		}
 		for i, e := range t.BoundsExprs {
 			ctx := parser.SemaContext{SearchPath: searchPath}
 			te, err := parser.TypeCheckAndRequire(e, &ctx, parser.TypeInt, "array bounds")
@@ -603,6 +590,12 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
 	case *parser.DUuid:
 		return encoding.EncodeUUIDValue(appendTo, uint32(colID), t.UUID), nil
+	case *parser.DArray:
+		a, err := encodeArray(t)
+		if err != nil {
+			return nil, err
+		}
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), a), nil
 	case *parser.DCollatedString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
 	case *parser.DOid:
@@ -1189,73 +1182,132 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 	if err != nil {
 		return nil, b, err
 	}
+	// NULL, true, and false are special, because their values are fully encoded by their value tag.
 	if typ == encoding.Null {
 		return parser.DNull, b[dataOffset:], nil
+	} else if typ == encoding.True {
+		return parser.MakeDBool(parser.DBool(true)), b[dataOffset:], nil
+	} else if typ == encoding.False {
+		return parser.MakeDBool(parser.DBool(false)), b[dataOffset:], nil
 	}
-	switch valType {
-	case parser.TypeBool:
-		var x bool
-		b, x, err = encoding.DecodeBoolValue(b)
-		// No need to chunk allocate DBool as MakeDBool returns either
-		// parser.DBoolTrue or parser.DBoolFalse.
-		return parser.MakeDBool(parser.DBool(x)), b, err
-	case parser.TypeInt:
-		var i int64
-		b, i, err = encoding.DecodeIntValue(b)
-		return a.NewDInt(parser.DInt(i)), b, err
-	case parser.TypeFloat:
-		var f float64
-		b, f, err = encoding.DecodeFloatValue(b)
-		return a.NewDFloat(parser.DFloat(f)), b, err
-	case parser.TypeDecimal:
-		var d apd.Decimal
-		b, d, err = encoding.DecodeDecimalValue(b)
-		dd := a.NewDDecimal(parser.DDecimal{Decimal: d})
-		return dd, b, err
-	case parser.TypeString:
+	if typ, ok := valType.(parser.TCollatedString); ok {
 		var data []byte
 		b, data, err = encoding.DecodeBytesValue(b)
-		return a.NewDString(parser.DString(data)), b, err
-	case parser.TypeName:
-		var data []byte
-		b, data, err = encoding.DecodeBytesValue(b)
-		return a.NewDName(parser.DString(data)), b, err
-	case parser.TypeBytes:
-		var data []byte
-		b, data, err = encoding.DecodeBytesValue(b)
-		return a.NewDBytes(parser.DBytes(data)), b, err
-	case parser.TypeDate:
-		var i int64
-		b, i, err = encoding.DecodeIntValue(b)
-		return a.NewDDate(parser.DDate(i)), b, err
-	case parser.TypeTimestamp:
-		var t time.Time
-		b, t, err = encoding.DecodeTimeValue(b)
-		return a.NewDTimestamp(parser.DTimestamp{Time: t}), b, err
-	case parser.TypeTimestampTZ:
-		var t time.Time
-		b, t, err = encoding.DecodeTimeValue(b)
-		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: t}), b, err
-	case parser.TypeInterval:
-		var d duration.Duration
-		b, d, err = encoding.DecodeDurationValue(b)
-		return a.NewDInterval(parser.DInterval{Duration: d}), b, err
-	case parser.TypeUUID:
-		var u uuid.UUID
-		b, u, err = encoding.DecodeUUIDValue(b)
-		return a.NewDUuid(parser.DUuid{UUID: u}), b, err
+		return parser.NewDCollatedString(string(data), typ.Locale, &a.env), b, err
+	}
+	if typ, ok := valType.(parser.TArray); ok {
+		return decodeArray(a, typ.Typ, b)
+	}
+	return decodeUntaggedDatum(a, valType, b[dataOffset:])
+}
 
-	case parser.TypeOid:
-		var i int64
-		b, i, err = encoding.DecodeIntValue(b)
-		return a.NewDOid(parser.MakeDOid(parser.DInt(i))), b, err
-	default:
-		if typ, ok := valType.(parser.TCollatedString); ok {
-			var data []byte
-			b, data, err = encoding.DecodeBytesValue(b)
-			return parser.NewDCollatedString(string(data), typ.Locale, &a.env), b, err
+func decodeArray(a *DatumAlloc, elementType parser.Type, b []byte) (parser.Datum, []byte, error) {
+	// Bytes value tag.
+	_, dataOffset, _, _, err := encoding.DecodeValueTag(b)
+	if err != nil {
+		return nil, b, err
+	}
+	b = b[dataOffset:]
+	if err != nil {
+		return nil, b, err
+	}
+	// Encoded bytes length.
+	b, _, _, err = encoding.DecodeNonsortingUvarint(b)
+	if err != nil {
+		return nil, b, err
+	}
+	// flags/dims
+	_ = b[0]
+	b = b[1:]
+	b, _, len, err := encoding.DecodeNonsortingUvarint(b)
+	if err != nil {
+		return nil, b, err
+	}
+	result := parser.DArray{
+		Array:    make(parser.Datums, len),
+		ParamTyp: elementType,
+	}
+	var val parser.Datum
+	for i := uint64(0); i < len; i++ {
+		val, b, err = decodeUntaggedDatum(a, elementType, b)
+		if err != nil {
+			return nil, b, err
 		}
-		return nil, nil, errors.Errorf("TODO(pmattis): decoded index value: %s", valType)
+		result.Array[i] = val
+	}
+	return &result, b, nil
+}
+
+func decodeUntaggedDatum(a *DatumAlloc, t parser.Type, b []byte) (parser.Datum, []byte, error) {
+	switch t {
+	case parser.TypeInt:
+		b, i, err := encoding.DecodeUntaggedIntValue(b)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDInt(parser.DInt(i)), b, nil
+	case parser.TypeString, parser.TypeName:
+		b, data, err := encoding.DecodeUntaggedBytesValue(b)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDString(parser.DString(data)), b, nil
+	case parser.TypeBool:
+		// The value of booleans are encoded in their tag, so we don't have an
+		// "Untagged" version of this function.
+		b, data, err := encoding.DecodeBoolValue(b)
+		if err != nil {
+			return nil, b, err
+		}
+		d := parser.DBool(data)
+		return &d, b, nil
+	case parser.TypeFloat:
+		b, data, err := encoding.DecodeUntaggedFloatValue(b)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDFloat(parser.DFloat(data)), b, nil
+	case parser.TypeDecimal:
+		b, data, err := encoding.DecodeUntaggedDecimalValue(b)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDDecimal(parser.DDecimal{Decimal: data}), b, nil
+	case parser.TypeBytes:
+		b, data, err := encoding.DecodeUntaggedBytesValue(b)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDBytes(parser.DBytes(data)), b, nil
+	case parser.TypeDate:
+		b, data, err := encoding.DecodeUntaggedIntValue(b)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDDate(parser.DDate(data)), b, nil
+	case parser.TypeTimestamp:
+		b, data, err := encoding.DecodeUntaggedTimeValue(b)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTimestamp(parser.DTimestamp{Time: data}), b, nil
+	case parser.TypeTimestampTZ:
+		b, data, err := encoding.DecodeUntaggedTimeValue(b)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: data}), b, nil
+	case parser.TypeInterval:
+		b, data, err := encoding.DecodeUntaggedDurationValue(b)
+		return a.NewDInterval(parser.DInterval{Duration: data}), b, err
+	case parser.TypeUUID:
+		b, data, err := encoding.DecodeUntaggedUUIDValue(b)
+		return a.NewDUuid(parser.DUuid{UUID: data}), b, err
+	case parser.TypeOid:
+		b, data, err := encoding.DecodeUntaggedIntValue(b)
+		return a.NewDOid(parser.MakeDOid(parser.DInt(data))), b, err
+	default:
+		return nil, b, errors.Errorf("couldn't decode type %s", t)
 	}
 }
 
@@ -1471,6 +1523,19 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			r.SetBytes(v.GetBytes())
 			return r, nil
 		}
+	case ColumnType_ARRAY:
+		if v, ok := val.(*parser.DArray); ok {
+			if DatumTypeToColumnSemanticType(v.ParamTyp) != *col.Type.ArrayContents {
+				return r, errors.Errorf("type of array contents %s doesn't match column type %s",
+					DatumTypeToColumnSemanticType(v.ParamTyp), col.Type.ArrayContents)
+			}
+			b, err := encodeArray(v)
+			if err != nil {
+				return r, err
+			}
+			r.SetBytes(b)
+			return r, nil
+		}
 	case ColumnType_COLLATEDSTRING:
 		if col.Type.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
@@ -1493,6 +1558,58 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 	}
 	return r, fmt.Errorf("value type %s doesn't match type %s of column %q",
 		val.ResolvedType(), col.Type.SemanticType, col.Name)
+}
+
+func encodeArray(d *parser.DArray) ([]byte, error) {
+	b := make([]byte, 0)
+	b = append(b, 1)
+	b = encoding.EncodeNonsortingUvarint(b, uint64(d.Len()))
+	for _, e := range d.Array {
+		var err error
+		b, err = encodeArrayElement(b, e)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return b, nil
+}
+
+func encodeArrayElement(b []byte, d parser.Datum) ([]byte, error) {
+	if d == parser.DNull {
+		// TODO(justin)
+		return nil, errors.Errorf("NULL values currently disallowed in ARRAYs")
+	}
+	switch t := d.(type) {
+	case *parser.DInt:
+		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
+	case *parser.DString:
+		bytes := []byte(*t)
+		b = encoding.EncodeUntaggedBytesValue(b, bytes)
+		return b, nil
+	case *parser.DBytes:
+		bytes := []byte(*t)
+		b = encoding.EncodeUntaggedBytesValue(b, bytes)
+		return b, nil
+	case *parser.DFloat:
+		return encoding.EncodeUntaggedFloatValue(b, float64(*t)), nil
+	case *parser.DBool:
+		return encoding.EncodeBoolValue(b, encoding.NoColumnID, bool(*t)), nil
+	case *parser.DDecimal:
+		return encoding.EncodeUntaggedDecimalValue(b, &t.Decimal), nil
+	case *parser.DDate:
+		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
+	case *parser.DTimestamp:
+		return encoding.EncodeUntaggedTimeValue(b, t.Time), nil
+	case *parser.DTimestampTZ:
+		return encoding.EncodeUntaggedTimeValue(b, t.Time), nil
+	case *parser.DInterval:
+		return encoding.EncodeUntaggedDurationValue(b, t.Duration), nil
+	case *parser.DUuid:
+		return encoding.EncodeUntaggedUUIDValue(b, t.UUID), nil
+	case *parser.DOid:
+		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
+	}
+	return nil, errors.Errorf("don't know how to encode %s", d)
 }
 
 // UnmarshalColumnValue decodes the value from a key-value pair using the type

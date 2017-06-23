@@ -78,7 +78,7 @@ var showRangesColumns = sqlbase.ResultColumns{
 	{
 		Name: "Replicas",
 		// The INTs in the array are Store IDs.
-		Typ: parser.TypeIntArray,
+		Typ: parser.TArray{parser.TypeInt},
 	},
 	{
 		Name: "Lease Holder",
