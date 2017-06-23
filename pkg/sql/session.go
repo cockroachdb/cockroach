@@ -24,6 +24,7 @@ import (
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	wrapper "github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
@@ -1308,6 +1309,10 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 			dur = parser.DNull
 		}
 
+		// Wrap long log messages to make traces easier to read on the command line.
+		strs, _ := wrapper.WrapString(lrr.msg, 80)
+		msg := strings.Join(strs, "\n")
+
 		row := traceRow{
 			parser.NewDInt(parser.DInt(lrr.span.txnIdx)),            // txn_idx
 			parser.NewDInt(parser.DInt(lrr.span.index)),             // span_idx
@@ -1315,7 +1320,7 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 			parser.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond), // timestamp
 			dur,                        // duration
 			operation,                  // operation
-			parser.NewDString(lrr.msg), // message
+			parser.NewDString(msg), // message
 		}
 		res = append(res, row)
 	}
