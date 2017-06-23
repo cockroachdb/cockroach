@@ -841,7 +841,7 @@ func TestColumnTypeSQLString(t *testing.T) {
 		expectedSQL string
 	}{
 		{ColumnType{SemanticType: ColumnType_INT}, "INT"},
-		{ColumnType{SemanticType: ColumnType_INT, Width: 2}, "BIT(2)"},
+		{ColumnType{SemanticType: ColumnType_INT, VisibleType: ColumnType_BIT, Width: 2}, "BIT(2)"},
 		{ColumnType{SemanticType: ColumnType_FLOAT}, "FLOAT"},
 		{ColumnType{SemanticType: ColumnType_FLOAT, Precision: 3}, "FLOAT(3)"},
 		{ColumnType{SemanticType: ColumnType_DECIMAL}, "DECIMAL"},
