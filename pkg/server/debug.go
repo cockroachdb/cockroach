@@ -169,7 +169,7 @@ func init() {
       </tr>
       <tr>
         <td>network status</td>
-        <td><a href="/debug/network">network</a></td>
+        <td><a href="../#/reports/network">network</a></td>
       </tr>
       <tr>
         <td>raft</td>
