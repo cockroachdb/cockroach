@@ -734,7 +734,9 @@ WARN_UNUSED_RESULT bool MergeValues(cockroach::storage::engine::enginepb::MVCCMe
       left->mutable_merge_timestamp()->CopyFrom(right.merge_timestamp());
     }
     if (full_merge && IsTimeSeriesData(left->raw_bytes())) {
-      ConsolidateTimeSeriesValue(left->mutable_raw_bytes(), logger);
+      if (!ConsolidateTimeSeriesValue(left->mutable_raw_bytes(), logger)) {
+          return false;
+      }
     }
     return true;
   }
