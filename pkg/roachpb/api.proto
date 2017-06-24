@@ -506,13 +506,6 @@ message PushTxnRequest {
   // Forces the push by overriding the normal checks in PushTxn to
   // either abort or push the timestamp.
   optional bool force = 7 [(gogoproto.nullable) = false];
-  // Specifies how to interpret priorities on a push. If false, higher
-  // priorities are allowed to push txns with lower priorities. If
-  // true, txns can only be pushed if the pusher has MaxTxnPriority
-  // or the pushee has MinTxnPriority.
-  // TODO(spencer): this field is necessary to upgrade from the old
-  // priority-based push mechanism. Remove this field at some point.
-  optional bool new_priorities = 8 [(gogoproto.nullable) = false];
 }
 
 // A PushTxnResponse is the return value from the PushTxn() method. It
