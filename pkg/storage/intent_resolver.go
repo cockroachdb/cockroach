@@ -203,7 +203,6 @@ func (ir *intentResolver) maybePushTransactions(
 			// that a transaction has timed out. See #877.
 			Now:           now,
 			PushType:      pushType,
-			NewPriorities: true,
 		})
 	}
 	b := &client.Batch{}

@@ -1643,7 +1643,7 @@ func evalPushTxn(
 		// Can always push a SNAPSHOT txn's timestamp.
 		reason = "pushee is SNAPSHOT"
 		pusherWins = true
-	case canPushWithPriority(&args.PusherTxn, &reply.PusheeTxn, args.NewPriorities):
+	case canPushWithPriority(&args.PusherTxn, &reply.PusheeTxn):
 		reason = "pusher has priority"
 		pusherWins = true
 	case args.Force:
@@ -1693,20 +1693,9 @@ func evalPushTxn(
 	return result, nil
 }
 
-func canPushWithPriority(pusher, pushee *roachpb.Transaction, newPriorities bool) bool {
-	if newPriorities {
-		if (pusher.Priority > roachpb.MinTxnPriority && pushee.Priority == roachpb.MinTxnPriority) ||
-			(pusher.Priority == roachpb.MaxTxnPriority && pushee.Priority < pusher.Priority) {
-			return true
-		}
-	} else {
-		if pusher.Priority != pushee.Priority {
-			return pusher.Priority > pushee.Priority
-		} else if pusher.ID != nil {
-			return bytes.Compare(pushee.ID.GetBytes(), pusher.ID.GetBytes()) < 0
-		}
-	}
-	return false
+func canPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
+		return (pusher.Priority > roachpb.MinTxnPriority && pushee.Priority == roachpb.MinTxnPriority) ||
+			(pusher.Priority == roachpb.MaxTxnPriority && pushee.Priority < pusher.Priority)
 }
 
 // evalQueryTxn fetches the current state of a transaction.

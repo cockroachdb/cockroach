@@ -2040,7 +2040,6 @@ func TestDistributedTxnCleanup(t *testing.T) {
 							PusheeTxn:     txn.Proto().TxnMeta,
 							PushType:      roachpb.PUSH_ABORT,
 							Force:         true,
-							NewPriorities: true,
 						})
 						_, pErr := store.Send(ctx, ba)
 						if pErr != nil {

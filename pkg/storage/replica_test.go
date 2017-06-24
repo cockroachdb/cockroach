@@ -1479,7 +1479,6 @@ func pushTxnArgs(
 		PusherTxn:     *pusher,
 		PusheeTxn:     pushee.TxnMeta,
 		PushType:      pushType,
-		NewPriorities: true,
 	}
 }
 
@@ -4517,7 +4516,6 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 	// Since the pushee has higher priority than the pusher, the push should fail.
 	pushee.Priority = 4
 	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
-	args.NewPriorities = false
 
 	_, pErr := tc.SendWrapped(&args)
 	if pErr == nil {

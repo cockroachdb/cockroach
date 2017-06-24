@@ -913,7 +913,6 @@ func pushTxn(
 		PusherTxn:     roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Priority: math.MaxInt32}},
 		PusheeTxn:     txn.TxnMeta,
 		PushType:      typ,
-		NewPriorities: true,
 	}
 	b := &client.Batch{}
 	b.AddRawRequest(pushArgs)
