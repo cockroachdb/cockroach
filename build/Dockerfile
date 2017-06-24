@@ -103,13 +103,11 @@ RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
 
 # BEGIN https://github.com/docker-library/golang/blob/2a15dff/1.8/alpine3.5/Dockerfile
 
-COPY parallelbuilds-go1.8.patch /
-RUN curl -fsSL https://storage.googleapis.com/golang/go1.8.3.src.tar.gz -o golang.tar.gz \
- && echo '5f5dea2447e7dcfdc50fa6b94c512e58bfba5673c039259fd843f68829d99fa6  golang.tar.gz' | sha256sum -c - \
+RUN curl -fsSL https://storage.googleapis.com/golang/go1.9rc1.src.tar.gz -o golang.tar.gz \
+ && echo '87717598ea60cc6143afa48f141f7e1308e196b71862028e710b910f376b452e golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
- && patch -p2 -i /parallelbuilds-go1.8.patch \
  && GOROOT_BOOTSTRAP=$(go env GOROOT) CC=clang CXX=clang++ ./make.bash \
  && rm -rf /*.patch \
  && apt-get autoremove -y golang
