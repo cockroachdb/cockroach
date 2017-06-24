@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type leaseTest struct {
@@ -232,14 +231,20 @@ func TestLeaseManager(testingT *testing.T) {
 	if _, _, err := t.acquire(1, 10000); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
-
-	l1, _ := t.mustAcquire(1, descID)
+	// Acquire 2 leases from the same node. They should return the same
+	// table and expiration.
+	l1, e1 := t.mustAcquire(1, descID)
+	l2, e2 := t.mustAcquire(1, descID)
+	if l1.ID != l2.ID || e1 != e2 {
+		t.Fatalf("expected same lease, but found %v != %v", l1, l2)
+	}
 	t.expectLeases(descID, "/1/1")
 	// Node 2 never acquired a lease on descID, so we should expect an error.
 	if err := t.release(2, l1); err == nil {
 		t.Fatalf("expected error, but found none")
 	}
 	t.mustRelease(1, l1, nil)
+	t.mustRelease(1, l2, nil)
 	t.expectLeases(descID, "/1/1")
 
 	// It is an error to acquire a lease for a specific version that doesn't
@@ -250,7 +255,7 @@ func TestLeaseManager(testingT *testing.T) {
 	}
 
 	// Publish a new version and explicitly acquire it.
-	l2, _ := t.mustAcquire(1, descID)
+	l2, _ = t.mustAcquire(1, descID)
 	t.mustPublish(ctx, 1, descID)
 	l3, _ := t.mustAcquireMinVersion(1, descID, 2)
 	t.expectLeases(descID, "/1/1 /2/1")
@@ -322,25 +327,19 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 
 	const descID = keys.LeaseTableID
 
-	// Acquire 2 leases from the same node. They should return the same
-	// table and expiration.
-	l1, e1 := t.mustAcquire(1, descID)
-	l2, e2 := t.mustAcquire(1, descID)
-	if l1.ID != l2.ID || e1 != e2 {
-		t.Fatalf("expected same lease, but found %v != %v", l1, l2)
-	}
-
-	t.expectLeases(descID, "/1/1")
-
-	// Set the minimum lease duration such that the next lease acquisition will
+	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
-	savedLeaseDuration, savedMinLeaseDuration := sql.LeaseDuration, sql.MinLeaseDuration
+	savedLeaseDuration := sql.LeaseDuration
 	defer func() {
-		sql.LeaseDuration, sql.MinLeaseDuration = savedLeaseDuration, savedMinLeaseDuration
+		sql.LeaseDuration = savedLeaseDuration
 	}()
 
-	sql.MinLeaseDuration = time.Unix(0, e1.WallTime).Sub(timeutil.Now())
-	sql.LeaseDuration = 2 * sql.MinLeaseDuration
+	sql.LeaseDuration = 5 * time.Nanosecond
+
+	time.Sleep(5 * sql.LeaseDuration)
+
+	l1, e1 := t.mustAcquire(1, descID)
+	t.expectLeases(descID, "/1/1")
 
 	// Another lease acquisition from the same node will result in a new lease.
 	rt := removalTracker.TrackRemoval(l1)
@@ -360,7 +359,6 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	t.expectLeases(descID, "/1/1")
 
 	t.mustRelease(1, l1, nil)
-	t.mustRelease(1, l2, nil)
 	t.mustRelease(1, l3, nil)
 }
 
@@ -752,5 +750,74 @@ SELECT EXISTS(SELECT * FROM t.foo);
 	case <-timeout:
 		t.Fatal("lease from sub-query was not released")
 	case <-fooRelease:
+	}
+}
+
+// Test that a transaction created way in the past will use the correct
+// table descriptor and will thus obey the modififcation time of the
+// table descriptor.
+func TestTxnObeysTableModificationTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert an entry so that the transaction is guaranteed to be
+	// assigned a timestamp.
+	if _, err := tx.Exec(`
+INSERT INTO t.timestamp VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify the table descriptor.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.kv ADD m CHAR DEFAULT 'z';`); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := tx.Query(`SELECT * FROM t.kv`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		// The transaction is unable to see column m.
+		var k, v, m string
+		if err := rows.Scan(&k, &v, &m); !testutils.IsError(
+			err, "expected 2 destination arguments in Scan, not 3",
+		) {
+			t.Fatalf("err = %v", err)
+		}
+		err = rows.Scan(&k, &v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if k != "a" || v != "b" {
+			t.Fatalf("didn't find expected row: %s %s", k, v)
+		}
+	}
+
+	// This INSERT is disallowed because a retryable error is returned on
+	// the Commit() below.
+	if _, err := tx.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Commit(); !testutils.IsError(err, "transaction deadline exceeded") {
+		t.Fatalf("err = %v", err)
 	}
 }
