@@ -672,52 +672,6 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 }
 
-// TestTxnObeysLeaseExpiration tests that a transaction is aborted when it
-// uses a table descriptor with an expired lease.
-func TestTxnObeysLeaseExpiration(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
-	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
-			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
-				CanUseExpiredLeases: true,
-			},
-		},
-	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	leaseManager := s.LeaseManager().(*sql.LeaseManager)
-
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-INSERT INTO t.kv VALUES ('a', 'b');
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	// The above INSERT has acquired a lease on the table; expire the lease.
-	// This lease while expired will still be used by the SQL commands below
-	// because CanUseExpiredLeases is set. The SQL commands will set the
-	// transaction deadline to the lease expiration time (in the past), and
-	// the transaction will eventually fail with a deadline exceeded error.
-	leaseManager.ExpireLeases(s.Clock())
-
-	testCases := []string{
-		`INSERT INTO t.kv VALUES ('c', 'd')`,
-		`UPDATE t.kv SET v = 'd' WHERE k = 'a'`,
-		`DELETE FROM t.kv WHERE k = 'a'`,
-		`TRUNCATE TABLE t.kv`,
-	}
-	for _, testCase := range testCases {
-		t.Run(testCase, func(t *testing.T) {
-			if _, err := sqlDB.Exec(testCase); !testutils.IsError(err, "pq: transaction deadline exceeded") {
-				t.Fatal(err)
-			}
-		})
-	}
-}
-
 // TestSubqueryLeases tests that all leases acquired by a subquery are
 // properly tracked and released.
 func TestSubqueryLeases(t *testing.T) {
