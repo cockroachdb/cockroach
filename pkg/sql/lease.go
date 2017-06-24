@@ -59,9 +59,6 @@ var (
 type leaseState struct {
 	id      sqlbase.ID
 	version sqlbase.DescriptorVersion
-	// TODO(vivek): Remove this once TestTxnObeysLeaseExpiration is no longer
-	// needed, or when it's rewritten.
-	testingKnobs LeaseStoreTestingKnobs
 }
 
 // tableVersionState holds the state for a table version. This includes
@@ -109,9 +106,6 @@ func (s *tableVersionState) String() string {
 // hasSomeLifeLeft returns true if the lease has at least a minimum of
 // lifetime left until expiration, and thus can be used.
 func (s *tableVersionState) hasSomeLifeLeft(clock *hlc.Clock) bool {
-	if s.lease.testingKnobs.CanUseExpiredLeases {
-		return true
-	}
 	minDesiredExpiration := clock.Now().Add(int64(MinLeaseDuration), 0)
 	return minDesiredExpiration.Less(s.expiration)
 }
@@ -161,7 +155,7 @@ func (s LeaseStore) acquire(
 	minVersion sqlbase.DescriptorVersion,
 	minExpirationTime hlc.Timestamp,
 ) (*tableVersionState, error) {
-	table := &tableVersionState{lease: &leaseState{testingKnobs: s.testingKnobs}}
+	table := &tableVersionState{lease: &leaseState{}}
 	expiration := s.clock.Now().Add(int64(jitteredLeaseDuration()), 0)
 	if expiration.Less(minExpirationTime) {
 		expiration = minExpirationTime
@@ -883,8 +877,6 @@ type LeaseStoreTestingKnobs struct {
 	LeaseAcquiringEvent func(tableID sqlbase.ID, txn *client.Txn)
 	// Called after a lease is acquired, with any operation error.
 	LeaseAcquiredEvent func(table sqlbase.TableDescriptor, err error)
-	// Allow the use of expired leases.
-	CanUseExpiredLeases bool
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
