@@ -550,11 +550,6 @@ func (txn *Txn) UpdateDeadlineMaybe(deadline hlc.Timestamp) bool {
 	return false
 }
 
-// ResetDeadline resets the deadline.
-func (txn *Txn) ResetDeadline() {
-	txn.deadline = nil
-}
-
 // Rollback sends an EndTransactionRequest with Commit=false.
 // txn is considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback(ctx context.Context) error {

@@ -267,24 +267,23 @@ type TableCollection struct {
 
 func (tc *TableCollection) maybeChangeTimestamp(ctx context.Context, txn *client.Txn) {
 	if tc.timestamp != (hlc.Timestamp{}) && tc.timestamp != txn.OrigTimestamp() {
-		txn.ResetDeadline()
 		tc.releaseTables(ctx)
 	}
 }
 
 // getTableVersion returns a table descriptor with a version suitable for
-// the transaction. The table must be released by calling tc.releaseTables().
+// the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
+// The table must be released by calling tc.releaseTables().
 //
-// TODO(vivek): The suitability of the table version returned is only partial
-// checked. The expiration time for the table descriptor is added as a deadline
-// for the transaction. The ModificationTime of the table is not compared to the
-// timestamp of the transaction. Fix this to be such that:
-// table.ModificationTime <= txn.Timestamp < expirationTime
+// TODO(vivek): Eliminate the need to return expiration from LeaseManager. It
+// is still useful for tests.
 //
 // TODO(vivek): Rollback most of #6418. #6418 introduced a transaction deadline
 // that is enforced at the KV layer, and was introduced to manager the validity
 // window of a table descriptor. Since we will be checking for the valid use
 // of a table descriptor here, we do not need the extra check at the KV layer.
+//
+// TODO(vivek): Allow cached descriptors for AS OF SYSTEM TIME queries.
 func (tc *TableCollection) getTableVersion(
 	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
@@ -353,7 +352,7 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
-	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, txn, dbID, tn.Table())
+	table, _, err := tc.leaseMgr.AcquireByName(ctx, txn, dbID, tn.Table())
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			// Transform the descriptor error into an error that references the
@@ -366,9 +365,6 @@ func (tc *TableCollection) getTableVersion(
 	tc.tables = append(tc.tables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", tn)
 
-	// If the table we just acquired expires before the txn's deadline, reduce
-	// the deadline.
-	txn.UpdateDeadlineMaybe(expiration)
 	return table, nil
 }
 
@@ -414,7 +410,7 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 	}
 
-	table, expiration, err := tc.leaseMgr.Acquire(ctx, txn, tableID)
+	table, _, err := tc.leaseMgr.Acquire(ctx, txn, tableID)
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			// Transform the descriptor error into an error that references the
@@ -428,9 +424,6 @@ func (tc *TableCollection) getTableVersionByID(
 	tc.tables = append(tc.tables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", table.Name)
 
-	// If the table we just acquired expires before the txn's deadline, reduce
-	// the deadline.
-	txn.UpdateDeadlineMaybe(expiration)
 	return table, nil
 }
 
