@@ -245,7 +245,8 @@ CREATE TABLE crdb_internal.leases (
 					if !userCanSeeDescriptor(&state.TableDescriptor, p.session.User) {
 						continue
 					}
-					if state.lease == nil || state.invalid {
+
+					if !state.leased {
 						continue
 					}
 					expCopy := leaseExpiration(state.expiration)
