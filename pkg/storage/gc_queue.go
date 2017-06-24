@@ -909,11 +909,10 @@ func pushTxn(
 		Span: roachpb.Span{
 			Key: txn.Key,
 		},
-		Now:           now,
-		PusherTxn:     roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Priority: math.MaxInt32}},
-		PusheeTxn:     txn.TxnMeta,
-		PushType:      typ,
-		NewPriorities: true,
+		Now:       now,
+		PusherTxn: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Priority: math.MaxInt32}},
+		PusheeTxn: txn.TxnMeta,
+		PushType:  typ,
 	}
 	b := &client.Batch{}
 	b.AddRawRequest(pushArgs)

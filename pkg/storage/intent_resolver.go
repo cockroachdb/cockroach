@@ -201,9 +201,8 @@ func (ir *intentResolver) maybePushTransactions(
 			// here, we would run into busy loops because that timestamp
 			// usually stays fixed among retries, so it will never realize
 			// that a transaction has timed out. See #877.
-			Now:           now,
-			PushType:      pushType,
-			NewPriorities: true,
+			Now:      now,
+			PushType: pushType,
 		})
 	}
 	b := &client.Batch{}
