@@ -83,15 +83,17 @@ func TestTableSet(t *testing.T) {
 	for i, d := range testData {
 		switch op := d.op.(type) {
 		case insert:
-			s := &tableVersionState{lease: &leaseState{}}
+			s := &tableVersionState{}
 			s.Version = op.version
 			s.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.insert(s)
+
 		case remove:
-			s := &tableVersionState{lease: &leaseState{}}
+			s := &tableVersionState{}
 			s.Version = op.version
 			s.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.remove(s)
+
 		case newest:
 			n := set.findNewest(op.version)
 			s := "<nil>"
