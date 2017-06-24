@@ -390,7 +390,6 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "IsSerializableRestart"}:           {},
 		{txnType, "NewBatch"}:                        {},
 		{txnType, "Exec"}:                            {},
-		{txnType, "ResetDeadline"}:                   {},
 		{txnType, "Run"}:                             {},
 		{txnType, "Send"}:                            {},
 		{txnType, "SetDebugName"}:                    {},

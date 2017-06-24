@@ -754,3 +754,72 @@ SELECT EXISTS(SELECT * FROM t.foo);
 	case <-fooRelease:
 	}
 }
+
+// Test that a transaction created way in the past will use the correct
+// table descriptor and will thus obey the modififcation time of the
+// table descriptor.
+func TestTxnObeysTableModificationTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert an entry so that the transaction is guaranteed to be
+	// assigned a timestamp.
+	if _, err := tx.Exec(`
+INSERT INTO t.timestamp VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify the table descriptor.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.kv ADD m CHAR DEFAULT 'z';`); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := tx.Query(`SELECT * FROM t.kv`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		// The transaction is unable to see column m.
+		var k, v, m string
+		if err := rows.Scan(&k, &v, &m); !testutils.IsError(
+			err, "expected 2 destination arguments in Scan, not 3",
+		) {
+			t.Fatalf("err = %v", err)
+		}
+		err = rows.Scan(&k, &v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if k != "a" || v != "b" {
+			t.Fatalf("didn't find expected row: %s %s", k, v)
+		}
+	}
+
+	// This INSERT is disallowed because a retryable error is returned on
+	// the Commit() below.
+	if _, err := tx.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Commit(); !isRetryableErr(err) {
+		t.Fatalf("err = %v", err)
+	}
+}
