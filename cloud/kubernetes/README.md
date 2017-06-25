@@ -54,6 +54,8 @@ which will lead to a lot of trouble.
 Secure mode currently works by requesting node/client certificates from the kubernetes
 controller at pod initialization time.
 
+
+
 This means that rescheduled pods will go through the CSR process, requiring manual involvement.
 A future improvement for node/client certificates will use kubernetes secrets, simplifying
 deployment and maintenance.
@@ -97,11 +99,21 @@ Run: `kubectl create -f cockroachdb-statefulset.yaml`
 
 ### Secure mode
 
+**REQUIRED**: the kubernetes cluster must run with the certificate controller enabled.
+This is done by passing the `--cluster-signing-cert-file` and `--cluster-signing-key-file` flags.
+On minikube, you can tell it to use the minikube-generated CA by specifying:
+```
+$ minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/ca.key"
+```
+
 Run: `kubectl create -f cockroachdb-statefulset-secure.yaml`
 
 Each new node will request a certificate from the kubernetes CA during its initialization phase.
 Statefulsets create pods one at a time, waiting for each previous pod to be initialized.
 This means that you must approve podN's certificate for podN+1 to be created.
+
+
+If a pod is rescheduled, it will reuse the previously-generated certificate.
 
 You can view pending certificates and approve them using:
 ```
@@ -174,7 +186,7 @@ http://localhost:8080/ in your web browser.
 
 ## Running the example app
 
-This directory contains the configuration to launch a simple load generator with 2 pods.
+This directory contains the configuration to launch a simple load generator with one pod.
 
 If you created an insecure cockroach cluster, run:
 ```shell
@@ -186,10 +198,15 @@ If you created a secure cockroach cluster, run:
 kubectl create -f example_app_secure.yaml
 ```
 
-For every pod being created, you will need to approve its client certificate request:
+When the first pod is being initialized, you will need to approve its client certificate request:
 ```shell
-kubectl certificate approve client.root-example-secure-etc..
+kubectl certificate approve client.root
 ```
+
+If more pods are then added through `kubectl scale deployment example-secure --replicas=X`, the generated
+certificate will be reused.
+**WARNING**: the example app in secure mode should be started with only one replica, or concurrent and
+conflicting certificate requests will be sent, causing issues.
 
 ## Simulating failures
 
