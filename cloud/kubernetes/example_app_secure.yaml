@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: example-secure
 spec:
-  replicas: 2
+  replicas: 1
   template:
     metadata:
       labels:
@@ -22,13 +22,17 @@ spec:
       # In addition to the client certificate and key, the init-certs entrypoint will symlink
       # the cluster CA to the certs directory.
       - name: init-certs
-        image: cockroachdb/cockroach-k8s-request-cert:0.1
+        image: cockroachdb/cockroach-k8s-request-cert:0.2
         imagePullPolicy: IfNotPresent
-        args:
-        - "-certs-dir=/cockroach-certs"
-        - "-type=client"
-        - "-user=root"
-        - "-symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        command:
+        - "/bin/ash"
+        - "-ecx"
+        - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=client -user=root -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         volumeMounts:
         - name: client-certs
           mountPath: /cockroach-certs
