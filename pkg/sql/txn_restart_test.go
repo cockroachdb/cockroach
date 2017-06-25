@@ -568,6 +568,12 @@ BEGIN;
 		t.Fatal(err)
 	}
 
+	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// otherwise the INSERT below would be automatically retried.
+	if _, err := sqlDB.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
 	// Continue the txn in a new request, which is not retriable.
 	_, err := sqlDB.Exec("INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())")
 	if !testutils.IsError(
@@ -1045,6 +1051,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
+	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// otherwise the INSERT below would be automatically retried.
+	if _, err := tx.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := tx.Exec(insertStmt); err != nil {
 		t.Fatal(err)
 	}
@@ -1077,6 +1089,12 @@ func TestUnexpectedStatementInRestartWait(t *testing.T) {
 	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
+	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// otherwise the SELECT below would be automatically retried.
+	if _, err := tx.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := tx.Exec(
 		"SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)"); !testutils.IsError(
 		err, `forced by crdb_internal\.force_retry\(\)`) {
@@ -1384,6 +1402,12 @@ func TestDistSQLRetryableError(t *testing.T) {
 
 	txn, err := db.Begin()
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// otherwise the INSERT below would be automatically retried. The actual
+	// statement doesn't matter, but it needs to be supported by DistSQL.
+	if _, err := txn.Exec("SET DISTSQL = ALWAYS"); err != nil {
 		t.Fatal(err)
 	}
 

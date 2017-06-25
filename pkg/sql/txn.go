@@ -28,7 +28,14 @@ func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error)
 	if p.txn == nil {
 		return nil, errors.Errorf("the server should have already created a transaction")
 	}
-	return &emptyNode{}, p.setTransactionModes(n.Modes)
+	if err := p.setTransactionModes(n.Modes); err != nil {
+		return nil, err
+	}
+
+	// Enter the FirstBatch state.
+	p.session.TxnState.State = FirstBatch
+
+	return &emptyNode{}, nil
 }
 
 // SetTransaction sets a transaction's isolation level

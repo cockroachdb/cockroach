@@ -451,7 +451,7 @@ func (c *cliState) refreshTransactionStatus() (txnStatus string) {
 		txnStatus = "  DONE"
 	case sql.RestartWait.String():
 		txnStatus = " RETRY"
-	case sql.Open.String():
+	case sql.Open.String(), sql.FirstBatch.String():
 		txnStatus = "  OPEN"
 	}
 

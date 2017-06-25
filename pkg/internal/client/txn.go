@@ -765,6 +765,7 @@ func (txn *Txn) ensureProtoLocked() {
 	if txn.mu.Proto.IsInitialized() {
 		return
 	}
+
 	// TODO(andrei): I think there's a bug here that we don't take into
 	// account the txn.mu.Proto.Timestamp after the proto has been wiped on a
 	// restart (but the timestamp has been preserved). Can the gateway's clock

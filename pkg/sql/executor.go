@@ -680,8 +680,13 @@ func (e *Executor) execParsed(
 		return res
 	}
 
+	// lastExecuted will maintain the list of statements that a txn closure
+	// last executed.
+	var lastExecuted StatementList
+
 	for len(stmts) > 0 {
-		// Each iteration consumes a transaction's worth of statements.
+		// Each iteration consumes a transaction's worth of statements. Any error
+		// that is encountered resets stmts.
 
 		inTxn := txnState.State != NoTxn
 		execOpt := client.TxnExecOptions{
@@ -698,7 +703,7 @@ func (e *Executor) execParsed(
 		// (i.e. the next statements we're going to see are the first statements in
 		// a transaction).
 		if !inTxn {
-			// Detect implicit transactions.
+			// Detect implicit transactions - they need to be autocommitted.
 			if _, isBegin := stmts[0].AST.(*parser.BeginTransaction); !isBegin {
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[:1]
@@ -727,7 +732,8 @@ func (e *Executor) execParsed(
 				txnState.mu.txn.SetDebugName(sqlTxnName)
 			}
 		} else {
-			txnState.autoRetry = false
+			// If we are in a txn, the first batch get auto-retried.
+			txnState.autoRetry = txnState.State == FirstBatch
 		}
 		execOpt.AutoRetry = txnState.autoRetry
 		if txnState.State == NoTxn {
@@ -742,7 +748,7 @@ func (e *Executor) execParsed(
 		automaticRetryCount := 0
 		txnClosure := func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			defer func() { automaticRetryCount++ }()
-			if txnState.State == Open && txnState.mu.txn != txn {
+			if txnState.TxnIsOpen() && txnState.mu.txn != txn {
 				panic(fmt.Sprintf("closure wasn't called in the txn we set up for it."+
 					"\ntxnState.mu.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.mu.txn, txn, txnState))
 			}
@@ -762,7 +768,8 @@ func (e *Executor) execParsed(
 
 			results, remainingStmts, err = runTxnAttempt(
 				e, session, stmtsToExec, pinfo, origState, opt,
-				avoidCachedDescriptors, automaticRetryCount)
+				!inTxn /* txnPrefix */, avoidCachedDescriptors, automaticRetryCount)
+			lastExecuted = stmtsToExec[0 : len(stmtsToExec)-len(remainingStmts)]
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State == Aborted {
@@ -871,10 +878,10 @@ func (e *Executor) execParsed(
 			}
 		}
 
-		// If the txn is in any state but Open, exec the schema changes. They'll
-		// short-circuit themselves if the mutation that queued them has been
-		// rolled back from the table descriptor.
-		if txnState.State != Open {
+		// If the txn is not in an "open" state any more, exec the schema changes.
+		// They'll short-circuit themselves if the mutation that queued them has
+		// been rolled back from the table descriptor.
+		if !txnState.TxnIsOpen() {
 			// Verify that metadata callback eventually succeeds, if one was
 			// set.
 			if e.cfg.TestingKnobs.WaitForGossipUpdate {
@@ -909,6 +916,12 @@ func (e *Executor) execParsed(
 		}
 	}
 
+	// The end of a batch needs to transition out of the FirstBatch state, except
+	// if the last statement executed was a BEGIN.
+	if txnState.State == FirstBatch && !canStayInFirstBatchState(lastExecuted) {
+		txnState.State = Open
+	}
+
 	return res
 }
 
@@ -930,6 +943,9 @@ func countRowsAffected(ctx context.Context, p planNode) (int, error) {
 
 // runTxnAttempt is used in the closure we pass to txn.Exec(). It
 // will be called possibly multiple times (if opt.AutoRetry is set).
+//
+// txnPrefix: set if the statements represent the first batch of statements in a
+// 	txn. Used to trap nested BEGINs.
 func runTxnAttempt(
 	e *Executor,
 	session *Session,
@@ -937,6 +953,7 @@ func runTxnAttempt(
 	pinfo *parser.PlaceholderInfo,
 	origState TxnStateEnum,
 	opt *client.TxnExecOptions,
+	txnPrefix bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 ) ([]Result, StatementList, error) {
@@ -953,7 +970,7 @@ func runTxnAttempt(
 
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
 		session, stmts, pinfo, opt.AutoCommit, /* implicitTxn */
-		opt.AutoRetry /* txnBeginning */, avoidCachedDescriptors, automaticRetryCount)
+		txnPrefix, avoidCachedDescriptors, automaticRetryCount)
 
 	if opt.AutoCommit && len(remainingStmts) > 0 {
 		panic("implicit txn failed to execute all stmts")
@@ -986,6 +1003,8 @@ func runTxnAttempt(
 //  a transaction).
 //  COMMIT/ROLLBACK statements are rejected if set. Also, the transaction
 //  might be auto-committed in this function.
+// txnPrefix: set if the statements represent the first batch of statements in a
+// 	txn. Used to trap nested BEGINs.
 // avoidCachedDescriptors: set if the statement execution should avoid
 //  using cached descriptors.
 // automaticRetryCount: increases with each retry; 0 for the first attempt.
@@ -1004,7 +1023,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 	stmts StatementList,
 	pinfo *parser.PlaceholderInfo,
 	implicitTxn bool,
-	txnBeginning bool,
+	txnPrefix bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 ) ([]Result, StatementList, error) {
@@ -1045,9 +1064,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 			res, err = runShowTransactionState(session, implicitTxn)
 		} else {
 			switch txnState.State {
-			case Open:
+			case Open, FirstBatch:
 				res, err = e.execStmtInOpenTxn(
-					session, stmt, pinfo, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
+					session, stmt, pinfo, implicitTxn, txnPrefix && (i == 0), /* firstInTxn */
 					avoidCachedDescriptors, automaticRetryCount)
 			case Aborted, RestartWait:
 				res, err = e.execStmtInAbortedTxn(session, stmt)
@@ -1089,6 +1108,11 @@ func getTransactionState(txnState *txnState, implicitTxn bool) string {
 	state := txnState.State
 	if implicitTxn {
 		state = NoTxn
+	}
+	// For the purposes of representing the states to client, make the FirstBatch
+	// state look like Open.
+	if state == FirstBatch {
+		state = Open
 	}
 	return state.String()
 }
@@ -1151,8 +1175,8 @@ func (e *Executor) execStmtInAbortedTxn(session *Session, stmt Statement) (Resul
 			return Result{}, err
 		}
 		if txnState.State == RestartWait {
-			// Reset the state. Txn is Open again.
-			txnState.State = Open
+			// Reset the state to FirstBatch. We're in an "open" txn again.
+			txnState.State = FirstBatch
 			// TODO(andrei/cdo): add a counter for user-directed retries.
 			return Result{}, nil
 		}
@@ -1246,7 +1270,7 @@ func (e *Executor) execStmtInOpenTxn(
 	automaticRetryCount int,
 ) (_ Result, err error) {
 	txnState := &session.TxnState
-	if txnState.State != Open {
+	if !txnState.TxnIsOpen() {
 		panic("execStmtInOpenTxn called outside of an open txn")
 	}
 
@@ -1259,7 +1283,7 @@ func (e *Executor) execStmtInOpenTxn(
 
 	defer func() {
 		if err != nil {
-			if txnState.State != Open {
+			if !txnState.TxnIsOpen() {
 				panic(fmt.Sprintf("unexpected txnState when cleaning up: %v", txnState.State))
 			}
 			txnState.updateStateAndCleanupOnErr(err, e)
@@ -1472,7 +1496,7 @@ func stmtAllowedInImplicitTxn(stmt Statement) bool {
 
 // rollbackSQLTransaction rolls back a transaction. All errors are swallowed.
 func rollbackSQLTransaction(txnState *txnState) Result {
-	if txnState.State != Open && txnState.State != RestartWait {
+	if !txnState.TxnIsOpen() && txnState.State != RestartWait {
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
 			txnState.State, txnState.mu.txn.Proto()))
 	}
@@ -1496,7 +1520,7 @@ const (
 
 // commitSqlTransaction commits a transaction.
 func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, error) {
-	if txnState.State != Open {
+	if !txnState.TxnIsOpen() {
 		panic(fmt.Sprintf("commitSqlTransaction called on non-open txn: %+v", txnState.mu.txn))
 	}
 	if commitType == commit {
@@ -1995,6 +2019,34 @@ func isAsOf(session *Session, stmt parser.Statement, max hlc.Timestamp) (*hlc.Ti
 	evalCtx := session.evalCtx()
 	ts, err := EvalAsOfTimestamp(&evalCtx, sc.From.AsOf, max)
 	return &ts, err
+}
+
+// isSavepoint returns true if stmt is a SAVEPOINT statement.
+func isSavepoint(stmt Statement) bool {
+	_, isSavepoint := stmt.AST.(*parser.Savepoint)
+	return isSavepoint
+}
+
+// isBegin returns true if stmt is a BEGIN statement.
+func isBegin(stmt Statement) bool {
+	_, isBegin := stmt.AST.(*parser.BeginTransaction)
+	return isBegin
+}
+
+// canStayInFirstBatchState returns true if the statements (which are assumed to
+// represent a transaction or a prefix of a transaction) represent a prefix that
+// can leave the transaction in the FirstBatch state (as opposed to
+// transitioning it to Open). Concretely, a batch consisting only of BEGIN, and
+// SAVEPOINT has this property.
+//
+// TODO(andrei): what statements, besides SAVEPOINT, can we accept?
+func canStayInFirstBatchState(stmts StatementList) bool {
+	for _, stmt := range stmts {
+		if !isBegin(stmt) && !isSavepoint(stmt) {
+			return false
+		}
+	}
+	return true
 }
 
 // convertToErrWithPGCode recognizes errs that should have SQL error codes to be
