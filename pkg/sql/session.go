@@ -732,8 +732,27 @@ const (
 	// Executor opens implicit transactions before executing non-transactional
 	// queries.
 	NoTxn TxnStateEnum = iota
+
+	// A txn is in scope, and we're currently executing statements from the first
+	// batch of statements using the transaction. If BEGIN was the last (or the
+	// only) statement in a batch, that batch doesn't count (the next batch will
+	// be considered the first one). The first batch of statements can be
+	// automatically retried in case of retryable errors since there's been no
+	// client logic relying on reads performed in the transaction.
+	//
+	// A BEGIN statement makes the transaction enter this state (from a previous
+	// NoTxn state). The end of the first batch of statements, if executed
+	// successfully, will move the state to Open.
+	//
+	// TODO(andrei): It'd be cool if exiting this state would be based not on
+	// batches sent by the client, but results being sent by the server to the
+	// client (i.e. the client can send 100 batches but, if we haven't sent it any
+	// results yet, we know that we can still retry them all).
+	FirstBatch
+
 	// A txn is in scope.
 	Open
+
 	// The txn has encountered a (non-retriable) error.
 	// Statements will be rejected until a COMMIT/ROLLBACK is seen.
 	Aborted
@@ -747,7 +766,7 @@ const (
 
 // Some states mean that a client.Txn is open, others don't.
 func (s TxnStateEnum) kvTxnIsOpen() bool {
-	return s == Open || s == RestartWait
+	return s == Open || s == FirstBatch || s == RestartWait
 }
 
 // txnState contains state associated with an ongoing SQL txn.
@@ -822,6 +841,12 @@ func (ts *txnState) SetState(val TxnStateEnum) {
 	atomic.StoreInt64((*int64)(&ts.state), int64(val))
 }
 
+// TxnIsOpen returns true if we are presently inside a SQL txn, and the txn is
+// not in an error state.
+func (ts *txnState) TxnIsOpen() bool {
+	return ts.State() == Open || ts.State() == FirstBatch
+}
+
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
 // It creates a new client.Txn and initializes it using the session defaults.
 // txnState.State will be set to Open.
@@ -888,7 +913,7 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session, implicitTxn bool)
 
 	ts.sp = sp
 	ts.Ctx = ctx
-	ts.SetState(Open)
+	ts.SetState(FirstBatch)
 	s.Tracing.onNewSQLTxn(ts.sp)
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})

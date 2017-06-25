@@ -139,6 +139,17 @@ SELECT * FROM kv
 a c
 x y
 
+# Two BEGINs in a row.
+
+statement ok
+BEGIN TRANSACTION
+
+statement error there is already a transaction in progress
+BEGIN TRANSACTION
+
+statement ok
+ROLLBACK TRANSACTION
+
 # BEGIN in the middle of a transaction is an error.
 
 statement ok
@@ -527,8 +538,10 @@ statement ok
 COMMIT
 
 # RestartWait state
+# The SELECT 1 is necessary to move the txn out of the FirstBatch state,
+# otherwise the next statement is automatically retried on the server.
 statement ok
-BEGIN TRANSACTION; SAVEPOINT cockroach_restart
+BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
 SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
@@ -548,6 +561,68 @@ Open
 
 statement ok
 COMMIT
+
+# Automatic retries for the first batch.
+statement ok
+BEGIN TRANSACTION; SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+
+statement ok
+ROLLBACK
+
+# Automatic retries for the first batch even when that first batch comes after
+# the BEGIN.
+statement ok
+BEGIN TRANSACTION;
+
+statement ok
+SELECT 1; SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+
+statement ok
+ROLLBACK
+
+# Automatic retries for the first batch even when that first batch comes after
+# the BEGIN and the BEGIN also has special statements that don't move the txn
+# state out of the "FirstBatch" state.
+statement ok
+BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY NORMAL
+
+statement ok
+SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+
+statement ok
+ROLLBACK
+
+# Like above, but the SAVEPOINT is its own batch.
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+SAVEPOINT cockroach_restart;
+
+statement ok
+SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+
+statement ok
+ROLLBACK
+
+
+# Automatic retries for the first batch after an explicit restart.
+statement ok
+BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1;
+
+query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
+SELECT CRDB_INTERNAL.FORCE_RETRY('50ms':::INTERVAL)
+
+statement ok
+ROLLBACK TO SAVEPOINT COCKROACH_RESTART;
+
+# This is the automatic retry we care about.
+statement ok
+SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+
+statement ok
+ROLLBACK
+
 
 # General savepoints
 statement ok
@@ -651,8 +726,10 @@ BEGIN ISOLATION LEVEL SERIALIZABLE, ISOLATION LEVEL SERIALIZABLE
 
 # Retryable error in a txn that hasn't performed any KV operations. It used to
 # not work.
+# The SELECT 1 is necessary to take the session out of the FirstBatch state,
+# otherwise the statement below would be retries automatically.
 statement ok
-BEGIN
+BEGIN; SELECT 1
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
 SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)

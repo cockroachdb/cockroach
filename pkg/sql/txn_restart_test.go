@@ -568,6 +568,12 @@ BEGIN;
 		t.Fatal(err)
 	}
 
+	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// otherwise the INSERT below would be automatically retried.
+	if _, err := sqlDB.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
 	// Continue the txn in a new request, which is not retriable.
 	_, err := sqlDB.Exec("INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())")
 	if !testutils.IsError(
@@ -684,6 +690,12 @@ func runTestTxn(
 	tx *gosql.Tx,
 	sentinelInsert string,
 ) bool {
+	// Run a bogus statement to disable the automatic server retries of subsequent
+	// statements.
+	if _, err := tx.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
 	retriesNeeded :=
 		(magicVals.restartCounts["boulanger"] + magicVals.abortCounts["boulanger"]) > 0
 	if retriesNeeded {
@@ -1045,6 +1057,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
+	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// otherwise the INSERT below would be automatically retried.
+	if _, err := tx.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := tx.Exec(insertStmt); err != nil {
 		t.Fatal(err)
 	}
@@ -1077,6 +1095,12 @@ func TestUnexpectedStatementInRestartWait(t *testing.T) {
 	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
+	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// otherwise the SELECT below would be automatically retried.
+	if _, err := tx.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := tx.Exec(
 		"SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)"); !testutils.IsError(
 		err, `forced by crdb_internal\.force_retry\(\)`) {
@@ -1366,7 +1390,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 
 	db.SetMaxOpenConns(1)
 
-	if _, err := db.Exec("SET DISTSQL = ALWAYS"); err != nil {
+	if _, err := db.Exec("SET DISTSQL = ON"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1385,6 +1409,20 @@ func TestDistSQLRetryableError(t *testing.T) {
 	txn, err := db.Begin()
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Run a batch of statements to move the txn out of the "FirstBatch" state.
+	if _, err := txn.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Let's make sure that DISTSQL will actually be used.
+	row := txn.QueryRow("SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT COUNT(1) FROM t]")
+	var automatic bool
+	if err := row.Scan(&automatic); err != nil {
+		t.Fatal(err)
+	}
+	if !automatic {
+		t.Fatal("DISTSQL not used for test's query")
 	}
 
 	_, err = txn.Exec("SELECT COUNT(1) FROM t")
