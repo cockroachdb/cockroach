@@ -387,7 +387,7 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 				// We send status "InFailedTransaction" also for state RestartWait
 				// because GO's lib/pq freaks out if we invent a new status.
 				txnStatus = 'E'
-			case sql.Open:
+			case sql.Open, sql.FirstBatch:
 				txnStatus = 'T'
 			case sql.NoTxn:
 				// We're not in a txn (i.e. the last txn was committed).

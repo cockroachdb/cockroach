@@ -10,6 +10,11 @@ SELECT CRDB_INTERNAL.FORCE_RETRY('50ms':::INTERVAL)
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart
 
+# The SELECT 1 is necessary to take the session out of the FirstBatch state,
+# otherwise the statement below would be retries automatically.
+statement ok
+SELECT 1
+
 query error restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
 SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL)
 

@@ -432,6 +432,8 @@ func (c *cliState) refreshTransactionStatus() {
 	case sql.RestartWait.String():
 		c.lastKnownTxnStatus = " RETRY"
 	case sql.Open.String():
+		// The state FirstBatch is reported by the server as Open, so no need to
+		// handle it here.
 		c.lastKnownTxnStatus = "  OPEN"
 	}
 }
