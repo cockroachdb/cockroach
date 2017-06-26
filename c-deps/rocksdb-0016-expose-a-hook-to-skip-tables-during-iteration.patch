@@ -18,13 +18,13 @@ irrelevant data for the scan at hand.
  3 files changed, 77 insertions(+), 1 deletion(-)
 
 diff --git a/db/db_iterator_test.cc b/db/db_iterator_test.cc
-index 2eee9445..16533949 100644
+index df09bcc..6b3abef 100644
 --- a/db/db_iterator_test.cc
 +++ b/db/db_iterator_test.cc
-@@ -1836,6 +1836,70 @@ TEST_F(DBIteratorTest, DBIteratorSkipRecentDuplicatesTest) {
+@@ -1911,6 +1911,70 @@ TEST_F(DBIteratorTest, DBIteratorSkipRecentDuplicatesTest) {
                   NUMBER_OF_RESEEKS_IN_ITERATION));
  }
- 
+
 +TEST_F(DBIteratorTest, TableFilter) {
 +  ASSERT_OK(Put("a", "1"));
 +  dbfull()->Flush(FlushOptions());
@@ -90,34 +90,36 @@ index 2eee9445..16533949 100644
 +}
 +
  }  // namespace rocksdb
- 
+
  int main(int argc, char** argv) {
 diff --git a/db/table_cache.cc b/db/table_cache.cc
-index dc987b30..220a03bc 100644
+index ad8282c..9429e70 100644
 --- a/db/table_cache.cc
 +++ b/db/table_cache.cc
-@@ -217,7 +217,12 @@ InternalIterator* TableCache::NewIterator(
+@@ -227,8 +227,13 @@ InternalIterator* TableCache::NewIterator(
    }
    InternalIterator* result = nullptr;
    if (s.ok()) {
--    result = table_reader->NewIterator(options, arena, skip_filters);
-+    if (options.table_filter &&
-+        !options.table_filter(*table_reader->GetTableProperties())) {
-+      result = NewEmptyInternalIterator(arena);
-+    } else {
-+      result = table_reader->NewIterator(options, arena, skip_filters);
-+    }
+-    result =
+-      table_reader->NewIterator(options, arena, &icomparator, skip_filters);
++     if (options.table_filter &&
++         !options.table_filter(*table_reader->GetTableProperties())) {
++       result = NewEmptyInternalIterator(arena);
++     } else {
++       result =
++        table_reader->NewIterator(options, arena, &icomparator, skip_filters);
++     }
      if (create_new_table_reader) {
        assert(handle == nullptr);
        result->RegisterCleanup(&DeleteTableReader, table_reader, nullptr);
 diff --git a/include/rocksdb/options.h b/include/rocksdb/options.h
-index c0ab3edd..4472ec0e 100644
+index 1c90a68..90b2a6b 100644
 --- a/include/rocksdb/options.h
 +++ b/include/rocksdb/options.h
-@@ -1546,6 +1546,13 @@ struct ReadOptions {
+@@ -1053,6 +1053,13 @@ struct ReadOptions {
    // Default: false
    bool ignore_range_deletions;
- 
+
 +  // A callback to determine whether relevant keys for this scan exist in a
 +  // given table based on the table's properties. The callback is passed the
 +  // properties of each table during iteration. If the callback returns false,
@@ -128,6 +130,3 @@ index c0ab3edd..4472ec0e 100644
    ReadOptions();
    ReadOptions(bool cksum, bool cache);
  };
--- 
-2.12.1
-
