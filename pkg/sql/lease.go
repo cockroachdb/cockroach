@@ -542,67 +542,52 @@ type tableState struct {
 	dropped bool
 }
 
-// acquire returns a lease at the specified version. The lease will have its
-// refcount incremented, so the caller is responsible to call release() on it.
+// acquire returns the latest version of a table. The table will have its
+// refcount incremented, so the caller is responsible for calling release() on it.
 func (t *tableState) acquire(
-	ctx context.Context, txn *client.Txn, version sqlbase.DescriptorVersion, m *LeaseManager,
+	ctx context.Context, txn *client.Txn, m *LeaseManager,
 ) (*tableVersionState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	for {
-		var s *tableVersionState
-		if version == 0 {
-			s = t.active.findNewest()
-		} else {
-			s = t.active.findVersion(version)
-		}
-		if s != nil {
-			if checkedTable := t.checkTable(s, version, m.clock); checkedTable != nil {
-				return checkedTable, nil
-			}
-		} else if version != 0 {
-			n := t.active.findNewest()
-			if n != nil && version < n.Version {
-				return nil, errors.Errorf("table %d unable to acquire lease on old version: %d < %d",
-					t.id, version, n.Version)
-			}
+		if s := t.active.findNewest(); s != nil && s.hasSomeLifeLeft(m.clock) {
+			s.incRefcount()
+			return s, nil
 		}
 
-		if err := t.acquireFromStoreLocked(ctx, txn, version, m); err != nil {
+		if err := t.acquireFromStoreLocked(ctx, txn, 0, m); err != nil {
 			return nil, err
 		}
 		// A new lease was added, so loop and perform the lookup again.
 	}
 }
 
-// checkLease checks whether lease is eligible to be returned to a client which
-// requested a lease at a specified version (version can also be 0).
-// Returns the lease after having incremented its refcount if it's OK to give it
-// to the client. Returns nil otherwise.
-//
-// t.mu needs to be locked
-func (t *tableState) checkTable(
-	table *tableVersionState, version sqlbase.DescriptorVersion, clock *hlc.Clock,
-) *tableVersionState {
-	// If a lease was requested for an old version of the descriptor,
-	// return it even if there is only a short time left before it
-	// expires, or even if it's expired. We can't renew this lease as doing so
-	// would violate the invariant that we only get leases on the newest
-	// version. The transaction will either finish before the lease expires or
-	// it will abort, which is what will happen if we returned an error here.
-	skipLifeCheck := version != 0 && table != t.active.findNewest()
-	if !skipLifeCheck && !table.hasSomeLifeLeft(clock) {
+// ensureVersion ensures that the latest version >= minVersion. It will
+// check if the latest known version meets the criterion, or attempt to
+// acquire a lease at the latest version with the hope that it meets
+// the criterion. acquireFromStoreLocked() returns an error if it
+// is unable to acquire a lease meeting the criterion.
+func (t *tableState) ensureVersion(
+	ctx context.Context, minVersion sqlbase.DescriptorVersion, m *LeaseManager,
+) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if s := t.active.findNewest(); s != nil && minVersion <= s.Version {
 		return nil
 	}
-	table.incRefcount()
-	return table
+
+	return m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return t.acquireFromStoreLocked(ctx, txn, minVersion, m)
+	})
 }
 
 // acquireFromStoreLocked acquires a new lease from the store and inserts it
-// into the active set. t.mu must be locked.
+// into the active set. t.mu must be locked. If the table descriptor version
+// doesn't exist an error is returned (the descriptor version >= minVersion).
 func (t *tableState) acquireFromStoreLocked(
-	ctx context.Context, txn *client.Txn, version sqlbase.DescriptorVersion, m *LeaseManager,
+	ctx context.Context, txn *client.Txn, minVersion sqlbase.DescriptorVersion, m *LeaseManager,
 ) error {
 	// Ensure there is no lease acquisition in progress.
 	if t.acquireWait() {
@@ -615,7 +600,7 @@ func (t *tableState) acquireFromStoreLocked(
 	if event != nil {
 		event(t.id, txn)
 	}
-	s, err := t.acquireNodeLease(ctx, txn, version, m, hlc.Timestamp{})
+	s, err := t.acquireNodeLease(ctx, txn, minVersion, m, hlc.Timestamp{})
 	if err != nil {
 		return err
 	}
@@ -635,7 +620,7 @@ func (t *tableState) acquireFromStoreLocked(
 //
 // t.mu must be locked.
 func (t *tableState) acquireFreshestFromStoreLocked(
-	ctx context.Context, txn *client.Txn, version sqlbase.DescriptorVersion, m *LeaseManager,
+	ctx context.Context, txn *client.Txn, m *LeaseManager,
 ) error {
 	// Ensure there is no lease acquisition in progress.
 	t.acquireWait()
@@ -650,7 +635,7 @@ func (t *tableState) acquireFreshestFromStoreLocked(
 		minExpirationTime = newestTable.expiration.Add(int64(time.Millisecond), 0)
 	}
 
-	s, err := t.acquireNodeLease(ctx, txn, version, m, minExpirationTime)
+	s, err := t.acquireNodeLease(ctx, txn, 0, m, minExpirationTime)
 	if err != nil {
 		return err
 	}
@@ -851,13 +836,17 @@ func (t *tableState) purgeOldLeases(
 		return nil
 	}
 
-	// Acquire a lease on the table at a version >= minVersion
-	// to maintain an active lease on the latest version, so that it
-	// doesn't get released when releaseInactive() is called below.
+	if err := t.ensureVersion(ctx, minVersion, m); err != nil {
+		return err
+	}
+
+	// Acquire a lease on the table on the latest version to maintain an
+	// active lease, so that it doesn't get released when releaseInactives()
+	// is called below. Release this lease after calling releaseInactives().
 	var table *tableVersionState
 	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		table, err = t.acquire(ctx, txn, minVersion, m)
+		table, err = t.acquire(ctx, txn, m)
 		return err
 	})
 	if dropped := err == errTableDropped; dropped || err == nil {
@@ -1091,7 +1080,7 @@ func (m *LeaseManager) AcquireByName(
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	table, expiration, err := m.Acquire(ctx, txn, tableID, 0)
+	table, expiration, err := m.Acquire(ctx, txn, tableID)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
@@ -1164,8 +1153,7 @@ func (m *LeaseManager) resolveName(
 	return sqlbase.ID(gr.ValueInt()), nil
 }
 
-// Acquire acquires a read lease for the specified table ID. If version is
-// non-zero the lease is grabbed for the specified version. Otherwise it is
+// Acquire acquires a read lease for the specified table ID. A lease is
 // grabbed for the most recent version of the descriptor that the lease manager
 // knows about. It returns a table descriptor and an expiration time.
 // A transaction is allowed to use the table descriptor as long as the txn
@@ -1173,10 +1161,10 @@ func (m *LeaseManager) resolveName(
 // TODO(andrei): move the tests that use this to the sql package and un-export
 // it.
 func (m *LeaseManager) Acquire(
-	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, version sqlbase.DescriptorVersion,
+	ctx context.Context, txn *client.Txn, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
-	table, err := t.acquire(ctx, txn, version, m)
+	table, err := t.acquire(ctx, txn, m)
 	if m.LeaseStore.testingKnobs.LeaseAcquiredEvent != nil {
 		m.LeaseStore.testingKnobs.LeaseAcquiredEvent(table.TableDescriptor, err)
 	}
@@ -1198,7 +1186,7 @@ func (m *LeaseManager) acquireFreshestFromStore(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err := t.acquireFreshestFromStoreLocked(
-		ctx, txn, 0 /* version */, m,
+		ctx, txn, m,
 	); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
