@@ -7,8 +7,8 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
 
 syntax = "proto3";
-package cockroach.ccl.utilccl;
-option go_package = "utilccl";
+package cockroach.ccl.utilccl.licenseccl;
+option go_package = "licenseccl";
 
 import "gogoproto/gogo.proto";
 
