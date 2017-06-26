@@ -378,7 +378,7 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 	}
 
-	table, expiration, err := tc.leaseMgr.Acquire(ctx, txn, tableID, 0)
+	table, expiration, err := tc.leaseMgr.Acquire(ctx, txn, tableID)
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			// Transform the descriptor error into an error that references the
