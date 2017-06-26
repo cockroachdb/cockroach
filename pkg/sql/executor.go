@@ -1390,6 +1390,29 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 		}
 		return Result{PGTag: s.StatementTag()}, nil
+
+	case *parser.Discard:
+		switch s.Mode {
+		case parser.DiscardModeAll:
+			if !txnState.implicitTxn {
+				return Result{}, pgerror.NewErrorf(pgerror.CodeActiveSQLTransactionError,
+					"DISCARD ALL cannot run inside a transaction block")
+			}
+
+			// RESET ALL
+			for _, v := range varGen {
+				if v.Reset != nil {
+					if err := v.Reset(session); err != nil {
+						return Result{}, err
+					}
+				}
+			}
+
+			// DEALLOCATE ALL
+			session.PreparedStatements.DeleteAll(session.Ctx())
+
+			return Result{PGTag: s.StatementTag()}, nil
+		}
 	}
 
 	var p *planner
