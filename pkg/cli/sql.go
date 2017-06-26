@@ -19,7 +19,6 @@ package cli
 import (
 	"bufio"
 	"bytes"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
@@ -404,36 +403,11 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	return nextState
 }
 
-func (c *cliState) getServerValue(what, sql string) (driver.Value, bool) {
-	var dbVals [1]driver.Value
-
-	query := makeQuery(sql)
-	rows, err := query(c.conn)
-	if err != nil {
-		fmt.Fprintf(stderr, "error retrieving the %s: %v", what, err)
-		return nil, false
-	}
-	defer func() { _ = rows.Close() }()
-
-	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(stderr, "cannot get the %s", what)
-		return nil, false
-	}
-
-	err = rows.Next(dbVals[:])
-	if err != nil {
-		fmt.Fprintf(stderr, "invalid %s: %v\n", what, err)
-		return nil, false
-	}
-
-	return dbVals[0], true
-}
-
 // refreshTransactionStatus retrieves and sets the current transaction status.
 func (c *cliState) refreshTransactionStatus() (txnStatus string) {
 	txnStatus = " ?"
 
-	dbVal, hasVal := c.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
+	dbVal, hasVal := c.conn.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
 		return txnStatus
 	}
@@ -466,7 +440,7 @@ func (c *cliState) refreshDatabaseName(txnStatus string) (string, bool) {
 		return "", false
 	}
 
-	dbVal, hasVal := c.getServerValue("database name", `SHOW DATABASE`)
+	dbVal, hasVal := c.conn.getServerValue("database name", `SHOW DATABASE`)
 	if !hasVal {
 		return "", false
 	}
