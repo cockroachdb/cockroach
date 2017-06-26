@@ -1,0 +1,40 @@
+statement ok
+SET SEARCH_PATH = foo
+
+query T
+SHOW SEARCH_PATH
+----
+pg_catalog, foo
+
+statement ok
+DISCARD ALL
+
+query T
+SHOW SEARCH_PATH
+----
+pg_catalog
+
+query T
+SET "time zone" = 'Europe/Amsterdam'; SHOW TIME ZONE
+----
+Europe/Amsterdam
+
+query T
+DISCARD ALL; SHOW TIME ZONE
+----
+UTC
+
+statement ok
+PREPARE a AS SELECT 1
+
+statement ok
+DISCARD ALL
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement ok
+BEGIN
+
+statement error DISCARD ALL cannot run inside a transaction block
+DISCARD ALL

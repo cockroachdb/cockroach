@@ -183,6 +183,12 @@ func (n *Deallocate) StatementTag() string {
 func (*Deallocate) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*Discard) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Discard) StatementTag() string { return "DISCARD" }
+
+// StatementType implements the Statement interface.
 func (n *Delete) StatementType() StatementType { return n.Returning.statementType() }
 
 // StatementTag returns a short string identifying the type of statement.
