@@ -18193,7 +18193,7 @@ export const cockroach = $root.cockroach = (() => {
                             writer.uint32(/* id 8, wireType 2 =*/66).string(message.env[i]);
                     if (message.latencies != null && message.hasOwnProperty("latencies"))
                         for (let keys = Object.keys(message.latencies), i = 0; i < keys.length; ++i)
-                            writer.uint32(/* id 9, wireType 2 =*/74).fork().uint32(/* id 1, wireType 0 =*/8).int64(keys[i]).uint32(/* id 2, wireType 0 =*/16).int64(message.latencies[keys[i]]).ldelim();
+                            writer.uint32(/* id 9, wireType 2 =*/74).fork().uint32(/* id 1, wireType 0 =*/8).int32(keys[i]).uint32(/* id 2, wireType 0 =*/16).int64(message.latencies[keys[i]]).ldelim();
                     return writer;
                 };
 
@@ -18261,9 +18261,9 @@ export const cockroach = $root.cockroach = (() => {
                             reader.skip().pos++;
                             if (message.latencies === $util.emptyObject)
                                 message.latencies = {};
-                            key = reader.int64();
+                            key = reader.int32();
                             reader.pos++;
-                            message.latencies[typeof key === "object" ? $util.longToHash(key) : key] = reader.int64();
+                            message.latencies[key] = reader.int64();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -18346,10 +18346,10 @@ export const cockroach = $root.cockroach = (() => {
                             return "latencies: object expected";
                         let key = Object.keys(message.latencies);
                         for (let i = 0; i < key.length; ++i) {
-                            if (!$util.key64Re.test(key[i]))
-                                return "latencies: integer|Long key{k:int64} expected";
+                            if (!$util.key32Re.test(key[i]))
+                                return "latencies: integer key{k:int32} expected";
                             if (!$util.isInteger(message.latencies[key[i]]) && !(message.latencies[key[i]] && $util.isInteger(message.latencies[key[i]].low) && $util.isInteger(message.latencies[key[i]].high)))
-                                return "latencies: integer|Long{k:int64} expected";
+                                return "latencies: integer|Long{k:int32} expected";
                         }
                     }
                     return null;

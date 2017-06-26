@@ -40,7 +40,7 @@ message NodeStatus {
   repeated string env = 8;
   // latencies is a map of nodeIDs to nanoseconds which is the latency between
   // this node and the other node.
-  map<int64, int64> latencies = 9 [
+  map<int32, int64> latencies = 9 [
     (gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
