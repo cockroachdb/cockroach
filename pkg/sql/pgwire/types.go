@@ -89,9 +89,11 @@ func pgTypeForParserType(t parser.Type) pgType {
 
 const secondsInDay = 24 * 60 * 60
 
-func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) {
+func (b *writeBuffer) writeTextDatum(
+	ctx context.Context, d parser.Datum, sessionLoc *time.Location,
+) {
 	if log.V(2) {
-		log.Infof(context.TODO(), "pgwire writing TEXT datum of type: %T, %#v", d, d)
+		log.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
 	if d == parser.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -210,9 +212,11 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 	}
 }
 
-func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location) {
+func (b *writeBuffer) writeBinaryDatum(
+	ctx context.Context, d parser.Datum, sessionLoc *time.Location,
+) {
 	if log.V(2) {
-		log.Infof(context.TODO(), "pgwire writing BINARY datum of type: %T, %#v", d, d)
+		log.Infof(ctx, "pgwire writing BINARY datum of type: %T, %#v", d, d)
 	}
 	if d == parser.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -344,7 +348,7 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 		subWriter.putInt32(int32(v.Len()))
 		subWriter.putInt32(int32(v.Len()))
 		for _, elem := range v.Array {
-			subWriter.writeBinaryDatum(elem, sessionLoc)
+			subWriter.writeBinaryDatum(ctx, elem, sessionLoc)
 		}
 		b.variablePutbuf = subWriter.wrapped
 		b.writeLengthPrefixedVariablePutbuf()
