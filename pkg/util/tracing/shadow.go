@@ -23,27 +23,30 @@
 package tracing
 
 import (
-	"sync/atomic"
-	"unsafe"
-
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type shadowTracerManager interface {
-	name() string
-	flush(tr opentracing.Tracer)
+	Name() string
+	Close(tr opentracing.Tracer)
 }
 
 type lightStepManager struct{}
 
-func (lightStepManager) name() string {
+func (lightStepManager) Name() string {
 	return "lightstep"
 }
 
-func (lightStepManager) flush(tr opentracing.Tracer) {
+func (lightStepManager) Close(tr opentracing.Tracer) {
+	// TODO(radu): these calls are not reliable. FlushLightstepTracer exits
+	// immediately if a flush is in progress (see
+	// github.com/lightstep/lightstep-tracer-go/issues/89), and CloseTracer always
+	// exits immediately (see
+	// https://github.com/lightstep/lightstep-tracer-go/pull/85#discussion_r123800322).
 	_ = lightstep.FlushLightStepTracer(tr)
+	_ = lightstep.CloseTracer(tr)
 }
 
 type shadowTracer struct {
@@ -51,27 +54,12 @@ type shadowTracer struct {
 	manager shadowTracerManager
 }
 
-// Atomic pointer of type *shadowTracer. We don't use sync.Value because we
-// can't set it to nil.
-var shadowPtr unsafe.Pointer
-
-func setShadowTracer(manager shadowTracerManager, tr opentracing.Tracer) {
-	shadow := &shadowTracer{
-		Tracer:  tr,
-		manager: manager,
-	}
-	atomic.StorePointer(&shadowPtr, unsafe.Pointer(shadow))
+func (st *shadowTracer) Typ() string {
+	return st.manager.Name()
 }
 
-func unsetShadowTracer() {
-	atomic.StorePointer(&shadowPtr, nil)
-}
-
-func getShadowTracer() *shadowTracer {
-	if ptr := atomic.LoadPointer(&shadowPtr); ptr != nil {
-		return (*shadowTracer)(ptr)
-	}
-	return nil
+func (st *shadowTracer) Close() {
+	st.manager.Close(st)
 }
 
 // linkShadowSpan creates and links a Shadow span to the passed-in span (i.e.
@@ -111,30 +99,27 @@ var lightStepToken = settings.RegisterStringSetting(
 	"",
 )
 
-func createLightStepTracer(token string) {
-	lsTr := lightstep.NewTracer(lightstep.Options{
+func createLightStepTracer(token string) opentracing.Tracer {
+	return lightstep.NewTracer(lightstep.Options{
 		AccessToken:      token,
 		MaxLogsPerSpan:   maxLogsPerSpan,
 		MaxBufferedSpans: 10000,
 		UseGRPC:          true,
 	})
-	setShadowTracer(lightStepManager{}, lsTr)
 }
 
 // We don't call OnChange inline above because it causes an "initialization
 // loop" compile error.
-var _ = lightStepToken.OnChange(updateShadowTracer)
+var _ = lightStepToken.OnChange(updateShadowTracers)
 
-func updateShadowTracer() {
-	if token := lightStepToken.Get(); token != "" {
-		createLightStepTracer(token)
+func updateShadowTracer(t *Tracer) {
+	if lsToken := lightStepToken.Get(); lsToken != "" {
+		t.setShadowTracer(lightStepManager{}, createLightStepTracer(lsToken))
 	} else {
-		unsetShadowTracer()
+		t.setShadowTracer(nil, nil)
 	}
 }
 
-func init() {
-	// If we want to hardcode a lightstep token (for testing), the OnChange
-	// callback for lightStepToken won't fire.
-	updateShadowTracer()
+func updateShadowTracers() {
+	tracerRegistry.ForEach(updateShadowTracer)
 }
