@@ -85,6 +85,7 @@ default_transaction_isolation  SERIALIZABLE
 distsql                        off
 extra_float_digits
 max_index_keys                 32
+node_id                        1
 search_path                    pg_catalog
 server_version                 9.5.0
 session_user                   root
@@ -177,6 +178,9 @@ server_version
 # Test read-only variables
 statement error variable "max_index_keys" cannot be changed
 SET max_index_keys = 32
+
+statement error variable "node_id" cannot be changed
+SET node_id = 123
 
 query TT
 SELECT name, value FROM system.settings WHERE name = 'testing.str'
