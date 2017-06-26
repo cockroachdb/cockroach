@@ -475,7 +475,8 @@ CREATE TABLE crdb_internal.session_trace(
                                    -- the trace has been collected.
   OPERATION STRING NULL,           -- The span's operation. Set only on
                                    -- the first (dummy) message in a span.
-  MESSAGE STRING NOT NULL          -- The logged message.
+  CONTEXT STRING,                  -- The context of the logged message, if any.
+  MESSAGE STRING NOT NULL          -- The logged message without its context.
 );
 `,
 	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
