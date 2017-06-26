@@ -358,9 +358,10 @@
   revision = "472a0745531a17dbac346e828b4c60e73ddff30c"
 
 [[projects]]
+  branch = "master"
   name = "github.com/lightstep/lightstep-tracer-go"
   packages = [".","basictracer","collectorpb","lightstep_thrift","lightsteppb","thrift_0_9_2/lib/go/thrift","thrift_rpc"]
-  revision = "d9d2a958da1b2b4dd282e7685261942e20abd49c"
+  revision = "7a9b172199f2df79def78707aaba049a191e74f2"
 
 [[projects]]
   name = "github.com/mattn/go-isatty"
