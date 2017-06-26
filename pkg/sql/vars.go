@@ -226,6 +226,10 @@ var varGen = map[string]sessionVar{
 		Get: func(*planner) string { return "32" },
 	},
 
+	`node_id`: {
+		Get: func(p *planner) string { return fmt.Sprintf("%d", p.LeaseMgr().nodeID.Get()) },
+	},
+
 	`search_path`: {
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
 			// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
