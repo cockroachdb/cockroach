@@ -162,6 +162,12 @@ func (i *MVCCIncrementalIterator) Next() {
 			continue
 		}
 
+		// Skip tombstone (len=0) records when startTime is zero (non-incremental).
+		if (i.startTime == hlc.Timestamp{}) && len(i.iter.UnsafeValue()) == 0 {
+			i.iter.NextKey()
+			continue
+		}
+
 		i.nextkey = true
 		break
 	}
