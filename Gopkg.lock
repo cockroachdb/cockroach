@@ -90,9 +90,11 @@
   version = "2017.04.17"
 
 [[projects]]
+  branch = "master"
   name = "github.com/chzyer/readline"
   packages = ["."]
-  revision = "41eea22f717c616615e1e59aa06cf831f9901f35"
+  revision = "8ca065f6f7703ba76dfd61a8af7c3426b54e650e"
+  source = "https://github.com/cockroachdb/readline"
 
 [[projects]]
   name = "github.com/client9/misspell"
@@ -589,6 +591,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6f78b7ab3c44287d1bcb1fc379ad6583d0492c9a5b43841d0c373de6a1d7c7dc"
+  inputs-digest = "c0370c19c12f78eb457fb3f4aea735bc7fe630af4c6f8a9294e9db502ec87dfa"
   solver-name = "gps-cdcl"
   solver-version = 1
