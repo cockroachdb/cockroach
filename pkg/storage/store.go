@@ -1833,14 +1833,14 @@ func splitPostApply(
 	if err != nil {
 		log.Fatalf(ctx, "unable to find RHS replica: %s", err)
 	}
-	if err := rightRng.init(&split.RightDesc, r.store.Clock(), 0); err != nil {
+
+	// Finish initialization of the RHS.
+	rightRng.mu.Lock()
+	if err := rightRng.initLocked(&split.RightDesc, r.store.Clock(), 0); err != nil {
 		log.Fatal(ctx, err)
 	}
 
-	// Finish initialization of the RHS.
-
 	r.mu.Lock()
-	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
 	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
 	rightLease := *rightRng.mu.state.Lease
