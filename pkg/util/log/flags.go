@@ -25,7 +25,7 @@ import (
 func init() {
 	logflags.InitFlags(
 		&logging.noStderrRedirect,
-		&logDir, &showLogs, &logging.nocolor, &logging.verbosity,
+		&logDir, &showLogs, &noColor, &logging.verbosity,
 		&logging.vmodule, &logging.traceLocation,
 		&LogFileMaxSize, &LogFilesCombinedMaxSize,
 	)
