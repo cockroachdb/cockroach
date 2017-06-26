@@ -108,6 +108,9 @@ func checkEnterpriseEnabledAt(cluster uuid.UUID, at time.Time, feature string) e
 }
 
 func (l License) checkCluster(cluster uuid.UUID) error {
+	if l.ClusterID == nil {
+		return nil
+	}
 	for _, c := range l.ClusterID {
 		if cluster == c {
 			return nil
