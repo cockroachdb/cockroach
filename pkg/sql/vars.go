@@ -59,7 +59,58 @@ var nopVar = sessionVar{
 	Reset: func(*planner) error { return nil },
 }
 
+// varGen is the main definition array for all session variables.
+// Note to maintainers: try to keep this sorted in the source code.
 var varGen = map[string]sessionVar{
+	`application_name`: {
+		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
+			// Set by clients to improve query logging.
+			// See https://www.postgresql.org/docs/9.6/static/runtime-config-logging.html#GUC-APPLICATION-NAME
+			s, err := p.getStringVal(`application_name`, values)
+			if err != nil {
+				return err
+			}
+			p.session.resetApplicationName(s)
+
+			return nil
+		},
+		Get: func(p *planner) string {
+			p.session.mu.RLock()
+			defer p.session.mu.RUnlock()
+			return p.session.mu.ApplicationName
+		},
+		Reset: func(p *planner) error {
+			p.session.resetApplicationName(p.session.defaults.applicationName)
+			return nil
+		},
+	},
+
+	// Supported for PG compatibility only.
+	// Controls returned message verbosity. We don't support this.
+	// See https://www.postgresql.org/docs/9.6/static/runtime-config-compatible.html
+	`client_min_messages`: nopVar,
+
+	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/9.6/static/multibyte.html
+	// Also aliased to SET NAMES.
+	`client_encoding`: {
+		Get: func(*planner) string {
+			return "UTF8"
+		},
+		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
+			s, err := p.getStringVal(`client_encoding`, values)
+			if err != nil {
+				return err
+			}
+			upper := strings.ToUpper(s)
+			if upper != "UTF8" && upper != "UNICODE" {
+				return fmt.Errorf("non-UTF8 encoding %s not supported", s)
+			}
+			return nil
+		},
+		Reset: func(*planner) error { return nil },
+	},
+
 	`database`: {
 		Set: func(ctx context.Context, p *planner, values []parser.TypedExpr) error {
 			dbName, err := p.getStringVal(`database`, values)
@@ -84,6 +135,25 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 	},
+
+	`datestyle`: {
+		// Supported for PG compatibility only.
+		Get: func(*planner) string {
+			return "ISO"
+		},
+		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
+			s, err := p.getStringVal(`datestyle`, values)
+			if err != nil {
+				return err
+			}
+			if strings.ToUpper(s) != "ISO" {
+				return fmt.Errorf("non-ISO date style %s not supported", s)
+			}
+			return nil
+		},
+		Reset: func(*planner) error { return nil },
+	},
+
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
 			// It's unfortunate that clients want us to support both SET
@@ -113,6 +183,7 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 	},
+
 	`distsql`: {
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
 			s, err := p.getStringVal(`distsql`, values)
@@ -145,6 +216,20 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 	},
+
+	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
+	`extra_float_digits`: nopVar,
+
+	`max_index_keys`: {
+		// Supported for PG compatibility only.
+		Get: func(*planner) string { return "32" },
+	},
+
+	`node_id`: {
+		Get: func(p *planner) string { return fmt.Sprintf("%d", p.LeaseMgr().nodeID.Get()) },
+	},
+
 	`search_path`: {
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
 			// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
@@ -177,7 +262,16 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 	},
+
+	`server_version`: {
+		Get: func(*planner) string { return PgServerVersion },
+	},
+	`session_user`: {
+		Get: func(p *planner) string { return p.session.User },
+	},
+
 	`standard_conforming_strings`: {
+		// Supported for PG compatibility only.
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
 			// If true, escape backslash literals in strings. We do this by default,
 			// and we do not support the opposite behavior.
@@ -195,28 +289,7 @@ var varGen = map[string]sessionVar{
 		Get:   func(*planner) string { return "on" },
 		Reset: func(*planner) error { return nil },
 	},
-	`application_name`: {
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
-			// Set by clients to improve query logging.
-			// See https://www.postgresql.org/docs/9.6/static/runtime-config-logging.html#GUC-APPLICATION-NAME
-			s, err := p.getStringVal(`application_name`, values)
-			if err != nil {
-				return err
-			}
-			p.session.resetApplicationName(s)
 
-			return nil
-		},
-		Get: func(p *planner) string {
-			p.session.mu.RLock()
-			defer p.session.mu.RUnlock()
-			return p.session.mu.ApplicationName
-		},
-		Reset: func(p *planner) error {
-			p.session.resetApplicationName(p.session.defaults.applicationName)
-			return nil
-		},
-	},
 	`time zone`: {
 		Get: func(p *planner) string {
 			// If the time zone is a "fixed offset" one, initialized from an offset
@@ -235,66 +308,17 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 	},
+
 	`transaction isolation level`: {
 		Get: func(p *planner) string { return p.txn.Isolation().String() },
 	},
+
 	`transaction priority`: {
 		Get: func(p *planner) string { return p.txn.UserPriority().String() },
 	},
+
 	`transaction status`: {
 		Get: func(p *planner) string { return getTransactionState(&p.session.TxnState, p.autoCommit) },
-	},
-	`max_index_keys`: {
-		Get: func(*planner) string { return "32" },
-	},
-	`server_version`: {
-		Get: func(*planner) string { return PgServerVersion },
-	},
-	`session_user`: {
-		Get: func(p *planner) string { return p.session.User },
-	},
-
-	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
-	`extra_float_digits`: nopVar,
-
-	// Controls returned message verbosity. We don't support this.
-	// See https://www.postgresql.org/docs/9.6/static/runtime-config-compatible.html
-	`client_min_messages`: nopVar,
-
-	// See https://www.postgresql.org/docs/9.6/static/multibyte.html
-	`client_encoding`: {
-		Get: func(*planner) string {
-			return "UTF8"
-		},
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
-			s, err := p.getStringVal(`client_encoding`, values)
-			if err != nil {
-				return err
-			}
-			upper := strings.ToUpper(s)
-			if upper != "UTF8" && upper != "UNICODE" {
-				return fmt.Errorf("non-UTF8 encoding %s not supported", s)
-			}
-			return nil
-		},
-		Reset: func(*planner) error { return nil },
-	},
-
-	`datestyle`: {
-		Get: func(*planner) string {
-			return "ISO"
-		},
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
-			s, err := p.getStringVal(`datestyle`, values)
-			if err != nil {
-				return err
-			}
-			if strings.ToUpper(s) != "ISO" {
-				return fmt.Errorf("non-ISO date style %s not supported", s)
-			}
-			return nil
-		},
-		Reset: func(*planner) error { return nil },
 	},
 
 	`trace`: {

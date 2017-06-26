@@ -19,7 +19,6 @@ package cli
 import (
 	"bufio"
 	"bytes"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
@@ -44,6 +43,7 @@ const (
 	infoMessage = `# Welcome to the cockroach SQL interface.
 # All statements must be terminated by a semicolon.
 # To exit: CTRL + D.
+#
 `
 )
 
@@ -170,7 +170,8 @@ const (
 // printCliHelp prints a short inline help about the CLI.
 func printCliHelp() {
 	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
-Type: \q to exit (Ctrl+C/Ctrl+D also supported)
+Type:
+  \q to exit        (Ctrl+C/Ctrl+D also supported)
   \! CMD            run an external command and print its results on standard output.
   \| CMD            run an external command and run its output as SQL statements.
   \set [NAME]       set a client-side flag or (without argument) print the current settings.
@@ -404,36 +405,11 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	return nextState
 }
 
-func (c *cliState) getServerValue(what, sql string) (driver.Value, bool) {
-	var dbVals [1]driver.Value
-
-	query := makeQuery(sql)
-	rows, err := query(c.conn)
-	if err != nil {
-		fmt.Fprintf(stderr, "error retrieving the %s: %v", what, err)
-		return nil, false
-	}
-	defer func() { _ = rows.Close() }()
-
-	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(stderr, "cannot get the %s", what)
-		return nil, false
-	}
-
-	err = rows.Next(dbVals[:])
-	if err != nil {
-		fmt.Fprintf(stderr, "invalid %s: %v\n", what, err)
-		return nil, false
-	}
-
-	return dbVals[0], true
-}
-
 // refreshTransactionStatus retrieves and sets the current transaction status.
 func (c *cliState) refreshTransactionStatus() (txnStatus string) {
 	txnStatus = " ?"
 
-	dbVal, hasVal := c.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
+	dbVal, hasVal := c.conn.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
 		return txnStatus
 	}
@@ -466,7 +442,7 @@ func (c *cliState) refreshDatabaseName(txnStatus string) (string, bool) {
 		return "", false
 	}
 
-	dbVal, hasVal := c.getServerValue("database name", `SHOW DATABASE`)
+	dbVal, hasVal := c.conn.getServerValue("database name", `SHOW DATABASE`)
 	if !hasVal {
 		return "", false
 	}
@@ -548,8 +524,7 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 			c.ins.SetConfig(cfg)
 		}
 
-		// The user only gets to see the info screen on interactive session.
-		fmt.Print(infoMessage)
+		fmt.Println("#\n# Enter \\? for a brief introduction.\n#")
 
 		c.checkSyntax = true
 		c.normalizeHistory = true
@@ -979,6 +954,11 @@ func runStatements(conn *sqlConn, stmts []string, displayFormat tableDisplayForm
 func runTerm(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		return usageAndError(cmd)
+	}
+
+	if isInteractive && len(sqlCtx.execStmts) == 0 {
+		// The user only gets to see the info screen on interactive sessions.
+		fmt.Print(infoMessage)
 	}
 
 	conn, err := getPasswordAndMakeSQLClient()
