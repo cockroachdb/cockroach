@@ -24,6 +24,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -143,6 +144,12 @@ func do(ctx context.Context) error {
 				return errors.Wrapf(err, "could not find test binary %s", txt)
 			}
 
+			relativePath, err := filepath.Rel(rootPkg.Dir, binaryPath)
+			if err != nil {
+				return errors.Wrapf(err, "could not get relative path to binary %s", binaryPath)
+			}
+			pkgName := path.Join(crdb, filepath.Dir(relativePath))
+
 			cmd := exec.CommandContext(ctx, binaryPath, "-test.timeout", "0", "-test.run", "-", "-test.bench", ".", "-test.benchmem")
 			cmd.Dir = filepath.Dir(binaryPath)
 			cmd.Stdout = buffer
@@ -150,8 +157,14 @@ func do(ctx context.Context) error {
 
 			log.Printf("exec: %s", cmd.Args)
 
+			start := timeutil.Now()
 			if err := cmd.Run(); err != nil {
 				return errors.Wrapf(err, "could not run test binary %s", binaryPath)
+			}
+			// Emulate the output of `go test`, which we don't get because
+			// we've prebuilt the binaries. (╯°□°）╯︵ ┻━┻)
+			if _, err := fmt.Fprintf(buffer, "ok  	%s	%0.3fs", pkgName, timeutil.Since(start).Seconds()); err != nil {
+				return errors.Wrapf(err, "could not write footer for package %s", pkgName)
 			}
 		}
 	}
