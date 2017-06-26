@@ -2332,13 +2332,7 @@ DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file) {
   // If snapshot_consistency is true and there is an outstanding RocksDB
   // snapshot, a global sequence number is forced (see the allow_global_seqno
   // option).
-  //
-  // TODO(dan): Switch snapshot_consistency back to true. The RocksDB in-memory
-  // env doesn't support NewRandomRWFile, which is used when a file is ingested
-  // while a snapshot is outstanding (it rewrites the sequence number in the
-  // ingested file to be greated than the snapshot's sequence number). Setting
-  // the option to false avoids this codepath during development. #16345.
-  ingest_options.snapshot_consistency = false;
+  ingest_options.snapshot_consistency = true;
   // If a file is ingested over existing data (including the range tombstones
   // used by range snapshots) or if a RocksDB snapshot is outstanding when this
   // ingest runs, then after moving/copying the file, RocksDB will edit it
