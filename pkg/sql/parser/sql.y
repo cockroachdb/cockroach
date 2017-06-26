@@ -387,7 +387,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %token <str>   DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
 %token <str>   DEALLOCATE DEFERRABLE DELETE DESC
-%token <str>   DISTINCT DO DOUBLE DROP
+%token <str>   DISCARD DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
 %token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPLAIN EXTRACT EXTRACT_DURATION
@@ -421,7 +421,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   OF OFF OFFSET OID ON ONLY OPTIONS OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
 
-%token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PLACING POSITION
+%token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PLACING PLANS POSITION
 %token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str>   QUERIES QUERY
@@ -432,13 +432,13 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str>   ROLLBACK ROLLUP ROW ROWS RSHIFT
 
-%token <str>   SAVEPOINT SCATTER SEARCH SECOND SELECT
+%token <str>   SAVEPOINT SCATTER SEARCH SECOND SELECT SEQUENCES
 %token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str>   START STATUS STDIN STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
-%token <str>   TABLE TABLES TEMPLATE TESTING_RANGES TESTING_RELOCATE TEXT THEN
+%token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES TESTING_RELOCATE TEXT THEN
 %token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
@@ -487,6 +487,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> create_user_stmt
 %type <Statement> create_view_stmt
 %type <Statement> delete_stmt
+%type <Statement> discard_stmt
 %type <Statement> drop_stmt
 %type <Statement> explain_stmt
 %type <Statement> help_stmt
@@ -818,6 +819,7 @@ stmt:
 | copy_from_stmt
 | create_stmt
 | delete_stmt
+| discard_stmt
 | drop_stmt
 | explain_stmt
 | help_stmt
@@ -1120,6 +1122,17 @@ delete_stmt:
   {
     $$.val = &Delete{Table: $4.tblExpr(), Where: newWhere(astWhere, $5.expr()), Returning: $6.retClause()}
   }
+
+// DISCARD [ ALL | PLANS | SEQUENCES | TEMP | TEMPORARY ]
+discard_stmt:
+  DISCARD ALL
+  {
+    $$.val = &Discard{Mode: DiscardModeAll}
+  }
+| DISCARD PLANS { return unimplemented(sqllex, "discard plans") }
+| DISCARD SEQUENCES { return unimplemented(sqllex, "discard sequences") }
+| DISCARD TEMP { return unimplemented(sqllex, "discard temp") }
+| DISCARD TEMPORARY { return unimplemented(sqllex, "discard temporary") }
 
 // DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
 drop_stmt:
@@ -5365,6 +5378,7 @@ unreserved_keyword:
 | DAY
 | DEALLOCATE
 | DELETE
+| DISCARD
 | DOUBLE
 | DROP
 | ENCODING
@@ -5415,6 +5429,7 @@ unreserved_keyword:
 | PARTITION
 | PASSWORD
 | PAUSE
+| PLANS
 | PRECEDING
 | PREPARE
 | PRIORITY
@@ -5448,6 +5463,7 @@ unreserved_keyword:
 | SEARCH
 | SECOND
 | SERIALIZABLE
+| SEQUENCES
 | SESSION
 | SESSIONS
 | SET
@@ -5462,7 +5478,9 @@ unreserved_keyword:
 | SPLIT
 | SYSTEM
 | TABLES
+| TEMP
 | TEMPLATE
+| TEMPORARY
 | TESTING_RANGES
 | TESTING_RELOCATE
 | TEXT

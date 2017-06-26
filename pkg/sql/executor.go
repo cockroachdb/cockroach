@@ -1390,6 +1390,30 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 		}
 		return Result{PGTag: s.StatementTag()}, nil
+
+	case *parser.Discard:
+		switch s.Mode {
+		case parser.DiscardModeAll:
+			if !implicitTxn {
+				// TODO(couchand): Use the actual PostgreSQL error code
+				return Result{}, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
+					"cannot do this here")
+			}
+
+			// RESET ALL
+			for _, v := range varGen {
+				if v.Reset != nil {
+					if err := v.Reset(session); err != nil {
+						return Result{}, err
+					}
+				}
+			}
+
+			// DEALLOCATE ALL
+			session.PreparedStatements.DeleteAll(session.Ctx())
+
+			return Result{PGTag: s.StatementTag()}, nil
+		}
 	}
 
 	var p *planner
