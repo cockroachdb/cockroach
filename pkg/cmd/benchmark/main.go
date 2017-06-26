@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"go/build"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -34,7 +33,6 @@ import (
 	"golang.org/x/oauth2/google"
 	"golang.org/x/perf/storage"
 
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -125,25 +123,12 @@ func do(ctx context.Context) error {
 		}
 	}
 
-	files := make([]*os.File, numIterations)
-	for i := range files {
-		file, err := ioutil.TempFile("", "cockroachdb-benchmark")
-		if err != nil {
-			return errors.Wrap(err, "could not create temporary file")
-		}
-		defer func() {
-			if err := file.Close(); err != nil {
-				log.Printf("could not close temporary file %s: %s", file.Name(), err)
-			}
-			if err := os.Remove(file.Name()); err != nil {
-				log.Printf("could not remove temporary file %s: %s", file.Name(), err)
-			}
-		}()
-		files[i] = file
-	}
-	for i, file := range files {
+	buffers := make([]bytes.Buffer, numIterations)
+	for i := range buffers {
+		buffer := &buffers[i]
+
 		if _, err := fmt.Fprintf(
-			file,
+			buffer,
 			"commit: %s\niteration: %d\nstart-time: %s\n",
 			bytes.TrimSpace(rev),
 			i,
@@ -160,7 +145,7 @@ func do(ctx context.Context) error {
 
 			cmd := exec.CommandContext(ctx, binaryPath, "-test.timeout", "0", "-test.run", "-", "-test.bench", ".", "-test.benchmem")
 			cmd.Dir = filepath.Dir(binaryPath)
-			cmd.Stdout = io.MultiWriter(file, os.Stdout)
+			cmd.Stdout = io.MultiWriter(buffer, os.Stdout)
 			cmd.Stderr = os.Stderr
 
 			log.Printf("exec: %s", cmd.Args)
@@ -179,24 +164,15 @@ func do(ctx context.Context) error {
 	u := client.NewUpload(ctx)
 
 	if err := func() error {
-		for i, file := range files {
-			{
-				info, err := file.Stat()
-				if err != nil {
-					return errors.Wrapf(err, "could not stat temporary file %s", file.Name())
-				}
-				log.Printf("uploading file %s: %s", file.Name(), humanizeutil.IBytes(info.Size()))
-			}
+		for i := range buffers {
+			buffer := &buffers[i]
 
 			w, err := u.CreateFile(fmt.Sprintf("bench%02d.txt", i))
 			if err != nil {
 				return errors.Wrap(err, "could not create upload file")
 			}
-			if _, err := file.Seek(0, 0); err != nil {
-				return errors.Wrapf(err, "could not seek temporary file %s", file.Name())
-			}
-			if _, err := io.Copy(w, file); err != nil {
-				return errors.Wrapf(err, "could not copy from temporary file %s", file.Name())
+			if _, err := io.Copy(w, buffer); err != nil {
+				return errors.Wrapf(err, "could not write to upload file")
 			}
 		}
 
