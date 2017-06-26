@@ -95,7 +95,10 @@ func TestTableSet(t *testing.T) {
 			set.remove(s)
 
 		case newest:
-			n := set.findNewest(op.version)
+			n := set.findNewest()
+			if op.version != 0 {
+				n = set.findVersion(op.version)
+			}
 			s := "<nil>"
 			if n != nil {
 				s = fmt.Sprintf("%d:%d", n.Version, n.expiration.WallTime)

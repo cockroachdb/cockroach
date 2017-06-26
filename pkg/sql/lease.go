@@ -491,13 +491,16 @@ func (l *tableSet) findIndex(version sqlbase.DescriptorVersion) (int, bool) {
 	return i, false
 }
 
-func (l *tableSet) findNewest(version sqlbase.DescriptorVersion) *tableVersionState {
+func (l *tableSet) findNewest() *tableVersionState {
 	if len(l.data) == 0 {
 		return nil
 	}
-	if version == 0 {
-		// No explicitly version, return the newest lease of the latest version.
-		return l.data[len(l.data)-1]
+	return l.data[len(l.data)-1]
+}
+
+func (l *tableSet) findVersion(version sqlbase.DescriptorVersion) *tableVersionState {
+	if len(l.data) == 0 {
+		return nil
 	}
 	// Find the index of the first lease with version > targetVersion.
 	i := sort.Search(len(l.data), func(i int) bool {
@@ -548,13 +551,18 @@ func (t *tableState) acquire(
 	defer t.mu.Unlock()
 
 	for {
-		s := t.active.findNewest(version)
+		var s *tableVersionState
+		if version == 0 {
+			s = t.active.findNewest()
+		} else {
+			s = t.active.findVersion(version)
+		}
 		if s != nil {
 			if checkedTable := t.checkTable(s, version, m.clock); checkedTable != nil {
 				return checkedTable, nil
 			}
 		} else if version != 0 {
-			n := t.active.findNewest(0)
+			n := t.active.findNewest()
 			if n != nil && version < n.Version {
 				return nil, errors.Errorf("table %d unable to acquire lease on old version: %d < %d",
 					t.id, version, n.Version)
@@ -583,7 +591,7 @@ func (t *tableState) checkTable(
 	// would violate the invariant that we only get leases on the newest
 	// version. The transaction will either finish before the lease expires or
 	// it will abort, which is what will happen if we returned an error here.
-	skipLifeCheck := version != 0 && table != t.active.findNewest(0)
+	skipLifeCheck := version != 0 && table != t.active.findNewest()
 	if !skipLifeCheck && !table.hasSomeLifeLeft(clock) {
 		return nil
 	}
@@ -637,7 +645,7 @@ func (t *tableState) acquireFreshestFromStoreLocked(
 	// Set the min expiration time to guarantee that the lease acquired is the
 	// last lease in t.active .
 	minExpirationTime := hlc.Timestamp{}
-	newestTable := t.active.findNewest(0)
+	newestTable := t.active.findNewest()
 	if newestTable != nil {
 		minExpirationTime = newestTable.expiration.Add(int64(time.Millisecond), 0)
 	}
@@ -766,7 +774,7 @@ func (t *tableState) release(table sqlbase.TableDescriptor, m *LeaseManager) err
 			m.isDraining() ||
 			// Release from the store if the lease is not for the latest
 			// version; only leases for the latest version can be acquired.
-			s != t.active.findNewest(0)
+			s != t.active.findNewest()
 
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -1195,7 +1203,7 @@ func (m *LeaseManager) acquireFreshestFromStore(
 	); err != nil {
 		return sqlbase.TableDescriptor{}, hlc.Timestamp{}, err
 	}
-	table := t.active.findNewest(0)
+	table := t.active.findNewest()
 	if table == nil {
 		panic("no lease in active set after having just acquired one")
 	}
