@@ -999,9 +999,9 @@ func (c *v3Conn) sendResponse(
 					}
 					switch fmtCode {
 					case formatText:
-						c.writeBuf.writeTextDatum(col, c.session.Location)
+						c.writeBuf.writeTextDatum(ctx, col, c.session.Location)
 					case formatBinary:
-						c.writeBuf.writeBinaryDatum(col, c.session.Location)
+						c.writeBuf.writeBinaryDatum(ctx, col, c.session.Location)
 					default:
 						c.writeBuf.setError(errors.Errorf("unsupported format code %s", fmtCode))
 					}

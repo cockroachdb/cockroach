@@ -95,7 +95,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 		}
 	}
 
-	buf.writeTextDatum(d, time.UTC)
+	buf.writeTextDatum(context.Background(), d, time.UTC)
 
 	b := buf.wrapped.Bytes()
 
@@ -111,6 +111,8 @@ func TestIntArrayRoundTrip(t *testing.T) {
 }
 
 func benchmarkWriteType(b *testing.B, d parser.Datum, format formatCode) {
+	ctx := context.Background()
+
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{Name: ""})}
 
 	writeMethod := buf.writeTextDatum
@@ -119,7 +121,7 @@ func benchmarkWriteType(b *testing.B, d parser.Datum, format formatCode) {
 	}
 
 	// Warm up the buffer.
-	writeMethod(d, nil)
+	writeMethod(ctx, d, nil)
 	buf.wrapped.Reset()
 
 	b.ResetTimer()
@@ -127,7 +129,7 @@ func benchmarkWriteType(b *testing.B, d parser.Datum, format formatCode) {
 		// Starting and stopping the timer in each loop iteration causes this
 		// to take much longer. See http://stackoverflow.com/a/37624250/3435257.
 		// buf.wrapped.Reset() should be fast enough to be negligible.
-		writeMethod(d, nil)
+		writeMethod(ctx, d, nil)
 		buf.wrapped.Reset()
 	}
 }
@@ -294,7 +296,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	if err := expected.SetString(s); err != nil {
 		b.Fatalf("could not set %q on decimal", s)
 	}
-	wbuf.writeBinaryDatum(expected, nil)
+	wbuf.writeBinaryDatum(context.Background(), expected, nil)
 
 	rbuf := readBuffer{msg: wbuf.wrapped.Bytes()}
 
