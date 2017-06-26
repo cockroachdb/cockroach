@@ -461,6 +461,37 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 	// we're just trying to clean up and will happily log the failed Rollback error
 	// if someone beat us.
 	if txn.status() == roachpb.PENDING {
+
+		// If the proto is uninitialized, we don't need to do anything; no requests
+		// have been set so there's nothing to cleanup. We'll avoid performing the
+		// rollback, because the rollback itself would send a request which would
+		// initialize the proto, which proves to be a problem for retryable errors
+		// that would look like they've been received for the wrong txn (they were
+		// produced for an uninitialized proto and they'll later be checked against
+		// an initialized one. How would a txn that hasn't sent anything get a
+		// retryable error, you may ask? By calling the SQL function
+		// crdb_iternal.force_retry().
+		//
+		// This here is a hack; the transaction protos should be initialized early
+		// so that we don't have this kind of problem. But even if they were
+		// initialized, we still should have some check here to not send an
+		// unnecessary rollback (which would probably fail, leading to potential
+		// confusing messages).
+		rollbackUnnecessary := false
+		txn.mu.Lock()
+		if !txn.mu.Proto.IsInitialized() {
+			rollbackUnnecessary = true
+			// Simulate the effect of sending a rollback.
+			txn.mu.finalized = true
+			// Let's set the status to ABORTED; unclear what that means given that our
+			// proto is not "initialized", but can't hurt.
+			txn.mu.Proto.Status = roachpb.ABORTED
+		}
+		txn.mu.Unlock()
+		if rollbackUnnecessary {
+			return
+		}
+
 		if replyErr := txn.rollback(ctx); replyErr != nil {
 			if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.status() == roachpb.ABORTED {
 				log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
