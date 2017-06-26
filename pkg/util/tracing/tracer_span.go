@@ -42,8 +42,9 @@ type spanMeta struct {
 type spanContext struct {
 	spanMeta
 
-	// Underlying lightstep span context, if using lightstep.
-	lightstep opentracing.SpanContext
+	// Underlying shadow tracer info and context (optional).
+	shadowTr  *shadowTracer
+	shadowCtx opentracing.SpanContext
 
 	// If set, all spans derived from this context are being recorded as a group.
 	recordingGroup *spanGroup
@@ -84,8 +85,9 @@ type span struct {
 
 	// x/net/trace.Trace instance; nil if not tracing to x/net/trace.
 	netTr trace.Trace
-	// "Shadow" lightstep span; nil if not using lightstep.
-	lightstep opentracing.Span
+	// Shadow tracer and span; nil if not using a shadow tracer.
+	shadowTr   *shadowTracer
+	shadowSpan opentracing.Span
 
 	operation string
 	startTime time.Time
@@ -242,7 +244,7 @@ func IsBlackHoleSpan(s opentracing.Span) bool {
 		return true
 	}
 	sp := s.(*span)
-	return !sp.isRecording() && sp.netTr == nil && sp.lightstep == nil
+	return !sp.isRecording() && sp.netTr == nil && sp.shadowTr == nil
 }
 
 // Finish is part of the opentracing.Span interface.
@@ -259,8 +261,8 @@ func (s *span) FinishWithOptions(opts opentracing.FinishOptions) {
 	s.mu.Lock()
 	s.mu.duration = finishTime.Sub(s.startTime)
 	s.mu.Unlock()
-	if s.lightstep != nil {
-		s.lightstep.Finish()
+	if s.shadowTr != nil {
+		s.shadowSpan.Finish()
 	}
 	if s.netTr != nil {
 		s.netTr.Finish()
@@ -283,8 +285,9 @@ func (s *span) Context() opentracing.SpanContext {
 		spanMeta: s.spanMeta,
 		Baggage:  baggageCopy,
 	}
-	if s.lightstep != nil {
-		sc.lightstep = s.lightstep.Context()
+	if s.shadowTr != nil {
+		sc.shadowTr = s.shadowTr
+		sc.shadowCtx = s.shadowSpan.Context()
 	}
 
 	if s.isRecording() {
@@ -296,8 +299,8 @@ func (s *span) Context() opentracing.SpanContext {
 
 // SetOperationName is part of the opentracing.Span interface.
 func (s *span) SetOperationName(operationName string) opentracing.Span {
-	if s.lightstep != nil {
-		s.lightstep.SetOperationName(operationName)
+	if s.shadowTr != nil {
+		s.shadowSpan.SetOperationName(operationName)
 	}
 	s.operation = operationName
 	return s
@@ -309,8 +312,8 @@ func (s *span) SetTag(key string, value interface{}) opentracing.Span {
 }
 
 func (s *span) setTagInner(key string, value interface{}, locked bool) opentracing.Span {
-	if s.lightstep != nil {
-		s.lightstep.SetTag(key, value)
+	if s.shadowTr != nil {
+		s.shadowSpan.SetTag(key, value)
 	}
 	if s.netTr != nil {
 		s.netTr.LazyPrintf("%s:%v", key, value)
@@ -332,8 +335,8 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 
 // LogFields is part of the opentracing.Span interface.
 func (s *span) LogFields(fields ...otlog.Field) {
-	if s.lightstep != nil {
-		s.lightstep.LogFields(fields...)
+	if s.shadowTr != nil {
+		s.shadowSpan.LogFields(fields...)
 	}
 	if s.netTr != nil {
 		// TODO(radu): when LightStep supports arbitrary fields, we should make
@@ -388,8 +391,8 @@ func (s *span) setBaggageItemLocked(restrictedKey, value string) opentracing.Spa
 	}
 	s.mu.Baggage[restrictedKey] = value
 
-	if s.lightstep != nil {
-		s.lightstep.SetBaggageItem(restrictedKey, value)
+	if s.shadowTr != nil {
+		s.shadowSpan.SetBaggageItem(restrictedKey, value)
 	}
 	// Also set a tag so it shows up in the Lightstep UI or x/net/trace.
 	s.setTagInner(restrictedKey, value, true /* locked */)

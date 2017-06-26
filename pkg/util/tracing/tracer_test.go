@@ -17,9 +17,7 @@
 package tracing
 
 import (
-	"sync/atomic"
 	"testing"
-	"unsafe"
 
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -266,7 +264,7 @@ func TestLightstepContext(t *testing.T) {
 		MaxLogsPerSpan: maxLogsPerSpan,
 		UseGRPC:        true,
 	})
-	atomic.StorePointer(&lightstepPtr, unsafe.Pointer(&lsTr))
+	setShadowTracer(lightStepManager{}, lsTr)
 	tr := NewTracer()
 	s := tr.StartSpan("test")
 
@@ -278,10 +276,6 @@ func TestLightstepContext(t *testing.T) {
 	if err := tr.Inject(s.Context(), opentracing.HTTPHeaders, carrier); err != nil {
 		t.Fatal(err)
 	}
-	traceID, spanID := getLightstepSpanIDs(lsTr, s.(*span).lightstep.Context())
-	if traceID == 0 || spanID == 0 {
-		t.Errorf("invalid trace/span IDs: %d %d", traceID, spanID)
-	}
 
 	// Extract also extracts the context in lightstep; this will fail if the
 	// contexts are not compatible.
@@ -291,13 +285,7 @@ func TestLightstepContext(t *testing.T) {
 	}
 
 	s2 := tr.StartSpan("child", opentracing.FollowsFrom(wireContext))
-	s2Ctx := s2.(*span).lightstep.Context()
-
-	traceID2, spanID2 := getLightstepSpanIDs(lsTr, s2Ctx)
-
-	if traceID2 != traceID || spanID2 == 0 {
-		t.Errorf("invalid child trace/span IDs: %d %d", traceID2, spanID2)
-	}
+	s2Ctx := s2.(*span).shadowSpan.Context()
 
 	// Verify that the baggage is correct in both the tracer context and in the
 	// lightstep context.

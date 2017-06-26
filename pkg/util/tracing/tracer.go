@@ -25,16 +25,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -47,16 +44,17 @@ const maxLogsPerSpan = 1000
 
 // These constants are used to form keys to represent tracing context
 // information in carriers supporting opentracing.HTTPHeaders format.
-// These must be identical to what lightstep uses (to allow us to inject the
-// information into lightstep); see:
-//   github.com/lightstep/lightstep-tracer-go/basictracer/propagation_ot.go
 const (
-	prefixTracerState = "ot-tracer-"
-	prefixBaggage     = "ot-baggage-"
+	prefixTracerState = "crdb-tracer-"
+	prefixBaggage     = "crdb-baggage-"
+	// prefixShadow is prepended to the keys for the context of the shadow tracer
+	// (e.g. LightStep).
+	prefixShadow = "crdb-shadow-"
 
 	fieldNameTraceID = prefixTracerState + "traceid"
 	fieldNameSpanID  = prefixTracerState + "spanid"
-	fieldNameSampled = prefixTracerState + "sampled"
+	// fieldNameShadow is the name of the shadow tracer.
+	fieldNameShadowType = prefixTracerState + "shadowtype"
 )
 
 var enableNetTrace = settings.RegisterBoolSetting(
@@ -64,50 +62,6 @@ var enableNetTrace = settings.RegisterBoolSetting(
 	"if set, traces for recent requests can be seen in the /debug page",
 	false,
 )
-
-var lightstepToken = settings.RegisterStringSetting(
-	"trace.lightstep.token",
-	"if set, traces go to Lightstep using this token",
-	"",
-)
-
-// We don't call OnChange inline above because it causes an "initialization
-// loop" compile error.
-var _ = lightstepToken.OnChange(updateLightstep)
-
-func init() {
-	// If we want to hardcode a lighstep token (for testing), the OnChange
-	// callback won't fire.
-	updateLightstep()
-}
-
-// Atomic pointer of type *opentracing.Tracer which itself points to a lightstep
-// tracer. We don't use sync.Value because we can't set it to nil.
-var lightstepPtr unsafe.Pointer
-
-func updateLightstep() {
-	if token := lightstepToken.Get(); token == "" {
-		// TODO(radu): if we had a lightstep tracer allocated, its background task
-		// will live on.
-		// Filed https://github.com/lightstep/lightstep-tracer-go/issues/82.
-		atomic.StorePointer(&lightstepPtr, nil)
-	} else {
-		lsTr := lightstep.NewTracer(lightstep.Options{
-			AccessToken:      token,
-			MaxLogsPerSpan:   maxLogsPerSpan,
-			MaxBufferedSpans: 10000,
-			UseGRPC:          true,
-		})
-		atomic.StorePointer(&lightstepPtr, unsafe.Pointer(&lsTr))
-	}
-}
-
-func getLightstep() opentracing.Tracer {
-	if ptr := atomic.LoadPointer(&lightstepPtr); ptr != nil {
-		return *(*opentracing.Tracer)(ptr)
-	}
-	return nil
-}
 
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
 //
@@ -157,45 +111,6 @@ func (t *Tracer) SetForceRealSpans(v bool) bool {
 	return prevVal
 }
 
-// lightstepExtractIDsCarrier is used as a carrier for getLightstepSpanIDs.
-type lightstepExtractIDsCarrier struct {
-	traceID, spanID uint64
-}
-
-var _ opentracing.TextMapWriter = &lightstepExtractIDsCarrier{}
-
-// Set is part of the opentracing.TextMapWriter interface.
-func (l *lightstepExtractIDsCarrier) Set(key, val string) {
-	var err error
-	switch key {
-	case fieldNameTraceID:
-		l.traceID, err = strconv.ParseUint(val, 16, 64)
-	case fieldNameSpanID:
-		l.spanID, err = strconv.ParseUint(val, 16, 64)
-	default:
-		// Ignore all other keys.
-		return
-	}
-	if err != nil {
-		panic(err)
-	}
-}
-
-// getLightstepSpanIDs extracts the TraceID and SpanID from a lightstep context.
-func getLightstepSpanIDs(
-	lightstep opentracing.Tracer, spanCtx opentracing.SpanContext,
-) (traceID uint64, spanID uint64) {
-	// Retrieve the trace metadata from lightstep.
-	var carrier lightstepExtractIDsCarrier
-	if err := lightstep.Inject(spanCtx, opentracing.TextMap, &carrier); err != nil {
-		panic(fmt.Sprintf("error injecting lightstep context %s", err))
-	}
-	if carrier.traceID == 0 || carrier.spanID == 0 {
-		panic(fmt.Sprintf("lightstep did not inject IDs: %d, %d", carrier.traceID, carrier.spanID))
-	}
-	return carrier.traceID, carrier.spanID
-}
-
 type recordableOption struct{}
 
 // Recordable is a StartSpanOption that forces creation of a real span.
@@ -223,9 +138,9 @@ func (t *Tracer) StartSpan(
 	}
 
 	netTrace := enableNetTrace.Get()
-	lsTr := getLightstep()
+	shadowTr := getShadowTracer()
 
-	if len(opts) == 0 && !netTrace && lsTr == nil && !t.forceRealSpans {
+	if len(opts) == 0 && !netTrace && shadowTr == nil && !t.forceRealSpans {
 		return &t.noopSpan
 	}
 
@@ -268,17 +183,16 @@ func (t *Tracer) StartSpan(
 		// TODO(radu): can we do something for multiple references?
 		break
 	}
-	if hasParent && parentCtx.lightstep == nil {
-		// If a lightstep tracer was configured, don't use it if the parent span
-		// isn't using it. It's possible that the parent was created before
-		// Lightstep was enabled.
-		lsTr = nil
+	if hasParent {
+		// We use the parent's shadow tracer, to avoid inconsistency inside a
+		// trace when the shadow tracer changes.
+		shadowTr = parentCtx.shadowTr
 	}
 
 	// If tracing is disabled, the Recordable option wasn't passed, and we're not
 	// part of a recording or snowball trace, avoid overhead and return a noop
 	// span.
-	if !recordable && recordingGroup == nil && lsTr == nil && !netTrace && !t.forceRealSpans {
+	if !recordable && recordingGroup == nil && shadowTr == nil && !netTrace && !t.forceRealSpans {
 		return &t.noopSpan
 	}
 
@@ -296,27 +210,20 @@ func (t *Tracer) StartSpan(
 		s.SetTag(k, v)
 	}
 
-	// If we are using lightstep, we create a new Lightstep span and use the
-	// metadata (TraceID, SpanID, Baggage) from that span.
-	// If not using Lightstep, we generate our own IDs.
-	if lsTr != nil {
-		var parentLightstepCtx opentracing.SpanContext
-		if hasParent {
-			if parentCtx.lightstep == nil {
-				panic("lightstep span derived from non-lightstep span")
-			}
-			s.TraceID = parentCtx.TraceID
-			parentLightstepCtx = parentCtx.lightstep
-		}
-		t.linkLightstepSpan(s, lsTr, parentLightstepCtx, parentType)
+	if !hasParent {
+		// No parent Span; allocate new trace id.
+		s.TraceID = uint64(rand.Int63())
 	} else {
-		s.SpanID = uint64(rand.Int63())
-		if !hasParent {
-			// No parent Span; allocate new trace id.
-			s.TraceID = uint64(rand.Int63())
-		} else {
-			s.TraceID = parentCtx.TraceID
+		s.TraceID = parentCtx.TraceID
+	}
+	s.SpanID = uint64(rand.Int63())
+
+	if shadowTr != nil {
+		var parentShadowCtx opentracing.SpanContext
+		if hasParent {
+			parentShadowCtx = parentCtx.shadowCtx
 		}
+		linkShadowSpan(s, shadowTr, parentShadowCtx, parentType)
 	}
 
 	// Start recording if necessary.
@@ -340,61 +247,14 @@ func (t *Tracer) StartSpan(
 		}
 	}
 
-	if netTrace || lsTr != nil {
-		// Copy baggage items to tags so they show up in the Lightstep UI or x/net/trace.
+	if netTrace || shadowTr != nil {
+		// Copy baggage items to tags so they show up in the shadow tracer UI or x/net/trace.
 		for k, v := range s.mu.Baggage {
 			s.SetTag(k, v)
 		}
 	}
 
 	return s
-}
-
-// linkLightstepSpan creates and links a Lightstep span to the passed-in span
-// (i.e. fills in s.lightstep). This should only be called when Lightstep
-// tracing is enabled.
-//
-// The Lightstep span will have a parent if parentLightstepCtx is not nil.
-// parentType is ignored if parentLightstepCtx is nil.
-//
-// This will assign sp.SpanID and sp.TraceID.
-//
-// The tags from s be copied to the Lightstep span.
-func (t *Tracer) linkLightstepSpan(
-	s *span,
-	lightstepTracer opentracing.Tracer,
-	parentLightstepCtx opentracing.SpanContext,
-	parentType opentracing.SpanReferenceType,
-) {
-	hasParent := parentLightstepCtx != nil
-	if hasParent && s.TraceID == 0 {
-		panic("span.TraceID should have been set")
-	}
-
-	// Create the shadow lightstep span.
-	var lsOpts []opentracing.StartSpanOption
-	// Replicate the options, using the lightstep context in the reference.
-	lsOpts = append(lsOpts, opentracing.StartTime(s.startTime))
-	if s.mu.tags != nil {
-		lsOpts = append(lsOpts, s.mu.tags)
-	}
-	if hasParent {
-		lsOpts = append(lsOpts, opentracing.SpanReference{
-			Type:              parentType,
-			ReferencedContext: parentLightstepCtx,
-		})
-	}
-	s.lightstep = lightstepTracer.StartSpan(s.operation, lsOpts...)
-	var lightstepTraceID uint64
-	lightstepTraceID, s.SpanID = getLightstepSpanIDs(
-		lightstepTracer, s.lightstep.Context(),
-	)
-	if s.TraceID != 0 && s.TraceID != lightstepTraceID {
-		panic(fmt.Sprintf(
-			"Existing TraceID (%d) doesn't match Lightstep TraceID (%d)",
-			s.TraceID, lightstepTraceID))
-	}
-	s.TraceID = lightstepTraceID
 }
 
 // StartChildSpan creates a child span of the given parent span. This is
@@ -437,18 +297,14 @@ func StartChildSpan(
 	}
 
 	s.TraceID = pSpan.TraceID
-	// If the parent is using Lightstep, we create a new Lightstep span and use its
-	// SpanID. Otherwise, we generate our own IDs.
-	if pSpan.lightstep != nil {
-		tr.linkLightstepSpan(
-			s, pSpan.lightstep.Tracer(), pSpan.lightstep.Context(), opentracing.ChildOfRef,
-		)
-	} else {
-		s.SpanID = uint64(rand.Int63())
+	s.SpanID = uint64(rand.Int63())
+
+	if pSpan.shadowTr != nil {
+		linkShadowSpan(s, pSpan.shadowTr, pSpan.shadowSpan.Context(), opentracing.ChildOfRef)
 	}
 
-	if pSpan.netTr != nil || pSpan.lightstep != nil {
-		// Copy baggage items to tags so they show up in the Lightstep UI or x/net/trace.
+	if pSpan.netTr != nil || pSpan.shadowTr != nil {
+		// Copy baggage items to tags so they show up in the shadow tracer UI or x/net/trace.
 		for k, v := range s.mu.Baggage {
 			s.SetTag(k, v)
 		}
@@ -465,6 +321,15 @@ func StartChildSpan(
 
 	pSpan.mu.Unlock()
 	return s
+}
+
+type textMapWriterFn func(key, val string)
+
+var _ opentracing.TextMapWriter = textMapWriterFn(nil)
+
+// Set is part of the opentracing.TextMapWriter interface.
+func (fn textMapWriterFn) Set(key, val string) {
+	fn(key, val)
 }
 
 // Inject is part of the opentracing.Tracer interface.
@@ -494,13 +359,31 @@ func (t *Tracer) Inject(
 
 	mapWriter.Set(fieldNameTraceID, strconv.FormatUint(sc.TraceID, 16))
 	mapWriter.Set(fieldNameSpanID, strconv.FormatUint(sc.SpanID, 16))
-	mapWriter.Set(fieldNameSampled, "true")
 
 	for k, v := range sc.Baggage {
 		mapWriter.Set(prefixBaggage+k, v)
 	}
 
+	if sc.shadowTr != nil {
+		mapWriter.Set(fieldNameShadowType, sc.shadowTr.manager.name())
+		// Encapsulate the shadow text map, prepending a prefix to the keys.
+		if err := sc.shadowTr.Inject(sc.shadowCtx, format, textMapWriterFn(func(key, val string) {
+			mapWriter.Set(prefixShadow+key, val)
+		})); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+type textMapReaderFn func(handler func(key, val string) error) error
+
+var _ opentracing.TextMapReader = textMapReaderFn(nil)
+
+// ForeachKey is part of the opentracing.TextMapReader interface.
+func (fn textMapReaderFn) ForeachKey(handler func(key, val string) error) error {
+	return fn(handler)
 }
 
 // Extract is part of the opentracing.Tracer interface.
@@ -518,6 +401,8 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.S
 	}
 
 	var sc spanContext
+	var shadowType string
+	var shadowCarrier opentracing.TextMapCarrier
 
 	err := mapReader.ForeachKey(func(k, v string) error {
 		switch k = strings.ToLower(k); k {
@@ -533,12 +418,20 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.S
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
+		case fieldNameShadowType:
+			shadowType = v
 		default:
 			if strings.HasPrefix(k, prefixBaggage) {
 				if sc.Baggage == nil {
 					sc.Baggage = make(map[string]string)
 				}
 				sc.Baggage[strings.TrimPrefix(k, prefixBaggage)] = v
+			} else if strings.HasPrefix(k, prefixShadow) {
+				if shadowCarrier == nil {
+					shadowCarrier = make(opentracing.TextMapCarrier)
+				}
+				// We build a shadow textmap with the original shadow keys.
+				shadowCarrier.Set(strings.TrimPrefix(k, prefixShadow), v)
 			}
 		}
 		return nil
@@ -550,14 +443,20 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.S
 		return noopSpanContext{}, nil
 	}
 
-	if lightstep := getLightstep(); lightstep != nil {
-		// Extract the lightstep context. For this to work, our key-value "schema"
-		// must match lightstep's exactly (otherwise we get an error here).
-		sc.lightstep, err = lightstep.Extract(format, carrier)
-		if err != nil {
-			return noopSpanContext{}, err
+	if shadowType != "" {
+		// Using a shadow tracer only works if all hosts use the same shadow tracer.
+		// If that's not the case, ignore the shadow context.
+		if shadowTr := getShadowTracer(); shadowTr != nil &&
+			strings.ToLower(shadowType) == strings.ToLower(shadowTr.manager.name()) {
+			sc.shadowTr = shadowTr
+			// Extract the shadow context using the un-encapsulated textmap.
+			sc.shadowCtx, err = shadowTr.Extract(format, shadowCarrier)
+			if err != nil {
+				return noopSpanContext{}, err
+			}
 		}
 	}
+
 	return &sc, nil
 }
 
@@ -652,10 +551,10 @@ func StartSnowballTrace(
 	return opentracing.ContextWithSpan(ctx, span), span, nil
 }
 
-// FlushTracer flushes any lightstep tracer that is in use.
+// FlushTracer flushes any shadow tracer that is in use.
 func FlushTracer() {
-	if lsTr := getLightstep(); lsTr != nil {
-		_ = lightstep.FlushLightStepTracer(lsTr)
+	if shadowTr := getShadowTracer(); shadowTr != nil {
+		shadowTr.manager.flush(shadowTr.Tracer)
 	}
 }
 
