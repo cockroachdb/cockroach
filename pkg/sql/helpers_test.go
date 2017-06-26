@@ -19,9 +19,11 @@ package sql
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"golang.org/x/net/context"
 )
 
 // LeaseRemovalTracker can be used to wait for leases to be removed from the
@@ -105,4 +107,25 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 		table.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
 	}
 	m.tableNames.mu.Unlock()
+}
+
+// AcquireMinVersion acquires a read lease for the specified table ID.
+// the lease is grabbed on the latest version if >= specified version.
+// It returns a table descriptor and an expiration time.
+// A transaction is allowed to use the table descriptor as long as the txn
+// timestamp < expiration time.
+// TODO(andrei): move the tests that use this to the sql package and un-export
+// it.
+func (m *LeaseManager) AcquireMinVersion(
+	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
+) (sqlbase.TableDescriptor, hlc.Timestamp, error) {
+	t := m.findTableState(tableID, true)
+	if err := t.updateLatestVersion(ctx, minVersion, m); err != nil {
+		return sqlbase.TableDescriptor{}, hlc.Timestamp{}, err
+	}
+	table, err := t.acquire(ctx, txn, m)
+	if err != nil {
+		return sqlbase.TableDescriptor{}, hlc.Timestamp{}, err
+	}
+	return table.TableDescriptor, table.expiration, nil
 }
