@@ -75,6 +75,33 @@ func (c *sqlConn) ensureConn() error {
 	return nil
 }
 
+// getServerValue retrieves the first driverValue returned by the
+// given sql query. If the query fails or does not return a single
+// column, `false` is returned in the second result.
+func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
+	var dbVals [1]driver.Value
+
+	rows, err := c.Query(sql, nil)
+	if err != nil {
+		fmt.Fprintf(stderr, "error retrieving the %s: %v\n", what, err)
+		return nil, false
+	}
+	defer func() { _ = rows.Close() }()
+
+	if len(rows.Columns()) == 0 {
+		fmt.Fprintf(stderr, "cannot get the %s\n", what)
+		return nil, false
+	}
+
+	err = rows.Next(dbVals[:])
+	if err != nil {
+		fmt.Fprintf(stderr, "invalid %s: %v\n", what, err)
+		return nil, false
+	}
+
+	return dbVals[0], true
+}
+
 // ExecTxn runs fn inside a transaction and retries it as needed.
 // On non-retryable failures, the transaction is aborted and rolled
 // back; on success, the transaction is committed.
