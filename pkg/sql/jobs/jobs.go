@@ -154,6 +154,22 @@ func (jl *JobLogger) JobID() *int64 {
 	return jl.jobID
 }
 
+// setDetails sets the Details field on a JobPayload, making sure that the
+// input details is of a supported type.
+func setDetails(payload *JobPayload, details interface{}) error {
+	switch d := details.(type) {
+	case BackupJobDetails:
+		payload.Details = &JobPayload_Backup{Backup: &d}
+	case RestoreJobDetails:
+		payload.Details = &JobPayload_Restore{Restore: &d}
+	case SchemaChangeJobDetails:
+		payload.Details = &JobPayload_SchemaChange{SchemaChange: &d}
+	default:
+		return errors.Errorf("JobLogger: unsupported job details type %T", d)
+	}
+	return nil
+}
+
 // Created records the creation of a new job in the system.jobs table and
 // remembers the assigned ID of the job in the JobLogger. The job information is
 // read from the Job field at the time Created is called.
@@ -163,15 +179,8 @@ func (jl *JobLogger) Created(ctx context.Context) error {
 		Username:      jl.Job.Username,
 		DescriptorIDs: jl.Job.DescriptorIDs,
 	}
-	switch d := jl.Job.Details.(type) {
-	case BackupJobDetails:
-		payload.Details = &JobPayload_Backup{Backup: &d}
-	case RestoreJobDetails:
-		payload.Details = &JobPayload_Restore{Restore: &d}
-	case SchemaChangeJobDetails:
-		payload.Details = &JobPayload_SchemaChange{SchemaChange: &d}
-	default:
-		return errors.Errorf("JobLogger: unsupported job details type %T", d)
+	if err := setDetails(payload, jl.Job.Details); err != nil {
+		return err
 	}
 	return jl.insertJobRecord(ctx, payload)
 }
@@ -262,6 +271,16 @@ func (jl *JobLogger) Succeeded(ctx context.Context) error {
 		}
 		payload.FinishedMicros = jobTimestamp(timeutil.Now())
 		payload.FractionCompleted = 1.0
+		return true, nil
+	})
+}
+
+// SetDetails sets the details field of the tracked job.
+func (jl *JobLogger) SetDetails(ctx context.Context, details interface{}) error {
+	return jl.updateJobRecord(ctx, JobStatusSucceeded, func(payload *JobPayload) (bool, error) {
+		if err := setDetails(payload, details); err != nil {
+			return false, err
+		}
 		return true, nil
 	})
 }

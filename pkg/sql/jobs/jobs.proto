@@ -29,7 +29,7 @@ message RestoreJobDetails {
 }
 
 message SchemaChangeJobDetails {
-  // Intentionally empty.
+  int64 readAsOf = 1;
 }
 
 message JobPayload {
