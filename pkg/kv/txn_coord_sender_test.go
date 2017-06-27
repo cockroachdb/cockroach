@@ -674,7 +674,7 @@ func TestTxnCoordSenderCancel(t *testing.T) {
 	// context canceled error. Anything else is unexpected.
 	err := txn.CommitOrCleanup(ctx)
 	if err != nil && err.Error() != context.Canceled.Error() &&
-		!testutils.IsError(err, "does not exist") {
+		!testutils.IsError(err, "TransactionStatusError: does not exist") {
 		t.Fatal(err)
 	}
 }
