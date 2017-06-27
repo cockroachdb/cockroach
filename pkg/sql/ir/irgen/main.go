@@ -16,9 +16,11 @@
 package main
 
 import (
+	"bytes"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/analyzer"
+	"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/codegen"
 	"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser"
 )
 
@@ -28,7 +30,14 @@ func main() {
 		println(err.Error())
 		os.Exit(1)
 	}
-	_, err = analyzer.Analyze(defs)
+	namedTypes, err := analyzer.Analyze(defs)
+	if err != nil {
+		println(err.Error())
+		os.Exit(1)
+	}
+	var b bytes.Buffer
+	codegen.GenerateCode(&b, codegen.Settings{CapEnums: 1, CapRefs: 2, LenAlloc: 256}, namedTypes)
+	_, err = b.WriteTo(os.Stdout)
 	if err != nil {
 		println(err.Error())
 		os.Exit(1)

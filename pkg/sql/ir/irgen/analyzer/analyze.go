@@ -17,6 +17,7 @@ package analyzer
 
 import (
 	"fmt"
+	"go/ast"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/ir"
 	"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser"
@@ -29,12 +30,15 @@ func Analyze(defs []parser.Def) ([]ir.NamedType, error) {
 
 	// First pass: check for duplicate names and tag numbers.
 	for j, d := range defs {
-		namedTypes[j].Name = d.Name.Name
+		if d.Kind != parser.PrimDef && !ast.IsExported(string(d.Name.Name)) {
+			return nil, &parser.PosError{Pos: d.Name.Pos, Err: fmt.Errorf("name %q would not be exported", d.Name.Name)}
+		}
 		sym, ok := symTab[d.Name.Name]
 		if ok {
 			return nil, &parser.PosError{Pos: d.Name.Pos,
 				Err: fmt.Errorf("type %q was defined previously at %s", d.Name.Name, sym.pos)}
 		}
+		namedTypes[j].Name = d.Name.Name
 		symTab[d.Name.Name] = symbol{pos: d.Name.Pos, kind: d.Kind, typ: &namedTypes[j]}
 
 		switch d.Kind {
@@ -43,6 +47,9 @@ func Analyze(defs []parser.Def) ([]ir.NamedType, error) {
 			for _, i := range d.Items {
 				if i.IsReserved() {
 					continue
+				}
+				if !ast.IsExported(string(i.Name.Name)) {
+					return nil, &parser.PosError{Pos: d.Name.Pos, Err: fmt.Errorf("name %q would not be exported", i.Name.Name)}
 				}
 				pos, ok := itemTab[i.Name.Name]
 				if ok {
