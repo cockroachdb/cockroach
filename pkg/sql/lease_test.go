@@ -711,8 +711,9 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase, func(t *testing.T) {
-			if _, err := sqlDB.Exec(testCase); !testutils.IsError(err, "pq: transaction deadline exceeded") {
-				t.Fatal(err)
+			expErr := "pq: TransactionStatusError: transaction deadline exceeded"
+			if _, err := sqlDB.Exec(testCase); !testutils.IsError(err, expErr) {
+				t.Fatalf("expected err: %s, got: %v", expErr, err)
 			}
 		})
 	}
