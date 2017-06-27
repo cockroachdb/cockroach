@@ -43,7 +43,7 @@ type sessionVar struct {
 
 	// Get returns a string representation of a given variable to be used
 	// either by SHOW or in the pg_catalog table.
-	Get func(p *planner) string
+	Get func(*Session) string
 
 	// Reset performs mutations (usually on session) to effect the change
 	// desired by RESET commands.
@@ -55,7 +55,7 @@ type sessionVar struct {
 // throwing an error when trying to SET or SHOW them.
 var nopVar = sessionVar{
 	Set:   func(context.Context, *Session, []parser.TypedExpr) error { return nil },
-	Get:   func(*planner) string { return "" },
+	Get:   func(*Session) string { return "" },
 	Reset: func(*Session) error { return nil },
 }
 
@@ -74,10 +74,10 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(p *planner) string {
-			p.session.mu.RLock()
-			defer p.session.mu.RUnlock()
-			return p.session.mu.ApplicationName
+		Get: func(session *Session) string {
+			session.mu.RLock()
+			defer session.mu.RUnlock()
+			return session.mu.ApplicationName
 		},
 		Reset: func(session *Session) error {
 			session.resetApplicationName(session.defaults.applicationName)
@@ -94,7 +94,7 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/9.6/static/multibyte.html
 	// Also aliased to SET NAMES.
 	`client_encoding`: {
-		Get: func(*planner) string {
+		Get: func(*Session) string {
 			return "UTF8"
 		},
 		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
@@ -128,7 +128,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(p *planner) string { return p.session.Database },
+		Get: func(session *Session) string { return session.Database },
 		Reset: func(session *Session) error {
 			session.Database = session.defaults.database
 			return nil
@@ -137,7 +137,7 @@ var varGen = map[string]sessionVar{
 
 	`datestyle`: {
 		// Supported for PG compatibility only.
-		Get: func(*planner) string {
+		Get: func(*Session) string {
 			return "ISO"
 		},
 		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
@@ -176,7 +176,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
+		Get: func(session *Session) string { return session.DefaultIsolationLevel.String() },
 		Reset: func(session *Session) error {
 			session.DefaultIsolationLevel = enginepb.IsolationType(0)
 			return nil
@@ -204,8 +204,8 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(p *planner) string {
-			return p.session.DistSQLMode.String()
+		Get: func(session *Session) string {
+			return session.DistSQLMode.String()
 		},
 		Reset: func(session *Session) error {
 			session.DistSQLMode = DistSQLExecModeFromInt(DistSQLClusterExecMode.Get())
@@ -222,11 +222,11 @@ var varGen = map[string]sessionVar{
 
 	`max_index_keys`: {
 		// Supported for PG compatibility only.
-		Get: func(*planner) string { return "32" },
+		Get: func(*Session) string { return "32" },
 	},
 
 	`node_id`: {
-		Get: func(p *planner) string { return fmt.Sprintf("%d", p.LeaseMgr().nodeID.Get()) },
+		Get: func(session *Session) string { return fmt.Sprintf("%d", session.tables.leaseMgr.nodeID.Get()) },
 	},
 
 	`search_path`: {
@@ -255,7 +255,7 @@ var varGen = map[string]sessionVar{
 			session.SearchPath = newSearchPath
 			return nil
 		},
-		Get: func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
+		Get: func(session *Session) string { return strings.Join(session.SearchPath, ", ") },
 		Reset: func(session *Session) error {
 			session.SearchPath = sqlbase.DefaultSearchPath
 			return nil
@@ -263,10 +263,10 @@ var varGen = map[string]sessionVar{
 	},
 
 	`server_version`: {
-		Get: func(*planner) string { return PgServerVersion },
+		Get: func(*Session) string { return PgServerVersion },
 	},
 	`session_user`: {
-		Get: func(p *planner) string { return p.session.User },
+		Get: func(session *Session) string { return session.User },
 	},
 
 	`standard_conforming_strings`: {
@@ -285,21 +285,21 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get:   func(*planner) string { return "on" },
+		Get:   func(*Session) string { return "on" },
 		Reset: func(*Session) error { return nil },
 	},
 
 	`time zone`: {
-		Get: func(p *planner) string {
+		Get: func(session *Session) string {
 			// If the time zone is a "fixed offset" one, initialized from an offset
 			// and not a standard name, then we use a magic format in the Location's
 			// name. We attempt to parse that here and retrieve the original offset
 			// specified by the user.
-			_, origRepr, parsed := sqlbase.ParseFixedOffsetTimeZone(p.session.Location.String())
+			_, origRepr, parsed := sqlbase.ParseFixedOffsetTimeZone(session.Location.String())
 			if parsed {
 				return origRepr
 			}
-			return p.session.Location.String()
+			return session.Location.String()
 		},
 		Set: setTimeZone,
 		Reset: func(session *Session) error {
@@ -309,25 +309,27 @@ var varGen = map[string]sessionVar{
 	},
 
 	`transaction isolation level`: {
-		Get: func(p *planner) string { return p.txn.Isolation().String() },
+		// TODO(couchand): determine if we need to lock here (is this the session's main goroutine?)
+		Get: func(session *Session) string { return session.TxnState.mu.txn.Isolation().String() },
 	},
 
 	`transaction priority`: {
-		Get: func(p *planner) string { return p.txn.UserPriority().String() },
+		// TODO(couchand): determine if we need to lock here (is this the session's main goroutine?)
+		Get: func(session *Session) string { return session.TxnState.mu.txn.UserPriority().String() },
 	},
 
 	`transaction status`: {
-		Get: func(p *planner) string { return getTransactionState(&p.session.TxnState) },
+		Get: func(session *Session) string { return getTransactionState(&session.TxnState) },
 	},
 
 	`trace`: {
-		Get: func(p *planner) string {
-			if p.session.Tracing.Enabled() {
+		Get: func(session *Session) string {
+			if session.Tracing.Enabled() {
 				val := "on"
-				if p.session.Tracing.RecordingType() == tracing.SingleNodeRecording {
+				if session.Tracing.RecordingType() == tracing.SingleNodeRecording {
 					val += ", local"
 				}
-				if p.session.Tracing.KVTracingEnabled() {
+				if session.Tracing.KVTracingEnabled() {
 					val += ", kv"
 				}
 				return val
