@@ -57,14 +57,19 @@ func do(ctx context.Context) error {
 		return errors.Wrap(err, "could not find repository root")
 	}
 
-	rev, err := func() ([]byte, error) {
-		cmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	show, err := func() ([]byte, error) {
+		cmd := exec.CommandContext(ctx, "git", "show", "--format='%H	%cI'", "HEAD")
 		cmd.Dir = rootPkg.Dir
 		return cmd.Output()
 	}()
 	if err != nil {
-		return errors.Wrap(err, "could not determine commit")
+		return errors.Wrap(err, "could not determine commit hash and committer date")
 	}
+	parts := strings.Split(string(bytes.TrimSpace(show)), "	")
+	if len(parts) != 2 {
+		return errors.Errorf("expected commit hash and committer date, got %s", show)
+	}
+	commit, commitTime := parts[0], parts[1]
 
 	data, ok := os.LookupEnv(serviceAccountJSONEnv)
 	if !ok {
@@ -130,8 +135,9 @@ func do(ctx context.Context) error {
 
 		if _, err := fmt.Fprintf(
 			buffer,
-			"commit: %s\niteration: %d\nstart-time: %s\n",
-			bytes.TrimSpace(rev),
+			"commit: %s\ncommit-time: %s\niteration: %d\nstart-time: %s\n",
+			commit,
+			commitTime,
 			i,
 			timeutil.Now().UTC().Format(time.RFC3339),
 		); err != nil {
