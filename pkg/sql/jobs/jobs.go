@@ -193,6 +193,14 @@ func (j *Job) Succeeded(ctx context.Context) error {
 	})
 }
 
+// SetDetails sets the details field of the currently running tracked job.
+func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
+	return j.update(ctx, "", func(payload *Payload) (bool, error) {
+		payload.Details = WrapPayloadDetails(details)
+		return true, nil
+	})
+}
+
 // Payload returns the most recently sent Payload for this Job. Will return an
 // empty Payload until Created() is called on a new Job.
 func (j *Job) Payload() Payload {
@@ -304,9 +312,18 @@ func (j *Job) update(
 			return err
 		}
 
-		const updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
+		var updateStmt string
+		var updateArgs []interface{}
+		if newStatus == "" {
+			updateStmt = "UPDATE system.jobs SET payload = $1 WHERE id = $2"
+			updateArgs = []interface{}{payloadBytes, *j.id}
+		} else {
+			updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
+			updateArgs = []interface{}{newStatus, payloadBytes, *j.id}
+		}
+
 		n, err := j.registry.ex.ExecuteStatementInTransaction(
-			ctx, "job-update", txn, updateStmt, newStatus, payloadBytes, *j.id)
+			ctx, "job-update", txn, updateStmt, updateArgs...)
 		if err != nil {
 			return err
 		}

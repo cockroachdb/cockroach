@@ -418,4 +418,29 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("set details works", func(t *testing.T) {
+		record := jobs.Record{Details: jobs.RestoreDetails{}}
+		expect := expectation{
+			DB:     sqlDB,
+			Record: record,
+			Type:   jobs.TypeRestore,
+			Before: timeutil.Now(),
+		}
+		job := registry.NewJob(record)
+		if err := job.Created(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.verify(job.ID(), jobs.StatusPending); err != nil {
+			t.Fatal(err)
+		}
+		newDetails := jobs.RestoreDetails{LowWaterMark: []byte{42}}
+		expect.Record.Details = newDetails
+		if err := job.SetDetails(ctx, newDetails); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.verify(job.ID(), jobs.StatusPending); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
