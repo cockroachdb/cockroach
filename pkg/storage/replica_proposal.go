@@ -663,6 +663,22 @@ func (r *Replica) handleReplicatedEvalResult(
 	if newLease := rResult.State.Lease; newLease != nil {
 		rResult.State.Lease = nil // for assertion
 
+		// Subtlety ahead - we can't update the lease before updating the
+		// timestamp cache if we don't want anomalies (#16610).
+		//
+		// TODO(tschottdorf): refactor leasePostApply so that it does the
+		// correctness stuff here and random triggers/etc there.
+		desc := r.Desc()
+		r.store.tsCacheMu.Lock()
+		for _, keyRange := range makeReplicatedKeyRanges(desc) {
+			for _, readOnly := range []bool{true, false} {
+				r.store.tsCacheMu.cache.add(
+					keyRange.start.Key, keyRange.end.Key,
+					newLease.Start, lowWaterTxnIDMarker, readOnly)
+			}
+		}
+		r.store.tsCacheMu.Unlock()
+
 		r.mu.Lock()
 		replicaID := r.mu.replicaID
 		prevLease := *r.mu.state.Lease
