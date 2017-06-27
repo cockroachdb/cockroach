@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
@@ -83,6 +84,8 @@ var (
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
 	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
+
+	clusterOrganization = settings.RegisterStringSetting("cluster.organization", "organization name", "")
 )
 
 // Server is the cockroach server node.
@@ -364,11 +367,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(s.grpc)
 	}
 
+	nodeInfo := sql.NodeInfo{
+		ClusterID:    s.ClusterID,
+		NodeID:       &s.nodeIDContainer,
+		Organization: clusterOrganization,
+	}
+
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
+		NodeInfo:                nodeInfo,
 		AmbientCtx:              s.cfg.AmbientCtx,
-		ClusterID:               s.ClusterID,
-		NodeID:                  &s.nodeIDContainer,
 		DB:                      s.db,
 		Gossip:                  s.gossip,
 		DistSender:              s.distSender,

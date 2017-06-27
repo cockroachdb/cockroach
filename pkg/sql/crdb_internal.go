@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"reflect"
 	"sort"
 	"time"
 
@@ -53,27 +52,24 @@ CREATE TABLE crdb_internal.node_build_info (
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		leaseMgr := p.LeaseMgr()
-		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
+		node := p.ExecCfg().NodeInfo
 
-		if err := addRow(
-			nodeID,
-			parser.NewDString("Name"),
-			parser.NewDString("CockroachDB"),
-		); err != nil {
-			return err
-		}
+		nodeID := parser.NewDInt(parser.DInt(int64(node.NodeID.Get())))
 
 		info := build.GetInfo()
-		s := reflect.ValueOf(&info).Elem()
-		t := s.Type()
-		for i := 0; i < s.NumField(); i++ {
-			f := s.Field(i)
-			if sv, ok := f.Interface().(string); ok {
-				fname := t.Field(i).Name
-				if err := addRow(nodeID, parser.NewDString(fname), parser.NewDString(sv)); err != nil {
-					return err
-				}
+		for k, v := range map[string]string{
+			"Name":         "CockroachDB",
+			"ClusterID":    node.ClusterID().String(),
+			"Organization": node.Organization.Get(),
+			"Build":        info.Short(),
+			"Version":      info.Tag,
+		} {
+			if err := addRow(
+				nodeID,
+				parser.NewDString(k),
+				parser.NewDString(v),
+			); err != nil {
+				return err
 			}
 		}
 		return nil
