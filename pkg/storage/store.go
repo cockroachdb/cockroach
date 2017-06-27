@@ -434,7 +434,7 @@ type Store struct {
 	// data destruction.
 	nonEmptySnapshotApplySem chan struct{}
 
-	// Sempahore to limit empty snapshot application. Empty snapshots are limited
+	// Semaphore to limit empty snapshot application. Empty snapshots are limited
 	// separately from non-empty snapshots so that an store with empty ranges can
 	// transmit those empty ranges to an underfull store without getting stuck
 	// behind large snapshots from a store without empty ranges.
