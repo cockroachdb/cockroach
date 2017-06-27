@@ -41,6 +41,12 @@ extern "C" {
 #include "_cgo_export.h"
 }  // extern "C"
 
+#if defined(COMPILER_GCC) || defined(__clang__)
+#define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+#else
+#define WARN_UNUSED_RESULT
+#endif
+
 struct DBCache {
   std::shared_ptr<rocksdb::Cache> rep;
 };
@@ -248,7 +254,7 @@ std::string EncodePrefixNextKey(DBSlice k) {
   return s;
 }
 
-bool SplitKey(rocksdb::Slice buf, rocksdb::Slice *key, rocksdb::Slice *timestamp) {
+WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice *key, rocksdb::Slice *timestamp) {
   if (buf.empty()) {
     return false;
   }
@@ -261,7 +267,7 @@ bool SplitKey(rocksdb::Slice buf, rocksdb::Slice *key, rocksdb::Slice *timestamp
   return true;
 }
 
-bool DecodeTimestamp(rocksdb::Slice *timestamp, int64_t *wall_time, int32_t *logical) {
+WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice *timestamp, int64_t *wall_time, int32_t *logical) {
   uint64_t w;
   if (!DecodeUint64(timestamp, &w)) {
     return false;
@@ -279,7 +285,7 @@ bool DecodeTimestamp(rocksdb::Slice *timestamp, int64_t *wall_time, int32_t *log
   return true;
 }
 
-bool DecodeHLCTimestamp(rocksdb::Slice buf, cockroach::util::hlc::Timestamp* timestamp) {
+WARN_UNUSED_RESULT bool DecodeHLCTimestamp(rocksdb::Slice buf, cockroach::util::hlc::Timestamp* timestamp) {
   int64_t wall_time;
   int32_t logical;
   if (!DecodeTimestamp(&buf, &wall_time, &logical)) {
@@ -290,7 +296,7 @@ bool DecodeHLCTimestamp(rocksdb::Slice buf, cockroach::util::hlc::Timestamp* tim
   return true;
 }
 
-bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *wall_time, int32_t *logical) {
+WARN_UNUSED_RESULT bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *wall_time, int32_t *logical) {
   key->clear();
 
   rocksdb::Slice timestamp;
@@ -412,7 +418,7 @@ void SetTag(std::string *val, cockroach::roachpb::ValueType tag) {
   (*val)[kTagPos] = tag;
 }
 
-bool ParseProtoFromValue(const std::string &val, google::protobuf::MessageLite *msg) {
+WARN_UNUSED_RESULT bool ParseProtoFromValue(const std::string &val, google::protobuf::MessageLite *msg) {
   if (val.size() < kHeaderSize) {
     return false;
   }
@@ -555,7 +561,7 @@ void SerializeTimeSeriesToValue(
 // InternalTimeSeriesData messages. The messages cannot be merged if they have
 // different start timestamps or sample durations. Returns true if the merge is
 // successful.
-bool MergeTimeSeriesValues(
+WARN_UNUSED_RESULT bool MergeTimeSeriesValues(
     std::string *left, const std::string &right, bool full_merge, rocksdb::Logger* logger) {
   // Attempt to parse TimeSeriesData from both Values.
   cockroach::roachpb::InternalTimeSeriesData left_ts;
@@ -656,7 +662,7 @@ bool MergeTimeSeriesValues(
 // This method is the single-value equivalent of MergeTimeSeriesValues, and is
 // used in the case where the first value is merged into the key. Returns true
 // if the merge is successful.
-bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
+WARN_UNUSED_RESULT bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
   // Attempt to parse TimeSeriesData from both Values.
   cockroach::roachpb::InternalTimeSeriesData val_ts;
   if (!ParseProtoFromValue(*val, &val_ts)) {
@@ -697,7 +703,7 @@ bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
   return true;
 }
 
-bool MergeValues(cockroach::storage::engine::enginepb::MVCCMetadata *left,
+WARN_UNUSED_RESULT bool MergeValues(cockroach::storage::engine::enginepb::MVCCMetadata *left,
                  const cockroach::storage::engine::enginepb::MVCCMetadata &right,
                  bool full_merge, rocksdb::Logger* logger) {
   if (left->has_raw_bytes()) {
@@ -732,7 +738,9 @@ bool MergeValues(cockroach::storage::engine::enginepb::MVCCMetadata *left,
       left->mutable_merge_timestamp()->CopyFrom(right.merge_timestamp());
     }
     if (full_merge && IsTimeSeriesData(left->raw_bytes())) {
-      ConsolidateTimeSeriesValue(left->mutable_raw_bytes(), logger);
+      if (!ConsolidateTimeSeriesValue(left->mutable_raw_bytes(), logger)) {
+          return false;
+      }
     }
     return true;
   }
@@ -762,7 +770,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
       const rocksdb::Slice* existing_value,
       const std::deque<std::string>& operand_list,
       std::string* new_value,
-      rocksdb::Logger* logger) const {
+      rocksdb::Logger* logger) const WARN_UNUSED_RESULT {
     // TODO(pmattis): Taken from the old merger code, below are some
     // details about how errors returned by the merge operator are
     // handled. Need to test various error scenarios and decide on
@@ -805,7 +813,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
       const rocksdb::Slice& key,
       const std::deque<rocksdb::Slice>& operand_list,
       std::string* new_value,
-      rocksdb::Logger* logger) const {
+      rocksdb::Logger* logger) const WARN_UNUSED_RESULT {
     cockroach::storage::engine::enginepb::MVCCMetadata meta;
 
     for (int i = 0; i < operand_list.size(); i++) {
@@ -825,7 +833,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
   bool MergeOne(cockroach::storage::engine::enginepb::MVCCMetadata* meta,
                 const rocksdb::Slice& operand,
                 bool full_merge,
-                rocksdb::Logger* logger) const {
+                rocksdb::Logger* logger) const WARN_UNUSED_RESULT {
     cockroach::storage::engine::enginepb::MVCCMetadata operand_meta;
     if (!operand_meta.ParseFromArray(operand.data(), operand.size())) {
       rocksdb::Warn(logger, "corrupted operand value");
@@ -1173,7 +1181,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   // entries for a particular key are stored consecutively in the
   // write batch with the "earlier" entries appearing first. Returns
   // true if the current entry is deleted and false otherwise.
-  bool ProcessDelta() {
+  bool ProcessDelta() WARN_UNUSED_RESULT {
     IteratorGetter base(equal_keys_ ? base_iterator_.get() : NULL);
     // The contents of WBWIIterator.Entry() are only valid until the
     // next mutation to the write batch. So keep a copy of the key
