@@ -145,7 +145,7 @@ func do(ctx context.Context) error {
 
 			cmd := exec.CommandContext(ctx, binaryPath, "-test.timeout", "0", "-test.run", "-", "-test.bench", ".", "-test.benchmem")
 			cmd.Dir = filepath.Dir(binaryPath)
-			cmd.Stdout = io.MultiWriter(buffer, os.Stdout)
+			cmd.Stdout = buffer
 			cmd.Stderr = os.Stderr
 
 			log.Printf("exec: %s", cmd.Args)
