@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -71,7 +70,9 @@ func assertEqualKVs(
 	}
 }
 
-func runMVCCIterateIncremental(t *testing.T) {
+func TestMVCCIterateIncremental(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
@@ -198,20 +199,6 @@ func runMVCCIterateIncremental(t *testing.T) {
 	t.Run("intents4", assertEqualKVs(e, keyMin, keyMax, ts0, tsMax, kvs(kv1_4_4, kv2_2_2)))
 }
 
-func TestMVCCIterateIncremental(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	t.Run("NormalIterators", func(t *testing.T) {
-		settings.TestingSetBool(&TimeBoundIteratorsEnabled, false)
-		runMVCCIterateIncremental(t)
-	})
-
-	t.Run("TimeBoundIterators", func(t *testing.T) {
-		settings.TestingSetBool(&TimeBoundIteratorsEnabled, true)
-		runMVCCIterateIncremental(t)
-	})
-}
-
 func TestMVCCIterateTimeBound(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -256,22 +243,27 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 		t.Run(fmt.Sprintf("%s-%s", testCase.start, testCase.end), func(t *testing.T) {
 			defer leaktest.AfterTest(t)()
 
-			settings.TestingSetBool(&TimeBoundIteratorsEnabled, false)
-			iter := NewMVCCIncrementalIterator(eng, testCase.start, testCase.end)
-			defer iter.Close()
-
 			var expectedKVs []engine.MVCCKeyValue
-			for iter.Reset(keys.MinKey, keys.MaxKey); iter.Valid(); iter.Next() {
-				expectedKVs = append(expectedKVs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
-			}
-			if iter.err != nil {
-				t.Fatal(err)
+			iter := eng.NewIterator(false)
+			defer iter.Close()
+			iter.Seek(engine.MVCCKey{})
+			for {
+				ok, err := iter.Valid()
+				if err != nil {
+					t.Fatal(err)
+				} else if !ok {
+					break
+				}
+				ts := iter.Key().Timestamp
+				if ts.Less(testCase.end) && (testCase.start.Less(ts) || testCase.start == ts) {
+					expectedKVs = append(expectedKVs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+				}
+				iter.Next()
 			}
 			if len(expectedKVs) < 1 {
 				t.Fatalf("source of truth had no expected KVs; likely a bug in the test itself")
 			}
 
-			settings.TestingSetBool(&TimeBoundIteratorsEnabled, true)
 			assertEqualKVs(eng, keys.MinKey, keys.MaxKey, testCase.start, testCase.end, expectedKVs)(t)
 		})
 	}
