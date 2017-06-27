@@ -2463,7 +2463,7 @@ func (r *Replica) tryExecuteWriteBatch(
 
 	log.Event(ctx, "applied timestamp cache")
 
-	ch, tryAbandon, undoQuotaAcquistion, err := r.propose(ctx, lease, ba, endCmds, spans)
+	ch, tryAbandon, undoQuotaAcquisition, err := r.propose(ctx, lease, ba, endCmds, spans)
 	if err != nil {
 		return nil, roachpb.NewError(err), proposalNoRetry
 	}
@@ -2474,7 +2474,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		//  - Proposals get duplicated.
 		// To counter this our quota pool is capped at the initial quota size.
 		if pErr != nil {
-			undoQuotaAcquistion()
+			undoQuotaAcquisition()
 		}
 	}()
 
