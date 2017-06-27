@@ -75,14 +75,14 @@ func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 		if v.Set == nil {
 			return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
 		}
-		if err := v.Set(ctx, p, typedValues); err != nil {
+		if err := v.Set(ctx, p.session, typedValues); err != nil {
 			return nil, err
 		}
 	case parser.SetModeReset:
 		if v.Reset == nil {
 			return nil, fmt.Errorf("variable \"%s\" cannot be reset", name)
 		}
-		if err := v.Reset(p); err != nil {
+		if err := v.Reset(p.session); err != nil {
 			return nil, err
 		}
 	}
@@ -233,8 +233,9 @@ func (p *planner) toSettingString(
 	}
 }
 
-func (p *planner) datumAsString(name string, value parser.TypedExpr) (string, error) {
-	val, err := value.Eval(&p.evalCtx)
+func datumAsString(session *Session, name string, value parser.TypedExpr) (string, error) {
+	evalCtx := session.evalCtx()
+	val, err := value.Eval(&evalCtx)
 	if err != nil {
 		return "", err
 	}
@@ -246,11 +247,11 @@ func (p *planner) datumAsString(name string, value parser.TypedExpr) (string, er
 	return string(s), nil
 }
 
-func (p *planner) getStringVal(name string, values []parser.TypedExpr) (string, error) {
+func getStringVal(session *Session, name string, values []parser.TypedExpr) (string, error) {
 	if len(values) != 1 {
 		return "", fmt.Errorf("set %s: requires a single string value", name)
 	}
-	return p.datumAsString(name, values[0])
+	return datumAsString(session, name, values[0])
 }
 
 func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, error) {
@@ -267,11 +268,12 @@ func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, 
 	return &emptyNode{}, nil
 }
 
-func setTimeZone(_ context.Context, p *planner, values []parser.TypedExpr) error {
+func setTimeZone(_ context.Context, session *Session, values []parser.TypedExpr) error {
 	if len(values) != 1 {
 		return errors.New("set time zone requires a single argument")
 	}
-	d, err := values[0].Eval(&p.evalCtx)
+	evalCtx := session.evalCtx()
+	d, err := values[0].Eval(&evalCtx)
 	if err != nil {
 		return err
 	}
@@ -321,6 +323,6 @@ func setTimeZone(_ context.Context, p *planner, values []parser.TypedExpr) error
 	if loc == nil {
 		loc = sqlbase.FixedOffsetTimeZoneToLocation(int(offset), d.String())
 	}
-	p.session.Location = loc
+	session.Location = loc
 	return nil
 }
