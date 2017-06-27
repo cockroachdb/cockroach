@@ -167,7 +167,7 @@ func TestTruncate(t *testing.T) {
 			t.Errorf("%d: intersection failure: %v", i, err)
 			continue
 		}
-		ba, num, err := truncate(original, rs)
+		ba, pos, err := truncate(original, rs)
 		if err != nil || test.err != "" {
 			if !testutils.IsError(err, test.err) {
 				t.Errorf("%d: %v (expected: %q)", i, err, test.err)
@@ -189,7 +189,7 @@ func TestTruncate(t *testing.T) {
 				reqs++
 			}
 		}
-		if reqs != num {
+		if num := len(pos); reqs != num {
 			t.Errorf("%d: counted %d requests, but truncation indicated %d", i, reqs, num)
 		}
 		if !reflect.DeepEqual(original, goldenOriginal) {
