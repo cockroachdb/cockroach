@@ -296,19 +296,19 @@ func (ptq *pushTxnQueue) MaybeWait(
 		pending: make(chan *roachpb.Transaction, 1),
 	}
 	pending.waiters = append(pending.waiters, push)
-	if log.V(2) {
-		if req.PusherTxn.ID != nil {
-			log.Infof(
-				ctx,
-				"%s pushing %s (%d pending)",
-				req.PusherTxn.ID.Short(),
-				req.PusheeTxn.ID.Short(),
-				len(pending.waiters),
-			)
-		} else {
-			log.Infof(ctx, "pushing %s (%d pending)", req.PusheeTxn.ID.Short(), len(pending.waiters))
-		}
+	if req.PusherTxn.ID != nil {
+		log.VEventf(
+			ctx,
+			2,
+			"%s pushing %s (%d pending)",
+			req.PusherTxn.ID.Short(),
+			req.PusheeTxn.ID.Short(),
+			len(pending.waiters),
+		)
+	} else {
+		log.VEventf(ctx, 2, "pushing %s (%d pending)", req.PusheeTxn.ID.Short(), len(pending.waiters))
 	}
+
 	ptq.mu.Unlock()
 
 	// Periodically refresh the pusher and pushee txns (with an
@@ -322,9 +322,11 @@ func (ptq *pushTxnQueue) MaybeWait(
 		select {
 		case <-ctx.Done():
 			// Caller has given up.
+			log.Event(ctx, "pusher giving up due to context cancellation")
 			return nil, roachpb.NewError(ctx.Err())
 
 		case txn := <-push.pending:
+			log.Eventf(ctx, "result of pending push: %v", txn)
 			// If txn is nil, the queue was cleared, presumably because the
 			// replica lost the range lease. Return not pushed so request
 			// proceeds and is redirected to the new range lease holder.
@@ -335,12 +337,15 @@ func (ptq *pushTxnQueue) MaybeWait(
 			// pushed. If this PushTxn request is satisfied, return
 			// successful PushTxn response.
 			if isPushed(req, txn) {
+				log.Event(ctx, "push request is satisfied")
 				return createPushTxnResponse(txn), nil
 			}
 			// If not successfully pushed, return not pushed so request proceeds.
+			log.Event(ctx, "not pushed; returning to caller")
 			return nil, nil
 
 		case <-queryCh:
+			log.Eventf(ctx, "querying pushee %+v", req.PusheeTxn)
 			// Query the pusher & pushee txns periodically to get updated
 			// status or notice either has expired.
 			updatedPushee, _, pErr := ptq.queryTxnStatus(ctx, req.PusheeTxn, ptq.store.Clock().Now())
@@ -348,22 +353,26 @@ func (ptq *pushTxnQueue) MaybeWait(
 				return nil, pErr
 			} else if updatedPushee == nil {
 				// Continue with push.
+				log.Event(ctx, "pushee not found, push should now succeed")
 				return nil, nil
 			}
+			log.Eventf(ctx, "updated pushee is %+v", updatedPushee)
+
 			pusheePriority := updatedPushee.Priority
 			pending.txn.Store(updatedPushee)
 			if isExpired(ptq.store.Clock().Now(), updatedPushee) {
-				if log.V(1) {
-					log.Warningf(ctx, "pushing expired txn %s", req.PusheeTxn.ID.Short())
-				}
+				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				return nil, nil
 			}
 
 			if req.PusherTxn.ID != nil {
+				log.Eventf(ctx, "updating pusher %+v", req.PusherTxn)
 				updatedPusher, waitingTxns, pErr := ptq.queryTxnStatus(ctx, req.PusherTxn.TxnMeta, ptq.store.Clock().Now())
 				if pErr != nil {
 					return nil, pErr
 				} else if updatedPusher != nil {
+					log.Eventf(ctx, "updated pusher is %+v", updatedPusher)
+
 					switch updatedPusher.Status {
 					case roachpb.COMMITTED:
 						return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedPusher)
@@ -385,32 +394,32 @@ func (ptq *pushTxnQueue) MaybeWait(
 					for id := range push.mu.dependents {
 						dependents = append(dependents, id.Short())
 					}
-					if log.V(2) {
-						log.Infof(
-							ctx,
-							"%s (%d), pushing %s (%d), has dependencies=%s",
-							req.PusherTxn.ID.Short(),
-							pusherPriority,
-							req.PusheeTxn.ID.Short(),
-							pusheePriority,
-							dependents,
-						)
-					}
+					log.VEventf(
+						ctx,
+						2,
+						"%s (%d), pushing %s (%d), has dependencies=%s",
+						req.PusherTxn.ID.Short(),
+						pusherPriority,
+						req.PusheeTxn.ID.Short(),
+						pusheePriority,
+						dependents,
+					)
 					push.mu.Unlock()
+
+					log.Eventf(ctx, "have dependency: %t, dependents: %v", haveDependency, dependents)
 
 					if haveDependency {
 						// Break the deadlock if the pusher has higher priority.
 						p1, p2 := pusheePriority, pusherPriority
 						if p1 < p2 || (p1 == p2 && bytes.Compare(req.PusheeTxn.ID.GetBytes(), req.PusherTxn.ID.GetBytes()) < 0) {
-							if log.V(1) {
-								log.Infof(
-									ctx,
-									"%s breaking deadlock by force push of %s; dependencies=%s",
-									req.PusherTxn.ID.Short(),
-									req.PusheeTxn.ID.Short(),
-									dependents,
-								)
-							}
+							log.VEventf(
+								ctx,
+								1,
+								"%s breaking deadlock by force push of %s; dependencies=%s",
+								req.PusherTxn.ID.Short(),
+								req.PusheeTxn.ID.Short(),
+								dependents,
+							)
 							return nil, errDeadlock
 						}
 					}
