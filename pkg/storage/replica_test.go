@@ -1474,11 +1474,11 @@ func pushTxnArgs(
 		Span: roachpb.Span{
 			Key: pushee.Key,
 		},
-		Now:           pusher.Timestamp,
-		PushTo:        pusher.Timestamp,
-		PusherTxn:     *pusher,
-		PusheeTxn:     pushee.TxnMeta,
-		PushType:      pushType,
+		Now:       pusher.Timestamp,
+		PushTo:    pusher.Timestamp,
+		PusherTxn: *pusher,
+		PusheeTxn: pushee.TxnMeta,
+		PushType:  pushType,
 	}
 }
 

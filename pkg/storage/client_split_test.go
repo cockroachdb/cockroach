@@ -2036,10 +2036,10 @@ func TestDistributedTxnCleanup(t *testing.T) {
 							Span: roachpb.Span{
 								Key: txn.Proto().Key,
 							},
-							Now:           store.Clock().Now(),
-							PusheeTxn:     txn.Proto().TxnMeta,
-							PushType:      roachpb.PUSH_ABORT,
-							Force:         true,
+							Now:       store.Clock().Now(),
+							PusheeTxn: txn.Proto().TxnMeta,
+							PushType:  roachpb.PUSH_ABORT,
+							Force:     true,
 						})
 						_, pErr := store.Send(ctx, ba)
 						if pErr != nil {

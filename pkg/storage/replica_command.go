@@ -1694,8 +1694,8 @@ func evalPushTxn(
 }
 
 func canPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
-		return (pusher.Priority > roachpb.MinTxnPriority && pushee.Priority == roachpb.MinTxnPriority) ||
-			(pusher.Priority == roachpb.MaxTxnPriority && pushee.Priority < pusher.Priority)
+	return (pusher.Priority > roachpb.MinTxnPriority && pushee.Priority == roachpb.MinTxnPriority) ||
+		(pusher.Priority == roachpb.MaxTxnPriority && pushee.Priority < pusher.Priority)
 }
 
 // evalQueryTxn fetches the current state of a transaction.
