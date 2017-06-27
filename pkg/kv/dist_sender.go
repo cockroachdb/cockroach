@@ -655,8 +655,9 @@ func (ds *DistSender) Send(
 }
 
 type response struct {
-	reply *roachpb.BatchResponse
-	pErr  *roachpb.Error
+	reply     *roachpb.BatchResponse
+	positions []int
+	pErr      *roachpb.Error
 }
 
 // divideAndSendBatchToRanges sends the supplied batch to all of the
@@ -673,6 +674,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// implicated in the span (rs) and combines them into a single
 	// BatchResponse when finished.
 	var responseChs []chan response
+
 	defer func() {
 		if r := recover(); r != nil {
 			// If we're in the middle of a panic, don't wait on responseChs.
@@ -689,15 +691,15 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			if br == nil {
 				// First response from a Range.
 				br = resp.reply
-			} else {
-				// This was the second or later call in a cross-Range request.
-				// Combine the new response with the existing one.
-				if err := br.Combine(resp.reply); err != nil {
-					pErr = roachpb.NewError(err)
-					return
-				}
-				br.Txn.Update(resp.reply.Txn)
+				br.Responses = make([]roachpb.ResponseUnion, len(ba.Requests))
 			}
+			// This was the second or later call in a cross-Range request.
+			// Combine the new response with the existing one.
+			if err := br.Combine(resp.reply, resp.positions); err != nil {
+				pErr = roachpb.NewError(err)
+				return
+			}
+			br.Txn.Update(resp.reply.Txn)
 		}
 
 		// If we experienced an error, don't neglect to update the error's
@@ -910,8 +912,8 @@ func (ds *DistSender) sendPartialBatch(
 	if err != nil {
 		return response{pErr: roachpb.NewError(err)}
 	}
-	truncBA, numActive, err := truncate(ba, intersected)
-	if numActive == 0 && err == nil {
+	truncBA, positions, err := truncate(ba, intersected)
+	if len(positions) == 0 && err == nil {
 		// This shouldn't happen in the wild, but some tests exercise it.
 		return response{
 			pErr: roachpb.NewErrorf("truncation resulted in empty batch on %s: %s", intersected, ba),
@@ -942,7 +944,7 @@ func (ds *DistSender) sendPartialBatch(
 
 		// If sending succeeded, return immediately.
 		if pErr == nil {
-			return response{reply: reply}
+			return response{reply: reply, positions: positions}
 		}
 
 		log.ErrEventf(ctx, "reply error %s: %s", ba, pErr)
