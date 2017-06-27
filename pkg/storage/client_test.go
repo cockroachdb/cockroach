@@ -815,9 +815,11 @@ func (m *multiTestContext) addStore(idx int) {
 	}
 	store.WaitForInit()
 
-	m.nodeLivenesses[idx].StartHeartbeat(context.Background(), stopper, func(ctx context.Context) error {
+	m.nodeLivenesses[idx].StartHeartbeat(context.Background(), stopper, func(ctx context.Context) {
 		now := m.clock.Now()
-		return store.WriteLastUpTimestamp(ctx, now)
+		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
+			log.Warning(ctx, err)
+		}
 	})
 	// Wait until we see the first heartbeat.
 	testutils.SucceedsSoon(m.t, func() error {
@@ -891,16 +893,19 @@ func (m *multiTestContext) restartStore(i int) {
 	store := storage.NewStore(cfg, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
 	m.stores[i] = store
 
+	ctx := context.Background()
+
 	// Need to start the store before adding it so that the store ID is initialized.
-	if err := store.Start(context.Background(), stopper); err != nil {
+	if err := store.Start(ctx, stopper); err != nil {
 		m.t.Fatal(err)
 	}
 	m.senders[i].AddStore(store)
 	m.mu.Unlock()
-
-	cfg.NodeLiveness.StartHeartbeat(context.Background(), stopper, func(ctx context.Context) error {
+	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, func(ctx context.Context) {
 		now := m.clock.Now()
-		return store.WriteLastUpTimestamp(context.Background(), now)
+		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
+			log.Warning(ctx, err)
+		}
 	})
 	// Wait until we see the first heartbeat.
 	testutils.SucceedsSoon(m.t, func() error {

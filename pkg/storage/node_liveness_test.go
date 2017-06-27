@@ -713,11 +713,7 @@ func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roa
 		for _, nl := range mtc.nodeLivenesses {
 			livenesses := nl.GetLivenesses()
 			for _, liveness := range livenesses {
-				expected := false
-				if liveness.NodeID == nodeID {
-					expected = true
-				}
-				if liveness.Decommissioning != expected {
+				if liveness.Decommissioning != (liveness.NodeID == nodeID) {
 					return errors.Errorf("unexpected Decommissioning value of %v for node %v", liveness.Decommissioning, liveness.NodeID)
 				}
 			}

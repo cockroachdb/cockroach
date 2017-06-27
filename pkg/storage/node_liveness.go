@@ -42,6 +42,8 @@ var (
 	// about a node for which nothing is known.
 	ErrNoLivenessRecord = errors.New("node not in the liveness table")
 
+	errChangeDecommissioningFailed = errors.New("failed to change the decommissioning status")
+
 	// errSkippedHeartbeat is returned when a heartbeat request fails because
 	// the underlying liveness record has had its epoch incremented.
 	errSkippedHeartbeat = errors.New("heartbeat failed on epoch increment")
@@ -82,7 +84,7 @@ type IsLiveCallback func(nodeID roachpb.NodeID)
 
 // HeartbeatCallback is invoked whenever this node updates its own liveness status,
 // indicating that it is alive.
-type HeartbeatCallback func(context.Context) error
+type HeartbeatCallback func(context.Context)
 
 // NodeLiveness encapsulates information on node liveness and provides
 // an API for querying, updating, and invalidating node
@@ -100,6 +102,7 @@ type NodeLiveness struct {
 	heartbeatInterval time.Duration
 	pauseHeartbeat    atomic.Value // contains a bool
 	sem               chan struct{}
+	triggerHeartbeat  chan struct{} // for testing
 	metrics           LivenessMetrics
 
 	mu struct {
@@ -129,6 +132,7 @@ func NewNodeLiveness(
 		livenessThreshold: livenessThreshold,
 		heartbeatInterval: livenessThreshold - renewalDuration,
 		sem:               make(chan struct{}, 1),
+		triggerHeartbeat:  make(chan struct{}, 1),
 	}
 	nl.metrics = LivenessMetrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
@@ -162,20 +166,33 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool) {
 	}
 }
 
-// SetDecommissioning calls PauseHeartbeat with the given boolean and then attempts to
-// update the liveness record.
+// SetDecommissioning runs a best-effort attempt of marking the the liveness
+// record as decommissioning.
 func (nl *NodeLiveness) SetDecommissioning(
 	ctx context.Context, nodeID roachpb.NodeID, decommission bool,
 ) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
+	var err error
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		liveness, err := nl.GetLiveness(nodeID)
-		if err != nil && err != ErrNoLivenessRecord {
-			log.Errorf(ctx, "unexpected error getting liveness: %s", err)
+		var liveness *Liveness
+		liveness, err = nl.GetLiveness(nodeID)
+		if err != nil {
+			if errors.Cause(err) == ErrNoLivenessRecord {
+				continue // expected, though should be rare in practice
+			}
+			break // failure
 		}
-		if err := nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission); err == nil {
-			return
+		err = nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
+		if err != nil {
+			if errors.Cause(err) == errChangeDecommissioningFailed {
+				continue // expected when epoch incremented
+			}
+			break // failure
 		}
+		break // success
+	}
+	if err != nil {
+		log.Errorf(ctx, "unable to mark node as decommissioning: %s", err)
 	}
 }
 
@@ -223,12 +240,12 @@ func (nl *NodeLiveness) setDecommissioningInternal(
 	if nodeID == nl.gossip.NodeID.Get() {
 		select {
 		case nl.sem <- struct{}{}:
+			defer func() {
+				<-nl.sem
+			}()
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-		defer func() {
-			<-nl.sem
-		}()
 	}
 
 	newLiveness := Liveness{
@@ -243,7 +260,7 @@ func (nl *NodeLiveness) setDecommissioningInternal(
 		if actual.Decommissioning == newLiveness.Decommissioning {
 			return nil
 		}
-		return errors.New("failed to update liveness record")
+		return errChangeDecommissioningFailed
 	})
 }
 
@@ -308,6 +325,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 			}
 			select {
 			case <-ticker.C:
+			case <-nl.triggerHeartbeat:
 			case <-stopper.ShouldStop():
 				return
 			}
@@ -315,10 +333,16 @@ func (nl *NodeLiveness) StartHeartbeat(
 	})
 }
 
-// PauseHeartbeat stops or restarts the periodic heartbeat depending
-// on the pause parameter.
+// PauseHeartbeat stops or restarts the periodic heartbeat depending on the
+// pause parameter. When unpausing, triggers an immediate heartbeat.
 func (nl *NodeLiveness) PauseHeartbeat(pause bool) {
 	nl.pauseHeartbeat.Store(pause)
+	if !pause {
+		select {
+		case nl.triggerHeartbeat <- struct{}{}:
+		default:
+		}
+	}
 }
 
 var errNodeAlreadyLive = errors.New("node already live")
@@ -609,7 +633,7 @@ func (nl *NodeLiveness) updateLiveness(
 	cb := nl.mu.heartbeatCallback
 	nl.mu.Unlock()
 	if cb != nil {
-		return cb(ctx)
+		cb(ctx)
 	}
 	return nil
 }
