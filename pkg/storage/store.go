@@ -432,17 +432,11 @@ type Store struct {
 
 	// Semaphore to limit concurrent non-empty snapshot application and replica
 	// data destruction.
-	nonEmptySnapshotApplySem chan struct{}
-
-	// Sempahore to limit empty snapshot application. Empty snapshots are limited
-	// separately from non-empty snapshots so that an store with empty ranges can
-	// transmit those empty ranges to an underfull store without getting stuck
-	// behind large snapshots from a store without empty ranges.
 	//
-	// Once we have rebalancing that balances bytes and not just the number of
-	// ranges on each store, this separation of empty and non-empty snapshots may
-	// be unnecessary.
-	emptySnapshotApplySem chan struct{}
+	// Empty snapshots, by contrast, are not limited so that an store with empty
+	// ranges can transmit those empty ranges to an underfull store without
+	// getting stuck behind large snapshots from a store without empty ranges.
+	nonEmptySnapshotApplySem chan struct{}
 
 	// Are rebalances to this store allowed or prohibited. Rebalances are
 	// prohibited while a store is catching up replicas (i.e. recovering) after
@@ -935,7 +929,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.tsCacheMu.Unlock()
 
 	s.nonEmptySnapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
-	s.emptySnapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
@@ -2679,31 +2672,29 @@ func (s *Store) maybeWaitInPushTxnQueue(
 func (s *Store) reserveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header,
 ) (func(), error) {
-	sem := s.nonEmptySnapshotApplySem
-	if header.RangeSize == 0 {
-		sem = s.emptySnapshotApplySem
-	}
-
-	if header.CanDecline {
-		if atomic.LoadInt32(&s.rebalancesDisabled) == 1 {
-			return nil, nil
-		}
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-s.stopper.ShouldStop():
-			return nil, errors.Errorf("stopped")
-		default:
-			return nil, nil
-		}
-	} else {
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-s.stopper.ShouldStop():
-			return nil, errors.Errorf("stopped")
+	// Empty snapshots are not limited since they're so cheap to apply.
+	if header.RangeSize > 0 {
+		if header.CanDecline {
+			if atomic.LoadInt32(&s.rebalancesDisabled) == 1 {
+				return nil, nil
+			}
+			select {
+			case s.nonEmptySnapshotApplySem <- struct{}{}:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-s.stopper.ShouldStop():
+				return nil, errors.Errorf("stopped")
+			default:
+				return nil, nil
+			}
+		} else {
+			select {
+			case s.nonEmptySnapshotApplySem <- struct{}{}:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-s.stopper.ShouldStop():
+				return nil, errors.Errorf("stopped")
+			}
 		}
 	}
 
@@ -2712,7 +2703,9 @@ func (s *Store) reserveSnapshot(
 	return func() {
 		s.metrics.ReservedReplicaCount.Dec(1)
 		s.metrics.Reserved.Dec(header.RangeSize)
-		<-sem
+		if header.RangeSize > 0 {
+			<-s.nonEmptySnapshotApplySem
+		}
 	}, nil
 }
 
