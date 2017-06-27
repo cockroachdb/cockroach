@@ -39,15 +39,17 @@ const (
 type sessionVar struct {
 	// Set performs mutations (usually on p.session) to effect the change
 	// desired by SET commands.
+	// TODO(couchand): only pass the session instead of the whole planner
 	Set func(ctx context.Context, p *planner, values []parser.TypedExpr) error
 
 	// Get returns a string representation of a given variable to be used
 	// either by SHOW or in the pg_catalog table.
+	// TODO(couchand): only pass the session instead of the whole planner
 	Get func(p *planner) string
 
 	// Reset performs mutations (usually on p.session) to effect the change
 	// desired by RESET commands.
-	Reset func(*planner) error
+	Reset func(*Session) error
 }
 
 // nopVar is a placeholder for a number of settings sent by various client
@@ -56,7 +58,7 @@ type sessionVar struct {
 var nopVar = sessionVar{
 	Set:   func(context.Context, *planner, []parser.TypedExpr) error { return nil },
 	Get:   func(*planner) string { return "" },
-	Reset: func(*planner) error { return nil },
+	Reset: func(*Session) error { return nil },
 }
 
 // varGen is the main definition array for all session variables.
@@ -79,8 +81,8 @@ var varGen = map[string]sessionVar{
 			defer p.session.mu.RUnlock()
 			return p.session.mu.ApplicationName
 		},
-		Reset: func(p *planner) error {
-			p.session.resetApplicationName(p.session.defaults.applicationName)
+		Reset: func(session *Session) error {
+			session.resetApplicationName(session.defaults.applicationName)
 			return nil
 		},
 	},
@@ -108,7 +110,7 @@ var varGen = map[string]sessionVar{
 			}
 			return nil
 		},
-		Reset: func(*planner) error { return nil },
+		Reset: func(*Session) error { return nil },
 	},
 
 	`database`: {
@@ -130,8 +132,8 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(p *planner) string { return p.session.Database },
-		Reset: func(p *planner) error {
-			p.session.Database = p.session.defaults.database
+		Reset: func(session *Session) error {
+			session.Database = session.defaults.database
 			return nil
 		},
 	},
@@ -151,7 +153,7 @@ var varGen = map[string]sessionVar{
 			}
 			return nil
 		},
-		Reset: func(*planner) error { return nil },
+		Reset: func(*Session) error { return nil },
 	},
 
 	`default_transaction_isolation`: {
@@ -178,8 +180,8 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
-		Reset: func(p *planner) error {
-			p.session.DefaultIsolationLevel = enginepb.IsolationType(0)
+		Reset: func(session *Session) error {
+			session.DefaultIsolationLevel = enginepb.IsolationType(0)
 			return nil
 		},
 	},
@@ -208,10 +210,10 @@ var varGen = map[string]sessionVar{
 		Get: func(p *planner) string {
 			return p.session.DistSQLMode.String()
 		},
-		Reset: func(p *planner) error {
-			p.session.DistSQLMode = DistSQLExecModeFromInt(DistSQLClusterExecMode.Get())
-			if p.session.execCfg.TestingKnobs.OverrideDistSQLMode != nil {
-				p.session.DistSQLMode = DistSQLExecModeFromInt(p.session.execCfg.TestingKnobs.OverrideDistSQLMode.Get())
+		Reset: func(session *Session) error {
+			session.DistSQLMode = DistSQLExecModeFromInt(DistSQLClusterExecMode.Get())
+			if session.execCfg.TestingKnobs.OverrideDistSQLMode != nil {
+				session.DistSQLMode = DistSQLExecModeFromInt(session.execCfg.TestingKnobs.OverrideDistSQLMode.Get())
 			}
 			return nil
 		},
@@ -257,8 +259,8 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
-		Reset: func(p *planner) error {
-			p.session.SearchPath = sqlbase.DefaultSearchPath
+		Reset: func(session *Session) error {
+			session.SearchPath = sqlbase.DefaultSearchPath
 			return nil
 		},
 	},
@@ -287,7 +289,7 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get:   func(*planner) string { return "on" },
-		Reset: func(*planner) error { return nil },
+		Reset: func(*Session) error { return nil },
 	},
 
 	`time zone`: {
@@ -303,8 +305,8 @@ var varGen = map[string]sessionVar{
 			return p.session.Location.String()
 		},
 		Set: setTimeZone,
-		Reset: func(p *planner) error {
-			p.session.Location = time.UTC
+		Reset: func(session *Session) error {
+			session.Location = time.UTC
 			return nil
 		},
 	},
@@ -335,12 +337,12 @@ var varGen = map[string]sessionVar{
 			}
 			return "off"
 		},
-		Reset: func(p *planner) error {
-			if !p.session.Tracing.Enabled() {
+		Reset: func(session *Session) error {
+			if !session.Tracing.Enabled() {
 				// Tracing is not active. Nothing to do.
 				return nil
 			}
-			return stopTracing(p.session)
+			return stopTracing(session)
 		},
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
 			return p.enableTracing(values)

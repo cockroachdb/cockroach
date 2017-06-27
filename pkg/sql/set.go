@@ -82,7 +82,7 @@ func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 		if v.Reset == nil {
 			return nil, fmt.Errorf("variable \"%s\" cannot be reset", name)
 		}
-		if err := v.Reset(p); err != nil {
+		if err := v.Reset(p.session); err != nil {
 			return nil, err
 		}
 	}
