@@ -10,7 +10,6 @@ package engineccl
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -48,29 +47,13 @@ type MVCCIncrementalIterator struct {
 	meta enginepb.MVCCMetadata
 }
 
-// TimeBoundIteratorsEnabled controls whether to use experimental iterators that
-// can more efficiently perform incremental backups by skipping over old SSTs.
-var TimeBoundIteratorsEnabled = func() *settings.BoolSetting {
-	name := "enterprise.kv.timebound_iterator.enabled"
-	s := settings.RegisterBoolSetting(name, "speed up incremental backups by efficiently skipping over old SSTs", false)
-	s.Hide()
-	return s
-}()
-
-func newEngineIter(e engine.Reader, startTime, endTime hlc.Timestamp) engine.Iterator {
-	if TimeBoundIteratorsEnabled.Get() {
-		return e.NewTimeBoundIterator(startTime, endTime)
-	}
-	return e.NewIterator(false)
-}
-
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
 // specified engine and time range.
 func NewMVCCIncrementalIterator(
 	e engine.Reader, startTime, endTime hlc.Timestamp,
 ) *MVCCIncrementalIterator {
 	return &MVCCIncrementalIterator{
-		iter:      newEngineIter(e, startTime, endTime),
+		iter:      e.NewTimeBoundIterator(startTime, endTime),
 		startTime: startTime,
 		endTime:   endTime,
 	}
