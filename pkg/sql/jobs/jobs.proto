@@ -29,7 +29,7 @@ message RestoreDetails {
 }
 
 message SchemaChangeDetails {
-  // Intentionally empty.
+  int64 readAsOf = 1;
 }
 
 message Payload {

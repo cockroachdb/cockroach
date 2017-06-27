@@ -438,4 +438,33 @@ func TestJobLogger(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("set details works", func(t *testing.T) {
+		db := sqlutils.MakeSQLRunner(t, rawSQLDB)
+		record := jobs.Record{Details: jobs.SchemaChangeDetails{}}
+		expectation := expectation{
+			Record:            record,
+			Type:              jobs.TypeSchemaChange,
+			Before:            timeutil.Now(),
+			FractionCompleted: 1.0,
+		}
+		newDetails := jobs.SchemaChangeDetails{ReadAsOf: 1000}
+		expectation.Record.Details = newDetails
+		job := jobs.NewJob(kvDB, executor, record)
+		if err := job.Created(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := job.Started(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := job.SetDetails(ctx, newDetails); err != nil {
+			t.Fatal(err)
+		}
+		if err := job.Succeeded(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := verifyJobRecord(db, kvDB, executor, job, jobs.StatusSucceeded, expectation); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

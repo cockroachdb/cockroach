@@ -153,6 +153,22 @@ func (j *Job) ID() *int64 {
 	return j.id
 }
 
+// setDetails sets the Details field on a Payload, making sure that the
+// input details is of a supported type.
+func setDetails(payload *Payload, details interface{}) error {
+	switch d := details.(type) {
+	case BackupDetails:
+		payload.Details = &Payload_Backup{Backup: &d}
+	case RestoreDetails:
+		payload.Details = &Payload_Restore{Restore: &d}
+	case SchemaChangeDetails:
+		payload.Details = &Payload_SchemaChange{SchemaChange: &d}
+	default:
+		return errors.Errorf("JobLogger: unsupported job details type %T", d)
+	}
+	return nil
+}
+
 // Created records the creation of a new job in the system.jobs table and
 // remembers the assigned ID of the job in the Job. The job information is read
 // from the Record field at the time Created is called.
@@ -162,15 +178,8 @@ func (j *Job) Created(ctx context.Context) error {
 		Username:      j.Record.Username,
 		DescriptorIDs: j.Record.DescriptorIDs,
 	}
-	switch d := j.Record.Details.(type) {
-	case BackupDetails:
-		payload.Details = &Payload_Backup{Backup: &d}
-	case RestoreDetails:
-		payload.Details = &Payload_Restore{Restore: &d}
-	case SchemaChangeDetails:
-		payload.Details = &Payload_SchemaChange{SchemaChange: &d}
-	default:
-		return errors.Errorf("Job: unsupported job details type %T", d)
+	if err := setDetails(payload, j.Record.Details); err != nil {
+		return err
 	}
 	return j.insert(ctx, payload)
 }
@@ -261,6 +270,16 @@ func (j *Job) Succeeded(ctx context.Context) error {
 		}
 		payload.FinishedMicros = roundTimestamp(timeutil.Now())
 		payload.FractionCompleted = 1.0
+		return true, nil
+	})
+}
+
+// SetDetails sets the details field of the currently running tracked job.
+func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
+	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
+		if err := setDetails(payload, details); err != nil {
+			return false, err
+		}
 		return true, nil
 	})
 }
