@@ -19,6 +19,8 @@ package storage
 
 import (
 	"fmt"
+	"sort"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -40,6 +42,14 @@ import (
 // This is a last line of defense against issues like #4925.
 // TODO(bdarnell): how to determine best value?
 const intentResolverTaskLimit = 100
+
+// intentResolverBatchSize is the maximum number of intents that will
+// be resolved in a single batch. Batches that span many ranges (which
+// is possible for the commit of a transaction that spans many ranges)
+// will be split into many batches with NoopRequests by the
+// DistSender, leading to high CPU overhead and quadratic memory
+// usage.
+const intentResolverBatchSize = 100
 
 // intentResolver manages the process of pushing transactions and
 // resolving intents.
@@ -422,26 +432,69 @@ func (ir *intentResolver) resolveIntents(
 		reqs = append(reqs, resolveArgs)
 	}
 
+	// Sort the intents to maximize batching by range.
+	sort.Slice(reqs, func(i, j int) bool {
+		return reqs[i].Header().Key.Compare(reqs[j].Header().Key) < 0
+	})
+
 	// Resolve all of the intents.
-	if len(reqs) > 0 {
+	var wg sync.WaitGroup
+	var errCh chan error
+	if wait {
+		// If the caller is waiting, use this channel to collect the first
+		// non-nil error (if any) from the async tasks.
+		errCh = make(chan error, 1)
+	}
+	for len(reqs) > 0 {
 		b := &client.Batch{}
-		b.AddRawRequest(reqs...)
+		if len(reqs) > intentResolverBatchSize {
+			b.AddRawRequest(reqs[:intentResolverBatchSize]...)
+			reqs = reqs[intentResolverBatchSize:]
+		} else {
+			b.AddRawRequest(reqs...)
+			reqs = nil
+		}
+		wg.Add(1)
 		action := func() error {
 			// TODO(tschottdorf): no tracing here yet.
 			return ir.store.DB().Run(ctx, b)
 		}
-		if wait || ir.store.Stopper().RunLimitedAsyncTask(
-			ctx, ir.sem, true /* wait */, func(ctx context.Context) {
+		if ir.store.Stopper().RunLimitedAsyncTask(
+			ctx, ir.sem, true, /* wait */
+			func(ctx context.Context) {
+				defer wg.Done()
+
 				if err := action(); err != nil {
+					// If we have a waiting caller, pass the first non-nil
+					// error out on the channel.
+					select {
+					case errCh <- err:
+						return
+					default:
+					}
+					// No caller waiting or channel full, so just log the error.
 					log.Warningf(ctx, "unable to resolve external intents: %s", err)
 				}
 			}) != nil {
+			wg.Done()
 			// Try async to not keep the caller waiting, but when draining
 			// just go ahead and do it synchronously. See #1684.
 			// TODO(tschottdorf): This is ripe for removal.
 			if err := action(); err != nil {
 				return err
 			}
+		}
+	}
+
+	if wait {
+		// Wait for all resolutions to complete. We don't want to return
+		// as soon as the first one fails because of issue #8360 (see
+		// comment at the top of this method)
+		wg.Wait()
+		select {
+		case err := <-errCh:
+			return err
+		default:
 		}
 	}
 
