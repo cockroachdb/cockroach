@@ -227,12 +227,14 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(key, endKey
 // of slots must be equal and the respective slots must be combinable.
 // On error, the receiver BatchResponse is in an invalid state.
 // TODO(tschottdorf): write tests.
-func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
-	if len(otherBatch.Responses) != len(br.Responses) {
-		return errors.New("unable to combine batch responses of different length")
-	}
-	for i, l := 0, len(br.Responses); i < l; i++ {
-		valLeft := br.Responses[i].GetInner()
+func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) error {
+	for i, l := 0, len(otherBatch.Responses); i < l; i++ {
+		id := positions[i]
+		if (ResponseUnion{}) == br.Responses[id] {
+			br.Responses[id] = otherBatch.Responses[i]
+			continue
+		}
+		valLeft := br.Responses[id].GetInner()
 		valRight := otherBatch.Responses[i].GetInner()
 		cValLeft, lOK := valLeft.(combinable)
 		cValRight, rOK := valRight.(combinable)
@@ -241,12 +243,6 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
 				return err
 			}
 			continue
-		}
-		// If our slot is a NoopResponse, then whatever the other batch has is
-		// the result. Note that the result can still be a NoopResponse, to be
-		// filled in by a future Combine().
-		if _, ok := valLeft.(*NoopResponse); ok {
-			br.Responses[i] = otherBatch.Responses[i]
 		}
 	}
 	br.Txn.Update(otherBatch.Txn)
