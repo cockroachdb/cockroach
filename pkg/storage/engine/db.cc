@@ -41,7 +41,11 @@ extern "C" {
 #include "_cgo_export.h"
 }  // extern "C"
 
+#if defined(COMPILER_GCC) || defined(__clang__)
 #define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+#else
+#define WARN_UNUSED_RESULT
+#endif
 
 struct DBCache {
   std::shared_ptr<rocksdb::Cache> rep;
