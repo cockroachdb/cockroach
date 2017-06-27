@@ -640,7 +640,7 @@ func TestStyle(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)`),
+			stream.GrepNot(`((\.pb|\.pb\.gw|embedded|_string)\.go|sql/ir/irgen/parser/(yaccpar|irgen\.y):|sql/parser/(yaccpar|sql\.y):)`),
 		), func(s string) {
 			t.Error(s)
 		}); err != nil {
@@ -766,12 +766,15 @@ func TestStyle(t *testing.T) {
 				//
 				// sql/parser/yaccpar:362:3: this value of sqlDollar is never used (SA4006)
 				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go:SA4006",
+				// sql/ir/irgen/parser/yaccpar:362:3: this value of irgenDollar is never used (SA4006)
+				"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser/irgen.go:SA4006",
 				// sql/parser/yaccpar:14:6: type sqlParser is unused (U1000)
 				// sql/parser/yaccpar:15:2: func sqlParser.Parse is unused (U1000)
 				// sql/parser/yaccpar:16:2: func sqlParser.Lookahead is unused (U1000)
 				// sql/parser/yaccpar:29:6: func sqlNewParser is unused (U1000)
 				// sql/parser/yaccpar:152:6: func sqlParse is unused (U1000)
 				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go:U1000",
+				"github.com/cockroachdb/cockroach/pkg/sql/irgen/parser/irgen.go:U1000",
 				// Generated file containing many unused postgres error codes.
 				"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go:U1000",
 				// Deprecated database/sql/driver interfaces not compatible with 1.7.
