@@ -423,9 +423,16 @@ func (ir *intentResolver) resolveIntents(
 	}
 
 	// Resolve all of the intents.
-	if len(reqs) > 0 {
+	const maxIntentBatchSize = 100
+	for len(reqs) > 0 {
 		b := &client.Batch{}
-		b.AddRawRequest(reqs...)
+		if len(reqs) > maxIntentBatchSize {
+			b.AddRawRequest(reqs[:maxIntentBatchSize]...)
+			reqs = reqs[maxIntentBatchSize:]
+		} else {
+			b.AddRawRequest(reqs...)
+			reqs = nil
+		}
 		action := func() error {
 			// TODO(tschottdorf): no tracing here yet.
 			return ir.store.DB().Run(ctx, b)

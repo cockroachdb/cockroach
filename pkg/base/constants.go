@@ -34,7 +34,7 @@ const (
 
 	// DefaultSendNextTimeout is the duration to wait before trying
 	// another replica to send a KV batch.
-	DefaultSendNextTimeout = 500 * time.Millisecond
+	DefaultSendNextTimeout = 5000 * time.Millisecond
 
 	// SlowRequestThreshold is the amount of time to wait before considering a
 	// request to be "slow".
