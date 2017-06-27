@@ -32,7 +32,7 @@ var noopRequest = roachpb.NoopRequest{}
 // span, inserting NoopRequest appropriately to replace requests which
 // are left without a key range to operate on. The number of non-noop
 // requests after truncation is returned.
-func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, int, error) {
+func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, []int, error) {
 	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
 		if _, ok := args.(*roachpb.NoopRequest); ok {
 			return true, emptySpan, nil
@@ -98,33 +98,30 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		return true, header, nil
 	}
 
-	var numNoop int
-	truncBA := ba
-	truncBA.Requests = make([]roachpb.RequestUnion, len(ba.Requests))
+	var truncBA roachpb.BatchRequest
+	var positions []int
+	truncBA = ba
+	truncBA.Requests = make([]roachpb.RequestUnion, 0)
 	for pos, arg := range ba.Requests {
 		hasRequest, newHeader, err := truncateOne(arg.GetInner())
-		if !hasRequest {
-			// We omit this one, i.e. replace it with a Noop.
-			numNoop++
-			union := roachpb.RequestUnion{}
-			union.MustSetInner(&noopRequest)
-			truncBA.Requests[pos] = union
-		} else {
+		if hasRequest {
 			// Keep the old one. If we must adjust the header, must copy.
 			if inner := ba.Requests[pos].GetInner(); newHeader.Equal(inner.Header()) {
-				truncBA.Requests[pos] = ba.Requests[pos]
+				truncBA.Requests = append(truncBA.Requests, ba.Requests[pos])
 			} else {
+				var union roachpb.RequestUnion
 				shallowCopy := inner.ShallowCopy()
 				shallowCopy.SetHeader(newHeader)
-				union := &truncBA.Requests[pos] // avoid operating on copy
 				union.MustSetInner(shallowCopy)
+				truncBA.Requests = append(truncBA.Requests, union)
 			}
+			positions = append(positions, pos)
 		}
 		if err != nil {
-			return roachpb.BatchRequest{}, 0, err
+			return roachpb.BatchRequest{}, positions, err
 		}
 	}
-	return truncBA, len(ba.Requests) - numNoop, nil
+	return truncBA, positions, nil
 }
 
 // prev gives the right boundary of the union of all requests which don't
