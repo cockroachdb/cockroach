@@ -68,7 +68,7 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 					panic(r)
 				}
 			}()
-			buf.writeBinaryDatum(d, time.UTC)
+			buf.writeBinaryDatum(context.Background(), d, time.UTC)
 			if buf.err != nil {
 				t.Fatal(buf.err)
 			}
@@ -138,7 +138,7 @@ func TestBinaryIntArray(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	buf.writeBinaryDatum(d, time.UTC)
+	buf.writeBinaryDatum(context.Background(), d, time.UTC)
 
 	b := buf.wrapped.Bytes()
 
@@ -206,7 +206,7 @@ func TestRandomBinaryDecimal(t *testing.T) {
 		if err := dec.SetString(test.In); err != nil {
 			t.Fatalf("could not set %q on decimal", test.In)
 		}
-		buf.writeBinaryDatum(dec, time.UTC)
+		buf.writeBinaryDatum(context.Background(), dec, time.UTC)
 		if buf.err != nil {
 			t.Fatal(buf.err)
 		}
