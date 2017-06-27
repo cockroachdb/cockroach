@@ -817,33 +817,33 @@ func (s *Server) Start(ctx context.Context) error {
 	// 1. records the local store "last up" timestamp for every store whenever the
 	//    liveness record is updated.
 	// 2. sets Draining if Decommissioning is set in the liveness record
-	sem := make(chan struct{}, 1)
-	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, func(ctx context.Context) error {
+	decommissionSem := make(chan struct{}, 1)
+	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, func(ctx context.Context) {
 		now := s.clock.Now()
 		if err := s.node.stores.VisitStores(func(s *storage.Store) error {
 			return s.WriteLastUpTimestamp(ctx, now)
 		}); err != nil {
-			return err
+			log.Warning(ctx, errors.Wrap(err, "writing last up timestamp"))
 		}
-		if liveness, err := s.nodeLiveness.Self(); err != nil {
-			return err
+
+		if liveness, err := s.nodeLiveness.Self(); err != nil && err != storage.ErrNoLivenessRecord {
+			log.Warning(ctx, errors.Wrap(err, "retrieving own liveness record"))
 		} else if liveness != nil && liveness.Decommissioning && !liveness.Draining {
-			s.stopper.RunWorker(ctx, func(context.Context) {
-				select {
-				case sem <- struct{}{}:
+			select {
+			case decommissionSem <- struct{}{}:
+				s.stopper.RunWorker(ctx, func(context.Context) {
 					defer func() {
-						<-sem
+						<-decommissionSem
 					}()
 					if _, err := s.Drain(GracefulDrainModes); err != nil {
 						log.Warningf(ctx, "failed to set Draining when Decommissioning: %v", err)
 					}
-				default:
-					// noop
-				}
-			})
-
+				})
+			default:
+				// Already have an active goroutine trying to drain; don't add a
+				// second one.
+			}
 		}
-		return nil
 	})
 
 	// Initialize grpc-gateway mux and context.
