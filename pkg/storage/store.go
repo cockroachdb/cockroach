@@ -1935,7 +1935,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 
 	// Clear the original range's request stats, since they include requests for
 	// spans that are now owned by the new range.
-	origRng.stats.resetRequestCounts()
+	origRng.leaseholderStats.resetRequestCounts()
 
 	if kr := s.mu.replicasByKey.ReplaceOrInsert(origRng); kr != nil {
 		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, origRng)
@@ -1988,8 +1988,11 @@ func (s *Store) MergeRange(
 			subsumedDesc.Replicas, subsumingDesc.Replicas)
 	}
 
-	if subsumingRng.stats != nil {
-		subsumingRng.stats.resetRequestCounts()
+	if subsumingRng.leaseholderStats != nil {
+		subsumingRng.leaseholderStats.resetRequestCounts()
+	}
+	if subsumingRng.writeStats != nil {
+		subsumingRng.writeStats.resetRequestCounts()
 	}
 
 	if err := s.maybeMergeTimestampCaches(ctx, subsumingRng, subsumedRng); err != nil {
@@ -2289,6 +2292,7 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	if err == nil {
 		capacity.RangeCount = int32(s.ReplicaCount())
 		capacity.LeaseCount = int32(s.LeaseCount())
+		capacity.WritesPerSecond = s.WritesPerSecond()
 	}
 	return capacity, err
 }
@@ -2384,6 +2388,22 @@ func (s *Store) LeaseCount() int {
 	})
 
 	return leaseCount
+}
+
+// WritesPerSecond returns the approximate number of keys the store is writing
+// per second.
+//
+// TODO(a-robinson): How dangerous is it that this number will be incorrectly
+// low the first time or two it gets gossiped when a store starts? We can't
+// easily have a countdown as its value changes like we can for leases/replicas.
+func (s *Store) WritesPerSecond() float64 {
+	var writeCount float64
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		qps, _ := r.writeStats.avgQPS()
+		writeCount += qps
+		return true
+	})
+	return writeCount
 }
 
 // Send fetches a range based on the header's replica, assembles method, args &

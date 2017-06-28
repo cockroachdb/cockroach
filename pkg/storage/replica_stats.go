@@ -69,14 +69,21 @@ func newReplicaStats(clock *hlc.Clock, getNodeLocality localityOracle) *replicaS
 }
 
 func (rs *replicaStats) record(nodeID roachpb.NodeID) {
-	locality := rs.getNodeLocality(nodeID)
+	rs.recordCount(1, nodeID)
+}
+
+func (rs *replicaStats) recordCount(count float64, nodeID roachpb.NodeID) {
+	var locality string
+	if rs.getNodeLocality != nil {
+		locality = rs.getNodeLocality(nodeID)
+	}
 	now := time.Unix(0, rs.clock.PhysicalNow())
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 
 	rs.maybeRotateLocked(now)
-	rs.mu.requests[rs.mu.idx][locality]++
+	rs.mu.requests[rs.mu.idx][locality] += count
 }
 
 func (rs *replicaStats) maybeRotateLocked(now time.Time) {
@@ -133,6 +140,43 @@ func (rs *replicaStats) perLocalityDecayingQPS() (perLocalityCounts, time.Durati
 		}
 	}
 	return counts, now.Sub(rs.mu.lastReset)
+}
+
+// avgQPS returns the average requests-per-second and the amount of time
+// over which the stat was accumulated. Note that these averages are exact,
+// not exponentially decayed (there isn't a ton of justification for going
+// one way or the the other, but not decaying makes the average more stable,
+// which is probably better for avoiding rebalance thrashing).
+func (rs *replicaStats) avgQPS() (float64, time.Duration) {
+	now := time.Unix(0, rs.clock.PhysicalNow())
+
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+
+	rs.maybeRotateLocked(now)
+
+	// First accumulate the counts, then divide by the total number of seconds.
+	var sum float64
+	var windowsUsed int
+	for i := range rs.mu.requests {
+		// We have to add len(rs.mu.requests) to the numerator to avoid getting a
+		// negative result from the modulus operation when rs.mu.idx is small.
+		requestsIdx := (rs.mu.idx + len(rs.mu.requests) - i) % len(rs.mu.requests)
+		if cur := rs.mu.requests[requestsIdx]; cur != nil {
+			windowsUsed++
+			for _, v := range cur {
+				sum += v
+			}
+		}
+	}
+	if windowsUsed <= 0 {
+		return 0, 0
+	}
+	duration := now.Sub(rs.mu.lastRotate) + time.Duration(windowsUsed-1)*replStatsRotateInterval
+	if duration == 0 {
+		return 0, 0
+	}
+	return sum / duration.Seconds(), duration
 }
 
 func (rs *replicaStats) resetRequestCounts() {

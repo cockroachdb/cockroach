@@ -13316,6 +13316,7 @@ export namespace cockroach {
             available?: Long;
             range_count?: number;
             lease_count?: number;
+            writes_per_second?: number;
         };
 
         /**
@@ -13357,6 +13358,12 @@ export namespace cockroach {
              * @type {number}
              */
             public lease_count: number;
+
+            /**
+             * StoreCapacity writes_per_second.
+             * @type {number}
+             */
+            public writes_per_second: number;
 
             /**
              * Creates a new StoreCapacity instance using the specified properties.
