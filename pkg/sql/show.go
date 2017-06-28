@@ -701,7 +701,8 @@ func (p *planner) ShowDatabases(ctx context.Context, n *parser.ShowDatabases) (p
 //          mysql only returns the user's privileges.
 func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNode, error) {
 	if n.Targets == nil {
-		return nil, errors.Errorf("TODO(marc): implement SHOW GRANT with no targets")
+		return nil, pgerror.Unimplemented("SHOW GRANTS <no target>",
+			"cannot use SHOW GRANTS without a target")
 	}
 
 	objectType := "Database"
