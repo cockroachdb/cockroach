@@ -131,6 +131,7 @@ var keywords = map[string]int{
 	"IS":                        IS,
 	"ISOLATION":                 ISOLATION,
 	"JOB":                       JOB,
+	"JOBS":                      JOBS,
 	"JOIN":                      JOIN,
 	"KEY":                       KEY,
 	"KEYS":                      KEYS,
