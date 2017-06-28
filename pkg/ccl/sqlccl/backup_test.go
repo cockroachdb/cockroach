@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -388,9 +389,14 @@ func verifySystemJob(
 
 // verifySystemJobProgress asserts that the fractionCompleted of the latest job
 // in the system.jobs table is approximately 0.5 when half of the expected
-// responses have completed.
+// responses have completed. If verifier is provided, it will be invoked with
+// the job's ID after the fraction is checked to allow for additional
+// assertions.
 func verifySystemJobProgress(
-	sqlDB *sqlutils.SQLRunner, allowResponse chan struct{}, totalExpectedResponses int,
+	sqlDB *sqlutils.SQLRunner,
+	allowResponse chan struct{},
+	totalExpectedResponses int,
+	verifier func(id int64) error,
 ) error {
 	// Allow half the total expected responses to proceed.
 	for i := 0; i < totalExpectedResponses/2; i++ {
@@ -399,15 +405,16 @@ func verifySystemJobProgress(
 
 	// Ensure the fractionCompleted of the latest job is in the range [0.25, 0.75].
 	err := util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+		var id int64
 		var fractionCompleted float32
 		sqlDB.QueryRow(
-			`SELECT fraction_completed FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
-		).Scan(&fractionCompleted)
+			`SELECT id, fraction_completed FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
+		).Scan(&id, &fractionCompleted)
 		if fractionCompleted < 0.25 || fractionCompleted > 0.75 {
 			return errors.Errorf("expected progress to be in range [0.25, 0.75] after 1s but got %f",
 				fractionCompleted)
 		}
-		return nil
+		return verifier(id)
 	})
 
 	// Close the channel to allow future responses to proceed without us
@@ -418,7 +425,6 @@ func verifySystemJobProgress(
 
 func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(dan): BEFORE MERGE")
 
 	const expectedProgressUpdateCount = backupRestoreDefaultRanges
 
@@ -447,7 +453,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	const numAccounts = 1000
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
+	ctx, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
 	defer cleanupFn()
 
 	sanitizedIncDir := dir + "/inc"
@@ -464,12 +470,12 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	// status to the system.jobs table. Since the incremental BACKUP syntax is a
 	// superset of the full BACKUP syntax, we'll cover everything by verifying the
 	// incremental backup below.
-
 	allowResponse = make(chan struct{})
 	// Closing the channel allows export responses to proceed immediately.
 	close(allowResponse)
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`, fullDir)
 
+	var backupTableID uint32
 	jobDone := make(chan error)
 
 	{
@@ -478,9 +484,8 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			_, err := sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
 			jobDone <- err
 		}()
-
 		if err := verifySystemJobProgress(
-			sqlDB, allowResponse, expectedProgressUpdateCount,
+			sqlDB, allowResponse, expectedProgressUpdateCount, func(int64) error { return nil },
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -489,8 +494,8 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tableID, err := sqlutils.QueryTableID(sqlDB.DB, "data", "bank")
-		if err != nil {
+		var err error
+		if backupTableID, err = sqlutils.QueryTableID(sqlDB.DB, "data", "bank"); err != nil {
 			t.Fatal(err)
 		}
 		if err := verifySystemJob(sqlDB, 1, jobs.JobTypeBackup, jobs.JobRecord{
@@ -502,7 +507,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			DescriptorIDs: sqlbase.IDs{
 				keys.DescriptorTableID,
 				keys.UsersTableID,
-				sqlbase.ID(tableID),
+				sqlbase.ID(backupTableID),
 			},
 		}); err != nil {
 			t.Fatal(err)
@@ -519,7 +524,27 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		}()
 
 		if err := verifySystemJobProgress(
-			sqlDB, allowResponse, expectedProgressUpdateCount,
+			sqlDB, allowResponse, expectedProgressUpdateCount, func(id int64) error {
+				iex := sql.InternalExecutor{
+					LeaseManager: tc.Servers[0].LeaseManager().(*sql.LeaseManager),
+				}
+				jobLogger, err := jobs.GetJobLogger(ctx, tc.Servers[0].DB(), iex, id)
+				if err != nil {
+					return err
+				}
+				switch d := jobLogger.Job.Details.(type) {
+				case jobs.RestoreJobDetails:
+					low := keys.MakeTablePrefix(backupTableID)
+					high := keys.MakeTablePrefix(backupTableID + 1)
+					if bytes.Compare(d.LowWaterMark, low) <= 0 || bytes.Compare(d.LowWaterMark, high) >= 0 {
+						return errors.Errorf("expected low water mark %v to be between %v and %v",
+							roachpb.Key(d.LowWaterMark), roachpb.Key(low), roachpb.Key(high))
+					}
+				default:
+					return errors.Errorf("unexpected job details type %T", d)
+				}
+				return nil
+			},
 		); err != nil {
 			t.Fatal(err)
 		}
