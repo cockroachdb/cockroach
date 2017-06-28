@@ -877,41 +877,10 @@ func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode,
 	return p.delegateQuery(ctx, `SELECT username FROM system.users ORDER BY 1`, nil)
 }
 
-// Help returns usage information for the builtin functions
+// Help returns usage information for the given builtin function.
 // Privileges: None
 func (p *planner) Help(ctx context.Context, n *parser.Help) (planNode, error) {
-	name := strings.ToLower(string(n.Name))
-	columns := sqlbase.ResultColumns{
-		{Name: "Function", Typ: parser.TypeString},
-		{Name: "Signature", Typ: parser.TypeString},
-		{Name: "Category", Typ: parser.TypeString},
-		{Name: "Details", Typ: parser.TypeString},
-	}
-	return &delayedNode{
-		name:    "HELP " + name,
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
-
-			matches, ok := parser.Builtins[name]
-			// TODO(dt): support fuzzy matching.
-			if !ok {
-				return v, nil
-			}
-
-			for _, f := range matches {
-				row := parser.Datums{
-					parser.NewDString(name),
-					parser.NewDString(f.Signature()),
-					parser.NewDString(f.Category()),
-					parser.NewDString(f.Info),
-				}
-				if _, err := v.rows.AddRow(ctx, row); err != nil {
-					v.Close(ctx)
-					return nil, err
-				}
-			}
-			return v, nil
-		},
-	}, nil
+	return p.delegateQuery(ctx, fmt.Sprintf(
+		`SELECT * FROM crdb_internal.builtin_functions WHERE function ILIKE %s`,
+		parser.EscapeSQLString(string(n.Name))), nil)
 }

@@ -52,6 +52,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalClusterSettingsTable,
 		crdbInternalLocalSessionsTable,
 		crdbInternalClusterSessionsTable,
+		crdbInternalBuiltinFunctionsTable,
 	},
 }
 
@@ -720,6 +721,35 @@ CREATE TABLE crdb_internal.cluster_settings (
 				parser.NewDString(setting.Description()),
 			); err != nil {
 				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalBuiltinFunctionsTable exposes the built-in function
+// metadata.
+var crdbInternalBuiltinFunctionsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.builtin_functions (
+  function  STRING NOT NULL,
+  signature STRING NOT NULL,
+  category  STRING NOT NULL,
+  details   STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, _ *planner, addRow func(...parser.Datum) error) error {
+		for _, name := range parser.AllBuiltinNames {
+			overloads := parser.Builtins[name]
+			for _, f := range overloads {
+				if err := addRow(
+					parser.NewDString(name),
+					parser.NewDString(f.Signature()),
+					parser.NewDString(f.Category()),
+					parser.NewDString(f.Info),
+				); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

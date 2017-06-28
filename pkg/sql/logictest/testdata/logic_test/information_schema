@@ -211,6 +211,7 @@ CREATE VIEW other_db.abc AS SELECT i from other_db.xyz
 query T
 SELECT table_name FROM information_schema.tables
 ----
+builtin_functions
 cluster_queries
 cluster_sessions
 cluster_settings
@@ -324,6 +325,7 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
+def            crdb_internal       builtin_functions          SYSTEM VIEW  1
 def            crdb_internal       cluster_queries            SYSTEM VIEW  1
 def            crdb_internal       cluster_sessions           SYSTEM VIEW  1
 def            crdb_internal       cluster_settings           SYSTEM VIEW  1
@@ -399,6 +401,7 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
+def            crdb_internal       builtin_functions          SYSTEM VIEW  1
 def            crdb_internal       cluster_queries            SYSTEM VIEW  1
 def            crdb_internal       cluster_sessions           SYSTEM VIEW  1
 def            crdb_internal       cluster_settings           SYSTEM VIEW  1
@@ -460,6 +463,7 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
+def            crdb_internal       builtin_functions          SYSTEM VIEW  1
 def            crdb_internal       cluster_queries            SYSTEM VIEW  1
 def            crdb_internal       cluster_sessions           SYSTEM VIEW  1
 def            crdb_internal       cluster_settings           SYSTEM VIEW  1
