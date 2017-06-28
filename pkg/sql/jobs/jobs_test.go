@@ -25,6 +25,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -60,99 +62,105 @@ func verifyJobRecord(
 	expectedStatus jobs.JobStatus,
 	expected jobExpectation,
 ) error {
-	var actualJob jobs.JobRecord
-	var typ string
-	var rawDescriptorIDs pq.Int64Array
-	var statusString string
-	var created pq.NullTime
-	var started pq.NullTime
-	var finished pq.NullTime
-	var modified pq.NullTime
-	var fractionCompleted float32
-	var errMessage string
-	// We have to query for the nth job created rather than filtering by ID,
-	// because job-generating SQL queries (e.g. BACKUP) do not currently return
-	// the job ID.
-	db.QueryRow(`
-		SELECT type, description, username, descriptor_ids, status,
+	testSource := func(source string) error {
+		var actualJob jobs.JobRecord
+		var typ string
+		var rawDescriptorIDs pq.Int64Array
+		var statusString string
+		var created pq.NullTime
+		var started pq.NullTime
+		var finished pq.NullTime
+		var modified pq.NullTime
+		var fractionCompleted float32
+		var errMessage string
+		// We have to query for the nth job created rather than filtering by ID,
+		// because job-generating SQL queries (e.g. BACKUP) do not currently return
+		// the job ID.
+		db.QueryRow(fmt.Sprintf(
+			`SELECT type, description, username, descriptor_ids, status,
 			   created, started, finished, modified, fraction_completed, error
-		FROM crdb_internal.jobs WHERE created >= $1 ORDER BY created LIMIT 1`,
-		expected.Before,
-	).Scan(
-		&typ, &actualJob.Description, &actualJob.Username, &rawDescriptorIDs, &statusString,
-		&created, &started, &finished, &modified, &fractionCompleted, &errMessage,
-	)
+			FROM %s WHERE created >= $1 ORDER BY created LIMIT 1`, source),
+			expected.Before,
+		).Scan(
+			&typ, &actualJob.Description, &actualJob.Username, &rawDescriptorIDs, &statusString,
+			&created, &started, &finished, &modified, &fractionCompleted, &errMessage,
+		)
 
-	// Verify the upstream-provided fields.
-	expected.Job.Details = nil
-	for _, id := range rawDescriptorIDs {
-		actualJob.DescriptorIDs = append(actualJob.DescriptorIDs, sqlbase.ID(id))
-	}
-	if e, a := expected.Job, actualJob; !reflect.DeepEqual(e, a) {
-		diff := strings.Join(pretty.Diff(e, a), "\n")
-		return errors.Errorf("JobRecords do not match:\n%s", diff)
-	}
+		// Verify the upstream-provided fields.
+		expected.Job.Details = nil
+		for _, id := range rawDescriptorIDs {
+			actualJob.DescriptorIDs = append(actualJob.DescriptorIDs, sqlbase.ID(id))
+		}
+		if e, a := expected.Job, actualJob; !reflect.DeepEqual(e, a) {
+			diff := strings.Join(pretty.Diff(e, a), "\n")
+			return errors.Errorf("JobRecords do not match:\n%s", diff)
+		}
 
-	// Verify a newly-instantiated JobLogger's properties.
-	fetched, err := jobs.GetJobLogger(context.TODO(), kvDB, ex, *jl.JobID())
-	if err != nil {
+		// Verify a newly-instantiated JobLogger's properties.
+		fetched, err := jobs.GetJobLogger(context.TODO(), kvDB, ex, *jl.JobID())
+		if err != nil {
+			return err
+		}
+		if e, a := jl.Payload(), fetched.Payload(); !reflect.DeepEqual(e, a) {
+			diff := strings.Join(pretty.Diff(e, a), "\n")
+			return errors.Errorf("Job Payloads do not match:\n%s", diff)
+		}
+
+		// Verify JobLogger-managed fields.
+		status := jobs.JobStatus(statusString)
+		if e, a := expectedStatus, status; e != a {
+			return errors.Errorf("expected status %v, got %v", e, a)
+		}
+		if e, a := expected.Type, typ; e != a {
+			return errors.Errorf("expected type %v, got type %v", e, a)
+		}
+		if e, a := expected.FractionCompleted, fractionCompleted; e != a {
+			return errors.Errorf("expected fraction completed %f, got %f", e, a)
+		}
+
+		// Check JobLogger-managed timestamps for sanity.
+		verifyModifiedAgainst := func(name string, ts time.Time) error {
+			if modified.Time.Before(ts) {
+				return errors.Errorf("modified time %v before %s time %v", modified, name, ts)
+			}
+			if now := timeutil.Now().Round(time.Microsecond); modified.Time.After(now) {
+				return errors.Errorf("modified time %v after current time %v", modified, now)
+			}
+			return nil
+		}
+
+		if expected.Before.After(created.Time) {
+			return errors.Errorf(
+				"created time %v is before expected created time %v",
+				created, expected.Before,
+			)
+		}
+		if status == jobs.JobStatusPending {
+			return verifyModifiedAgainst("created", created.Time)
+		}
+
+		if !started.Valid && status == jobs.JobStatusSucceeded {
+			return errors.Errorf("started time is NULL but job claims to be successful")
+		}
+		if started.Valid && created.Time.After(started.Time) {
+			return errors.Errorf("created time %v is after started time %v", created, started)
+		}
+		if status == jobs.JobStatusRunning {
+			return verifyModifiedAgainst("started", started.Time)
+		}
+
+		if started.Time.After(finished.Time) {
+			return errors.Errorf("started time %v is after finished time %v", started, finished)
+		}
+		if e, a := expected.Error, errMessage; e != a {
+			return errors.Errorf("expected error %v, got %v", e, a)
+		}
+		return verifyModifiedAgainst("finished", finished.Time)
+	}
+	if err := testSource(`crdb_internal.jobs`); err != nil {
 		return err
 	}
-	if e, a := jl.Payload(), fetched.Payload(); !reflect.DeepEqual(e, a) {
-		diff := strings.Join(pretty.Diff(e, a), "\n")
-		return errors.Errorf("Job Payloads do not match:\n%s", diff)
-	}
-
-	// Verify JobLogger-managed fields.
-	status := jobs.JobStatus(statusString)
-	if e, a := expectedStatus, status; e != a {
-		return errors.Errorf("expected status %v, got %v", e, a)
-	}
-	if e, a := expected.Type, typ; e != a {
-		return errors.Errorf("expected type %v, got type %v", e, a)
-	}
-	if e, a := expected.FractionCompleted, fractionCompleted; e != a {
-		return errors.Errorf("expected fraction completed %f, got %f", e, a)
-	}
-
-	// Check JobLogger-managed timestamps for sanity.
-	verifyModifiedAgainst := func(name string, ts time.Time) error {
-		if modified.Time.Before(ts) {
-			return errors.Errorf("modified time %v before %s time %v", modified, name, ts)
-		}
-		if now := timeutil.Now().Round(time.Microsecond); modified.Time.After(now) {
-			return errors.Errorf("modified time %v after current time %v", modified, now)
-		}
-		return nil
-	}
-
-	if expected.Before.After(created.Time) {
-		return errors.Errorf(
-			"created time %v is before expected created time %v",
-			created, expected.Before,
-		)
-	}
-	if status == jobs.JobStatusPending {
-		return verifyModifiedAgainst("created", created.Time)
-	}
-
-	if !started.Valid && status == jobs.JobStatusSucceeded {
-		return errors.Errorf("started time is NULL but job claims to be successful")
-	}
-	if started.Valid && created.Time.After(started.Time) {
-		return errors.Errorf("created time %v is after started time %v", created, started)
-	}
-	if status == jobs.JobStatusRunning {
-		return verifyModifiedAgainst("started", started.Time)
-	}
-
-	if started.Time.After(finished.Time) {
-		return errors.Errorf("started time %v is after finished time %v", started, finished)
-	}
-	if e, a := expected.Error, errMessage; e != a {
-		return errors.Errorf("expected error %v, got %v", e, a)
-	}
-	return verifyModifiedAgainst("finished", finished.Time)
+	return testSource(`[SHOW JOBS]`)
 }
 
 func TestJobLogger(t *testing.T) {

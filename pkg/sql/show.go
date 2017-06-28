@@ -1055,6 +1055,17 @@ func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planN
 
 }
 
+// ShowJobs returns all the jobs.
+// Privileges: None.
+func (p *planner) ShowJobs(ctx context.Context, n *parser.ShowJobs) (planNode, error) {
+	const getJobs = `TABLE crdb_internal.jobs`
+	stmt, err := parser.ParseOne(getJobs)
+	if err != nil {
+		return nil, err
+	}
+	return p.newPlan(ctx, stmt, nil)
+}
+
 func (p *planner) ShowSessions(ctx context.Context, n *parser.ShowSessions) (planNode, error) {
 	columns := sqlbase.ResultColumns{
 		{Name: "node_id", Typ: parser.TypeInt},
