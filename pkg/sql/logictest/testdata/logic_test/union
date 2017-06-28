@@ -64,6 +64,13 @@ VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LI
 3
 2
 
+# UNION with NULL columns in operands works.
+query I
+VALUES (1) UNION ALL VALUES (NULL) ORDER BY 1
+----
+NULL
+1
+
 statement ok
 CREATE TABLE uniontest (
   k INT,
@@ -183,3 +190,16 @@ SELECT 1 EXCEPT SELECT '3'
 
 query error column z does not exist
 SELECT 1 UNION SELECT 3 ORDER BY z
+
+# Check that EXPLAIN properly releases memory for virtual tables.
+query ITTT
+EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
+----
+0  union
+1  render
+2  virtual table
+2                 source  crdb_internal.node_build_info
+3  values
+3                 size    3 columns, 9 rows
+1  values
+1                 size    1 column, 1 row

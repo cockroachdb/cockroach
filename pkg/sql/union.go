@@ -76,7 +76,7 @@ func (p *planner) UnionClause(
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !l.Typ.Equivalent(r.Typ) {
+		if !(l.Typ.Equivalent(r.Typ) || l.Typ == parser.TypeNull || r.Typ == parser.TypeNull) {
 			return nil, fmt.Errorf("%v types %s and %s cannot be matched", n.Type, l.Typ, r.Typ)
 		}
 		if l.Hidden != r.Hidden {
@@ -85,13 +85,11 @@ func (p *planner) UnionClause(
 	}
 
 	node := &unionNode{
-		right:     right,
-		left:      left,
-		rightDone: false,
-		leftDone:  false,
-		emitAll:   emitAll,
-		emit:      emit,
-		scratch:   make([]byte, 0),
+		right:   right,
+		left:    left,
+		emitAll: emitAll,
+		emit:    emit,
+		scratch: make([]byte, 0),
 	}
 	return node, nil
 }
@@ -132,22 +130,19 @@ func (p *planner) UnionClause(
 //    already emitted as many as were on the right, don't emit.
 type unionNode struct {
 	right, left planNode
-	rightDone   bool
-	leftDone    bool
 	emitAll     bool // emitAll is a performance optimization for UNION ALL.
 	emit        unionNodeEmit
 	scratch     []byte
 }
 
 func (n *unionNode) Values() parser.Datums {
-	switch {
-	case !n.rightDone:
+	if n.right != nil {
 		return n.right.Values()
-	case !n.leftDone:
-		return n.left.Values()
-	default:
-		return nil
 	}
+	if n.left != nil {
+		return n.left.Values()
+	}
+	return nil
 }
 
 func (n *unionNode) readRight(ctx context.Context) (bool, error) {
@@ -171,8 +166,8 @@ func (n *unionNode) readRight(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	n.rightDone = true
 	n.right.Close(ctx)
+	n.right = nil
 	return n.readLeft(ctx)
 }
 
@@ -193,8 +188,8 @@ func (n *unionNode) readLeft(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	n.leftDone = true
 	n.left.Close(ctx)
+	n.left = nil
 	return false, nil
 }
 
@@ -206,22 +201,23 @@ func (n *unionNode) Start(ctx context.Context) error {
 }
 
 func (n *unionNode) Next(ctx context.Context) (bool, error) {
-	switch {
-	case !n.rightDone:
+	if n.right != nil {
 		return n.readRight(ctx)
-	case !n.leftDone:
-		return n.readLeft(ctx)
-	default:
-		return false, nil
 	}
+	if n.left != nil {
+		return n.readLeft(ctx)
+	}
+	return false, nil
 }
 
 func (n *unionNode) Close(ctx context.Context) {
-	switch {
-	case !n.rightDone:
+	if n.right != nil {
 		n.right.Close(ctx)
-	case !n.leftDone:
+		n.right = nil
+	}
+	if n.left != nil {
 		n.left.Close(ctx)
+		n.left = nil
 	}
 }
 
