@@ -629,6 +629,133 @@ func TestDiversityRemovalScore(t *testing.T) {
 	}
 }
 
+func TestBalanceScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	storeList := StoreList{
+		candidateRanges:          stat{mean: 1000},
+		candidateDiskUsage:       stat{mean: 0.50},
+		candidateWritesPerSecond: stat{mean: 1000},
+	}
+
+	sMean := roachpb.StoreCapacity{
+		Capacity:        1024 * 1024 * 1024,
+		Available:       512 * 1024 * 1024,
+		RangeCount:      1000,
+		WritesPerSecond: 1000,
+		BytesPerReplica: roachpb.Percentiles{
+			P10: 100 * 1024,
+			P25: 250 * 1024,
+			P50: 500 * 1024,
+			P75: 750 * 1024,
+			P90: 1000 * 1024,
+		},
+		WritesPerReplica: roachpb.Percentiles{
+			P10: 1,
+			P25: 2.5,
+			P50: 5,
+			P75: 7.5,
+			P90: 10,
+		},
+	}
+	sRangesOverfull := sMean
+	sRangesOverfull.RangeCount = 1500
+	sRangesUnderfull := sMean
+	sRangesUnderfull.RangeCount = 500
+	sBytesOverfull := sMean
+	sBytesOverfull.Available = 256 * 1024 * 1024
+	sBytesUnderfull := sMean
+	sBytesUnderfull.Available = 768 * 1024 * 1024
+	sRangesOverfullBytesOverfull := sRangesOverfull
+	sRangesOverfullBytesOverfull.Available = 256 * 1024 * 1024
+	sRangesUnderfullBytesUnderfull := sRangesUnderfull
+	sRangesUnderfullBytesUnderfull.Available = 768 * 1024 * 1024
+	sRangesUnderfullBytesOverfull := sRangesUnderfull
+	sRangesUnderfullBytesOverfull.Available = 256 * 1024 * 1024
+	sRangesOverfullBytesUnderfull := sRangesOverfull
+	sRangesOverfullBytesUnderfull.Available = 768 * 1024 * 1024
+	sRangesUnderfullBytesOverfullWritesOverfull := sRangesUnderfullBytesOverfull
+	sRangesUnderfullBytesOverfullWritesOverfull.WritesPerSecond = 1500
+	sRangesUnderfullBytesUnderfullWritesOverfull := sRangesUnderfullBytesUnderfull
+	sRangesUnderfullBytesUnderfullWritesOverfull.WritesPerSecond = 1500
+
+	rMedian := RangeInfo{
+		LiveBytes:       500 * 1024,
+		WritesPerSecond: 5,
+	}
+	rHighBytes := rMedian
+	rHighBytes.LiveBytes = 2000 * 1024
+	rLowBytes := rMedian
+	rLowBytes.LiveBytes = 50 * 1024
+	rHighBytesHighWrites := rHighBytes
+	rHighBytesHighWrites.WritesPerSecond = 20
+	rHighBytesLowWrites := rHighBytes
+	rHighBytesLowWrites.WritesPerSecond = 0.5
+	rLowBytesHighWrites := rLowBytes
+	rLowBytesHighWrites.WritesPerSecond = 20
+	rLowBytesLowWrites := rLowBytes
+	rLowBytesLowWrites.WritesPerSecond = 0.5
+	rHighWrites := rMedian
+	rHighWrites.WritesPerSecond = 20
+	rLowWrites := rMedian
+	rLowWrites.WritesPerSecond = 0.5
+
+	testCases := []struct {
+		sc       roachpb.StoreCapacity
+		ri       RangeInfo
+		expected float64
+	}{
+		{sMean, rMedian, 0},
+		{sMean, rHighBytes, 0},
+		{sMean, rLowBytes, 0},
+		{sRangesOverfull, rMedian, -1},
+		{sRangesOverfull, rHighBytes, -1},
+		{sRangesOverfull, rLowBytes, -1},
+		{sRangesUnderfull, rMedian, 1},
+		{sRangesUnderfull, rHighBytes, 1},
+		{sRangesUnderfull, rLowBytes, 1},
+		{sBytesOverfull, rMedian, 0},
+		{sBytesOverfull, rHighBytes, -1},
+		{sBytesOverfull, rLowBytes, 1},
+		{sBytesUnderfull, rMedian, 0},
+		{sBytesUnderfull, rHighBytes, 1},
+		{sBytesUnderfull, rLowBytes, -1},
+		{sRangesOverfullBytesOverfull, rMedian, -2},
+		{sRangesOverfullBytesOverfull, rHighBytes, 0},
+		{sRangesOverfullBytesOverfull, rLowBytes, 0},
+		{sRangesUnderfullBytesUnderfull, rMedian, 2},
+		{sRangesUnderfullBytesUnderfull, rHighBytes, 0},
+		{sRangesUnderfullBytesUnderfull, rLowBytes, 0},
+		{sRangesUnderfullBytesOverfull, rMedian, 1},
+		{sRangesUnderfullBytesOverfull, rHighBytes, 0},
+		{sRangesUnderfullBytesOverfull, rLowBytes, 2},
+		{sRangesOverfullBytesUnderfull, rMedian, -1},
+		{sRangesOverfullBytesUnderfull, rHighBytes, 0},
+		{sRangesOverfullBytesUnderfull, rLowBytes, -2},
+		{sRangesUnderfullBytesOverfullWritesOverfull, rMedian, 1},
+		{sRangesUnderfullBytesOverfullWritesOverfull, rHighBytes, 0},
+		{sRangesUnderfullBytesOverfullWritesOverfull, rHighBytesHighWrites, -1},
+		{sRangesUnderfullBytesOverfullWritesOverfull, rHighBytesLowWrites, 1},
+		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytes, 2},
+		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytesHighWrites, 1},
+		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytesLowWrites, 3},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rMedian, 2},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytes, 0},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesHighWrites, -1},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesLowWrites, 1},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytes, 0},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesHighWrites, -1},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesLowWrites, 1},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighWrites, 1},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowWrites, 3},
+	}
+	for i, tc := range testCases {
+		if a, e := balanceScore(storeList, tc.sc, tc.ri), tc.expected; a.totalScore() != e {
+			t.Errorf("%d: balanceScore(storeList, %+v, %+v) got %s; want %.2f", i, tc.sc, tc.ri, a, e)
+		}
+	}
+}
+
 func TestMaxCapacity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
