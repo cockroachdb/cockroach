@@ -18,8 +18,9 @@ package storage
 
 import (
 	"fmt"
-	"hash/crc32"
 	"io/ioutil"
+	"math/rand"
+	"os"
 	"path/filepath"
 	"reflect"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -297,12 +299,12 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Replicated.RaftLogDelta = nil
 
-	if p.Replicated.AddSSTable.Data == nil {
-		p.Replicated.AddSSTable.Data = q.Replicated.AddSSTable.Data
-	} else if q.Replicated.AddSSTable.Data != nil {
+	if p.Replicated.AddSSTable == nil {
+		p.Replicated.AddSSTable = q.Replicated.AddSSTable
+	} else if q.Replicated.AddSSTable != nil {
 		return errors.New("conflicting AddSSTable")
 	}
-	q.Replicated.AddSSTable.Data = nil
+	q.Replicated.AddSSTable = nil
 
 	if q.Local.intents != nil {
 		if p.Local.intents == nil {
@@ -507,32 +509,46 @@ func (r *Replica) leasePostApply(
 	}
 }
 
-func (r *Replica) addSSTablePostApply(ctx context.Context, data []byte) {
-	var checksum []byte
-	{
-		hash := crc32.New(crc32.MakeTable(crc32.Castagnoli))
-		if _, err := hash.Write(data); err != nil {
-			panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
-		}
-		checksum = hash.Sum(nil)
+func (r *Replica) addSSTablePreApply(
+	ctx context.Context, sideloaded sideloadStorage, term, index uint64, startKey, endKey roachpb.RKey, sst storagebase.ReplicatedEvalResult_AddSSTable,
+) {
+	checksum := util.CRC32(sst.Data)
+
+	if checksum != sst.CRC32 {
+		// TODO(tschottdorf): once available, print information about the log index.
+		log.Fatalf(ctx, "checksum does not match; at proposal time %x (%d), now %x (%d)",
+			sst.CRC32, sst.CRC32, checksum, checksum)
 	}
 
-	// TODO(dan): Instead of a path based on checksum, use the one in the RFC:
-	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/raft_sstable_sideloading.md#detailed-design
+	// TODO(danhhz,tschottdorf): we can hardlink directly to the sideloaded
+	// SSTable and ingest that if we also put a "sanitizer" in the
+	// implementation of sideloadedStorage that undoes the serial number that
+	// RocksDB may add to the SSTable. This avoids copying the file entirely.
 	var path string
 	var move bool
 	if inmem, ok := r.store.engine.(engine.InMem); ok {
 		path = fmt.Sprintf("%x", checksum)
 		move = false
-		if err := inmem.WriteFile(path, data); err != nil {
+		if err := inmem.WriteFile(path, sst.Data); err != nil {
 			panic(err)
 		}
 	} else {
-		path = filepath.Join(r.store.engine.GetAuxiliaryDir(), fmt.Sprintf("addsstable-%x", checksum))
-		move = true
-		if err := ioutil.WriteFile(path, data, 0600); err != nil {
-			panic(err)
+		// TODO(danhhz,tschottdorf): consider ingestion directly from the
+		// sideloaded payload.
+		//
+		// TODO(tschottdorf): plumb an evaluation struct into this method so
+		// that the file name can mirror that used by sideloading, and the
+		// randomness here can go away.
+		path = filepath.Join(r.store.engine.GetAuxiliaryDir(), fmt.Sprintf("addsstable-%x-%d", checksum, rand.Int63()))
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			move = true
+			if err := ioutil.WriteFile(path, sst.Data, 0600); err != nil {
+				panic(err)
+			}
+		} else if err != nil {
+			log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 		}
+		log.Eventf(ctx, "ingesting file %s", path)
 	}
 
 	if err := r.store.engine.IngestExternalFile(ctx, path, move); err != nil {
@@ -705,6 +721,12 @@ func (r *Replica) handleReplicatedEvalResult(
 		// Clear any entries in the Raft log entry cache for this range up
 		// to and including the most recently truncated index.
 		r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)
+		log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", newTruncState.Index)
+		if err := r.raftMu.sideloaded.TruncateTo(ctx, newTruncState.Index+1); err != nil {
+			// We don't *have* to remove these entries for correctness. Log a
+			// loud error, but keep humming along.
+			log.Errorf(ctx, "while removing sideloaded files during log truncation: %s", err)
+		}
 	}
 
 	if newThresh := rResult.State.GCThreshold; newThresh != (hlc.Timestamp{}) {
@@ -757,17 +779,6 @@ func (r *Replica) handleReplicatedEvalResult(
 		if checkRaftLog {
 			r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 		}
-	}
-
-	if rResult.AddSSTable.Data != nil {
-		// TODO(dan): DANGER DANGER DANGER. ReplicatedEvalResult is for
-		// in-memory side effects. If there was a crash before this line, the
-		// database would be corrupted because the command would be marked as
-		// applied but the new sstable wouldn't be there. We need to figure out
-		// how to make this atomic with the commit of the batch including the
-		// new AppliedIndex.
-		r.addSSTablePostApply(ctx, rResult.AddSSTable.Data)
-		rResult.AddSSTable.Data = nil
 	}
 
 	if !reflect.DeepEqual(rResult, storagebase.ReplicatedEvalResult{}) {

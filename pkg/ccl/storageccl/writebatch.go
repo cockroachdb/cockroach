@@ -67,7 +67,7 @@ func evalWriteBatch(
 
 	// Check if there was data in the affected keyrange. If so, delete it (and
 	// adjust the MVCCStats) before applying the WriteBatch data.
-	existingStats, err := clearExistingData(batch, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+	existingStats, err := clearExistingData(ctx, batch, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 	if err != nil {
 		return storage.EvalResult{}, errors.Wrap(err, "clearing existing data")
 	}

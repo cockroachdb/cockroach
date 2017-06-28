@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -57,7 +58,11 @@ func evalAddSSTable(
 
 	// Check if there was data in the affected keyrange. If so, delete it (and
 	// adjust the MVCCStats) before applying the SSTable.
-	existingStats, err := clearExistingData(batch, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+	//
+	// TODO(tschottdorf): this could be a large proposal (perhaps too large to
+	// be accepted). Better to compute the stats and send them along, but make
+	// the actual clear a below-Raft side effect.
+	existingStats, err := clearExistingData(ctx, batch, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 	if err != nil {
 		return storage.EvalResult{}, errors.Wrap(err, "clearing existing data")
 	}
@@ -65,8 +70,9 @@ func evalAddSSTable(
 
 	pd := storage.EvalResult{
 		Replicated: storagebase.ReplicatedEvalResult{
-			AddSSTable: storagebase.ReplicatedEvalResult_AddSSTable{
-				Data: args.Data,
+			AddSSTable: &storagebase.ReplicatedEvalResult_AddSSTable{
+				Data:  args.Data,
+				CRC32: util.CRC32(args.Data),
 			},
 		},
 	}
@@ -119,7 +125,7 @@ func verifySSTable(
 }
 
 func clearExistingData(
-	batch engine.ReadWriter, start, end engine.MVCCKey, nowNanos int64,
+	ctx context.Context, batch engine.ReadWriter, start, end engine.MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	iter := batch.NewIterator(false)
 	defer iter.Close()

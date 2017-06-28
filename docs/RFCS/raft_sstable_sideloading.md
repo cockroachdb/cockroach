@@ -1,5 +1,5 @@
 - Feature Name: Raft Proposal Sideloading for SSTable ingestion
-- Status: in-progress
+- Status: completed
 - Start Date: 2017-05-24
 - Authors: Dan Harrison and Tobias Schottdorf, original suggestion Ben Darnell
 - RFC PR: #16159
@@ -52,7 +52,7 @@ The mechanism proposed here is the following:
    which are unused for regular Raft proposals.
 1. When a proposal is to be sideloaded, a regular proposal is generated, but the
    sideloaded data and its hash populated. In the concrete case of `SSTable`
-   this means that `evalIngestSSTable` creates an essentially empty proposal
+   this means that `evalAddSSTable` creates an essentially empty proposal
    (perhaps accounting for an MVCC stats delta).
 1.  On its way into Raft, the
    `SideloadedData` bytes are then written to disk and stripped from the

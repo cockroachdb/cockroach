@@ -254,6 +254,8 @@ type Replica struct {
 		// Note that there are two replicaStateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
 		stateLoader replicaStateLoader
+		// sideloaded SSTables.
+		sideloaded sideloadStorage
 	}
 
 	// Contains the lease history when enabled.
@@ -335,7 +337,8 @@ type Replica struct {
 		//
 		// The *ProposalData in the map are "owned" by it. Elements from the
 		// map must only be referenced while Replica.mu is held, except if the
-		// element is removed from the map first.
+		// element is removed from the map first. The notable exception is the
+		// contained RaftCommand, which we treat as immutable.
 		proposals         map[storagebase.CmdIDKey]*ProposalData
 		internalRaftGroup *raft.RawNode
 		// The ID of the replica within the Raft group. May be 0 if the replica has
@@ -605,12 +608,14 @@ func NewReplica(
 func (r *Replica) init(
 	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
 ) error {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.initLocked(desc, clock, replicaID)
+	return r.initRaftMuLockedReplicaMuLocked(desc, clock, replicaID)
 }
 
-func (r *Replica) initLocked(
+func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
 ) error {
 	ctx := r.AnnotateCtx(context.TODO())
@@ -620,6 +625,8 @@ func (r *Replica) initLocked(
 	if desc.IsInitialized() && replicaID != 0 {
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
+
+	r.raftMu.sideloaded = newInMemSideloadStorage(desc.RangeID, replicaID)
 
 	r.cmdQMu.Lock()
 	r.cmdQMu.global = NewCommandQueue(true /* optimizeOverlap */)
@@ -699,7 +706,7 @@ func (r *Replica) destroyDataRaftMuLocked(
 
 	// NB: this uses the local descriptor instead of the consistent one to match
 	// the data on disk.
-	if err := clearRangeData(r.Desc(), r.store.Engine(), batch); err != nil {
+	if err := clearRangeData(ctx, r.Desc(), r.store.Engine(), batch); err != nil {
 		return err
 	}
 	clearTime := timeutil.Now()
@@ -708,10 +715,19 @@ func (r *Replica) destroyDataRaftMuLocked(
 	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {
 		return err
 	}
-	if err := batch.Commit(false); err != nil {
+	// We need to sync here because we are potentially deleting sideloaded
+	// proposals from the file system next. We could write the tombstone only in
+	// a synchronous batch first and then delete the data alternatively, but
+	// then need to handle the case in which there is both the tombstone and
+	// leftover replica data.
+	if err := batch.Commit(true); err != nil {
 		return err
 	}
 	commitTime := timeutil.Now()
+
+	if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
+		return err
+	}
 
 	ms := r.GetMVCCStats()
 	log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
@@ -2566,12 +2582,14 @@ func (r *Replica) requestToProposal(
 	var pErr *roachpb.Error
 	var result *EvalResult
 	result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
+
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal.Local = &result.Local
 	proposal.command = storagebase.RaftCommand{
 		ReplicatedEvalResult: result.Replicated,
 		WriteBatch:           result.WriteBatch,
 	}
+
 	if r.store.TestingKnobs().TestingEvalFilter != nil {
 		// For backwards compatibility, tests that use TestingEvalFilter
 		// need the original request to be preserved. See #10493
@@ -2733,6 +2751,10 @@ func (r *Replica) propose(
 		}
 		intents := proposal.Local.detachIntents()
 		r.raftMu.Lock()
+		// TODO(tschottdorf): refactor how we deal with fields that are set on
+		// error. Each field should know under which circumstances it takes
+		// effect.
+		proposal.command.ReplicatedEvalResult.AddSSTable = nil
 		r.handleEvalResultRaftMuLocked(ctx, proposal.Local, proposal.command.ReplicatedEvalResult)
 		r.raftMu.Unlock()
 		if endCmds != nil {
@@ -2863,6 +2885,7 @@ func (r *Replica) isSoloReplicaRLocked() bool {
 }
 
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
+
 	data, err := protoutil.Marshal(&p.command)
 	if err != nil {
 		return err
@@ -2924,13 +2947,22 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	}
 
 	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+		encode := encodeRaftCommandV1
+		if p.command.ReplicatedEvalResult.AddSSTable != nil {
+			if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
+				return false, errors.New("cannot sideload empty SSTable")
+			}
+			encode = encodeRaftCommandV2
+			log.Event(p.ctx, "sideloadable proposal detected")
+		}
+
 		if log.V(4) {
 			log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 		}
 		// We're proposing a command so there is no need to wake the leader if we
 		// were quiesced.
 		r.unquiesceLocked()
-		return false /* !unquiesceAndWakeLeader */, raftGroup.Propose(encodeRaftCommand(p.idKey, data))
+		return false /* !unquiesceAndWakeLeader */, raftGroup.Propose(encode(p.idKey, data))
 	})
 }
 
@@ -2977,7 +3009,7 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 		}
 		r.mu.quiescent = false
 		// Propose an empty command which will wake the leader.
-		_ = r.mu.internalRaftGroup.Propose(encodeRaftCommand(makeIDKey(), nil))
+		_ = r.mu.internalRaftGroup.Propose(encodeRaftCommandV1(makeIDKey(), nil))
 	}
 }
 
@@ -3122,11 +3154,21 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	// We know that all of the writes from here forward will be to distinct keys.
 	writer := batch.Distinct()
+	prevLastIndex := lastIndex
 	if len(rd.Entries) > 0 {
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
-		var err error
-		if lastIndex, raftLogSize, err = r.append(ctx, writer, lastIndex, raftLogSize, rd.Entries); err != nil {
+		thinEntries, err := r.maybeSideloadEntriesRaftMuLocked(ctx, rd.Entries)
+		if err != nil {
+			return stats, err
+		}
+		if lastIndex, raftLogSize, err = r.append(
+			ctx,
+			writer,
+			lastIndex,
+			raftLogSize,
+			thinEntries,
+		); err != nil {
 			return stats, err
 		}
 	}
@@ -3145,9 +3187,30 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	elapsed := timeutil.Since(start)
 	r.store.metrics.RaftLogCommitLatency.RecordValue(elapsed.Nanoseconds())
 
-	// Update protected state (last index, raft log size and raft leader
-	// ID) and set raft log entry cache. We clear any older, uncommitted
-	// log entries and cache the latest ones.
+	if len(rd.Entries) > 0 {
+		// We may have just overwritten parts of the log which contain
+		// sideloaded SSTables from a previous term (and perhaps discarded some
+		// entries that we didn't overwrite). Remove any such leftover on-disk
+		// payloads (we can do that now because we've committed the deletion
+		// just above).
+		firstPurge := rd.Entries[0].Index // first new entry written
+		purgeTerm := rd.Entries[0].Term - 1
+		lastPurge := prevLastIndex // old end of the log, include in deletion
+		for i := firstPurge; i <= lastPurge; i++ {
+			err := r.raftMu.sideloaded.Purge(ctx, i, purgeTerm)
+			if err != nil && errors.Cause(err) != errSideloadedFileNotFound {
+				return stats, errors.Wrapf(err, "while purging index %d", i)
+			}
+		}
+	}
+
+	// Update protected state (last index, raft log size and raft leader ID) and
+	// set raft log entry cache. We clear any older, uncommitted log entries and
+	// cache the latest ones.
+	//
+	// Note also that we're likely to send messages related to the Entries we
+	// just appended, and these entries need to be inlined when sending them to
+	// followers - populating the cache here saves a lot of that work.
 	r.mu.Lock()
 	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
@@ -3155,13 +3218,58 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.leaderID = leaderID
 	r.mu.Unlock()
 
-	for _, msg := range rd.Messages {
-		r.sendRaftMessage(ctx, msg)
+	for _, message := range rd.Messages {
+		drop := false
+		if message.Type == raftpb.MsgApp {
+			// Iterate over the entries to inline sideloaded commands.
+			for j := range message.Entries {
+				cow := false
+				newEnt, err := maybeInlineSideloadedRaftCommand(
+					ctx,
+					r.RangeID,
+					message.Entries[j],
+					r.raftMu.sideloaded,
+					r.store.raftEntryCache,
+				)
+				if err != nil {
+					// We can simply drop the message since it could always get lost
+					// in transit anyway.
+					log.Errorf(ctx, "while inlining sideloaded commands: %s", err)
+					drop = true
+					continue
+				}
+				if newEnt != nil {
+					if !cow {
+						cow = true
+						// Copy the whole slice to avoid data races. Entries are
+						// usually shared between multiple outgoing messages,
+						// and while it would be possible to only modify them
+						// only the first time around, that isn't easy to
+						// implement (since you have to do nontrivial work to
+						// decide whether inlining needs to happen).
+						message.Entries = append([]raftpb.Entry(nil), message.Entries...)
+					}
+					message.Entries[j] = *newEnt
+				}
+			}
+		}
+		if !drop {
+			r.sendRaftMessage(ctx, message)
+		}
 	}
 
 	for _, e := range rd.CommittedEntries {
 		switch e.Type {
 		case raftpb.EntryNormal:
+			// Committed entries come straight from the Raft log. Consequently,
+			// sideloaded SSTables are not usually inlined.
+			if newEnt, err := maybeInlineSideloadedRaftCommand(
+				ctx, r.RangeID, e, r.raftMu.sideloaded, r.store.raftEntryCache,
+			); err != nil {
+				return stats, err
+			} else if newEnt != nil {
+				e = *newEnt
+			}
 
 			var commandID storagebase.CmdIDKey
 			var command storagebase.RaftCommand
@@ -3193,7 +3301,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				}
 			}
 
-			if changedRepl := r.processRaftCommand(ctx, commandID, e.Index, command); changedRepl {
+			if changedRepl := r.processRaftCommand(ctx, commandID, e.Term, e.Index, command); changedRepl {
 				log.Fatalf(ctx, "unexpected replication change from command %s", &command)
 			}
 			r.store.metrics.RaftCommandsApplied.Inc(1)
@@ -3228,7 +3336,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 			commandID := storagebase.CmdIDKey(ccCtx.CommandID)
 			if changedRepl := r.processRaftCommand(
-				ctx, commandID, e.Index, command,
+				ctx, commandID, e.Term, e.Index, command,
 			); !changedRepl {
 				// If we did not apply the config change, tell raft that the config change was aborted.
 				cc = raftpb.ConfChange{}
@@ -3708,6 +3816,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	return true
 }
 
+// sendRaftMessage sends a Raft message.
 func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
@@ -3925,7 +4034,7 @@ func (r *Replica) checkForcedErrLocked(
 // make sure that the error returned from this method is always populated in
 // those cases, as one of the callers uses it to abort replica changes.
 func (r *Replica) processRaftCommand(
-	ctx context.Context, idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
+	ctx context.Context, idKey storagebase.CmdIDKey, term, index uint64, raftCmd storagebase.RaftCommand,
 ) bool {
 	if index == 0 {
 		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
@@ -4011,6 +4120,20 @@ func (r *Replica) processRaftCommand(
 		if raftCmd.WriteBatch != nil {
 			writeBatch = raftCmd.WriteBatch
 		}
+
+		if raftCmd.ReplicatedEvalResult.AddSSTable != nil {
+			r.addSSTablePreApply(
+				ctx,
+				r.raftMu.sideloaded,
+				term,
+				index,
+				raftCmd.ReplicatedEvalResult.StartKey,
+				raftCmd.ReplicatedEvalResult.EndKey,
+				*raftCmd.ReplicatedEvalResult.AddSSTable,
+			)
+			raftCmd.ReplicatedEvalResult.AddSSTable = nil
+		}
+
 		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
 			ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch)
 

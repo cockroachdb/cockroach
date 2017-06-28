@@ -68,7 +68,7 @@ func (is Server) CollectChecksum(
 			}
 			resp.Checksum = c.checksum
 			if !bytes.Equal(req.Checksum, c.checksum) {
-				log.Errorf(ctx, "consistency check failed on range ID %s: expected checksum %x, got %x",
+				log.Errorf(ctx, "consistency check failed on range r%d: expected checksum %x, got %x",
 					req.RangeID, req.Checksum, c.checksum)
 				resp.Snapshot = c.snapshot
 			}
