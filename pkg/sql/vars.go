@@ -317,7 +317,7 @@ var varGen = map[string]sessionVar{
 	},
 
 	`transaction status`: {
-		Get: func(p *planner) string { return getTransactionState(&p.session.TxnState, p.autoCommit) },
+		Get: func(p *planner) string { return getTransactionState(&p.session.TxnState) },
 	},
 
 	`trace`: {
