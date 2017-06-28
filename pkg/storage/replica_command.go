@@ -3981,13 +3981,9 @@ func (r *Replica) adminScatter(
 			break
 		}
 
+		rangeInfo := rangeInfoForRepl(r, desc)
 		targetStore := r.store.allocator.RebalanceTarget(
-			ctx,
-			zone.Constraints,
-			desc.Replicas,
-			desc.RangeID,
-			storeFilterNone,
-		)
+			ctx, zone.Constraints, rangeInfo, storeFilterNone)
 		if targetStore == nil {
 			if log.V(2) {
 				log.Infof(ctx, "scatter: no rebalance targets found on try %d, moving on", i)

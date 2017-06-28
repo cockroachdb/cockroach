@@ -2239,7 +2239,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	}
 
 	// Increment the manual clock and do a write to increase the qps above zero.
-	manualClock.Increment(int64(time.Second))
+	manualClock.Increment(int64(storage.MinStatsDuration))
 	key := roachpb.Key("a")
 	pArgs := putArgs(key, []byte("aaa"))
 	if _, pErr := client.SendWrapped(context.Background(), rg1(s), pArgs); pErr != nil {
@@ -2256,7 +2256,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	if e, a := int32(1), cap.LeaseCount; e != a {
 		t.Errorf("expected cap.LeaseCount=%d, got %d", e, a)
 	}
-	if minExpected, a := float64(1), cap.WritesPerSecond; minExpected > a {
+	if minExpected, a := 1/float64(storage.MinStatsDuration/time.Second), cap.WritesPerSecond; minExpected > a {
 		t.Errorf("expected cap.WritesPerSecond >= %f, got %f", minExpected, a)
 	}
 	bpr2 := cap.BytesPerReplica
