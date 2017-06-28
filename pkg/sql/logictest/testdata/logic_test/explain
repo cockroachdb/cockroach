@@ -132,47 +132,57 @@ EXPLAIN SHOW TABLES
 3  virtual table
 3                 source  information_schema.tables
 4  values
-4                 size    5 columns, 58 rows
+4                 size    5 columns, 59 rows
 
 query ITTT
 EXPLAIN SHOW DATABASE
 ----
-0  virtual table
-0                 source  SHOW database
-1  values
-1                 size    1 column, 1 row
+0  render
+1  filter
+2  virtual table
+2                 source  crdb_internal.session_variables
+3  values
+3                 size    2 columns, 19 rows
 
 query ITTT
 EXPLAIN SHOW TIME ZONE
 ----
-0 virtual table
-0                 source  SHOW TIME ZONE
-1 values
-1                 size    1 column, 1 row
+0  render
+1  filter
+2  virtual table
+2                 source  crdb_internal.session_variables
+3  values
+3                 size    2 columns, 19 rows
 
 query ITTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-0  virtual table
-0                 source  SHOW default_transaction_isolation
-1  values
-1                 size    1 column, 1 row
+0  render
+1  filter
+2  virtual table
+2                 source  crdb_internal.session_variables
+3  values
+3                 size    2 columns, 19 rows
 
 query ITTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 ----
-0 virtual table
-0                 source  SHOW TRANSACTION ISOLATION LEVEL
-1 values
-1                 size    1 column, 1 row
+0  render
+1  filter
+2  virtual table
+2                 source  crdb_internal.session_variables
+3  values
+3                 size    2 columns, 19 rows
 
 query ITTT
 EXPLAIN SHOW TRANSACTION PRIORITY
 ----
-0 virtual table
-0                 source  SHOW TRANSACTION PRIORITY
-1 values
-1                 size    1 column, 1 row
+0  render
+1  filter
+2  virtual table
+2                 source  crdb_internal.session_variables
+3  values
+3                 size    2 columns, 19 rows
 
 query ITTT
 EXPLAIN SHOW COLUMNS FROM foo
@@ -190,7 +200,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 7  virtual table
 7                 source    information_schema.columns
 8  values
-8                 size      13 columns, 499 rows
+8                 size      13 columns, 501 rows
 5  render
 6  filter
 7  virtual table

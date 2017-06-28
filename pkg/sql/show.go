@@ -167,53 +167,19 @@ func (p *planner) Show(ctx context.Context, n *parser.Show) (planNode, error) {
 		return p.showClusterSetting(ctx, name)
 	}
 
-	var columns sqlbase.ResultColumns
-
-	switch name {
-	case `all`:
-		columns = sqlbase.ResultColumns{
-			{Name: "Variable", Typ: parser.TypeString},
-			{Name: "Value", Typ: parser.TypeString},
-		}
-	default:
-		if _, ok := varGen[name]; !ok {
-			return nil, fmt.Errorf("unknown variable: %q", origName)
-		}
-		columns = sqlbase.ResultColumns{{Name: name, Typ: parser.TypeString}}
+	if name == "all" {
+		return p.delegateQuery(ctx, "TABLE crdb_internal.session_variables", nil)
 	}
 
-	return &delayedNode{
-		name:    "SHOW " + origName,
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
-
-			switch name {
-			case `all`:
-				for _, vName := range varNames {
-					gen := varGen[vName]
-					value := gen.Get(p)
-					if _, err := v.rows.AddRow(
-						ctx, parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
-					); err != nil {
-						v.rows.Close(ctx)
-						return nil, err
-					}
-				}
-			default:
-				// The key in varGen is guaranteed to exist thanks to the
-				// check above.
-				gen := varGen[name]
-				value := gen.Get(p)
-				if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
-					v.rows.Close(ctx)
-					return nil, err
-				}
-			}
-
-			return v, nil
-		},
-	}, nil
+	if _, ok := varGen[name]; !ok {
+		return nil, fmt.Errorf("unknown variable: %q", origName)
+	}
+	return p.delegateQuery(ctx, fmt.Sprintf(
+		`SELECT value AS %[1]s FROM crdb_internal.session_variables `+
+			`WHERE variable = %[2]s`,
+		parser.Name(name).String(),
+		parser.EscapeSQLString(name)),
+		nil)
 }
 
 // ShowColumns of a table.
