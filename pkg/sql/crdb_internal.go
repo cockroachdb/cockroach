@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -42,6 +43,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalStmtStatsTable,
 		crdbInternalJobsTable,
 		crdbInternalSessionTraceTable,
+		crdbInternalClusterSettingsTable,
 	},
 }
 
@@ -484,6 +486,33 @@ CREATE TABLE crdb_internal.session_trace(
 		}
 		for _, r := range rows {
 			if err := addRow(r[:]...); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalClusterSettingsTable exposes the list of current
+// cluster settings.
+var crdbInternalClusterSettingsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.cluster_settings (
+  name          STRING NOT NULL,
+  current_value STRING NOT NULL,
+  type          STRING NOT NULL,
+  description   STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+		for _, k := range settings.Keys() {
+			setting, _ := settings.Lookup(k)
+			if err := addRow(
+				parser.NewDString(k),
+				parser.NewDString(setting.String()),
+				parser.NewDString(setting.Typ()),
+				parser.NewDString(setting.Description()),
+			); err != nil {
 				return err
 			}
 		}
