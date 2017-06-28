@@ -103,71 +103,57 @@ func checkTablePrivileges(ctx context.Context, p *planner, tn *parser.TableName)
 	return nil
 }
 
-func (p *planner) showClusterSetting(name string) (planNode, error) {
-	var columns sqlbase.ResultColumns
-	var populate func(ctx context.Context, v *valuesNode) error
-
-	switch name {
-	case "all":
-		columns = sqlbase.ResultColumns{
-			{Name: "name", Typ: parser.TypeString},
-			{Name: "current_value", Typ: parser.TypeString},
-			{Name: "type", Typ: parser.TypeString},
-			{Name: "description", Typ: parser.TypeString},
-		}
-		populate = func(ctx context.Context, v *valuesNode) error {
-			for _, k := range settings.Keys() {
-				setting, _ := settings.Lookup(k)
-				if _, err := v.rows.AddRow(ctx, parser.Datums{
-					parser.NewDString(k),
-					parser.NewDString(setting.String()),
-					parser.NewDString(setting.Typ()),
-					parser.NewDString(setting.Description()),
-				}); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-
-	default:
-		val, ok := settings.Lookup(name)
-		if !ok {
-			return nil, errors.Errorf("unknown setting: %q", name)
-		}
-		var d parser.Datum
-		switch s := val.(type) {
-		case *settings.IntSetting:
-			d = parser.NewDInt(parser.DInt(s.Get()))
-		case *settings.StringSetting:
-			d = parser.NewDString(s.String())
-		case *settings.BoolSetting:
-			d = parser.MakeDBool(parser.DBool(s.Get()))
-		case *settings.FloatSetting:
-			d = parser.NewDFloat(parser.DFloat(s.Get()))
-		case *settings.DurationSetting:
-			d = &parser.DInterval{Duration: duration.Duration{Nanos: s.Get().Nanoseconds()}}
-		case *settings.EnumSetting:
-			d = parser.NewDInt(parser.DInt(s.Get()))
-		case *settings.ByteSizeSetting:
-			d = parser.NewDString(s.String())
-		default:
-			return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
-		}
-		columns = sqlbase.ResultColumns{{Name: name, Typ: d.ResolvedType()}}
-		populate = func(ctx context.Context, v *valuesNode) error {
-			_, err := v.rows.AddRow(ctx, parser.Datums{d})
-			return err
-		}
+func (p *planner) showClusterSetting(ctx context.Context, name string) (planNode, error) {
+	if name == "all" {
+		return p.delegateQuery(ctx, "SHOW CLUSTER SETTINGS",
+			"TABLE crdb_internal.cluster_settings", nil, nil)
 	}
 
+	val, ok := settings.Lookup(name)
+	if !ok {
+		return nil, errors.Errorf("unknown setting: %q", name)
+	}
+	var dType parser.Type
+	switch val.(type) {
+	case *settings.IntSetting, *settings.EnumSetting:
+		dType = parser.TypeInt
+	case *settings.StringSetting, *settings.ByteSizeSetting:
+		dType = parser.TypeString
+	case *settings.BoolSetting:
+		dType = parser.TypeBool
+	case *settings.FloatSetting:
+		dType = parser.TypeFloat
+	case *settings.DurationSetting:
+		dType = parser.TypeInterval
+	default:
+		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
+	}
+
+	columns := sqlbase.ResultColumns{{Name: name, Typ: dType}}
 	return &delayedNode{
 		name:    "SHOW CLUSTER SETTING " + name,
 		columns: columns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 1)
+			d := parser.DNull
+			switch s := val.(type) {
+			case *settings.IntSetting:
+				d = parser.NewDInt(parser.DInt(s.Get()))
+			case *settings.StringSetting:
+				d = parser.NewDString(s.String())
+			case *settings.BoolSetting:
+				d = parser.MakeDBool(parser.DBool(s.Get()))
+			case *settings.FloatSetting:
+				d = parser.NewDFloat(parser.DFloat(s.Get()))
+			case *settings.DurationSetting:
+				d = &parser.DInterval{Duration: duration.Duration{Nanos: s.Get().Nanoseconds()}}
+			case *settings.EnumSetting:
+				d = parser.NewDInt(parser.DInt(s.Get()))
+			case *settings.ByteSizeSetting:
+				d = parser.NewDString(s.String())
+			}
 
-			if err := populate(ctx, v); err != nil {
+			v := p.newContainerValuesNode(columns, 0)
+			if _, err := v.rows.AddRow(ctx, parser.Datums{d}); err != nil {
 				v.rows.Close(ctx)
 				return nil, err
 			}
@@ -177,12 +163,12 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 }
 
 // Show a session-local variable name.
-func (p *planner) Show(n *parser.Show) (planNode, error) {
+func (p *planner) Show(ctx context.Context, n *parser.Show) (planNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
 
 	if n.ClusterSetting {
-		return p.showClusterSetting(name)
+		return p.showClusterSetting(ctx, name)
 	}
 
 	var columns sqlbase.ResultColumns
@@ -1069,8 +1055,8 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 // ShowTransactionStatus implements the plan for SHOW TRANSACTION STATUS.
 // This statement is usually handled as a special case in Executor,
 // but for FROM [SHOW TRANSACTION STATUS] we will arrive here too.
-func (p *planner) ShowTransactionStatus() (planNode, error) {
-	return p.Show(&parser.Show{Name: "transaction status"})
+func (p *planner) ShowTransactionStatus(ctx context.Context) (planNode, error) {
+	return p.Show(ctx, &parser.Show{Name: "transaction status"})
 }
 
 // ShowUsers returns all the users.

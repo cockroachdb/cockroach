@@ -204,6 +204,7 @@ DROP DATABASE other_db
 query TT
 select table_schema, table_name FROM information_schema.tables ORDER BY 1, 2
 ----
+crdb_internal       cluster_settings
 crdb_internal       jobs
 crdb_internal       leases
 crdb_internal       node_build_info
@@ -336,6 +337,7 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
+def            crdb_internal       cluster_settings           SYSTEM VIEW  1
 def            crdb_internal       jobs                       SYSTEM VIEW  1
 def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
