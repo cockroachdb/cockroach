@@ -167,7 +167,8 @@ func (rq *replicateQueue) shouldQueue(
 		return
 	}
 
-	action, priority := rq.allocator.ComputeAction(ctx, zone, desc)
+	rangeInfo := rangeInfoForRepl(repl, desc)
+	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo)
 	if action != AllocatorNoop {
 		if log.V(2) {
 			log.Infof(ctx, "repair needed (%s), enqueuing", action)
@@ -191,12 +192,7 @@ func (rq *replicateQueue) shouldQueue(
 		return false, 0
 	}
 
-	target := rq.allocator.RebalanceTarget(
-		ctx,
-		zone.Constraints,
-		desc.Replicas,
-		desc.RangeID,
-	)
+	target := rq.allocator.RebalanceTarget(ctx, zone.Constraints, rangeInfo)
 	if log.V(2) {
 		if target != nil {
 			log.Infof(ctx, "rebalance target found, enqueuing")
@@ -263,7 +259,8 @@ func (rq *replicateQueue) processOneChange(
 		return false, err
 	}
 
-	switch action, _ := rq.allocator.ComputeAction(ctx, zone, desc); action {
+	rangeInfo := rangeInfoForRepl(repl, desc)
+	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo); action {
 	case AllocatorAdd:
 		if log.V(1) {
 			log.Infof(ctx, "adding a new replica")
@@ -272,7 +269,7 @@ func (rq *replicateQueue) processOneChange(
 			ctx,
 			zone.Constraints,
 			desc.Replicas,
-			desc.RangeID,
+			rangeInfo,
 			true, /* relaxConstraints */
 		)
 		if err != nil {
@@ -304,7 +301,7 @@ func (rq *replicateQueue) processOneChange(
 				ctx,
 				zone.Constraints,
 				oldPlusNewReplicas,
-				desc.RangeID,
+				rangeInfo,
 				true, /* relaxConstraints */
 			)
 			if err != nil {
@@ -327,11 +324,7 @@ func (rq *replicateQueue) processOneChange(
 			log.Infof(ctx, "removing a replica")
 		}
 		candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas)
-		removeReplica, err := rq.allocator.RemoveTarget(
-			ctx,
-			zone.Constraints,
-			candidates,
-		)
+		removeReplica, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo)
 		if err != nil {
 			return false, err
 		}
@@ -424,12 +417,7 @@ func (rq *replicateQueue) processOneChange(
 			}
 		}
 
-		rebalanceStore := rq.allocator.RebalanceTarget(
-			ctx,
-			zone.Constraints,
-			desc.Replicas,
-			desc.RangeID,
-		)
+		rebalanceStore := rq.allocator.RebalanceTarget(ctx, zone.Constraints, rangeInfo)
 		if rebalanceStore == nil {
 			if log.V(1) {
 				log.Infof(ctx, "no suitable rebalance target")

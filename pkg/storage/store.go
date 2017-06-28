@@ -1405,6 +1405,9 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Max(rangeCountdown, 1))))
 	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 1))))
+	// TODO(DONOTSUBMIT): Remove log
+	log.Infof(ctx, "gossiping store capacity: %+v", storeDesc.Capacity)
+	log.Infof(ctx, "will gossip again when at %.1f ranges or %.1f leases", rangeCountdown, leaseCountdown)
 
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)

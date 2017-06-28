@@ -77,7 +77,7 @@ func TestCandidateSelection(t *testing.T) {
 
 	type scoreTuple struct {
 		constraint int
-		rangeCount int
+		balance    int
 	}
 	genCandidates := func(scores []scoreTuple, idShift int) candidateList {
 		var cl candidateList
@@ -87,7 +87,7 @@ func TestCandidateSelection(t *testing.T) {
 					StoreID: roachpb.StoreID(i + idShift),
 				},
 				constraintScore: float64(score.constraint),
-				rangeCount:      score.rangeCount,
+				balanceScore:    float64(score.balance),
 				valid:           true,
 			})
 		}
@@ -101,7 +101,7 @@ func TestCandidateSelection(t *testing.T) {
 			if i != 0 {
 				buffer.WriteRune(',')
 			}
-			buffer.WriteString(fmt.Sprintf("%d:%d", int(c.constraintScore), c.rangeCount))
+			buffer.WriteString(fmt.Sprintf("%d:%.2f", int(c.constraintScore), c.balanceScore))
 		}
 		return buffer.String()
 	}
@@ -199,7 +199,7 @@ func TestCandidateSelection(t *testing.T) {
 			if good == nil {
 				t.Fatalf("candidate for store %d not found in candidate list: %s", goodStore.StoreID, cl)
 			}
-			actual := scoreTuple{int(good.constraintScore), good.rangeCount}
+			actual := scoreTuple{int(good.constraintScore), int(good.balanceScore)}
 			if actual != tc.good {
 				t.Errorf("expected:%v actual:%v", tc.good, actual)
 			}
@@ -213,7 +213,7 @@ func TestCandidateSelection(t *testing.T) {
 			if bad == nil {
 				t.Fatalf("candidate for store %d not found in candidate list: %s", badStore.StoreID, cl)
 			}
-			actual := scoreTuple{int(bad.constraintScore), bad.rangeCount}
+			actual := scoreTuple{int(bad.constraintScore), int(bad.balanceScore)}
 			if actual != tc.bad {
 				t.Errorf("expected:%v actual:%v", tc.bad, actual)
 			}
@@ -228,57 +228,57 @@ func TestBetterThan(t *testing.T) {
 		{
 			valid:           true,
 			constraintScore: 1,
-			rangeCount:      0,
+			balanceScore:    0,
 		},
 		{
 			valid:           true,
 			constraintScore: 1,
-			rangeCount:      0,
+			balanceScore:    0,
 		},
 		{
 			valid:           true,
 			constraintScore: 1,
-			rangeCount:      1,
+			balanceScore:    1,
 		},
 		{
 			valid:           true,
 			constraintScore: 1,
-			rangeCount:      1,
+			balanceScore:    1,
 		},
 		{
 			valid:           true,
 			constraintScore: 0,
-			rangeCount:      0,
+			balanceScore:    0,
 		},
 		{
 			valid:           true,
 			constraintScore: 0,
-			rangeCount:      0,
+			balanceScore:    0,
 		},
 		{
 			valid:           true,
 			constraintScore: 0,
-			rangeCount:      1,
+			balanceScore:    1,
 		},
 		{
 			valid:           true,
 			constraintScore: 0,
-			rangeCount:      1,
+			balanceScore:    1,
 		},
 		{
 			valid:           false,
 			constraintScore: 1,
-			rangeCount:      0,
+			balanceScore:    0,
 		},
 		{
 			valid:           false,
 			constraintScore: 0,
-			rangeCount:      0,
+			balanceScore:    0,
 		},
 		{
 			valid:           false,
 			constraintScore: 0,
-			rangeCount:      1,
+			balanceScore:    1,
 		},
 	}
 

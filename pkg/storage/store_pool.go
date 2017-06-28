@@ -403,14 +403,22 @@ func (s *stat) update(x float64) {
 type StoreList struct {
 	stores []roachpb.StoreDescriptor
 
-	// candidateCount tracks range count stats for stores that are eligible to
+	// candidateRanges tracks range count stats for stores that are eligible to
 	// be rebalance targets (their used capacity percentage must be lower than
 	// maxFractionUsedThreshold).
-	candidateCount stat
+	candidateRanges stat
 
 	// candidateLeases tracks range lease stats for stores that are eligible to
 	// be rebalance targets.
 	candidateLeases stat
+
+	// candidateDiskUsage tracks disk use percentage stats for stores that are
+	// eligible to be rebalance targets.
+	candidateDiskUsage stat
+
+	// candidateWritesPerSecond tracks writes-per-second stats for stores that are
+	// eligible to be rebalance targets.
+	candidateWritesPerSecond stat
 }
 
 // Generates a new store list based on the passed in descriptors. It will
@@ -419,17 +427,23 @@ func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 	sl := StoreList{stores: descriptors}
 	for _, desc := range descriptors {
 		if desc.Capacity.FractionUsed() <= maxFractionUsedThreshold {
-			sl.candidateCount.update(float64(desc.Capacity.RangeCount))
+			sl.candidateRanges.update(float64(desc.Capacity.RangeCount))
 		}
 		sl.candidateLeases.update(float64(desc.Capacity.LeaseCount))
+		sl.candidateDiskUsage.update(desc.Capacity.FractionUsed())
+		sl.candidateWritesPerSecond.update(desc.Capacity.WritesPerSecond)
 	}
 	return sl
 }
 
 func (sl StoreList) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "  candidate: avg-ranges=%v avg-leases=%v\n",
-		sl.candidateCount.mean, sl.candidateLeases.mean)
+	fmt.Fprintf(&buf,
+		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-writes-per-second=%v\n",
+		sl.candidateRanges.mean,
+		sl.candidateLeases.mean,
+		sl.candidateDiskUsage.mean,
+		sl.candidateWritesPerSecond.mean)
 	for _, desc := range sl.stores {
 		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d fraction-used=%.2f\n",
 			desc.StoreID, desc.Capacity.RangeCount,

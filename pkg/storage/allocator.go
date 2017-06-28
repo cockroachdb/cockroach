@@ -43,10 +43,10 @@ const (
 	// stores.
 	maxFractionUsedThreshold = 0.95
 
-	// baseRebalanceThreshold is the minimum ratio of a store's range/lease surplus to
-	// the mean range/lease count that permits rebalances/lease-transfers away from
-	// that store.
-	baseRebalanceThreshold = 0.05
+	// baseleaseRebalanceThreshold is the minimum ratio of a store's lease surplus
+	// to the mean range/lease count that permits rebalances/lease-transfers away
+	// from that store.
+	baseLeaseRebalanceThreshold = 0.05
 
 	// minReplicaWeight sets a floor for how low a replica weight can be. This is
 	// needed because a weight of zero doesn't work in the current lease scoring
@@ -171,6 +171,25 @@ func makeAllocatorRand(source rand.Source) allocatorRand {
 	}
 }
 
+// RangeInfo contains the information needed by the allocator to make
+// rebalancing decisions for a given range.
+type RangeInfo struct {
+	Desc            *roachpb.RangeDescriptor
+	LiveBytes       int64
+	WritesPerSecond float64
+}
+
+func rangeInfoForRepl(repl *Replica, desc *roachpb.RangeDescriptor) RangeInfo {
+	// TODO(DONOTSUBMIT): We probably should avoid taking action if the write
+	// stats haven't had at least a few seconds to accumulate.
+	writesPerSecond, _ := repl.writeStats.avgQPS()
+	return RangeInfo{
+		Desc:            desc,
+		LiveBytes:       repl.GetMVCCStats().LiveBytes,
+		WritesPerSecond: writesPerSecond,
+	}
+}
+
 // Allocator tries to spread replicas as evenly as possible across the stores
 // in the cluster.
 type Allocator struct {
@@ -203,7 +222,7 @@ func MakeAllocator(
 // supplied range, as governed by the supplied zone configuration. It
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
-	ctx context.Context, zone config.ZoneConfig, desc *roachpb.RangeDescriptor,
+	ctx context.Context, zone config.ZoneConfig, rangeInfo RangeInfo,
 ) (AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
@@ -212,7 +231,7 @@ func (a *Allocator) ComputeAction(
 
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	need := int(zone.NumReplicas)
-	have := len(desc.Replicas)
+	have := len(rangeInfo.Desc.Replicas)
 	if have < need {
 		// Range is under-replicated, and should add an additional replica.
 		// Priority is adjusted by the difference between the current replica
@@ -224,11 +243,12 @@ func (a *Allocator) ComputeAction(
 		}
 		return AllocatorAdd, priority
 	}
-	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
+	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(
+		rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
 	if len(deadReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
 		// Adjust the priority by the number of dead replicas the range has.
-		quorum := computeQuorum(len(desc.Replicas))
+		quorum := computeQuorum(len(rangeInfo.Desc.Replicas))
 		if lr := len(liveReplicas); lr >= quorum {
 			// Only allow removal of a dead replica if we have a suitable allocation
 			// target that we can up-replicate to. This isn't necessarily the target
@@ -237,7 +257,7 @@ func (a *Allocator) ComputeAction(
 				ctx,
 				zone.Constraints,
 				liveReplicas,
-				desc.RangeID,
+				rangeInfo,
 				true, /* relaxConstraints */
 			)
 			if err == nil {
@@ -276,15 +296,16 @@ func (a *Allocator) AllocateTarget(
 	ctx context.Context,
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
-	rangeID roachpb.RangeID,
+	rangeInfo RangeInfo,
 	relaxConstraints bool,
 ) (*roachpb.StoreDescriptor, error) {
-	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeID, storeFilterThrottled)
+	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
 	candidates := allocateCandidates(
 		sl,
 		constraints,
 		existing,
+		rangeInfo,
 		a.storePool.getLocalities(existing),
 		a.storePool.deterministic,
 	)
@@ -314,30 +335,34 @@ func (a *Allocator) AllocateTarget(
 // falls back to selecting a random target from any of the existing
 // replicas.
 func (a Allocator) RemoveTarget(
-	ctx context.Context, constraints config.Constraints, existing []roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	constraints config.Constraints,
+	candidates []roachpb.ReplicaDescriptor,
+	rangeInfo RangeInfo,
 ) (roachpb.ReplicaDescriptor, error) {
-	if len(existing) == 0 {
-		return roachpb.ReplicaDescriptor{}, errors.Errorf("must supply at least one replica to allocator.RemoveTarget()")
+	if len(candidates) == 0 {
+		return roachpb.ReplicaDescriptor{}, errors.Errorf("must supply at least one candidate replica to allocator.RemoveTarget()")
 	}
 
-	// Retrieve store descriptors for the provided replicas from the StorePool.
-	existingStoreIDs := make(roachpb.StoreIDSlice, len(existing))
-	for i, exist := range existing {
+	// Retrieve store descriptors for the provided candidates from the StorePool.
+	existingStoreIDs := make(roachpb.StoreIDSlice, len(candidates))
+	for i, exist := range candidates {
 		existingStoreIDs[i] = exist.StoreID
 	}
 	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
-	candidates := removeCandidates(
+	rankedCandidates := removeCandidates(
 		sl,
 		constraints,
-		a.storePool.getLocalities(existing),
+		rangeInfo,
+		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
 		a.storePool.deterministic,
 	)
 	if log.V(3) {
-		log.Infof(ctx, "remove candidates: %s", candidates)
+		log.Infof(ctx, "remove candidates: %s", rankedCandidates)
 	}
-	if bad := candidates.selectBad(a.randGen); bad != nil {
-		for _, exist := range existing {
+	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
+		for _, exist := range rangeInfo.Desc.Replicas {
 			if exist.StoreID == bad.StoreID {
 				if log.V(3) {
 					log.Infof(ctx, "remove target: %s", bad)
@@ -356,9 +381,8 @@ func (a Allocator) RemoveTarget(
 // criteria. Namely, if chosen, it must further the goal of balancing the
 // cluster.
 //
-// The supplied parameters are the required attributes for the range, a list of
-// the existing replicas of the range, and the range ID of the replica being
-// allocated.
+// The supplied parameters are the required attributes for the range and
+// information about the range being considered for rebalancing.
 //
 // The existing replicas modulo any store with dead replicas are candidates for
 // rebalancing. Note that rebalancing is accomplished by first adding a new
@@ -370,36 +394,34 @@ func (a Allocator) RemoveTarget(
 // rebalance. This helps prevent a stampeding herd targeting an abnormally
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
-	ctx context.Context,
-	constraints config.Constraints,
-	existing []roachpb.ReplicaDescriptor,
-	rangeID roachpb.RangeID,
+	ctx context.Context, constraints config.Constraints, rangeInfo RangeInfo,
 ) *roachpb.StoreDescriptor {
-	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterThrottled)
+	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
 	existingCandidates, candidates := rebalanceCandidates(
 		ctx,
 		sl,
 		constraints,
-		existing,
-		a.storePool.getLocalities(existing),
+		rangeInfo.Desc.Replicas,
+		rangeInfo,
+		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
 		a.storePool.deterministic,
 	)
 
 	// We're going to add another replica to the range which will change the
 	// quorum size. Verify that the number of existing candidates is sufficient
 	// to meet the new quorum. Note that "existingCandidates" only contains
-	// replicas on live nodes while "existing" contains all of the replicas for a
-	// range. For a range configured for 3 replicas, this will disable
-	// rebalancing if one of the replicas is on a down node. Instead, we'll have
-	// to wait for the down node to be declared dead and go through the dead-node
-	// removal dance: remove dead replica, add new replica.
+	// replicas on live nodes while "rangeInfo.Desc.Replicas" contains all of the
+	// replicas for a range. For a range configured for 3 replicas, this will
+	// disable rebalancing if one of the replicas is on a down node. Instead,
+	// we'll have to wait for the down node to be declared dead and go through the
+	// dead-node removal dance: remove dead replica, add new replica.
 	//
-	// NB: The len(existing) > 1 check allows rebalancing of ranges with only a
-	// single replica. This is a corner case which could happen in practice and
-	// also affects tests.
-	newQuorum := computeQuorum(len(existing) + 1)
-	if len(existing) > 1 && len(existingCandidates) < newQuorum {
+	// NB: The len(rangeInfo.Desc.Replicas) > 1 check allows rebalancing of ranges
+	// with only a single replica. This is a corner case which could happen in
+	// practice and also affects tests.
+	newQuorum := computeQuorum(len(rangeInfo.Desc.Replicas) + 1)
+	if len(rangeInfo.Desc.Replicas) > 1 && len(existingCandidates) < newQuorum {
 		// Don't rebalance as we won't be able to make quorum after the rebalance
 		// until the new replica has been caught up.
 		return nil
@@ -697,7 +719,7 @@ func loadBasedLeaseRebalanceScore(
 	// Start with twice the base rebalance threshold in order to fight more
 	// strongly against thrashing caused by small variances in the distribution
 	// of request weights.
-	rebalanceThreshold := (2 * baseRebalanceThreshold) - rebalanceAdjustment
+	rebalanceThreshold := (2 * baseLeaseRebalanceThreshold) - rebalanceAdjustment
 
 	overfullLeaseThreshold := int32(math.Ceil(meanLeases * (1 + rebalanceThreshold)))
 	overfullScore := source.Capacity.LeaseCount - overfullLeaseThreshold
@@ -725,8 +747,8 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 	existing []roachpb.ReplicaDescriptor,
 ) bool {
 	// Allow lease transfer if we're above the overfull threshold, which is
-	// mean*(1+baseRebalanceThreshold).
-	overfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 + baseRebalanceThreshold)))
+	// mean*(1+baseLeaseRebalanceThreshold).
+	overfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 + baseLeaseRebalanceThreshold)))
 	minOverfullThreshold := int32(math.Ceil(sl.candidateLeases.mean + 5))
 	if overfullLeaseThreshold < minOverfullThreshold {
 		overfullLeaseThreshold = minOverfullThreshold
@@ -736,7 +758,7 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 	}
 
 	if float64(source.Capacity.LeaseCount) > sl.candidateLeases.mean {
-		underfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 - baseRebalanceThreshold)))
+		underfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 - baseLeaseRebalanceThreshold)))
 		minUnderfullThreshold := int32(math.Ceil(sl.candidateLeases.mean - 5))
 		if underfullLeaseThreshold > minUnderfullThreshold {
 			underfullLeaseThreshold = minUnderfullThreshold
