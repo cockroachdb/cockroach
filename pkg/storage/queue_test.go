@@ -229,11 +229,28 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		t.Errorf("expected empty queue; got %v", r)
 	}
 
-	// Set !shouldAdd for r2 and add it; this has effect of removing it.
+	// Verify that priorities aren't lowered by a later MaybeAdd.
 	bq.MaybeAdd(r1, hlc.Timestamp{})
 	bq.MaybeAdd(r2, hlc.Timestamp{})
-	shouldAddMap[r2] = false
+	priorityMap[r1] = 1.0
+	bq.MaybeAdd(r1, hlc.Timestamp{})
+	if bq.Length() != 2 {
+		t.Fatalf("expected length 2; got %d", bq.Length())
+	}
+	if bq.pop() != r1 {
+		t.Error("expected r1")
+	}
+	if bq.pop() != r2 {
+		t.Error("expected r2")
+	}
+	if r := bq.pop(); r != nil {
+		t.Errorf("expected empty queue; got %v", r)
+	}
+
+	// Try removing a replica.
+	bq.MaybeAdd(r1, hlc.Timestamp{})
 	bq.MaybeAdd(r2, hlc.Timestamp{})
+	bq.MaybeRemove(r2.RangeID)
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
 	}
