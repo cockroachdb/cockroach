@@ -173,6 +173,27 @@ SELECT relname from pg_class where oid='a'::regclass
 ----
 a
 
+## Regression for #16767 - ensure regclass casts use normalized table names
+
+statement ok
+CREATE TABLE hasCase (id INT PRIMARY KEY)
+
+query T
+SELECT relname from pg_class where oid='hasCase'::regclass
+----
+hascase
+
+statement ok
+CREATE TABLE "quotedCase" (id INT PRIMARY KEY)
+
+query error relation 'quotedcase' does not exist
+SELECT relname from pg_class where oid='quotedCase'::regclass
+
+query T
+SELECT relname from pg_class where oid='"quotedCase"'::regclass
+----
+quotedCase
+
 # a non-root user with sufficient permissions can get the OID of a table from
 # the current database
 
