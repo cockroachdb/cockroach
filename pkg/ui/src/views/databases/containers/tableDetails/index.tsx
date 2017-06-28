@@ -87,7 +87,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
         </section>
         <section className="section">
           <div className="database-summary-title">
-            { this.props.params[tableNameAttr] }
+            <h2>{ this.props.params[tableNameAttr] }</h2>
           </div>
           <div className="content l-columns">
             <div className="l-columns__left">

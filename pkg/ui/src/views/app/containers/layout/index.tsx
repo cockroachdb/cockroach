@@ -43,8 +43,9 @@ export default class extends React.Component<RouterState, {}> {
           // TODO(mrtracy): The title can be moved down to individual pages,
           // it is not always the top element on the page (for example, on
           // pages with a back button).
-          !!title ? <section className="header">{ title }</section>
-                  : null
+          !!title
+            ? <section className="section"><h1>{ title }</h1></section>
+            : null
         }
         { children }
       </StickyContainer>

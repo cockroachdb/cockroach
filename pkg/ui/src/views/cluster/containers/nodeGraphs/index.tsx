@@ -208,15 +208,17 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           <TimeScaleDropdown />
         </PageConfigItem>
       </PageConfig>
-      <div className="section l-columns">
-        <div className="chart-group l-columns__left">
-          { graphComponents }
+      <section className="section">
+        <div className="l-columns">
+          <div className="chart-group l-columns__left">
+            { graphComponents }
+          </div>
+          <div className="l-columns__right">
+            <Alerts />
+            <ClusterSummaryBar nodesSummary={this.props.nodesSummary} nodeSources={nodeSources} />
+          </div>
         </div>
-        <div className="l-columns__right">
-          <Alerts />
-          <ClusterSummaryBar nodesSummary={this.props.nodesSummary} nodeSources={nodeSources} />
-        </div>
-      </div>
+      </section>
     </div>;
   }
 }
