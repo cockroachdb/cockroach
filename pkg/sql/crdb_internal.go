@@ -17,8 +17,10 @@
 package sql
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -26,9 +28,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var crdbInternal = virtualSchema{
@@ -41,6 +45,8 @@ var crdbInternal = virtualSchema{
 		crdbInternalStmtStatsTable,
 		crdbInternalJobsTable,
 		crdbInternalSessionTraceTable,
+		crdbInternalLocalQueriesTable,
+		crdbInternalClusterQueriesTable,
 	},
 }
 
@@ -490,4 +496,94 @@ CREATE TABLE crdb_internal.session_trace(
 		}
 		return nil
 	},
+}
+
+const queriesSchemaPattern = `
+CREATE TABLE crdb_internal.%s (
+  node_id          INT NOT NULL,   -- the node on which the query is running
+  username         STRING,         -- the user running the query
+  start            TIMESTAMP,      -- the start time of the query
+  query            STRING,         -- the SQL code of the query
+  client_address   STRING,         -- the address of the client that issued the query
+  application_name STRING,         -- the name of the application as per SET application_name
+  distributed      BOOL,           -- whether the query is running distributed
+  phase            STRING          -- the current execution phase
+);
+`
+
+// crdbInternalLocalQueriesTable exposes the list of running queries
+// on the current node. The results are dependent on the current user.
+var crdbInternalLocalQueriesTable = virtualSchemaTable{
+	schema: fmt.Sprintf(queriesSchemaPattern, "node_queries"),
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		req := serverpb.ListSessionsRequest{Username: p.session.User}
+		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
+		if err != nil {
+			return err
+		}
+		return populateQueriesTable(ctx, addRow, response)
+	},
+}
+
+// crdbInternalClusterQueriesTable exposes the list of running queries
+// on the entire cluster. The result is dependent on the current user.
+var crdbInternalClusterQueriesTable = virtualSchemaTable{
+	schema: fmt.Sprintf(queriesSchemaPattern, "cluster_queries"),
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		req := serverpb.ListSessionsRequest{Username: p.session.User}
+		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
+		if err != nil {
+			return err
+		}
+		return populateQueriesTable(ctx, addRow, response)
+	},
+}
+
+func populateQueriesTable(
+	ctx context.Context, addRow func(...parser.Datum) error, response *serverpb.ListSessionsResponse,
+) error {
+	for _, session := range response.Sessions {
+		for _, query := range session.ActiveQueries {
+			isDistributedDatum := parser.DNull
+			phase := strings.ToLower(query.Phase.String())
+			if phase == "executing" {
+				isDistributedDatum = parser.DBoolFalse
+				if query.IsDistributed {
+					isDistributedDatum = parser.DBoolTrue
+				}
+			}
+			if err := addRow(
+				parser.NewDInt(parser.DInt(session.NodeID)),
+				parser.NewDString(session.Username),
+				parser.MakeDTimestamp(query.Start, time.Microsecond),
+				parser.NewDString(query.Sql),
+				parser.NewDString(session.ClientAddress),
+				parser.NewDString(session.ApplicationName),
+				isDistributedDatum,
+				parser.NewDString(phase),
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	for _, rpcErr := range response.Errors {
+		log.Warning(ctx, rpcErr.Message)
+		if rpcErr.NodeID != 0 {
+			// Add a row with this node ID, and nulls for all other columns
+			if err := addRow(
+				parser.NewDInt(parser.DInt(rpcErr.NodeID)),
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -211,9 +211,11 @@ CREATE VIEW other_db.abc AS SELECT i from other_db.xyz
 query T
 SELECT table_name FROM information_schema.tables
 ----
+cluster_queries
 jobs
 leases
 node_build_info
+node_queries
 node_statement_statistics
 schema_changes
 session_trace
@@ -310,6 +312,7 @@ pg_attribute
 pg_attrdef
 pg_am
 node_statement_statistics
+node_queries
 node_build_info
 namespace
 
@@ -317,9 +320,11 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
+def            crdb_internal       cluster_queries            SYSTEM VIEW  1
 def            crdb_internal       jobs                       SYSTEM VIEW  1
 def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
+def            crdb_internal       node_queries               SYSTEM VIEW  1
 def            crdb_internal       node_statement_statistics  SYSTEM VIEW  1
 def            crdb_internal       schema_changes             SYSTEM VIEW  1
 def            crdb_internal       session_trace              SYSTEM VIEW  1
@@ -387,9 +392,11 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
+def            crdb_internal       cluster_queries            SYSTEM VIEW  1
 def            crdb_internal       jobs                       SYSTEM VIEW  1
 def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
+def            crdb_internal       node_queries               SYSTEM VIEW  1
 def            crdb_internal       node_statement_statistics  SYSTEM VIEW  1
 def            crdb_internal       schema_changes             SYSTEM VIEW  1
 def            crdb_internal       session_trace              SYSTEM VIEW  1
@@ -443,9 +450,11 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
+def            crdb_internal       cluster_queries            SYSTEM VIEW  1
 def            crdb_internal       jobs                       SYSTEM VIEW  1
 def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
+def            crdb_internal       node_queries               SYSTEM VIEW  1
 def            crdb_internal       node_statement_statistics  SYSTEM VIEW  1
 def            crdb_internal       schema_changes             SYSTEM VIEW  1
 def            crdb_internal       session_trace              SYSTEM VIEW  1
