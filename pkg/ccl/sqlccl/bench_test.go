@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -153,7 +152,7 @@ func BenchmarkLoadSQL(b *testing.B) {
 	b.StopTimer()
 }
 
-func runEmptyIncrementalBackup(b *testing.B) {
+func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
 	const numStatements = 100000
 
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
@@ -189,16 +188,4 @@ func runEmptyIncrementalBackup(b *testing.B) {
 	// We report the number of bytes that incremental backup was able to
 	// *skip*--i.e., the number of bytes in the full backup.
 	b.SetBytes(int64(b.N) * dataSize)
-}
-
-func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
-	b.Run("Normal", func(b *testing.B) {
-		defer settings.TestingSetBool(&engineccl.TimeBoundIteratorsEnabled, false)()
-		runEmptyIncrementalBackup(b)
-	})
-
-	b.Run("TimeBound", func(b *testing.B) {
-		defer settings.TestingSetBool(&engineccl.TimeBoundIteratorsEnabled, true)()
-		runEmptyIncrementalBackup(b)
-	})
 }
