@@ -119,6 +119,15 @@ func (node *ShowQueries) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// ShowJobs represents a SHOW JOBS statement
+type ShowJobs struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowJobs) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW JOBS")
+}
+
 // ShowSessions represents a SHOW SESSIONS statement
 type ShowSessions struct {
 	Cluster bool
