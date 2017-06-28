@@ -340,7 +340,7 @@ func (p *planner) newPlan(
 	case *parser.SetDefaultIsolation:
 		return p.SetDefaultIsolation(n)
 	case *parser.Show:
-		return p.Show(n)
+		return p.Show(ctx, n)
 	case *parser.ShowColumns:
 		return p.ShowColumns(ctx, n)
 	case *parser.ShowConstraints:
@@ -364,7 +364,7 @@ func (p *planner) newPlan(
 	case *parser.ShowTrace:
 		return p.ShowTrace(ctx, n)
 	case *parser.ShowTransactionStatus:
-		return p.ShowTransactionStatus()
+		return p.ShowTransactionStatus(ctx)
 	case *parser.ShowUsers:
 		return p.ShowUsers(ctx, n)
 	case *parser.ShowRanges:
@@ -409,7 +409,7 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 	case *parser.SelectClause:
 		return p.SelectClause(ctx, n, nil, nil, nil, publicColumns)
 	case *parser.Show:
-		return p.Show(n)
+		return p.Show(ctx, n)
 	case *parser.ShowCreateTable:
 		return p.ShowCreateTable(ctx, n)
 	case *parser.ShowCreateView:
@@ -435,7 +435,7 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 	case *parser.ShowUsers:
 		return p.ShowUsers(ctx, n)
 	case *parser.ShowTransactionStatus:
-		return p.ShowTransactionStatus()
+		return p.ShowTransactionStatus(ctx)
 	case *parser.ShowRanges:
 		return p.ShowRanges(ctx, n)
 	case *parser.Split:

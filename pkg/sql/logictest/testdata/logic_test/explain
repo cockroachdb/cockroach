@@ -132,7 +132,7 @@ EXPLAIN SHOW TABLES
 3  virtual table
 3                 source  information_schema.tables
 4  values
-4                 size    5 columns, 52 rows
+4                 size    5 columns, 55 rows
 
 query ITTT
 EXPLAIN SHOW DATABASE
@@ -190,7 +190,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 7  virtual table
 7                 source    information_schema.columns
 8  values
-8                 size      13 columns, 459 rows
+8                 size      13 columns, 479 rows
 5  render
 6  filter
 7  virtual table

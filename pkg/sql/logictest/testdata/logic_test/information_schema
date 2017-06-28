@@ -212,6 +212,7 @@ query T
 SELECT table_name FROM information_schema.tables
 ----
 cluster_queries
+cluster_settings
 jobs
 leases
 node_build_info
@@ -321,6 +322,7 @@ SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
 def            crdb_internal       cluster_queries            SYSTEM VIEW  1
+def            crdb_internal       cluster_settings           SYSTEM VIEW  1
 def            crdb_internal       jobs                       SYSTEM VIEW  1
 def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
@@ -393,6 +395,7 @@ SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
 def            crdb_internal       cluster_queries            SYSTEM VIEW  1
+def            crdb_internal       cluster_settings           SYSTEM VIEW  1
 def            crdb_internal       jobs                       SYSTEM VIEW  1
 def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
@@ -451,6 +454,7 @@ SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
 def            crdb_internal       cluster_queries            SYSTEM VIEW  1
+def            crdb_internal       cluster_settings           SYSTEM VIEW  1
 def            crdb_internal       jobs                       SYSTEM VIEW  1
 def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
