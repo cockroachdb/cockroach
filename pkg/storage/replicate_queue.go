@@ -187,10 +187,6 @@ func (rq *replicateQueue) shouldQueue(
 		}
 	}
 
-	if rq.store.TestingKnobs().DisableReplicaRebalancing {
-		return false, 0
-	}
-
 	target := rq.allocator.RebalanceTarget(
 		ctx,
 		zone.Constraints,

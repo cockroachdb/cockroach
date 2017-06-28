@@ -1139,7 +1139,6 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	ctx := context.Background()
 
 	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableReplicaRebalancing = true
 	var corrupt struct {
 		syncutil.Mutex
 		store *storage.Store
@@ -2378,10 +2377,7 @@ func TestReplicaGCRace(t *testing.T) {
 // ReplicateQueue will notice and remove any replicas on it.
 func TestStoreRangeRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableReplicaRebalancing = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{}
 	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
 	defer mtc.Stop()
 	mtc.Start(t, 4)

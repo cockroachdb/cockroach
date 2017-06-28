@@ -45,11 +45,11 @@ const (
 )
 
 func rebalanceFromConvergesOnMean(sl StoreList, candidate roachpb.StoreDescriptor) bool {
-	return rangesPerGiB(candidate.Capacity) > sl.candidateRangesPerGiB.mean
+	return rangesPerGiB(candidate.Capacity) > sl.candidateRangesPerGiB.mean+0.5
 }
 
 func rebalanceToConvergesOnMean(sl StoreList, candidate roachpb.StoreDescriptor) bool {
-	return rangesPerGiB(candidate.Capacity) < sl.candidateRangesPerGiB.mean
+	return rangesPerGiB(candidate.Capacity) < sl.candidateRangesPerGiB.mean-0.5
 }
 
 // candidate store for allocation.
@@ -477,7 +477,7 @@ func shouldRebalance(ctx context.Context, store roachpb.StoreDescriptor, sl Stor
 
 	// Rebalance if we're above the overfull threshold, which is
 	// mean*(1+rebalanceThreshold).
-	overfullThreshold := sl.candidateRangesPerGiB.mean * (1 + baseRebalanceThreshold)
+	overfullThreshold := math.Ceil(sl.candidateRangesPerGiB.mean * (1 + baseRebalanceThreshold))
 	rangeCountAboveOverfullThreshold := rangesPerGiB(store.Capacity) > overfullThreshold
 
 	// Rebalance if the candidate store has a range count above the mean, and
@@ -485,7 +485,7 @@ func shouldRebalance(ctx context.Context, store roachpb.StoreDescriptor, sl Stor
 	// than mean*(1-rebalanceThreshold).
 	var rebalanceToUnderfullStore bool
 	if rangesPerGiB(store.Capacity) > sl.candidateRangesPerGiB.mean {
-		underfullThreshold := sl.candidateRangesPerGiB.mean * (1 - baseRebalanceThreshold)
+		underfullThreshold := math.Floor(sl.candidateRangesPerGiB.mean * (1 - baseRebalanceThreshold))
 		for _, desc := range sl.stores {
 			if rangesPerGiB(desc.Capacity) < underfullThreshold {
 				rebalanceToUnderfullStore = true

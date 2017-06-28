@@ -782,9 +782,6 @@ type StoreTestingKnobs struct {
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
 	DisableReplicateQueue bool
-	// DisableReplicaRebalancing disables rebalancing of replicas but otherwise
-	// leaves the replicate queue operational.
-	DisableReplicaRebalancing bool
 	// DisableSplitQueue disables the split queue.
 	DisableSplitQueue bool
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance
