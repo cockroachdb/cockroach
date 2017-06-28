@@ -87,5 +87,7 @@ func TestMain(m *testing.M) {
 		}
 	}
 
+	serverutils.InitTestServerFactory(server.TestServerFactory)
+
 	os.Exit(code)
 }
