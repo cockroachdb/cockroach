@@ -398,7 +398,7 @@ func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool 
 }
 
 // addInternal adds the replica the queue with specified priority. If
-// the replica is already queued, updates the existing
+// the replica is already queued at a lower priority, updates the existing
 // priority. Expects the queue lock to be held by caller.
 func (bq *baseQueue) addInternal(
 	ctx context.Context, desc *roachpb.RangeDescriptor, should bool, priority float64,
@@ -425,23 +425,24 @@ func (bq *baseQueue) addInternal(
 		return false, nil
 	}
 
-	item, ok := bq.mu.replicas[desc.RangeID]
+	// Note that even though the caller said not to queue the replica, we don't
+	// want to remove it if it's already been queued. It may have been queued by
+	// a caller that knows more than this one.
 	if !should {
-		if ok {
-			if log.V(1) {
-				log.Infof(ctx, "%s: removing from queue", item.value)
-			}
-			bq.remove(item)
-		}
 		return false, errReplicaNotAddable
-	} else if ok {
-		if item.priority != priority {
+	}
+
+	item, ok := bq.mu.replicas[desc.RangeID]
+	if ok {
+		// Replica has already been added but at a lower priority; update priority.
+		// Don't lower it since the previous caller may have known more than this
+		// one does.
+		if priority > item.priority {
 			if log.V(1) {
 				log.Infof(ctx, "updating priority: %0.3f -> %0.3f", item.priority, priority)
 			}
+			bq.mu.priorityQ.update(item, priority)
 		}
-		// Replica has already been added; update priority.
-		bq.mu.priorityQ.update(item, priority)
 		return false, nil
 	}
 
