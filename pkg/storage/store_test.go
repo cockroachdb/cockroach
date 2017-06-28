@@ -990,8 +990,9 @@ func TestStoreSendBadRange(t *testing.T) {
 }
 
 // splitTestRange splits a range. This does *not* fully emulate a real split
-// and should not be used in new tests. Tests that need splits should live in
-// client_split_test.go and use AdminSplit instead of this function.
+// and should not be used in new tests. Tests that need splits should either live in
+// client_split_test.go and use AdminSplit instead of this function or use the
+// TestServerInterface.
 // See #702
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
 func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Replica {
