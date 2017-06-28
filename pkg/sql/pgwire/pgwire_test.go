@@ -862,7 +862,13 @@ func TestPGPreparedQuery(t *testing.T) {
 	}
 	defer db.Close()
 
-	runTests := func(query string, prepared bool, tests []preparedQueryTest, queryFunc func(...interface{}) (*gosql.Rows, error)) {
+	runTests := func(
+		t *testing.T,
+		query string,
+		prepared bool,
+		tests []preparedQueryTest,
+		queryFunc func(...interface{}) (*gosql.Rows, error),
+	) {
 		for _, test := range tests {
 			if testing.Verbose() || log.V(1) {
 				log.Infof(context.Background(), "query: %s", query)
@@ -954,23 +960,29 @@ CREATE TABLE d.empty ();`
 		t.Fatal(err)
 	}
 
-	for query, tests := range queryTests {
-		runTests(query, false, tests, func(args ...interface{}) (*gosql.Rows, error) {
-			return db.Query(query, args...)
-		})
-	}
-
-	for query, tests := range queryTests {
-		if stmt, err := db.Prepare(query); err != nil {
-			t.Errorf("%s: prepare error: %s", query, err)
-		} else {
-			func() {
-				defer stmt.Close()
-
-				runTests(query, true, tests, stmt.Query)
-			}()
+	t.Run("exec", func(t *testing.T) {
+		for query, tests := range queryTests {
+			t.Run(query, func(t *testing.T) {
+				runTests(t, query, false, tests, func(args ...interface{}) (*gosql.Rows, error) {
+					return db.Query(query, args...)
+				})
+			})
 		}
-	}
+	})
+
+	t.Run("prepare", func(t *testing.T) {
+		for query, tests := range queryTests {
+			t.Run(query, func(t *testing.T) {
+				if stmt, err := db.Prepare(query); err != nil {
+					t.Errorf("%s: prepare error: %s", query, err)
+				} else {
+					defer stmt.Close()
+
+					runTests(t, query, true, tests, stmt.Query)
+				}
+			})
+		}
+	})
 }
 
 type preparedExecTest struct {
