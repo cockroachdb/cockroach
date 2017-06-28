@@ -9,7 +9,7 @@ SHOW GRANTS ON DATABASE a
 Database User Privileges
 a        root ALL
 
-statement error TODO\(marc\): implement SHOW GRANT with no targets
+statement error cannot use SHOW GRANTS without a target
 SHOW GRANTS
 
 statement error user root does not have ALL privileges
