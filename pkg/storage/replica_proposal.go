@@ -74,7 +74,9 @@ type ProposalData struct {
 	endCmds *endCmds
 
 	// doneCh is used to signal the waiting RPC handler (the contents of
-	// proposalResult come from LocalEvalResult)
+	// proposalResult come from LocalEvalResult).
+	// Attention: this channel is not to be signaled directly downstream of Raft.
+	// Always use ProposalData.finishRaftApplication().
 	doneCh chan proposalResult
 
 	// Local contains the results of evaluating the request
@@ -93,12 +95,35 @@ type ProposalData struct {
 	Request *roachpb.BatchRequest
 }
 
-// finish first invokes the endCmds function and then sends the
-// specified proposalResult on the proposal's done channel. endCmds is
-// invoked here in order to allow the original client to be cancelled
-// and possibly no longer listening to this done channel, and so can't
-// be counted on to invoke endCmds itself.
-func (proposal *ProposalData) finish(pr proposalResult) {
+// finishRaftApplication is called downstream of Raft when a command application
+// has finished. proposal.doneCh is signaled with pr so that the proposer is
+// unblocked.
+//
+// It first invokes the endCmds function and then sends the specified
+// proposalResult on the proposal's done channel. endCmds is invoked here in
+// order to allow the original client to be cancelled and possibly no longer
+// listening to this done channel, and so can't be counted on to invoke endCmds
+// itself.
+//
+// Note: this should not be called upstream of Raft because, in case pr.Err is
+// set, it clears the intents from pr before sending it on the channel. This
+// clearing should not be done upstream of Raft because, in cases of errors
+// encountered upstream of Raft, we might still want to resolve intents:
+// upstream of Raft, pr.intents represent intents encountered by a request, not
+// the current txn's intents.
+func (proposal *ProposalData) finishRaftApplication(pr proposalResult) {
+	if pr.Err != nil {
+		// Clear the intents so that the intent resolution process does not take
+		// place: if an EndTransaction fails, we don't want to commit the txn's
+		// writes. In principle we'd still want to resolve any intents ancountered
+		// by the EndTransaction's batch of requests, other than the current txn's
+		// intents, but we don't make an attempt to separate the two categories of
+		// intents.
+		// TODO(tschottdorf,bdarnell): refactor this so there are two Intents
+		// fields, one for intents to be resolved if the command applies
+		// successfully, and one for intents to be resolved no matter what.
+		pr.Intents = nil
+	}
 	if proposal.endCmds != nil {
 		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
 		proposal.endCmds = nil

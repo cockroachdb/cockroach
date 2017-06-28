@@ -364,6 +364,11 @@ func (ts *TestServer) Stores() *storage.Stores {
 	return ts.node.stores
 }
 
+// GetStores is part of TestServerInterface.
+func (ts *TestServer) GetStores() interface{} {
+	return ts.node.stores
+}
+
 // Engines returns the TestServer's engines.
 func (ts *TestServer) Engines() []engine.Engine {
 	return ts.engines
