@@ -2353,9 +2353,10 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 		// TODO(a-robinson): How dangerous is it that this number will be incorrectly
 		// low the first time or two it gets gossiped when a store starts? We can't
 		// easily have a countdown as its value changes like for leases/replicas.
-		qps, _ := r.writeStats.avgQPS()
-		totalWritesPerSecond += qps
-		writesPerReplica = append(writesPerReplica, qps)
+		if qps, dur := r.writeStats.avgQPS(); dur >= MinStatsDuration {
+			totalWritesPerSecond += qps
+			writesPerReplica = append(writesPerReplica, qps)
+		}
 		return true
 	})
 	capacity.LeaseCount = leaseCount
@@ -4048,8 +4049,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		}
 		behindCount += metrics.BehindCount
 		selfBehindCount += metrics.SelfBehindCount
-		qps, _ := rep.writeStats.avgQPS()
-		averageWritesPerSecond += qps
+		if qps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
+			averageWritesPerSecond += qps
+		}
 		return true // more
 	})
 
