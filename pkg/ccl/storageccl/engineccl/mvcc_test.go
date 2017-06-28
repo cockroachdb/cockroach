@@ -56,6 +56,9 @@ func assertEqualKVs(
 		for iter.Reset(startKey, endKey); iter.Valid(); iter.Next() {
 			kvs = append(kvs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
 		}
+		if err := iter.Error(); err != nil {
+			t.Fatal(err)
+		}
 
 		if len(kvs) != len(expected) {
 			t.Fatalf("got %d kvs but expected %d: %v", len(kvs), len(expected), kvs)
