@@ -29,27 +29,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-const (
-	// The number of random candidates to select from a larger list of possible
-	// candidates. Because the allocator heuristics are being run on every node it
-	// is actually not desirable to set this value higher. Doing so can lead to
-	// situations where the allocator determistically selects the "best" node for a
-	// decision and all of the nodes pile on allocations to that node. See "power
-	// of two random choices":
-	// https://brooker.co.za/blog/2012/01/17/two-random.html and
-	// https://www.eecs.harvard.edu/~michaelm/postscripts/mythesis.pdf.
-	allocatorRandomCount = 2
-
-	// TODO: Is this a defined constant anywhere in a standard library?
-	bytesPerGiB = 1 << 30
-)
+// The number of random candidates to select from a larger list of possible
+// candidates. Because the allocator heuristics are being run on every node it
+// is actually not desirable to set this value higher. Doing so can lead to
+// situations where the allocator determistically selects the "best" node for a
+// decision and all of the nodes pile on allocations to that node. See "power
+// of two random choices":
+// https://brooker.co.za/blog/2012/01/17/two-random.html and
+// https://www.eecs.harvard.edu/~michaelm/postscripts/mythesis.pdf.
+const allocatorRandomCount = 2
 
 func rebalanceFromConvergesOnMean(sl StoreList, candidate roachpb.StoreDescriptor) bool {
-	return rangesPerGiB(candidate.Capacity) > sl.candidateRangesPerGiB.mean+0.5
+	return float64(candidate.Capacity.RangeCount) > sl.candidateCount.mean+0.5
 }
 
 func rebalanceToConvergesOnMean(sl StoreList, candidate roachpb.StoreDescriptor) bool {
-	return rangesPerGiB(candidate.Capacity) < sl.candidateRangesPerGiB.mean-0.5
+	return float64(candidate.Capacity.RangeCount) < sl.candidateCount.mean-0.5
 }
 
 // candidate store for allocation.
@@ -57,13 +52,13 @@ type candidate struct {
 	store           roachpb.StoreDescriptor
 	valid           bool
 	constraintScore float64
-	rangesPerGiB    float64
+	rangeCount      int
 	details         string
 }
 
 func (c candidate) String() string {
-	return fmt.Sprintf("s%d, valid:%t, con:%.2f, rangesPerGiB:%.2f, details:(%s)",
-		c.store.StoreID, c.valid, c.constraintScore, c.rangesPerGiB, c.details)
+	return fmt.Sprintf("s%d, valid:%t, con:%.2f, ranges:%d, details:(%s)",
+		c.store.StoreID, c.valid, c.constraintScore, c.rangeCount, c.details)
 }
 
 // less first compares valid, then constraint scores, then range counts.
@@ -77,7 +72,7 @@ func (c candidate) less(o candidate) bool {
 	if c.constraintScore != o.constraintScore {
 		return c.constraintScore < o.constraintScore
 	}
-	return c.rangesPerGiB > o.rangesPerGiB
+	return c.rangeCount > o.rangeCount
 }
 
 type candidateList []candidate
@@ -113,7 +108,7 @@ var _ sort.Interface = byScoreAndID(nil)
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
 	if c[i].constraintScore == c[j].constraintScore &&
-		c[i].rangesPerGiB == c[j].rangesPerGiB &&
+		c[i].rangeCount == c[j].rangeCount &&
 		c[i].valid == c[j].valid {
 		return c[i].store.StoreID < c[j].store.StoreID
 	}
@@ -225,14 +220,6 @@ func (cl candidateList) selectBad(randGen allocatorRand) *roachpb.StoreDescripto
 	return &worst.store
 }
 
-func rangesPerGiB(capacity roachpb.StoreCapacity) float64 {
-	// Don't consider differences in store size for stores of less than 1GB -
-	// this is primarily useful to avoid huge rangesPerGiB numbers for unit tests
-	// that use 1MB store capacities.
-	capacityGB := math.Max(float64(capacity.Capacity/bytesPerGiB), 1.0)
-	return float64(capacity.RangeCount) / capacityGB
-}
-
 // allocateCandidates creates a candidate list of all stores that can used for
 // allocating a new replica ordered from the best to the worst. Only stores
 // that meet the criteria are included in the list.
@@ -260,7 +247,7 @@ func allocateCandidates(
 			store:           s,
 			valid:           true,
 			constraintScore: diversityScore + float64(preferredMatched),
-			rangesPerGiB:    rangesPerGiB(s.Capacity),
+			rangeCount:      int(s.Capacity.RangeCount),
 			details: fmt.Sprintf("diversity=%.2f, preferred=%d",
 				diversityScore, preferredMatched),
 		})
@@ -315,7 +302,7 @@ func removeCandidates(
 			store:           s,
 			valid:           true,
 			constraintScore: diversityScore + float64(preferredMatched) + convergesScore,
-			rangesPerGiB:    rangesPerGiB(s.Capacity),
+			rangeCount:      int(s.Capacity.RangeCount),
 			details: fmt.Sprintf("diversity=%.2f, preferred=%d, converge=%.2f",
 				diversityScore, preferredMatched, convergesScore),
 		})
@@ -425,7 +412,7 @@ func rebalanceCandidates(
 				store:           s,
 				valid:           true,
 				constraintScore: diversityScore + float64(storeInfo.matched) + convergesScore,
-				rangesPerGiB:    rangesPerGiB(s.Capacity),
+				rangeCount:      int(s.Capacity.RangeCount),
 				details: fmt.Sprintf("diversity=%.2f, preferred=%d, converge=%.2f",
 					diversityScore, storeInfo.matched, convergesScore),
 			})
@@ -449,7 +436,7 @@ func rebalanceCandidates(
 				store:           s,
 				valid:           true,
 				constraintScore: diversityScore + float64(storeInfo.matched) + convergesScore,
-				rangesPerGiB:    rangesPerGiB(s.Capacity),
+				rangeCount:      int(s.Capacity.RangeCount),
 				details: fmt.Sprintf("diversity=%.2f, preferred=%d, converge=%.2f",
 					diversityScore, storeInfo.matched, convergesScore),
 			})
@@ -477,17 +464,17 @@ func shouldRebalance(ctx context.Context, store roachpb.StoreDescriptor, sl Stor
 
 	// Rebalance if we're above the overfull threshold, which is
 	// mean*(1+rebalanceThreshold).
-	overfullThreshold := math.Ceil(sl.candidateRangesPerGiB.mean * (1 + baseRebalanceThreshold))
-	rangeCountAboveOverfullThreshold := rangesPerGiB(store.Capacity) > overfullThreshold
+	overfullThreshold := int32(math.Ceil(sl.candidateCount.mean * (1 + baseRebalanceThreshold)))
+	rangeCountAboveOverfullThreshold := store.Capacity.RangeCount > overfullThreshold
 
 	// Rebalance if the candidate store has a range count above the mean, and
 	// there exists another store that is underfull: its range count is smaller
 	// than mean*(1-rebalanceThreshold).
 	var rebalanceToUnderfullStore bool
-	if rangesPerGiB(store.Capacity) > sl.candidateRangesPerGiB.mean {
-		underfullThreshold := math.Floor(sl.candidateRangesPerGiB.mean * (1 - baseRebalanceThreshold))
+	if float64(store.Capacity.RangeCount) > sl.candidateCount.mean {
+		underfullThreshold := int32(math.Floor(sl.candidateCount.mean * (1 - baseRebalanceThreshold)))
 		for _, desc := range sl.stores {
-			if rangesPerGiB(desc.Capacity) < underfullThreshold {
+			if desc.Capacity.RangeCount < underfullThreshold {
 				rebalanceToUnderfullStore = true
 				break
 			}
@@ -497,11 +484,11 @@ func shouldRebalance(ctx context.Context, store roachpb.StoreDescriptor, sl Stor
 	shouldRebalance := maxCapacityUsed || rangeCountAboveOverfullThreshold || rebalanceToUnderfullStore
 	if log.V(2) && shouldRebalance {
 		log.Infof(ctx,
-			"s%d: should-rebalance: fraction-used=%.2f range-count=%d ranges-per-gb=%.2f"+
-				"(mean=%.1f, overfull-threshold=%.2f, fraction-used=%t, "+
+			"s%d: should-rebalance: fraction-used=%.2f range-count=%d "+
+				"(mean=%.1f, overfull-threshold=%d, fraction-used=%t, "+
 				"above-overfull-threshold=%t, rebalance-to-underfull=%t)",
-			store.StoreID, store.Capacity.FractionUsed(), store.Capacity.RangeCount, rangesPerGiB(store.Capacity),
-			sl.candidateRangesPerGiB.mean, overfullThreshold, maxCapacityUsed,
+			store.StoreID, store.Capacity.FractionUsed(), store.Capacity.RangeCount,
+			sl.candidateCount.mean, overfullThreshold, maxCapacityUsed,
 			rangeCountAboveOverfullThreshold, rebalanceToUnderfullStore)
 	}
 	return shouldRebalance
