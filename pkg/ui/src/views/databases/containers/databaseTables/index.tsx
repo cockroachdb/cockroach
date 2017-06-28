@@ -52,77 +52,81 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
 
     const numTables = tableInfos && tableInfos.length || 0;
 
-    return <div className="database-summary l-columns">
-      <div className="database-summary-title">
-        { dbID }
-      </div>
-      <div className="l-columns__left">
-        <div className="database-summary-table sql-table">
-        {
-          (numTables === 0) ? "" :
-          <DatabaseTableListSortedTable
-              data={tableInfos}
-              sortSetting={sortSetting}
-              onChangeSortSetting={(setting) => this.props.setSort(setting) }
-              columns={[
+    return (
+      <div className="database-summary">
+        <div className="database-summary-title">
+          <h2>{dbID}</h2>
+        </div>
+        <div className="l-columns">
+          <div className="l-columns__left">
+            <div className="database-summary-table sql-table">
               {
-                title: "Table Name",
-                cell: (tableInfo) => {
-                  return (
-                    <div className="sort-table__unbounded-column">
-                      <Link to={`databases/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>
-                    </div>
-                  );
-                },
-                sort: (tableInfo) => tableInfo.name,
-                className: "expand-link", // don't pad the td element to allow the link to expand
-              },
-              {
-                title: "Size",
-                cell: (tableInfo) => Bytes(tableInfo.size),
-                sort: (tableInfo) => tableInfo.size,
-              },
-              {
-                title: "Ranges",
-                cell: (tableInfo) => tableInfo.rangeCount,
-                sort: (tableInfo) => tableInfo.rangeCount,
-              },
-              {
-                title: "# of Columns",
-                cell: (tableInfo) => tableInfo.numColumns,
-                sort: (tableInfo) => tableInfo.numColumns,
-              },
-              {
-                title: "# of Indices",
-                cell: (tableInfo) => tableInfo.numIndices,
-                sort: (tableInfo) => tableInfo.numIndices,
-              },
-              {
-                title: "Schema Change",
-                cell: (_tableInfo) => "",
-              },
-              ]}/>
-        }
+                (numTables === 0) ? "" :
+                  <DatabaseTableListSortedTable
+                    data={tableInfos}
+                    sortSetting={sortSetting}
+                    onChangeSortSetting={(setting) => this.props.setSort(setting)}
+                    columns={[
+                      {
+                        title: "Table Name",
+                        cell: (tableInfo) => {
+                          return (
+                            <div className="sort-table__unbounded-column">
+                              <Link to={`databases/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>
+                            </div>
+                          );
+                        },
+                        sort: (tableInfo) => tableInfo.name,
+                        className: "expand-link", // don't pad the td element to allow the link to expand
+                      },
+                      {
+                        title: "Size",
+                        cell: (tableInfo) => Bytes(tableInfo.size),
+                        sort: (tableInfo) => tableInfo.size,
+                      },
+                      {
+                        title: "Ranges",
+                        cell: (tableInfo) => tableInfo.rangeCount,
+                        sort: (tableInfo) => tableInfo.rangeCount,
+                      },
+                      {
+                        title: "# of Columns",
+                        cell: (tableInfo) => tableInfo.numColumns,
+                        sort: (tableInfo) => tableInfo.numColumns,
+                      },
+                      {
+                        title: "# of Indices",
+                        cell: (tableInfo) => tableInfo.numIndices,
+                        sort: (tableInfo) => tableInfo.numIndices,
+                      },
+                      {
+                        title: "Schema Change",
+                        cell: (_tableInfo) => "",
+                      },
+                    ]} />
+              }
+            </div>
+          </div>
+          <div className="l-columns__right">
+            <SummaryBar>
+              <SummaryHeadlineStat
+                title="Database Size"
+                tooltip="Total disk size of this database."
+                value={this.totalSize()}
+                format={Bytes} />
+              <SummaryHeadlineStat
+                title={(numTables === 1) ? "Table" : "Tables"}
+                tooltip="The total number of tables in this database."
+                value={numTables} />
+              <SummaryHeadlineStat
+                title="Total Range Count"
+                tooltip="The total ranges across all tables in this database."
+                value={this.totalRangeCount()} />
+            </SummaryBar>
+          </div>
         </div>
       </div>
-      <div className="l-columns__right">
-        <SummaryBar>
-          <SummaryHeadlineStat
-            title="Database Size"
-            tooltip="Total disk size of this database."
-            value={ this.totalSize() }
-            format={ Bytes }/>
-          <SummaryHeadlineStat
-            title={ (numTables === 1) ? "Table" : "Tables" }
-            tooltip="The total number of tables in this database."
-            value={ numTables }/>
-          <SummaryHeadlineStat
-            title="Total Range Count"
-            tooltip="The total ranges across all tables in this database."
-            value={ this.totalRangeCount() }/>
-        </SummaryBar>
-      </div>
-    </div>;
+    );
   }
 }
 

@@ -57,9 +57,9 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
     }
 
     return <div>
-      <div className="header header--subsection">
-        Live Nodes
-      </div>
+      <section className="section">
+        <h2>Live Nodes</h2>
+      </section>
       <section className="section">
         <NodeSortedTable
           data={statuses}
@@ -153,8 +153,8 @@ class DeadNodeList extends React.Component<NodeCategoryListProps, {}> {
     }
 
     return <div>
-      <section className="header header--subsection">
-        Dead Nodes
+      <section className="section">
+        <h2>Dead Nodes</h2>
       </section>
       <section className="section">
         <NodeSortedTable

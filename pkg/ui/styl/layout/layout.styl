@@ -25,6 +25,7 @@ $subnav-background  = $background-color
   height 100vh
   min-width 100%
   padding-left $nav-width
+  padding-top 20px
 
   &:after
     content ""
@@ -48,32 +49,19 @@ $subnav-background  = $background-color
   &__item
     float left
     list-style none
-    margin-right 2rem
-
-.header
-  flex 0 0 auto
-  color $headings-color
-  font-size 24px
-  padding 24px 24px 12px
-  text-transform uppercase
-  font-family Lato-Bold
-  letter-spacing 5px
-
-.header--subsection
-  text-transform none
-  letter-spacing 0
+    margin-right 24px
 
 .l-columns
-  clearfix()
-  min-width 1360px
+  display flex
+  margin 0 -5px
 
 .l-columns__left
-  float left
-  width 930px
+  flex 3
+  padding 0 5px
 
 .l-columns__right
-  float left
-  width 380px
+  flex 1
+  padding 0 5px
 
 .page.help-us
   height 100%
@@ -87,8 +75,9 @@ $subnav-background  = $background-color
 
 .parent-link a
   color $link-color
-  font-size 13px
+  font-size 14px
   font-family Lato-Regular
+  font-weight bold
   text-transform uppercase
   text-decoration none
   letter-spacing 2px
