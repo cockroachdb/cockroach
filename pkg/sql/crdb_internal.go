@@ -44,6 +44,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalJobsTable,
 		crdbInternalSessionTraceTable,
 		crdbInternalClusterSettingsTable,
+		crdbInternalSessionVariablesTable,
 	},
 }
 
@@ -512,6 +513,29 @@ CREATE TABLE crdb_internal.cluster_settings (
 				parser.NewDString(setting.String()),
 				parser.NewDString(setting.Typ()),
 				parser.NewDString(setting.Description()),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalSessionVariablesTable exposes the session variables.
+var crdbInternalSessionVariablesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.session_variables (
+  variable STRING NOT NULL,
+  value    STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+		for _, vName := range varNames {
+			gen := varGen[vName]
+			value := gen.Get(p.session)
+			if err := addRow(
+				parser.NewDString(vName),
+				parser.NewDString(value),
 			); err != nil {
 				return err
 			}

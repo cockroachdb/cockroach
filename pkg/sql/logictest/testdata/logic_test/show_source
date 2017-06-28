@@ -19,7 +19,7 @@ UTF8                1
 query TT colnames
 SELECT * FROM [SHOW ALL]
 ----
-Variable                       Value
+variable                       value
 application_name
 client_encoding                UTF8
 client_min_messages
