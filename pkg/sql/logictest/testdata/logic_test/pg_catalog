@@ -1057,12 +1057,12 @@ SET DATABASE = ''
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='constraint_db'
 ----
-0
+3
 
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_views WHERE schemaname='constraint_db'
 ----
-0
+1
 
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_class c
@@ -1081,7 +1081,7 @@ WHERE n.nspname = 'constraint_db'
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_depend
 ----
-0
+2
 
 # Verify that an unset database shows everything in pg_catalog for the root
 # user.

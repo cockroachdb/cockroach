@@ -715,9 +715,6 @@ func forEachTableDescWithTableLookup(
 	}
 	sort.Strings(dbNames)
 	for _, dbName := range dbNames {
-		if !p.isDatabaseVisible(dbName) {
-			continue
-		}
 		db := databases[dbName]
 		dbTableNames := make([]string, 0, len(db.tables))
 		for tableName := range db.tables {

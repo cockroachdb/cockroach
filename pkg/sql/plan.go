@@ -232,6 +232,17 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt parser.Statement) (pla
 	return nil, nil
 }
 
+// delegateQuery recurses into newPlan using a custom SQL string.
+func (p *planner) delegateQuery(
+	ctx context.Context, sql string, desiredTypes []parser.Type,
+) (planNode, error) {
+	stmt, err := parser.ParseOne(sql)
+	if err != nil {
+		return nil, err
+	}
+	return p.newPlan(ctx, stmt, desiredTypes)
+}
+
 // newPlan constructs a planNode from a statement. This is used
 // recursively by the various node constructors.
 func (p *planner) newPlan(

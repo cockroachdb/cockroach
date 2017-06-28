@@ -103,46 +103,6 @@ func checkTablePrivileges(ctx context.Context, p *planner, tn *parser.TableName)
 	return nil
 }
 
-// runInDB runs the closure with the provided database set to the session's current
-// database, and resets the session's database afterwards. This is necessary to get
-// visibility into information_schema if the current user isn't root.
-func runInDB(p *planner, tempDB string, f func() error) error {
-	origDatabase := p.evalCtx.Database
-	p.evalCtx.Database = tempDB
-	err := f()
-	p.evalCtx.Database = origDatabase
-	return err
-}
-
-// queryInfoSchema queries the information_schema with the provided SQL query and
-// uses the results to populate a valuesNode.
-func queryInfoSchema(
-	ctx context.Context,
-	p *planner,
-	columns sqlbase.ResultColumns,
-	db string,
-	sql string,
-	args ...interface{},
-) (*valuesNode, error) {
-	v := p.newContainerValuesNode(columns, 0)
-	if err := runInDB(p, db, func() error {
-		rows, err := p.queryRows(ctx, sql, args...)
-		if err != nil {
-			return err
-		}
-		for _, r := range rows {
-			if _, err := v.rows.AddRow(ctx, r); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		v.rows.Close(ctx)
-		return nil, err
-	}
-	return v, nil
-}
-
 func (p *planner) showClusterSetting(name string) (planNode, error) {
 	var columns sqlbase.ResultColumns
 	var populate func(ctx context.Context, v *valuesNode) error
@@ -284,18 +244,20 @@ func (p *planner) ShowColumns(ctx context.Context, n *parser.ShowColumns) (planN
 		return nil, err
 	}
 
-	columns := sqlbase.ResultColumns{
-		{Name: "Field", Typ: parser.TypeString},
-		{Name: "Type", Typ: parser.TypeString},
-		{Name: "Null", Typ: parser.TypeBool},
-		{Name: "Default", Typ: parser.TypeString},
-		{Name: "Indices", Typ: parser.TypeString},
+	db := tn.Database()
+	if err := checkDBExists(ctx, p, db); err != nil {
+		return nil, err
 	}
-	return &delayedNode{
-		name:    "SHOW COLUMNS FROM " + tn.String(),
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			const getColumnsQuery = `
+
+	if err := checkTableExists(ctx, p, tn); err != nil {
+		return nil, err
+	}
+
+	if err := checkTablePrivileges(ctx, p, tn); err != nil {
+		return nil, err
+	}
+
+	const getColumnsQuery = `
 				SELECT
 					COLUMN_NAME AS "Field",
 					DATA_TYPE AS "Type",
@@ -308,32 +270,21 @@ func (p *planner) ShowColumns(ctx context.Context, n *parser.ShowColumns) (planN
 						 FROM
 								 (SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, ORDINAL_POSITION
 										FROM information_schema.columns
-									 WHERE TABLE_SCHEMA=$1 AND TABLE_NAME=$2)
+									 WHERE TABLE_SCHEMA=%[1]s AND TABLE_NAME=%[2]s)
 								 LEFT OUTER JOIN
 								 (SELECT COLUMN_NAME, INDEX_NAME
 										FROM information_schema.statistics
-									 WHERE TABLE_SCHEMA=$1 AND TABLE_NAME=$2)
+									 WHERE TABLE_SCHEMA=%[1]s AND TABLE_NAME=%[2]s)
 								 USING(COLUMN_NAME)
 						GROUP BY COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, ORDINAL_POSITION
 					 )
 				ORDER BY ORDINAL_POSITION`
 
-			db := tn.Database()
-			if err := checkDBExists(ctx, p, db); err != nil {
-				return nil, err
-			}
-
-			if err := checkTableExists(ctx, p, tn); err != nil {
-				return nil, err
-			}
-
-			if err := checkTablePrivileges(ctx, p, tn); err != nil {
-				return nil, err
-			}
-
-			return queryInfoSchema(ctx, p, columns, db, getColumnsQuery, tn.Database(), tn.Table())
-		},
-	}, nil
+	return p.delegateQuery(ctx,
+		fmt.Sprintf(getColumnsQuery,
+			parser.EscapeSQLString(tn.Database()),
+			parser.EscapeSQLString(tn.Table())),
+		nil)
 }
 
 // showCreateInterleave returns an INTERLEAVE IN PARENT clause for the specified
@@ -609,12 +560,7 @@ WHERE message LIKE 'fetched: %'
 `
 	}
 
-	stmt, err := parser.ParseOne(fmt.Sprintf(traceClause, whereClause))
-	if err != nil {
-		return nil, err
-	}
-
-	plan, err := p.newPlan(ctx, stmt, nil)
+	plan, err := p.delegateQuery(ctx, fmt.Sprintf(traceClause, whereClause), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -685,13 +631,9 @@ WHERE message LIKE 'fetched: %'
 //   Notes: postgres does not have a "show databases"
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
 func (p *planner) ShowDatabases(ctx context.Context, n *parser.ShowDatabases) (planNode, error) {
-	const getDatabases = `SELECT SCHEMA_NAME AS "Database" FROM information_schema.schemata
-							ORDER BY "Database"`
-	stmt, err := parser.ParseOne(getDatabases)
-	if err != nil {
-		return nil, err
-	}
-	return p.newPlan(ctx, stmt, nil)
+	return p.delegateQuery(ctx,
+		`SELECT SCHEMA_NAME AS "Database" FROM information_schema.schemata ORDER BY "Database"`,
+		nil)
 }
 
 // ShowGrants returns grant details for the specified objects and users.
@@ -701,138 +643,77 @@ func (p *planner) ShowDatabases(ctx context.Context, n *parser.ShowDatabases) (p
 //          mysql only returns the user's privileges.
 func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNode, error) {
 	if n.Targets == nil {
-		return nil, errors.Errorf("TODO(marc): implement SHOW GRANT with no targets")
+		return nil, pgerror.Unimplemented("SHOW GRANTS <no target>",
+			"cannot use SHOW GRANTS without a target")
 	}
 
-	objectType := "Database"
-	if n.Targets.Tables != nil {
-		objectType = "Table"
-	}
+	var grantQuery bytes.Buffer
+	var params []string
 
-	columns := sqlbase.ResultColumns{
-		{Name: objectType, Typ: parser.TypeString},
-		{Name: "User", Typ: parser.TypeString},
-		{Name: "Privileges", Typ: parser.TypeString},
-	}
-
-	return &delayedNode{
-		name:    "SHOW GRANTS",
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
-
-			queryFn := func(sql string, args ...interface{}) error {
-				rows, err := p.queryRows(ctx, sql, args...)
-				if err != nil {
-					return err
-				}
-				for _, r := range rows {
-					if _, err := v.rows.AddRow(ctx, r); err != nil {
-						return err
-					}
-				}
-				return nil
+	if n.Targets.Databases != nil {
+		// Get grants of database from information_schema.schema_privileges
+		// if the type of target is database.
+		for _, db := range n.Targets.Databases.ToStrings() {
+			if err := checkDBExists(ctx, p, db); err != nil {
+				return nil, err
 			}
+			params = append(params, parser.EscapeSQLString(db))
+		}
 
-			// Get grants of database from information_schema.schema_privileges
-			// if the type of target is database.
-			if n.Targets.Databases != nil {
-				// TODO(nvanbenschoten): Clean up parameter assignment throughout.
-				var params []interface{}
-				var paramHolders []string
-				paramSeq := 1
-				for _, db := range n.Targets.Databases.ToStrings() {
-					if err := checkDBExists(ctx, p, db); err != nil {
-						v.rows.Close(ctx)
-						return nil, err
-					}
-
-					paramHolders = append(paramHolders, fmt.Sprintf("$%d", paramSeq))
-					paramSeq++
-					params = append(params, db)
-				}
-				schemaGrants := fmt.Sprintf(`SELECT TABLE_SCHEMA AS "Database", GRANTEE AS "User",
-									PRIVILEGE_TYPE AS "Privileges" FROM information_schema.schema_privileges
-									WHERE TABLE_SCHEMA IN (%s)`, strings.Join(paramHolders, ","))
-				if n.Grantees != nil {
-					paramHolders = paramHolders[:0]
-					for _, grantee := range n.Grantees.ToStrings() {
-						paramHolders = append(paramHolders, fmt.Sprintf("$%d", paramSeq))
-						params = append(params, grantee)
-						paramSeq++
-					}
-					schemaGrants = fmt.Sprintf(`%s AND GRANTEE IN(%s)`, schemaGrants, strings.Join(paramHolders, ","))
-				}
-				if err := queryFn(schemaGrants, params...); err != nil {
-					v.rows.Close(ctx)
+		fmt.Fprint(&grantQuery,
+			`SELECT TABLE_SCHEMA AS "Database", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" `+
+				`FROM information_schema.schema_privileges`)
+		if len(params) == 0 {
+			// There are no rows, but we can't simply return emptyNode{} because
+			// the result columns must still be defined.
+			grantQuery.WriteString(` WHERE false`)
+		} else {
+			fmt.Fprintf(&grantQuery, ` WHERE TABLE_SCHEMA IN (%s)`, strings.Join(params, ","))
+		}
+	} else {
+		// Get grants of table from information_schema.table_privileges
+		// if the type of target is table.
+		for _, tableTarget := range n.Targets.Tables {
+			tableGlob, err := tableTarget.NormalizeTablePattern()
+			if err != nil {
+				return nil, err
+			}
+			tables, err := expandTableGlob(ctx, p.txn, p.getVirtualTabler(),
+				p.session.Database, tableGlob)
+			if err != nil {
+				return nil, err
+			}
+			for i := range tables {
+				if err := checkTableExists(ctx, p, &tables[i]); err != nil {
 					return nil, err
 				}
+				params = append(params, fmt.Sprintf("(%s,%s)",
+					parser.EscapeSQLString(tables[i].Database()),
+					parser.EscapeSQLString(tables[i].Table())))
 			}
+		}
 
-			// Get grants of table from information_schema.table_privileges
-			// if the type of target is table.
-			if n.Targets.Tables != nil {
-				// TODO(nvanbenschoten): Clean up parameter assignment throughout.
-				var params []interface{}
-				var paramHolders []string
-				paramSeq := 1
-				for _, tableTarget := range n.Targets.Tables {
-					tableGlob, err := tableTarget.NormalizeTablePattern()
-					if err != nil {
-						v.rows.Close(ctx)
-						return nil, err
-					}
-					tables, err := expandTableGlob(ctx, p.txn, p.getVirtualTabler(), p.session.Database, tableGlob)
-					if err != nil {
-						v.rows.Close(ctx)
-						return nil, err
-					}
-					for i := range tables {
-						if err := checkTableExists(ctx, p, &tables[i]); err != nil {
-							v.rows.Close(ctx)
-							return nil, err
-						}
+		fmt.Fprint(&grantQuery,
+			`SELECT TABLE_NAME AS "Table", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" `+
+				`FROM information_schema.table_privileges`)
+		if len(params) == 0 {
+			// There are no rows, but we can't simply return emptyNode{} because
+			// the result columns must still be defined.
+			grantQuery.WriteString(` WHERE false`)
+		} else {
+			fmt.Fprintf(&grantQuery, ` WHERE (TABLE_SCHEMA, TABLE_NAME) IN (%s)`, strings.Join(params, ","))
+		}
+	}
 
-						paramHolders = append(paramHolders, fmt.Sprintf("($%d,$%d)",
-							paramSeq, paramSeq+1))
-						params = append(params, tables[i].Database(), tables[i].Table())
-						paramSeq += 2
-
-					}
-				}
-				if len(paramHolders) == 0 {
-					return v, nil
-				}
-				tableGrants := fmt.Sprintf(`SELECT TABLE_NAME, GRANTEE, PRIVILEGE_TYPE FROM information_schema.table_privileges
-									WHERE (TABLE_SCHEMA, TABLE_NAME) IN (%s)`, strings.Join(paramHolders, ","))
-				if n.Grantees != nil {
-					paramHolders = paramHolders[:0]
-					for _, grantee := range n.Grantees.ToStrings() {
-						paramHolders = append(paramHolders, fmt.Sprintf("$%d", paramSeq))
-						params = append(params, grantee)
-						paramSeq++
-					}
-					tableGrants = fmt.Sprintf(`%s AND GRANTEE IN(%s)`, tableGrants, strings.Join(paramHolders, ","))
-				}
-				if err := queryFn(tableGrants, params...); err != nil {
-					v.rows.Close(ctx)
-					return nil, err
-				}
-			}
-
-			// Sort the result by target name, user name and privileges.
-			return &sortNode{
-				p:    p,
-				plan: v,
-				ordering: sqlbase.ColumnOrdering{
-					{ColIdx: 0, Direction: encoding.Ascending},
-					{ColIdx: 1, Direction: encoding.Ascending},
-					{ColIdx: 2, Direction: encoding.Ascending},
-				},
-				columns: v.columns,
-			}, nil
-		},
-	}, nil
+	if n.Grantees != nil {
+		params = params[:0]
+		for _, grantee := range n.Grantees.ToStrings() {
+			params = append(params, parser.EscapeSQLString(grantee))
+		}
+		fmt.Fprintf(&grantQuery, ` AND GRANTEE IN (%s)`, strings.Join(params, ","))
+	}
+	fmt.Fprint(&grantQuery, " ORDER BY 1,2,3")
+	return p.delegateQuery(ctx, grantQuery.String(), nil)
 }
 
 // ShowIndex returns all the indexes for a table.
@@ -845,21 +726,20 @@ func (p *planner) ShowIndex(ctx context.Context, n *parser.ShowIndex) (planNode,
 		return nil, err
 	}
 
-	columns := sqlbase.ResultColumns{
-		{Name: "Table", Typ: parser.TypeString},
-		{Name: "Name", Typ: parser.TypeString},
-		{Name: "Unique", Typ: parser.TypeBool},
-		{Name: "Seq", Typ: parser.TypeInt},
-		{Name: "Column", Typ: parser.TypeString},
-		{Name: "Direction", Typ: parser.TypeString},
-		{Name: "Storing", Typ: parser.TypeBool},
-		{Name: "Implicit", Typ: parser.TypeBool},
+	db := tn.Database()
+	if err := checkDBExists(ctx, p, db); err != nil {
+		return nil, err
 	}
-	return &delayedNode{
-		name:    "SHOW INDEXES FROM " + tn.String(),
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			const getIndexes = `
+
+	if err := checkTableExists(ctx, p, tn); err != nil {
+		return nil, err
+	}
+
+	if err := checkTablePrivileges(ctx, p, tn); err != nil {
+		return nil, err
+	}
+
+	const getIndexes = `
 				SELECT
 					TABLE_NAME AS "Table",
 					INDEX_NAME AS "Name",
@@ -871,25 +751,14 @@ func (p *planner) ShowIndex(ctx context.Context, n *parser.ShowIndex) (planNode,
 					IMPLICIT AS "Implicit"
 				FROM information_schema.statistics
 				WHERE
-					TABLE_SCHEMA=$1 AND
-					TABLE_NAME=$2`
+					TABLE_SCHEMA=%[1]s AND
+					TABLE_NAME=%[2]s`
 
-			db := tn.Database()
-			if err := checkDBExists(ctx, p, db); err != nil {
-				return nil, err
-			}
-
-			if err := checkTableExists(ctx, p, tn); err != nil {
-				return nil, err
-			}
-
-			if err := checkTablePrivileges(ctx, p, tn); err != nil {
-				return nil, err
-			}
-
-			return queryInfoSchema(ctx, p, columns, db, getIndexes, tn.Database(), tn.Table())
-		},
-	}, nil
+	return p.delegateQuery(ctx,
+		fmt.Sprintf(getIndexes,
+			parser.EscapeSQLString(tn.Database()),
+			parser.EscapeSQLString(tn.Table())),
+		nil)
 }
 
 // ShowConstraints returns all the constraints for a table.
@@ -1167,25 +1036,19 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 	if name == "" {
 		return nil, errNoDatabase
 	}
+	if err := checkDBExists(ctx, p, name); err != nil {
+		return nil, err
+	}
 
-	columns := sqlbase.ResultColumns{{Name: "Table", Typ: parser.TypeString}}
-	return &delayedNode{
-		name:    "SHOW TABLES FROM " + name,
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			const getTablesQuery = `
-				SELECT TABLE_NAME
+	const getTablesQuery = `
+				SELECT TABLE_NAME AS "Table"
 				FROM information_schema.tables
-				WHERE tables.TABLE_SCHEMA=$1
+				WHERE tables.TABLE_SCHEMA=%s
 				ORDER BY tables.TABLE_NAME`
 
-			if err := checkDBExists(ctx, p, name); err != nil {
-				return nil, err
-			}
-
-			return queryInfoSchema(ctx, p, columns, name, getTablesQuery, name)
-		},
-	}, nil
+	return p.delegateQuery(ctx,
+		fmt.Sprintf(getTablesQuery, parser.EscapeSQLString(name)),
+		nil)
 }
 
 // ShowTransactionStatus implements the plan for SHOW TRANSACTION STATUS.
@@ -1198,11 +1061,7 @@ func (p *planner) ShowTransactionStatus() (planNode, error) {
 // ShowUsers returns all the users.
 // Privileges: SELECT on system.users.
 func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode, error) {
-	stmt, err := parser.ParseOne(`SELECT username FROM system.users ORDER BY 1`)
-	if err != nil {
-		return nil, err
-	}
-	return p.newPlan(ctx, stmt, nil)
+	return p.delegateQuery(ctx, `SELECT username FROM system.users ORDER BY 1`, nil)
 }
 
 // Help returns usage information for the builtin functions
