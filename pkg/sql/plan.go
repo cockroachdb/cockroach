@@ -180,17 +180,20 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 	}
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(planColumns(plan)) {
+			plan.Close(ctx)
 			return nil, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
 				"cached plan must not change result type")
 		}
 	}
 	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
+		plan.Close(ctx)
 		return nil, err
 	}
 
 	needed := allColumns(plan)
 	plan, err = p.optimizePlan(ctx, plan, needed)
 	if err != nil {
+		plan.Close(ctx)
 		return nil, err
 	}
 
