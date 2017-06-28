@@ -27,6 +27,29 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start
 
 The minimum kubernetes version to successfully run the examples in this directory is `1.6`.
 
+For secure mode, the controller must enable `certificatesigningrequests`.
+You can check if this is enabled by looking at the controller logs:
+```
+# On cloud platform:
+# Find the controller:
+$ kubectl get pods --all-namespaces | grep controller
+kube-system   po/kube-controller-manager-k8s-master-5ef244d4-0   1/1       Running   0          7m
+
+# Check the logs:
+$ kubectl logs kube-controller-manager-k8s-master-5ef244d4-0 -n kube-system | grep certificate
+I0628 12:38:23.471365       1 controllermanager.go:427] Starting "certificatesigningrequests"
+E0628 12:38:23.473076       1 certificates.go:38] Failed to start certificate controller: open /etc/kubernetes/ca/ca.pem: no such file or directory
+W0628 12:38:23.473106       1 controllermanager.go:434] Skipping "certificatesigningrequests"
+# This shows that the certificate controller is not running, approved CSRs will not trigger a certificate.
+
+# On minikube:
+$ minikube logs|grep certificate
+Jun 28 12:49:00 minikube localkube[3440]: I0628 12:49:00.224903    3440 controllermanager.go:437] Started "certificatesigningrequests"
+Jun 28 12:49:00 minikube localkube[3440]: I0628 12:49:00.231134    3440 certificate_controller.go:120] Starting certificate controller manager
+# This shows that the certificate controller is running, approved CSRs will get a certificate.
+
+```
+
 ### StatefulSet limitations
 
 There is currently no possibility to use node-local storage (outside of
