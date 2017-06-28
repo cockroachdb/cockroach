@@ -218,7 +218,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	const numKeys = 100
+	const numKeys = 1000
 	const numBatches = 10
 	const batchTimeSpan = 10
 	const valueSize = 8
@@ -235,7 +235,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 		end   hlc.Timestamp
 	}{
 		// entire time range
-		{hlc.Timestamp{WallTime: 0, Logical: 0}, hlc.Timestamp{WallTime: 100, Logical: 0}},
+		{hlc.Timestamp{WallTime: 0, Logical: 0}, hlc.Timestamp{WallTime: 110, Logical: 0}},
 		// one SST
 		{hlc.Timestamp{WallTime: 10, Logical: 0}, hlc.Timestamp{WallTime: 19, Logical: 0}},
 		// one SST, plus the min of the following SST
@@ -264,9 +264,15 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 			for iter.Reset(keys.MinKey, keys.MaxKey); iter.Valid(); iter.Next() {
 				expectedKVs = append(expectedKVs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
 			}
+			if iter.err != nil {
+				t.Fatal(err)
+			}
+			if len(expectedKVs) < 1 {
+				t.Fatalf("source of truth had no expected KVs; likely a bug in the test itself")
+			}
 
 			settings.TestingSetBool(&TimeBoundIteratorsEnabled, true)
-			assertEqualKVs(eng, keys.MinKey, keys.MaxKey, testCase.start, testCase.end, expectedKVs)
+			assertEqualKVs(eng, keys.MinKey, keys.MaxKey, testCase.start, testCase.end, expectedKVs)(t)
 		})
 	}
 }

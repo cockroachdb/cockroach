@@ -77,7 +77,7 @@ func loadTestData(
 
 	sstTimestamps := make([]int64, numBatches)
 	for i := 0; i < len(sstTimestamps); i++ {
-		sstTimestamps[i] = int64(i * batchTimeSpan)
+		sstTimestamps[i] = int64((i + 1) * batchTimeSpan)
 	}
 
 	var batch engine.Batch
