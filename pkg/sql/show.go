@@ -20,19 +20,16 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
@@ -815,103 +812,11 @@ func (p *planner) ShowJobs(ctx context.Context, n *parser.ShowJobs) (planNode, e
 }
 
 func (p *planner) ShowSessions(ctx context.Context, n *parser.ShowSessions) (planNode, error) {
-	columns := sqlbase.ResultColumns{
-		{Name: "node_id", Typ: parser.TypeInt},
-		{Name: "username", Typ: parser.TypeString},
-		{Name: "client_address", Typ: parser.TypeString},
-		{Name: "application_name", Typ: parser.TypeString},
-		{Name: "active_queries", Typ: parser.TypeString},
-		{Name: "session_start", Typ: parser.TypeTimestamp},
-		{Name: "oldest_query_start", Typ: parser.TypeTimestamp},
-		{Name: "kv_txn", Typ: parser.TypeString},
+	query := `TABLE crdb_internal.node_sessions`
+	if n.Cluster {
+		query = `TABLE crdb_internal.cluster_sessions`
 	}
-	return &delayedNode{
-		name:    n.String(),
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			statusServer := p.session.execCfg.StatusServer
-
-			var response *serverpb.ListSessionsResponse
-			var err error
-			sessionsRequest := &serverpb.ListSessionsRequest{Username: p.session.User}
-			if n.Cluster {
-				response, err = statusServer.ListSessions(ctx, sessionsRequest)
-			} else {
-				response, err = statusServer.ListLocalSessions(ctx, sessionsRequest)
-			}
-
-			if err != nil {
-				return nil, err
-			}
-
-			v := p.newContainerValuesNode(columns, len(response.Sessions))
-			for _, session := range response.Sessions {
-
-				// Generate active_queries and oldest_query_start
-				var activeQueries bytes.Buffer
-				var oldestStart time.Time
-				var oldestStartDatum parser.Datum
-
-				for _, query := range session.ActiveQueries {
-					activeQueries.WriteString(query.Sql)
-					activeQueries.WriteString("; ")
-
-					if oldestStart.IsZero() || query.Start.Before(oldestStart) {
-						oldestStart = query.Start
-					}
-				}
-
-				if oldestStart.IsZero() {
-					oldestStartDatum = parser.DNull
-				} else {
-					oldestStartDatum = parser.MakeDTimestamp(oldestStart, time.Microsecond)
-				}
-
-				kvTxnIDDatum := parser.DNull
-				if session.KvTxnID != nil {
-					kvTxnIDDatum = parser.NewDString(session.KvTxnID.String())
-				}
-
-				row := parser.Datums{
-					parser.NewDInt(parser.DInt(session.NodeID)),
-					parser.NewDString(session.Username),
-					parser.NewDString(session.ClientAddress),
-					parser.NewDString(session.ApplicationName),
-					parser.NewDString(activeQueries.String()),
-					parser.MakeDTimestamp(session.Start, time.Microsecond),
-					oldestStartDatum,
-					kvTxnIDDatum,
-				}
-				if _, err := v.rows.AddRow(ctx, row); err != nil {
-					v.Close(ctx)
-					return nil, err
-				}
-			}
-
-			for _, rpcErr := range response.Errors {
-				if rpcErr.NodeID != 0 {
-					// Add a row with this node ID, and nulls for all other columns
-					_, err := v.rows.AddRow(ctx, parser.Datums{
-						parser.NewDInt(parser.DInt(rpcErr.NodeID)),
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-					})
-					if err != nil {
-						v.Close(ctx)
-						return nil, err
-					}
-				}
-				log.Warning(ctx, rpcErr.Message)
-			}
-
-			return v, nil
-		},
-	}, nil
+	return p.delegateQuery(ctx, "SHOW SESSIONS", query, nil, nil)
 }
 
 // ShowTables returns all the tables.
