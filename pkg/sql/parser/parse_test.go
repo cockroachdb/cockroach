@@ -172,6 +172,8 @@ func TestParse(t *testing.T) {
 		{`DELETE FROM a WHERE a = b RETURNING a + b`},
 		{`DELETE FROM a WHERE a = b RETURNING NOTHING`},
 
+		{`DISCARD ALL`},
+
 		{`DROP DATABASE a`},
 		{`DROP DATABASE IF EXISTS a`},
 		{`DROP TABLE a`},

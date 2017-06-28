@@ -37,40 +37,40 @@ const (
 // sessionVar provides a unified interface for performing operations on
 // variables such as the selected database, or desired syntax.
 type sessionVar struct {
-	// Set performs mutations (usually on p.session) to effect the change
+	// Set performs mutations (usually on session) to effect the change
 	// desired by SET commands.
-	Set func(ctx context.Context, p *planner, values []parser.TypedExpr) error
+	Set func(ctx context.Context, session *Session, values []parser.TypedExpr) error
 
 	// Get returns a string representation of a given variable to be used
 	// either by SHOW or in the pg_catalog table.
 	Get func(p *planner) string
 
-	// Reset performs mutations (usually on p.session) to effect the change
+	// Reset performs mutations (usually on session) to effect the change
 	// desired by RESET commands.
-	Reset func(*planner) error
+	Reset func(*Session) error
 }
 
 // nopVar is a placeholder for a number of settings sent by various client
 // drivers which we do not support, but should simply ignore rather than
 // throwing an error when trying to SET or SHOW them.
 var nopVar = sessionVar{
-	Set:   func(context.Context, *planner, []parser.TypedExpr) error { return nil },
+	Set:   func(context.Context, *Session, []parser.TypedExpr) error { return nil },
 	Get:   func(*planner) string { return "" },
-	Reset: func(*planner) error { return nil },
+	Reset: func(*Session) error { return nil },
 }
 
 // varGen is the main definition array for all session variables.
 // Note to maintainers: try to keep this sorted in the source code.
 var varGen = map[string]sessionVar{
 	`application_name`: {
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
 			// Set by clients to improve query logging.
 			// See https://www.postgresql.org/docs/9.6/static/runtime-config-logging.html#GUC-APPLICATION-NAME
-			s, err := p.getStringVal(`application_name`, values)
+			s, err := getStringVal(session, `application_name`, values)
 			if err != nil {
 				return err
 			}
-			p.session.resetApplicationName(s)
+			session.resetApplicationName(s)
 
 			return nil
 		},
@@ -79,8 +79,8 @@ var varGen = map[string]sessionVar{
 			defer p.session.mu.RUnlock()
 			return p.session.mu.ApplicationName
 		},
-		Reset: func(p *planner) error {
-			p.session.resetApplicationName(p.session.defaults.applicationName)
+		Reset: func(session *Session) error {
+			session.resetApplicationName(session.defaults.applicationName)
 			return nil
 		},
 	},
@@ -97,8 +97,8 @@ var varGen = map[string]sessionVar{
 		Get: func(*planner) string {
 			return "UTF8"
 		},
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
-			s, err := p.getStringVal(`client_encoding`, values)
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+			s, err := getStringVal(session, `client_encoding`, values)
 			if err != nil {
 				return err
 			}
@@ -108,30 +108,29 @@ var varGen = map[string]sessionVar{
 			}
 			return nil
 		},
-		Reset: func(*planner) error { return nil },
+		Reset: func(*Session) error { return nil },
 	},
 
 	`database`: {
-		Set: func(ctx context.Context, p *planner, values []parser.TypedExpr) error {
-			dbName, err := p.getStringVal(`database`, values)
+		Set: func(ctx context.Context, session *Session, values []parser.TypedExpr) error {
+			dbName, err := getStringVal(session, `database`, values)
 			if err != nil {
 				return err
 			}
 
 			if len(dbName) != 0 {
 				// Verify database descriptor exists.
-				if _, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), dbName); err != nil {
+				if _, err := MustGetDatabaseDesc(ctx, session.TxnState.mu.txn, &session.virtualSchemas, dbName); err != nil {
 					return err
 				}
 			}
-			p.session.Database = dbName
-			p.evalCtx.Database = dbName
+			session.Database = dbName
 
 			return nil
 		},
 		Get: func(p *planner) string { return p.session.Database },
-		Reset: func(p *planner) error {
-			p.session.Database = p.session.defaults.database
+		Reset: func(session *Session) error {
+			session.Database = session.defaults.database
 			return nil
 		},
 	},
@@ -141,8 +140,8 @@ var varGen = map[string]sessionVar{
 		Get: func(*planner) string {
 			return "ISO"
 		},
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
-			s, err := p.getStringVal(`datestyle`, values)
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+			s, err := getStringVal(session, `datestyle`, values)
 			if err != nil {
 				return err
 			}
@@ -151,26 +150,26 @@ var varGen = map[string]sessionVar{
 			}
 			return nil
 		},
-		Reset: func(*planner) error { return nil },
+		Reset: func(*Session) error { return nil },
 	},
 
 	`default_transaction_isolation`: {
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
 			// It's unfortunate that clients want us to support both SET
 			// SESSION CHARACTERISTICS AS TRANSACTION ..., which takes the
 			// isolation level as keywords/identifiers (e.g. JDBC), and SET
 			// DEFAULT_TRANSACTION_ISOLATION TO '...', which takes an
 			// expression (e.g. psycopg2). But that's how it is.  Just ensure
 			// this code keeps in sync with SetDefaultIsolation() in set.go.
-			s, err := p.getStringVal(`default_transaction_isolation`, values)
+			s, err := getStringVal(session, `default_transaction_isolation`, values)
 			if err != nil {
 				return err
 			}
 			switch strings.ToUpper(s) {
 			case `READ UNCOMMITTED`, `READ COMMITTED`, `SNAPSHOT`:
-				p.session.DefaultIsolationLevel = enginepb.SNAPSHOT
+				session.DefaultIsolationLevel = enginepb.SNAPSHOT
 			case `REPEATABLE READ`, `SERIALIZABLE`:
-				p.session.DefaultIsolationLevel = enginepb.SERIALIZABLE
+				session.DefaultIsolationLevel = enginepb.SERIALIZABLE
 			default:
 				return fmt.Errorf("set default_transaction_isolation: unknown isolation level: %q", s)
 			}
@@ -178,27 +177,27 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
-		Reset: func(p *planner) error {
-			p.session.DefaultIsolationLevel = enginepb.IsolationType(0)
+		Reset: func(session *Session) error {
+			session.DefaultIsolationLevel = enginepb.IsolationType(0)
 			return nil
 		},
 	},
 
 	`distsql`: {
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
-			s, err := p.getStringVal(`distsql`, values)
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+			s, err := getStringVal(session, `distsql`, values)
 			if err != nil {
 				return err
 			}
 			switch parser.Name(s).Normalize() {
 			case parser.ReNormalizeName("off"):
-				p.session.DistSQLMode = DistSQLOff
+				session.DistSQLMode = DistSQLOff
 			case parser.ReNormalizeName("on"):
-				p.session.DistSQLMode = DistSQLOn
+				session.DistSQLMode = DistSQLOn
 			case parser.ReNormalizeName("auto"):
-				p.session.DistSQLMode = DistSQLAuto
+				session.DistSQLMode = DistSQLAuto
 			case parser.ReNormalizeName("always"):
-				p.session.DistSQLMode = DistSQLAlways
+				session.DistSQLMode = DistSQLAlways
 			default:
 				return fmt.Errorf("set distsql: \"%s\" not supported", s)
 			}
@@ -208,10 +207,10 @@ var varGen = map[string]sessionVar{
 		Get: func(p *planner) string {
 			return p.session.DistSQLMode.String()
 		},
-		Reset: func(p *planner) error {
-			p.session.DistSQLMode = DistSQLExecModeFromInt(DistSQLClusterExecMode.Get())
-			if p.session.execCfg.TestingKnobs.OverrideDistSQLMode != nil {
-				p.session.DistSQLMode = DistSQLExecModeFromInt(p.session.execCfg.TestingKnobs.OverrideDistSQLMode.Get())
+		Reset: func(session *Session) error {
+			session.DistSQLMode = DistSQLExecModeFromInt(DistSQLClusterExecMode.Get())
+			if session.execCfg.TestingKnobs.OverrideDistSQLMode != nil {
+				session.DistSQLMode = DistSQLExecModeFromInt(session.execCfg.TestingKnobs.OverrideDistSQLMode.Get())
 			}
 			return nil
 		},
@@ -231,12 +230,12 @@ var varGen = map[string]sessionVar{
 	},
 
 	`search_path`: {
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
 			// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 			newSearchPath := make(parser.SearchPath, len(values))
 			foundPgCatalog := false
 			for i, v := range values {
-				s, err := p.datumAsString("search_path", v)
+				s, err := datumAsString(session, "search_path", v)
 				if err != nil {
 					return err
 				}
@@ -253,12 +252,12 @@ var varGen = map[string]sessionVar{
 				// will be searched before searching any of the path items."
 				newSearchPath = append([]string{"pg_catalog"}, newSearchPath...)
 			}
-			p.session.SearchPath = newSearchPath
+			session.SearchPath = newSearchPath
 			return nil
 		},
 		Get: func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
-		Reset: func(p *planner) error {
-			p.session.SearchPath = sqlbase.DefaultSearchPath
+		Reset: func(session *Session) error {
+			session.SearchPath = sqlbase.DefaultSearchPath
 			return nil
 		},
 	},
@@ -272,11 +271,11 @@ var varGen = map[string]sessionVar{
 
 	`standard_conforming_strings`: {
 		// Supported for PG compatibility only.
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
 			// If true, escape backslash literals in strings. We do this by default,
 			// and we do not support the opposite behavior.
 			// See https://www.postgresql.org/docs/9.1/static/runtime-config-compatible.html#GUC-STANDARD-CONFORMING-STRINGS
-			s, err := p.getStringVal(`standard_conforming_strings`, values)
+			s, err := getStringVal(session, `standard_conforming_strings`, values)
 			if err != nil {
 				return err
 			}
@@ -287,7 +286,7 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get:   func(*planner) string { return "on" },
-		Reset: func(*planner) error { return nil },
+		Reset: func(*Session) error { return nil },
 	},
 
 	`time zone`: {
@@ -303,8 +302,8 @@ var varGen = map[string]sessionVar{
 			return p.session.Location.String()
 		},
 		Set: setTimeZone,
-		Reset: func(p *planner) error {
-			p.session.Location = time.UTC
+		Reset: func(session *Session) error {
+			session.Location = time.UTC
 			return nil
 		},
 	},
@@ -335,26 +334,26 @@ var varGen = map[string]sessionVar{
 			}
 			return "off"
 		},
-		Reset: func(p *planner) error {
-			if !p.session.Tracing.Enabled() {
+		Reset: func(session *Session) error {
+			if !session.Tracing.Enabled() {
 				// Tracing is not active. Nothing to do.
 				return nil
 			}
-			return stopTracing(p.session)
+			return stopTracing(session)
 		},
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
-			return p.enableTracing(values)
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+			return enableTracing(session, values)
 		},
 	},
 }
 
-func (p *planner) enableTracing(values []parser.TypedExpr) error {
+func enableTracing(session *Session, values []parser.TypedExpr) error {
 	traceKV := false
 	recordingType := tracing.SnowballRecording
 	enableMode := true
 
 	for _, v := range values {
-		s, err := p.datumAsString("trace", v)
+		s, err := datumAsString(session, "trace", v)
 		if err != nil {
 			return err
 		}
@@ -375,9 +374,9 @@ func (p *planner) enableTracing(values []parser.TypedExpr) error {
 		}
 	}
 	if !enableMode {
-		return stopTracing(p.session)
+		return stopTracing(session)
 	}
-	return p.session.Tracing.StartTracing(recordingType, traceKV)
+	return session.Tracing.StartTracing(recordingType, traceKV)
 }
 
 func stopTracing(s *Session) error {
