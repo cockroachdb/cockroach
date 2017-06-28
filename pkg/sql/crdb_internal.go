@@ -462,20 +462,20 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 var crdbInternalSessionTraceTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.session_trace(
-  TXN_IDX INT NOT NULL,            -- The transaction's 0-based index, among all
+  txn_idx     INT NOT NULL,        -- The transaction's 0-based index, among all
                                    -- transactions that have been traced.
-																   -- Only filled for the first log message in a
-																   -- transaction's top-level span.
-  SPAN_IDX INT NOT NULL,           -- The span's index.
-  MESSAGE_IDX INT NOT NULL,        -- The message's index within its span.
-  TIMESTAMP TIMESTAMPTZ NOT NULL,  -- The message's timestamp.
-  DURATION INTERVAL,               -- The span's duration. Set only on the first
+                                   -- Only filled for the first log message in a
+                                   -- transaction's top-level span.
+  span_idx    INT NOT NULL,        -- The span's index.
+  message_idx INT NOT NULL,        -- The message's index within its span.
+  timestamp   TIMESTAMPTZ NOT NULL,-- The message's timestamp.
+  duration    INTERVAL,            -- The span's duration. Set only on the first
                                    -- (dummy) message on a span.
                                    -- NULL if the span was not finished at the time
                                    -- the trace has been collected.
-  OPERATION STRING NULL,           -- The span's operation. Set only on
+  operation   STRING NULL,         -- The span's operation. Set only on
                                    -- the first (dummy) message in a span.
-  MESSAGE STRING NOT NULL          -- The logged message.
+  message     STRING NOT NULL      -- The logged message.
 );
 `,
 	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
