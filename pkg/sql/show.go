@@ -103,17 +103,6 @@ func checkTablePrivileges(ctx context.Context, p *planner, tn *parser.TableName)
 	return nil
 }
 
-// runInDB runs the closure with the provided database set to the session's current
-// database, and resets the session's database afterwards. This is necessary to get
-// visibility into information_schema if the current user isn't root.
-func runInDB(p *planner, tempDB string, f func() error) error {
-	origDatabase := p.evalCtx.Database
-	p.evalCtx.Database = tempDB
-	err := f()
-	p.evalCtx.Database = origDatabase
-	return err
-}
-
 // queryInfoSchema queries the information_schema with the provided SQL query and
 // uses the results to populate a valuesNode.
 func queryInfoSchema(
@@ -125,7 +114,7 @@ func queryInfoSchema(
 	args ...interface{},
 ) (*valuesNode, error) {
 	v := p.newContainerValuesNode(columns, 0)
-	if err := runInDB(p, db, func() error {
+	if err := func() error {
 		rows, err := p.queryRows(ctx, sql, args...)
 		if err != nil {
 			return err
@@ -136,7 +125,7 @@ func queryInfoSchema(
 			}
 		}
 		return nil
-	}); err != nil {
+	}(); err != nil {
 		v.rows.Close(ctx)
 		return nil, err
 	}

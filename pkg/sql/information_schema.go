@@ -622,18 +622,6 @@ func (fn tableLookupFn) tableOrErr(id sqlbase.ID) (*sqlbase.TableDescriptor, err
 	return nil, errors.Errorf("could not find referenced table with ID %v", id)
 }
 
-// isSystemDatabaseName returns true if the input name is not a user db name.
-func isSystemDatabaseName(name string) bool {
-	switch name {
-	case informationSchemaName:
-	case pgCatalogName:
-	case sqlbase.SystemDB.Name:
-	default:
-		return false
-	}
-	return true
-}
-
 // forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a
 // tableLookupFn when calling fn to allow callers to lookup fetched table descriptors
 // on demand. This is important for callers dealing with objects like foreign keys, where
@@ -715,9 +703,6 @@ func forEachTableDescWithTableLookup(
 	}
 	sort.Strings(dbNames)
 	for _, dbName := range dbNames {
-		if !p.isDatabaseVisible(dbName) {
-			continue
-		}
 		db := databases[dbName]
 		dbTableNames := make([]string, 0, len(db.tables))
 		for tableName := range db.tables {
