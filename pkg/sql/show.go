@@ -187,24 +187,6 @@ func (p *planner) Show(ctx context.Context, n *parser.Show) (planNode, error) {
 //   Notes: postgres does not have a SHOW COLUMNS statement.
 //          mysql only returns columns you have privileges on.
 func (p *planner) ShowColumns(ctx context.Context, n *parser.ShowColumns) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
-	if err != nil {
-		return nil, err
-	}
-
-	db := tn.Database()
-	if err := checkDBExists(ctx, p, db); err != nil {
-		return nil, err
-	}
-
-	if err := checkTableExists(ctx, p, tn); err != nil {
-		return nil, err
-	}
-
-	if err := checkTablePrivileges(ctx, p, tn); err != nil {
-		return nil, err
-	}
-
 	const getColumnsQuery = `
 				SELECT
 					COLUMN_NAME AS "Field",
@@ -227,9 +209,35 @@ func (p *planner) ShowColumns(ctx context.Context, n *parser.ShowColumns) (planN
 						GROUP BY COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, ORDINAL_POSITION
 					 )
 				ORDER BY ORDINAL_POSITION`
+	return p.showTableDetails(ctx, n.Table, getColumnsQuery)
+}
+
+// showTableDetails extracts information about the given table using
+// the given query patterns in SQL. The query pattern must accept two
+// formatting parameters: the database and table name, in that order.
+func (p *planner) showTableDetails(
+	ctx context.Context, t parser.NormalizableTableName, query string,
+) (planNode, error) {
+	tn, err := t.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	db := tn.Database()
+	if err := checkDBExists(ctx, p, db); err != nil {
+		return nil, err
+	}
+
+	if err := checkTableExists(ctx, p, tn); err != nil {
+		return nil, err
+	}
+
+	if err := checkTablePrivileges(ctx, p, tn); err != nil {
+		return nil, err
+	}
 
 	return p.delegateQuery(ctx,
-		fmt.Sprintf(getColumnsQuery,
+		fmt.Sprintf(query,
 			parser.EscapeSQLString(tn.Database()),
 			parser.EscapeSQLString(tn.Table())),
 		nil)
@@ -669,24 +677,6 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 //   Notes: postgres does not have a SHOW INDEXES statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowIndex(ctx context.Context, n *parser.ShowIndex) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
-	if err != nil {
-		return nil, err
-	}
-
-	db := tn.Database()
-	if err := checkDBExists(ctx, p, db); err != nil {
-		return nil, err
-	}
-
-	if err := checkTableExists(ctx, p, tn); err != nil {
-		return nil, err
-	}
-
-	if err := checkTablePrivileges(ctx, p, tn); err != nil {
-		return nil, err
-	}
-
 	const getIndexes = `
 				SELECT
 					TABLE_NAME AS "Table",
@@ -698,15 +688,8 @@ func (p *planner) ShowIndex(ctx context.Context, n *parser.ShowIndex) (planNode,
 					STORING AS "Storing",
 					IMPLICIT AS "Implicit"
 				FROM information_schema.statistics
-				WHERE
-					TABLE_SCHEMA=%[1]s AND
-					TABLE_NAME=%[2]s`
-
-	return p.delegateQuery(ctx,
-		fmt.Sprintf(getIndexes,
-			parser.EscapeSQLString(tn.Database()),
-			parser.EscapeSQLString(tn.Table())),
-		nil)
+				WHERE TABLE_SCHEMA=%[1]s AND TABLE_NAME=%[2]s`
+	return p.showTableDetails(ctx, n.Table, getIndexes)
 }
 
 // ShowConstraints returns all the constraints for a table.
