@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"sort"
@@ -49,6 +50,8 @@ var crdbInternal = virtualSchema{
 		crdbInternalLocalQueriesTable,
 		crdbInternalClusterQueriesTable,
 		crdbInternalClusterSettingsTable,
+		crdbInternalLocalSessionsTable,
+		crdbInternalClusterSessionsTable,
 	},
 }
 
@@ -587,6 +590,112 @@ func populateQueriesTable(
 			}
 		}
 	}
+	return nil
+}
+
+const sessionsSchemaPattern = `
+CREATE TABLE crdb_internal.%s (
+  node_id            INT NOT NULL,   -- the node on which the query is running
+  username           STRING,         -- the user running the query
+  client_address     STRING,         -- the address of the client that issued the query
+  application_name   STRING,         -- the name of the application as per SET application_name
+  active_queries     STRING,         -- the currently running queries as SQL
+  session_start      TIMESTAMP,      -- the time when the session was opened
+  oldest_query_start TIMESTAMP,      -- the time when the oldest query in the session was started
+  kv_txn             STRING          -- the ID of the current KV transaction
+);
+`
+
+// crdbInternalLocalSessionsTable exposes the list of running sessions
+// on the current node. The results are dependent on the current user.
+var crdbInternalLocalSessionsTable = virtualSchemaTable{
+	schema: fmt.Sprintf(sessionsSchemaPattern, "node_sessions"),
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		req := serverpb.ListSessionsRequest{Username: p.session.User}
+		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
+		if err != nil {
+			return err
+		}
+		return populateSessionsTable(ctx, addRow, response)
+	},
+}
+
+// crdbInternalClusterSessionsTable exposes the list of running sessions
+// on the entire cluster. The result is dependent on the current user.
+var crdbInternalClusterSessionsTable = virtualSchemaTable{
+	schema: fmt.Sprintf(sessionsSchemaPattern, "cluster_sessions"),
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		req := serverpb.ListSessionsRequest{Username: p.session.User}
+		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
+		if err != nil {
+			return err
+		}
+		return populateSessionsTable(ctx, addRow, response)
+	},
+}
+
+func populateSessionsTable(
+	ctx context.Context, addRow func(...parser.Datum) error, response *serverpb.ListSessionsResponse,
+) error {
+	for _, session := range response.Sessions {
+		// Generate active_queries and oldest_query_start
+		var activeQueries bytes.Buffer
+		var oldestStart time.Time
+		var oldestStartDatum parser.Datum
+
+		for _, query := range session.ActiveQueries {
+			activeQueries.WriteString(query.Sql)
+			activeQueries.WriteString("; ")
+
+			if oldestStart.IsZero() || query.Start.Before(oldestStart) {
+				oldestStart = query.Start
+			}
+		}
+
+		if oldestStart.IsZero() {
+			oldestStartDatum = parser.DNull
+		} else {
+			oldestStartDatum = parser.MakeDTimestamp(oldestStart, time.Microsecond)
+		}
+
+		kvTxnIDDatum := parser.DNull
+		if session.KvTxnID != nil {
+			kvTxnIDDatum = parser.NewDString(session.KvTxnID.String())
+		}
+
+		if err := addRow(
+			parser.NewDInt(parser.DInt(session.NodeID)),
+			parser.NewDString(session.Username),
+			parser.NewDString(session.ClientAddress),
+			parser.NewDString(session.ApplicationName),
+			parser.NewDString(activeQueries.String()),
+			parser.MakeDTimestamp(session.Start, time.Microsecond),
+			oldestStartDatum,
+			kvTxnIDDatum,
+		); err != nil {
+			return err
+		}
+	}
+
+	for _, rpcErr := range response.Errors {
+		log.Warning(ctx, rpcErr.Message)
+		if rpcErr.NodeID != 0 {
+			// Add a row with this node ID, and nulls for all other columns
+			if err := addRow(
+				parser.NewDInt(parser.DInt(rpcErr.NodeID)),
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+				parser.DNull,
+			); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
