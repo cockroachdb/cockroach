@@ -140,12 +140,12 @@ You can view pending certificates and approve them using:
 ```
 # List CSRs:
 $ kubectl get csr
-NAME                 AGE       REQUESTOR                               CONDITION
-node-cockroachdb-0   4s        system:serviceaccount:default:default   Pending
+NAME                         AGE       REQUESTOR                               CONDITION
+default.node.cockroachdb-0   4s        system:serviceaccount:default:default   Pending
 
 # Examine the CSR:
-$ kubecrtl describe csr node-cockroachdb-0
-Name:                   node-cockroachdb-0
+$ kubectl describe csr default.node.cockroachdb-0
+Name:                   default.node.cockroachdb-0
 Labels:                 <none>
 Annotations:            <none>
 CreationTimestamp:      Thu, 22 Jun 2017 09:56:49 -0400
@@ -164,12 +164,12 @@ Subject Alternative Names:
 Events: <none>
 
 # If everything checks out, approve the CSR:
-$ kubectl certificate approve node-cockroachdb-0
-certificatesigningrequest "node-cockroachdb-0" approved
+$ kubectl certificate approve default.node.cockroachdb-0
+certificatesigningrequest "default.node.cockroachdb-0" approved
 
 # Otherwise, deny the CSR:
-$ kubectl certificate deny node-cockroachdb-0
-certificatesigningrequest "node-cockroachdb-0" denied
+$ kubectl certificate deny default.node.cockroachdb-0
+certificatesigningrequest "default.node.cockroachdb-0" denied
 ```
 
 ## Accessing the database
@@ -221,7 +221,7 @@ kubectl create -f example_app_secure.yaml
 
 When the first pod is being initialized, you will need to approve its client certificate request:
 ```shell
-kubectl certificate approve client.root
+kubectl certificate approve default.client.root
 ```
 
 If more pods are then added through `kubectl scale deployment example-secure --replicas=X`, the generated
