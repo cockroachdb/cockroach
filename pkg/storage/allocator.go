@@ -789,3 +789,38 @@ func filterBehindReplicas(
 	}
 	return candidates
 }
+
+// filterUnremovableReplicas removes any unremovable replicas from the supplied
+// slice. An unremovable replicas is one which is a necessary part of the
+// quorum that will result from removing 1 replica.
+func filterUnremovableReplicas(
+	raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
+) []roachpb.ReplicaDescriptor {
+	upToDateReplicas := filterBehindReplicas(raftStatus, replicas)
+	quorum := computeQuorum(len(replicas) - 1)
+	if len(upToDateReplicas) < quorum {
+		// The number of up-to-date replicas is less than quorum. No replicas can
+		// be removed.
+		return nil
+	}
+	if len(upToDateReplicas) > quorum {
+		// The number of up-to-date replicas is larger than quorum. Any replica can
+		// be removed.
+		return replicas
+	}
+	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas)-len(upToDateReplicas))
+	necessary := func(r roachpb.ReplicaDescriptor) bool {
+		for _, t := range upToDateReplicas {
+			if t == r {
+				return true
+			}
+		}
+		return false
+	}
+	for _, r := range replicas {
+		if !necessary(r) {
+			candidates = append(candidates, r)
+		}
+	}
+	return candidates
+}
