@@ -117,6 +117,10 @@ type TestServerInterface interface {
 	// store on this node.
 	GetFirstStoreID() roachpb.StoreID
 
+	// GetStores returns the collection of stores from this TestServer's node.
+	// The return value is of type *storage.Stores.
+	GetStores() interface{}
+
 	// SplitRange splits the range containing splitKey.
 	SplitRange(
 		splitKey roachpb.Key,

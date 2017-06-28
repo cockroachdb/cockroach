@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1857,7 +1858,7 @@ func TestLeaseConcurrent(t *testing.T) {
 						// otherwise its context (and tracing span) may be used after the
 						// client cleaned up.
 						delete(tc.repl.mu.proposals, proposal.idKey)
-						proposal.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
+						proposal.finishRaftApplication(proposalResult{Err: roachpb.NewErrorf(origMsg)})
 						return
 					}
 					if err := defaultSubmitProposalLocked(tc.repl, proposal); err != nil {
@@ -7846,5 +7847,90 @@ func TestCommandTooLarge(t *testing.T) {
 		[]byte(strings.Repeat("a", int(maxCommandSize.Get()))))
 	if _, pErr := tc.SendWrapped(&args); !testutils.IsPError(pErr, "command is too large") {
 		t.Fatalf("did not get expected error: %v", pErr)
+	}
+}
+
+// Test that, if the application of a Raft command fails, intents are not
+// resolved. This is because we don't want intent resolution to take place if an
+// EndTransaction fails.
+func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var storeKnobs StoreTestingKnobs
+	var filterActive int32
+	storeKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+		if atomic.LoadInt32(&filterActive) == 1 {
+			return roachpb.NewErrorf("boom")
+		}
+		return nil
+	}
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{Store: &storeKnobs}})
+	defer s.Stopper().Stop(context.TODO())
+
+	splitKey := roachpb.Key("b")
+	if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey); err != nil {
+		t.Fatal(err)
+	}
+
+	key := roachpb.Key("a")
+	txn := newTransaction("test", key, roachpb.NormalUserPriority,
+		enginepb.SERIALIZABLE, s.Clock(),
+	)
+	btArgs, _ := beginTxnArgs(key, txn)
+	var ba roachpb.BatchRequest
+	ba.Header.Txn = txn
+	ba.Add(&btArgs)
+	if _, pErr := s.DistSender().Send(context.TODO(), ba); pErr != nil {
+		t.Fatal(pErr.GoError())
+	}
+
+	// Fail future command applications.
+	atomic.StoreInt32(&filterActive, 1)
+
+	// Propose an EndTransaction with a remote intent. The _remote_ part is
+	// important because intents local to the txn's range are resolved inline with
+	// the EndTransaction execution.
+	// We do this by using replica.propose() directly, as opposed to going through
+	// the DistSender, because we want to inspect the proposal's result after the
+	// injected error.
+	etArgs, _ := endTxnArgs(txn, true /* commit */)
+	etArgs.IntentSpans = []roachpb.Span{{Key: roachpb.Key("bb")}}
+	ba = roachpb.BatchRequest{}
+	ba.Timestamp = s.Clock().Now()
+	ba.Header.Txn = txn
+	ba.Add(&etArgs)
+	// Get a reference to the txn's replica.
+	stores := s.GetStores().(*Stores)
+	rkey, err := keys.Addr(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rangeID, _, err := stores.LookupReplica(rkey, nil /* end */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := stores.GetStore(s.GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repl, err := store.GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exLease, _ := repl.getLease()
+	ch, _, _, err := repl.propose(
+		context.Background(), exLease, ba, nil /* endCmds */, nil, /* spans */
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	propRes := <-ch
+	if !testutils.IsPError(propRes.Err, "boom") {
+		t.Fatalf("expected injected error, got: %v", propRes.Err)
+	}
+	if len(propRes.Intents) != 0 {
+		t.Fatal("expected intents to have been cleared")
 	}
 }
