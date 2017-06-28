@@ -141,36 +141,36 @@ func do(ctx context.Context) error {
 			i,
 			timeutil.Now().UTC().Format(time.RFC3339),
 		); err != nil {
-			return errors.Wrap(err, "could not write header")
+			return errors.Wrapf(err, "could not write header on iteration %d", i)
 		}
 
 		for _, txt := range binaries {
 			binaryPath, err := filepath.Abs(txt)
 			if err != nil {
-				return errors.Wrapf(err, "could not find test binary %s", txt)
+				return errors.Wrapf(err, "could not find test binary %s on iteration %d", txt, i)
 			}
 
-			relativePath, err := filepath.Rel(rootPkg.Dir, binaryPath)
-			if err != nil {
-				return errors.Wrapf(err, "could not get relative path to binary %s", binaryPath)
+			{
+				relativePath, err := filepath.Rel(rootPkg.Dir, binaryPath)
+				if err != nil {
+					return errors.Wrapf(err, "could not get relative path to binary %s on iteration %d", binaryPath, i)
+				}
+				pkgName := path.Join(crdb, filepath.Dir(relativePath))
+
+				if _, err := fmt.Fprintf(buffer, "pkg: %s\n", pkgName); err != nil {
+					return errors.Wrapf(err, "could not write package name %s on iteration %d", pkgName, i)
+				}
 			}
-			pkgName := path.Join(crdb, filepath.Dir(relativePath))
 
 			cmd := exec.CommandContext(ctx, binaryPath, "-test.timeout", "0", "-test.run", "-", "-test.bench", ".", "-test.benchmem")
 			cmd.Dir = filepath.Dir(binaryPath)
 			cmd.Stdout = buffer
 			cmd.Stderr = os.Stderr
 
-			log.Printf("exec: %s", cmd.Args)
+			log.Printf("iteration %d running: %s", i, cmd.Args)
 
-			start := timeutil.Now()
 			if err := cmd.Run(); err != nil {
-				return errors.Wrapf(err, "could not run test binary %s", binaryPath)
-			}
-			// Emulate the output of `go test`, which we don't get because
-			// we've prebuilt the binaries. (╯°□°）╯︵ ┻━┻)
-			if _, err := fmt.Fprintf(buffer, "ok  	%s	%0.3fs", pkgName, timeutil.Since(start).Seconds()); err != nil {
-				return errors.Wrapf(err, "could not write footer for package %s", pkgName)
+				return errors.Wrapf(err, "could not run test binary %s on iteration %d", binaryPath, i)
 			}
 		}
 	}
