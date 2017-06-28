@@ -2241,16 +2241,16 @@ func (*DTable) Size() uintptr { return unsafe.Sizeof(DTable{}) }
 type DOid struct {
 	// A DOid embeds a DInt, the underlying integer OID for this OID datum.
 	DInt
-	// symanticType indicates the particular variety of OID this datum is, whether raw
+	// semanticType indicates the particular variety of OID this datum is, whether raw
 	// oid or a reg* type.
-	symanticType *OidColType
+	semanticType *OidColType
 	// name is set to the resolved name of this OID, if available.
 	name string
 }
 
 // MakeDOid is a helper routine to create a DOid initialized from a DInt.
 func MakeDOid(d DInt) DOid {
-	return DOid{DInt: d, symanticType: oidColTypeOid, name: ""}
+	return DOid{DInt: d, semanticType: oidColTypeOid, name: ""}
 }
 
 // NewDOid is a helper routine to create a *DOid initialized from a DInt.
@@ -2263,7 +2263,7 @@ func NewDOid(d DInt) *DOid {
 // returns it.
 func (d *DOid) AsRegProc(name string) *DOid {
 	d.name = name
-	d.symanticType = oidColTypeRegProc
+	d.semanticType = oidColTypeRegProc
 	return d
 }
 
@@ -2291,7 +2291,7 @@ func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
 
 // Format implements the Datum interface.
 func (d *DOid) Format(buf *bytes.Buffer, f FmtFlags) {
-	if d.symanticType == oidColTypeOid || d.name == "" {
+	if d.semanticType == oidColTypeOid || d.name == "" {
 		FormatNode(buf, f, &d.DInt)
 	} else {
 		encodeSQLStringWithFlags(buf, d.name, FmtBareStrings)
@@ -2307,18 +2307,18 @@ func (d *DOid) IsMin() bool { return d.DInt.IsMin() }
 // Next implements the Datum interface.
 func (d *DOid) Next() (Datum, bool) {
 	next, ok := d.DInt.Next()
-	return &DOid{*next.(*DInt), d.symanticType, ""}, ok
+	return &DOid{*next.(*DInt), d.semanticType, ""}, ok
 }
 
 // Prev implements the Datum interface.
 func (d *DOid) Prev() (Datum, bool) {
 	prev, ok := d.DInt.Prev()
-	return &DOid{*prev.(*DInt), d.symanticType, ""}, ok
+	return &DOid{*prev.(*DInt), d.semanticType, ""}, ok
 }
 
 // ResolvedType implements the Datum interface.
 func (d *DOid) ResolvedType() Type {
-	return oidColTypeToType(d.symanticType)
+	return oidColTypeToType(d.semanticType)
 }
 
 // Size implements the Datum interface.
@@ -2327,13 +2327,13 @@ func (d *DOid) Size() uintptr { return unsafe.Sizeof(*d) }
 // max implements the Datum interface.
 func (d *DOid) max() (Datum, bool) {
 	max, ok := d.DInt.max()
-	return &DOid{*max.(*DInt), d.symanticType, ""}, ok
+	return &DOid{*max.(*DInt), d.semanticType, ""}, ok
 }
 
 // min implements the Datum interface.
 func (d *DOid) min() (Datum, bool) {
 	min, ok := d.DInt.min()
-	return &DOid{*min.(*DInt), d.symanticType, ""}, ok
+	return &DOid{*min.(*DInt), d.semanticType, ""}, ok
 }
 
 // DOidWrapper is a Datum implementation which is a wrapper around a Datum, allowing

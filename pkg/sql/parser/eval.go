@@ -2041,7 +2041,7 @@ var regTypeInfos = map[*OidColType]regTypeInfo{
 func queryOidWithJoin(
 	ctx *EvalContext, typ *OidColType, d Datum, joinClause string, additionalWhere string,
 ) (*DOid, error) {
-	ret := &DOid{symanticType: typ}
+	ret := &DOid{semanticType: typ}
 	info := regTypeInfos[typ]
 	var queryCol string
 	switch d.(type) {
@@ -2391,25 +2391,25 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DOid:
 			switch typ {
 			case oidColTypeOid:
-				return &DOid{symanticType: typ, DInt: v.DInt}, nil
+				return &DOid{semanticType: typ, DInt: v.DInt}, nil
 			default:
 				oid, err := queryOid(ctx, typ, v)
 				if err != nil {
 					oid = NewDOid(v.DInt)
-					oid.symanticType = typ
+					oid.semanticType = typ
 				}
 				return oid, nil
 			}
 		case *DInt:
 			switch typ {
 			case oidColTypeOid:
-				return &DOid{symanticType: typ, DInt: *v}, nil
+				return &DOid{semanticType: typ, DInt: *v}, nil
 			default:
 				tmpOid := NewDOid(*v)
 				oid, err := queryOid(ctx, typ, tmpOid)
 				if err != nil {
 					oid = tmpOid
-					oid.symanticType = typ
+					oid.semanticType = typ
 				}
 				return oid, nil
 			}
@@ -2428,7 +2428,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				if err != nil {
 					return nil, err
 				}
-				return &DOid{symanticType: typ, DInt: *i}, nil
+				return &DOid{semanticType: typ, DInt: *i}, nil
 			case oidColTypeRegProc, oidColTypeRegProcedure:
 				// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
 				// Postgres only does this when the cast is ::regprocedure, but we're
@@ -2451,7 +2451,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				colType, err := ParseType(s)
 				if err == nil {
 					datumType := CastTargetToDatumType(colType)
-					return &DOid{symanticType: typ, DInt: DInt(datumType.Oid()), name: datumType.SQLName()}, nil
+					return &DOid{semanticType: typ, DInt: DInt(datumType.Oid()), name: datumType.SQLName()}, nil
 				}
 				// Fall back to searching pg_type, since we don't provide syntax for
 				// every postgres type that we understand OIDs for.
