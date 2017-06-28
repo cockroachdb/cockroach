@@ -2378,7 +2378,6 @@ func TestReplicaGCRace(t *testing.T) {
 // ReplicateQueue will notice and remove any replicas on it.
 func TestStoreRangeRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	mtc := &multiTestContext{storeConfig: &sc}
