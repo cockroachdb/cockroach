@@ -506,6 +506,8 @@ message PushTxnRequest {
   // Forces the push by overriding the normal checks in PushTxn to
   // either abort or push the timestamp.
   optional bool force = 7 [(gogoproto.nullable) = false];
+
+  reserved 8;
 }
 
 // A PushTxnResponse is the return value from the PushTxn() method. It
