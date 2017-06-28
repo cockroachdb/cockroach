@@ -801,88 +801,11 @@ func (p *planner) ShowConstraints(
 }
 
 func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planNode, error) {
-	columns := sqlbase.ResultColumns{
-		{Name: "node_id", Typ: parser.TypeInt},
-		{Name: "username", Typ: parser.TypeString},
-		{Name: "start", Typ: parser.TypeTimestamp},
-		{Name: "query", Typ: parser.TypeString},
-		{Name: "client_address", Typ: parser.TypeString},
-		{Name: "application_name", Typ: parser.TypeString},
-		{Name: "distributed", Typ: parser.TypeBool},
-		{Name: "phase", Typ: parser.TypeString},
+	query := `TABLE "".crdb_internal.node_queries`
+	if n.Cluster {
+		query = `TABLE "".crdb_internal.cluster_queries`
 	}
-
-	return &delayedNode{
-		name:    n.String(),
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			statusServer := p.session.execCfg.StatusServer
-
-			var response *serverpb.ListSessionsResponse
-			var err error
-			sessionsRequest := &serverpb.ListSessionsRequest{Username: p.session.User}
-			if n.Cluster {
-				response, err = statusServer.ListSessions(ctx, sessionsRequest)
-			} else {
-				response, err = statusServer.ListLocalSessions(ctx, sessionsRequest)
-			}
-
-			if err != nil {
-				return nil, err
-			}
-
-			v := p.newContainerValuesNode(columns, 0)
-			for _, session := range response.Sessions {
-				for _, query := range session.ActiveQueries {
-					isDistributedDatum := parser.DNull
-					if query.Phase.String() == "EXECUTING" {
-						isDistributedDatum = parser.DBoolFalse
-						if query.IsDistributed {
-							isDistributedDatum = parser.DBoolTrue
-						}
-					}
-					row := parser.Datums{
-						parser.NewDInt(parser.DInt(session.NodeID)),
-						parser.NewDString(session.Username),
-						parser.MakeDTimestamp(query.Start, time.Microsecond),
-						parser.NewDString(query.Sql),
-						parser.NewDString(session.ClientAddress),
-						parser.NewDString(session.ApplicationName),
-						isDistributedDatum,
-						parser.NewDString(strings.ToLower(query.Phase.String())),
-					}
-					if _, err := v.rows.AddRow(ctx, row); err != nil {
-						v.Close(ctx)
-						return nil, err
-					}
-				}
-			}
-
-			for _, rpcErr := range response.Errors {
-				if rpcErr.NodeID != 0 {
-					// Add a row with this node ID, and nulls for all other columns
-					_, err := v.rows.AddRow(ctx, parser.Datums{
-						parser.NewDInt(parser.DInt(rpcErr.NodeID)),
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-					})
-					if err != nil {
-						v.Close(ctx)
-						return nil, err
-					}
-				}
-				log.Warning(ctx, rpcErr.Message)
-			}
-
-			return v, nil
-		},
-	}, nil
-
+	return p.delegateQuery(ctx, "SHOW QUERIES", query, nil, nil)
 }
 
 // ShowJobs returns all the jobs.
