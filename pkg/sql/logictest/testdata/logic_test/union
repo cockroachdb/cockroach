@@ -64,6 +64,13 @@ VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LI
 3
 2
 
+# UNION with NULL columns in operands works.
+query I
+VALUES (1) UNION ALL VALUES (NULL) ORDER BY 1
+----
+NULL
+1
+
 statement ok
 CREATE TABLE uniontest (
   k INT,
