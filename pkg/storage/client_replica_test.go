@@ -18,6 +18,7 @@ package storage_test
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"reflect"
 	"sync"
@@ -29,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1497,4 +1499,106 @@ func TestDrainRangeRejection(t *testing.T) {
 	); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+func TestSystemZoneConfigs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
+	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Scan like a bat out of hell to ensure replication and replica GC
+			// happen in a timely manner.
+			ScanInterval: 50 * time.Millisecond,
+		},
+	})
+	ctx := context.TODO()
+	defer tc.Stopper().Stop(ctx)
+
+	// Before moving forward, pre-split the keys for the system zone configs.
+	// If we don't do this, the test can flake on the splits happening at an
+	// inopportune time (or on the replicate queue blocking on a needed split
+	// if we disable the split queue).
+	splitKeys := []roachpb.Key{
+		keys.MakeTablePrefix(keys.MetaRangesID),
+		keys.MakeTablePrefix(keys.TimeseriesRangesID),
+		keys.MakeTablePrefix(keys.SystemRangesID),
+	}
+	for _, key := range splitKeys {
+		splitKey := keys.MakeRowSentinelKey(key)
+		if _, _, err := tc.SplitRange(splitKey); err != nil {
+			t.Fatalf("failed to split at key %s: %s", key, err)
+		}
+	}
+
+	expectedRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedReplicas := (expectedRanges + len(splitKeys)) * int(config.DefaultZoneConfig().NumReplicas)
+
+	waitForReplicas := func() error {
+		var conflictingID roachpb.RangeID
+		replicas := make(map[roachpb.RangeID]int)
+		for _, s := range tc.Servers {
+			if err := storage.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) (bool, error) {
+				if existing, ok := replicas[desc.RangeID]; ok && existing != len(desc.Replicas) {
+					conflictingID = desc.RangeID
+				}
+				replicas[desc.RangeID] = len(desc.Replicas)
+				return false, nil
+			}); err != nil {
+				return err
+			}
+		}
+		if conflictingID != 0 {
+			return fmt.Errorf("not all replicas agree on the range descriptor for r%d", conflictingID)
+		}
+		var totalReplicas int
+		for _, count := range replicas {
+			totalReplicas += count
+		}
+		if totalReplicas != expectedReplicas {
+			return fmt.Errorf("got %d replicas, want %d; details: %+v", totalReplicas, expectedReplicas, replicas)
+		}
+		return nil
+	}
+
+	// Wait until we're down to the expected number of replicas. This is
+	// effectively waiting on replica GC to kick in to destroy any replicas that
+	// got removed during rebalancing of the initial ranges, since the testcluster
+	// waits until nothing is underreplicated but not until all rebalancing has
+	// settled down.
+	testutils.SucceedsSoon(t, waitForReplicas)
+
+	// Allow for inserting zone configs without having to go through (or
+	// duplicate the logic from) the CLI.
+	config.TestingSetupZoneConfigHook(tc.Stopper())
+
+	// Update the meta zone config to have more replicas and expect the number
+	// of replicas to go up accordingly after running all replicas through the
+	// replicate queue.
+	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig.NumReplicas += 2
+	config.TestingSetZoneConfig(keys.MetaRangesID, zoneConfig)
+	expectedReplicas += 2
+	testutils.SucceedsSoon(t, waitForReplicas)
+
+	// Do the same thing, but down-replicating the timeseries range.
+	zoneConfig = config.DefaultZoneConfig()
+	zoneConfig.NumReplicas -= 2
+	config.TestingSetZoneConfig(keys.TimeseriesRangesID, zoneConfig)
+	expectedReplicas -= 2
+	testutils.SucceedsSoon(t, waitForReplicas)
+
+	// Finally, verify the system ranges. Note that in a new cluster there are
+	// two system ranges, which we have to take into account here.
+	zoneConfig = config.DefaultZoneConfig()
+	zoneConfig.NumReplicas += 2
+	config.TestingSetZoneConfig(keys.SystemRangesID, zoneConfig)
+	expectedReplicas += 4
+	testutils.SucceedsSoon(t, waitForReplicas)
 }

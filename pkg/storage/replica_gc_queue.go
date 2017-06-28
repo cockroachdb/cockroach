@@ -123,6 +123,10 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		return false, 0
 	}
 
+	if _, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
+		return true, replicaGCPriorityRemoved
+	}
+
 	lastActivity := hlc.Timestamp{
 		WallTime: repl.store.startedAt,
 	}
