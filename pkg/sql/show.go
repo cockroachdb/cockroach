@@ -160,7 +160,6 @@ func (p *planner) showClusterSetting(ctx context.Context, name string) (planNode
 
 // Show a session-local variable name.
 func (p *planner) Show(ctx context.Context, n *parser.Show) (planNode, error) {
-	origName := n.Name
 	name := strings.ToLower(n.Name)
 
 	if n.ClusterSetting {
@@ -171,14 +170,17 @@ func (p *planner) Show(ctx context.Context, n *parser.Show) (planNode, error) {
 		return p.delegateQuery(ctx, "TABLE crdb_internal.session_variables", nil)
 	}
 
-	if _, ok := varGen[name]; !ok {
-		return nil, fmt.Errorf("unknown variable: %q", origName)
-	}
 	return p.delegateQuery(ctx, fmt.Sprintf(
-		`SELECT value AS %[1]s FROM crdb_internal.session_variables `+
-			`WHERE variable = %[2]s`,
+		`SELECT IFNULL(value, `+
+			`crdb_internal.force_error('`+pgerror.CodeUndefinedObjectError+`', 'unknown variable: ' || %[3]s)::string`+
+			`) as value `+
+			`FROM (SELECT value FROM crdb_internal.session_variables `+
+			`      WHERE variable=%[2]s`+
+			`      UNION ALL VALUES (NULL) ORDER BY value DESC) LIMIT 1`,
 		parser.Name(name).String(),
-		parser.EscapeSQLString(name)),
+		parser.EscapeSQLString(name),
+		parser.EscapeSQLString(fmt.Sprintf("%q", name)),
+	),
 		nil)
 }
 

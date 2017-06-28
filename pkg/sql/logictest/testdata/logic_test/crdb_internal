@@ -83,8 +83,8 @@ SELECT * FROM crdb_internal.jobs
 ----
 id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error
 
-query error pq: crdb_internal.force_internal_error\(\): foo
-SELECT crdb_internal.force_internal_error('foo')
+query error pq: foo
+SELECT crdb_internal.force_error('', 'foo')
 
 # Check that privileged builtins are only allowed for 'root'
 query I
@@ -96,9 +96,6 @@ user testuser
 
 query error pq: insufficient privilege
 select crdb_internal.force_retry(interval '0s')
-
-query error pq: insufficient privilege
-select crdb_internal.force_internal_error('foo')
 
 query error pq: insufficient privilege
 select crdb_internal.force_panic('foo')

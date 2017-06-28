@@ -1654,15 +1654,15 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	"crdb_internal.force_internal_error": {
+	"crdb_internal.force_error": {
 		Builtin{
-			Types:      ArgTypes{{"msg", TypeString}},
+			Types:      ArgTypes{{"errorCode", TypeString}, {"msg", TypeString}},
 			ReturnType: fixedReturnType(TypeInt),
 			impure:     true,
-			privileged: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
-				msg := string(*args[0].(*DString))
-				return nil, pgerror.NewError(pgerror.CodeInternalError, msg)
+				errCode := string(*args[0].(*DString))
+				msg := string(*args[1].(*DString))
+				return nil, pgerror.NewError(errCode, msg)
 			},
 			category: categorySystemInfo,
 			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
