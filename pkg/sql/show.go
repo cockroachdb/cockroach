@@ -350,7 +350,7 @@ func (p *planner) showCreateInterleave(
 		sharedPrefixLen += int(ancestor.SharedPrefixLen)
 	}
 	interleavedColumnNames := quoteNames(idx.ColumnNames[:sharedPrefixLen]...)
-	s := fmt.Sprintf(" INTERLEAVE IN PARENT %s (%s)", parentTable.Name, interleavedColumnNames)
+	s := fmt.Sprintf(" INTERLEAVE IN PARENT %s (%s)", parser.Name(parentTable.Name), interleavedColumnNames)
 	return s, nil
 }
 
