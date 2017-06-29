@@ -56,15 +56,6 @@ var (
 	MinLeaseDuration = time.Minute
 )
 
-type leaseState struct {
-	id         sqlbase.ID
-	version    sqlbase.DescriptorVersion
-	expiration parser.DTimestamp
-	// TODO(vivek): Remove this once TestTxnObeysLeaseExpiration is no longer
-	// needed, or when it's rewritten.
-	testingKnobs LeaseStoreTestingKnobs
-}
-
 // tableVersionState holds the state for a table version. This includes
 // the lease information for a table version.
 // TODO(vivek): A node only needs to manage lease information on what it
@@ -74,39 +65,38 @@ type tableVersionState struct {
 	// Care must be taken to not modify it.
 	sqlbase.TableDescriptor
 
-	// mu protects refcount and invalid.
+	// The expiration time for the table version. A transaction with
+	// timestamp T can use this table descriptor version iff
+	// TableDescriptor.ModificationTime <= T < expiration
+	//
+	// The expiration time is either the expiration time of the lease
+	// when a lease is associated with the table version, or the
+	// ModificationTime of the next version when the table version
+	// isn't associated with a lease.
+	// TODO(vivek): implement the latter condition.
+	expiration hlc.Timestamp
+
+	// mu protects refcount and leased.
 	mu       syncutil.Mutex
 	refcount int
-	// Set if the lease has been released and cannot be handed out any more.
-	// The table name cache can have references to such tables because we
-	// don't atomically releasing a lease and update the cache.
-	invalid bool
-
-	// A lease for the table version if needed. Normally a table descriptor is associated
-	// with a lease. For a table descriptor at version "v" its expiration time is the
-	// is the ModificationTime of the descriptor at version = v + 2. The expiration time
-	// for the table is finalized as soon as version = v + 2 is written, henceforth not
-	// requiring a lease at version = v.
-	lease *leaseState
+	// Set if the node has a lease on this descriptor version.
+	// Leases can only be held for the two latest versions of
+	// a table descriptor. The latest version known to a node
+	// (can be different than the current latest version in the store)
+	// is always associated with a lease. The previous version known to
+	// a node might not necessarily be associated with a lease.
+	leased bool
 }
 
 func (s *tableVersionState) String() string {
-	return fmt.Sprintf("%d(%q) ver=%d:%d, refcount=%d", s.ID, s.Name, s.Version, s.lease.expiration.UnixNano(), s.refcount)
-}
-
-// Expiration returns the expiration time of the table version.
-func (s *tableVersionState) Expiration() time.Time {
-	return s.lease.expiration.Time
+	return fmt.Sprintf("%d(%q) ver=%d:%s, refcount=%d", s.ID, s.Name, s.Version, s.expiration, s.refcount)
 }
 
 // hasSomeLifeLeft returns true if the lease has at least a minimum of
 // lifetime left until expiration, and thus can be used.
 func (s *tableVersionState) hasSomeLifeLeft(clock *hlc.Clock) bool {
-	if s.lease.testingKnobs.CanUseExpiredLeases {
-		return true
-	}
-	minDesiredExpiration := clock.Now().GoTime().Add(MinLeaseDuration)
-	return s.lease.expiration.After(minDesiredExpiration)
+	minDesiredExpiration := clock.Now().Add(int64(MinLeaseDuration), 0)
+	return minDesiredExpiration.Less(s.expiration)
 }
 
 func (s *tableVersionState) incRefcount() {
@@ -116,15 +106,21 @@ func (s *tableVersionState) incRefcount() {
 }
 
 func (s *tableVersionState) incRefcountLocked() {
-	if s.invalid {
+	// TODO(vivek): remove once some tableVersionState are not associated
+	// with a lease.
+	if !s.leased {
 		panic(fmt.Sprintf("trying to incRefcount on released lease: %+v", s))
 	}
 	s.refcount++
 	log.VEventf(context.TODO(), 2, "tableVersionState.incRef: %s", s)
 }
 
-func (s *tableVersionState) expirationToHLC() hlc.Timestamp {
-	return hlc.Timestamp{WallTime: s.Expiration().UnixNano()}
+// The lease expiration stored in the database is of a different type.
+// We've decided that it's too much work to change the type to
+// hlc.Timestamp, so we're using this method to give us the stored
+// type: parser.DTimestamp.
+func (s *tableVersionState) leaseExpiration() parser.DTimestamp {
+	return parser.DTimestamp{Time: time.Unix(0, s.expiration.WallTime).Round(time.Microsecond)}
 }
 
 // LeaseStore implements the operations for acquiring and releasing leases and
@@ -152,15 +148,12 @@ func (s LeaseStore) acquire(
 	txn *client.Txn,
 	tableID sqlbase.ID,
 	minVersion sqlbase.DescriptorVersion,
-	minExpirationTime parser.DTimestamp,
+	minExpirationTime hlc.Timestamp,
 ) (*tableVersionState, error) {
-	table := &tableVersionState{lease: &leaseState{testingKnobs: s.testingKnobs}}
-	expiration := time.Unix(0, s.clock.Now().WallTime).Add(jitteredLeaseDuration())
-	expiration = expiration.Round(time.Microsecond)
-	if !minExpirationTime.IsZero() && expiration.Before(minExpirationTime.Time) {
-		expiration = minExpirationTime.Time
+	expiration := s.clock.Now().Add(int64(jitteredLeaseDuration()), 0)
+	if expiration.Less(minExpirationTime) {
+		expiration = minExpirationTime
 	}
-	table.lease.expiration = parser.DTimestamp{Time: expiration}
 
 	// Use the supplied (user) transaction to look up the descriptor because the
 	// descriptor might have been created within the transaction.
@@ -174,9 +167,11 @@ func (s LeaseStore) acquire(
 	tableDesc.MaybeUpgradeFormatVersion()
 	// Once the descriptor is set it is immutable and care must be taken
 	// to not modify it.
-	table.TableDescriptor = *tableDesc
-	table.lease.id = table.ID
-	table.lease.version = table.Version
+	table := &tableVersionState{
+		TableDescriptor: *tableDesc,
+		expiration:      expiration,
+		leased:          true,
+	}
 
 	// ValidateTable instead of Validate, even though we have a txn available,
 	// so we don't block reads waiting for this table version.
@@ -208,9 +203,9 @@ func (s LeaseStore) acquire(
 		defer finishInternalPlanner(p)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
-		lease := table.lease
+		leaseExpiration := table.leaseExpiration()
 		count, err := p.exec(
-			ctx, insertLease, lease.id, int(lease.version), nodeID, &lease.expiration,
+			ctx, insertLease, table.ID, int(table.Version), nodeID, &leaseExpiration,
 		)
 		if err != nil {
 			return err
@@ -240,9 +235,9 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 			defer finishInternalPlanner(p)
 			const deleteLease = `DELETE FROM system.lease ` +
 				`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
-			lease := table.lease
+			leaseExpiration := table.leaseExpiration()
 			count, err := p.exec(
-				ctx, deleteLease, lease.id, int(lease.version), nodeID, &lease.expiration)
+				ctx, deleteLease, table.ID, int(table.Version), nodeID, &leaseExpiration)
 			if err != nil {
 				return err
 			}
@@ -437,8 +432,8 @@ func (s LeaseStore) countLeases(
 // addition and removal of elements, finding the table for a particular
 // version, or finding the most recent table version.
 type tableSet struct {
-	// The lease state data is stored in a sorted slice ordered by <version,
-	// expiration>. Ordering is maintained by insert and remove.
+	// The lease state data is stored in a sorted slice ordered by <version>.
+	// Ordering is maintained by insert and remove.
 	data []*tableVersionState
 }
 
@@ -448,7 +443,7 @@ func (l *tableSet) String() string {
 		if i > 0 {
 			buf.WriteString(" ")
 		}
-		buf.WriteString(fmt.Sprintf("%d:%d", s.Version, s.Expiration().UnixNano()))
+		buf.WriteString(fmt.Sprintf("%d:%d", s.Version, s.expiration.WallTime))
 	}
 	return buf.String()
 }
@@ -496,13 +491,16 @@ func (l *tableSet) findIndex(version sqlbase.DescriptorVersion) (int, bool) {
 	return i, false
 }
 
-func (l *tableSet) findNewest(version sqlbase.DescriptorVersion) *tableVersionState {
+func (l *tableSet) findNewest() *tableVersionState {
 	if len(l.data) == 0 {
 		return nil
 	}
-	if version == 0 {
-		// No explicitly version, return the newest lease of the latest version.
-		return l.data[len(l.data)-1]
+	return l.data[len(l.data)-1]
+}
+
+func (l *tableSet) findVersion(version sqlbase.DescriptorVersion) *tableVersionState {
+	if len(l.data) == 0 {
+		return nil
 	}
 	// Find the index of the first lease with version > targetVersion.
 	i := sort.Search(len(l.data), func(i int) bool {
@@ -527,11 +525,12 @@ type tableState struct {
 	stopper        *stop.Stopper
 	// Protects both active and acquiring.
 	mu syncutil.Mutex
-	// The active leases for the table: sorted by their version and expiration
-	// time. There may be more than one active lease when the system is
+	// The active leases for the table: sorted by their version.
+	// There may be more than one active lease when the system is
 	// transitioning from one version of the descriptor to another or when the
 	// node preemptively acquires a new lease for a version when the old lease
-	// has not yet expired.
+	// has not yet expired. In the latter case, a new entry is created with the
+	// expiration time of the new lease and the older entry is removed.
 	active tableSet
 	// A channel used to indicate whether a lease is actively being acquired.
 	// nil if there is no lease acquisition in progress for the table. If
@@ -552,13 +551,18 @@ func (t *tableState) acquire(
 	defer t.mu.Unlock()
 
 	for {
-		s := t.active.findNewest(version)
+		var s *tableVersionState
+		if version == 0 {
+			s = t.active.findNewest()
+		} else {
+			s = t.active.findVersion(version)
+		}
 		if s != nil {
 			if checkedTable := t.checkTable(s, version, m.clock); checkedTable != nil {
 				return checkedTable, nil
 			}
 		} else if version != 0 {
-			n := t.active.findNewest(0)
+			n := t.active.findNewest()
 			if n != nil && version < n.Version {
 				return nil, errors.Errorf("table %d unable to acquire lease on old version: %d < %d",
 					t.id, version, n.Version)
@@ -587,7 +591,7 @@ func (t *tableState) checkTable(
 	// would violate the invariant that we only get leases on the newest
 	// version. The transaction will either finish before the lease expires or
 	// it will abort, which is what will happen if we returned an error here.
-	skipLifeCheck := version != 0 && table != t.active.findNewest(0)
+	skipLifeCheck := version != 0 && table != t.active.findNewest()
 	if !skipLifeCheck && !table.hasSomeLifeLeft(clock) {
 		return nil
 	}
@@ -611,7 +615,7 @@ func (t *tableState) acquireFromStoreLocked(
 	if event != nil {
 		event(t.id, txn)
 	}
-	s, err := t.acquireNodeLease(ctx, txn, version, m, parser.DTimestamp{})
+	s, err := t.acquireNodeLease(ctx, txn, version, m, hlc.Timestamp{})
 	if err != nil {
 		return err
 	}
@@ -640,11 +644,10 @@ func (t *tableState) acquireFreshestFromStoreLocked(
 
 	// Set the min expiration time to guarantee that the lease acquired is the
 	// last lease in t.active .
-	minExpirationTime := parser.DTimestamp{}
-	newestTable := t.active.findNewest(0)
+	minExpirationTime := hlc.Timestamp{}
+	newestTable := t.active.findNewest()
 	if newestTable != nil {
-		minExpirationTime = parser.DTimestamp{
-			Time: newestTable.lease.expiration.Add(time.Millisecond)}
+		minExpirationTime = newestTable.expiration.Add(int64(time.Millisecond), 0)
 	}
 
 	s, err := t.acquireNodeLease(ctx, txn, version, m, minExpirationTime)
@@ -670,7 +673,7 @@ func (t *tableState) upsertLocked(ctx context.Context, table *tableVersionState,
 	// subsume the refcount of the older lease.
 	table.refcount += s.refcount
 	s.refcount = 0
-	s.invalid = true
+	s.leased = false
 	table.mu.Unlock()
 	s.mu.Unlock()
 	log.VEventf(ctx, 2, "replaced lease: %s with %s", s, table)
@@ -688,6 +691,7 @@ func (t *tableState) releaseInactiveLeases(m *LeaseManager) {
 			table.mu.Lock()
 			defer table.mu.Unlock()
 			if table.refcount == 0 {
+				table.leased = false
 				t.removeTable(table, m)
 			}
 		}()
@@ -724,7 +728,7 @@ func (t *tableState) acquireNodeLease(
 	txn *client.Txn,
 	minVersion sqlbase.DescriptorVersion,
 	m *LeaseManager,
-	minExpirationTime parser.DTimestamp,
+	minExpirationTime hlc.Timestamp,
 ) (*tableVersionState, error) {
 	if m.isDraining() {
 		return nil, errors.New("cannot acquire lease when draining")
@@ -770,7 +774,7 @@ func (t *tableState) release(table sqlbase.TableDescriptor, m *LeaseManager) err
 			m.isDraining() ||
 			// Release from the store if the lease is not for the latest
 			// version; only leases for the latest version can be acquired.
-			s != t.active.findNewest(0)
+			s != t.active.findNewest()
 
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -780,9 +784,9 @@ func (t *tableState) release(table sqlbase.TableDescriptor, m *LeaseManager) err
 			panic(fmt.Sprintf("negative ref count: %s", s))
 		}
 		if s.refcount == 0 && removeOnceDereferenced {
-			s.invalid = true
+			s.leased = false
 		}
-		return s.invalid
+		return !s.leased
 	}
 	if decRefcount(s) {
 		t.removeTable(s, m)
@@ -876,8 +880,6 @@ type LeaseStoreTestingKnobs struct {
 	LeaseAcquiringEvent func(tableID sqlbase.ID, txn *client.Txn)
 	// Called after a lease is acquired, with any operation error.
 	LeaseAcquiredEvent func(table sqlbase.TableDescriptor, err error)
-	// Allow the use of expired leases.
-	CanUseExpiredLeases bool
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
@@ -947,7 +949,7 @@ func (c *tableNameCache) get(
 		// Expired, or almost expired, table. Don't hand it out.
 		return nil
 	}
-	if table.invalid {
+	if !table.leased {
 		// This get() raced with a release operation. The leaseManager should remove
 		// this cache entry soon.
 		return nil
@@ -969,7 +971,7 @@ func (c *tableNameCache) insert(table *tableVersionState) {
 	// If we already have a lease in the cache for this name, see if this one is
 	// better (higher version or later expiration).
 	if table.Version > existing.Version ||
-		(table.Version == existing.Version && table.Expiration().After(existing.Expiration())) {
+		(table.Version == existing.Version && (existing.expiration.Less(table.expiration))) {
 		// Overwrite the old table. The new one is better. From now on, we want
 		// clients to use the new one.
 		c.tables[key] = table
@@ -1078,7 +1080,7 @@ func (m *LeaseManager) AcquireByName(
 	// Check if we have cached an ID for this name.
 	tableVersion := m.tableNames.get(dbID, tableName, m.clock)
 	if tableVersion != nil {
-		return tableVersion.TableDescriptor, tableVersion.expirationToHLC(), nil
+		return tableVersion.TableDescriptor, tableVersion.expiration, nil
 	}
 
 	// We failed to find something in the cache, or what we found is not
@@ -1182,7 +1184,7 @@ func (m *LeaseManager) Acquire(
 	if err != nil {
 		return sqlbase.TableDescriptor{}, hlc.Timestamp{}, err
 	}
-	return table.TableDescriptor, table.expirationToHLC(), nil
+	return table.TableDescriptor, table.expiration, nil
 }
 
 // acquireFreshestFromStore acquires a new lease from the store. The returned
@@ -1201,12 +1203,12 @@ func (m *LeaseManager) acquireFreshestFromStore(
 	); err != nil {
 		return sqlbase.TableDescriptor{}, hlc.Timestamp{}, err
 	}
-	table := t.active.findNewest(0)
+	table := t.active.findNewest()
 	if table == nil {
 		panic("no lease in active set after having just acquired one")
 	}
 	table.incRefcount()
-	return table.TableDescriptor, table.expirationToHLC(), nil
+	return table.TableDescriptor, table.expiration, nil
 }
 
 // Release releases a previously acquired table.
@@ -1235,6 +1237,7 @@ func (m *LeaseManager) SetDraining(drain bool) {
 	if !drain {
 		return
 	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, t := range m.mu.tables {
