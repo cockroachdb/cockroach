@@ -85,6 +85,14 @@ EXPLAIN DROP DATABASE foo
 ----
 0 drop database
 
+# explain SHOW JOBS - beware to test this before the CREATE INDEX
+# below, otherwise the result becomes non-deterministic.
+query ITTT
+EXPLAIN SHOW JOBS
+----
+0  values
+0          size  12 columns, 0 rows
+
 statement ok
 CREATE INDEX a ON foo(x)
 
@@ -123,8 +131,12 @@ EXPLAIN SHOW DATABASES
 query ITTT
 EXPLAIN SHOW TABLES
 ----
-0  values
-0          size  1 column, 1 row
+0  sort
+0          order  +"Table"
+1  render
+2  filter
+3  values
+3          size   5 columns, 52 rows
 
 query ITTT
 EXPLAIN SHOW DATABASE
@@ -159,22 +171,40 @@ EXPLAIN SHOW TRANSACTION PRIORITY
 query ITTT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-0  values
-0          size  5 columns, 1 row
+0  sort
+0          order     +ordinal_position
+1  render
+2  group
+3  render
+4  join
+4          type      left outer
+4          equality  (column_name) = (column_name)
+5  render
+6  filter
+7  values
+7          size      13 columns, 459 rows
+5  render
+6  filter
+7  values
+7          size      13 columns, 22 rows
 
 query ITTT
 EXPLAIN SHOW GRANTS ON foo
 ----
 0  sort
 0          order  +"Table",+"User",+"Privileges"
-1  values
-1          size   3 columns, 1 row
+1  render
+2  filter
+3  values
+3          size   8 columns, 45 rows
 
 query ITTT
 EXPLAIN SHOW INDEX FROM foo
 ----
-0  values
-0          size  8 columns, 3 rows
+0  render
+1  filter
+2  values
+2          size  13 columns, 22 rows
 
 query ITTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
