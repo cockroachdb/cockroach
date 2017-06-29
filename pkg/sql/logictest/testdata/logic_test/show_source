@@ -50,6 +50,7 @@ query TTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE name != 'diagnostics.reporting.enabled'
 ----
 name                                               current_value  type  description
+cluster.organization                     					           			s     organization name
 diagnostics.reporting.interval                     1h0m0s         d     interval at which diagnostics data should be reported
 diagnostics.reporting.report_metrics               true           b     enable collection and reporting diagnostic metrics to cockroach labs
 diagnostics.reporting.send_crash_reports           true           b     send crash and panic reports

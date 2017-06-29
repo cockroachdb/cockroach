@@ -64,18 +64,15 @@ SELECT field, value FROM crdb_internal.node_build_info WHERE field ILIKE 'name'
 field value
 Name  CockroachDB
 
-query T
+query T rowsort
 SELECT field FROM crdb_internal.node_build_info
 ----
 Name
-GoVersion
-Tag
-Time
-Revision
-CgoCompiler
-Platform
-Distribution
-Type
+Build
+ClusterID
+Organization
+Version
+
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
 query ITTTTTTTTTRT colnames
