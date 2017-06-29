@@ -411,15 +411,15 @@ func (r *Replica) leasePostApply(
 		// lease's expiration but instead use the new lease's start to initialize
 		// the timestamp cache low water.
 		desc := r.Desc()
-		r.store.tsCache.Lock()
+		r.tsCache.Lock()
 		for _, keyRange := range makeReplicatedKeyRanges(desc) {
 			for _, readOnly := range []bool{true, false} {
-				r.store.tsCache.add(
+				r.tsCache.add(
 					keyRange.start.Key, keyRange.end.Key,
 					newLease.Start, lowWaterTxnIDMarker, readOnly)
 			}
 		}
-		r.store.tsCache.Unlock()
+		r.tsCache.Unlock()
 
 		// Reset the request counts used to make lease placement decisions whenever
 		// starting a new lease.
