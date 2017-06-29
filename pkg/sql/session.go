@@ -22,6 +22,7 @@ import (
 	"net"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -668,6 +669,10 @@ func (s *Session) setQueryExecutionMode(query queryHandle, isDistributed bool) {
 	s.mu.Unlock()
 }
 
+// MaxSQLBytes is the maximum length in bytes of SQL statements serialized
+// into a serverpb.Session. Exported for testing.
+var MaxSQLBytes = 1000
+
 // serialize serializes a Session into a serverpb.Session
 // that can be served over RPC.
 func (s *Session) serialize() serverpb.Session {
@@ -686,16 +691,16 @@ func (s *Session) serialize() serverpb.Session {
 
 	for query := range s.mu.ActiveQueries {
 		sql := query.stmt.String()
-		if len(sql) > 1000 {
-			// Truncate just after the first ASCII character.
-			i := 996
-			for i = 996; i > 0; i-- {
-				if (sql[i] & 0x80) == 0 {
-					// ASCII character found.
+		if len(sql) > MaxSQLBytes {
+			sql = sql[:MaxSQLBytes-utf8.RuneLen('…')]
+			// Ensure the resulting string is valid utf8.
+			for {
+				if r, _ := utf8.DecodeLastRuneInString(sql); r != utf8.RuneError {
 					break
 				}
+				sql = sql[:len(sql)-1]
 			}
-			sql = sql[:(i+1)] + "..."
+			sql += "…"
 		}
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			Start:         query.start.UTC(),

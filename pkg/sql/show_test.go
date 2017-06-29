@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"golang.org/x/net/context"
 
@@ -293,17 +294,37 @@ func TestShowQueries(t *testing.T) {
 	var conn1 *gosql.DB
 	var conn2 *gosql.DB
 
-	insertStmt := "INSERT INTO t VALUES (1, '"
-	for i := 0; i < 996; i++ {
-		insertStmt = insertStmt + "a"
-	}
-	insertStmt = insertStmt + "\U0001F4A9aaa')"
+	const showQuery = "SELECT node_id, query FROM [SHOW CLUSTER QUERIES]"
+	tableName := strings.Repeat("💩", len(showQuery)) + "s" // add a single byte
 
-	expectedInsertStmt := "INSERT INTO t VALUES (1, e'"
-	for i := 0; i < (996 - 26); i++ {
-		expectedInsertStmt = expectedInsertStmt + "a"
+	selectStmt := fmt.Sprintf("SELECT * FROM %s", tableName)
+
+	// Set the truncation point such that our SELECT would naively be
+	// truncated mid-rune.
+	{
+		truncationLength := len(showQuery)
+		for utf8.ValidString(selectStmt[:truncationLength-utf8.RuneLen('…')]) {
+			truncationLength++
+		}
+		defer func(maxSQLBytes int) {
+			sql.MaxSQLBytes = maxSQLBytes
+		}(sql.MaxSQLBytes)
+		sql.MaxSQLBytes = truncationLength
 	}
-	expectedInsertStmt = expectedInsertStmt + "..."
+
+	maxLen := sql.MaxSQLBytes - utf8.RuneLen('…')
+	if r, _ := utf8.DecodeLastRuneInString(selectStmt[:maxLen]); r != utf8.RuneError {
+		t.Fatalf("expected naive truncation to produce invalid utf8, got %c", r)
+	}
+	expectedSelectStmt := selectStmt
+	for i := range expectedSelectStmt {
+		if i > maxLen {
+			_, prevLen := utf8.DecodeLastRuneInString(expectedSelectStmt[:i])
+			expectedSelectStmt = expectedSelectStmt[:i-prevLen]
+			break
+		}
+	}
+	expectedSelectStmt = expectedSelectStmt + "…"
 
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
@@ -313,40 +334,39 @@ func TestShowQueries(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
 						StatementFilter: func(ctx context.Context, stmt string, res *sql.Result) {
-							if strings.Contains(stmt, "INSERT INTO t") {
-								rows, _ := conn1.Query("SELECT node_id,query FROM [SHOW CLUSTER QUERIES]")
+							if stmt == selectStmt {
+								rows, err := conn1.Query(showQuery)
+								if err != nil {
+									t.Fatal(err)
+								}
 								defer rows.Close()
 
+								count := 0
 								for rows.Next() {
+									count++
+
 									var nodeID int
 									var sql string
 									if err := rows.Scan(&nodeID, &sql); err != nil {
 										t.Fatal(err)
 									}
-									if strings.Contains(sql, "INSERT INTO t") && sql != expectedInsertStmt {
-										t.Fatalf("Unexpected query in SHOW QUERIES: %s, expected: %s",
+									if sql != showQuery && sql != expectedSelectStmt {
+										t.Fatalf(
+											"unexpected query in SHOW QUERIES: %s, expected: %s",
 											sql,
-											expectedInsertStmt)
+											expectedSelectStmt,
+										)
 									}
 									if nodeID < 1 || nodeID > 2 {
-										t.Fatalf("Invalid node ID: %d", nodeID)
+										t.Fatalf("invalid node ID: %d", nodeID)
 									}
 								}
-
-								countRow, _ := conn1.Query("SELECT COUNT(*) FROM [SHOW CLUSTER QUERIES]")
-								defer countRow.Close()
-
-								if !countRow.Next() {
-									t.Fatalf("Could not get countRow for SHOW CLUSTER QUERIES")
-								}
-
-								var count int
-								if err := countRow.Scan(&count); err != nil {
+								if err := rows.Err(); err != nil {
 									t.Fatal(err)
 								}
 
-								if count != 2 {
-									t.Fatalf("Unexpected number of running queries: %d. Expected 2", count)
+								if expectedCount := 2; count != expectedCount {
+									t.Fatalf("unexpected number of running queries: %d, expected %d", count, expectedCount)
 								}
 							}
 						},
@@ -358,11 +378,9 @@ func TestShowQueries(t *testing.T) {
 
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
-	sqlutils.CreateTable(t, conn1, "t",
-		"num INT, text TEXT",
-		0, nil)
+	sqlutils.CreateTable(t, conn1, tableName, "num INT", 0, nil)
 
-	if _, err := conn2.Exec(insertStmt); err != nil {
+	if _, err := conn2.Exec(selectStmt); err != nil {
 		t.Fatal(err)
 	}
 
