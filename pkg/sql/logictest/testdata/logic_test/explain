@@ -115,96 +115,74 @@ query ITTT
 EXPLAIN SHOW DATABASES
 ----
 0  sort
-0                 order   +"Database"
+0          order  +"Database"
 1  render
-2  virtual table
-2                 source  information_schema.schemata
-3  values
-3                 size    4 columns, 6 rows
+2  values
+2          size   4 columns, 6 rows
 
 query ITTT
 EXPLAIN SHOW TABLES
 ----
-0  virtual table
-0                 source  SHOW TABLES FROM test
-1  values
-1                 size    1 column, 1 row
+0  values
+0          size  1 column, 1 row
 
 query ITTT
 EXPLAIN SHOW DATABASE
 ----
-0  virtual table
-0                 source  SHOW database
-1  values
-1                 size    1 column, 1 row
+0  values
+0          size  1 column, 1 row
 
 query ITTT
 EXPLAIN SHOW TIME ZONE
 ----
-0 virtual table
-0                 source  SHOW TIME ZONE
-1 values
-1                 size    1 column, 1 row
+0  values
+0          size  1 column, 1 row
 
 query ITTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-0  virtual table
-0                 source  SHOW default_transaction_isolation
-1  values
-1                 size    1 column, 1 row
+0  values
+0          size  1 column, 1 row
 
 query ITTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 ----
-0 virtual table
-0                 source  SHOW TRANSACTION ISOLATION LEVEL
-1 values
-1                 size    1 column, 1 row
+0  values
+0          size  1 column, 1 row
 
 query ITTT
 EXPLAIN SHOW TRANSACTION PRIORITY
 ----
-0 virtual table
-0                 source  SHOW TRANSACTION PRIORITY
-1 values
-1                 size    1 column, 1 row
+0  values
+0          size  1 column, 1 row
 
 query ITTT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-0  virtual table
-0                 source  SHOW COLUMNS FROM foo
-1  values
-1                 size    5 columns, 1 row
+0  values
+0          size  5 columns, 1 row
 
 query ITTT
 EXPLAIN SHOW GRANTS ON foo
 ----
-0  virtual table
-0                 source  SHOW GRANTS
-1  sort
-1                 order   +"Table",+"User",+"Privileges"
-2  values
-2                 size    3 columns, 1 row
+0  sort
+0          order  +"Table",+"User",+"Privileges"
+1  values
+1          size   3 columns, 1 row
 
 query ITTT
 EXPLAIN SHOW INDEX FROM foo
 ----
-0  virtual table
-0                 source  SHOW INDEXES FROM foo
-1  values
-1                 size    8 columns, 3 rows
+0  values
+0          size  8 columns, 3 rows
 
 query ITTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-0  virtual table
-0                 source  SHOW CONSTRAINTS FROM foo
-1  sort
-1                 order   +"Table",+"Name"
-2  values
-2                 size    5 columns, 0 rows
+0  sort
+0          order  +"Table",+"Name"
+1  values
+1          size   5 columns, 0 rows
 
 query ITTT
 EXPLAIN SHOW USERS
