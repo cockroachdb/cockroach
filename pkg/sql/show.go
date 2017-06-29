@@ -354,7 +354,7 @@ func (p *planner) showCreateInterleave(
 		sharedPrefixLen += int(ancestor.SharedPrefixLen)
 	}
 	interleavedColumnNames := quoteNames(idx.ColumnNames[:sharedPrefixLen]...)
-	s := fmt.Sprintf(" INTERLEAVE IN PARENT %s (%s)", parentTable.Name, interleavedColumnNames)
+	s := fmt.Sprintf(" INTERLEAVE IN PARENT %s (%s)", parser.Name(parentTable.Name), interleavedColumnNames)
 	return s, nil
 }
 
@@ -674,10 +674,14 @@ WHERE message LIKE 'fetched: %'
 	}
 
 	// We failed to substitute; this is an internal error.
+	err = pgerror.NewErrorf(pgerror.CodeInternalError,
+		"invalid logical plan structure:\n%s\nwhile inserting:\n%s",
+		planToString(ctx, plan),
+		planToString(ctx, tracePlan))
 	plan.Close(ctx)
 	stmtPlan.Close(ctx)
 	tracePlan.Close(ctx)
-	return nil, pgerror.NewError(pgerror.CodeInternalError, "invalid logical plan structure")
+	return nil, err
 }
 
 // ShowDatabases returns all the databases.
@@ -701,7 +705,8 @@ func (p *planner) ShowDatabases(ctx context.Context, n *parser.ShowDatabases) (p
 //          mysql only returns the user's privileges.
 func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNode, error) {
 	if n.Targets == nil {
-		return nil, errors.Errorf("TODO(marc): implement SHOW GRANT with no targets")
+		return nil, pgerror.Unimplemented("SHOW GRANTS <no target>",
+			"cannot use SHOW GRANTS without a target")
 	}
 
 	objectType := "Database"

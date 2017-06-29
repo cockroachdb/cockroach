@@ -764,56 +764,38 @@ SELECT * FROM [EXPLAIN SELECT
   ] WHERE type <> 'values' AND field <> 'size'
 ----
 0   sort
-0                  order     +pktable_schem,+pktable_name,+fk_name,+key_seq
+0              order     +pktable_schem,+pktable_name,+fk_name,+key_seq
 1   render
 2   join
-2                  type      inner
-2                  equality  (oid) = (relnamespace)
-3   virtual table
-3                  source    pg_catalog.pg_namespace
+2              type      inner
+2              equality  (oid) = (relnamespace)
 3   join
-3                  type      inner
-3                  equality  (oid, oid) = (attrelid, confrelid)
-4   virtual table
-4                  source    pg_catalog.pg_class
+3              type      inner
+3              equality  (oid, oid) = (attrelid, confrelid)
 4   join
-4                  type      inner
-5   virtual table
-5                  source    pg_catalog.pg_attribute
+4              type      inner
 5   join
-5                  type      inner
-5                  equality  (oid) = (relnamespace)
+5              type      inner
+5              equality  (oid) = (relnamespace)
 6   filter
-7   virtual table
-7                  source    pg_catalog.pg_namespace
 6   join
-6                  type      inner
-6                  equality  (oid, oid) = (attrelid, conrelid)
+6              type      inner
+6              equality  (oid, oid) = (attrelid, conrelid)
 7   filter
-8   virtual table
-8                  source    pg_catalog.pg_class
 7   join
-7                  type      inner
-8   virtual table
-8                  source    pg_catalog.pg_attribute
+7              type      inner
 8   join
-8                  type      inner
-8                  equality  (oid) = (objid)
+8              type      inner
+8              equality  (oid) = (objid)
 9   filter
-10  virtual table
-10                 source    pg_catalog.pg_constraint
 9   join
-9                  type      cross
+9              type      cross
 10  generator
 10  join
-10                 type      inner
-10                 equality  (refobjid) = (oid)
+10             type      inner
+10             equality  (refobjid) = (oid)
 11  filter
-12  virtual table
-12                 source    pg_catalog.pg_depend
 11  filter
-12  virtual table
-12                 source    pg_catalog.pg_class
 
 query TTTTTTTTIIITTI
 SELECT     NULL::text  AS pktable_cat,

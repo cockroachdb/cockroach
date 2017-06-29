@@ -130,6 +130,11 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 	case *ordinalityNode:
 		applyLimit(n.source, numRows, soft)
 
+	case *delayedNode:
+		if n.plan != nil {
+			applyLimit(n.plan, numRows, soft)
+		}
+
 	case *deleteNode:
 		setUnlimited(n.run.rows)
 	case *updateNode:
@@ -148,11 +153,6 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 		setUnlimited(n.plan)
 	case *explainPlanNode:
 		if n.expanded {
-			setUnlimited(n.plan)
-		}
-
-	case *delayedNode:
-		if n.plan != nil {
 			setUnlimited(n.plan)
 		}
 
