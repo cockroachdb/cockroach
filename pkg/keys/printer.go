@@ -655,7 +655,6 @@ func MassagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) str
 // TestPrettyPrintRange for some examples.
 func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 	var b bytes.Buffer
-	const ellipsis = '\u2026'
 	if maxChars < 8 {
 		maxChars = 8
 	}
@@ -672,7 +671,7 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 			i = maxChars - 1
 		}
 		b.WriteString(prettyStart[:i])
-		b.WriteRune(ellipsis)
+		b.WriteRune('…')
 		return b.String()
 	}
 	b.WriteString(prettyStart[:i])
@@ -683,7 +682,7 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 			b.WriteString(what)
 		} else {
 			b.WriteString(what[:maxChars-1])
-			b.WriteRune(ellipsis)
+			b.WriteRune('…')
 		}
 	}
 
