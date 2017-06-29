@@ -427,7 +427,7 @@ func NewTransactionStatusError(msg string) *TransactionStatusError {
 }
 
 func (e *TransactionStatusError) Error() string {
-	return e.Msg
+	return "TransactionStatusError: " + e.Msg
 }
 
 func (e *TransactionStatusError) message(pErr *Error) string {
