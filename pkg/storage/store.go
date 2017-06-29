@@ -562,12 +562,8 @@ type Store struct {
 		replicaQueues map[roachpb.RangeID]raftRequestQueue
 	}
 
-	tsCacheMu struct {
-		// Protects all fields in the tsCacheMu struct.
-		syncutil.Mutex
-		// Most recent timestamps for keys / key ranges.
-		cache *timestampCache
-	}
+	// Most recent timestamps for keys / key ranges.
+	tsCache []*timestampCache
 
 	scheduler *raftScheduler
 
@@ -933,9 +929,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
 
-	s.tsCacheMu.Lock()
-	s.tsCacheMu.cache = newTimestampCache(s.cfg.Clock)
-	s.tsCacheMu.Unlock()
+	s.tsCache = make([]*timestampCache, 16)
+	for i := 0; i < len(s.tsCache); i++ {
+		s.tsCache[i] = newTimestampCache(s.cfg.Clock)
+		s.tsCache[i].maxBytes /= uint64(len(s.tsCache))
+	}
 
 	s.nonEmptySnapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 	s.emptySnapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)

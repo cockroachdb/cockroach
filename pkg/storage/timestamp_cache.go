@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -138,6 +139,11 @@ func cacheEntrySize(start, end interval.Comparable, txnID *uuid.UUID) uint64 {
 // with monotonic increases. The low water mark is initialized to
 // the current system time plus the maximum clock offset.
 type timestampCache struct {
+	// NB: this mutex needs to be acquired by the caller of the various
+	// timstampCache methods for safety. It is embedded in the timestampCache
+	// itself for convenience.
+	syncutil.Mutex
+
 	rCache, wCache   *cache.IntervalCache
 	lowWater, latest hlc.Timestamp
 
