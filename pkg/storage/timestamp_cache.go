@@ -93,10 +93,12 @@ func (cr *cacheRequest) numSpans() int {
 
 func (cr *cacheRequest) size() uint64 {
 	var n uint64
-	for _, s := range cr.reads {
+	for i := range cr.reads {
+		s := &cr.reads[i]
 		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey), cr.txnID)
 	}
-	for _, s := range cr.writes {
+	for i := range cr.writes {
+		s := &cr.writes[i]
 		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey), cr.txnID)
 	}
 	if cr.txn.Key != nil {
@@ -657,10 +659,12 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.R
 			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
 		}
 		tc.bytes -= reqSize
-		for _, sp := range req.reads {
+		for i := range req.reads {
+			sp := &req.reads[i]
 			tc.add(sp.Key, sp.EndKey, req.timestamp, req.txnID, true /* readTSCache */)
 		}
-		for _, sp := range req.writes {
+		for i := range req.writes {
+			sp := &req.writes[i]
 			tc.add(sp.Key, sp.EndKey, req.timestamp, req.txnID, false /* !readTSCache */)
 		}
 		if req.txn.Key != nil {
