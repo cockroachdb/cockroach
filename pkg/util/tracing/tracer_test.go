@@ -254,6 +254,7 @@ func TestTracerInjectExtract(t *testing.T) {
 }
 
 func TestLightstepContext(t *testing.T) {
+	tr := NewTracer()
 	lsTr := lightstep.NewTracer(lightstep.Options{
 		AccessToken: "invalid",
 		Collector: lightstep.Endpoint{
@@ -264,8 +265,7 @@ func TestLightstepContext(t *testing.T) {
 		MaxLogsPerSpan: maxLogsPerSpan,
 		UseGRPC:        true,
 	})
-	setShadowTracer(lightStepManager{}, lsTr)
-	tr := NewTracer()
+	tr.(*Tracer).setShadowTracer(lightStepManager{}, lsTr)
 	s := tr.StartSpan("test")
 
 	const testBaggageKey = "test-baggage"
@@ -277,8 +277,7 @@ func TestLightstepContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Extract also extracts the context in lightstep; this will fail if the
-	// contexts are not compatible.
+	// Extract also extracts the embedded lightstep context.
 	wireContext, err := tr.Extract(opentracing.HTTPHeaders, carrier)
 	if err != nil {
 		t.Fatal(err)

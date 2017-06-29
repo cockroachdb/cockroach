@@ -25,13 +25,16 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -91,6 +94,9 @@ type Tracer struct {
 	// by tests for situations when they need to indirectly create spans and don't
 	// have the option of passing the Recordable option to their constructor.
 	forceRealSpans bool
+
+	// Pointer to shadowTracer, if using one.
+	shadowTracer unsafe.Pointer
 }
 
 var _ opentracing.Tracer = &Tracer{}
@@ -100,7 +106,16 @@ var _ opentracing.Tracer = &Tracer{}
 func NewTracer() opentracing.Tracer {
 	t := &Tracer{}
 	t.noopSpan.tracer = t
+	updateShadowTracer(t)
+	tracerRegistry.Add(t)
 	return t
+}
+
+// Close cleans up any resources associated with a Tracer.
+func (t *Tracer) Close() {
+	tracerRegistry.Remove(t)
+	// Clean up any shadow tracer.
+	t.setShadowTracer(nil, nil)
 }
 
 // SetForceRealSpans sets forceRealSpans option to v and returns the previous
@@ -109,6 +124,23 @@ func (t *Tracer) SetForceRealSpans(v bool) bool {
 	prevVal := t.forceRealSpans
 	t.forceRealSpans = v
 	return prevVal
+}
+
+func (t *Tracer) setShadowTracer(manager shadowTracerManager, tr opentracing.Tracer) {
+	var shadow *shadowTracer
+	if manager != nil {
+		shadow = &shadowTracer{
+			Tracer:  tr,
+			manager: manager,
+		}
+	}
+	if old := atomic.SwapPointer(&t.shadowTracer, unsafe.Pointer(shadow)); old != nil {
+		(*shadowTracer)(old).Close()
+	}
+}
+
+func (t *Tracer) getShadowTracer() *shadowTracer {
+	return (*shadowTracer)(atomic.LoadPointer(&t.shadowTracer))
 }
 
 type recordableOption struct{}
@@ -138,7 +170,7 @@ func (t *Tracer) StartSpan(
 	}
 
 	netTrace := enableNetTrace.Get()
-	shadowTr := getShadowTracer()
+	shadowTr := t.getShadowTracer()
 
 	if len(opts) == 0 && !netTrace && shadowTr == nil && !t.forceRealSpans {
 		return &t.noopSpan
@@ -365,7 +397,7 @@ func (t *Tracer) Inject(
 	}
 
 	if sc.shadowTr != nil {
-		mapWriter.Set(fieldNameShadowType, sc.shadowTr.manager.name())
+		mapWriter.Set(fieldNameShadowType, sc.shadowTr.Typ())
 		// Encapsulate the shadow text map, prepending a prefix to the keys.
 		if err := sc.shadowTr.Inject(sc.shadowCtx, format, textMapWriterFn(func(key, val string) {
 			mapWriter.Set(prefixShadow+key, val)
@@ -446,8 +478,8 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.S
 	if shadowType != "" {
 		// Using a shadow tracer only works if all hosts use the same shadow tracer.
 		// If that's not the case, ignore the shadow context.
-		if shadowTr := getShadowTracer(); shadowTr != nil &&
-			strings.ToLower(shadowType) == strings.ToLower(shadowTr.manager.name()) {
+		if shadowTr := t.getShadowTracer(); shadowTr != nil &&
+			strings.ToLower(shadowType) == strings.ToLower(shadowTr.Typ()) {
 			sc.shadowTr = shadowTr
 			// Extract the shadow context using the un-encapsulated textmap.
 			sc.shadowCtx, err = shadowTr.Extract(format, shadowCarrier)
@@ -551,13 +583,6 @@ func StartSnowballTrace(
 	return opentracing.ContextWithSpan(ctx, span), span, nil
 }
 
-// FlushTracer flushes any shadow tracer that is in use.
-func FlushTracer() {
-	if shadowTr := getShadowTracer(); shadowTr != nil {
-		shadowTr.manager.flush(shadowTr.Tracer)
-	}
-}
-
 // TestingCheckRecordedSpans checks whether a recording looks like an expected
 // one represented by a string with one line per expected span and one line per
 // expected event (i.e. log message).
@@ -637,4 +662,41 @@ func TestingCheckRecordedSpans(recSpans []RecordedSpan, expected string) error {
 func matchesWithoutFileLine(msg string, expected string) bool {
 	groups := regexp.MustCompile(`^(event: ).*:[0-9]* (.*)$`).FindStringSubmatch(msg)
 	return len(groups) == 3 && fmt.Sprintf("event: %s", groups[2]) == expected
+}
+
+// The tracer registry keeps track of active Tracer instances; it is used to
+// update the shadow tracer in those instances when the relevant settings
+// change. It is needed because the cluster settings are singleton globals.
+type tracerRegistryImpl struct {
+	syncutil.Mutex
+	tracers []*Tracer
+}
+
+var tracerRegistry tracerRegistryImpl
+
+func (tr *tracerRegistryImpl) Add(t *Tracer) {
+	tr.Lock()
+	tr.tracers = append(tr.tracers, t)
+	tr.Unlock()
+}
+
+func (tr *tracerRegistryImpl) Remove(t *Tracer) {
+	tr.Lock()
+	defer tr.Unlock()
+
+	for i := range tr.tracers {
+		if tr.tracers[i] == t {
+			tr.tracers = tr.tracers[:i+copy(tr.tracers[i:], tr.tracers[i+1:])]
+			return
+		}
+	}
+	panic("removing unknown tracer")
+}
+
+func (tr *tracerRegistryImpl) ForEach(fn func(t *Tracer)) {
+	tr.Lock()
+	defer tr.Unlock()
+	for _, t := range tr.tracers {
+		fn(t)
+	}
 }
