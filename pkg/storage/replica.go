@@ -4130,8 +4130,10 @@ func (r *Replica) acquireSplitLock(
 			rightRng.mu.Unlock()
 			r.store.mu.Lock()
 			delete(r.store.mu.replicas, rightRng.RangeID)
-			delete(r.store.mu.replicaQueues, rightRng.RangeID)
 			delete(r.store.mu.uninitReplicas, rightRng.RangeID)
+			r.store.replicaQueues.Lock()
+			delete(r.store.replicaQueues.m, rightRng.RangeID)
+			r.store.replicaQueues.Unlock()
 			r.store.mu.Unlock()
 		}
 		rightRng.raftMu.Unlock()
