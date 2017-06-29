@@ -674,10 +674,14 @@ WHERE message LIKE 'fetched: %'
 	}
 
 	// We failed to substitute; this is an internal error.
+	err = pgerror.NewErrorf(pgerror.CodeInternalError,
+		"invalid logical plan structure:\n%s\nwhile inserting:\n%s",
+		planToString(ctx, plan),
+		planToString(ctx, tracePlan))
 	plan.Close(ctx)
 	stmtPlan.Close(ctx)
 	tracePlan.Close(ctx)
-	return nil, pgerror.NewError(pgerror.CodeInternalError, "invalid logical plan structure")
+	return nil, err
 }
 
 // ShowDatabases returns all the databases.
