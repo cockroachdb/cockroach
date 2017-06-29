@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"reflect"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -54,11 +53,14 @@ type sqlConn struct {
 	// case of automatic reconnects.
 	dbName string
 
+	serverVersion string // build.Info.Tag (short version, like 1.0.3)
+	serverBuild   string // build.Info.Short (version, platform, etc summary)
+
 	// clusterID and serverBuildInfo are the last known corresponding
 	// values from the server, used to report any changes upon
 	// (re)connects.
-	clusterID       string
-	serverBuildInfo build.Info
+	clusterID           string
+	clusterOrganization string
 }
 
 func (c *sqlConn) ensureConn() error {
@@ -88,35 +90,6 @@ func (c *sqlConn) ensureConn() error {
 	return nil
 }
 
-// clientVersionIdent identifies the client version.
-var clientVersionIdent = computeVersionFromInfo(build.GetInfo())
-
-// clientVersion describes the client version.
-var clientVersion = build.GetInfo().Short()
-
-// computeVersionFromInfo returns a value that identifies a particular
-// version number.
-// We use both Revision and tag here because:
-// - Revision is insufficient to determine whether the source code was modified
-//   since the last commit, whereas tag contains `-dirty` in that case;
-// - Tag only has few bits from the revision, and will thus
-//   become more sensitive to silent version mismatches over time.
-func computeVersionFromInfo(info build.Info) string {
-	return info.Revision + info.Tag
-}
-
-var unknownServerBuild = build.Info{
-	GoVersion:    "?",
-	Tag:          "?",
-	Time:         "?",
-	Revision:     "?",
-	CgoCompiler:  "?",
-	Platform:     "?",
-	Distribution: "?",
-	Type:         "?",
-	Dependencies: nil,
-}
-
 // checkServerMetadata reports the server version and cluster ID
 // upon the initial connection or if either has changed since
 // the last connection, based on the last known values in the sqlConn
@@ -127,7 +100,7 @@ func (c *sqlConn) checkServerMetadata() error {
 		return nil
 	}
 
-	newServerBuildInfo := unknownServerBuild
+	newServerVersion := ""
 	newClusterID := ""
 
 	// Retrieve the node ID and server build info.
@@ -148,59 +121,55 @@ func (c *sqlConn) checkServerMetadata() error {
 			return nil
 		}
 
-		// Extract the build.Info fields from the query results.
-		var zeroValue reflect.Value
-		infoStruct := reflect.ValueOf(&newServerBuildInfo).Elem()
+		// Extract the version fields from the query results.
 		for _, row := range rowVals {
-			if vField := infoStruct.FieldByName(row[1]); vField != zeroValue {
-				vField.Set(reflect.ValueOf(row[2]))
+			switch row[1] {
+			case "ClusterID":
+				newClusterID = row[2]
+			case "Version":
+				newServerVersion = row[2]
+			case "Build":
+				c.serverBuild = row[2]
+			case "Organization":
+				c.clusterOrganization = row[2]
 			}
+
 		}
 	}
 
 	// Report the server version only if it the revision has been
 	// fetched successfully, and the revision has changed since the last
 	// connection.
-	if newServerBuildInfo != c.serverBuildInfo && newServerBuildInfo.Revision != "?" {
-		c.serverBuildInfo = newServerBuildInfo
+	if newServerVersion != c.serverVersion {
+		c.serverVersion = newServerVersion
 
-		serverVersionIdent := computeVersionFromInfo(newServerBuildInfo)
 		isSame := ""
-		// We compare the version numbers only using revision+tag, whereas
-		// we *display* the version using the full version string
-		// (computed by Short() below).
-		// This is because we don't care if they're different
-		// platforms/build tools/timestamps. The important bit exposed by
+		// We compare just the version (`build.Info.Tag`), whereas we *display* the
+		// the full build summary (version, platform, etc) string
+		// (`build.Info.Short()`). This is because we don't care if they're
+		// different platforms/build tools/timestamps. The important bit exposed by
 		// a version mismatch is the wire protocol and SQL dialect.
-		if serverVersionIdent == clientVersionIdent {
+		if client := build.GetInfo(); c.serverVersion != client.Tag {
+			fmt.Println("# Client version:", client.Short())
+		} else {
 			isSame = " (same version as client)"
 		}
-
-		if isSame == "" {
-			fmt.Println("# Client version:", clientVersion)
-		}
-		fmt.Printf("# Server version: %s%s\n", newServerBuildInfo.Short(), isSame)
-	}
-
-	// Retrieve the cluster ID.
-	clusterVal, _ := c.getServerValue("cluster ID", "SELECT crdb_internal.cluster_id()::STRING")
-	if s, ok := clusterVal.(string); ok {
-		newClusterID = s
+		fmt.Printf("# Server version: %s%s\n", c.serverBuild, isSame)
 	}
 
 	// Report the cluster ID only if it it could be fetched
 	// successfully, and it has changed since the last connection.
-	if newClusterID != c.clusterID && newClusterID != "" {
-		defer func() { c.clusterID = newClusterID }()
-
-		// As a special case, we complain loudly if the cluster ID
-		// actually changes. This is sign of a potentially very bad load
-		// balancer configuration.
-		if c.clusterID != "" {
+	if old := c.clusterID; newClusterID != c.clusterID {
+		c.clusterID = newClusterID
+		if old != "" {
 			return errors.Errorf("the cluster ID has changed!\nPrevious ID: %s\nNew ID: %s",
-				c.clusterID, newClusterID)
+				old, newClusterID)
 		}
-		fmt.Println("# Cluster ID:", newClusterID)
+		c.clusterID = newClusterID
+		fmt.Println("# Cluster ID:", c.clusterID)
+		if c.clusterOrganization != "" {
+			fmt.Println("# Organization:", c.clusterOrganization)
+		}
 	}
 
 	return nil

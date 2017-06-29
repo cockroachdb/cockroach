@@ -234,14 +234,20 @@ type Executor struct {
 	}
 }
 
+// NodeInfo contains metadata about the executing node and cluster.
+type NodeInfo struct {
+	ClusterID    func() uuid.UUID
+	NodeID       *base.NodeIDContainer
+	Organization *settings.StringSetting
+}
+
 // An ExecutorConfig encompasses the auxiliary objects and configuration
 // required to create an executor.
 // All fields holding a pointer or an interface are required to create
 // a Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
+	NodeInfo
 	AmbientCtx      log.AmbientContext
-	ClusterID       func() uuid.UUID
-	NodeID          *base.NodeIDContainer
 	DB              *client.DB
 	Gossip          *gossip.Gossip
 	DistSender      *kv.DistSender
