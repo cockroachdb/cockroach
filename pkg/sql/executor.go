@@ -1286,10 +1286,12 @@ func (e *Executor) execStmtInOpenTxn(
 		if !firstInTxn {
 			return Result{}, errTransactionInProgress
 		}
+
 	case *parser.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
 		return commitSQLTransaction(txnState, commit)
+
 	case *parser.ReleaseSavepoint:
 		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
 			return Result{}, err
@@ -1297,11 +1299,13 @@ func (e *Executor) execStmtInOpenTxn(
 		// ReleaseSavepoint is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
 		return commitSQLTransaction(txnState, release)
+
 	case *parser.RollbackTransaction:
 		// RollbackTransaction is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
 		// Notice that we don't return any errors on rollback.
 		return rollbackSQLTransaction(txnState), nil
+
 	case *parser.Savepoint:
 		if err := parser.ValidateRestartCheckpoint(s.Name); err != nil {
 			return Result{}, err
@@ -1317,6 +1321,7 @@ func (e *Executor) execStmtInOpenTxn(
 		// This here is all the execution there is.
 		txnState.retryIntent = true
 		return Result{}, nil
+
 	case *parser.RollbackToSavepoint:
 		err := parser.ValidateRestartCheckpoint(s.Savepoint)
 		// If commands have already been sent through the transaction,
@@ -1326,48 +1331,17 @@ func (e *Executor) execStmtInOpenTxn(
 			txnState.mu.txn.Proto().Restart(0, 0, hlc.Timestamp{})
 		}
 		return Result{}, err
+
 	case *parser.Prepare:
-		name := s.Name.String()
-		if session.PreparedStatements.Exists(name) {
-			return Result{}, pgerror.NewErrorf(pgerror.CodeDuplicateDatabaseError,
-				"prepared statement %q already exists", name)
-		}
-		typeHints := make(parser.PlaceholderTypes, len(s.Types))
-		for i, t := range s.Types {
-			typeHints[strconv.Itoa(i+1)] = parser.CastTargetToDatumType(t)
-		}
-		_, err := session.PreparedStatements.New(
-			e, name, Statement{AST: s.Statement}, s.Statement.String(), typeHints,
-		)
-		return Result{}, err
+		// This must be handled here instead of the common path below
+		// beause we need to use the Executor reference.
+		return Result{}, e.PrepareStmt(session, s)
+
 	case *parser.Execute:
-		name := s.Name.String()
-		prepared, ok := session.PreparedStatements.Get(name)
-		if !ok {
-			return Result{}, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
-				"prepared statement %q does not exist", name)
-		}
-		if len(prepared.SQLTypes) != len(s.Params) {
-			return Result{}, pgerror.NewErrorf(pgerror.CodeSyntaxError,
-				"wrong number of parameters for prepared statement %q: expected %d, got %d",
-				name, len(prepared.SQLTypes), len(s.Params))
-		}
-		qArgs := make(parser.QueryArguments, len(s.Params))
-		for i, e := range s.Params {
-			idx := strconv.Itoa(i + 1)
-			typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.SQLTypes[idx], "EXECUTE parameter", session.SearchPath)
-			if err != nil {
-				return Result{}, pgerror.NewError(pgerror.CodeFeatureNotSupportedError, err.Error())
-			}
-			var p parser.Parser
-			if err := p.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
-				return Result{}, err
-			}
-			qArgs[idx] = typedExpr
-		}
-		results, err := e.execPrepared(
-			session, prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes},
-		)
+		// This must be handled here instead of the common path below
+		// beause we need to use the Executor reference and prepare the
+		// query plan in a different way.
+		results, err := e.ExecutePreparedStmt(session, s)
 		if err != nil {
 			return Result{}, err
 		}
@@ -1377,42 +1351,6 @@ func (e *Executor) execStmtInOpenTxn(
 			return Result{}, nil
 		}
 		return results.ResultList[0], nil
-
-	case *parser.Deallocate:
-		if s.Name == "" {
-			session.PreparedStatements.DeleteAll(session.Ctx())
-		} else {
-			if found := session.PreparedStatements.Delete(
-				session.Ctx(), string(s.Name),
-			); !found {
-				return Result{}, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
-					"prepared statement %q does not exist", s.Name)
-			}
-		}
-		return Result{PGTag: s.StatementTag()}, nil
-
-	case *parser.Discard:
-		switch s.Mode {
-		case parser.DiscardModeAll:
-			if !txnState.implicitTxn {
-				return Result{}, pgerror.NewErrorf(pgerror.CodeActiveSQLTransactionError,
-					"DISCARD ALL cannot run inside a transaction block")
-			}
-
-			// RESET ALL
-			for _, v := range varGen {
-				if v.Reset != nil {
-					if err := v.Reset(session); err != nil {
-						return Result{}, err
-					}
-				}
-			}
-
-			// DEALLOCATE ALL
-			session.PreparedStatements.DeleteAll(session.Ctx())
-
-			return Result{PGTag: s.StatementTag()}, nil
-		}
 	}
 
 	var p *planner

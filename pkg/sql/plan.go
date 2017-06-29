@@ -275,8 +275,12 @@ func (p *planner) newPlan(
 		return p.CreateUser(ctx, n)
 	case *parser.CreateView:
 		return p.CreateView(ctx, n)
+	case *parser.Deallocate:
+		return p.Deallocate(ctx, n)
 	case *parser.Delete:
 		return p.Delete(ctx, n, desiredTypes)
+	case *parser.Discard:
+		return p.Discard(ctx, n)
 	case *parser.DropDatabase:
 		return p.DropDatabase(ctx, n)
 	case *parser.DropIndex:

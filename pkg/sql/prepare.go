@@ -18,12 +18,14 @@ package sql
 
 import (
 	"bytes"
+	"strconv"
 	"unsafe"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -296,4 +298,72 @@ func (pp PreparedPortals) Delete(ctx context.Context, name string) bool {
 		return true
 	}
 	return false
+}
+
+// PrepareStmt implements the PREPARE statement.
+// See https://www.postgresql.org/docs/current/static/sql-prepare.html for details.
+func (e *Executor) PrepareStmt(session *Session, s *parser.Prepare) error {
+	name := s.Name.String()
+	if session.PreparedStatements.Exists(name) {
+		return pgerror.NewErrorf(pgerror.CodeDuplicateDatabaseError,
+			"prepared statement %q already exists", name)
+	}
+	typeHints := make(parser.PlaceholderTypes, len(s.Types))
+	for i, t := range s.Types {
+		typeHints[strconv.Itoa(i+1)] = parser.CastTargetToDatumType(t)
+	}
+	_, err := session.PreparedStatements.New(
+		e, name, Statement{AST: s.Statement}, s.Statement.String(), typeHints,
+	)
+	return err
+}
+
+// ExecutePreparedStmt implements the EXECUTE statement.
+// See https://www.postgresql.org/docs/current/static/sql-execute.html for details.
+func (e *Executor) ExecutePreparedStmt(
+	session *Session, s *parser.Execute,
+) (results StatementResults, err error) {
+	name := s.Name.String()
+	prepared, ok := session.PreparedStatements.Get(name)
+	if !ok {
+		return results, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
+			"prepared statement %q does not exist", name)
+	}
+
+	if len(prepared.SQLTypes) != len(s.Params) {
+		return results, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"wrong number of parameters for prepared statement %q: expected %d, got %d",
+			name, len(prepared.SQLTypes), len(s.Params))
+	}
+
+	qArgs := make(parser.QueryArguments, len(s.Params))
+	for i, e := range s.Params {
+		idx := strconv.Itoa(i + 1)
+		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.SQLTypes[idx], "EXECUTE parameter", session.SearchPath)
+		if err != nil {
+			return results, pgerror.NewError(pgerror.CodeFeatureNotSupportedError, err.Error())
+		}
+		var p parser.Parser
+		if err := p.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
+			return results, err
+		}
+		qArgs[idx] = typedExpr
+	}
+	return e.execPrepared(
+		session, prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes},
+	)
+}
+
+// Deallocate implements the DEALLOCATE statement.
+// See https://www.postgresql.org/docs/current/static/sql-deallocate.html for details.
+func (p *planner) Deallocate(ctx context.Context, s *parser.Deallocate) (planNode, error) {
+	if s.Name == "" {
+		p.session.PreparedStatements.DeleteAll(ctx)
+	} else {
+		if found := p.session.PreparedStatements.Delete(ctx, string(s.Name)); !found {
+			return nil, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
+				"prepared statement %q does not exist", s.Name)
+		}
+	}
+	return &emptyNode{}, nil
 }
