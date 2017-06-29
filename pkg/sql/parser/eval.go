@@ -1702,7 +1702,7 @@ type EvalPlanner interface {
 	QueryRow(ctx context.Context, sql string, args ...interface{}) (Datums, error)
 
 	// QualifyWithDatabase resolves a possibly unqualified table name into a
-	// table name that is qualified by database.
+	// normalized table name that is qualified by database.
 	QualifyWithDatabase(ctx context.Context, t *NormalizableTableName) (*TableName, error)
 }
 
@@ -2041,7 +2041,7 @@ var regTypeInfos = map[*OidColType]regTypeInfo{
 func queryOidWithJoin(
 	ctx *EvalContext, typ *OidColType, d Datum, joinClause string, additionalWhere string,
 ) (*DOid, error) {
-	ret := &DOid{symanticType: typ}
+	ret := &DOid{semanticType: typ}
 	info := regTypeInfos[typ]
 	var queryCol string
 	switch d.(type) {
@@ -2391,25 +2391,25 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DOid:
 			switch typ {
 			case oidColTypeOid:
-				return &DOid{symanticType: typ, DInt: v.DInt}, nil
+				return &DOid{semanticType: typ, DInt: v.DInt}, nil
 			default:
 				oid, err := queryOid(ctx, typ, v)
 				if err != nil {
 					oid = NewDOid(v.DInt)
-					oid.symanticType = typ
+					oid.semanticType = typ
 				}
 				return oid, nil
 			}
 		case *DInt:
 			switch typ {
 			case oidColTypeOid:
-				return &DOid{symanticType: typ, DInt: *v}, nil
+				return &DOid{semanticType: typ, DInt: *v}, nil
 			default:
 				tmpOid := NewDOid(*v)
 				oid, err := queryOid(ctx, typ, tmpOid)
 				if err != nil {
 					oid = tmpOid
-					oid.symanticType = typ
+					oid.semanticType = typ
 				}
 				return oid, nil
 			}
@@ -2418,7 +2418,9 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			// Trim whitespace and unwrap outer quotes if necessary.
 			// This is required to mimic postgres.
 			s = strings.TrimSpace(s)
+			var hadQuotes bool
 			if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
+				hadQuotes = true
 				s = s[1 : len(s)-1]
 			}
 
@@ -2428,7 +2430,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				if err != nil {
 					return nil, err
 				}
-				return &DOid{symanticType: typ, DInt: *i}, nil
+				return &DOid{semanticType: typ, DInt: *i}, nil
 			case oidColTypeRegProc, oidColTypeRegProcedure:
 				// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
 				// Postgres only does this when the cast is ::regprocedure, but we're
@@ -2451,7 +2453,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				colType, err := ParseType(s)
 				if err == nil {
 					datumType := CastTargetToDatumType(colType)
-					return &DOid{symanticType: typ, DInt: DInt(datumType.Oid()), name: datumType.SQLName()}, nil
+					return &DOid{semanticType: typ, DInt: DInt(datumType.Oid()), name: datumType.SQLName()}, nil
 				}
 				// Fall back to searching pg_type, since we don't provide syntax for
 				// every postgres type that we understand OIDs for.
@@ -2462,6 +2464,12 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			case oidColTypeRegClass:
 				// Resolving a table name requires looking at the search path to
 				// determine the database that owns it.
+				// If the table wasn't quoted, normalize it. This matches the behavior
+				// when creating tables - table names are normalized (downcased) unless
+				// they're double quoted.
+				if !hadQuotes {
+					s = ReNormalizeName(s)
+				}
 				t := &NormalizableTableName{
 					TableNameReference: UnresolvedName{
 						Name(s),
@@ -2474,7 +2482,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				// table because we only have the database name, not its OID, which is
 				// what is stored in pg_class. This extra join means we can't use
 				// queryOid like everyone else.
-				return queryOidWithJoin(ctx, typ, NewDString(s),
+				return queryOidWithJoin(ctx, typ, NewDString(tn.Table()),
 					"JOIN pg_catalog.pg_namespace ON relnamespace = pg_namespace.oid",
 					fmt.Sprintf("AND nspname = '%s'", tn.Database()))
 			default:
