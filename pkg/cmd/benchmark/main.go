@@ -135,9 +135,11 @@ func do(ctx context.Context) error {
 
 		if _, err := fmt.Fprintf(
 			buffer,
-			"commit: %s\ncommit-time: %s\niteration: %d\nstart-time: %s\n",
+			"commit: %s\ncommit-time: %s\nbranch: %s\nname: %s\niteration: %d\nstart-time: %s\n",
 			commit,
 			commitTime,
+			"master",
+			"nightly",
 			i,
 			timeutil.Now().UTC().Format(time.RFC3339),
 		); err != nil {
