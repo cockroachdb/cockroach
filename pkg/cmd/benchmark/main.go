@@ -58,14 +58,14 @@ func do(ctx context.Context) error {
 	}
 
 	show, err := func() ([]byte, error) {
-		cmd := exec.CommandContext(ctx, "git", "show", "--format='%H	%cI'", "HEAD")
+		cmd := exec.CommandContext(ctx, "git", "show", "-s", "--format=%H%n%cI", "HEAD")
 		cmd.Dir = rootPkg.Dir
 		return cmd.Output()
 	}()
 	if err != nil {
 		return errors.Wrap(err, "could not determine commit hash and committer date")
 	}
-	parts := strings.Split(string(bytes.TrimSpace(show)), "	")
+	parts := strings.Split(string(bytes.TrimSpace(show)), "\n")
 	if len(parts) != 2 {
 		return errors.Errorf("expected commit hash and committer date, got %s", show)
 	}
@@ -73,7 +73,7 @@ func do(ctx context.Context) error {
 
 	data, ok := os.LookupEnv(serviceAccountJSONEnv)
 	if !ok {
-		return errors.Errorf("Service account JSON environment variable %s is not set", serviceAccountJSONEnv)
+		return errors.Errorf("service account JSON environment variable %s is not set", serviceAccountJSONEnv)
 	}
 
 	conf, err := google.JWTConfigFromJSON([]byte(data), "https://www.googleapis.com/auth/userinfo.email")
@@ -135,9 +135,11 @@ func do(ctx context.Context) error {
 
 		if _, err := fmt.Fprintf(
 			buffer,
-			"commit: %s\ncommit-time: %s\niteration: %d\nstart-time: %s\n",
+			"commit: %s\ncommit-time: %s\nbranch: %s\nname: %s\niteration: %d\nstart-time: %s\n",
 			commit,
 			commitTime,
+			"master",
+			"nightly",
 			i,
 			timeutil.Now().UTC().Format(time.RFC3339),
 		); err != nil {
