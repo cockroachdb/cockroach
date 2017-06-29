@@ -84,6 +84,12 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *valuesNode:
 		markOmitted(n.columns, needed)
 
+	case *delayedNode:
+		if n.plan != nil {
+			setNeededColumns(n.plan, needed)
+		}
+		markOmitted(n.columns, needed)
+
 	case *scanNode:
 		copy(n.valNeededForCol, needed)
 		for i := range needed {
@@ -187,7 +193,6 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *createUserNode:
-	case *delayedNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:

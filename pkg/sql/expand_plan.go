@@ -209,10 +209,16 @@ func doExpandPlan(
 		plan, err = expandRenderNode(ctx, p, params, n)
 
 	case *delayedNode:
-		n.plan, err = n.constructor(ctx, p)
-		if err == nil {
-			n.plan, err = doExpandPlan(ctx, p, params, n.plan)
+		var newPlan planNode
+		newPlan, err = n.constructor(ctx, p)
+		if err != nil {
+			return plan, err
 		}
+		newPlan, err = doExpandPlan(ctx, p, params, newPlan)
+		if err != nil {
+			return plan, err
+		}
+		plan = newPlan
 
 	case *splitNode:
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)

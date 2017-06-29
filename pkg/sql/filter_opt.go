@@ -302,6 +302,13 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *delayedNode:
+		if n.plan != nil {
+			if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
+				return plan, extraFilter, err
+			}
+		}
+
 	case *splitNode:
 		if n.rows, err = p.triggerFilterPropagation(ctx, n.rows); err != nil {
 			return plan, extraFilter, err
@@ -317,7 +324,6 @@ func (p *planner) propagateFilters(
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *createUserNode:
-	case *delayedNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:
