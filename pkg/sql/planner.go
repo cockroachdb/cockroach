@@ -167,6 +167,9 @@ func (p *planner) setTxn(txn *client.Txn) {
 
 // query initializes a planNode from a SQL statement string. Close() must be
 // called on the returned planNode after use.
+// This function is not suitable for use in the planNode constructors directly:
+// the returned planNode has already been optimized.
+// Consider also (*planner).delegateQuery(...).
 func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (planNode, error) {
 	if log.V(2) {
 		log.Infof(ctx, "internal query: %s", sql)
