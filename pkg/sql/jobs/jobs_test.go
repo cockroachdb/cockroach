@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -86,16 +87,6 @@ func verifyJobRecord(
 			&created, &started, &finished, &modified, &fractionCompleted, &errMessage,
 		)
 
-		// Verify the upstream-provided fields.
-		expected.Job.Details = nil
-		for _, id := range rawDescriptorIDs {
-			actualJob.DescriptorIDs = append(actualJob.DescriptorIDs, sqlbase.ID(id))
-		}
-		if e, a := expected.Job, actualJob; !reflect.DeepEqual(e, a) {
-			diff := strings.Join(pretty.Diff(e, a), "\n")
-			return errors.Errorf("JobRecords do not match:\n%s", diff)
-		}
-
 		// Verify a newly-instantiated JobLogger's properties.
 		fetched, err := jobs.GetJobLogger(context.TODO(), kvDB, ex, *jl.JobID())
 		if err != nil {
@@ -104,6 +95,16 @@ func verifyJobRecord(
 		if e, a := jl.Payload(), fetched.Payload(); !reflect.DeepEqual(e, a) {
 			diff := strings.Join(pretty.Diff(e, a), "\n")
 			return errors.Errorf("Job Payloads do not match:\n%s", diff)
+		}
+
+		// Verify the upstream-provided fields.
+		expected.Job.Details = fetched.Job.Details
+		for _, id := range rawDescriptorIDs {
+			actualJob.DescriptorIDs = append(actualJob.DescriptorIDs, sqlbase.ID(id))
+		}
+		if e, a := expected.Job, actualJob; !reflect.DeepEqual(e, a) {
+			diff := strings.Join(pretty.Diff(e, a), "\n")
+			return errors.Errorf("JobRecords do not match:\n%s", diff)
 		}
 
 		// Verify JobLogger-managed fields.
@@ -178,15 +179,14 @@ func TestJobLogger(t *testing.T) {
 			Description:   "There's a snake in my boot!",
 			Username:      "Woody Pride",
 			DescriptorIDs: []sqlbase.ID{1, 2, 3},
-			Details:       jobs.BackupJobDetails{},
+			Details:       jobs.RestoreJobDetails{},
 		}
 		woodyExpectation := jobExpectation{
 			Job:    woodyJob,
-			Type:   jobs.JobTypeBackup,
+			Type:   jobs.JobTypeRestore,
 			Before: timeutil.Now(),
 		}
-		woodyLogger := jobs.NewJobLogger(kvDB, executor,
-			woodyJob)
+		woodyLogger := jobs.NewJobLogger(kvDB, executor, woodyJob)
 
 		if err := woodyLogger.Created(ctx); err != nil {
 			t.Fatal(err)
@@ -212,13 +212,24 @@ func TestJobLogger(t *testing.T) {
 			{0.0, 0.0}, {0.5, 0.5}, {0.5, 0.5}, {0.4, 0.5}, {0.8, 0.8}, {1.0, 1.0},
 		}
 		for _, f := range progresses {
-			if err := woodyLogger.Progressed(ctx, f.actual); err != nil {
+			if err := woodyLogger.Progressed(ctx, f.actual, jobs.Noop); err != nil {
 				t.Fatal(err)
 			}
 			woodyExpectation.FractionCompleted = f.expected
 			if err := verifyJobRecord(db, kvDB, executor, woodyLogger, jobs.JobStatusRunning, woodyExpectation); err != nil {
 				t.Fatal(err)
 			}
+		}
+
+		// Test Progressed callbacks.
+		if err := woodyLogger.Progressed(ctx, 1.0, func(_ context.Context, details interface{}) {
+			details.(*jobs.JobPayload_Restore).Restore.LowWaterMark = roachpb.Key("mariana")
+		}); err != nil {
+			t.Fatal(err)
+		}
+		woodyExpectation.Job.Details = jobs.RestoreJobDetails{LowWaterMark: roachpb.Key("mariana")}
+		if err := verifyJobRecord(db, kvDB, executor, woodyLogger, jobs.JobStatusRunning, woodyExpectation); err != nil {
+			t.Fatal(err)
 		}
 
 		if err := woodyLogger.Succeeded(ctx); err != nil {
@@ -236,14 +247,15 @@ func TestJobLogger(t *testing.T) {
 		}
 		buzzExpectation := jobExpectation{
 			Job:    buzzJob,
-			Type:   jobs.JobTypeRestore,
+			Type:   jobs.JobTypeBackup,
 			Before: timeutil.Now(),
 			Error:  "Buzz Lightyear can't fly",
 		}
 		buzzLogger := jobs.NewJobLogger(kvDB, executor, buzzJob)
 
 		// Test modifying the job details before calling `Created`.
-		buzzLogger.Job.Details = jobs.RestoreJobDetails{}
+		buzzLogger.Job.Details = jobs.BackupJobDetails{}
+		buzzExpectation.Job.Details = jobs.BackupJobDetails{}
 		if err := buzzLogger.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -258,7 +270,7 @@ func TestJobLogger(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := buzzLogger.Progressed(ctx, .42); err != nil {
+		if err := buzzLogger.Progressed(ctx, .42, jobs.Noop); err != nil {
 			t.Fatal(err)
 		}
 		buzzExpectation.FractionCompleted = .42
@@ -362,10 +374,10 @@ func TestJobLogger(t *testing.T) {
 		if err := logger.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Progressed(ctx, -0.1); !testutils.IsError(err, "outside allowable range") {
+		if err := logger.Progressed(ctx, -0.1, jobs.Noop); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
-		if err := logger.Progressed(ctx, 1.1); !testutils.IsError(err, "outside allowable range") {
+		if err := logger.Progressed(ctx, 1.1, jobs.Noop); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
 	})
@@ -377,7 +389,7 @@ func TestJobLogger(t *testing.T) {
 		if err := logger.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Progressed(ctx, 0.5); !testutils.IsError(err, `job \d+ not started`) {
+		if err := logger.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(err, `job \d+ not started`) {
 			t.Fatalf("expected 'job not started' error, but got %v", err)
 		}
 	})
@@ -395,7 +407,7 @@ func TestJobLogger(t *testing.T) {
 		if err := logger.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Progressed(ctx, 0.5); !testutils.IsError(err, `job \d+ already finished`) {
+		if err := logger.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(err, `job \d+ already finished`) {
 			t.Fatalf("expected 'job already finished' error, but got %v", err)
 		}
 	})
@@ -416,7 +428,7 @@ func TestJobLogger(t *testing.T) {
 		if err := logger.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Progressed(ctx, 0.2); err != nil {
+		if err := logger.Progressed(ctx, 0.2, jobs.Noop); err != nil {
 			t.Fatal(err)
 		}
 		if err := logger.Succeeded(ctx); err != nil {
