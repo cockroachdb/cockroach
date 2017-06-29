@@ -237,7 +237,7 @@ To test CockroachDB’s SQL functionality, we use a logic test framework that
 provides a convenient syntax for asserting the expected results of queries.
 
 Take a peek at the top of one of these logic test files,
-`pkg/sql/testdata/logic_test/builtin_function`. Here’s an existing test for the
+`pkg/sql/logictest/testdata/logic_test/builtin_function`. Here’s an existing test for the
 length function from that file:
 
 ```text
@@ -256,7 +256,7 @@ corresponding column. In the above example, we expect one row of output with
 columns 9 and 13.
 
 Let’s add a new test for our function. Create a new file,
-`pkg/sql/testdata/logic_test/codelab`, with the following contents:
+`pkg/sql/logictest/testdata/logic_test/codelab`, with the following contents:
 
 ```text
 query T
