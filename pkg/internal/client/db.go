@@ -24,9 +24,11 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -593,4 +595,23 @@ func getOneRow(runErr error, b *Batch) (KeyValue, error) {
 		return KeyValue{}, err
 	}
 	return res.Rows[0], nil
+}
+
+// IncrementValRetryable increments a key's value by a specified amount and
+// returns the new value.
+//
+// It performs the increment as a retryable non-transactional increment. The key
+// might be incremented multiple times because of the retries.
+func IncrementValRetryable(ctx context.Context, db *DB, key roachpb.Key, inc int64) (int64, error) {
+	var err error
+	var res KeyValue
+	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+		res, err = db.Inc(ctx, key, inc)
+		switch err.(type) {
+		case *roachpb.UnhandledRetryableError, *roachpb.AmbiguousResultError:
+			continue
+		}
+		break
+	}
+	return res.ValueInt(), err
 }

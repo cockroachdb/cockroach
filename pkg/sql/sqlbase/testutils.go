@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -59,8 +60,8 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
 	desc := &Descriptor{}
-	if err := kvDB.GetProto(context.TODO(), descKey, desc); err != nil {
-		panic("proto missing")
+	if err := kvDB.GetProto(context.TODO(), descKey, desc); err != nil || (*desc == Descriptor{}) {
+		log.Fatalf(context.TODO(), "proto with id %d missing. err: %v", gr.ValueInt(), err)
 	}
 	return desc.GetTable()
 }
