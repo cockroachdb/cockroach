@@ -120,6 +120,8 @@ var varGen = map[string]sessionVar{
 
 			if len(dbName) != 0 {
 				// Verify database descriptor exists.
+				session.TxnState.mu.RLock()
+				defer session.TxnState.mu.RUnlock()
 				if _, err := MustGetDatabaseDesc(ctx, session.TxnState.mu.txn, &session.virtualSchemas, dbName); err != nil {
 					return err
 				}
@@ -309,13 +311,19 @@ var varGen = map[string]sessionVar{
 	},
 
 	`transaction isolation level`: {
-		// TODO(couchand): determine if we need to lock here (is this the session's main goroutine?)
-		Get: func(session *Session) string { return session.TxnState.mu.txn.Isolation().String() },
+		Get: func(session *Session) string {
+			session.TxnState.mu.RLock()
+			defer session.TxnState.mu.RUnlock()
+			return session.TxnState.mu.txn.Isolation().String()
+		},
 	},
 
 	`transaction priority`: {
-		// TODO(couchand): determine if we need to lock here (is this the session's main goroutine?)
-		Get: func(session *Session) string { return session.TxnState.mu.txn.UserPriority().String() },
+		Get: func(session *Session) string {
+			session.TxnState.mu.RLock()
+			defer session.TxnState.mu.RUnlock()
+			return session.TxnState.mu.txn.UserPriority().String()
+		},
 	},
 
 	`transaction status`: {
