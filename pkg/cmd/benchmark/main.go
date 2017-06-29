@@ -73,7 +73,7 @@ func do(ctx context.Context) error {
 
 	data, ok := os.LookupEnv(serviceAccountJSONEnv)
 	if !ok {
-		return errors.Errorf("Service account JSON environment variable %s is not set", serviceAccountJSONEnv)
+		return errors.Errorf("service account JSON environment variable %s is not set", serviceAccountJSONEnv)
 	}
 
 	conf, err := google.JWTConfigFromJSON([]byte(data), "https://www.googleapis.com/auth/userinfo.email")
