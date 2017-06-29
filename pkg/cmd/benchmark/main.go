@@ -58,14 +58,14 @@ func do(ctx context.Context) error {
 	}
 
 	show, err := func() ([]byte, error) {
-		cmd := exec.CommandContext(ctx, "git", "show", "--format='%H	%cI'", "HEAD")
+		cmd := exec.CommandContext(ctx, "git", "show", "-s", "--format=%H%n%cI", "HEAD")
 		cmd.Dir = rootPkg.Dir
 		return cmd.Output()
 	}()
 	if err != nil {
 		return errors.Wrap(err, "could not determine commit hash and committer date")
 	}
-	parts := strings.Split(string(bytes.TrimSpace(show)), "	")
+	parts := strings.Split(string(bytes.TrimSpace(show)), "\n")
 	if len(parts) != 2 {
 		return errors.Errorf("expected commit hash and committer date, got %s", show)
 	}
