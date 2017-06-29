@@ -19,6 +19,7 @@ controller=$(terraform output controller-ip)
 # Prepare the command to run the test. Note that --concurrency must be
 # a multiple of 10 and some tests require a minimum of 20.
 testcmd="cd jepsen/cockroachdb && set -eo pipefail && \
+ ~/lein clean && find . && \
  stdbuf -oL -eL \
  ~/lein run test \
    --tarball file:///home/ubuntu/cockroach.tgz \
