@@ -3863,22 +3863,43 @@ func RelocateRange(
 			addTargets = append(addTargets, t)
 		}
 	}
-	if len(addTargets) > 0 {
+
+	canRetry := func(err error) bool {
+		// FIXME: retry only on whitelisted errors. Known examples: snapshot
+		// intersects existing range.
+		return true
+	}
+
+	for len(addTargets) > 0 && ctx.Err() == nil {
+		target := addTargets[0]
 		if err := db.AdminChangeReplicas(
-			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, addTargets,
+			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
 		); err != nil {
-			return err
+			log.Warningf(ctx, "while adding target %v: %s", target, err)
+			if !canRetry(err) {
+				return err
+			}
+			continue
 		}
+		addTargets = addTargets[1:]
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	// Step 2: Transfer the lease to the first target. This needs to happen before
 	// we remove replicas or we may try to remove the lease holder.
 
-	if err := db.AdminTransferLease(
-		ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
-	); err != nil {
-		return err
+	transferLease := func() {
+		if err := db.AdminTransferLease(
+			ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
+		); err != nil {
+			log.Warningf(ctx, "while transferring lease: %s", err)
+		}
 	}
+
+	transferLease()
 
 	// Step 3: Remove any replicas that are not targets.
 
@@ -3898,14 +3919,22 @@ func RelocateRange(
 			})
 		}
 	}
-	if len(removeTargets) > 0 {
+
+	for len(removeTargets) > 0 && ctx.Err() == nil {
+		target := removeTargets[0]
+		transferLease()
 		if err := db.AdminChangeReplicas(
-			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, removeTargets,
+			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
 		); err != nil {
-			return err
+			log.Warningf(ctx, "while removing target %v: %s", target, err)
+			if !canRetry(err) {
+				return err
+			}
+			continue
 		}
+		removeTargets = removeTargets[1:]
 	}
-	return nil
+	return ctx.Err()
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.
