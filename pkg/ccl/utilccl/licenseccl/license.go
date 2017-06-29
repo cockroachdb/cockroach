@@ -52,7 +52,7 @@ func Decode(s string) (*License, error) {
 }
 
 // Check returns an error if the license is empty or not currently valid.
-func (l *License) Check(cluster uuid.UUID, at time.Time, feature string) error {
+func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) error {
 	if l == nil {
 		// TODO(dt): link to some stable URL that then redirects to a helpful page
 		// that explains what to do here.
@@ -72,6 +72,13 @@ func (l *License) Check(cluster uuid.UUID, at time.Time, feature string) error {
 		if expiration := time.Unix(l.ValidUntilUnixSec, 0); at.After(expiration) {
 			return errors.Errorf("license expired at %s", expiration.String())
 		}
+	}
+
+	if l.ClusterID == nil {
+		if strings.EqualFold(l.OrganizationName, org) {
+			return nil
+		}
+		return errors.Errorf("license valid only for %q", l.OrganizationName)
 	}
 
 	for _, c := range l.ClusterID {

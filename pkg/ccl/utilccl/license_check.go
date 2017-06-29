@@ -51,18 +51,18 @@ var currentLicense = func() *atomic.Value {
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
 // feature is not enabled, including information or a link explaining how to
 // enable it.
-func CheckEnterpriseEnabled(cluster uuid.UUID, feature string) error {
+func CheckEnterpriseEnabled(cluster uuid.UUID, org, feature string) error {
 	// TODO(dt): delete this after a transition period, before 1.1.
 	if EnterpriseEnabled.Get() {
 		return nil
 	}
-	return checkEnterpriseEnabledAt(cluster, timeutil.Now(), feature)
+	return checkEnterpriseEnabledAt(timeutil.Now(), cluster, org, feature)
 }
 
-func checkEnterpriseEnabledAt(cluster uuid.UUID, at time.Time, feature string) error {
+func checkEnterpriseEnabledAt(at time.Time, cluster uuid.UUID, org, feature string) error {
 	var lic *licenseccl.License
 	if licPtr := currentLicense.Load(); licPtr != nil {
 		lic = licPtr.(*licenseccl.License)
 	}
-	return lic.Check(cluster, at, feature)
+	return lic.Check(at, cluster, org, feature)
 }
