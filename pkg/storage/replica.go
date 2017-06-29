@@ -562,7 +562,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		store:          store,
 		abortCache:     NewAbortCache(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
-		tsCache:        store.tsCache,
+		tsCache:        store.tsCache[rangeID%roachpb.RangeID(len(store.tsCache))],
 	}
 	r.mu.stateLoader = makeReplicaStateLoader(rangeID)
 	if leaseHistoryMaxEntries > 0 {

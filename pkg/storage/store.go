@@ -563,7 +563,7 @@ type Store struct {
 	}
 
 	// Most recent timestamps for keys / key ranges.
-	tsCache *timestampCache
+	tsCache []*timestampCache
 
 	scheduler *raftScheduler
 
@@ -929,7 +929,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
 
-	s.tsCache = newTimestampCache(s.cfg.Clock)
+	s.tsCache = make([]*timestampCache, 16)
+	for i := 0; i < len(s.tsCache); i++ {
+		s.tsCache[i] = newTimestampCache(s.cfg.Clock)
+		s.tsCache[i].maxBytes /= uint64(len(s.tsCache))
+	}
 
 	s.nonEmptySnapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 	s.emptySnapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
