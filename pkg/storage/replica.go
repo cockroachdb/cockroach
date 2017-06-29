@@ -1775,9 +1775,9 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 			log.Fatal(context.Background(), err)
 		}
 		creq := makeCacheRequest(&ec.ba, br, span)
-		ec.repl.store.tsCacheMu.Lock()
-		ec.repl.store.tsCacheMu.cache.AddRequest(creq)
-		ec.repl.store.tsCacheMu.Unlock()
+		ec.repl.store.tsCache.Lock()
+		ec.repl.store.tsCache.AddRequest(creq)
+		ec.repl.store.tsCache.Unlock()
 	}
 
 	ec.repl.cmdQMu.Lock()
@@ -2070,13 +2070,13 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 
 	// TODO(peter): We only need to hold a write lock during the ExpandRequests
 	// calls. Investigate whether using a RWMutex here reduces lock contention.
-	r.store.tsCacheMu.Lock()
-	defer r.store.tsCacheMu.Unlock()
+	r.store.tsCache.Lock()
+	defer r.store.tsCache.Unlock()
 
 	if ba.Txn != nil {
-		r.store.tsCacheMu.cache.ExpandRequests(ba.Txn.Timestamp, span)
+		r.store.tsCache.ExpandRequests(ba.Txn.Timestamp, span)
 	} else {
-		r.store.tsCacheMu.cache.ExpandRequests(ba.Timestamp, span)
+		r.store.tsCache.ExpandRequests(ba.Timestamp, span)
 	}
 
 	var bumped bool
@@ -2089,7 +2089,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// has already been finalized, in which case this is a replay.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 				key := keys.TransactionKey(header.Key, *ba.GetTxnID())
-				wTS, _, wOK := r.store.tsCacheMu.cache.GetMaxWrite(key, nil)
+				wTS, _, wOK := r.store.tsCache.GetMaxWrite(key, nil)
 				if wOK {
 					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
 				} else if !wTS.Less(ba.Txn.Timestamp) {
@@ -2108,7 +2108,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			}
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
-			rTS, rTxnID, _ := r.store.tsCacheMu.cache.GetMaxRead(header.Key, header.EndKey)
+			rTS, rTxnID, _ := r.store.tsCache.GetMaxRead(header.Key, header.EndKey)
 			if ba.Txn != nil {
 				if rTxnID == nil || *ba.Txn.ID != *rTxnID {
 					nextTS := rTS.Next()
@@ -2126,7 +2126,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// write too old boolean for transactions. Note that currently
 			// only EndTransaction and DeleteRange requests update the
 			// write timestamp cache.
-			wTS, wTxnID, _ := r.store.tsCacheMu.cache.GetMaxWrite(header.Key, header.EndKey)
+			wTS, wTxnID, _ := r.store.tsCache.GetMaxWrite(header.Key, header.EndKey)
 			if ba.Txn != nil {
 				if wTxnID == nil || *ba.Txn.ID != *wTxnID {
 					if !wTS.Less(ba.Txn.Timestamp) {
