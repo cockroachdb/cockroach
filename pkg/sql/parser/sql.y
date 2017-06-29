@@ -363,10 +363,9 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   NOT_REGMATCH REGIMATCH NOT_REGIMATCH
 %token <str>   ERROR
 
-// If you want to make any keyword changes, update the keyword table in
-// src/include/parser/kwlist.h and add new keywords to the appropriate one of
-// the reserved-or-not-so-reserved keyword lists, below; search this file for
-// "Keyword category lists".
+// If you want to make any keyword changes, add the new keyword here as well as
+// to the appropriate one of the reserved-or-not-so-reserved keyword lists,
+// below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
 %token <str>   ACTION ADD
@@ -453,8 +452,8 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %token <str>   ZONE
 
-// The grammar thinks these are keywords, but they are not in the kwlist.h list
-// and so can never be entered directly. The filter in parser.c creates these
+// The grammar thinks these are keywords, but they are not in any category
+// and so can never be entered directly. The filter in scan.go creates these
 // tokens when required (based on looking one token ahead).
 //
 // NOT_LA exists so that productions such as NOT LIKE can be given the same
@@ -5348,10 +5347,6 @@ unrestricted_name:
 // Put a new keyword into the first list that it can go into without causing
 // shift or reduce conflicts. The earlier lists define "less reserved"
 // categories of keywords.
-//
-// Make sure that each keyword's category in kwlist.h matches where it is
-// listed here. (Someday we may be able to generate these lists and kwlist.h's
-// table from a common master list.)
 //
 // "Unreserved" keywords --- available for use as any kind of name.
 unreserved_keyword:
