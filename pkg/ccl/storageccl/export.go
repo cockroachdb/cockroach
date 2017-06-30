@@ -145,7 +145,17 @@ func evalExport(
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
 	iter := engineccl.NewMVCCIncrementalIterator(batch, args.StartTime, h.Timestamp)
 	defer iter.Close()
-	for iter.Reset(args.Key, args.EndKey); iter.Valid(); iter.Next() {
+	for iter.Seek(engine.MakeMVCCMetadataKey(args.Key)); ; iter.NextKey() {
+		ok, err := iter.Valid()
+		if err != nil {
+			// The error may be a WriteIntentError. In which case, returning it will
+			// cause this command to be retried.
+			return storage.EvalResult{}, err
+		}
+		if !ok || iter.UnsafeKey().Key.Compare(args.EndKey) >= 0 {
+			break
+		}
+
 		if log.V(3) {
 			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
 			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
@@ -157,11 +167,6 @@ func evalExport(
 		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
 			return storage.EvalResult{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
 		}
-	}
-	if err := iter.Error(); err != nil {
-		// The error may be a WriteIntentError. In which case, returning it will
-		// cause this command to be retried.
-		return storage.EvalResult{}, err
 	}
 
 	if sst.DataSize == 0 {

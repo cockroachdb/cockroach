@@ -1138,26 +1138,37 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
 
-	var ts string
-	var rowCount int64
+	var beforeTs, equalTs string
+	var rowCount int
 
-	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts)
-	sqlDB.Exec(`TRUNCATE data.bank`)
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
+	sqlDB.Exec(`BEGIN`)
+	sqlDB.Exec(`DELETE FROM data.bank`)
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&equalTs)
+	sqlDB.Exec(`COMMIT`)
 
 	sqlDB.QueryRow(`SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
-	if rowCount != 0 {
-		t.Fatalf("expected 0 rows but found %d", rowCount)
+	if expected := 0; rowCount != expected {
+		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
 
-	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, dir, ts))
+	beforeDir := filepath.Join(dir, `beforeTs`)
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, beforeDir, beforeTs))
+	equalDir := filepath.Join(dir, `equalTs`)
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, equalDir, equalTs))
 
 	sqlDB.Exec(`DROP TABLE data.bank`)
-
-	sqlDB.Exec(`RESTORE data.* FROM $1`, dir)
-
+	sqlDB.Exec(`RESTORE data.* FROM $1`, beforeDir)
 	sqlDB.QueryRow(`SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
-	if rowCount != numAccounts {
-		t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
+	if expected := numAccounts; rowCount != expected {
+		t.Fatalf("expected %d rows but found %d", expected, rowCount)
+	}
+
+	sqlDB.Exec(`DROP TABLE data.bank`)
+	sqlDB.Exec(`RESTORE data.* FROM $1`, equalDir)
+	sqlDB.QueryRow(`SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
+	if expected := 0; rowCount != expected {
+		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
 }
 
