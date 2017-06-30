@@ -119,7 +119,6 @@ func TestImport(t *testing.T) {
 	})
 	t.Run("AddSSTable", func(t *testing.T) {
 		defer settings.TestingSetBool(&AddSSTableEnabled, true)()
-		defer storage.TestingSetDisableSnapshotClearRange(true)()
 		t.Run("batch=default", runTestImport)
 		t.Run("batch=1", func(t *testing.T) {
 			// The test normally doesn't trigger the batching behavior, so lower

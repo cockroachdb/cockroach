@@ -215,9 +215,7 @@ func TestBackupRestoreLocal(t *testing.T) {
 
 func TestBackupRestoreAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	defer settings.TestingSetBool(&storageccl.AddSSTableEnabled, true)()
-	defer storage.TestingSetDisableSnapshotClearRange(true)()
 
 	const numAccounts = 1000
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)

@@ -41,7 +41,6 @@ func singleKVSSTable(key engine.MVCCKey, value []byte) ([]byte, error) {
 
 func TestDBAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer storage.TestingSetDisableSnapshotClearRange(true)()
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	ctx := context.Background()
@@ -119,7 +118,6 @@ func TestDBAddSSTable(t *testing.T) {
 
 func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer storage.TestingSetDisableSnapshotClearRange(true)()
 
 	ctx := context.Background()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
