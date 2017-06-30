@@ -2015,6 +2015,8 @@ func canStayInFirstBatchState(stmt Statement) bool {
 	return isBegin(stmt) ||
 		isSavepoint(stmt) ||
 		isSetTransaction(stmt) ||
+		// Parallelized statements don't return results to clients, by definition.
+		IsStmtParallelized(stmt) ||
 		// ROLLBACK TO SAVEPOINT does its own state transitions; if it leave the
 		// transaction in the FirstBatch state, don't mess with it.
 		isRollbackToSavepoint(stmt)

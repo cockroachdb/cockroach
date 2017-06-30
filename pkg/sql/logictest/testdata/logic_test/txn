@@ -624,6 +624,18 @@ statement ok
 ROLLBACK
 
 
+# Parallelized statements doesn't prevent automatic retries of the first batch.
+# Restore when #16827 is fixed.
+# statement ok
+# BEGIN TRANSACTION; INSERT INTO kv (k,v) VALUES ('x', 'b') RETURNING NOTHING;
+#
+# statement ok
+# SELECT 1; SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+#
+# statement ok
+# ROLLBACK
+
+
 # General savepoints
 statement ok
 BEGIN TRANSACTION
