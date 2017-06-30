@@ -46,7 +46,7 @@ type virtualSchema struct {
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	schema   string
-	populate func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error
+	populate func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -97,13 +97,15 @@ type virtualTableEntry struct {
 	desc     *sqlbase.TableDescriptor
 }
 
+type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
+
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
 // where we can't guarantee it will be Close()d in case of error.
 func (e virtualTableEntry) getPlanInfo(
 	ctx context.Context,
-) (sqlbase.ResultColumns, nodeConstructor) {
+) (sqlbase.ResultColumns, virtualTableConstructor) {
 	var columns sqlbase.ResultColumns
 	for _, col := range e.desc.Columns {
 		columns = append(columns, sqlbase.ResultColumn{
@@ -112,10 +114,10 @@ func (e virtualTableEntry) getPlanInfo(
 		})
 	}
 
-	constructor := func(ctx context.Context, p *planner) (planNode, error) {
+	constructor := func(ctx context.Context, p *planner, prefix string) (planNode, error) {
 		v := p.newContainerValuesNode(columns, 0)
 
-		err := e.tableDef.populate(ctx, p, func(datums ...parser.Datum) error {
+		err := e.tableDef.populate(ctx, p, prefix, func(datums ...parser.Datum) error {
 			if r, c := len(datums), len(v.columns); r != c {
 				panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
 			}

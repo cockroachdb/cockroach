@@ -53,7 +53,7 @@ CREATE TABLE crdb_internal.node_build_info (
   value   STRING NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		node := p.ExecCfg().NodeInfo
 
 		nodeID := parser.NewDInt(parser.DInt(int64(node.NodeID.Get())))
@@ -95,7 +95,7 @@ CREATE TABLE crdb_internal.tables (
   create_table             STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		descs, err := getAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
@@ -165,7 +165,7 @@ CREATE TABLE crdb_internal.schema_changes (
   direction     STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		descs, err := getAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
@@ -223,7 +223,7 @@ CREATE TABLE crdb_internal.leases (
   deleted     BOOL NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		leaseMgr := p.LeaseMgr()
 		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
 
@@ -287,7 +287,7 @@ CREATE TABLE crdb_internal.jobs (
 	error              STRING
 );
 `,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		rows, err := p.queryRows(ctx, `SELECT id, status, created, payload FROM system.jobs`)
 		if err != nil {
 			return err
@@ -372,7 +372,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   overhead_lat_var    FLOAT NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		if p.session.User != security.RootUser {
 			return errors.New("only root can access application statistics")
 		}
@@ -477,7 +477,7 @@ CREATE TABLE crdb_internal.session_trace(
   message     STRING NOT NULL      -- The logged message.
 );
 `,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		rows, err := p.session.Tracing.generateSessionTraceVTable()
 		if err != nil {
 			return err

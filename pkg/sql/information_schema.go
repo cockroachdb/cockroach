@@ -115,8 +115,8 @@ CREATE TABLE information_schema.columns (
 	DATETIME_PRECISION INT
 );
 `,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			// Table descriptors already holds columns in-order.
 			visible := 0
 			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
@@ -175,8 +175,8 @@ CREATE TABLE information_schema.key_column_usage (
 	ORDINAL_POSITION INT NOT NULL DEFAULT 0,
 	POSITION_IN_UNIQUE_CONSTRAINT INT
 );`,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, func(
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
 			db *sqlbase.DatabaseDescriptor,
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
@@ -230,7 +230,7 @@ CREATE TABLE information_schema.schemata (
 	DEFAULT_CHARACTER_SET_NAME STRING NOT NULL DEFAULT '',
 	SQL_PATH STRING
 );`,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
 				defString,                  // catalog_name
@@ -252,7 +252,7 @@ CREATE TABLE information_schema.schema_privileges (
 	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );
 `,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.Privileges.Show() {
 				for _, privilege := range u.Privileges {
@@ -305,8 +305,8 @@ CREATE TABLE information_schema.statistics (
 	STORING BOOL NOT NULL DEFAULT FALSE,
 	IMPLICIT BOOL NOT NULL DEFAULT FALSE
 );`,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			appendRow := func(index *sqlbase.IndexDescriptor, colName string, sequence int,
 				direction parser.Datum, isStored, isImplicit bool,
 			) error {
@@ -390,8 +390,8 @@ CREATE TABLE information_schema.table_constraints (
 	TABLE_NAME STRING NOT NULL DEFAULT '',
 	CONSTRAINT_TYPE STRING NOT NULL DEFAULT ''
 );`,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, func(
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
 			db *sqlbase.DatabaseDescriptor,
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
@@ -426,7 +426,7 @@ CREATE TABLE information_schema.user_privileges (
 	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
 	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );`,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		grantee := parser.NewDString(security.RootUser)
 		for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
 			if err := addRow(
@@ -455,8 +455,8 @@ CREATE TABLE information_schema.table_privileges (
 	WITH_HIERARCHY BOOL NOT NULL DEFAULT FALSE
 );
 `,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			for _, u := range table.Privileges.Show() {
 				for _, privilege := range u.Privileges {
 					if err := addRow(
@@ -493,8 +493,8 @@ CREATE TABLE information_schema.tables (
 	TABLE_TYPE STRING NOT NULL DEFAULT '',
 	VERSION INT
 );`,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			tableType := tableTypeBaseTable
 			if isVirtualDescriptor(table) {
 				tableType = tableTypeSystemView
@@ -526,8 +526,8 @@ CREATE TABLE information_schema.views (
     IS_TRIGGER_DELETABLE BOOL NOT NULL DEFAULT FALSE,
     IS_TRIGGER_INSERTABLE_INTO BOOL NOT NULL DEFAULT FALSE
 );`,
-	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			if !table.IsView() {
 				return nil
 			}
@@ -599,9 +599,10 @@ func forEachDatabaseDesc(
 func forEachTableDesc(
 	ctx context.Context,
 	p *planner,
+	prefix string,
 	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
 ) error {
-	return forEachTableDescWithTableLookup(ctx, p, func(
+	return forEachTableDescWithTableLookup(ctx, p, prefix, func(
 		db *sqlbase.DatabaseDescriptor,
 		table *sqlbase.TableDescriptor,
 		_ tableLookupFn,
@@ -639,9 +640,13 @@ func isSystemDatabaseName(name string) bool {
 // tableLookupFn when calling fn to allow callers to lookup fetched table descriptors
 // on demand. This is important for callers dealing with objects like foreign keys, where
 // the metadata for each object must be augmented by looking at the referenced table.
+// The prefix argument specifies in which database context we are requesting the descriptors.
+// In context "" all descriptors are visible, in non-empty contexts only the descriptors
+// of that database are visible.
 func forEachTableDescWithTableLookup(
 	ctx context.Context,
 	p *planner,
+	prefix string,
 	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor, tableLookupFn) error,
 ) error {
 	type dbDescTables struct {
@@ -716,7 +721,7 @@ func forEachTableDescWithTableLookup(
 	}
 	sort.Strings(dbNames)
 	for _, dbName := range dbNames {
-		if !p.isDatabaseVisible(dbName) {
+		if !isDatabaseVisible(dbName, prefix, p.session.User) {
 			continue
 		}
 		db := databases[dbName]
