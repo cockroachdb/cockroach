@@ -367,7 +367,7 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 	// is draining and the session does not have an ongoing transaction.
 	c.conn = newReadTimeoutConn(c.conn, func() error {
 		if err := func() error {
-			if draining() && c.session.TxnState.State == sql.NoTxn {
+			if draining() && c.session.TxnState.State() == sql.NoTxn {
 				return errors.New(ErrDraining)
 			}
 			return c.session.Ctx().Err()
@@ -382,7 +382,7 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 		if !c.doingExtendedQueryMessage && !c.doNotSendReadyForQuery {
 			c.writeBuf.initMsg(serverMsgReady)
 			var txnStatus byte
-			switch c.session.TxnState.State {
+			switch c.session.TxnState.State() {
 			case sql.Aborted, sql.RestartWait:
 				// We send status "InFailedTransaction" also for state RestartWait
 				// because GO's lib/pq freaks out if we invent a new status.
