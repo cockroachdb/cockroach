@@ -165,7 +165,7 @@ func runIterate(
 
 func BenchmarkTimeBoundIterate(b *testing.B) {
 	for _, loadFactor := range []float32{1.0, 0.5, 0.1, 0.05, 0.0} {
-		b.Run(fmt.Sprintf("LoadFactor%.2f", loadFactor), func(b *testing.B) {
+		b.Run(fmt.Sprintf("LoadFactor=%.2f", loadFactor), func(b *testing.B) {
 			b.Run("NormalIterator", func(b *testing.B) {
 				runIterate(b, loadFactor, func(e engine.Engine, _, _ hlc.Timestamp) engine.Iterator {
 					return e.NewIterator(false)
