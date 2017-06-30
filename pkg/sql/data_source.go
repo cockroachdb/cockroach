@@ -823,5 +823,5 @@ func (src *dataSourceInfo) FormatVar(buf *bytes.Buffer, f parser.FmtFlags, colId
 			buf.WriteString("_.")
 		}
 	}
-	buf.WriteString(src.sourceColumns[colIdx].Name)
+	parser.Name(src.sourceColumns[colIdx].Name).Format(buf, f)
 }
