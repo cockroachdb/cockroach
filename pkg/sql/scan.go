@@ -378,8 +378,8 @@ func (n *scanNode) IndexedVarResolvedType(idx int) parser.Type {
 	return n.resultColumns[idx].Typ
 }
 
-func (n *scanNode) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags, idx int) {
-	buf.WriteString(n.resultColumns[idx].Name)
+func (n *scanNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	parser.Name(n.resultColumns[idx].Name).Format(buf, f)
 }
 
 // scanVisibility represents which table columns should be included in a scan.

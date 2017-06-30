@@ -38,3 +38,14 @@ CREATE TABLE unused3(x INT, y INT, FAMILY woo " (x, y, "welp INT); -- concerning
 DROP USER dumpty;
 CREATE TABLE unused (x ")
 ) INTERLEAVE IN PARENT "woo; DROP USER humpty;" (x)
+
+# Check that view creates handle strange things properly.
+statement ok
+CREATE VIEW ";--alsoconcerning" AS SELECT @1, @2, @3 FROM ";--notbetter"
+
+query TT
+SHOW CREATE VIEW ";--alsoconcerning"
+----
+";--alsoconcerning"  CREATE VIEW ";--alsoconcerning" ("@1", "@2", "@3") AS SELECT x, y, "welp INT); -- concerning much
+DROP USER dumpty;
+CREATE TABLE unused (x " FROM test.";--notbetter"
