@@ -200,7 +200,7 @@ func MakeRowInserter(
 // insertCPutFn is used by insertRow when conflicts (i.e. the key already exists)
 // should generate errors.
 func insertCPutFn(
-	ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
 ) {
 	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
 	// client.Batch wrapper instead of inlining it everywhere.
@@ -212,7 +212,7 @@ func insertCPutFn(
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
 func insertPutFn(
-	ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
 ) {
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", *key, value.PrettyPrint())
@@ -220,7 +220,7 @@ func insertPutFn(
 	b.Put(key, value)
 }
 
-type puter interface {
+type putter interface {
 	CPut(key, value, expValue interface{})
 	Put(key, value interface{})
 }
@@ -228,7 +228,7 @@ type puter interface {
 // InsertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
 func (ri *RowInserter) InsertRow(
-	ctx context.Context, b puter, values []parser.Datum, ignoreConflicts bool, traceKV bool,
+	ctx context.Context, b putter, values []parser.Datum, ignoreConflicts bool, traceKV bool,
 ) error {
 	if len(values) != len(ri.InsertCols) {
 		return errors.Errorf("got %d values but expected %d", len(values), len(ri.InsertCols))
