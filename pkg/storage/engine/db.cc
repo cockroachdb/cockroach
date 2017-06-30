@@ -1528,7 +1528,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Enable subcompactions which will use multiple threads to speed up
   // a single compaction. The value of num_cpu/2 has not been tuned.
   options.max_subcompactions = std::max(db_opts.num_cpu / 2, 1);
-  options.use_direct_writes = db_opts.use_direct_writes;
+  options.use_direct_io_for_flush_and_compaction = db_opts.use_direct_writes;
   options.WAL_ttl_seconds = db_opts.wal_ttl_seconds;
   options.comparator = &kComparator;
   options.create_if_missing = true;
@@ -2407,7 +2407,7 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
 }
 
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
-  rocksdb::Status status = fw->rep.Add(EncodeKey(key), ToSlice(val));
+  rocksdb::Status status = fw->rep.Put(EncodeKey(key), ToSlice(val));
   if (!status.ok()) {
     return ToDBStatus(status);
   }
