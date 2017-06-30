@@ -280,29 +280,33 @@ func BenchmarkKV(b *testing.B) {
 	} {
 		opName := runtime.FuncForPC(reflect.ValueOf(opFn).Pointer()).Name()
 		opName = strings.TrimPrefix(opName, "github.com/cockroachdb/cockroach/pkg/sql_test.kvInterface.")
-		for _, rows := range []int{1, 10, 100, 1000, 10000} {
+		b.Run(opName, func(b *testing.B) {
 			for _, kvFn := range []func(*testing.B) kvInterface{
 				newKVNative,
 				newKVSQL,
 			} {
 				kvTyp := runtime.FuncForPC(reflect.ValueOf(kvFn).Pointer()).Name()
 				kvTyp = strings.TrimPrefix(kvTyp, "github.com/cockroachdb/cockroach/pkg/sql_test.newKV")
-				b.Run(fmt.Sprintf("%s%d_%s", opName, rows, kvTyp), func(b *testing.B) {
-					kv := kvFn(b)
-					defer kv.done()
+				b.Run(kvTyp, func(b *testing.B) {
+					for _, rows := range []int{1, 10, 100, 1000, 10000} {
+						b.Run(fmt.Sprintf("rows=%d", rows), func(b *testing.B) {
+							kv := kvFn(b)
+							defer kv.done()
 
-					if err := kv.prep(rows, i != 0 /* Insert */ && i != 2 /* Delete */); err != nil {
-						b.Fatal(err)
+							if err := kv.prep(rows, i != 0 /* Insert */ && i != 2 /* Delete */); err != nil {
+								b.Fatal(err)
+							}
+							b.ResetTimer()
+							for i := 0; i < b.N; i++ {
+								if err := opFn(kv, rows, i); err != nil {
+									b.Fatal(err)
+								}
+							}
+							b.StopTimer()
+						})
 					}
-					b.ResetTimer()
-					for i := 0; i < b.N; i++ {
-						if err := opFn(kv, rows, i); err != nil {
-							b.Fatal(err)
-						}
-					}
-					b.StopTimer()
 				})
 			}
-		}
+		})
 	}
 }
