@@ -23,11 +23,13 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -39,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -132,11 +133,17 @@ func NewServer(ctx *Context) *grpc.Server {
 	return s
 }
 
+// errValue is used to allow storing an error in an atomic.Value which does not
+// support storing a nil interface.
+type errValue struct {
+	error
+}
+
 type connMeta struct {
 	sync.Once
 	conn         *grpc.ClientConn
 	dialErr      error
-	heartbeatErr error
+	heartbeatErr atomic.Value
 }
 
 // Context contains the fields required by the rpc framework.
@@ -158,10 +165,7 @@ type Context struct {
 
 	localInternalServer roachpb.InternalServer
 
-	conns struct {
-		syncutil.Mutex
-		cache map[string]*connMeta
-	}
+	conns syncmap.Map
 
 	// For unittesting.
 	BreakerFactory func() *circuit.Breaker
@@ -190,14 +194,13 @@ func NewContext(
 		ctx.LocalClock, 10*defaultHeartbeatInterval, baseCtx.HistogramWindowInterval)
 	ctx.heartbeatInterval = defaultHeartbeatInterval
 	ctx.heartbeatTimeout = 2 * defaultHeartbeatInterval
-	ctx.conns.cache = make(map[string]*connMeta)
 
 	stopper.RunWorker(ctx.masterCtx, func(context.Context) {
 		<-stopper.ShouldQuiesce()
 
 		cancel()
-		ctx.conns.Lock()
-		for key, meta := range ctx.conns.cache {
+		ctx.conns.Range(func(k, v interface{}) bool {
+			meta := v.(*connMeta)
 			meta.Do(func() {
 				// Make sure initialization is not in progress when we're removing the
 				// conn. We need to set the error in case we win the race against the
@@ -206,9 +209,9 @@ func NewContext(
 					meta.dialErr = &roachpb.NodeUnavailableError{}
 				}
 			})
-			ctx.removeConnLocked(key, meta)
-		}
-		ctx.conns.Unlock()
+			ctx.removeConn(k.(string), meta)
+			return true
+		})
 	})
 
 	return ctx
@@ -229,12 +232,7 @@ func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer
 }
 
 func (ctx *Context) removeConn(key string, meta *connMeta) {
-	ctx.conns.Lock()
-	ctx.removeConnLocked(key, meta)
-	ctx.conns.Unlock()
-}
-
-func (ctx *Context) removeConnLocked(key string, meta *connMeta) {
+	ctx.conns.Delete(key)
 	if log.V(1) {
 		log.Infof(ctx.masterCtx, "closing %s", key)
 	}
@@ -245,21 +243,18 @@ func (ctx *Context) removeConnLocked(key string, meta *connMeta) {
 			}
 		}
 	}
-	delete(ctx.conns.cache, key)
 }
 
 // GRPCDial calls grpc.Dial with the options appropriate for the context.
 func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	ctx.conns.Lock()
-	meta, ok := ctx.conns.cache[target]
+	value, ok := ctx.conns.Load(target)
 	if !ok {
-		meta = &connMeta{
-			heartbeatErr: ErrNotHeartbeated,
-		}
-		ctx.conns.cache[target] = meta
+		meta := &connMeta{}
+		meta.heartbeatErr.Store(errValue{ErrNotHeartbeated})
+		value, _ = ctx.conns.LoadOrStore(target, meta)
 	}
-	ctx.conns.Unlock()
 
+	meta := value.(*connMeta)
 	meta.Do(func() {
 		var dialOpt grpc.DialOption
 		if ctx.Insecure {
@@ -371,10 +366,8 @@ var ErrNotHeartbeated = errors.New("not yet heartbeated")
 // This should not be used as a definite status of a node's health and just used
 // to prioritize healthy nodes over unhealthy ones.
 func (ctx *Context) ConnHealth(remoteAddr string) error {
-	ctx.conns.Lock()
-	defer ctx.conns.Unlock()
-	if meta, ok := ctx.conns.cache[remoteAddr]; ok {
-		return meta.heartbeatErr
+	if value, ok := ctx.conns.Load(remoteAddr); ok {
+		return value.(*connMeta).heartbeatErr.Load().(errValue).error
 	}
 	return ErrNotConnected
 }
@@ -413,9 +406,7 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 		if cancel != nil {
 			cancel()
 		}
-		ctx.conns.Lock()
-		meta.heartbeatErr = err
-		ctx.conns.Unlock()
+		meta.heartbeatErr.Store(errValue{err})
 
 		// HACK: work around https://github.com/grpc/grpc-go/issues/1026
 		// Getting a "connection refused" error from the "write" system call
