@@ -374,7 +374,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 
 					// Create a new IndexedVar with the next available index.
 					idx := len(n.aggContainer.idxMap)
-					aggIVar := parser.NewOrdinalReference(idx)
+					aggIVar := parser.NewIndexedVar(idx)
 					aggIVars[colIdx] = aggIVar
 					n.aggContainer.idxMap[idx] = colIdx
 					n.aggContainer.aggFuncs[idx] = t
@@ -397,9 +397,14 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 		// an IndexedVarHelper and bind each of the corresponding IndexedVars to
 		// the helper.
 		aggHelper := parser.MakeIndexedVarHelper(&n.aggContainer, len(aggIVars))
-		for _, aggIVar := range aggIVars {
-			if err := aggHelper.BindIfUnbound(aggIVar); err != nil {
+		for _, ivar := range aggIVars {
+			// The ivars above have been created with a nil container, and
+			// therefore they are guaranteed to be modified in-place by
+			// BindIfUnbound().
+			if newIvar, err := aggHelper.BindIfUnbound(ivar); err != nil {
 				panic(err)
+			} else if newIvar != ivar {
+				panic(fmt.Sprintf("unexpected binding: %v, expected: %v", newIvar, ivar))
 			}
 		}
 	}
