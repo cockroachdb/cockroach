@@ -23,14 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 )
 
 func BenchmarkAddSSTable(b *testing.B) {
-	defer storage.TestingSetDisableSnapshotClearRange(true)()
 	tempDir, dirCleanupFn := testutils.TempDir(b)
 	defer dirCleanupFn()
 
@@ -139,7 +137,6 @@ func BenchmarkWriteBatch(b *testing.B) {
 func BenchmarkImport(b *testing.B) {
 	b.Run("AddSSTable", func(b *testing.B) {
 		defer settings.TestingSetBool(&storageccl.AddSSTableEnabled, true)()
-		defer storage.TestingSetDisableSnapshotClearRange(true)()
 		runBenchmarkImport(b)
 	})
 	b.Run("WriteBatch", func(b *testing.B) {
