@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -487,11 +488,11 @@ func (s *Session) Finish(e *Executor) {
 	_ = s.parallelizeQueue.Wait()
 
 	// If we're inside a txn, roll it back.
-	if s.TxnState.State.kvTxnIsOpen() {
+	if s.TxnState.State().kvTxnIsOpen() {
 		s.TxnState.updateStateAndCleanupOnErr(
 			errors.Errorf("session closing"), e)
 	}
-	if s.TxnState.State != NoTxn {
+	if s.TxnState.State() != NoTxn {
 		s.TxnState.finishSQLTxn(s)
 	}
 
@@ -565,7 +566,7 @@ func (s *Session) EmergencyClose() {
 // active transaction (an example is when we want to log an event to the session
 // event log); in that case s.context should be used directly.
 func (s *Session) Ctx() context.Context {
-	if s.TxnState.State != NoTxn {
+	if s.TxnState.State() != NoTxn {
 		return s.TxnState.Ctx
 	}
 	return s.context
@@ -721,7 +722,7 @@ func (s *Session) serialize() serverpb.Session {
 }
 
 // TxnStateEnum represents the state of a SQL txn.
-type TxnStateEnum int
+type TxnStateEnum int64
 
 //go:generate stringer -type=TxnStateEnum
 const (
@@ -754,7 +755,14 @@ func (s TxnStateEnum) kvTxnIsOpen() bool {
 // For interactive transactions (open across batches of SQL commands sent by a
 // user), txnState is intended to be stored as part of a user Session.
 type txnState struct {
-	State TxnStateEnum
+	// state is read and written to atomically because it can be updated
+	// concurrently with the execution of statements in the parallelizeQueue.
+	// Access with State() / SetState().
+	//
+	// NOTE: Only state updates that are inconsequential to statement execution
+	// are allowed concurrently with the execution of the parallizeQueue (e.g.
+	// Open->FirstBatch).
+	state TxnStateEnum
 
 	// Mutable fields accessed from goroutines not synchronized by this txn's session,
 	// such as when a SHOW SESSIONS statement is executed on another session.
@@ -808,6 +816,16 @@ type txnState struct {
 	// host this here instead of TxnState because TxnState is
 	// fully reset upon each call to resetForNewSQLTxn().
 	mon mon.MemoryMonitor
+}
+
+// State returns the current state of the session.
+func (ts *txnState) State() TxnStateEnum {
+	return TxnStateEnum(atomic.LoadInt64((*int64)(&ts.state)))
+}
+
+// SetState updates the state of the session.
+func (ts *txnState) SetState(val TxnStateEnum) {
+	atomic.StoreInt64((*int64)(&ts.state), int64(val))
 }
 
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
@@ -893,7 +911,7 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	ts.sp = sp
 	ts.Ctx = ctx
-	ts.State = Open
+	ts.SetState(Open)
 	s.Tracing.onNewSQLTxn(ts.sp)
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
@@ -934,7 +952,7 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 			"attempting to move SQL txn to state %v inconsistent with KV txn state: %s "+
 				"(finalized: false)", state, ts.mu.txn.Proto().Status))
 	}
-	ts.State = state
+	ts.SetState(state)
 	ts.mu.Lock()
 	ts.mu.txn = nil
 	ts.mu.Unlock()
@@ -993,7 +1011,7 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 		// If we got a retriable error, move the SQL txn to the RestartWait state.
 		// Note that TransactionAborted is also a retriable error, handled here;
 		// in this case cleanup for the txn has been done for us under the hood.
-		ts.State = RestartWait
+		ts.SetState(RestartWait)
 	}
 }
 
