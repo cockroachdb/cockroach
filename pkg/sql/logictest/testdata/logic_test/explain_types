@@ -86,10 +86,10 @@ query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
 ----
 0  render                                                                                          (z int, v int)
-0          render 0     ((2)[int] * (count(k))[int])[int]
+0          render 0     ((2)[int] * ("count(k)")[int])[int]
 0          render 1     (v)[int]
 1  filter                                                                                          (v int, "count(k)" int, "count(k)" int, v int)
-1          filter       ((count(k))[int] > (1)[int])[bool]
+1          filter       (("count(k)")[int] > (1)[int])[bool]
 2  group                                                                                           (v int, "count(k)" int, "count(k)" int, v int)
 2          aggregate 0  (v)[int]
 2          aggregate 1  (count((k)[int]))[int]
@@ -106,20 +106,20 @@ EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v
 query ITTTTT
 EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
 ----
-0  render                                                   (z int, v int)
-0          render 0     ((2)[int] * (count(k))[int])[int]
+0  render                                                     (z int, v int)
+0          render 0     ((2)[int] * ("count(k)")[int])[int]
 0          render 1     (v)[int]
-1  filter                                                   (v int, "count(k)" int, "count(k)" int, v int)
-1          filter       ((count(k))[int] > (1)[int])[bool]
-2  group                                                    (v int, "count(k)" int, "count(k)" int, v int)
+1  filter                                                     (v int, "count(k)" int, "count(k)" int, v int)
+1          filter       (("count(k)")[int] > (1)[int])[bool]
+2  group                                                      (v int, "count(k)" int, "count(k)" int, v int)
 2          aggregate 0  (v)[int]
 2          aggregate 1  (count((k)[int]))[int]
 2          aggregate 2  (count((k)[int]))[int]
 2          aggregate 3  (v)[int]
-3  render                                                   (v int, k int)
+3  render                                                     (v int, k int)
 3          render 0     (v)[int]
 3          render 1     (k)[int]
-4  empty                                                    ()
+4  empty                                                      ()
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) DELETE FROM t WHERE v > 1
