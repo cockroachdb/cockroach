@@ -470,7 +470,9 @@ func backupPlanHook(
 		return nil, nil, nil
 	}
 
-	if err := utilccl.CheckEnterpriseEnabled(p.ExecCfg().ClusterID(), "BACKUP"); err != nil {
+	if err := utilccl.CheckEnterpriseEnabled(
+		p.ExecCfg().ClusterID(), p.ExecCfg().Organization.Get(), "BACKUP",
+	); err != nil {
 		return nil, nil, err
 	}
 
@@ -576,7 +578,9 @@ func showBackupPlanHook(
 		return nil, nil, nil
 	}
 
-	if err := utilccl.CheckEnterpriseEnabled(p.ExecCfg().ClusterID(), "SHOW BACKUP"); err != nil {
+	if err := utilccl.CheckEnterpriseEnabled(
+		p.ExecCfg().ClusterID(), p.ExecCfg().Organization.Get(), "SHOW BACKUP",
+	); err != nil {
 		return nil, nil, err
 	}
 
