@@ -9,6 +9,7 @@
 package storageccl_test
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -33,14 +34,14 @@ func BenchmarkAddSSTable(b *testing.B) {
 	defer dirCleanupFn()
 
 	for _, numEntries := range []int{100, 1000, 10000} {
-		bankData := sampledataccl.BankRows(numEntries)
-		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
-		backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
-		if err != nil {
-			b.Fatalf("%+v", err)
-		}
+		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
+			bankData := sampledataccl.BankRows(numEntries)
+			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
+			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			if err != nil {
+				b.Fatalf("%+v", err)
+			}
 
-		b.Run(strconv.Itoa(numEntries), func(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
@@ -91,14 +92,14 @@ func BenchmarkWriteBatch(b *testing.B) {
 	defer dirCleanupFn()
 
 	for _, numEntries := range []int{100, 1000, 10000} {
-		bankData := sampledataccl.BankRows(numEntries)
-		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
-		backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
-		if err != nil {
-			b.Fatalf("%+v", err)
-		}
+		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
+			bankData := sampledataccl.BankRows(numEntries)
+			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
+			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			if err != nil {
+				b.Fatalf("%+v", err)
+			}
 
-		b.Run(strconv.Itoa(numEntries), func(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
@@ -150,18 +151,18 @@ func runBenchmarkImport(b *testing.B) {
 	defer dirCleanupFn()
 
 	for _, numEntries := range []int{1, 100, 10000, 100000} {
-		bankData := sampledataccl.BankRows(numEntries)
-		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
-		backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
-		if err != nil {
-			b.Fatalf("%+v", err)
-		}
-		storage, err := storageccl.ExportStorageConfFromURI(`nodelocal://` + backupDir)
-		if err != nil {
-			b.Fatalf("%+v", err)
-		}
+		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
+			bankData := sampledataccl.BankRows(numEntries)
+			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
+			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			if err != nil {
+				b.Fatalf("%+v", err)
+			}
+			storage, err := storageccl.ExportStorageConfFromURI(`nodelocal://` + backupDir)
+			if err != nil {
+				b.Fatalf("%+v", err)
+			}
 
-		b.Run(strconv.Itoa(numEntries), func(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
