@@ -391,7 +391,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
 %token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPLAIN EXTRACT EXTRACT_DURATION
 
-%token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOORDIV FOLLOWING FOR
+%token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR
 %token <str>   FORCE_INDEX FOREIGN FROM FULL
 
 %token <str>   GRANT GRANTS GREATEST GROUP GROUPING
@@ -400,7 +400,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %token <str>   INCREMENTAL IF IFNULL ILIKE IN INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
-%token <str>   INNER INSERT INT INT2VECTOR INT8 INT64 INTEGER
+%token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
 %token <str>   JOB JOBS JOIN
@@ -3635,6 +3635,14 @@ numeric:
   {
     $$.val = intColTypeInt
   }
+| INT2
+    {
+      $$.val = intColTypeInt2
+    }
+| INT4
+  {
+    $$.val = intColTypeInt4
+  }
 | INT8
   {
     $$.val = intColTypeInt8
@@ -3659,6 +3667,14 @@ numeric:
   {
     $$.val = floatColTypeReal
   }
+| FLOAT4
+    {
+      $$.val = floatColTypeFloat4
+    }
+| FLOAT8
+    {
+      $$.val = floatColTypeFloat8
+    }
 | FLOAT opt_float
   {
     nv := $2.numVal()
@@ -5535,11 +5551,15 @@ col_name_keyword:
 | EXTRACT
 | EXTRACT_DURATION
 | FLOAT
+| FLOAT4
+| FLOAT8
 | GREATEST
 | GROUPING
 | IF
 | IFNULL
 | INT
+| INT2
+| INT4
 | INT8
 | INT64
 | INTEGER
