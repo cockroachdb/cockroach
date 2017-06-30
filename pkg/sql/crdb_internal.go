@@ -30,8 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+const crdbInternalName = "crdb_internal"
+
 var crdbInternal = virtualSchema{
-	name: "crdb_internal",
+	name: crdbInternalName,
 	tables: []virtualSchemaTable{
 		crdbInternalBuildInfoTable,
 		crdbInternalTablesTable,

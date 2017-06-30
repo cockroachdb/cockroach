@@ -628,6 +628,7 @@ func isSystemDatabaseName(name string) bool {
 	case informationSchemaName:
 	case pgCatalogName:
 	case sqlbase.SystemDB.Name:
+	case crdbInternalName:
 	default:
 		return false
 	}
