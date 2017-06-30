@@ -94,12 +94,14 @@ func (node *BoolColType) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // Pre-allocated immutable integer column types.
 var (
-	intColTypeBit         = &IntColType{Name: "BIT", N: 1, ImplicitWidth: true}
+	intColTypeBit         = &IntColType{Name: "BIT", Width: 1, ImplicitWidth: true}
 	intColTypeInt         = &IntColType{Name: "INT"}
+	intColTypeInt2        = &IntColType{Name: "INT2", Width: 16, ImplicitWidth: true}
+	intColTypeInt4        = &IntColType{Name: "INT4", Width: 32, ImplicitWidth: true}
 	intColTypeInt8        = &IntColType{Name: "INT8"}
 	intColTypeInt64       = &IntColType{Name: "INT64"}
 	intColTypeInteger     = &IntColType{Name: "INTEGER"}
-	intColTypeSmallInt    = &IntColType{Name: "SMALLINT"}
+	intColTypeSmallInt    = &IntColType{Name: "SMALLINT", Width: 16, ImplicitWidth: true}
 	intColTypeBigInt      = &IntColType{Name: "BIGINT"}
 	intColTypeSerial      = &IntColType{Name: "SERIAL"}
 	intColTypeSmallSerial = &IntColType{Name: "SMALLSERIAL"}
@@ -108,25 +110,25 @@ var (
 
 var errBitLengthNotPositive = errors.New("length for type bit must be at least 1")
 
-func newIntBitType(n int) (*IntColType, error) {
-	if n < 1 {
+func newIntBitType(width int) (*IntColType, error) {
+	if width < 1 {
 		return nil, errBitLengthNotPositive
 	}
-	return &IntColType{Name: "BIT", N: n}, nil
+	return &IntColType{Name: "BIT", Width: width}, nil
 }
 
 // IntColType represents an INT, INTEGER, SMALLINT or BIGINT type.
 type IntColType struct {
 	Name          string
-	N             int
+	Width         int
 	ImplicitWidth bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *IntColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
-	if node.N > 0 && !node.ImplicitWidth {
-		fmt.Fprintf(buf, "(%d)", node.N)
+	if node.Width > 0 && !node.ImplicitWidth {
+		fmt.Fprintf(buf, "(%d)", node.Width)
 	}
 }
 
@@ -139,15 +141,18 @@ func (node *IntColType) IsSerial() bool {
 
 // Pre-allocated immutable float column types.
 var (
-	floatColTypeReal   = &FloatColType{Name: "REAL"}
-	floatColTypeFloat  = &FloatColType{Name: "FLOAT"}
-	floatColTypeDouble = &FloatColType{Name: "DOUBLE PRECISION"}
+	floatColTypeReal   = &FloatColType{Name: "REAL", Width: 32}
+	floatColTypeFloat  = &FloatColType{Name: "FLOAT", Width: 64}
+	floatColTypeFloat4 = &FloatColType{Name: "FLOAT4", Width: 32}
+	floatColTypeFloat8 = &FloatColType{Name: "FLOAT8", Width: 64}
+	floatColTypeDouble = &FloatColType{Name: "DOUBLE PRECISION", Width: 64}
 )
 
 // FloatColType represents a REAL, DOUBLE or FLOAT type.
 type FloatColType struct {
 	Name          string
 	Prec          int
+	Width         int
 	PrecSpecified bool // true if the value of Prec is not the default
 }
 
@@ -157,7 +162,7 @@ func NewFloatColType(prec int, precSpecified bool) *FloatColType {
 	if prec == 0 && !precSpecified {
 		return floatColTypeFloat
 	}
-	return &FloatColType{Name: "FLOAT", Prec: prec, PrecSpecified: precSpecified}
+	return &FloatColType{Name: "FLOAT", Width: 64, Prec: prec, PrecSpecified: precSpecified}
 }
 
 // Format implements the NodeFormatter interface.
