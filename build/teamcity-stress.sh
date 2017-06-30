@@ -9,23 +9,63 @@ exit_status=0
 
 build/builder.sh go install ./pkg/cmd/github-post
 
-build/builder.sh env \
-		 make stress \
-		 PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
-		 TESTTIMEOUT=30m TESTFLAGS='-test.v' \
-		 STRESSFLAGS='-maxtime 15m -maxfails 1 -stderr' \
-		 2>&1 \
-    | tee artifacts/stress.log \
-    || exit_status=$?
+build/builder.sh env COCKROACH_DEDICATED_RAFT_STORAGE=DISABLED \
+  make stress \
+  PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
+  TESTTIMEOUT=30m TESTFLAGS='-test.v' \
+  STRESSFLAGS='-maxtime 15m -maxfails 1 -stderr' \
+  2>&1 \
+  | tee artifacts/stress.log \
+  || exit_status=$?
 
 if [ $exit_status -ne 0 ]; then
-    build/builder.sh env \
-		     GITHUB_API_TOKEN="$GITHUB_API_TOKEN" \
-		     BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" \
-		     TC_BUILD_ID="$TC_BUILD_ID" \
-		     TC_SERVER_URL="$TC_SERVER_URL" \
-		     PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
-		     github-post < artifacts/stress.log
+  build/builder.sh env \
+    GITHUB_API_TOKEN="$GITHUB_API_TOKEN" \
+    BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" \
+    TC_BUILD_ID="$TC_BUILD_ID" \
+    TC_SERVER_URL="$TC_SERVER_URL" \
+    PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
+    github-post < artifacts/stress.log
+  exit $exit_status
 fi;
 
+build/builder.sh env COCKROACH_DEDICATED_RAFT_STORAGE=TRANSITIONING \
+  make stress \
+  PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
+  TESTTIMEOUT=30m TESTFLAGS='-test.v' \
+  STRESSFLAGS='-maxtime 15m -maxfails 1 -stderr' \
+  2>&1 \
+  | tee artifacts/stress.log \
+  || exit_status=$?
+
+if [ $exit_status -ne 0 ]; then
+  build/builder.sh env \
+    GITHUB_API_TOKEN="$GITHUB_API_TOKEN" \
+    BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" \
+    TC_BUILD_ID="$TC_BUILD_ID" \
+    TC_SERVER_URL="$TC_SERVER_URL" \
+    PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
+    github-post < artifacts/stress.log
+  exit $exit_status
+fi;
+
+build/builder.sh env COCKROACH_DEDICATED_RAFT_STORAGE=ENABLED \
+  make stress \
+  PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
+  TESTTIMEOUT=30m TESTFLAGS='-test.v' \
+  STRESSFLAGS='-maxtime 15m -maxfails 1 -stderr' \
+  2>&1 \
+  | tee artifacts/stress.log \
+  || exit_status=$?
+
+if [ $exit_status -ne 0 ]; then
+  build/builder.sh env \
+    GITHUB_API_TOKEN="$GITHUB_API_TOKEN" \
+    BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" \
+    TC_BUILD_ID="$TC_BUILD_ID" \
+    TC_SERVER_URL="$TC_SERVER_URL" \
+    PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
+    github-post < artifacts/stress.log
+  exit $exit_status
+fi;
 exit $exit_status
