@@ -183,6 +183,9 @@ oid         datname             datconnlimit  datlastsysoid  datfrozenxid  datmi
 
 ## pg_catalog.pg_tables
 
+statement ok
+SET DATABASE = constraint_db
+
 query TTTTBBBB colnames
 SELECT * FROM pg_catalog.pg_tables WHERE schemaname = 'constraint_db'
 ----
@@ -404,9 +407,9 @@ JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'constraint_db'
 ----
-oid         relname  adrelid     adnum  adbin          adsrc
-2737381215  t1       2876473678  4      12:::INT       12:::INT
-2989572986  t3       3211628798  3      'FOO':::STRING 'FOO':::STRING
+oid         relname  adrelid     adnum  adbin           adsrc
+2737381215  t1       2876473678  4      12:::INT        12:::INT
+2989572986  t3       3211628798  3      'FOO':::STRING  'FOO':::STRING
 
 ## pg_catalog.pg_indexes
 
@@ -937,6 +940,9 @@ extname  extowner  extnamespace  extrelocatable  extversion  extconfig  extcondi
 
 ## pg_catalog.pg_settings
 
+statement ok
+SET DATABASE = test
+
 query TTTTTT colnames
 SELECT name, setting, category, short_desc, extra_desc, vartype FROM pg_catalog.pg_settings
 ----
@@ -1021,6 +1027,9 @@ query T
 SELECT pg_catalog.pg_get_expr('1', 0, true)
 ----
 1
+
+statement ok
+SET DATABASE = constraint_db
 
 query OTT
 SELECT def.oid, c.relname, pg_catalog.pg_get_expr(def.adbin, def.adrelid)

@@ -256,19 +256,9 @@ CREATE DATABASE thirddb
 statement ok
 SET DATABASE = thirddb
 
-# Ensure that if there's no such table in the search path, but it still exists
-# in another database, the query fails.
+# Ensure that if the table is not in the current database, but it
+# still exists in another database, the query does fail (regclass
+# does not automatically search in other dbs, even for the root user).
 
 query error table "a" does not exist
 SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
-
-statement ok
-SET SEARCH_PATH = otherdb,test
-
-# Ensure that the search path is respected properly: the table named "a" from
-# otherdb should be selected.
-
-query OI
-SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
-----
-a  2
