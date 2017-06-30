@@ -28,7 +28,8 @@ import (
 
 // loadTestData writes numKeys keys in numBatches separate batches. Keys are
 // written in order. Every key in a given batch has the same MVCC timestamp;
-// batch timestamps start at 0 and increase in intervals of batchTimeSpan.
+// batch timestamps start at batchTimeSpan and increase in intervals of
+// batchTimeSpan.
 //
 // Importantly, writing keys in order convinces RocksDB to output one SST per
 // batch, where each SST contains keys of only one timestamp. E.g., writing A,B
