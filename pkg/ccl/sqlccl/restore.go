@@ -9,6 +9,8 @@
 package sqlccl
 
 import (
+	"runtime"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
@@ -515,11 +517,10 @@ func PresplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 		return nil
 	}
 
-	// 20 was picked because it's small enough that the 2tb restore acceptance
-	// test finishes smoothly on GCE and large enough that it only takes ~8
-	// minutes to presplit for a ~16000 range dataset.
-	// TODO(dan): See if there's some better solution #14798.
-	const splitsPerSecond, splitsBurst = 20, 1
+	// 100 was picked because it's small enough that a ~16000 presplit restore
+	// finishes smoothly on a 4-node azure production cluster. TODO(dan): See if
+	// there's some better solution #14798.
+	const splitsPerSecond, splitsBurst = 100, 1
 	limiter := rate.NewLimiter(splitsPerSecond, splitsBurst)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -786,14 +787,15 @@ func Restore(
 	// transfers, poor performance on SQL workloads, etc) as well as log spam
 	// about slow distsender requests. Rate limit them here, too.
 	//
-	// Use the number of nodes in the cluster as the number of outstanding
-	// Import requests for the rate limiting. TODO(dan): This is very
-	// conservative, see if we can bump it back up by rate limiting WriteBatch.
+	// Use the number of cpus accross all nodes in the cluster as the number of
+	// outstanding Import requests for the rate limiting. NB: this assumes all
+	// nodes in the cluster have the same number of cpus, but it's okay if
+	// that's wrong
 	//
 	// TODO(dan): Make this limiting per node.
 	//
 	// TODO(dan): See if there's some better solution than rate-limiting #14798.
-	maxConcurrentImports := clusterNodeCount(p.ExecCfg().Gossip)
+	maxConcurrentImports := clusterNodeCount(p.ExecCfg().Gossip) * runtime.NumCPU()
 	importsSem := make(chan struct{}, maxConcurrentImports)
 
 	log.Eventf(ctx, "commencing import of data with concurrency %d", maxConcurrentImports)

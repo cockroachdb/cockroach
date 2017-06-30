@@ -11,6 +11,7 @@ package storageccl
 import (
 	"bytes"
 	"io/ioutil"
+	"runtime"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -30,12 +31,11 @@ import (
 
 // importRequestLimit is the number of Import requests that can run at once.
 // Each downloads a file from cloud storage to a temp file, iterates it, and
-// sends WriteBatch requests to batch insert it. After accounting for write
-// amplification, a single ImportRequest and the resulting WriteBatch
-// requests is enough to keep an SSD busy. Any more and we risk contending
-// RocksDB, which slows down heartbeats, which can cause mass lease
-// transfers.
-const importRequestLimit = 1
+// sends AddSSTable requests to batch insert it. Import and the resulting
+// AddSSTable calls are mostly cpu-bound at this point so allow NumCPU of them
+// to be running concurrently, which will hopefully hit the sweet spot between
+// maximizing throughput and minimizing thrashing.
+var importRequestLimit = runtime.NumCPU()
 
 var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
 
@@ -54,7 +54,7 @@ var AddSSTableEnabled = func() *settings.BoolSetting {
 	s := settings.RegisterBoolSetting(
 		"kv.import.experimental_addsstable.enabled",
 		"set to true to use the AddSSTable command in Import",
-		false,
+		true,
 	)
 	s.Hide()
 	return s
