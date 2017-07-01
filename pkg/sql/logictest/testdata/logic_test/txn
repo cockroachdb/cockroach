@@ -549,6 +549,29 @@ Open
 statement ok
 COMMIT
 
+# Wrong savepoint name moves the txn state from RestartWait to Aborted.
+statement ok
+BEGIN TRANSACTION; SAVEPOINT cockroach_restart
+
+query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
+SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+
+query T
+SHOW TRANSACTION STATUS
+----
+RestartWait
+
+statement error SAVEPOINT not supported except for COCKROACH_RESTART
+ROLLBACK TO SAVEPOINT bogus_name
+
+query T
+SHOW TRANSACTION STATUS
+----
+Aborted
+
+statement ok
+ROLLBACK
+
 # General savepoints
 statement ok
 BEGIN TRANSACTION
