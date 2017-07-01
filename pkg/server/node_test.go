@@ -185,11 +185,8 @@ func TestBootstrapCluster(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
-	re := e
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-		stopper.AddCloser(re)
-	}
+	re := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(re)
 	if _, err := bootstrapCluster(
 		storage.StoreConfig{}, []engine.Engine{e}, []engine.Engine{re}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
@@ -231,10 +228,7 @@ func TestBootstrapCluster(t *testing.T) {
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
-	re := e
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-	}
+	re := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	if _, err := bootstrapCluster(
 		storage.StoreConfig{}, []engine.Engine{e}, []engine.Engine{re}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
@@ -249,15 +243,12 @@ func TestBootstrapNewStore(t *testing.T) {
 	})
 	defer engines.Close()
 
-	raftEngines := engines
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		raftEngines = Engines([]engine.Engine{
-			re,
-			engine.NewInMem(roachpb.Attributes{}, 1<<20),
-			engine.NewInMem(roachpb.Attributes{}, 1<<20),
-		})
-		defer raftEngines.Close()
-	}
+	raftEngines := Engines([]engine.Engine{
+		re,
+		engine.NewInMem(roachpb.Attributes{}, 1<<20),
+		engine.NewInMem(roachpb.Attributes{}, 1<<20),
+	})
+	defer raftEngines.Close()
 	_, _, node, stopper := createAndStartTestNode(
 		util.TestAddr,
 		engines,
@@ -299,11 +290,8 @@ func TestNodeJoin(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(e)
 
-	re := e
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-		engineStopper.AddCloser(re)
-	}
+	re := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	engineStopper.AddCloser(re)
 
 	if _, err := bootstrapCluster(
 		storage.StoreConfig{}, []engine.Engine{e}, []engine.Engine{re}, kv.MakeTxnMetrics(metric.TestSampleInterval),
@@ -328,11 +316,8 @@ func TestNodeJoin(t *testing.T) {
 	e2 := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(e2)
 
-	re2 := e2
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		re2 = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-		engineStopper.AddCloser(re2)
-	}
+	re2 := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	engineStopper.AddCloser(re2)
 
 	engines2 := []engine.Engine{e2}
 	raftEngines2 := []engine.Engine{re2}
@@ -384,11 +369,8 @@ func TestNodeJoinSelf(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
-	re := e
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-		defer re.Close()
-	}
+	re := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer re.Close()
 
 	engines := []engine.Engine{e}
 	raftEngines := []engine.Engine{re}
@@ -407,11 +389,8 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
-	re := e
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-		defer re.Close()
-	}
+	re := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer re.Close()
 	if _, err := bootstrapCluster(
 		storage.StoreConfig{}, []engine.Engine{e}, []engine.Engine{re}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
@@ -744,11 +723,8 @@ func TestStartNodeWithLocality(t *testing.T) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
 
-		re := e
-		if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-			re = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-			defer re.Close()
-		}
+		re := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		defer re.Close()
 		if _, err := bootstrapCluster(
 			storage.StoreConfig{}, []engine.Engine{e}, []engine.Engine{re}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {

@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,10 +40,8 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		defer raftEngines.Close()
-	}
 	defer engines.Close()
+	defer raftEngines.Close()
 	if err := cfg.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
@@ -66,9 +63,7 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
 	defer engines.Close()
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		defer raftEngines.Close()
-	}
+	defer raftEngines.Close()
 	if err := cfg.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}

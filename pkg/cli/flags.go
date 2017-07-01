@@ -258,6 +258,16 @@ func init() {
 		// We share the default with the ClientInsecure flag.
 		boolFlag(f, &serverInsecure, cliflags.ServerInsecure, baseCfg.Insecure)
 
+		// The default transitioning mode should be false, unless specified we
+		// will run the new major version. It's only when explicitly specified
+		// that we run in the slower transitioning mode, intended to work
+		// interoperably across major versions.
+		//
+		// TODO(irfansharif): Set to false by default, set to true temporarily
+		// as a stand-in while acceptance tests get updated to use this flag
+		// when testing version upgrades/rollbacks.
+		boolFlag(f, &serverCfg.TransitioningMode, cliflags.TransitioningMode, true)
+
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
 		stringFlag(f, &serverSSLCertsDir, cliflags.ServerCertsDir, base.DefaultCertsDirectory)

@@ -76,11 +76,8 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	defer engineStopper.Stop(context.TODO())
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(eng)
-	raftEng := eng
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-		engineStopper.AddCloser(raftEng)
-	}
+	raftEng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	engineStopper.AddCloser(raftEng)
 	var rangeID2 roachpb.RangeID
 
 	get := func(store *storage.Store, rangeID roachpb.RangeID, key roachpb.Key) int64 {
@@ -173,11 +170,8 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer eng.Close()
-	raftEng := eng
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		raftEng = engine.NewInMem(roachpb.Attributes{}, 10<<20)
-		defer raftEng.Close()
-	}
+	raftEng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	defer raftEng.Close()
 
 	numIncrements := 0
 

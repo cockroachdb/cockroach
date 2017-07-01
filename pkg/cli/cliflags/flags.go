@@ -270,6 +270,15 @@ strongly discouraged for production usage and should never be used on
 a public network without combining it with --host.`,
 	}
 
+	TransitioningMode = FlagInfo{
+		Name: "transitioning",
+		// TODO(irfansharif): Flesh this section out to better convey the
+		// intended usage pattern.
+		Description: `
+Start in transitioning mode.
+        `,
+	}
+
 	// KeySize, CertificateLifetime, AllowKeyReuse, and OverwriteFiles are used for
 	// certificate generation functions.
 	KeySize = FlagInfo{

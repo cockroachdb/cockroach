@@ -156,11 +156,8 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		stopper.AddCloser(tc.engine)
 	}
 	if tc.raftEngine == nil {
-		tc.raftEngine = tc.engine
-		if TransitioningRaftStorage || EnabledRaftStorage {
-			tc.raftEngine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"mem", "raft"}}, 1<<20)
-			stopper.AddCloser(tc.raftEngine)
-		}
+		tc.raftEngine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"mem", "raft"}}, 1<<20)
+		stopper.AddCloser(tc.raftEngine)
 	}
 
 	if tc.transport == nil {
@@ -6084,13 +6081,11 @@ func TestEntries(t *testing.T) {
 	repl.mu.Unlock()
 
 	// Case 24: add a gap to the indexes.
-	if DisabledRaftStorage || TransitioningRaftStorage {
-		if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.Timestamp{}, nil); err != nil {
-			t.Fatal(err)
-		}
+	if err := engine.MVCCDelete(context.Background(), tc.store.RaftEngine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.Timestamp{}, nil); err != nil {
+		t.Fatal(err)
 	}
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		if err := engine.MVCCDelete(context.Background(), tc.store.RaftEngine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.Timestamp{}, nil); err != nil {
+	if transitioningRaftStorage {
+		if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.Timestamp{}, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -7464,9 +7459,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 
 	batch, raftBatch, _, _, _, pErr := tc.repl.evaluateTxnWriteBatch(ctx, makeIDKey(), ba, nil)
 	defer batch.Close()
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		defer raftBatch.Close()
-	}
+	defer raftBatch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)
 	}

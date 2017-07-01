@@ -386,7 +386,7 @@ func (n *Node) start(
 	n.startComputePeriodicMetrics(n.stopper, n.storeCfg.MetricsSampleInterval)
 	n.startGossip(n.stopper)
 
-	log.Infof(ctx, "%s: started with %v engine(s), %v raft engines and attributes %v", n, engines, raftEngines, attrs.Attrs)
+	log.Infof(ctx, "%s: started with %v engine(s), %v raft engine(s) and attributes %v", n, engines, raftEngines, attrs.Attrs)
 	return nil
 }
 

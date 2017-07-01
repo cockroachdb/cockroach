@@ -362,17 +362,17 @@ func (rsl replicaStateLoader) setMVCCStats(
 // updated through Raft.
 
 func loadLastIndex(
-	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
+	ctx context.Context, reader, raftEngReader engine.Reader, rangeID roachpb.RangeID,
 ) (uint64, error) {
 	rsl := makeReplicaStateLoader(rangeID)
-	return rsl.loadLastIndex(ctx, reader)
+	return rsl.loadLastIndex(ctx, reader, raftEngReader)
 }
 
 func (rsl replicaStateLoader) loadLastIndex(
-	ctx context.Context, reader engine.Reader,
+	ctx context.Context, reader, raftEngReader engine.Reader,
 ) (uint64, error) {
 	var lastIndex uint64
-	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftLastIndexKey(),
+	v, _, err := engine.MVCCGet(ctx, raftEngReader, rsl.RaftLastIndexKey(),
 		hlc.Timestamp{}, true /* consistent */, nil)
 	if err != nil {
 		return 0, err
@@ -552,17 +552,22 @@ func writeInitialState(
 		return enginepb.MVCCStats{}, err
 	}
 
-	if TransitioningRaftStorage {
+	if err := rsl.synthesizeHardState(ctx, raftEng, s, oldHS); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	if transitioningRaftStorage {
 		if err := rsl.synthesizeHardState(ctx, eng, s, oldHS); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
 	}
-	if err := rsl.synthesizeHardState(ctx, raftEng, s, oldHS); err != nil {
+
+	if err := rsl.setLastIndex(ctx, raftEng, s.TruncatedState.Index); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-
-	if err := rsl.setLastIndex(ctx, eng, s.TruncatedState.Index); err != nil {
-		return enginepb.MVCCStats{}, err
+	if transitioningRaftStorage {
+		if err := rsl.setLastIndex(ctx, eng, s.TruncatedState.Index); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
 	}
 
 	return newMS, nil

@@ -128,56 +128,14 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 var enablePreVote = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_PREVOTE", false)
 
-// We define three modes of operation during migrations across subsequent major
-// versions. Changes introduced in a new major version can either be DISABLED,
-// ENABLED or run under TRANSITION mode (this corresponds to a cluster running
-// mixed versions, think rolling upgrades).
-//
-// Consider the example where we introduced a dedicated RocksDB instance for
-// raft data where the following modes are used. Briefly, the major version
-// with this feature stored raft data (log entries and raft HardState) in a
-// new, dedicated RocksDB instance whereas the version prior stored it in the
-// same instance storing all user-level keys.
-// - DISABLED corresponded to using a single engine for both raft and the
-//   user-level keys, as before
-// - TRANSITIONING corresponded to storing raft data on both engines
-//   interoperably in order to facilitate rolling migrations
-// - ENABLED corresponded to storing raft data only in the dedicated raft
-//   engine
-//
-// NB: It should be safe to transition from DISABLED to TRANSITIONING and
-// from TRANSITIONING to ENABLED (once all the nodes in the cluster are in
-// TRANSITIONING mode). Likewise, to facilitate rollbacks, it should be safe to
-// transition from ENABLED to TRANSITIONING and from TRANSITIONING to DISABLED
-// (again, once all the nodes in the cluster are in TRANSITIONING mode).
-const (
-	DISABLED      = "DISABLED"
-	TRANSITIONING = "TRANSITIONING"
-	ENABLED       = "ENABLED"
-)
-
-// TODO(irfansharif): Changing this to a cluster setting instead makes it
-// easier to transition between TransitioningRaftStorage mode to
-// EnabledRaftStorage mode via a user command, lest we restart all the nodes
-// again.
-var raftStorageMode = envutil.EnvOrDefaultString(
-	"COCKROACH_DEDICATED_RAFT_STORAGE",
-	TRANSITIONING,
-)
-
-// DisabledRaftStorage mode preserves the behavior prior to the dedicated raft
-// storage engine changes thus using a single RocksDB instance for both raft
-// and user-level KV data.
-var DisabledRaftStorage = raftStorageMode == DISABLED
-
-// TransitioningRaftStorage mode uses both RocksDB instances for raft data
+// transitioningRaftStorage mode uses both RocksDB instances for raft data
 // interoperably, the raft specific and the regular instance.
 // We use this mode to facilitate rolling upgrades in the following manner:
 // - When a node restarts, it undertakes an offline store-level migration first
 //   by copying over all existing raft data (log entries + HardState) into the new
 //   dedicated raft engine
 // - Nodes will be restarted to run in this mode, they will be able to
-//   communicate with nodes without these changes transparently and it does so
+//   communicate with nodes without these changes transparently. They will do so
 //   by constructing WriteBatches with raft data changes addressed to the
 //   original RocksDB instance downstream of raft (as was the case before, see
 //   WriteBatch.Data) in addition to the new instance (see WriteBatch.RaftData)
@@ -189,12 +147,14 @@ var DisabledRaftStorage = raftStorageMode == DISABLED
 //
 // NB: When in the transitioning mode, even though we store raft data on both
 // engines, we only serve reads from the new one.
-var TransitioningRaftStorage = raftStorageMode == TRANSITIONING
+//
+var transitioningRaftStorage bool
 
-// EnabledRaftStorage mode enables the use of a dedicated RocksDB instance for
-// raft data. Raft log entries and the HardState are stored on this instance
-// alone.
-var EnabledRaftStorage = raftStorageMode == ENABLED
+// SetTransitioningMode sets the appropriate boolean flags for changes that use
+// an explicit transitioning state during migrations.
+func SetTransitioningMode(transitioning bool) {
+	transitioningRaftStorage = transitioning
+}
 
 // RaftElectionTimeout returns the raft election timeout, as computed
 // from the specified tick interval and number of election timeout
@@ -1244,22 +1204,26 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
 
+	s.mu.Lock()
+
+	if err := s.runStoreLevelMigrationsLocked(ctx); err != nil {
+		// We were unable to run the necessary store level migrations,
+		// panicking seems appropriate.
+		panic(err)
+	}
+
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
-	s.mu.Lock()
-
+	//
 	// TODO(peter): While we have to iterate to find the replica descriptors
-	// serially, we can perform the migrations and replica creation
+	// serially, we can perform some migrations and replica creation
 	// concurrently. Note that while we can perform this initialization
-	// concurrently, all of the initialization must be performed before we start
-	// listening for Raft messages and starting the process Raft loop.
+	// concurrently, all of the initialization must be performed before we
+	// start listening for Raft messages and starting the process Raft loop.
 	err = IterateRangeDescriptors(ctx, s.engine,
 		func(desc roachpb.RangeDescriptor) (bool, error) {
-			// TODO(irfansharif): Will need to copy over hard state + log
-			// entries for each range if running in transitioning mode and we
-			// were on an old cockroach version before.
 			if !desc.IsInitialized() {
 				return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
 			}
@@ -1665,10 +1629,6 @@ func checkEnginesEmpty(ctx context.Context, eng, raftEng engine.Engine) error {
 		return errors.Errorf("engine belongs to store %s, contains %s", ident, keyVals)
 	}
 
-	if DisabledRaftStorage {
-		return nil
-	}
-
 	kvs, err = engine.Scan(
 		raftEng,
 		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMin)),
@@ -1812,11 +1772,8 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	batch := s.engine.NewBatch()
 	defer batch.Close()
 
-	raftBatch := batch
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftBatch = s.raftEngine.NewBatch()
-		defer raftBatch.Close()
-	}
+	raftBatch := s.raftEngine.NewBatch()
+	defer raftBatch.Close()
 	ms := &enginepb.MVCCStats{}
 	now := s.cfg.Clock.Now()
 	ctx := context.Background()
@@ -1863,10 +1820,8 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 	*ms = updatedMS
 
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		if err := raftBatch.Commit(true /* sync */); err != nil {
-			return err
-		}
+	if err := raftBatch.Commit(true /* sync */); err != nil {
+		return err
 	}
 	return batch.Commit(true /* sync */)
 }
@@ -2408,8 +2363,11 @@ func (s *Store) Attrs() roachpb.Attributes {
 	return s.engine.Attrs()
 }
 
-// Capacity returns the capacity of the underlying storage engine. Note that
+// Capacity returns the capacity of the underlying storage engines. Note that
 // this does not include reservations.
+// TODO(irfansharif): Currently we merge the capacities of both underlying
+// storage engines, the base and the dedicated raft one. Really we should have
+// more granularity here.
 func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	capacity, err := s.engine.Capacity()
 	if err != nil {
@@ -2420,15 +2378,14 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	capacity.LeaseCount = int32(s.LeaseCount())
 	capacity.WritesPerSecond = s.WritesPerSecond()
 
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftEngCapacity, err := s.raftEngine.Capacity()
-		if err != nil {
-			return roachpb.StoreCapacity{}, err
-		}
-
-		capacity.Capacity += raftEngCapacity.Capacity
-		capacity.Available += raftEngCapacity.Available
+	raftEngCapacity, err := s.raftEngine.Capacity()
+	if err != nil {
+		return roachpb.StoreCapacity{}, err
 	}
+
+	capacity.Capacity += raftEngCapacity.Capacity
+	capacity.Available += raftEngCapacity.Available
+
 	return capacity, nil
 }
 
@@ -4063,6 +4020,83 @@ func (s *Store) canApplySnapshotLocked(
 	return placeholder, nil
 }
 
+// runStoreLevelMigrationsLocked runs store level migrations for the
+// dedicated raft engine changes.
+func (s *Store) runStoreLevelMigrationsLocked(ctx context.Context) error {
+	if transitioningRaftStorage {
+		// To see why we need a store level migration here consider that prior
+		// to introducing the dedicated raft storage engine, all our raft data
+		// (log entries, HardState, etc.) was stored on the single base engine.
+		// We need to explicitly copy over this data to the new engine before
+		// proceeding, in transitioning mode (as is the case here) we read raft
+		// data from the new engine.
+		// transitioningRaftStorage mode however is not only for version
+		// upgrades (older versions migrating to the new), it is also the
+		// intermediary mode for rollbacks where we have raft data stored
+		// exclusively in the dedicated engine and need to maintain it in the
+		// base engine for interoperability.
+		// To this end we do the dumb thing here and check one of the engines
+		// to see if it has any raft data and simply copy it all over to the
+		// other (as opposed to somehow detecting if we're migrating from an
+		// old version to the new or vice versa).
+		batch := s.engine.NewBatch()
+		raftBatch := s.raftEngine.NewBatch()
+		// to is the engine we'll be writing raft data to, from is the engine
+		// we'll be writing raft data from.
+		to, from := raftBatch, batch
+		{
+			err := IterateRangeDescriptors(ctx, s.engine,
+				func(desc roachpb.RangeDescriptor) (bool, error) {
+					// Arbitrarily we check to see if the HardState is present
+					// in the 'to' engine, and if so we swap with 'from'.
+					val, _, err := engine.MVCCGet(ctx, to, keys.RaftHardStateKey(desc.RangeID),
+						hlc.Timestamp{}, true /* consistent */, nil /* txn */)
+					if err != nil {
+						return true, err
+					}
+					if val != nil {
+						to, from = from, to
+					}
+					// We need only check raft data for a single range
+					// descriptor, we can terminate the iteration immediately.
+					return true, nil
+				})
+			if err != nil {
+				return err
+			}
+		}
+		err := IterateRangeDescriptors(ctx, s.engine,
+			func(desc roachpb.RangeDescriptor) (bool, error) {
+				for _, keyRange := range makeRaftEngineKeyRanges(desc.RangeID) {
+					scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+						if err := engine.MVCCBlindPut(ctx, to, nil, kv.Key, hlc.Timestamp{},
+							kv.Value, nil /* txn */); err != nil {
+							return true, err
+						}
+						return false, nil
+					}
+					_, err := engine.MVCCIterate(ctx, from, keyRange.start.Key, keyRange.end.Key,
+						hlc.Timestamp{}, true /* consistent */, nil /* txn */, false /* !reverse */, scanFunc)
+					if err != nil {
+						return true, err
+					}
+				}
+
+				return false, nil
+			})
+		if err != nil {
+			return err
+		}
+
+		if err := to.Commit(true /* sync */); err != nil {
+			return err
+		}
+		raftBatch.Close()
+		batch.Close()
+	}
+	return nil
+}
+
 func (s *Store) updateCapacityGauges() error {
 	desc, err := s.Descriptor()
 	if err != nil {
@@ -4254,13 +4288,11 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	}
 	s.metrics.updateRocksDBStats(*stats)
 
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		stats, err := s.raftEngine.GetStats()
-		if err != nil {
-			return err
-		}
-		s.metrics.updateRocksDBStats(*stats)
+	raftEngStats, err := s.raftEngine.GetStats()
+	if err != nil {
+		return err
 	}
+	s.metrics.updateRocksDBStats(*raftEngStats)
 
 	// If we're using RocksDB, log the sstable overview.
 	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
@@ -4274,17 +4306,15 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 			log.Info(ctx, rocksdb.GetCompactionStats())
 		}
 	}
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		if rocksdb, ok := s.raftEngine.(*engine.RocksDB); ok {
-			sstables := rocksdb.GetSSTables()
-			s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
-			readAmp := sstables.ReadAmplification()
-			s.metrics.RdbReadAmplification.Update(int64(readAmp))
-			// Log this metric infrequently.
-			if tick%60 == 0 /* every 10m */ {
-				log.Infof(ctx, "sstables (raft eng read amplification = %d):\n%s", readAmp, sstables)
-				log.Infof(ctx, rocksdb.GetCompactionStats())
-			}
+	if rocksdb, ok := s.raftEngine.(*engine.RocksDB); ok {
+		sstables := rocksdb.GetSSTables()
+		s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
+		readAmp := sstables.ReadAmplification()
+		s.metrics.RdbReadAmplification.Update(int64(readAmp))
+		// Log this metric infrequently.
+		if tick%60 == 0 /* every 10m */ {
+			log.Infof(ctx, "sstables (raft eng read amplification = %d):\n%s", readAmp, sstables)
+			log.Infof(ctx, rocksdb.GetCompactionStats())
 		}
 	}
 	return nil

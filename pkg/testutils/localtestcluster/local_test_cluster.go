@@ -101,12 +101,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	ltc.Gossip = gossip.New(ambient, nc, rpcContext, server, ltc.Stopper, metric.NewRegistry())
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20)
 	ltc.Stopper.AddCloser(ltc.Eng)
-	ltc.RaftEng = ltc.Eng
-
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		ltc.RaftEng = engine.NewInMem(roachpb.Attributes{}, 50<<20)
-		ltc.Stopper.AddCloser(ltc.RaftEng)
-	}
+	ltc.RaftEng = engine.NewInMem(roachpb.Attributes{}, 50<<20)
+	ltc.Stopper.AddCloser(ltc.RaftEng)
 
 	ltc.Stores = storage.NewStores(ambient, ltc.Clock)
 

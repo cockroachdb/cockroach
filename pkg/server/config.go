@@ -236,6 +236,37 @@ type Config struct {
 	// it is ready.
 	PIDFile string
 
+	// We define two modes of operation during migrations across subsequent major
+	// versions. Changes introduced in a new major version can either be enabled or
+	// run under transitioning mode (this corresponds to a cluster running mixed
+	// versions, think rolling upgrades).
+	//
+	// Consider the example where we introduced a dedicated RocksDB instance for
+	// raft data where the following modes are used. Briefly, the major version
+	// with this feature stores raft data (log entries, HardState, etc.) in a
+	// new, dedicated RocksDB instance whereas the version prior stored it in the
+	// same instance storing all user-level keys.
+	// - The 'transitioning' mode corresponded to storing raft data on both engines
+	//   interoperably in order to facilitate rolling migrations
+	// - The 'enabled' mode corresponded to storing raft data only in the dedicated
+	//   raft engine, the base engine for everything else (as before)
+	// See usages of transitioningRaftStorage in pkg/storage/store.go for an
+	// example of how mode was used.
+	//
+	// NB: It should be safe to transition from the old version to transitioning
+	// mode and then from transitioning to enabled (once all the nodes in the
+	// cluster are in transitioning mode). Likewise, to facilitate rollbacks, it
+	// should be safe to transition from enabled to transitioning mode and from
+	// transitioning to the old version (again, once all the nodes in the cluster
+	// are in transitioning mode). The intended design here is that version
+	// upgrades and rollbacks actually go through a sequence of two rolling
+	// restarts with nodes running in transitioning mode performing sub-optimally
+	// so as to maintain interoperability.
+	//
+	// TransitioningMode is the switch to indicate that we're running in
+	// transitioning mode.
+	TransitioningMode bool
+
 	enginesCreated bool
 }
 
@@ -436,15 +467,15 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
-// CreateEngines creates Engines based on the specs in cfg.Stores.
+// CreateEngines creates engines based on the specs in cfg.Stores. For each
+// store we create two engines, one for raft data (log entries, HardState,
+// etc.) and one for everything else.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, Engines, error) {
 	var engines Engines
 	defer engines.Close()
 
 	var raftEngines Engines
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		defer raftEngines.Close()
-	}
+	defer raftEngines.Close()
 
 	if cfg.enginesCreated {
 		return Engines{}, Engines{}, errors.Errorf("engines already created")
@@ -486,18 +517,12 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, Engines, error) 
 			}
 			details = append(details, fmt.Sprintf("store %d: in-memory, size %s",
 				i, humanizeutil.IBytes(sizeInBytes)))
-			var engSize int64
-			if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-				engSize = (9 * sizeInBytes) / 10
-			}
+			engSize := (9 * sizeInBytes) / 10
 			eng := engine.NewInMem(spec.Attributes, engSize)
-			raftEng := eng
-			if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-				// TODO(irfansharif): For now we specify initialize the raft
-				// engine with 10% of the total size specified, this can/should
-				// be determined via user specified flags.
-				raftEng = engine.NewInMem(spec.Attributes, sizeInBytes-engSize)
-			}
+			// TODO(irfansharif): For now we specify initialize the raft
+			// engine with 10% of the total size specified, this can/should
+			// be determined via user specified flags.
+			raftEng := engine.NewInMem(spec.Attributes, sizeInBytes-engSize)
 
 			engines = append(engines, eng)
 			raftEngines = append(raftEngines, raftEng)
@@ -527,21 +552,18 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, Engines, error) 
 				return Engines{}, Engines{}, err
 			}
 
-			raftEng := eng
-			if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-				// TODO(irfansharif): TBD on max open files. For now we also
-				// use the same shared cache. It's worth exploring if there's
-				// performance gain to be had using a dedicated cache instead.
-				raftEng, err = engine.NewRocksDB(
-					spec.Attributes,
-					filepath.Join(spec.Path, raftEngineSubDir),
-					cache,
-					sizeInBytes,
-					engine.DefaultMaxOpenFiles,
-				)
-				if err != nil {
-					return Engines{}, Engines{}, err
-				}
+			// TODO(irfansharif): TBD on max open files. For now we also
+			// use the same shared cache. It's worth exploring if there's a
+			// performance gain to be had using a dedicated cache instead.
+			raftEng, err := engine.NewRocksDB(
+				spec.Attributes,
+				filepath.Join(spec.Path, raftEngineSubDir),
+				cache,
+				sizeInBytes,
+				engine.DefaultMaxOpenFiles,
+			)
+			if err != nil {
+				return Engines{}, Engines{}, err
 			}
 
 			engines = append(engines, eng)
@@ -555,8 +577,10 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, Engines, error) 
 		log.Info(ctx, s)
 	}
 	enginesCopy := engines
-	engines = nil
 	raftEnginesCopy := raftEngines
+	// Neutralize the preceding deferred {engines,raftEngines}.Close(). See the
+	// comment on Engines.Close() for this pattern.
+	engines = nil
 	raftEngines = nil
 	return enginesCopy, raftEnginesCopy, nil
 }

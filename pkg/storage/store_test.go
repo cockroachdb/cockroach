@@ -139,11 +139,8 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
 
-	raftEng := eng
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftEng = engine.NewInMem(roachpb.Attributes{}, 10<<20)
-		stopper.AddCloser(raftEng)
-	}
+	raftEng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	stopper.AddCloser(raftEng)
 
 	cfg.Transport = NewDummyRaftTransport()
 	sender := &testSender{}
@@ -194,11 +191,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
 
-	var raftEng engine.Engine = eng
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-		stopper.AddCloser(raftEng)
-	}
+	raftEng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(raftEng)
 
 	cfg.Transport = NewDummyRaftTransport()
 
@@ -261,14 +255,11 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
+
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
-
-	var raftEng engine.Engine = eng
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-		stopper.AddCloser(raftEng)
-	}
+	raftEng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(raftEng)
 
 	// Put some random garbage into the engine.
 	if err := eng.Put(engine.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
