@@ -111,7 +111,7 @@ func BenchmarkKV(b *testing.B) {
 			} {
 				kvTyp := runtime.FuncForPC(reflect.ValueOf(kvFn).Pointer()).Name()
 				kvTyp = strings.TrimPrefix(kvTyp, "github.com/cockroachdb/cockroach/pkg/ccl/sqlccl.newKV")
-				for _, initData := range []bool{false} { // TODO(dan): add true
+				for _, initData := range []bool{false, true} {
 					b.Run(fmt.Sprintf("%s%d_%s initData=%t", opName, rows, kvTyp, initData), func(b *testing.B) {
 						kv := kvFn(b)
 						defer kv.done()
