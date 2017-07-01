@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -74,7 +75,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows), "", cliCtx.tableDisplayFormat)
 }
 
-var nodesColumnHeaders = []string{
+var statusNodesColumnHeaders = []string{
 	"id",
 	"address",
 	"build",
@@ -140,7 +141,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		return errors.Errorf("expected no arguments or a single node ID")
 	}
 
-	return printQueryOutput(os.Stdout, nodesColumnHeaders, newRowSliceIter(nodeStatusesToRows(nodeStatuses)), "",
+	return printQueryOutput(os.Stdout, statusNodesColumnHeaders, newRowSliceIter(nodeStatusesToRows(nodeStatuses)), "",
 		cliCtx.tableDisplayFormat)
 }
 
@@ -185,16 +186,126 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 	return rows
 }
 
+var decommissionNodesColumnHeaders = []string{
+	"id",
+	"address",
+	"build",
+	"updated_at",
+	"started_at",
+	"live_bytes",
+	"key_bytes",
+	"value_bytes",
+	"intent_bytes",
+	"system_bytes",
+	"replicas_leaders",
+	"replicas_leaseholders",
+	"ranges",
+	"ranges_unavailable",
+	"ranges_underreplicated",
+}
+
+var decommissionNodeCmd = &cobra.Command{
+	Use:   "decommission [<node ID>]+",
+	Short: "decommissions the node(s)",
+	Long: `
+	Marks the nodes, provided in a comma-separated list, as decommissioning.
+	This will cause leases and replicas to be removed from the node.
+	`,
+	RunE: MaybeDecorateGRPCError(runStatusNode),
+}
+
+func runDecommissionNode(cmd *cobra.Command, args []string) error {
+	var nodeIDs []string
+	switch len(args) {
+	case 1:
+		nodeIDs = strings.Split(args[0], ",")
+	default:
+		return usageAndError(cmd)
+	}
+	nodeIDs = nodeIDs
+
+	var nodeStatuses []status.NodeStatus
+
+	c, stopper, err := getStatusClient()
+	if err != nil {
+		return err
+	}
+	ctx := stopperContext(stopper)
+	defer stopper.Stop(ctx)
+
+	switch len(args) {
+	case 0:
+		nodes, err := c.Nodes(ctx, &serverpb.NodesRequest{})
+		if err != nil {
+			return err
+		}
+		nodeStatuses = nodes.Nodes
+	case 1:
+		nodeID := args[0]
+		nodeStatus, err := c.Node(ctx, &serverpb.NodeRequest{NodeId: nodeID})
+		if err != nil {
+			return err
+		}
+		nodeStatuses = []status.NodeStatus{*nodeStatus}
+	}
+
+	return printQueryOutput(os.Stdout, statusNodesColumnHeaders, newRowSliceIter(nodeStatusesToRows(nodeStatuses)), "",
+		cliCtx.tableDisplayFormat)
+}
+
+// nodeStatusesToRows converts NodeStatuses to SQL-like result rows, so that we can pretty-print
+// them.
+func nodeDecommissionToRows(statuses []status.NodeStatus) [][]string {
+	// Create results that are like the results for SQL results, so that we can pretty-print them.
+	var rows [][]string
+	for _, nodeStatus := range statuses {
+		hostPort := nodeStatus.Desc.Address.AddressField
+		updatedAt := time.Unix(0, nodeStatus.UpdatedAt)
+		updatedAtStr := updatedAt.Format(localTimeFormat)
+		startedAt := time.Unix(0, nodeStatus.StartedAt)
+		startedAtStr := startedAt.Format(localTimeFormat)
+		build := nodeStatus.BuildInfo.Tag
+
+		metricVals := map[string]float64{}
+		for _, storeStatus := range nodeStatus.StoreStatuses {
+			for key, val := range storeStatus.Metrics {
+				metricVals[key] += val
+			}
+		}
+
+		rows = append(rows, []string{
+			strconv.FormatInt(int64(nodeStatus.Desc.NodeID), 10),
+			hostPort,
+			build,
+			updatedAtStr,
+			startedAtStr,
+			strconv.FormatInt(int64(metricVals["livebytes"]), 10),
+			strconv.FormatInt(int64(metricVals["keybytes"]), 10),
+			strconv.FormatInt(int64(metricVals["valbytes"]), 10),
+			strconv.FormatInt(int64(metricVals["intentbytes"]), 10),
+			strconv.FormatInt(int64(metricVals["sysbytes"]), 10),
+			strconv.FormatInt(int64(metricVals["replicas.leaders"]), 10),
+			strconv.FormatInt(int64(metricVals["replicas.leaseholders"]), 10),
+			strconv.FormatInt(int64(metricVals["ranges"]), 10),
+			strconv.FormatInt(int64(metricVals["ranges.unavailable"]), 10),
+			strconv.FormatInt(int64(metricVals["ranges.underreplicated"]), 10),
+		})
+	}
+	return rows
+}
+
 // Sub-commands for node command.
 var nodeCmds = []*cobra.Command{
 	lsNodesCmd,
 	statusNodeCmd,
+	decommissionNodeCmd,
+	//	recommissionNodeCmd,
 }
 
 var nodeCmd = &cobra.Command{
 	Use:   "node [command]",
-	Short: "list nodes and show their status",
-	Long:  "List nodes and show their status.",
+	Short: "list nodes, show their status and de/recommission them",
+	Long:  "List nodes, show their status; decommission and recommission nodes.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Usage()
 	},

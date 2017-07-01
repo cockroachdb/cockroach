@@ -1036,6 +1036,13 @@ func (s *Server) Undrain(off []serverpb.DrainMode) []serverpb.DrainMode {
 	return nowActive
 }
 
+// Decommission idempotently sets the decommissioning flag for specified nodes.
+func (s *Server) Decommission(setTo bool, nodeIDs []roachpb.NodeID) {
+	for _, nodeID := range nodeIDs {
+		s.nodeLiveness.SetDecommissioning(context.TODO(), nodeID, setTo)
+	}
+}
+
 // startSampleEnvironment begins a worker that periodically instructs the
 // runtime stat sampler to sample the environment.
 func (s *Server) startSampleEnvironment(frequency time.Duration) {

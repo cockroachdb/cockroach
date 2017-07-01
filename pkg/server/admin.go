@@ -1090,6 +1090,38 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	}
 }
 
+// Decommission sets the decommission flag to the specified value on the specified node(s).
+func (s *adminServer) Decommission(
+	_ context.Context, req *serverpb.DecommissionRequest,
+) (*serverpb.DecommissionResponse, error) {
+	nodeIDs := make([]roachpb.NodeID, len(req.NodeID))
+	for i, sNodeID := range req.NodeID {
+		if nodeID, err := strconv.Atoi(sNodeID); err == nil {
+			nodeIDs[i] = roachpb.NodeID(nodeID)
+		} else {
+			return nil, err
+		}
+	}
+	s.server.Decommission(req.Decommissioning, nodeIDs)
+	nl := s.server.nodeLiveness
+	ls := nl.GetLivenesses()
+	res := serverpb.DecommissionResponse{
+		Nodes: make([]serverpb.DecommissionResponse_Value, len(ls)),
+	}
+	for i, l := range ls {
+		res.Nodes[i] = serverpb.DecommissionResponse_Value{}
+		res.Nodes[i].NodeID = int32(l.NodeID)
+		if live, err := nl.IsLive(l.NodeID); err != nil {
+			res.Nodes[i].IsLive = live
+		} // else false
+		// TODO (ND) add call to server.ReplicaCount when cherry-pick other branch
+		res.Nodes[i].RangeCount = 1
+		res.Nodes[i].Decommissioning = l.Decommissioning
+		res.Nodes[i].Draining = l.Draining
+	}
+	return &res, nil
+}
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.
