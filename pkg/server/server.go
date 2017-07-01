@@ -228,6 +228,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.db = client.NewDB(s.txnCoordSender, s.clock)
 
+	storage.SetTransitioningMode(s.cfg.TransitioningMode)
+
 	active, renewal := storage.NodeLivenessDurations(
 		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))
 	s.nodeLiveness = storage.NewNodeLiveness(
@@ -680,9 +682,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "failed to create {raft,}engines")
 	}
 	s.stopper.AddCloser(&s.engines)
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		s.stopper.AddCloser(&s.raftEngines)
-	}
+	s.stopper.AddCloser(&s.raftEngines)
 
 	// We might have to sleep a bit to protect against this node producing non-
 	// monotonic timestamps. Before restarting, its clock might have been driven

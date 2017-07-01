@@ -94,12 +94,8 @@ func createTestStoreWithConfig(
 ) *storage.Store {
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
-
-	var raftEng engine.Engine = eng
-	if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-		raftEng = engine.NewInMem(roachpb.Attributes{}, 10<<20)
-		stopper.AddCloser(raftEng)
-	}
+	raftEng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	stopper.AddCloser(raftEng)
 
 	return createTestStoreWithEngine(t, eng, raftEng, true, storeCfg, stopper)
 }
@@ -697,11 +693,7 @@ func (m *multiTestContext) addStore(idx int) {
 	var needBootstrap bool
 	if len(m.engines) > idx {
 		eng = m.engines[idx]
-
-		raftEng = eng
-		if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-			raftEng = m.raftEngines[idx]
-		}
+		raftEng = m.raftEngines[idx]
 	} else {
 		engineStopper := stop.NewStopper()
 		m.engineStoppers = append(m.engineStoppers, engineStopper)
@@ -709,15 +701,12 @@ func (m *multiTestContext) addStore(idx int) {
 		engineStopper.AddCloser(eng)
 		m.engines = append(m.engines, eng)
 
-		raftEng = eng
-		if storage.TransitioningRaftStorage || storage.EnabledRaftStorage {
-			raftEngineStopper := stop.NewStopper()
-			m.raftEngineStoppers = append(m.raftEngineStoppers, raftEngineStopper)
-			raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-			raftEngineStopper.AddCloser(raftEng)
-		}
-
+		raftEngineStopper := stop.NewStopper()
+		m.raftEngineStoppers = append(m.raftEngineStoppers, raftEngineStopper)
+		raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		raftEngineStopper.AddCloser(raftEng)
 		m.raftEngines = append(m.raftEngines, raftEng)
+
 		needBootstrap = true
 	}
 	grpcServer := rpc.NewServer(m.rpcContext)
@@ -1001,7 +990,6 @@ func (m *multiTestContext) changeReplicasLocked(
 ) (roachpb.ReplicaID, error) {
 	ctx := context.TODO()
 	startKey := m.findStartKeyLocked(rangeID)
-	log.Infof(context.TODO(), "skey: %v", startKey)
 
 	// Perform a consistent read to get the updated range descriptor (as
 	// opposed to just going to one of the stores), to make sure we have

@@ -60,9 +60,9 @@ var _ raft.Storage = (*replicaRaftStorage)(nil)
 // InitialState requires that r.mu is held.
 func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	// For uninitialized ranges, membership is unknown at this point.
 	hs, err := r.mu.stateLoader.loadHardState(ctx, r.store.RaftEngine())
 	if raft.IsEmptyHardState(hs) || err != nil {
+		// For uninitialized ranges, membership is unknown at this point.
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
 	var cs raftpb.ConfState
@@ -80,11 +80,8 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	raftEngSnap := snap
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftEngSnap = r.store.NewRaftEngineSnapshot()
-		defer raftEngSnap.Close()
-	}
+	raftEngSnap := r.store.NewRaftEngineSnapshot()
+	defer raftEngSnap.Close()
 	ctx := r.AnnotateCtx(context.TODO())
 	return entries(ctx, snap, raftEngSnap, r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
 }
@@ -193,8 +190,7 @@ func entries(
 		}
 
 		// Was the missing index after the last index?
-		// TODO(irfansharif): Explore writing last index to raft engine.
-		lastIndex, err := loadLastIndex(ctx, e, rangeID)
+		lastIndex, err := loadLastIndex(ctx, e, re, rangeID)
 		if err != nil {
 			return nil, err
 		}
@@ -246,11 +242,8 @@ func iterateEntries(
 func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	raftEngSnap := snap
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftEngSnap = r.store.NewRaftEngineSnapshot()
-		defer raftEngSnap.Close()
-	}
+	raftEngSnap := r.store.NewRaftEngineSnapshot()
+	defer raftEngSnap.Close()
 	ctx := r.AnnotateCtx(context.TODO())
 	return term(ctx, snap, raftEngSnap, r.RangeID, r.store.raftEntryCache, i)
 }
@@ -387,10 +380,7 @@ func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSn
 	defer sp.Finish()
 	snap := r.store.NewSnapshot()
 	log.Eventf(ctx, "new engine snapshot for replica %s", r)
-	raftEngSnap := snap
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftEngSnap = r.store.NewRaftEngineSnapshot()
-	}
+	raftEngSnap := r.store.NewRaftEngineSnapshot()
 
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
@@ -436,9 +426,7 @@ type OutgoingSnapshot struct {
 func (s *OutgoingSnapshot) Close() {
 	s.Iter.Close()
 	s.EngineSnap.Close()
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		s.RaftEngineSnap.Close()
-	}
+	s.RaftEngineSnap.Close()
 }
 
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
@@ -560,28 +548,32 @@ func (r *Replica) append(
 			return 0, 0, err
 		}
 		value.InitChecksum(key)
-		var err error
 		if ent.Index > prevLastIndex {
-			err = engine.MVCCBlindPut(ctx, raftBatch, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			if err := engine.MVCCBlindPut(ctx, raftBatch, &diff, key, hlc.Timestamp{},
+				value, nil /* txn */); err != nil {
+				return 0, 0, err
+			}
 		} else {
-			err = engine.MVCCPut(ctx, raftBatch, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			if err := engine.MVCCPut(ctx, raftBatch, &diff, key, hlc.Timestamp{}, value,
+				nil /* txn */); err != nil {
+				return 0, 0, err
+			}
 		}
-		if err != nil {
-			return 0, 0, err
-		}
-		if TransitioningRaftStorage {
-			var err error
+		if transitioningRaftStorage {
 			if ent.Index > prevLastIndex {
 				// We pass in a nil MVCCStats so to not account for this delta
-				// in raftLogSize. In TransitioningRaftStorage mode log truncations
+				// in raftLogSize. In transitioningRaftStorage mode log truncations
 				// are based entirely on the size of the raft log stored in the
 				// raft specific RocksDB instance.
-				err = engine.MVCCBlindPut(ctx, batch, nil, key, hlc.Timestamp{}, value, nil /* txn */)
+				if err := engine.MVCCBlindPut(ctx, batch, nil, key, hlc.Timestamp{},
+					value, nil /* txn */); err != nil {
+					return 0, 0, err
+				}
 			} else {
-				err = engine.MVCCPut(ctx, batch, nil, key, hlc.Timestamp{}, value, nil /* txn */)
-			}
-			if err != nil {
-				return 0, 0, err
+				if err := engine.MVCCPut(ctx, batch, nil, key, hlc.Timestamp{},
+					value, nil /* txn */); err != nil {
+					return 0, 0, err
+				}
 			}
 		}
 	}
@@ -591,22 +583,30 @@ func (r *Replica) append(
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		// Note that the caller is in charge of deleting any sideloaded payloads
 		// (which they must only do *after* the batch has committed).
-		err := engine.MVCCDelete(ctx, raftBatch, &diff, r.raftMu.stateLoader.RaftLogKey(i),
-			hlc.Timestamp{}, nil /* txn */)
-		if err != nil {
+		if err := engine.MVCCDelete(ctx, raftBatch, &diff, r.raftMu.stateLoader.RaftLogKey(i),
+			hlc.Timestamp{}, nil /* txn */); err != nil {
 			return 0, 0, err
 		}
-		if TransitioningRaftStorage {
-			err := engine.MVCCDelete(ctx, batch, nil, r.raftMu.stateLoader.RaftLogKey(i),
-				hlc.Timestamp{}, nil /* txn */)
-			if err != nil {
+		if transitioningRaftStorage {
+			// We pass in a nil MVCCStats so to not account for this delta in
+			// RaftLogSize. In transitioningRaftStorage mode log truncations are
+			// based entirely on the size of the raft log stored in the raft
+			// specific RocksDB instance.
+			if err := engine.MVCCDelete(ctx, batch, nil, r.raftMu.stateLoader.RaftLogKey(i),
+				hlc.Timestamp{}, nil /* txn */); err != nil {
 				return 0, 0, err
 			}
 		}
 	}
 
-	if err := r.raftMu.stateLoader.setLastIndex(ctx, batch, lastIndex); err != nil {
+	if err := r.raftMu.stateLoader.setLastIndex(ctx, raftBatch, lastIndex); err != nil {
 		return 0, 0, err
+	}
+
+	if transitioningRaftStorage {
+		if err := r.raftMu.stateLoader.setLastIndex(ctx, batch, lastIndex); err != nil {
+			return 0, 0, err
+		}
 	}
 
 	raftLogSize := prevRaftLogSize + diff.SysBytes
@@ -661,7 +661,9 @@ func clearRangeData(
 	const metadataRanges = 2
 	for i, keyRange := range makeAllKeyRanges(desc) {
 		// The metadata ranges have a relatively small number of keys making usage
-		// of range tombstones (as created by ClearRange) a pessimization.
+		// of range tombstones (as created by ClearRange) a pessimization, we
+		// use ClearIterRange instead. This also holds true for when we clear
+		// raft specific range data (log entries, HardState, etc.).
 		var err error
 		if i < metadataRanges {
 			err = batch.ClearIterRange(iter, keyRange.start, keyRange.end)
@@ -673,18 +675,16 @@ func clearRangeData(
 		}
 	}
 
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftIter := raftEng.NewIterator(false)
-		defer raftIter.Close()
+	raftIter := raftEng.NewIterator(false)
+	defer raftIter.Close()
 
-		for _, keyRange := range makeRaftEngineKeyRanges(desc) {
-			// The metadata ranges have a relatively small number of keys making usage
-			// of range tombstones (as created by ClearRange) a pessimization.
-			if err := raftBatch.ClearIterRange(raftIter, keyRange.start, keyRange.end); err != nil {
-				return err
-			}
+	for _, keyRange := range makeRaftEngineKeyRanges(desc.RangeID) {
+		if err := raftBatch.ClearIterRange(raftIter, keyRange.start, keyRange.end); err != nil {
+			return err
 		}
-
+		// We do not need to explicitly clear out raft data out of the base
+		// engine when in transitioningRaftStorage mode as we already do so
+		// above when clearing out all key ranges.
 	}
 	return nil
 }
@@ -759,11 +759,8 @@ func (r *Replica) applySnapshot(
 	// reads from the batch.
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
-	raftBatch := batch
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftBatch = r.store.RaftEngine().NewWriteOnlyBatch()
-		defer raftBatch.Close()
-	}
+	raftBatch := r.store.RaftEngine().NewWriteOnlyBatch()
+	defer raftBatch.Close()
 
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
@@ -784,10 +781,7 @@ func (r *Replica) applySnapshot(
 	// The log entries are all written to distinct keys so we can use a
 	// distinct batch.
 	distinctBatch := batch.Distinct()
-	distinctBatchRaft := distinctBatch
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		distinctBatchRaft = raftBatch.Distinct()
-	}
+	distinctRaftBatch := raftBatch.Distinct()
 	stats.batch = timeutil.Now()
 
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
@@ -804,7 +798,7 @@ func (r *Replica) applySnapshot(
 	_, raftLogSize, err = r.append(
 		ctx,
 		distinctBatch,
-		distinctBatchRaft,
+		distinctRaftBatch,
 		0,
 		raftLogSize,
 		thinEntries,
@@ -821,22 +815,20 @@ func (r *Replica) applySnapshot(
 	// say it isn't going to accept a snapshot which is identical to the current
 	// state?
 	if !raft.IsEmptyHardState(hs) {
-		if TransitioningRaftStorage {
+		if err := r.raftMu.stateLoader.setHardState(ctx, distinctRaftBatch, hs); err != nil {
+			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
+		}
+		if transitioningRaftStorage {
 			if err := r.raftMu.stateLoader.setHardState(ctx, distinctBatch, hs); err != nil {
 				return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 			}
-		}
-		if err := r.raftMu.stateLoader.setHardState(ctx, distinctBatchRaft, hs); err != nil {
-			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 		}
 	}
 
 	// We need to close the distinct batch and start using the normal batch for
 	// the read below.
 	distinctBatch.Close()
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		distinctBatchRaft.Close()
-	}
+	distinctRaftBatch.Close()
 
 	// As outlined above, last and applied index are the same after applying
 	// the snapshot (i.e. the snapshot has no uncommitted tail).
@@ -844,15 +836,37 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
 			s.RaftAppliedIndex, snap.Metadata.Index)
 	}
+	// We need to write out the lastIndex to the dedicated raft engine. This
+	// isn't explicitly serialized upstream when constructing the snapshot but
+	// we can reconstruct it here from the log entries and the TruncatedState.
+	var lastIndex uint64
+	if len(thinEntries) != 0 {
+		lastIndex = thinEntries[len(thinEntries)-1].Index
+	} else {
+		// The log is empty, we fall back to the TruncatedState to determine
+		// what is effectively the lastIndex.
+		lastEnt := s.TruncatedState
+		lastIndex = lastEnt.Index
+	}
 
-	// We've written Raft log entries, so we need to sync the WAL.
-	if err := batch.Commit(syncRaftLog.Get()); err != nil {
+	r.raftMu.stateLoader.setLastIndex(ctx, raftBatch, lastIndex)
+	if transitioningRaftStorage {
+		r.raftMu.stateLoader.setLastIndex(ctx, batch, lastIndex)
+	}
+
+	// We've written Raft log entries and the HardState, so we need to sync the WAL.
+	if err := raftBatch.Commit(syncRaftLog.Get()); err != nil {
 		return err
 	}
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		if err := raftBatch.Commit(syncRaftLog.Get()); err != nil {
-			return err
-		}
+	// We need to flush out the writes to the base engine, consider what could
+	// happen if we didn't:
+	// - We receive an incoming snapshot with the log entries and all keys
+	// - The log entries are persisted to disk, the TruncatedState (addressed
+	//   to the base engine) isn't
+	// If we crash at this point we restart with a trivial TruncatedState and
+	// have no way to bridge the gap.
+	if err := batch.Commit(syncRaftLog.Get()); err != nil {
+		return err
 	}
 
 	stats.commit = timeutil.Now()

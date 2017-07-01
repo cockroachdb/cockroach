@@ -151,11 +151,8 @@ func TestStoresLookupReplica(t *testing.T) {
 	for i, rng := range ranges {
 		e[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		stopper.AddCloser(e[i])
-		re[i] = e[i]
-		if TransitioningRaftStorage || EnabledRaftStorage {
-			re[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-			stopper.AddCloser(re[i])
-		}
+		re[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		stopper.AddCloser(re[i])
 		cfg.Transport = NewDummyRaftTransport()
 		s[i] = NewStore(cfg, e[i], re[i], &roachpb.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID
@@ -247,11 +244,8 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 		cfg.Transport = NewDummyRaftTransport()
 		eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		stopper.AddCloser(eng)
-		raftEng := eng
-		if TransitioningRaftStorage || EnabledRaftStorage {
-			raftEng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
-			stopper.AddCloser(raftEng)
-		}
+		raftEng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		stopper.AddCloser(raftEng)
 		s := NewStore(cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++
 		s.Ident.StoreID = storeIDAlloc

@@ -652,7 +652,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	}
 	r.rangeStr.store(0, r.mu.state.Desc)
 
-	r.mu.lastIndex, err = r.mu.stateLoader.loadLastIndex(ctx, r.store.Engine())
+	r.mu.lastIndex, err = r.mu.stateLoader.loadLastIndex(ctx, r.store.Engine(), r.store.RaftEngine())
 	if err != nil {
 		return err
 	}
@@ -702,11 +702,8 @@ func (r *Replica) destroyDataRaftMuLocked(
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
-	raftBatch := batch
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftBatch = r.store.RaftEngine().NewWriteOnlyBatch()
-		defer raftBatch.Close()
-	}
+	raftBatch := r.store.RaftEngine().NewWriteOnlyBatch()
+	defer raftBatch.Close()
 
 	// NB: this uses the local descriptor instead of the consistent one to match
 	// the data on disk.
@@ -729,10 +726,8 @@ func (r *Replica) destroyDataRaftMuLocked(
 		return err
 	}
 
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		if err := raftBatch.Commit(false); err != nil {
-			return err
-		}
+	if err := raftBatch.Commit(true); err != nil {
+		return err
 	}
 	commitTime := timeutil.Now()
 
@@ -2338,11 +2333,8 @@ func (r *Replica) executeReadOnlyBatch(
 	readOnlyEng := r.store.Engine().NewReadOnly()
 	defer readOnlyEng.Close()
 
-	readOnlyRaftEng := readOnlyEng
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		readOnlyRaftEng = r.store.RaftEngine().NewReadOnly()
-		defer readOnlyRaftEng.Close()
-	}
+	readOnlyRaftEng := r.store.RaftEngine().NewReadOnly()
+	defer readOnlyRaftEng.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnlyEng, readOnlyRaftEng, rec, nil, ba)
 
 	if intents := result.Local.detachIntents(); len(intents) > 0 {
@@ -3164,7 +3156,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 
-		if lastIndex, err = r.raftMu.stateLoader.loadLastIndex(ctx, r.store.Engine()); err != nil {
+		if lastIndex, err = r.raftMu.stateLoader.loadLastIndex(ctx, r.store.Engine(), r.store.RaftEngine()); err != nil {
 			return stats, err
 		}
 		// We refresh pending commands after applying a snapshot because this
@@ -3184,19 +3176,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// which passes the reads through to the underlying DB.
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
-
-	raftBatch := batch
+	raftBatch := r.store.RaftEngine().NewWriteOnlyBatch()
+	defer raftBatch.Close()
 
 	// We know that all of the writes from here forward will be to distinct keys.
-	writer := batch.Distinct()
+	distinctBatch := batch.Distinct()
 	prevLastIndex := lastIndex
-	writerRaft := writer
-
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftBatch = r.store.RaftEngine().NewWriteOnlyBatch()
-		defer raftBatch.Close()
-		writerRaft = raftBatch.Distinct()
-	}
+	distinctRaftBatch := raftBatch.Distinct()
 
 	if len(rd.Entries) > 0 {
 		// All of the entries are appended to distinct keys, returning a new
@@ -3207,8 +3193,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		if lastIndex, raftLogSize, err = r.append(
 			ctx,
-			writer,
-			writerRaft,
+			distinctBatch,
+			distinctRaftBatch,
 			lastIndex,
 			raftLogSize,
 			thinEntries,
@@ -3218,28 +3204,26 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if TransitioningRaftStorage {
-			if err := r.raftMu.stateLoader.setHardState(ctx, writer, rd.HardState); err != nil {
+		if err := r.raftMu.stateLoader.setHardState(ctx, distinctRaftBatch, rd.HardState); err != nil {
+			return stats, err
+		}
+		if transitioningRaftStorage {
+			if err := r.raftMu.stateLoader.setHardState(ctx, distinctBatch, rd.HardState); err != nil {
 				return stats, err
 			}
 		}
-		if err := r.raftMu.stateLoader.setHardState(ctx, writerRaft, rd.HardState); err != nil {
-			return stats, err
-		}
 	}
-	writer.Close()
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		writerRaft.Close()
-	}
+	distinctBatch.Close()
+	distinctRaftBatch.Close()
 
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
 	start := timeutil.Now()
-	if err := batch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
+	if err := raftBatch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
 		return stats, err
 	}
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		if err := raftBatch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
+	if transitioningRaftStorage {
+		if err := batch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
 			return stats, err
 		}
 	}
@@ -4339,9 +4323,13 @@ func (r *Replica) acquireMergeLock(
 }
 
 // applyRaftCommand applies a raft command from the replicated log to the
-// underlying state machine (i.e. the engine). When the state machine can not be
-// updated, an error (which is likely a ReplicaCorruptionError) is returned and
-// must be handled by the caller.
+// underlying state machine, for most commands this only concerns the base
+// engine. For the few commands that modify raft data (e.g.
+// TruncateLogRequests truncating raft log entries) we apply these changes to
+// the dedicated raft engine.
+//
+// When the state machine can not be updated, an error (which is likely a
+// ReplicaCorruptionError) is returned and must be handled by the caller.
 func (r *Replica) applyRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
@@ -4368,32 +4356,97 @@ func (r *Replica) applyRaftCommand(
 				oldRaftAppliedIndex, rResult.State.RaftAppliedIndex)))
 	}
 
-	batch := r.store.Engine().NewWriteOnlyBatch()
-	defer batch.Close()
-	raftBatch := batch
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftBatch = r.store.RaftEngine().NewWriteOnlyBatch()
-		defer raftBatch.Close()
+	// What if upstream of raft we're running an older version without the
+	// dedicated raft storage engine changes? Raft data (log entries, HardState
+	// last index, etc.) are still being propagated via WriteBatch.Data (intended
+	// to be applied to the single base engine). If we're in
+	// transitioningRaftStorage mode we need to ensure that this raft data is
+	// also copied over to the new engine.
+	// We can tell we're running an older version upstream by checking if
+	// WriteBatch.RaftData == nil.
+	preRaftStorageVersionUpstream := writeBatch != nil && writeBatch.RaftData == nil
+	if !transitioningRaftStorage && preRaftStorageVersionUpstream {
+		// Sanity check: We're only allowed to move past transitioning mode
+		// once all the nodes in the cluster are in transitioning mode. See
+		// #16809.
+		panic("mixed version cluster running without transitioning mode")
 	}
+
+	var batch engine.Batch
+	if transitioningRaftStorage && preRaftStorageVersionUpstream {
+		// We will need to copy over raft data from this batch.
+		batch = r.store.Engine().NewBatch()
+	} else {
+		batch = r.store.Engine().NewWriteOnlyBatch()
+	}
+	defer batch.Close()
+
+	raftBatch := r.store.RaftEngine().NewWriteOnlyBatch()
+	defer raftBatch.Close()
 
 	if writeBatch != nil {
 		if err := batch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
 			return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-				errors.Wrap(err, "unable to apply WriteBatch")))
+				errors.Wrap(err, "unable to apply WriteBatch.Data to eng")))
 		}
 
-		if TransitioningRaftStorage || EnabledRaftStorage {
-			// TODO(irfansharif): Is it ever the case that we have an empty
-			// WriteBatch.RaftData but non-empty WriteBatch.Data? If
-			// so we could/should avoid initializing/operating on batchRaft.
-			// What if upstream we have an older version without these changes?
-			// Raft data is still being propagated via WriteBatch.Data, if
-			// we're in TransitioningRaftStorage mode we should ensure that
-			// data (log entries and HardState) is copied over to the new
-			// engine.
+		// TODO(irfansharif): For most commands we do not have any
+		// modifications pertaining to the raft engine, we only do for the
+		// subset of commands that modify raft data through raft (such as log
+		// entries truncated via TruncateLogRequests). Naively one would assume
+		// that in these cases WriteBatch.RaftData == nil but is in fact a
+		// zeroed byte slice. Initializing raft engine batches and committing
+		// this, albeit asynchronously and despite being a no-op, has a
+		// measurable cost. We should detect this 'empty' WriteBatch.RaftData
+		// and avoid doing as much work as possible.
+
+		// We do the dumb thing here and simply copy over all of the relevant
+		// key ranges, not just the delta introduced in the current WriteBatch.
+		// We do this as we do not expect to be in transitioningRaftStorage
+		// mode for very long.
+		if transitioningRaftStorage && preRaftStorageVersionUpstream {
+			distinctRaftBatch := raftBatch.Distinct()
+			for _, keyRange := range makeRaftEngineKeyRanges(r.RangeID) {
+				scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+					err := engine.MVCCBlindPut(
+						ctx, distinctRaftBatch, nil,
+						kv.Key,
+						hlc.Timestamp{},
+						kv.Value,
+						nil, /* txn */
+					)
+					if err != nil {
+						return true, err
+					}
+					return false, nil
+				}
+				_, err := engine.MVCCIterate(
+					ctx, r.store.Engine(),
+					keyRange.start.Key,
+					keyRange.end.Key,
+					hlc.Timestamp{},
+					true,  /* consistent */
+					nil,   /* txn */
+					false, /* !reverse */
+					scanFunc,
+				)
+				if err != nil {
+					return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
+						errors.Wrap(err, "unable to migrate cross versions")))
+				}
+			}
+			distinctRaftBatch.Close()
+		}
+		if writeBatch.RaftData != nil {
 			if err := raftBatch.ApplyBatchRepr(writeBatch.RaftData, false); err != nil {
 				return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-					errors.Wrap(err, "unable to apply WriteBatch")))
+					errors.Wrap(err, "unable to apply WriteBatch.RaftData to raft eng")))
+			}
+			if transitioningRaftStorage {
+				if err := batch.ApplyBatchRepr(writeBatch.RaftData, false); err != nil {
+					return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
+						errors.Wrap(err, "unable to apply WriteBatch.RaftData to eng")))
+				}
 			}
 		}
 	}
@@ -4432,16 +4485,66 @@ func (r *Replica) applyRaftCommand(
 	writer.Close()
 
 	start := timeutil.Now()
+	// Previously we never explicitly synchronized raft command applications to
+	// disk. This was fine as far as correctness was concerned and was so for
+	// obvious performance reasons. Now that we store raft log entries in it's
+	// own dedicated engine we need to be more careful when dealing with log
+	// truncation requests (rResult.RaftLogDelta != nil is an easy check for
+	// this).
+	// Consider the following scenario, entirely plausible, if we did not
+	// synchronize to disk here:
+	// - Log truncation requests delete log entries from the raft engine
+	//   (unsynchronized)
+	// - The new TruncatedState, still stored in the base engine at the time of
+	//   writing, is written out (unsynchronized)
+	// - RocksDB carries out compactions for the raft engine thus effectively
+	//   persisting the deletion of log entries. At this point the updated
+	//   TruncatedState is still only memory-resident
+	// If we crash at this point, on restart we will fail to load the updated
+	// TruncatedState and fall back to an older version (if any). Attempting to
+	// replay the logs from this point on is no longer possible, we've deleted
+	// the entries.
+	//
+	// Naively one would assume the underlying problem here is the fact that
+	// TruncatedState is stored in the base engine, but there's another issue.
+	// In addition to ensuring that we synchronize TruncatedState and the log
+	// entry deletions at the same time, we need to ensure the application of
+	// a truncated log entry has been persisted when persisting the
+	// deletion of the very same log entry, i.e. for Put(k,v) the base RocksDB
+	// engine must have synced (k,v) before truncating the operation's
+	// corresponding log entry. Consider what happens if we don't:
+	// - We receive a Put(k,v) command, downstream of raft we don't synchronize
+	//   the base engine after updating it's state (for obvious performance
+	//   reasons, we don't need to for correctness as we can simply replay from
+	//   the log in the event we crash)
+	// - Log truncation request deletes a log entry corresponding to an earlier
+	//   Put(k,v) command, this is synchronized for the reasons above
+	// Note that the base engine's updated state is still only memory-resident.
+	// If we crash at this point, on restart we will replay the remaining raft
+	// log entries. Because the log entry corresponding to the Put(k,v) command
+	// has been deleted we never apply this change (the earlier modification
+	// was never persisted) thus effectively losing writes. Simply syncing both
+	// engines during log truncations prevents this from occurring.
+	//
+	// TODO(irfansharif): There's still good reason to move TruncatedState to
+	// the dedicated raft engine, see discussion in #16809.
+	// TODO(irfansharif): This is a hotspot, log truncations happen fairly
+	// often and here we flush our base engine to disk. We need re-evaluate how
+	// aggressively we truncate the raft log in light of this, possibly moving
+	// it downstream of raft.
+	//
+	// NB: Though exceedingly unlikely in practice, it's important that we
+	// flush the base engine prior to the raft engine. If we did so in the
+	// opposite order and crashed immediately after flushing the raft engine
+	// and right before the base, we have the same issues as above.
 	isLogTruncationRequest := rResult.RaftLogDelta != nil
 	if err := batch.Commit(isLogTruncationRequest); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "could not commit batch")))
 	}
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		if err := raftBatch.Commit(true); err != nil {
-			return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-				errors.Wrap(err, "could not commit raft batch")))
-		}
+	if err := raftBatch.Commit(isLogTruncationRequest); err != nil {
+		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
+			errors.Wrap(err, "could not commit raft batch")))
 	}
 	elapsed := timeutil.Since(start)
 	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
@@ -4498,9 +4601,7 @@ func (r *Replica) evaluateProposalInner(
 			// a WriteBatch to signal to the caller that we fail-fast this
 			// proposal.
 			batch.Close()
-			if TransitioningRaftStorage || EnabledRaftStorage {
-				raftBatch.Close()
-			}
+			raftBatch.Close()
 			batch, raftBatch = nil, nil
 			// Restore the original txn's Writing bool if pd.Err specifies
 			// a transaction.
@@ -4520,14 +4621,13 @@ func (r *Replica) evaluateProposalInner(
 		Data:     batch.Repr(),
 		RaftData: raftBatch.Repr(),
 	}
+
 	// TODO(tschottdorf): could keep this open and commit as the proposal
 	// applies, saving work on the proposer. Take care to discard batches
 	// properly whenever the command leaves `r.mu.proposals` without coming
 	// back.
 	batch.Close()
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftBatch.Close()
-	}
+	raftBatch.Close()
 	return result
 }
 
@@ -4599,10 +4699,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		batch := r.store.Engine().NewBatch()
-		raftBatch := batch
-		if TransitioningRaftStorage || EnabledRaftStorage {
-			raftBatch = r.store.RaftEngine().NewBatch()
-		}
+		raftBatch := r.store.RaftEngine().NewBatch()
 		if raceEnabled && spans != nil {
 			batch = makeSpanSetBatch(batch, spans)
 			raftBatch = makeSpanSetBatch(raftBatch, spans)
@@ -4620,12 +4717,8 @@ func (r *Replica) evaluateTxnWriteBatch(
 				clonedTxn.Status = roachpb.ABORTED
 				batch.Close()
 				batch = r.store.Engine().NewBatch()
-				if TransitioningRaftStorage || EnabledRaftStorage {
-					raftBatch.Close()
-					raftBatch = r.store.RaftEngine().NewBatch()
-				} else {
-					raftBatch = batch
-				}
+				raftBatch.Close()
+				raftBatch = r.store.RaftEngine().NewBatch()
 				ms = enginepb.MVCCStats{}
 			} else {
 				// Run commit trigger manually.
@@ -4646,9 +4739,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 		}
 
 		batch.Close()
-		if TransitioningRaftStorage || EnabledRaftStorage {
-			raftBatch.Close()
-		}
+		raftBatch.Close()
 		ms = enginepb.MVCCStats{}
 
 		// Handle the case of a required one phase commit transaction.
@@ -4666,10 +4757,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 	}
 
 	batch := r.store.Engine().NewBatch()
-	raftBatch := batch
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		raftBatch = r.store.RaftEngine().NewBatch()
-	}
+	raftBatch := r.store.RaftEngine().NewBatch()
 	if raceEnabled && spans != nil {
 		batch = makeSpanSetBatch(batch, spans)
 		raftBatch = makeSpanSetBatch(raftBatch, spans)

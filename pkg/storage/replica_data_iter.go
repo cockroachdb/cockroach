@@ -51,22 +51,30 @@ func makeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
 	return makeReplicaKeyRanges(d, keys.MakeRangeIDReplicatedPrefix)
 }
 
-// makeRaftEngineKeyRanges returns two key ranges, one for the HardState and
-// one for the raft log entries associated for the given range descriptor.
-func makeRaftEngineKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
-	hskey := keys.RaftHardStateKey(d.RangeID)
-	rlpkey := keys.RaftLogPrefix(d.RangeID)
+// makeRaftEngineKeyRanges returns the three key ranges that are stored in the
+// dedicated raft engine for the given Range. These include:
+// - the HardState key range
+// - the RaftLastIndex key range
+// - the raft log entries associated for the given range descriptor
+func makeRaftEngineKeyRanges(rangeID roachpb.RangeID) []keyRange {
+	hskey := keys.RaftHardStateKey(rangeID)
+	rlpkey := keys.RaftLogPrefix(rangeID)
+	likey := keys.RaftLastIndexKey(rangeID)
+
 	return []keyRange{
 		{
 			start: engine.MakeMVCCMetadataKey(hskey),
 			end:   engine.MakeMVCCMetadataKey(hskey.PrefixEnd()),
 		},
 		{
+			start: engine.MakeMVCCMetadataKey(likey),
+			end:   engine.MakeMVCCMetadataKey(likey.PrefixEnd()),
+		},
+		{
 			start: engine.MakeMVCCMetadataKey(rlpkey),
 			end:   engine.MakeMVCCMetadataKey(rlpkey.PrefixEnd()),
 		},
 	}
-
 }
 
 // makeReplicaKeyRanges returns a slice of 3 key ranges. The last key range in

@@ -1895,10 +1895,9 @@ func evalTruncateLog(
 		hlc.Timestamp{}, nil /* txn */, true /* returnKeys */); err != nil {
 		return EvalResult{}, err
 	}
-
-	if TransitioningRaftStorage {
+	if transitioningRaftStorage {
 		// We pass in a nil MVCCStats so to not account for this delta in
-		// RaftLogSize. In TransitioningRaftStorage mode log truncations are
+		// RaftLogSize. In transitioningRaftStorage mode log truncations are
 		// based entirely on the size of the raft log stored in the raft
 		// specific RocksDB instance.
 		if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, nil, start, end, math.MaxInt64, /* max */
@@ -3297,11 +3296,9 @@ func mergeTrigger(
 	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), math.MaxInt64, hlc.Timestamp{}, nil, false); err != nil {
 		return EvalResult{}, errors.Errorf("cannot remove range metadata %s", err)
 	}
-	if TransitioningRaftStorage || EnabledRaftStorage {
-		localRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(rightRangeID)
+	for _, keyRange := range makeRaftEngineKeyRanges(rightRangeID) {
 		if _, _, _, err := engine.MVCCDeleteRange(ctx, raftBatch, nil,
-			localRangeIDUnreplicatedPrefix, localRangeIDUnreplicatedPrefix.PrefixEnd(),
-			math.MaxInt64, hlc.Timestamp{}, nil, false); err != nil {
+			keyRange.start.Key, keyRange.end.Key, math.MaxInt64, hlc.Timestamp{}, nil, false); err != nil {
 			return EvalResult{}, errors.Errorf("cannot remove range metadata %s", err)
 		}
 	}
