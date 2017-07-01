@@ -16,6 +16,7 @@ package storage
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"golang.org/x/net/context"
 
@@ -47,6 +48,9 @@ type sideloadStorage interface {
 	// TruncateTo removes all files belonging to an index strictly smaller than
 	// the given one.
 	TruncateTo(_ context.Context, index uint64) error
+	// Returns an absolute path to the file that Get() would return the contents
+	// of.
+	Filename(_ context.Context, index, term uint64) (string, error)
 }
 
 type slKey struct {
@@ -58,15 +62,11 @@ type inMemSideloadStorage struct {
 	prefix string
 }
 
-func newInMemSideloadStorage(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) sideloadStorage {
+func newInMemSideloadStorage(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string) sideloadStorage {
 	return &inMemSideloadStorage{
-		prefix: fmt.Sprintf("%d.%d/", rangeID, replicaID),
+		prefix: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),
 		m:      make(map[slKey][]byte),
 	}
-}
-
-func (imss *inMemSideloadStorage) String() string {
-	return imss.prefix
 }
 
 func (imss *inMemSideloadStorage) key(index, term uint64) slKey {
@@ -91,6 +91,15 @@ func (imss *inMemSideloadStorage) Get(_ context.Context, index, term uint64) ([]
 		return nil, errSideloadedFileNotFound
 	}
 	return data, nil
+}
+
+func (imss *inMemSideloadStorage) Filename(_ context.Context, index, term uint64) (string, error) {
+	key := imss.key(index, term)
+	_, ok := imss.m[key]
+	if !ok {
+		return "", errSideloadedFileNotFound
+	}
+	return filepath.Join(imss.prefix, fmt.Sprintf("i%d.t%d", index, term)), nil
 }
 
 func (imss *inMemSideloadStorage) Purge(_ context.Context, index, term uint64) error {

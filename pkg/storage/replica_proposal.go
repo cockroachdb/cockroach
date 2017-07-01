@@ -19,9 +19,7 @@ package storage
 import (
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
-	"path/filepath"
 	"reflect"
 	"time"
 
@@ -509,50 +507,93 @@ func (r *Replica) leasePostApply(
 	}
 }
 
-func (r *Replica) addSSTablePreApply(
-	ctx context.Context, sideloaded sideloadStorage, term, index uint64, startKey, endKey roachpb.RKey, sst storagebase.ReplicatedEvalResult_AddSSTable,
+func addSSTablePreApply(
+	ctx context.Context,
+	eng engine.Engine,
+	sideloaded sideloadStorage,
+	term, index uint64,
+	startKey, endKey roachpb.RKey,
+	sst storagebase.ReplicatedEvalResult_AddSSTable,
 ) {
 	checksum := util.CRC32(sst.Data)
 
 	if checksum != sst.CRC32 {
-		// TODO(tschottdorf): once available, print information about the log index.
-		log.Fatalf(ctx, "checksum does not match; at proposal time %x (%d), now %x (%d)",
-			sst.CRC32, sst.CRC32, checksum, checksum)
+		log.Fatalf(
+			ctx,
+			"checksum for AddSSTable at index term %d, index %d does not match; at proposal time %x (%d), now %x (%d)",
+			term, index, sst.CRC32, sst.CRC32, checksum, checksum,
+		)
 	}
 
 	// TODO(danhhz,tschottdorf): we can hardlink directly to the sideloaded
 	// SSTable and ingest that if we also put a "sanitizer" in the
 	// implementation of sideloadedStorage that undoes the serial number that
 	// RocksDB may add to the SSTable. This avoids copying the file entirely.
-	var path string
+	path, err := sideloaded.Filename(ctx, index, term)
+	if err != nil {
+		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
+	}
+	path += ".ingested"
+
 	var move bool
-	if inmem, ok := r.store.engine.(engine.InMem); ok {
+	if inmem, ok := eng.(engine.InMem); ok {
 		path = fmt.Sprintf("%x", checksum)
 		move = false
 		if err := inmem.WriteFile(path, sst.Data); err != nil {
 			panic(err)
 		}
 	} else {
-		// TODO(danhhz,tschottdorf): consider ingestion directly from the
-		// sideloaded payload.
-		//
-		// TODO(tschottdorf): plumb an evaluation struct into this method so
-		// that the file name can mirror that used by sideloading, and the
-		// randomness here can go away.
-		path = filepath.Join(r.store.engine.GetAuxiliaryDir(), fmt.Sprintf("addsstable-%x-%d", checksum, rand.Int63()))
+		move = true
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			move = true
 			if err := ioutil.WriteFile(path, sst.Data, 0600); err != nil {
 				panic(err)
 			}
 		} else if err != nil {
 			log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 		}
-		log.Eventf(ctx, "ingesting file %s", path)
 	}
 
-	if err := r.store.engine.IngestExternalFile(ctx, path, move); err != nil {
+	// Before RocksDB 5.5.1, IngestExternalFile did not take into account range
+	// deletion tombstones. This could lose data, and the below assertions catch
+	// that. We leave them here until this productionizes to make sure we're
+	// always seeing at least some of what we ingested. At this point, the
+	// expectation is that it will never fire again.
+	//
+	// TODO(tschottdorf): remove this after (the arbitrary date) July 30th 2017.
+	assert := true
+
+	isEmpty := func() bool { return false }
+	if assert {
+		isEmpty = func() bool {
+			snap := eng.NewSnapshot()
+			defer snap.Close()
+			const peekNum = 10
+			n := 0
+			snap.Iterate(
+				engine.MakeMVCCMetadataKey(roachpb.Key(startKey)),
+				engine.MakeMVCCMetadataKey(roachpb.Key(endKey)),
+				func(kv engine.MVCCKeyValue) (bool, error) {
+					n++
+					log.Eventf(ctx, "found key %s", kv.Key)
+					return n > peekNum, nil
+				},
+			)
+			return n == 0
+		}
+	}
+
+	log.Event(ctx, "ready to ingest")
+	preEmpty := isEmpty()
+
+	if err := eng.IngestExternalFile(ctx, path, move); err != nil {
 		panic(err)
+	}
+	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, path)
+
+	postEmpty := isEmpty()
+
+	if preEmpty && postEmpty {
+		log.Fatalf(ctx, "ingested %s, but key range remained empty", path)
 	}
 }
 

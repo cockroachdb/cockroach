@@ -626,7 +626,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
 
-	r.raftMu.sideloaded = newInMemSideloadStorage(desc.RangeID, replicaID)
+	r.raftMu.sideloaded = newInMemSideloadStorage(desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir())
 
 	r.cmdQMu.Lock()
 	r.cmdQMu.global = NewCommandQueue(true /* optimizeOverlap */)
@@ -4034,7 +4034,10 @@ func (r *Replica) checkForcedErrLocked(
 // make sure that the error returned from this method is always populated in
 // those cases, as one of the callers uses it to abort replica changes.
 func (r *Replica) processRaftCommand(
-	ctx context.Context, idKey storagebase.CmdIDKey, term, index uint64, raftCmd storagebase.RaftCommand,
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	term, index uint64,
+	raftCmd storagebase.RaftCommand,
 ) bool {
 	if index == 0 {
 		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")

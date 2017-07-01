@@ -600,7 +600,9 @@ const (
 	snapTypePreemptive = "preemptive"
 )
 
-func clearRangeData(ctx context.Context, desc *roachpb.RangeDescriptor, eng engine.Engine, batch engine.Batch) error {
+func clearRangeData(
+	ctx context.Context, desc *roachpb.RangeDescriptor, eng engine.Engine, batch engine.Batch,
+) error {
 	iter := eng.NewIterator(false)
 	defer iter.Close()
 

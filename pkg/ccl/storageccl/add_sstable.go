@@ -141,6 +141,15 @@ func clearExistingData(
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
+
+	statsCpy := existingStats
+	statsCpy.LastUpdateNanos = 0
+	if (statsCpy == enginepb.MVCCStats{}) {
+		log.Eventf(ctx, "target key range is empty")
+		return existingStats, nil
+	}
+
+	log.Eventf(ctx, "target key range not empty, will clear existing data: %+v", existingStats)
 	// If this is a SpanSetIterator, we have to unwrap it because
 	// ClearIterRange needs a plain rocksdb iterator (and can't unwrap
 	// it itself because of import cycles).
