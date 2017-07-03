@@ -592,6 +592,12 @@ type txnState struct {
 	// This must be constant for the lifetime of a SQL transaction.
 	sqlTimestamp time.Time
 
+	// The transaction's isolation level.
+	isolation enginepb.IsolationType
+
+	// The transaction's priority.
+	priority roachpb.UserPriority
+
 	// mon tracks txn-bound objects like the running state of
 	// planNode in the midst of performing a computation. We
 	// host this here instead of TxnState because TxnState is
@@ -602,16 +608,33 @@ type txnState struct {
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
 // It creates a new client.Txn and initializes it using the session defaults.
 // txnState.State will be set to Open.
-func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
+//
+// implicitTxn is set if the txn corresponds to an implicit SQL txn and controls
+// the debug name of the txn.
+// retryIntent is set if the client is prepared to handle the RestartWait and
+// controls state transitions in case of error.
+// sqlTimestamp is the timestamp to report for current_timestamp(), now() etc.
+// isolation is the transaction's isolation level.
+// priority is the transaction's priority.
+func (ts *txnState) resetForNewSQLTxn(
+	e *Executor,
+	s *Session,
+	implicitTxn bool,
+	retryIntent bool,
+	sqlTimestamp time.Time,
+	isolation enginepb.IsolationType,
+	priority roachpb.UserPriority,
+) {
 	if ts.sp != nil {
 		panic(fmt.Sprintf("txnState.reset() called on ts with active span. How come "+
 			"finishSQLTxn() wasn't called previously? ts: %+v", ts))
 	}
 
+	ts.retryIntent = retryIntent
 	// Reset state vars to defaults.
-	ts.retryIntent = false
-	ts.autoRetry = false
+	ts.autoRetry = true
 	ts.commitSeen = false
+	ts.sqlTimestamp = sqlTimestamp
 
 	// Create a context for this transaction. It will include a
 	// root span that will contain everything executed as part of the
@@ -653,7 +676,15 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
 	ts.txn = client.NewTxn(e.cfg.DB)
-	if err := ts.txn.SetIsolation(s.DefaultIsolationLevel); err != nil {
+	if implicitTxn {
+		ts.txn.SetDebugName(sqlImplicitTxnName)
+	} else {
+		ts.txn.SetDebugName(sqlTxnName)
+	}
+	if err := ts.setIsolationLevel(isolation); err != nil {
+		panic(err)
+	}
+	if err := ts.setPriority(priority); err != nil {
 		panic(err)
 	}
 	ts.State = Open
@@ -683,10 +714,8 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 	ts.txn = nil
 }
 
-// finishSQLTxn closes the root span for the current SQL txn.
-// This needs to be called before resetForNewSQLTransaction() is called for
-// starting another SQL txn.
-// The session context is just used for logging the SQL trace.
+// finishSQLTxn closes the root span for the current SQL txn.  This needs to be
+// called before resetForNewSQLTxn() is called for starting another SQL txn.
 func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 	ts.mon.Stop(ts.Ctx)
 	if ts.sp == nil {
@@ -742,6 +771,22 @@ func (ts *txnState) hijackCtx(ctx context.Context) func() {
 	return func() {
 		ts.Ctx = origCtx
 	}
+}
+
+func (ts *txnState) setIsolationLevel(isolation enginepb.IsolationType) error {
+	if err := ts.txn.SetIsolation(isolation); err != nil {
+		return err
+	}
+	ts.isolation = isolation
+	return nil
+}
+
+func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
+	if err := ts.txn.SetUserPriority(userPriority); err != nil {
+		return err
+	}
+	ts.priority = userPriority
+	return nil
 }
 
 type schemaChangerCollection struct {
