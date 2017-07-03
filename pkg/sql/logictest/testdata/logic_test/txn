@@ -598,7 +598,7 @@ ROLLBACK TO SAVEPOINT cockroach_restart
 statement ok
 ROLLBACK TO SAVEPOINT cockroach_restart
 
-# Can rollback after a transactional write, even if not in a retryable state.
+# Can rollback after a transactional write, even from a non-error state.
 statement ok
 UPSERT INTO kv VALUES('savepoint', 'true')
 
@@ -613,6 +613,56 @@ query I
 SELECT COUNT(*) FROM kv WHERE k = 'savepoint'
 ----
 0
+
+
+# Can ROLLBACK TO SAVEPOINT even from a non-retryable error.
+statement ok
+BEGIN TRANSACTION; SAVEPOINT cockroach_restart
+
+statement error pq: table "bogus_name" does not exist
+SELECT * from bogus_name
+
+query T
+SHOW TRANSACTION STATUS
+----
+Aborted
+
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart
+
+query T
+SHOW TRANSACTION STATUS
+----
+Open
+
+statement ok
+ROLLBACK
+
+
+# ROLLBACK TO SAVEPOINT in a txn without a SAVEPOINT.
+statement ok
+BEGIN
+
+statement error SAVEPOINT COCKROACH_RESTART has not been used
+ROLLBACK TO SAVEPOINT cockroach_restart
+
+statement ok
+ROLLBACK
+
+
+# ROLLBACK TO SAVEPOINT in an aborted txn without a SAVEPOINT.
+statement ok
+BEGIN
+
+statement error pq: table "bogus_name" does not exist
+SELECT * from bogus_name
+
+statement error SAVEPOINT COCKROACH_RESTART has not been used
+ROLLBACK TO SAVEPOINT cockroach_restart
+
+statement ok
+ROLLBACK
+
 
 # Test READ ONLY/WRITE syntax.
 
