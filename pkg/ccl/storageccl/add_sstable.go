@@ -9,8 +9,6 @@
 package storageccl
 
 import (
-	"fmt"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
@@ -22,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -40,8 +37,9 @@ func evalAddSSTable(
 	h := cArgs.Header
 	ms := cArgs.Stats
 
-	_, span := tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
-	defer tracing.FinishSpan(span)
+	// TODO(tschottdorf): restore this in some form. Gets in the way of testing.
+	//_, span := tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
+	//defer tracing.FinishSpan(span)
 	if log.V(1) {
 		log.Infof(ctx, "addsstable [%s,%s)", args.Key, args.EndKey)
 	}

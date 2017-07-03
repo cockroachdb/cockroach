@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"reflect"
 	"time"
 
@@ -544,9 +545,14 @@ func addSSTablePreApply(
 		}
 	} else {
 		move = true
+		// TODO(tschottdorf): remove this once sideloaded storage guarantees its
+		// existence.
+		if err := os.MkdirAll(filepath.Dir(path), 0600); err != nil {
+			panic(err)
+		}
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			if err := ioutil.WriteFile(path, sst.Data, 0600); err != nil {
-				panic(err)
+				log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 			}
 		} else if err != nil {
 			log.Fatalf(ctx, "while ingesting %s: %s", path, err)

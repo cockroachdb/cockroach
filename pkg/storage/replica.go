@@ -4124,9 +4124,31 @@ func (r *Replica) processRaftCommand(
 			writeBatch = raftCmd.WriteBatch
 		}
 
+		var usuallyNilBatch engine.Batch
+		// AddSSTable ingestions run before the actual batch. This makes sure that
+		// when the Raft command is applied, the ingestion has definitely succeeded.
 		if raftCmd.ReplicatedEvalResult.AddSSTable != nil {
-			r.addSSTablePreApply(
+			// Create the batch now so that it is open before the ingestion.
+			// Otherwise, if the batch contains a deletion for a (RocksDB-level)
+			// key present in the import, and the batch applies *on top of* the
+			// ingestion, it will nuke the ingested key. So we want the
+			// following order:
+			// - batch is created
+			// - SSTable is ingested
+			// - deletions are written to batch
+			// - batch commits.
+			//
+			// TODO(tschottdorf): this doesn't actually work. Find out why and
+			// how we can fix it: TestRaftSSTableSideloadingProposal/empty=true
+			// fails; after the second proposal, the key is missing. It is fixed
+			// when we move applyRaftCommand before this block.
+			//
+			// TODO(tschottdorf): refactor for beauty. We could always pass the
+			// batch into applyRaftCommand.
+			usuallyNilBatch = r.store.engine.NewWriteOnlyBatch()
+			addSSTablePreApply(
 				ctx,
+				r.store.engine,
 				r.raftMu.sideloaded,
 				term,
 				index,
@@ -4138,7 +4160,7 @@ func (r *Replica) processRaftCommand(
 		}
 
 		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
-			ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch)
+			ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch, usuallyNilBatch)
 
 		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
@@ -4272,15 +4294,25 @@ func (r *Replica) acquireMergeLock(
 }
 
 // applyRaftCommand applies a raft command from the replicated log to the
-// underlying state machine (i.e. the engine). When the state machine can not
-// be updated, an error (which is likely a ReplicaCorruptionError) is returned
-// and must be handled by the caller.
+// underlying state machine (i.e. the engine). When the state machine can not be
+// updated, an error (which is likely a ReplicaCorruptionError) is returned and
+// must be handled by the caller.
+//
+// For SSTable ingestion, applyRaftCommand accepts a pre-opened batch (so that
+// the ingestion and the batch have the right ordering). It closes or commits
+// this batch in all cases. If no batch is provided, it uses its own.
 func (r *Replica) applyRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	rResult storagebase.ReplicatedEvalResult,
 	writeBatch *storagebase.WriteBatch,
+	batch engine.Batch,
 ) (enginepb.MVCCStats, *roachpb.Error) {
+	if batch == nil {
+		batch = r.store.Engine().NewWriteOnlyBatch()
+	}
+	defer batch.Close()
+
 	if rResult.State.RaftAppliedIndex <= 0 {
 		log.Fatalf(ctx, "raft command index is <= 0")
 	}
@@ -4300,9 +4332,6 @@ func (r *Replica) applyRaftCommand(
 			errors.Errorf("applied index jumped from %d to %d",
 				oldRaftAppliedIndex, rResult.State.RaftAppliedIndex)))
 	}
-
-	batch := r.store.Engine().NewWriteOnlyBatch()
-	defer batch.Close()
 
 	if writeBatch != nil {
 		if err := batch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
