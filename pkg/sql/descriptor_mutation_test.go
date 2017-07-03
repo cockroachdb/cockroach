@@ -408,13 +408,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			initRows := [][]string{{"a", "z"}, {"b", "y"}}
 			for _, row := range initRows {
 				if useUpsert {
-					if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ($1, $2)`, row[0], row[1]); err != nil {
-						t.Fatal(err)
-					}
+					mTest.Exec(`UPSERT INTO t.test VALUES ($1, $2)`, row[0], row[1])
 				} else {
-					if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ($1, $2)`, row[0], row[1]); err != nil {
-						t.Fatal(err)
-					}
+					mTest.Exec(`INSERT INTO t.test VALUES ($1, $2)`, row[0], row[1])
 				}
 			}
 			mTest.CheckQueryResults(starQuery, initRows)
@@ -429,13 +425,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 
 			// Insert a new entry.
 			if useUpsert {
-				if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('c', 'x')`); err != nil {
-					t.Fatal(err)
-				}
+				mTest.Exec(`UPSERT INTO t.test VALUES ('c', 'x')`)
 			} else {
-				if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ('c', 'x')`); err != nil {
-					t.Fatal(err)
-				}
+				mTest.Exec(`INSERT INTO t.test VALUES ('c', 'x')`)
 			}
 			mTest.CheckQueryResults(starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "x"}})
 
@@ -453,21 +445,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
 			// Update.
 			if useUpsert {
-				if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('c', 'w')`); err != nil {
-					t.Fatal(err)
-				}
+				mTest.Exec(`UPSERT INTO t.test VALUES ('c', 'w')`)
 				// Update "v" to its current value "z" in row "a".
-				if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('a', 'z')`); err != nil {
-					t.Fatal(err)
-				}
+				mTest.Exec(`UPSERT INTO t.test VALUES ('a', 'z')`)
 			} else {
-				if _, err := sqlDB.Exec(`UPDATE t.test SET v = 'w' WHERE k = 'c'`); err != nil {
-					t.Fatal(err)
-				}
+				mTest.Exec(`UPDATE t.test SET v = 'w' WHERE k = 'c'`)
 				// Update "v" to its current value "z" in row "a".
-				if _, err := sqlDB.Exec(`UPDATE t.test SET v = 'z' WHERE k = 'a'`); err != nil {
-					t.Fatal(err)
-				}
+				mTest.Exec(`UPDATE t.test SET v = 'z' WHERE k = 'a'`)
 			}
 			mTest.CheckQueryResults(starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "w"}})
 
@@ -579,13 +563,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 
 				// Insert a row into the table.
 				if useUpsert {
-					if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('c', 'x')`); err != nil {
-						t.Error(err)
-					}
+					mTest.Exec(`UPSERT INTO t.test VALUES ('c', 'x')`)
 				} else {
-					if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ('c', 'x')`); err != nil {
-						t.Error(err)
-					}
+					mTest.Exec(`INSERT INTO t.test VALUES ('c', 'x')`)
 				}
 
 				// Make column "i" and index "foo" live.
@@ -618,13 +598,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 
 				// Update a row without specifying  mutation column "i".
 				if useUpsert {
-					if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('a', 'u')`); err != nil {
-						t.Error(err)
-					}
+					mTest.Exec(`UPSERT INTO t.test VALUES ('a', 'u')`)
 				} else {
-					if _, err := sqlDB.Exec(`UPDATE t.test SET v = 'u' WHERE k = 'a'`); err != nil {
-						t.Error(err)
-					}
+					mTest.Exec(`UPDATE t.test SET v = 'u' WHERE k = 'a'`)
 				}
 				// Make column "i" and index "foo" live.
 				mTest.makeMutationsActive()
@@ -645,9 +621,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 				mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
 
 				// Delete row "b".
-				if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = 'b'`); err != nil {
-					t.Error(err)
-				}
+				mTest.Exec(`DELETE FROM t.test WHERE k = 'b'`)
 				// Make column "i" and index "foo" live.
 				mTest.makeMutationsActive()
 				// Row "b" is deleted.
@@ -730,9 +704,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.writeColumnMutation("b", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
 	// An index referencing a column mutation that is being added
 	// is allowed to be added.
-	if _, err := sqlDB.Exec(`CREATE INDEX bar ON t.test (b)`); err != nil {
-		t.Fatal(err)
-	}
+	mt.Exec(`CREATE INDEX bar ON t.test (b)`)
 	// Make "b" live.
 	mt.makeMutationsActive()
 
@@ -741,9 +713,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// Add index DROP mutation "foo""
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
 	// Noop.
-	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); err != nil {
-		t.Fatal(err)
-	}
+	mt.Exec(`DROP INDEX t.test@foo`)
 	// Make "foo" live.
 	mt.makeMutationsActive()
 	// "foo" is being added.
@@ -761,9 +731,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 		t.Fatal(err)
 	}
 	// Noop.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP b`); err != nil {
-		t.Fatal(err)
-	}
+	mt.Exec(`ALTER TABLE t.test DROP b`)
 	// Make "b" live.
 	mt.makeMutationsActive()
 	// "b" is being added.
@@ -812,9 +780,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// Add index mutation "foo""
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
 	// Noop.
-	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); err != nil {
-		t.Fatal(err)
-	}
+	mt.Exec(`DROP INDEX t.test@foo`)
 	// Make "foo" live.
 	mt.makeMutationsActive()
 	// "foo" is being added.
@@ -829,12 +795,8 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 
 	// Add index mutation "foo""
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{})
-	if _, err := sqlDB.Exec(`ALTER INDEX t.test@foo RENAME to ufo`); err != nil {
-		mt.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test RENAME COLUMN c TO d`); err != nil {
-		mt.Fatal(err)
-	}
+	mt.Exec(`ALTER INDEX t.test@foo RENAME to ufo`)
+	mt.Exec(`ALTER TABLE t.test RENAME COLUMN c TO d`)
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
 	mt.tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
