@@ -24,17 +24,13 @@ type InMem struct {
 // NewInMem allocates and returns a new, opened InMem engine.
 // The caller must call the engine's Close method when the engine is no longer
 // needed.
-//
-// FIXME(tschottdorf): make the signature similar to NewRocksDB (require a cfg).
-func NewInMem(attrs roachpb.Attributes, cacheSize int64) InMem {
-	cache := NewRocksDBCache(cacheSize)
+func NewInMem(attrs roachpb.Attributes, storeSize int64) InMem {
+	cache := NewRocksDBCache(0)
 	// The cache starts out with a refcount of one, and creating the engine
 	// from it adds another refcount, at which point we release one of them.
 	defer cache.Release()
 
-	// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
-	// https://github.com/cockroachdb/cockroach/issues/16750
-	rdb, err := newMemRocksDB(attrs, cache, 512<<20 /* MaxSizeBytes: 512 MiB */)
+	rdb, err := newMemRocksDB(attrs, cache, storeSize)
 	if err != nil {
 		panic(err)
 	}
