@@ -1154,6 +1154,9 @@ func (e *Executor) execStmtInAbortedTxn(session *Session, stmt Statement) (Resul
 			panic("unreachable")
 		}
 		if err := parser.ValidateRestartCheckpoint(spName); err != nil {
+			if txnState.State == RestartWait {
+				txnState.updateStateAndCleanupOnErr(err, e)
+			}
 			return Result{}, err
 		}
 		if txnState.State == RestartWait {
