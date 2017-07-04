@@ -742,16 +742,17 @@ func (t *Transaction) IsInitialized() bool {
 	return t.ID != nil
 }
 
-// MakePriority generates a random priority value, biased by the
-// specified userPriority. If userPriority=100, the random priority
-// will be 100x more likely to be greater than if userPriority=1. If
-// userPriority = 0.1, the random priority will be 1/10th as likely to
-// be greater than if userPriority=1. Balance is achieved when
-// userPriority=1, in which case the priority chosen is unbiased.
+// MakePriority generates a random priority value, biased by the specified
+// userPriority. If userPriority=100, the random priority will be 100x more
+// likely to be greater than if userPriority=1. If userPriority = 0.1, the
+// random priority will be 1/10th as likely to be greater than if
+// userPriority=NormalUserPriority ( = 1). Balance is achieved when
+// userPriority=NormalUserPriority, in which case the priority chosen is
+// unbiased.
 //
 // If userPriority is less than or equal to MinUserPriority, returns
-// MinTxnPriority; if greater than or equal to MaxUserPriority,
-// returns MaxTxnPriority.
+// MinTxnPriority; if greater than or equal to MaxUserPriority, returns
+// MaxTxnPriority. If userPriority is 0, returns NormalUserPriority.
 func MakePriority(userPriority UserPriority) int32 {
 	// A currently undocumented feature allows an explicit priority to
 	// be set by specifying priority < 1. The explicit priority is
@@ -763,7 +764,7 @@ func MakePriority(userPriority UserPriority) int32 {
 		}
 		return int32(-userPriority)
 	} else if userPriority == 0 {
-		userPriority = 1
+		userPriority = NormalUserPriority
 	} else if userPriority >= MaxUserPriority {
 		return MaxTxnPriority
 	} else if userPriority <= MinUserPriority {
