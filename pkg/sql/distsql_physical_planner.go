@@ -327,6 +327,22 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *distinctNode:
 		return dsp.checkSupportForNode(n.plan)
 
+	case *valuesNode:
+		rec := shouldNotDistribute
+		if n.n != nil {
+			// valuesNode source is a sql clause
+			// TODO: check other sources of valuesNode
+			for _, tuple := range n.tuples {
+				for _, expr := range tuple {
+					if err := dsp.checkExpr(expr); err != nil {
+						return 0, err
+					}
+				}
+			}
+			rec = shouldDistribute
+		}
+		return rec, nil
+
 	case *insertNode, *updateNode, *deleteNode:
 		// This is a potential hot path.
 		return 0, mutationsNotSupportedError
@@ -1564,9 +1580,71 @@ func (dsp *distSQLPlanner) createPlanForNode(
 	case *distinctNode:
 		return dsp.createPlanForDistinct(planCtx, n)
 
+	case *valuesNode:
+		return dsp.createPlanForValues(planCtx, n)
+
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))
 	}
+}
+
+func (dsp *distSQLPlanner) createPlanForValues(
+	planCtx *planningCtx, n *valuesNode,
+) (physicalPlan, error) {
+	columns := len(n.columns)
+
+	s := distsqlrun.ValuesCoreSpec{
+		Columns: make([]distsqlrun.DatumInfo, columns),
+	}
+	types := make([]sqlbase.ColumnType, columns)
+
+	for i, t := range n.columns {
+		types[i] = sqlbase.DatumTypeToColumnType(t.Typ)
+		s.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
+		s.Columns[i].Type = types[i]
+	}
+
+	var a sqlbase.DatumAlloc
+	if err := n.Start(planCtx.ctx); err != nil {
+		return physicalPlan{}, err
+	}
+	defer n.Close(planCtx.ctx)
+
+	for i := 0; i < n.Len(); i++ {
+		if next, err := n.Next(planCtx.ctx); !next {
+			return physicalPlan{}, err
+		}
+
+		var buf []byte
+		datums := n.rows.At(i)
+		for j := range n.columns {
+			var err error
+			datum := sqlbase.DatumToEncDatum(types[j], datums[j])
+			buf, err = datum.Encode(&a, s.Columns[j].Encoding, buf)
+			if err != nil {
+				return physicalPlan{}, err
+			}
+		}
+		s.RawBytes = append(s.RawBytes, buf)
+	}
+
+	plan := distsqlplan.PhysicalPlan{
+		Processors: []distsqlplan.Processor{{
+			// TODO: find a better node to place processor at
+			Node: dsp.nodeDesc.NodeID,
+			Spec: distsqlrun.ProcessorSpec{
+				Core:   distsqlrun.ProcessorCoreUnion{Values: &s},
+				Output: []distsqlrun.OutputRouterSpec{distsqlrun.OutputRouterSpec{Type: 0}},
+			},
+		}},
+		ResultRouters: []distsqlplan.ProcessorIdx{0},
+		ResultTypes:   types,
+	}
+
+	return physicalPlan{
+		PhysicalPlan:       plan,
+		planToStreamColMap: identityMap(makePlanToStreamColMap(columns), columns),
+	}, nil
 }
 
 func (dsp *distSQLPlanner) createPlanForDistinct(
