@@ -318,40 +318,40 @@ func (e *Executor) PrepareStmt(session *Session, s *parser.Prepare) error {
 	return err
 }
 
-// ExecutePreparedStmt implements the EXECUTE statement.
+// getPreparedStatementForExecute implements the EXECUTE foo(args) SQL
+// statement, returning the referenced prepared statement and correctly updated
+// placeholder info.
 // See https://www.postgresql.org/docs/current/static/sql-execute.html for details.
-func (e *Executor) ExecutePreparedStmt(
+func getPreparedStatementForExecute(
 	session *Session, s *parser.Execute,
-) (results StatementResults, err error) {
+) (ps *PreparedStatement, pInfo *parser.PlaceholderInfo, err error) {
 	name := s.Name.String()
 	prepared, ok := session.PreparedStatements.Get(name)
 	if !ok {
-		return results, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
+		return ps, pInfo, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
 			"prepared statement %q does not exist", name)
 	}
 
 	if len(prepared.SQLTypes) != len(s.Params) {
-		return results, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return ps, pInfo, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"wrong number of parameters for prepared statement %q: expected %d, got %d",
 			name, len(prepared.SQLTypes), len(s.Params))
 	}
 
 	qArgs := make(parser.QueryArguments, len(s.Params))
+	var p parser.Parser
 	for i, e := range s.Params {
 		idx := strconv.Itoa(i + 1)
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.SQLTypes[idx], "EXECUTE parameter", session.SearchPath)
 		if err != nil {
-			return results, pgerror.NewError(pgerror.CodeFeatureNotSupportedError, err.Error())
+			return ps, pInfo, pgerror.NewError(pgerror.CodeFeatureNotSupportedError, err.Error())
 		}
-		var p parser.Parser
 		if err := p.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
-			return results, err
+			return ps, pInfo, err
 		}
 		qArgs[idx] = typedExpr
 	}
-	return e.execPrepared(
-		session, prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes},
-	)
+	return prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes}, nil
 }
 
 // Deallocate implements the DEALLOCATE statement.
@@ -366,4 +366,18 @@ func (p *planner) Deallocate(ctx context.Context, s *parser.Deallocate) (planNod
 		}
 	}
 	return &emptyNode{}, nil
+}
+
+// Execute creates a plan for an execute statement by substituting the plan for
+// the prepared statement. This is not called in normal circumstances by
+// the executor - it merely exists to enable explains and traces for execute
+// statements.
+func (p *planner) Execute(ctx context.Context, n *parser.Execute) (planNode, error) {
+	ps, newPInfo, err := getPreparedStatementForExecute(p.session, n)
+	if err != nil {
+		return nil, err
+	}
+	p.semaCtx.Placeholders.Assign(newPInfo)
+
+	return p.newPlan(ctx, ps.Statement, nil)
 }
