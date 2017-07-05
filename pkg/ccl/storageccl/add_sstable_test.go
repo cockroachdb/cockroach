@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/kr/pretty"
 )
 
 func singleKVSSTable(key engine.MVCCKey, value []byte) ([]byte, error) {
@@ -66,38 +67,69 @@ func TestDBAddSSTable(t *testing.T) {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
 
-		if err := db.ExperimentalAddSSTable(ctx, "b", "c", data); err != nil {
+		ingestCtx, collect := testutils.MakeRecordCtx()
+		defer collect()
+		if err := db.ExperimentalAddSSTable(ingestCtx, "b", "c", data); err != nil {
 			t.Fatalf("%+v", err)
 		}
+		if err := testutils.MatchInOrder(collect(),
+			"evaluating AddSSTable",
+			"key range is empty; commencing with SSTable proposal",
+			"sideloadable proposal detected",
+			"ingested SSTable at index",
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		if result, err := db.Get(ctx, "bb"); err != nil {
 			t.Fatalf("%+v", err)
 		} else if result := result.ValueBytes(); !bytes.Equal([]byte("1"), result) {
-			t.Errorf("expected \"%s\", got \"%s\"", []byte("1"), result)
+			t.Errorf("expected %q, got %q", []byte("1"), result)
 		}
 	}
 
 	// Key range in request span is not empty.
-	{
+	//
+	// Doing the same ingestion multiple times highlights the case in which the
+	// deletion of existing data overlaps the data being ingested. This case is
+	// central in that it's likely the scenario in practice, and that a lot of
+	// special care goes into handling it (TL;DR is we can't ingest and clear
+	// overlapping data safely; instead we don't use sideloading).
+	ingestCtx, collect := testutils.MakeRecordCtx()
+	defer collect()
+	for i := 0; i < 2; i++ {
 		key := engine.MVCCKey{Key: []byte("bb2"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("2").RawBytes)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := db.ExperimentalAddSSTable(ctx, "b", "c", data); err != nil {
+		if err := db.ExperimentalAddSSTable(ingestCtx, "b", "c", data); err != nil {
 			t.Fatalf("%+v", err)
 		}
 
 		if result, err := db.Get(ctx, "bb2"); err != nil {
 			t.Fatalf("%+v", err)
 		} else if result := result.ValueBytes(); !bytes.Equal([]byte("2"), result) {
-			t.Errorf("expected \"%s\", got \"%s\"", []byte("2"), result)
+			t.Errorf("expected %q, got %q", []byte("2"), result)
 		}
 
 		if result, err := db.Get(ctx, "bb"); err != nil {
 			t.Fatalf("%+v", err)
 		} else if result := result.ValueBytes(); result != nil {
-			t.Errorf("expected nil, got \"%s\"", result)
+			t.Errorf("expected nil, got %q", result)
 		}
+	}
+	if err := testutils.MatchInOrder(collect(),
+		"evaluating AddSSTable",
+		"target key range not empty, will clear existing data",
+		"key range contains existing data",
+		"falling back to regular WriteBatch",
+		"evaluating AddSSTable",
+		"target key range not empty, will clear existing data",
+		"key range contains existing data",
+		"falling back to regular WriteBatch",
+	); err != nil {
+		t.Fatal(err)
 	}
 
 	// Invalid key/value entry checksum.
@@ -161,15 +193,17 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	}
 
 	expectedStats := &enginepb.MVCCStats{
-		LiveBytes: 9721,
-		LiveCount: 9901,
-		KeyBytes:  9715,
-		KeyCount:  9901,
-		ValBytes:  10006,
-		ValCount:  10001,
+		LiveBytes:       9721,
+		LiveCount:       9901,
+		KeyBytes:        9715,
+		KeyCount:        9901,
+		ValBytes:        10006,
+		ValCount:        10001,
+		LastUpdateNanos: key.Timestamp.WallTime,
 	}
+
 	if !reflect.DeepEqual(expectedStats, cArgs.Stats) {
-		t.Errorf("mvcc stats mismatch %+v != %+v", expectedStats, cArgs.Stats)
+		t.Errorf("mvcc stats mismatch: diff(expected, actual): %s", pretty.Diff(expectedStats, cArgs.Stats))
 	}
 
 	// TODO(dan): The WriteBatch test runs this again to test the idempotence,

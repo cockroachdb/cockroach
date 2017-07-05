@@ -1955,6 +1955,10 @@ func (r *RocksDB) GetAuxiliaryDir() string {
 }
 
 // SetAuxiliaryDir changes the auxiliary storage path for this engine.
+// Never call this.
+//
+// TODO(tschottdorf,danhhz): remove the only "real" use in backup_test.go
+// and this method.
 func (r *RocksDB) SetAuxiliaryDir(d string) error {
 	if err := os.MkdirAll(d, 0755); err != nil {
 		return err
