@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func testBasicEncodeDecode32(
@@ -1777,6 +1778,8 @@ func TestUpperBoundValueEncodingSize(t *testing.T) {
 }
 
 func TestPrettyPrintValueEncoded(t *testing.T) {
+	uuidStr := "63616665-6630-3064-6465-616462656562"
+	u, _ := uuid.FromString(uuidStr)
 	tests := []struct {
 		buf      []byte
 		expected string
@@ -1793,6 +1796,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 			duration.Duration{Months: 1, Days: 2, Nanos: 3}), "1mon2d3ns"},
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x1, 0x2, 0xF, 0xFF}), "01020fff"},
 		{EncodeBytesValue(nil, NoColumnID, []byte("foo")), "foo"},
+		{EncodeUUIDValue(nil, NoColumnID, u), uuidStr},
 	}
 	for i, test := range tests {
 		remaining, str, err := PrettyPrintValueEncoded(test.buf)
