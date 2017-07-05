@@ -399,7 +399,7 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(ROCKSDB_SRC_DIR)/.extra
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/rocksdb-rebuild. See above for rationale.
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
-	  $(if $(findstring release,$(TYPE)),,-DWITH_$(if $(findstring mingw,$(TARGET_TRIPLE)),AVX2,SSE42)=OFF) \
+	  $(if $(findstring release,$(TYPE)),-DPORTABLE=ON -DFORCE_SSE42=ON) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
 	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
 	  $(if $(ENABLE_ROCKSDB_ASSERTIONS),,-DCMAKE_CXX_FLAGS=-DNDEBUG)
