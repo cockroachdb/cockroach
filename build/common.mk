@@ -212,10 +212,10 @@ $(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/Makefile $(REPO_ROOT)/.go-version 
 # common because both the root Makefile and protobuf.mk have C dependencies.
 
 C_DEPS_DIR := $(abspath $(REPO_ROOT)/c-deps)
-JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc.src
-PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf.src
-ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb.src
-SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy.src
+JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
+PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
+ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
+SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy
 
 C_LIBS_SRCS := $(JEMALLOC_SRC_DIR) $(PROTOBUF_SRC_DIR) $(ROCKSDB_SRC_DIR) $(SNAPPY_SRC_DIR)
 
@@ -318,7 +318,7 @@ CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 
 $(CGO_UNSUFFIXED_FLAGS_FILES): .ALWAYS_REBUILD
 
-$(CGO_FLAGS_FILES):
+$(CGO_FLAGS_FILES): $(REPO_ROOT)/build/common.mk
 	@echo 'GEN $@'
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
@@ -329,22 +329,6 @@ $(CGO_FLAGS_FILES):
 	@echo '// #cgo CPPFLAGS: -I$(JEMALLOC_DIR)/include' >> $@
 	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR)/.libs $(ROCKSDB_DIR))' >> $@
 	@echo 'import "C"' >> $@
-
-# We package tarballs in c-deps so that DEP.src.tar.xz is guaranteed to extract
-# to folder DEP.src.
-#
-# Targeting a marker file, DEP.src/.extracted, instead of directly targeting the
-# DEP.src folder, guarantees that the tarball extraction is atomic, as the
-# marker file is touched only after a successful extraction. Otherwise, it's
-# quite common for a mistimed Ctrl-C to leave DEP.src partially-extracted but
-# with a timestamp that makes it appear up-to-date.
-#
-# This is the behavior provided by .DELETE_ON_ERROR, but .DELETE_ON_ERROR only
-# works on file targets, not folder targets.
-$(C_DEPS_DIR)/%.src/.extracted: $(C_DEPS_DIR)/%.src.tar.xz
-	rm -rf $(notdir $(@D))
-	$(REPO_ROOT)/scripts/untarxz.sh $< -C $(C_DEPS_DIR)
-	touch $@
 
 # BUILD ARTIFACT CACHING
 #
@@ -367,7 +351,10 @@ $(C_DEPS_DIR)/%.src/.extracted: $(C_DEPS_DIR)/%.src.tar.xz
 # past, when the tarballs were packaged), and so the build artifacts always look
 # up-to-date.
 
-$(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/.extracted
+$(JEMALLOC_SRC_DIR)/configure:
+	cd $(JEMALLOC_SRC_DIR) && autoconf
+
+$(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/configure
 	rm -rf $(JEMALLOC_DIR)
 	mkdir -p $(JEMALLOC_DIR)
 	@# NOTE: If you change the configure flags below, bump the version in
@@ -377,7 +364,7 @@ $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/.ex
 	@# https://github.com/jemalloc/jemalloc/issues/585.
 	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(CONFIGURE_FLAGS) $(if $(findstring musl,$(TARGET_TRIPLE)),,--enable-prof)
 
-$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(PROTOBUF_SRC_DIR)/.extracted
+$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild
 	rm -rf $(PROTOBUF_DIR)
 	mkdir -p $(PROTOBUF_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -385,7 +372,7 @@ $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(PROTOBUF_SRC_DIR)/.ex
 	cd $(PROTOBUF_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 
 ifneq ($(PROTOC_DIR),$(PROTOBUF_DIR))
-$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(PROTOBUF_SRC_DIR)/.extracted
+$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild
 	rm -rf $(PROTOC_DIR)
 	mkdir -p $(PROTOC_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -393,20 +380,24 @@ $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(PROTOBUF_SRC_DIR)/.extr
 	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 endif
 
-$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(ROCKSDB_SRC_DIR)/.extracted | libsnappy $(if $(USE_STDMALLOC),,libjemalloc)
+$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | libsnappy $(if $(USE_STDMALLOC),,libjemalloc)
 	rm -rf $(ROCKSDB_DIR)
 	mkdir -p $(ROCKSDB_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/rocksdb-rebuild. See above for rationale.
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
 	  $(if $(findstring release,$(TYPE)),,-DWITH_$(if $(findstring mingw,$(TARGET_TRIPLE)),AVX2,SSE42)=OFF) \
-	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
+	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR="$(SNAPPY_SRC_DIR);$(SNAPPY_DIR)" -DWITH_SNAPPY=ON \
 	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
 	  $(if $(ENABLE_ROCKSDB_ASSERTIONS),,-DCMAKE_CXX_FLAGS=-DNDEBUG)
 	@# TODO(benesch): Tweak how we pass -DNDEBUG above when we upgrade to a
 	@# RocksDB release that includes https://github.com/facebook/rocksdb/pull/2300.
 
-$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild $(SNAPPY_SRC_DIR)/.extracted
+$(SNAPPY_SRC_DIR)/configure:
+	cd $(SNAPPY_SRC_DIR) && autoreconf -i
+
+$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild $(SNAPPY_SRC_DIR)/configure
+	rm -rf $(SNAPPY_DIR)
 	mkdir -p $(SNAPPY_DIR)
 	@# NOTE: If you change the configure flags below, bump the version in
 	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
@@ -439,7 +430,7 @@ librocksdb: $(ROCKSDB_DIR)/Makefile $(BOOTSTRAP_TARGET)
 
 .PHONY: clean-c-deps
 clean-c-deps:
-	rm -rf $(JEMALLOC_DIR)
-	rm -rf $(PROTOBUF_DIR)
-	rm -rf $(ROCKSDB_DIR)
-	rm -rf $(SNAPPY_DIR)
+	rm -rf $(JEMALLOC_DIR) && cd $(JEMALLOC_SRC_DIR) && git clean -dxf
+	rm -rf $(PROTOBUF_DIR) && cd $(PROTOBUF_SRC_DIR) && git clean -dxf
+	rm -rf $(ROCKSDB_DIR) && cd $(ROCKSDB_SRC_DIR) && git clean -dxf
+	rm -rf $(SNAPPY_DIR) && cd $(SNAPPY_SRC_DIR) && git clean -dxf

@@ -8,7 +8,7 @@
 set -euo pipefail
 
 apt-get update
-apt-get install -y cmake xz-utils
+apt-get install -y autoconf automake cmake libtool
 
 workdir=$(mktemp -d)
 tar xzf cockroach.src.tgz -C "$workdir"
