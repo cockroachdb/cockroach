@@ -12,6 +12,7 @@
   - Bash (4+ is preferred)
   - GNU Make (3.81+ is known to work)
   - CMake 2.8.12+
+  - Autotools 2.68+
   - XZ Utils (5.2.3+ is known to work), except on macOS, where xz support is
     built in to `tar`.
   - Optional: NodeJS 6.x and Yarn 0.22.0+. Required when compiling protocol
