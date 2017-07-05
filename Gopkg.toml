@@ -18,6 +18,11 @@ required = [
  "golang.org/x/tools/cmd/stringer",
 ]
 
+ignored = [
+  # Non-existent package used by a toy program in c-deps/protobuf.
+  "github.com/google/protobuf/examples/tutorial"
+]
+
 # https://github.com/cockroachdb/raven-go/pulls/1 avoids banned go/build import.
 [[constraint]]
   name = "github.com/getsentry/raven-go"
