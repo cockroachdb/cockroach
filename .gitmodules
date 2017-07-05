@@ -1,3 +1,16 @@
 [submodule "vendor"]
 	path = vendor
 	url = https://github.com/cockroachdb/vendored
+[submodule "c-deps/jemalloc"]
+	path = c-deps/jemalloc
+	url = https://github.com/cockroachdb/jemalloc.git
+[submodule "c-deps/rocksdb"]
+	path = c-deps/rocksdb
+	url = https://github.com/cockroachdb/rocksdb.git
+[submodule "c-deps/snappy"]
+	path = c-deps/snappy
+	url = https://github.com/cockroachdb/snappy.git
+	ignore = untracked
+[submodule "c-deps/protobuf"]
+	path = c-deps/protobuf
+	url = https://github.com/cockroachdb/protobuf.git
