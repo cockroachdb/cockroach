@@ -250,7 +250,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 			case `all`:
 				for _, vName := range varNames {
 					gen := varGen[vName]
-					value := gen.Get(p)
+					value := gen.Get(p.session)
 					if _, err := v.rows.AddRow(
 						ctx, parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
 					); err != nil {
@@ -262,7 +262,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				// The key in varGen is guaranteed to exist thanks to the
 				// check above.
 				gen := varGen[name]
-				value := gen.Get(p)
+				value := gen.Get(p.session)
 				if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
 					v.rows.Close(ctx)
 					return nil, err
