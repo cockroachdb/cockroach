@@ -14,5 +14,8 @@ set -euo pipefail
 #
 # git ls-files gets this right with the notable exception of submodules, which
 # are always output as a bare directory. We filter them out manually.
-git ls-files . ':!vendor'
-git -C vendor ls-files | sed -e s,^,vendor/,
+git ls-files . ':!vendor' ':!c-deps'
+for submodule in vendor c-deps/*
+do
+  git -C "$submodule" ls-files | sed -e "s,^,$submodule/,"
+done
