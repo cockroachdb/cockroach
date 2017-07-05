@@ -1293,6 +1293,12 @@ func (e *Executor) execStmtInOpenTxn(
 				panic(fmt.Sprintf("unexpected txnState when cleaning up: %v", txnState.State()))
 			}
 			txnState.updateStateAndCleanupOnErr(err, e)
+
+			if firstInTxn && isBegin(stmt) {
+				// A failed BEGIN statement that was starting a txn doesn't leave the
+				// txn in the Aborted state; we transition back to NoTxn.
+				txnState.resetStateAndTxn(NoTxn)
+			}
 		} else if txnState.State() == FirstBatch &&
 			!canStayInFirstBatchState(stmt) {
 			// Transition from FirstBatch to Open except in the case of special
