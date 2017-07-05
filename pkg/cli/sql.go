@@ -92,6 +92,10 @@ type cliState struct {
 	lastInputLine string
 	// atEOF indicates whether the last call to readline signaled EOF on input.
 	atEOF bool
+	// lastKnownTxnStatus reports the last known transaction
+	// status. Erased after every statement executed, until the next
+	// query to the server updates it.
+	lastKnownTxnStatus string
 
 	// partialLines is the array of lines accumulated so far in a
 	// multi-line entry. When syntax checking is enabled, partialLines
@@ -390,15 +394,15 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
-	txnStatus := c.refreshTransactionStatus()
-	dbName, hasDbName := c.refreshDatabaseName(txnStatus)
+	c.refreshTransactionStatus()
+	dbName, hasDbName := c.refreshDatabaseName()
 
 	dbStr := ""
 	if hasDbName {
 		dbStr = "/" + dbName
 	}
 
-	c.fullPrompt = c.promptPrefix + dbStr + txnStatus
+	c.fullPrompt = c.promptPrefix + dbStr + c.lastKnownTxnStatus
 	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
 	c.fullPrompt += "> "
 
@@ -406,12 +410,12 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 }
 
 // refreshTransactionStatus retrieves and sets the current transaction status.
-func (c *cliState) refreshTransactionStatus() (txnStatus string) {
-	txnStatus = " ?"
+func (c *cliState) refreshTransactionStatus() {
+	c.lastKnownTxnStatus = " ?"
 
 	dbVal, hasVal := c.conn.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
-		return txnStatus
+		return
 	}
 
 	txnString := formatVal(dbVal,
@@ -420,25 +424,25 @@ func (c *cliState) refreshTransactionStatus() (txnStatus string) {
 	// Change the prompt based on the response from the server.
 	switch txnString {
 	case sql.NoTxn.String():
-		txnStatus = ""
+		c.lastKnownTxnStatus = ""
 	case sql.Aborted.String():
-		txnStatus = " ERROR"
+		c.lastKnownTxnStatus = " ERROR"
 	case sql.CommitWait.String():
-		txnStatus = "  DONE"
+		c.lastKnownTxnStatus = "  DONE"
 	case sql.RestartWait.String():
-		txnStatus = " RETRY"
+		c.lastKnownTxnStatus = " RETRY"
 	case sql.Open.String():
-		txnStatus = "  OPEN"
+		c.lastKnownTxnStatus = "  OPEN"
 	}
-
-	return txnStatus
 }
 
 // refreshDatabaseName retrieves the current database name from the server.
 // The database name is only queried if there is no transaction ongoing,
 // or the transaction is fully open.
-func (c *cliState) refreshDatabaseName(txnStatus string) (string, bool) {
-	if !(txnStatus == "" /*NoTxn*/ || txnStatus == "  OPEN") {
+func (c *cliState) refreshDatabaseName() (string, bool) {
+	if !(c.lastKnownTxnStatus == "" /*NoTxn*/ ||
+		c.lastKnownTxnStatus == "  OPEN" ||
+		c.lastKnownTxnStatus == " ?" /* Unknown */) {
 		return "", false
 	}
 
@@ -829,10 +833,11 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	// In interactive mode, we make some additional effort to help the user:
 	// if the entry so far is starting an incomplete transaction, push
 	// the user to enter input over multiple lines.
-	if endsWithIncompleteTxn(parsedStmts) && c.lastInputLine != "" {
+	if c.lastKnownTxnStatus == "" && endsWithIncompleteTxn(parsedStmts) && c.lastInputLine != "" {
 		if c.partialStmtsLen == 0 {
 			fmt.Fprintln(stderr, "Now adding input for a multi-line SQL transaction client-side.\n"+
-				"Press Enter two times to send the SQL text collected so far to the server, or Ctrl+C to cancel.")
+				"Press Enter two times to send the SQL text collected so far to the server, or Ctrl+C to cancel.\n"+
+				"You can also use \\show to display the statements entered so far.")
 		}
 
 		nextState = contState
@@ -844,6 +849,11 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 }
 
 func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
+	// Once we send something to the server, the txn status may change arbitrarily.
+	// Clear the known state so that further entries do not assume anything.
+	c.lastKnownTxnStatus = " ?"
+
+	// Now run the statement/query.
 	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines),
 		cliCtx.tableDisplayFormat)
 	if c.exitErr != nil {
