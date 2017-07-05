@@ -33,6 +33,19 @@ SELECT span, message, operation FROM [SHOW TRACE FOR SELECT 1]
 (0,2)  plan completed execution              consuming rows
 (0,2)  resources released, stopping trace    consuming rows
 
+statement ok
+PREPARE x AS SELECT 1
+
+query TTT
+SELECT span, message, operation FROM [SHOW TRACE FOR EXECUTE x]
+----
+(0,0)  === SPAN START: sql txn implicit ===  sql txn implicit
+(0,1)  === SPAN START: starting plan ===     starting plan
+(0,2)  === SPAN START: consuming rows ===    consuming rows
+(0,2)  output row: [1]                       consuming rows
+(0,2)  plan completed execution              consuming rows
+(0,2)  resources released, stopping trace    consuming rows
+
 # Check SHOW SESSION KV TRACE.
 
 statement ok

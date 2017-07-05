@@ -1245,6 +1245,7 @@ explainable_stmt:
 | split_stmt
 | testing_relocate_stmt
 | scatter_stmt
+| execute_stmt
 | explain_stmt { /* SKIP DOC */ }
 
 explain_option_list:

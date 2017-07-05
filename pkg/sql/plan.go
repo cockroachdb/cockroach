@@ -346,6 +346,8 @@ func (p *planner) newPlan(
 		return p.DropView(ctx, n)
 	case *parser.DropUser:
 		return p.DropUser(ctx, n)
+	case *parser.Execute:
+		return p.Execute(ctx, n)
 	case *parser.Explain:
 		return p.Explain(ctx, n)
 	case *parser.Grant:
