@@ -238,15 +238,17 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			// Check that we can read all the rows and columns.
 			mTest.CheckQueryResults(starQuery, initRows)
 
-			var afterInsert, afterUpdate, afterDelete [][]string
+			var afterInsert, afterUpdate, afterPKUpdate, afterDelete [][]string
 			var afterDeleteKeys int
 			if state == sqlbase.DescriptorMutation_DELETE_ONLY {
 				// The default value of "i" for column "i" is not written.
 				afterInsert = [][]string{{"a", "z", "q"}, {"c", "x", "NULL"}}
 				// Update is a noop for column "i".
 				afterUpdate = [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}}
+				// Update the pk of the second tuple from c to d
+				afterPKUpdate = [][]string{{"a", "u", "q"}, {"d", "x", "NULL"}}
 				// Delete also deletes column "i".
-				afterDelete = [][]string{{"c", "x", "NULL"}}
+				afterDelete = [][]string{{"d", "x", "NULL"}}
 				afterDeleteKeys = 2
 			} else {
 				// The default value of "i" for column "i" is written.
@@ -255,12 +257,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 					// Update is not a noop for column "i". Column "i" gets updated
 					// with its default value (#9474).
 					afterUpdate = [][]string{{"a", "u", "i"}, {"c", "x", "i"}}
+					afterPKUpdate = [][]string{{"a", "u", "i"}, {"d", "x", "i"}}
 				} else {
 					// Update is a noop for column "i".
 					afterUpdate = [][]string{{"a", "u", "q"}, {"c", "x", "i"}}
+					afterPKUpdate = [][]string{{"a", "u", "q"}, {"d", "x", "i"}}
 				}
 				// Delete also deletes column "i".
-				afterDelete = [][]string{{"c", "x", "i"}}
+				afterDelete = [][]string{{"d", "x", "i"}}
 				afterDeleteKeys = 3
 			}
 			// Make column "i" a mutation.
@@ -312,6 +316,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			mTest.makeMutationsActive()
 			// The update to column "v" is seen; there is no effect on column "i".
 			mTest.CheckQueryResults(starQuery, afterUpdate)
+
+			// Make column "i" a mutation.
+			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
+			// Update primary key of row "c" to be "d"
+			mTest.Exec(`UPDATE t.test SET k = 'd' WHERE v = 'x'`)
+			// Make column "i" live so that it is read.
+			mTest.makeMutationsActive()
+			mTest.CheckQueryResults(starQuery, afterPKUpdate)
 
 			// Make column "i" a mutation.
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
@@ -469,15 +481,32 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 
 			// Make "foo" a mutation.
 			mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
+			// Update the primary key of row "a".
+			mTest.Exec(`UPDATE t.test SET k = 'd' WHERE v = 'z'`)
+			mTest.CheckQueryResults(starQuery, [][]string{{"b", "y"}, {"c", "w"}, {"d", "z"}})
+
+			// Make index "foo" live so that we can read it.
+			mTest.makeMutationsActive()
+			// Updating the primary key for a row when we're in delete-only won't
+			// create a new index entry, and will delete the old one. Otherwise it'll
+			// create a new entry and delete the old one.
+			if state == sqlbase.DescriptorMutation_DELETE_ONLY {
+				mTest.CheckQueryResults(indexQuery, [][]string{{"y"}})
+			} else {
+				mTest.CheckQueryResults(indexQuery, [][]string{{"w"}, {"y"}, {"z"}})
+			}
+
+			// Make "foo" a mutation.
+			mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
 			// Delete row "b".
 			mTest.Exec(`DELETE FROM t.test WHERE k = 'b'`)
-			mTest.CheckQueryResults(starQuery, [][]string{{"a", "z"}, {"c", "w"}})
+			mTest.CheckQueryResults(starQuery, [][]string{{"c", "w"}, {"d", "z"}})
 
 			// Make index "foo" live so that we can read it.
 			mTest.makeMutationsActive()
 			// Deleting row "b" deletes "y" from the index.
 			if state == sqlbase.DescriptorMutation_DELETE_ONLY {
-				mTest.CheckQueryResults(indexQuery, [][]string{{"z"}})
+				mTest.CheckQueryResults(indexQuery, [][]string{})
 			} else {
 				mTest.CheckQueryResults(indexQuery, [][]string{{"w"}, {"z"}})
 			}
