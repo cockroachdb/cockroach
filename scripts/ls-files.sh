@@ -14,5 +14,16 @@ set -euo pipefail
 #
 # git ls-files gets this right with the notable exception of submodules, which
 # are always output as a bare directory. We filter them out manually.
-git ls-files . ':!vendor'
-git -C vendor ls-files | sed -e s,^,vendor/,
+
+submodules=($(git submodule foreach --quiet 'echo $path'))
+
+# The parameter expansion below prepends `:(exclude)` to every path in the
+# submodules array, resulting in a final command like:
+#
+#     git ls-files . :(exclude)vendor :(exclude)c-deps/jemalloc...
+#
+git ls-files . "${submodules[@]/#/:(exclude)}"
+
+for submodule in "${submodules[@]}"; do
+  git -C "$submodule" ls-files | sed -e "s,^,$submodule/,"
+done
