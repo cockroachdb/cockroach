@@ -9,6 +9,7 @@
 package storageccl_test
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -33,14 +34,14 @@ func BenchmarkAddSSTable(b *testing.B) {
 	defer dirCleanupFn()
 
 	for _, numEntries := range []int{100, 1000, 10000} {
-		bankData := sampledataccl.BankRows(numEntries)
-		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
-		backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
-		if err != nil {
-			b.Fatalf("%+v", err)
-		}
+		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
+			bankData := sampledataccl.BankRows(numEntries)
+			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
+			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			if err != nil {
+				b.Fatalf("%+v", err)
+			}
 
-		b.Run(strconv.Itoa(numEntries), func(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
@@ -49,9 +50,9 @@ func BenchmarkAddSSTable(b *testing.B) {
 			id := sqlbase.ID(keys.MaxReservedDescID + 1)
 
 			var totalLen int64
+			b.StopTimer()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				b.StopTimer()
 				sst, err := engine.MakeRocksDBSstFileWriter()
 				if err != nil {
 					b.Fatalf("%+v", err)
@@ -74,13 +75,13 @@ func BenchmarkAddSSTable(b *testing.B) {
 				}
 				sst.Close()
 				totalLen += int64(len(data))
-				b.StartTimer()
 
+				b.StartTimer()
 				if err := kvDB.ExperimentalAddSSTable(ctx, span.Key, span.EndKey, data); err != nil {
 					b.Fatalf("%+v", err)
 				}
+				b.StopTimer()
 			}
-			b.StopTimer()
 			b.SetBytes(totalLen / int64(b.N))
 		})
 	}
@@ -91,14 +92,14 @@ func BenchmarkWriteBatch(b *testing.B) {
 	defer dirCleanupFn()
 
 	for _, numEntries := range []int{100, 1000, 10000} {
-		bankData := sampledataccl.BankRows(numEntries)
-		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
-		backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
-		if err != nil {
-			b.Fatalf("%+v", err)
-		}
+		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
+			bankData := sampledataccl.BankRows(numEntries)
+			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
+			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			if err != nil {
+				b.Fatalf("%+v", err)
+			}
 
-		b.Run(strconv.Itoa(numEntries), func(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
@@ -108,9 +109,9 @@ func BenchmarkWriteBatch(b *testing.B) {
 			var batch engine.RocksDBBatchBuilder
 
 			var totalLen int64
+			b.StopTimer()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				b.StopTimer()
 				id++
 				backup.ResetKeyValueIteration()
 				kvs, span, err := backup.NextKeyValues(numEntries, id)
@@ -122,13 +123,13 @@ func BenchmarkWriteBatch(b *testing.B) {
 				}
 				repr := batch.Finish()
 				totalLen += int64(len(repr))
-				b.StartTimer()
 
+				b.StartTimer()
 				if err := kvDB.WriteBatch(ctx, span.Key, span.EndKey, repr); err != nil {
 					b.Fatalf("%+v", err)
 				}
+				b.StopTimer()
 			}
-			b.StopTimer()
 			b.SetBytes(totalLen / int64(b.N))
 		})
 	}
@@ -150,18 +151,18 @@ func runBenchmarkImport(b *testing.B) {
 	defer dirCleanupFn()
 
 	for _, numEntries := range []int{1, 100, 10000, 100000} {
-		bankData := sampledataccl.BankRows(numEntries)
-		backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
-		backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
-		if err != nil {
-			b.Fatalf("%+v", err)
-		}
-		storage, err := storageccl.ExportStorageConfFromURI(`nodelocal://` + backupDir)
-		if err != nil {
-			b.Fatalf("%+v", err)
-		}
+		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
+			bankData := sampledataccl.BankRows(numEntries)
+			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
+			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			if err != nil {
+				b.Fatalf("%+v", err)
+			}
+			storage, err := storageccl.ExportStorageConfFromURI(`nodelocal://` + backupDir)
+			if err != nil {
+				b.Fatalf("%+v", err)
+			}
 
-		b.Run(strconv.Itoa(numEntries), func(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
@@ -170,9 +171,9 @@ func runBenchmarkImport(b *testing.B) {
 			id := sqlbase.ID(keys.MaxReservedDescID + 1)
 
 			var totalLen int64
+			b.StopTimer()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				b.StopTimer()
 				id++
 				var rekeys []roachpb.ImportRequest_TableRekey
 				var oldStartKey roachpb.Key
@@ -195,8 +196,8 @@ func runBenchmarkImport(b *testing.B) {
 					})
 				}
 				newStartKey := roachpb.Key(keys.MakeTablePrefix(uint32(id)))
-				b.StartTimer()
 
+				b.StartTimer()
 				var files []roachpb.ImportRequest_File
 				for _, file := range backup.Desc.Files {
 					files = append(files, roachpb.ImportRequest_File{Dir: storage, Path: file.Path})
@@ -215,8 +216,8 @@ func runBenchmarkImport(b *testing.B) {
 					b.Fatalf("%+v", pErr.GoError())
 				}
 				totalLen += res.(*roachpb.ImportResponse).Imported.DataSize
+				b.StopTimer()
 			}
-			b.StopTimer()
 			b.SetBytes(totalLen / int64(b.N))
 		})
 	}

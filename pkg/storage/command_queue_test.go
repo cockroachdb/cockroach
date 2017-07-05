@@ -572,7 +572,7 @@ func BenchmarkCommandQueueGetWaitAllReadOnly(b *testing.B) {
 	// CommandQueue.getOverlaps had O(n) performance in this setup. Since reads
 	// do not wait on other reads, expected performance is O(1).
 	for _, size := range []int{1, 4, 16, 64, 128, 256} {
-		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
+		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
 			cq := NewCommandQueue(true)
 			spans := []roachpb.Span{{
 				Key:    roachpb.Key("aaaaaaaaaa"),
@@ -595,7 +595,7 @@ func BenchmarkCommandQueueReadWriteMix(b *testing.B) {
 	// of reads per write.
 	// See #15544.
 	for _, readsPerWrite := range []int{1, 4, 16, 64, 128, 256} {
-		b.Run(fmt.Sprintf("%d", readsPerWrite), func(b *testing.B) {
+		b.Run(fmt.Sprintf("readsPerWrite=%d", readsPerWrite), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				totalCmds := 1 << 10
 				liveCmdQueue := make(chan *cmd, 16)
