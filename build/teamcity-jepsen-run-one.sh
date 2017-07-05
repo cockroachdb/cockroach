@@ -52,11 +52,14 @@ if timeout 15m ssh "${SSH_OPTIONS[@]}" "ubuntu@${controller}" "${testcmd}" \
            # with an excerpt from the jepsen log.
            prevsecs=0
            while true; do
-               # Fail if no jepsen logging message within 30 seconds.
+               # Fail if no jepsen logging message within 60 seconds.
                # Note that jepsen sleeps for the --recovery-time
                # parameter above at the end of the test, so this
                # timeout must be greater than that value.
-               read -t 30 x
+               # Additionally, jepsen uses some hard-coded 30s timeouts
+               # internally, so setting this too low may interfere with
+               # jepsen's own error reporting.
+               read -t 60 x
                status=$?
                if [ $status -gt 128 ]; then
                    progress "Jepsen test was silent for too long, aborting"
