@@ -16,6 +16,7 @@ package client
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/pkg/errors"
@@ -121,7 +122,13 @@ func (m *LeaseManager) TimeRemaining(l *Lease) time.Duration {
 }
 
 func (m *LeaseManager) timeRemaining(val *LeaseVal) time.Duration {
-	return val.Expiration.GoTime().Sub(m.clock.Now().GoTime()) - m.clock.MaxOffset()
+	maxOffset := m.clock.MaxOffset()
+	if maxOffset == time.Duration(math.MaxInt64) {
+		// Clockless reads are active, so we don't need to stop using the lease
+		// early.
+		maxOffset = 0
+	}
+	return val.Expiration.GoTime().Sub(m.clock.Now().GoTime()) - maxOffset
 }
 
 // ExtendLease attempts to push the expiration time of the lease farther out

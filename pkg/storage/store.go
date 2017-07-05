@@ -894,7 +894,12 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 	// Due to lease extensions, the remaining interval can be longer than just
 	// the sum of the offset (=length of stasis period) and the active
 	// duration, but definitely not by 2x.
-	return 2 * int64(sc.RangeLeaseActiveDuration+sc.Clock.MaxOffset())
+	maxOffset := sc.Clock.MaxOffset()
+	if maxOffset == time.Duration(math.MaxInt64) {
+		// Don't do shady math on clockless reads.
+		maxOffset = 0
+	}
+	return 2 * int64(sc.RangeLeaseActiveDuration+maxOffset)
 }
 
 // NewStore returns a new instance of a store.
@@ -2460,13 +2465,13 @@ func (s *Store) Send(
 		s.cfg.TestingKnobs.ClockBeforeSend(s.cfg.Clock, ba)
 	}
 
-	if s.Clock().MaxOffset() > 0 {
+	if maxOffset := s.Clock().MaxOffset(); maxOffset > 0 && maxOffset != time.Duration(math.MaxInt64) {
 		// Once a command is submitted to raft, all replicas' logical
 		// clocks will be ratcheted forward to match. If the command
 		// appears to come from a node with a bad clock, reject it now
 		// before we reach that point.
 		offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
-		if offset > s.Clock().MaxOffset() && !s.cfg.TestingKnobs.DisableMaxOffsetCheck {
+		if offset > maxOffset && !s.cfg.TestingKnobs.DisableMaxOffsetCheck {
 			return nil, roachpb.NewErrorf("rejecting command with timestamp in the future: %d (%s ahead)",
 				ba.Timestamp.WallTime, offset)
 		}

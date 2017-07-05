@@ -423,7 +423,10 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 			// Only update the clock offset measurement if we actually got a
 			// successful response from the server.
 			pingDuration := receiveTime.Sub(sendTime)
-			if pingDuration > maximumPingDurationMult*ctx.LocalClock.MaxOffset() {
+			maxOffset := ctx.LocalClock.MaxOffset()
+			if maxOffset != time.Duration(math.MaxInt64) &&
+				pingDuration > maximumPingDurationMult*maxOffset {
+
 				request.Offset.Reset()
 			} else {
 				// Offset and error are measured using the remote clock reading

@@ -21,6 +21,8 @@ package storage
 
 import (
 	"fmt"
+	"math"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -361,7 +363,12 @@ func (r *Replica) leaseStatus(
 		}
 		expiration = status.liveness.Expiration
 	}
-	stasis := expiration.Add(-int64(r.store.Clock().MaxOffset()), 0)
+	maxOffset := r.store.Clock().MaxOffset()
+	if maxOffset == time.Duration(math.MaxInt64) {
+		// No stasis when using clockless reads.
+		maxOffset = 0
+	}
+	stasis := expiration.Add(-int64(maxOffset), 0)
 	if timestamp.Less(stasis) {
 		status.state = leaseValid
 		// If the replica owns the lease, additional verify that the lease's
