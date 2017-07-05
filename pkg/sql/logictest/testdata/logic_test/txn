@@ -790,14 +790,10 @@ BEGIN READ WRITE; COMMIT
 statement error read only not supported
 BEGIN READ ONLY
 
-# TODO(andrei): Something might be fishy here. The statement above leaves the
-# transaction in an error state, and so we need this rollback. But all the
-# errors below are parse errors, and so they don't mess with the transaction
-# state. Perhaps it'd be better if the statement above also left the session in
-# the NoTxn state. I couldn't do an analogous test with Postgres since I can't
-# trigger a BEGIN error that's not a parse error.
-statement ok
-ROLLBACK
+query T
+SHOW TRANSACTION STATUS
+----
+NoTxn
 
 statement error read mode specified multiple times
 BEGIN READ WRITE, READ ONLY
