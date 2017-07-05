@@ -74,6 +74,31 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	mtc.Start(t, numStores)
 
 	mtc.replicateRange(rangeID, 1, 2)
+
+	{
+		repl1, err := mtc.stores[1].GetReplica(rangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Put some bogus data on the replica which we're about to remove. Then,
+		// at the end of the test, check that that sideloaded storage is now
+		// empty (in other words, GC'ing the Replica took care of cleanup).
+		repl1.PutBogusSideloadedData(12345, 6789)
+
+		defer func() {
+			if !t.Failed() {
+				testutils.SucceedsSoon(t, func() error {
+					if count := repl1.SideloadedDataCount(); count != 0 {
+						return errors.Errorf(
+							"first replica still has %d sideloaded files despite GC", count,
+						)
+					}
+					return nil
+				})
+			}
+		}()
+	}
+
 	mtc.unreplicateRange(rangeID, 1)
 
 	// Make sure the range is removed from the store.
