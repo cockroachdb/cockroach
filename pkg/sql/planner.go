@@ -167,6 +167,9 @@ func (p *planner) setTxn(txn *client.Txn) {
 
 // query initializes a planNode from a SQL statement string. Close() must be
 // called on the returned planNode after use.
+// This function is not suitable for use in the planNode constructors directly:
+// the returned planNode has already been optimized.
+// Consider also (*planner).delegateQuery(...).
 func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (planNode, error) {
 	if log.V(2) {
 		log.Infof(ctx, "internal query: %s", sql)
@@ -274,15 +277,17 @@ func (p *planner) fillFKTableMap(ctx context.Context, m sqlbase.TableLookupsByID
 	return nil
 }
 
-// isDatabaseVisible returns true if the given database is visible to the
-// current user. Only the current database and system databases are available
-// to ordinary users; everything is available to root.
-func (p *planner) isDatabaseVisible(dbName string) bool {
-	if p.session.User == security.RootUser {
+// isDatabaseVisible returns true if the given database is visible
+// given the provided prefix.
+// An empty prefix makes all databases visible.
+// System databases are always visible.
+// Otherwise only the database with the same name as the prefix is available.
+func isDatabaseVisible(dbName, prefix, user string) bool {
+	if isSystemDatabaseName(dbName) {
 		return true
-	} else if dbName == p.evalCtx.Database {
+	} else if dbName == prefix {
 		return true
-	} else if isSystemDatabaseName(dbName) {
+	} else if prefix == "" {
 		return true
 	}
 	return false

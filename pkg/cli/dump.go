@@ -143,7 +143,7 @@ func getDumpMetadata(
 func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string, err error) {
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT TABLE_NAME
-		FROM information_schema.tables
+		FROM "".information_schema.tables
 		AS OF SYSTEM TIME '%s'
 		WHERE TABLE_SCHEMA = $1
 		`, ts), []driver.Value{dbName})
@@ -179,7 +179,7 @@ func getMetadataForTable(
 	// Fetch column types.
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME, DATA_TYPE
-		FROM information_schema.columns
+		FROM "".information_schema.columns
 		AS OF SYSTEM TIME '%s'
 		WHERE TABLE_SCHEMA = $1
 			AND TABLE_NAME = $2
@@ -218,7 +218,7 @@ func getMetadataForTable(
 	// Fetch the primary index name.
 	vals, err = conn.QueryRow(fmt.Sprintf(`
 		SELECT CONSTRAINT_NAME
-		FROM information_schema.table_constraints
+		FROM "".information_schema.table_constraints
 		AS OF SYSTEM TIME '%s'
 		WHERE TABLE_SCHEMA = $1
 			AND TABLE_NAME = $2
@@ -239,7 +239,7 @@ func getMetadataForTable(
 
 	rows, err = conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME
-		FROM information_schema.key_column_usage
+		FROM "".information_schema.key_column_usage
 		AS OF SYSTEM TIME '%s'
 		WHERE TABLE_SCHEMA = $1
 			AND TABLE_NAME = $2
@@ -275,7 +275,7 @@ func getMetadataForTable(
 
 	vals, err = conn.QueryRow(fmt.Sprintf(`
 		SELECT CREATE_TABLE
-		FROM crdb_internal.tables
+		FROM "".crdb_internal.tables
 		AS OF SYSTEM TIME '%s'
 		WHERE NAME = $1
 			AND DATABASE_NAME = $2
