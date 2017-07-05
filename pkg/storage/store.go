@@ -74,7 +74,8 @@ const (
 
 	// defaultRaftEntryCacheSize is the default size in bytes for a
 	// store's Raft log entry cache.
-	defaultRaftEntryCacheSize = 1 << 24 // 16M
+	defaultRaftEntryCacheSize   = 16 << 20 // 16M
+	defaultRaftEntryCacheShards = 16
 
 	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
@@ -669,10 +670,6 @@ type StoreConfig struct {
 	// the range event log.
 	LogRangeEvents bool
 
-	// RaftEntryCacheSize is the size in bytes of the Raft log entry cache
-	// shared by all Raft groups managed by the store.
-	RaftEntryCacheSize uint64
-
 	TestingKnobs StoreTestingKnobs
 
 	// concurrentSnapshotApplyLimit specifies the maximum number of empty
@@ -864,9 +861,6 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RaftElectionTimeoutTicks == 0 {
 		sc.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
 	}
-	if sc.RaftEntryCacheSize == 0 {
-		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
-	}
 	if sc.concurrentSnapshotApplyLimit == 0 {
 		// NB: setting this value higher than 1 is likely to degrade client
 		// throughput.
@@ -920,7 +914,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		})
 	}
 	s.intentResolver = newIntentResolver(s)
-	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
+	s.raftEntryCache = newRaftEntryCache(defaultRaftEntryCacheSize, defaultRaftEntryCacheShards)
 	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
 

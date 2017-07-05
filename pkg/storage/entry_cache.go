@@ -48,35 +48,49 @@ func (a *entryCacheKey) Compare(b llrb.Comparable) int {
 	}
 }
 
+type raftEntryCacheShard struct {
+	syncutil.RWMutex                     // protects Cache for concurrent access.
+	bytes            uint64              // total size of the cache in bytes
+	cache            *cache.OrderedCache // LRU cache of log entries, keyed by rangeID / log index
+}
+
 // A raftEntryCache maintains a global cache of Raft group log
 // entries. The cache mostly prevents unnecessary reads from disk of
 // recently-written log entries between log append and application
 // to the FSM.
 type raftEntryCache struct {
-	syncutil.Mutex                     // protects Cache for concurrent access.
-	bytes          uint64              // total size of the cache in bytes
-	cache          *cache.OrderedCache // LRU cache of log entries, keyed by rangeID / log index
+	shards []raftEntryCacheShard
 }
 
 // newRaftEntryCache returns a new RaftEntryCache with the given
 // maximum size in bytes.
-func newRaftEntryCache(maxBytes uint64) *raftEntryCache {
+func newRaftEntryCache(maxBytes uint64, numShards int) *raftEntryCache {
+	maxBytes /= uint64(numShards)
+
 	rec := &raftEntryCache{
-		cache: cache.NewOrderedCache(cache.Config{Policy: cache.CacheLRU}),
+		shards: make([]raftEntryCacheShard, numShards),
 	}
-	// The raft entry cache mutex will be held when the ShouldEvict
-	// and OnEvicted callbacks are invoked.
-	//
-	// On ShouldEvict, compare the total size of the cache in bytes to the
-	// configured maxBytes. We also insist that at least one entry remains
-	// in the cache to prevent the case where a very large entry isn't able
-	// to be cached at all.
-	rec.cache.Config.ShouldEvict = func(n int, k, v interface{}) bool {
-		return rec.bytes > maxBytes && n >= 1
-	}
-	rec.cache.Config.OnEvicted = func(k, v interface{}) {
-		ent := v.(*raftpb.Entry)
-		rec.bytes -= uint64(ent.Size())
+
+	for i := range rec.shards {
+		s := &rec.shards[i]
+		cache := cache.NewOrderedCache(cache.Config{
+			Policy: cache.CacheLRU,
+			// The raft entry cache shard mutex will be held when the ShouldEvict and
+			// OnEvicted callbacks are invoked.
+			//
+			// On ShouldEvict, compare the total size of the cache in bytes to the
+			// configured maxBytes. We also insist that at least one entry remains
+			// in the cache to prevent the case where a very large entry isn't able
+			// to be cached at all.
+			ShouldEvict: func(n int, k, v interface{}) bool {
+				return s.bytes > maxBytes && n >= 1
+			},
+			OnEvicted: func(k, v interface{}) {
+				ent := v.(*raftpb.Entry)
+				s.bytes -= uint64(ent.Size())
+			},
+		})
+		s.cache = cache
 	}
 
 	return rec
@@ -96,19 +110,24 @@ func (rec *raftEntryCache) makeCacheEntry(key entryCacheKey, value raftpb.Entry)
 	return &alloc.entry
 }
 
+func (rec *raftEntryCache) getShard(rangeID roachpb.RangeID) *raftEntryCacheShard {
+	return &rec.shards[rangeID%roachpb.RangeID(len(rec.shards))]
+}
+
 // addEntries adds the slice of raft entries, using the range ID and the
 // entry indexes as each cached entry's key.
 func (rec *raftEntryCache) addEntries(rangeID roachpb.RangeID, ents []raftpb.Entry) {
 	if len(ents) == 0 {
 		return
 	}
-	rec.Lock()
-	defer rec.Unlock()
+	s := rec.getShard(rangeID)
+	s.Lock()
+	defer s.Unlock()
 
 	for _, e := range ents {
-		rec.bytes += uint64(e.Size())
+		s.bytes += uint64(e.Size())
 		entry := rec.makeCacheEntry(entryCacheKey{RangeID: rangeID, Index: e.Index}, e)
-		rec.cache.AddEntry(entry)
+		s.cache.AddEntry(entry)
 	}
 }
 
@@ -120,14 +139,15 @@ func (rec *raftEntryCache) addEntries(rangeID roachpb.RangeID, ents []raftpb.Ent
 func (rec *raftEntryCache) getEntries(
 	ents []raftpb.Entry, rangeID roachpb.RangeID, lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, uint64, uint64) {
-	rec.Lock()
-	defer rec.Unlock()
+	s := rec.getShard(rangeID)
+	s.RLock()
+	defer s.RUnlock()
 	var bytes uint64
 	nextIndex := lo
 
 	fromKey := &entryCacheKey{RangeID: rangeID, Index: lo}
 	toKey := &entryCacheKey{RangeID: rangeID, Index: hi}
-	rec.cache.DoRange(func(k, v interface{}) bool {
+	s.cache.DoRange(func(k, v interface{}) bool {
 		ecKey := k.(*entryCacheKey)
 		if ecKey.Index != nextIndex {
 			return true
@@ -147,21 +167,22 @@ func (rec *raftEntryCache) getEntries(
 
 // delEntries deletes entries between [lo, hi) for specified range.
 func (rec *raftEntryCache) delEntries(rangeID roachpb.RangeID, lo, hi uint64) {
-	rec.Lock()
-	defer rec.Unlock()
+	s := rec.getShard(rangeID)
+	s.Lock()
+	defer s.Unlock()
 	if lo >= hi {
 		return
 	}
 	var keys []*entryCacheKey
 	fromKey := &entryCacheKey{RangeID: rangeID, Index: lo}
 	toKey := &entryCacheKey{RangeID: rangeID, Index: hi}
-	rec.cache.DoRange(func(k, v interface{}) bool {
+	s.cache.DoRange(func(k, v interface{}) bool {
 		keys = append(keys, k.(*entryCacheKey))
 		return false
 	}, fromKey, toKey)
 
 	for _, k := range keys {
-		rec.cache.Del(k)
+		s.cache.Del(k)
 	}
 }
 
