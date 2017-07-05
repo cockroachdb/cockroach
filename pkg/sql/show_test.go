@@ -172,7 +172,9 @@ func TestShowCreateTable(t *testing.T) {
 	j INT NULL,
 	k INT NULL,
 	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b),
+	INDEX t7_auto_index_fk_i_ref_items (i ASC, j ASC),
 	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c),
+	INDEX t7_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
