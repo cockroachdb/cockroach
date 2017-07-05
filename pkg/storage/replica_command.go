@@ -1887,7 +1887,9 @@ func evalTruncateLog(
 	end := keys.RaftLogKey(cArgs.EvalCtx.RangeID(), args.Index)
 	var diff enginepb.MVCCStats
 	// Passing zero timestamp to MVCCDeleteRange is equivalent to a ranged clear
-	// but it also computes stats.
+	// but it also computes stats. Note that any sideloaded payloads that may be
+	// removed by this truncation don't matter; they're not tracked in the raft
+	// log delta.
 	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, math.MaxInt64, /* max */
 		hlc.Timestamp{}, nil /* txn */, false /* returnKeys */); err != nil {
 		return EvalResult{}, err
@@ -2200,14 +2202,15 @@ func (r *Replica) CheckConsistency(
 	}
 	wg.Wait()
 
+	logFunc := log.Errorf
+	if p := r.store.TestingKnobs().BadChecksumPanic; p != nil {
+		p(r.store.Ident)
+	} else if r.store.cfg.ConsistencyCheckPanicOnFailure {
+		logFunc = log.Fatalf
+	}
+
 	if inconsistencyCount == 0 {
 	} else if args.WithDiff {
-		logFunc := log.Errorf
-		if p := r.store.TestingKnobs().BadChecksumPanic; p != nil {
-			p(r.store.Ident)
-		} else if r.store.cfg.ConsistencyCheckPanicOnFailure {
-			logFunc = log.Fatalf
-		}
 		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
 	} else {
 		if err := r.store.stopper.RunAsyncTask(
@@ -2219,7 +2222,7 @@ func (r *Replica) CheckConsistency(
 					key = keys.LocalMax
 				}
 				if err := r.store.db.CheckConsistency(ctx, key, endKey, true /* withDiff */); err != nil {
-					log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
+					logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", err)
 				}
 			}); err != nil {
 			log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
@@ -2372,55 +2375,6 @@ func (r *Replica) sha512(
 	}
 	sha := make([]byte, 0, sha512.Size)
 	return hasher.Sum(sha), nil
-}
-
-func makeUnimplementedCommand(method roachpb.Method) Command {
-	return Command{
-		DeclareKeys: DefaultDeclareKeys,
-		Eval: func(
-			_ context.Context, _ engine.ReadWriter, _ CommandArgs, _ roachpb.Response,
-		) (EvalResult, error) {
-			return EvalResult{}, errors.Errorf("unimplemented command: %s", method.String())
-		}}
-}
-
-var writeBatchCmd = makeUnimplementedCommand(roachpb.WriteBatch)
-var addSSTableCmd = makeUnimplementedCommand(roachpb.AddSSTable)
-var exportCmd = makeUnimplementedCommand(roachpb.Export)
-var importCmdFn ImportCmdFunc = func(context.Context, CommandArgs) (*roachpb.ImportResponse, error) {
-	return &roachpb.ImportResponse{}, errors.Errorf("unimplemented command: %s", roachpb.Import)
-}
-
-// SetWriteBatchCmd allows setting the function that will be called as the
-// implementation of the WriteBatch command. Only allowed to be called by Init.
-func SetWriteBatchCmd(cmd Command) {
-	// This is safe if SetWriteBatchCmd is only called at init time.
-	commands[roachpb.WriteBatch] = cmd
-}
-
-// SetAddSSTableCmd allows setting the function that will be called as the
-// implementation of the AddSSTable command. Only allowed to be called by Init.
-func SetAddSSTableCmd(cmd Command) {
-	// This is safe if SetAddSSTableCmd is only called at init time.
-	commands[roachpb.AddSSTable] = cmd
-}
-
-// SetExportCmd allows setting the function that will be called as the
-// implementation of the Export command. Only allowed to be called by Init.
-func SetExportCmd(cmd Command) {
-	// This is safe if SetExportCmd is only called at init time.
-	commands[roachpb.Export] = cmd
-}
-
-// ImportCmdFunc is the type of the function that will be called as the
-// implementation of the Import command.
-type ImportCmdFunc func(context.Context, CommandArgs) (*roachpb.ImportResponse, error)
-
-// SetImportCmd allows setting the function that will be called as the
-// implementation of the Import command. Only allowed to be called by Init.
-func SetImportCmd(fn ImportCmdFunc) {
-	// This is safe if SetImportCmd is only called at init time.
-	importCmdFn = fn
 }
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
@@ -3689,7 +3643,7 @@ func (r *Replica) sendSnapshot(
 ) error {
 	snap, err := r.GetSnapshot(ctx, snapType)
 	if err != nil {
-		return errors.Wrapf(err, "%s: change replicas failed to generate snapshot", r)
+		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
