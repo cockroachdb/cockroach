@@ -724,14 +724,14 @@ func (e *Executor) execParsed(
 					avoidCachedDescriptors = true
 				}
 			}
-			txnState.resetForNewSQLTxn(e, session, execOpt.AutoCommit /* implicitTxn */)
-			txnState.autoRetry = true
-			txnState.sqlTimestamp = e.cfg.Clock.PhysicalTime()
-			if txnState.implicitTxn {
-				txnState.mu.txn.SetDebugName(sqlImplicitTxnName)
-			} else {
-				txnState.mu.txn.SetDebugName(sqlTxnName)
-			}
+			txnState.resetForNewSQLTxn(
+				e, session,
+				execOpt.AutoCommit, /* implicitTxn */
+				false,              /* retryIntent */
+				e.cfg.Clock.PhysicalTime(), /* sqlTimestamp */
+				session.DefaultIsolationLevel,
+				roachpb.NormalUserPriority,
+			)
 		} else {
 			txnState.autoRetry = false
 		}
@@ -1153,16 +1153,34 @@ func (e *Executor) execStmtInAbortedTxn(session *Session, stmt Statement) (Resul
 			}
 			return Result{}, err
 		}
+		if !txnState.retryIntent {
+			err := fmt.Errorf("SAVEPOINT %s has not been used", parser.RestartSavepointName)
+			if txnState.State == RestartWait {
+				txnState.updateStateAndCleanupOnErr(err, e)
+			}
+			return Result{}, err
+		}
+
 		if txnState.State == RestartWait {
 			// Reset the state. Txn is Open again.
 			txnState.State = Open
-			// TODO(andrei/cdo): add a counter for user-directed retries.
-			return Result{}, nil
+		} else {
+			// We accept ROLLBACK TO SAVEPOINT even after non-retryable errors to make
+			// it easy for client libraries that want to indiscriminately issue
+			// ROLLBACK TO SAVEPOINT after every error and possibly follow it with a
+			// ROLLBACK and also because we accept ROLLBACK TO SAVEPOINT in the Open
+			// state, so this is consistent.
+			// The old txn has already been rolled back; we start a new txn with the
+			// same sql timestamp and isolation as the current one.
+			curTs, curIso, curPri := txnState.sqlTimestamp, txnState.isolation, txnState.priority
+			txnState.finishSQLTxn(session)
+			txnState.resetForNewSQLTxn(
+				e, session,
+				false /* implicitTxn */, true, /* retryIntent */
+				curTs /* sqlTimestamp */, curIso /* isolation */, curPri /* priority */)
 		}
-		err := sqlbase.NewTransactionAbortedError(fmt.Sprintf(
-			"SAVEPOINT %s has not been used or a non-retriable error was encountered",
-			parser.RestartSavepointName))
-		return Result{}, err
+		// TODO(andrei/cdo): add a counter for user-directed retries.
+		return Result{}, nil
 	default:
 		if txnState.State == RestartWait {
 			err := sqlbase.NewTransactionAbortedError(
@@ -1320,14 +1338,21 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{}, nil
 
 	case *parser.RollbackToSavepoint:
-		err := parser.ValidateRestartCheckpoint(s.Savepoint)
+		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
+			return Result{}, err
+		}
+		if !txnState.retryIntent {
+			err := fmt.Errorf("SAVEPOINT %s has not been used", parser.RestartSavepointName)
+			return Result{}, err
+		}
 		// If commands have already been sent through the transaction,
 		// restart the client txn's proto to increment the epoch. The SQL
 		// txn's state is already set to OPEN.
-		if err == nil && txnState.mu.txn.CommandCount() > 0 {
-			txnState.mu.txn.Proto().Restart(0, 0, hlc.Timestamp{})
+		if txnState.mu.txn.CommandCount() > 0 {
+			txnState.mu.txn.Proto().Restart(
+				0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
 		}
-		return Result{}, err
+		return Result{}, nil
 
 	case *parser.Prepare:
 		// This must be handled here instead of the common path below
