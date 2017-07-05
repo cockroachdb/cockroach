@@ -324,6 +324,19 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			// Check that there are no hidden KV values for row "a",
 			// and column "i" for row "a" was deleted.
 			mTest.checkTableSize(afterDeleteKeys)
+
+			// Make column "i" a mutation.
+			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
+			// Update primary key of row "c" to be "d"
+			mTest.Exec(`UPDATE t.test SET k = 'd' WHERE v = 'x'`)
+			// Make column "i" live so that it is read.
+			mTest.makeMutationsActive()
+			if state == sqlbase.DescriptorMutation_DELETE_ONLY {
+				mTest.CheckQueryResults(starQuery, [][]string{{"d", "x", "NULL"}})
+			} else {
+				mTest.CheckQueryResults(starQuery, [][]string{{"d", "x", "i"}})
+			}
+			mTest.checkTableSize(afterDeleteKeys)
 		}
 	}
 
@@ -478,6 +491,23 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			// Deleting row "b" deletes "y" from the index.
 			if state == sqlbase.DescriptorMutation_DELETE_ONLY {
 				mTest.CheckQueryResults(indexQuery, [][]string{{"z"}})
+			} else {
+				mTest.CheckQueryResults(indexQuery, [][]string{{"w"}, {"z"}})
+			}
+
+			// Make "foo" a mutation.
+			mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
+			// Update the primary key of row "a".
+			mTest.Exec(`UPDATE t.test SET k = 'b' WHERE v = 'z'`)
+			mTest.CheckQueryResults(starQuery, [][]string{{"b", "z"}, {"c", "w"}})
+
+			// Make index "foo" live so that we can read it.
+			mTest.makeMutationsActive()
+			// Updating the primary key for a row when we're in delete-only won't
+			// create a new index entry, and will delete the old one. Otherwise it'll
+			// create a new entry and delete the old one.
+			if state == sqlbase.DescriptorMutation_DELETE_ONLY {
+				mTest.CheckQueryResults(indexQuery, [][]string{})
 			} else {
 				mTest.CheckQueryResults(indexQuery, [][]string{{"w"}, {"z"}})
 			}
