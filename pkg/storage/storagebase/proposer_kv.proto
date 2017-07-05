@@ -85,10 +85,21 @@ message ReplicatedEvalResult {
   optional ChangeReplicas change_replicas = 12;
   optional int64 raft_log_delta = 13;
 
+  // AddSSTable is a side effect that must execute before the Raft application
+  // is committed. It must be idempotent to account for an ill-timed crash after
+  // applying the side effect, but before committing the batch.
+  //
+  // TODO(tschottdorf): additionally, after the crash, the node must not serve
+  // traffic until the persisted committed log has fully applied. Otherwise, we
+  // risk exposing data created through such a side effect whose corresponding
+  // Raft command hasn't committed yet. This isn't so much an issue with AddSSTable
+  // since these Ranges are not user-visible, but it is a general concern assuming
+  // other such side effects are added.
   message AddSSTable {
     optional bytes data = 1;
+    optional uint32 crc32 = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CRC32"];
   }
-  optional AddSSTable add_sstable = 16 [(gogoproto.nullable) = false, (gogoproto.customname) = "AddSSTable"];
+  optional AddSSTable add_sstable = 16 [(gogoproto.customname) = "AddSSTable"];
 
   reserved 10001 to 10013;
 }
