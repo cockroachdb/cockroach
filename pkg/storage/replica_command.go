@@ -28,6 +28,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -3833,12 +3834,12 @@ func evalLeaseInfo(
 	return EvalResult{}, nil
 }
 
-// RelocateRange relocates a given range to a given set of stores. The first
+// TestingRelocateRange relocates a given range to a given set of stores. The first
 // store in the slice becomes the new leaseholder.
 //
 // This is best-effort; if replication queues are enabled and a change in
 // membership happens at the same time, there will be errors.
-func RelocateRange(
+func TestingRelocateRange(
 	ctx context.Context,
 	db *client.DB,
 	rangeDesc roachpb.RangeDescriptor,
@@ -3867,7 +3868,15 @@ func RelocateRange(
 	canRetry := func(err error) bool {
 		// FIXME: retry only on whitelisted errors. Known examples: snapshot
 		// intersects existing range.
-		return true
+		whitelist := []string{
+			"snapshot intersects existing range",
+		}
+		for _, substr := range whitelist {
+			if strings.Contains(err.Error(), substr) {
+				return true
+			}
+		}
+		return false
 	}
 
 	for len(addTargets) > 0 && ctx.Err() == nil {
@@ -3968,7 +3977,7 @@ func (r *Replica) adminScatter(
 	}
 	targets := stores[:num]
 
-	relocateErr := RelocateRange(ctx, db, rangeDesc, targets)
+	relocateErr := TestingRelocateRange(ctx, db, rangeDesc, targets)
 
 	res := roachpb.AdminScatterResponse{
 		Ranges: []roachpb.AdminScatterResponse_Range{{
