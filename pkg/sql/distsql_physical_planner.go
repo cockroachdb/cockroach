@@ -1616,7 +1616,7 @@ func (dsp *distSQLPlanner) createPlanForValues(
 		}
 
 		var buf []byte
-		datums := n.rows.At(i)
+		datums := n.Values()
 		for j := range n.columns {
 			var err error
 			datum := sqlbase.DatumToEncDatum(types[j], datums[j])
