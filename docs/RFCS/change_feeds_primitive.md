@@ -61,7 +61,7 @@ presented here: We
   for connecting the "initial state" (think `SELECT * FROM ...` or `INSERT ...
   RETURNING CURRENT_TIMESTAMP()`) to the stream of updates.
 - chose to operate on a set of key ranges since that captures both collections
-  of individual keys, sets of tables, or whole databases (CDT).
+  of individual keys, sets of tables, or whole databases (CDC).
 - require close notifications because often, a higher-level system needs to
   buffer updates until is knows that older data won't change any more; a simple
   example is wanting to output updates in timestamp-sorted order. More
@@ -79,7 +79,7 @@ presented here: We
   to disabling long transactions, which we must not impose globally.
 - aim to serve change feeds from follower replicas (hence the connection to
   [16593][followerreads]).
-- make the protocol efficient enough to poll whole databases in practice.
+- make the protocol efficient enough to operate on whole databases in practice.
 
 Note that the consumers of this primitive are always going to be
 CockroachDB-internal subsystems that consume raw data (similar to a stream of
@@ -92,19 +92,36 @@ higher-level subsystems are out of scope.
 
 The events emitted are simple:
 
-- `key` was set to `value` at `timestamp`, and
-- `key` was deleted at `timestamp`.
+- `key` was set to `value` at `timestamp`,
+- `key` was deleted at `timestamp`, and
+- `[startKey, endKey)` was closed at `timestamp`, i.e. no more events will be emitted for `[startKey, endKey)` at timestamps below the event's.
+
+Consumers should not make any assumptions about timestamp ordering. Events or close timestamps could be reported out of order. For example, the following would be legal:
+
+1. `key=x` changes to `a` at `ts=123.0`
+1. `key=x` gets deleted at `ts=120`     // deletion reported out of order
+1. `[a, z)` closes at `ts=110`
+1. `[a, z)` closes at `ts=100`          // close notification out of order
+
+However, the following would not be legal (because the deletion violates the close notification's promise):
+
+1. `[a, z)` closes at `ts=100`
+1. `key=x` gets deleted at `ts=90`
+
+In practice, these "anomalies" would happen only infrequently, and usually
+accompagnied by a reconnection.
 
 The exact format in which they are reported are TBD. Throughout this document,
 we assume that we are passing along `WriteBatch`es, though that is not a hard
 requirement. Typical consumers will live in the SQL subsystem, so they may
 profit from a simplified format.
 
+
 ## Replica-level
 
-Replicas (whether they're lease holder or not) accept a new `ChangeFeed` command
-which contains a base HLC timestamp and (in the usual header) a key range for
-which updates are to be delivered. The `ChangeFeed` command first grabs
+Replicas (whether they're lease holder or not) accept a top-level `ChangeFeed`
+RPC which contains a base HLC timestamp and (in the usual header) a key range
+for which updates are to be delivered. The `ChangeFeed` command first grabs
 `raftMu`, opens a RocksDB snapshot, registers itself with the raft processing
 goroutine and releases `raftMu` again. By registering itself, it receives all
 future `WriteBatch`es which apply on the Replica, and sends them on the stream
@@ -115,8 +132,8 @@ The remaining difficulty is that additionally, we must retrieve all updates made
 at or after the given base HLC timestamp, and this is what the engine snapshot
 is for. We invoke a new MVCC operation (specified below) that, given a base
 timestamp and a set of key ranges, synthesizes ChangeFeed notifications from the
-snapshot (this is possible if the base timestamp does not violate the GC
-threshold).
+snapshot (which is possible assuming that the base timestamp is a valid read
+timestamp, i.e. does not violate the GCThreshold or the like).
 
 Once these synthesized events have been fed to the client, we begin relaying
 close notifications. We assume that close notifications are driven by [follower
@@ -134,8 +151,8 @@ simply reconnect to another Replica, again using its most recently received
 close notification.
 
 Initially, streams may also disconnect if they find themselves unable to keep up
-with write traffic on the Range. Later, we can consider adding backpressure, but
-this is out of scope for now.
+with write traffic on the Range. Later, we can consider triggering an early
+split adding backpressure, but this is out of scope for now.
 
 ## MVCC-level
 
@@ -222,7 +239,8 @@ too much aggregation going on), and then, of course, materialized views.
 
 Performance concerns exist mostly in two areas: keeping the follower reads
 active (i.e. proactively closing out timestamps) and the MVCC scan to recover
-the base timestamp.
+the base timestamp. There are also concerns about the memory and CPU costs
+associated to having many (smaller) watchers.
 
 We defer discussion of the former into its own RFC. The concern here is that
 when one is receiving events from, say, a giant database which is mostly
@@ -233,11 +251,15 @@ close out timestamps.
 The second concern is the case in which there is a high rate of `ChangeFeed`
 requests with a base timestamp and large key ranges, so that a lot of work is
 spent on scanning data from snapshots which is not relevant to the feed. This
-shouldn't be an issue for small (think single-key) watchers, and may ultimately
-be a non-issue. Change Data Capture-type change feeds are very likely to be
-singletons and long-lived. Thus, it's possible that all that's needed here are
-good diagnostic tools and the option to avoid the snapshot catch-up operation
-(when missing a few updates is OK).
+shouldn't be an issue for small (think single-key) watchers, but a large feed in
+a busy reconnect loop could inflict serious damage to the system, especially if
+it uses a low base timestamp (we may want to impose limits here) and thus has to
+transfer significant amounts of data before switching to streaming mode.
+
+Change Data Capture-type change feeds are likely to be singletons and
+long-lived. Thus, it's possible that all that's needed here are good diagnostic
+tools and the option to avoid the snapshot catch-up operation (when missing a
+few updates is OK).
 
 ## Ranged updates
 
@@ -262,7 +284,7 @@ two separate subsystems, or that may even replace this proposed one.
 
 ## Licensing
 
-We will have to figure out what's CCL and what's OSS. Intuitively CDT sounds
+We will have to figure out what's CCL and what's OSS. Intuitively CDC sounds
 like it could be an enterprise feature and single-column watches should be OSS.
 However, there's a lot in between, and the primitive presented here is shared
 between all of them.
