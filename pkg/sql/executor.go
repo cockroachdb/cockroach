@@ -1386,19 +1386,16 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{}, e.PrepareStmt(session, s)
 
 	case *parser.Execute:
-		// This must be handled here instead of the common path below
-		// beause we need to use the Executor reference and prepare the
-		// query plan in a different way.
-		results, err := e.ExecutePreparedStmt(session, s)
+		// Substitute the placeholder information and actual statement with that of
+		// the saved prepared statement and pass control back to the ordinary
+		// execute path.
+		ps, newPInfo, err := handleSQLExecute(session, s)
 		if err != nil {
 			return Result{}, err
 		}
-		// No need to check if len(results.ResultList) > 1 because execPrepared
-		// returns an error in that case.
-		if len(results.ResultList) == 0 {
-			return Result{}, nil
-		}
-		return results.ResultList[0], nil
+		pinfo = newPInfo
+		stmt.AST = ps.Statement
+		stmt.ExpectedTypes = ps.Columns
 	}
 
 	var p *planner
