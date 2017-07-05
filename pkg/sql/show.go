@@ -400,16 +400,16 @@ func (p *planner) showCreateTable(
 				parser.Name(fkTable.Name),
 				quoteNames(fkIdx.ColumnNames...),
 			)
-		} else {
-			interleave, err := p.showCreateInterleave(ctx, &idx)
-			if err != nil {
-				return "", err
-			}
-			fmt.Fprintf(&buf, ",\n\t%s%s",
-				idx.SQLString(""),
-				interleave,
-			)
 		}
+		interleave, err := p.showCreateInterleave(ctx, &idx)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&buf, ",\n\t%s%s",
+			idx.SQLString(""),
+			interleave,
+		)
+
 	}
 	for _, fam := range desc.Families {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))

@@ -182,7 +182,9 @@ delivery  CREATE TABLE delivery (
               shipment INT NULL,
               item STRING NULL,
               CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products (upc),
+              INDEX delivery_item_idx (item ASC),
               CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment),
+              INDEX delivery_auto_index_fk_order_ref_orders ("order" ASC, shipment ASC),
               FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
 
@@ -705,11 +707,12 @@ query TT
 SHOW CREATE TABLE refers
 ----
 refers  CREATE TABLE refers (
-a INT NULL,
-b INT NULL,
-INDEX another_idx (b ASC),
-CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee (id),
-FAMILY "primary" (a, b, rowid)
+    a INT NULL,
+    b INT NULL,
+    INDEX another_idx (b ASC),
+    CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee (id),
+    INDEX refers_auto_index_fk_a_ref_referee (a ASC),
+    FAMILY "primary" (a, b, rowid)
 )
 
 statement ok
