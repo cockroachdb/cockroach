@@ -55,7 +55,7 @@ type Txn struct {
 	mu struct {
 		syncutil.Mutex
 		Proto roachpb.Transaction
-		// UserPriority is the transaction's priority. Is not set,
+		// UserPriority is the transaction's priority. If not set,
 		// NormalUserPriority will be used.
 		UserPriority roachpb.UserPriority
 		// txnAnchorKey is the key at which to anchor the transaction record. If
