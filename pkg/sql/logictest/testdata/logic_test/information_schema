@@ -199,6 +199,63 @@ DROP DATABASE other_db
 
 ## information_schema.tables
 
+# Check the default contents of information_schema.tables (incl. the
+# special system tables)
+query TT
+select table_schema, table_name FROM information_schema.tables ORDER BY 1, 2
+----
+crdb_internal       jobs
+crdb_internal       leases
+crdb_internal       node_build_info
+crdb_internal       node_statement_statistics
+crdb_internal       schema_changes
+crdb_internal       session_trace
+crdb_internal       tables
+information_schema  columns
+information_schema  key_column_usage
+information_schema  schema_privileges
+information_schema  schemata
+information_schema  statistics
+information_schema  table_constraints
+information_schema  table_privileges
+information_schema  tables
+information_schema  user_privileges
+information_schema  views
+pg_catalog          pg_am
+pg_catalog          pg_attrdef
+pg_catalog          pg_attribute
+pg_catalog          pg_class
+pg_catalog          pg_collation
+pg_catalog          pg_constraint
+pg_catalog          pg_database
+pg_catalog          pg_depend
+pg_catalog          pg_description
+pg_catalog          pg_enum
+pg_catalog          pg_extension
+pg_catalog          pg_foreign_server
+pg_catalog          pg_foreign_table
+pg_catalog          pg_index
+pg_catalog          pg_indexes
+pg_catalog          pg_inherits
+pg_catalog          pg_namespace
+pg_catalog          pg_proc
+pg_catalog          pg_range
+pg_catalog          pg_roles
+pg_catalog          pg_settings
+pg_catalog          pg_tables
+pg_catalog          pg_type
+pg_catalog          pg_views
+system              descriptor
+system              eventlog
+system              jobs
+system              lease
+system              namespace
+system              rangelog
+system              settings
+system              ui
+system              users
+system              zones
+
 statement ok
 CREATE DATABASE other_db
 
@@ -208,65 +265,60 @@ CREATE TABLE other_db.xyz (i INT)
 statement ok
 CREATE VIEW other_db.abc AS SELECT i from other_db.xyz
 
+statement ok
+GRANT UPDATE ON other_db.xyz TO testuser
+
+user testuser
+
+# Check the output with the current database set to 'test' (the
+# defaults in tests). This will make the tables in other_db invisible to
+# a non-root user.
 query T
-SELECT table_name FROM information_schema.tables
+SELECT table_name FROM information_schema.tables WHERE table_schema = 'other_db'
 ----
-jobs
-leases
-node_build_info
-node_statement_statistics
-schema_changes
-session_trace
-tables
-columns
-key_column_usage
-schema_privileges
-schemata
-statistics
-table_constraints
-table_privileges
-tables
-user_privileges
-views
+
+# Check that the other_db tables become visible when a prefix is specified
+query T
+SELECT table_name FROM other_db.information_schema.tables WHERE table_schema = 'other_db'
+----
+xyz
+
+# Check that the non-root user can also query all databases with an explicit empty prefix
+query T
+SELECT table_name FROM "".information_schema.tables WHERE table_schema = 'other_db'
+----
+xyz
+
+# Check that the other_db tables become visible to non-root when the current database is changed.
+query T
+SET DATABASE = other_db; SELECT table_name FROM information_schema.tables WHERE table_schema = 'other_db'
+----
+xyz
+
+user root
+
+# Check that root sees everything when there is no current database
+query T
+SET DATABASE = ''; SELECT table_name FROM information_schema.tables WHERE table_schema = 'other_db'
+----
 abc
 xyz
-pg_am
-pg_attrdef
-pg_attribute
-pg_class
-pg_collation
-pg_constraint
-pg_database
-pg_depend
-pg_description
-pg_enum
-pg_extension
-pg_foreign_server
-pg_foreign_table
-pg_index
-pg_indexes
-pg_inherits
-pg_namespace
-pg_proc
-pg_range
-pg_roles
-pg_settings
-pg_tables
-pg_type
-pg_views
-descriptor
-eventlog
-jobs
-lease
-namespace
-rangelog
-settings
-ui
-users
-zones
 
+# Check that root doesn't see other things when there is a current database
 query T
-SELECT table_name FROM information_schema.tables WHERE table_name > 'n' ORDER BY 1 DESC
+SET DATABASE = test; SELECT table_name FROM information_schema.tables WHERE table_schema = 'other_db'
+----
+
+# Check that a query cannot use prefixes for regular tables
+query error invalid table name
+SELECT * FROM other_db.other_db.xyz
+
+statement ok
+SET DATABASE = other_db
+
+# Check that filtering works.
+query T
+SELECT table_name FROM information_schema.tables WHERE table_name > 't'  ORDER BY 1 DESC
 ----
 zones
 xyz
@@ -278,41 +330,8 @@ tables
 tables
 table_privileges
 table_constraints
-statistics
-settings
-session_trace
-schemata
-schema_privileges
-schema_changes
-rangelog
-pg_views
-pg_type
-pg_tables
-pg_settings
-pg_roles
-pg_range
-pg_proc
-pg_namespace
-pg_inherits
-pg_indexes
-pg_index
-pg_foreign_table
-pg_foreign_server
-pg_extension
-pg_enum
-pg_description
-pg_depend
-pg_database
-pg_constraint
-pg_collation
-pg_class
-pg_attribute
-pg_attrdef
-pg_am
-node_statement_statistics
-node_build_info
-namespace
 
+# Check that the metadata is reported properly.
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
@@ -335,7 +354,7 @@ def            information_schema  tables                     SYSTEM VIEW  1
 def            information_schema  user_privileges            SYSTEM VIEW  1
 def            information_schema  views                      SYSTEM VIEW  1
 def            other_db            abc                        VIEW         1
-def            other_db            xyz                        BASE TABLE   2
+def            other_db            xyz                        BASE TABLE   3
 def            pg_catalog          pg_am                      SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef                 SYSTEM VIEW  1
 def            pg_catalog          pg_attribute               SYSTEM VIEW  1
@@ -378,99 +397,33 @@ query TTI colnames
 SELECT TABLE_SCHEMA, TABLE_NAME, VERSION FROM information_schema.tables WHERE version > 1
 ----
 table_schema  table_name  version
-other_db      xyz         5
+other_db      xyz         6
 system        eventlog    2
 
 user testuser
 
+# Check that another user cannot see other_db.adbc any more because they
+# don't have privileges on it.
 query TTTTI colnames
-SELECT * FROM information_schema.tables
+SELECT * FROM information_schema.tables WHERE table_schema = 'other_db'
 ----
-table_catalog  table_schema        table_name         table_type   version
-def            information_schema  columns            SYSTEM VIEW  1
-def            information_schema  key_column_usage   SYSTEM VIEW  1
-def            information_schema  schema_privileges  SYSTEM VIEW  1
-def            information_schema  schemata           SYSTEM VIEW  1
-def            information_schema  statistics         SYSTEM VIEW  1
-def            information_schema  table_constraints  SYSTEM VIEW  1
-def            information_schema  table_privileges   SYSTEM VIEW  1
-def            information_schema  tables             SYSTEM VIEW  1
-def            information_schema  user_privileges    SYSTEM VIEW  1
-def            information_schema  views              SYSTEM VIEW  1
-def            pg_catalog          pg_am              SYSTEM VIEW  1
-def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
-def            pg_catalog          pg_attribute       SYSTEM VIEW  1
-def            pg_catalog          pg_class           SYSTEM VIEW  1
-def            pg_catalog          pg_collation       SYSTEM VIEW  1
-def            pg_catalog          pg_constraint      SYSTEM VIEW  1
-def            pg_catalog          pg_database        SYSTEM VIEW  1
-def            pg_catalog          pg_depend          SYSTEM VIEW  1
-def            pg_catalog          pg_description     SYSTEM VIEW  1
-def            pg_catalog          pg_enum            SYSTEM VIEW  1
-def            pg_catalog          pg_extension       SYSTEM VIEW  1
-def            pg_catalog          pg_foreign_server  SYSTEM VIEW  1
-def            pg_catalog          pg_foreign_table   SYSTEM VIEW  1
-def            pg_catalog          pg_index           SYSTEM VIEW  1
-def            pg_catalog          pg_indexes         SYSTEM VIEW  1
-def            pg_catalog          pg_inherits        SYSTEM VIEW  1
-def            pg_catalog          pg_namespace       SYSTEM VIEW  1
-def            pg_catalog          pg_proc            SYSTEM VIEW  1
-def            pg_catalog          pg_range           SYSTEM VIEW  1
-def            pg_catalog          pg_roles           SYSTEM VIEW  1
-def            pg_catalog          pg_settings        SYSTEM VIEW  1
-def            pg_catalog          pg_tables          SYSTEM VIEW  1
-def            pg_catalog          pg_type            SYSTEM VIEW  1
-def            pg_catalog          pg_views           SYSTEM VIEW  1
+table_catalog  table_schema  table_name  table_type  version
+def            other_db      xyz         BASE TABLE  6
 
 user root
 
 statement ok
-GRANT SELECT ON other_db.xyz TO testuser
+GRANT SELECT ON other_db.abc TO testuser
 
 user testuser
 
-statement ok
-SET DATABASE = other_db
-
+# Check the user can see the tables now that they have privilege.
 query TTTTI colnames
-SELECT * FROM information_schema.tables
+SELECT * FROM information_schema.tables WHERE table_schema = 'other_db'
 ----
-table_catalog  table_schema        table_name         table_type   version
-def            information_schema  columns            SYSTEM VIEW  1
-def            information_schema  key_column_usage   SYSTEM VIEW  1
-def            information_schema  schema_privileges  SYSTEM VIEW  1
-def            information_schema  schemata           SYSTEM VIEW  1
-def            information_schema  statistics         SYSTEM VIEW  1
-def            information_schema  table_constraints  SYSTEM VIEW  1
-def            information_schema  table_privileges   SYSTEM VIEW  1
-def            information_schema  tables             SYSTEM VIEW  1
-def            information_schema  user_privileges    SYSTEM VIEW  1
-def            information_schema  views              SYSTEM VIEW  1
-def            other_db            xyz                BASE TABLE   6
-def            pg_catalog          pg_am              SYSTEM VIEW  1
-def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
-def            pg_catalog          pg_attribute       SYSTEM VIEW  1
-def            pg_catalog          pg_class           SYSTEM VIEW  1
-def            pg_catalog          pg_collation       SYSTEM VIEW  1
-def            pg_catalog          pg_constraint      SYSTEM VIEW  1
-def            pg_catalog          pg_database        SYSTEM VIEW  1
-def            pg_catalog          pg_depend          SYSTEM VIEW  1
-def            pg_catalog          pg_description     SYSTEM VIEW  1
-def            pg_catalog          pg_enum            SYSTEM VIEW  1
-def            pg_catalog          pg_extension       SYSTEM VIEW  1
-def            pg_catalog          pg_foreign_server  SYSTEM VIEW  1
-def            pg_catalog          pg_foreign_table   SYSTEM VIEW  1
-def            pg_catalog          pg_index           SYSTEM VIEW  1
-def            pg_catalog          pg_indexes         SYSTEM VIEW  1
-def            pg_catalog          pg_inherits        SYSTEM VIEW  1
-def            pg_catalog          pg_namespace       SYSTEM VIEW  1
-def            pg_catalog          pg_proc            SYSTEM VIEW  1
-def            pg_catalog          pg_range           SYSTEM VIEW  1
-def            pg_catalog          pg_roles           SYSTEM VIEW  1
-def            pg_catalog          pg_settings        SYSTEM VIEW  1
-def            pg_catalog          pg_tables          SYSTEM VIEW  1
-def            pg_catalog          pg_type            SYSTEM VIEW  1
-def            pg_catalog          pg_views           SYSTEM VIEW  1
+table_catalog  table_schema  table_name  table_type  version
+def            other_db      abc         VIEW        2
+def            other_db      xyz         BASE TABLE  6
 
 user root
 
@@ -515,6 +468,9 @@ CREATE TABLE constraint_db.t2 (
     CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_db.t1(a),
     INDEX (t1_ID)
 )
+
+statement ok
+SET DATABASE = constraint_db
 
 query TTTTTT colnames
 SELECT *
@@ -577,6 +533,9 @@ def            system        users       username        1
 def            system        users       hashedPassword  2
 def            system        zones       id              1
 def            system        zones       config          2
+
+statement ok
+SET DATABASE = test
 
 statement ok
 CREATE TABLE with_defaults (a INT DEFAULT 9, b STRING DEFAULT 'default', c INT, d STRING)
@@ -699,6 +658,9 @@ CREATE TABLE constraint_column.t3 (
     INDEX (a, b)
 )
 
+statement ok
+SET DATABASE = constraint_column
+
 query TTTTTTTII colnames
 SELECT * FROM information_schema.key_column_usage WHERE constraint_schema = 'constraint_column' ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION
 ----
@@ -718,7 +680,7 @@ DROP DATABASE constraint_column
 ## information_schema.schema_privileges
 
 statement ok
-CREATE DATABASE other_db
+CREATE DATABASE other_db; SET DATABASE = other_db
 
 query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges

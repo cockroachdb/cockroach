@@ -52,6 +52,15 @@ func encodeSQLString(buf *bytes.Buffer, in string) {
 	encodeSQLStringWithFlags(buf, in, FmtSimple)
 }
 
+// EscapeSQLString returns an escaped SQL representation of the given
+// string. This is suitable for safely producing a SQL string valid
+// for input to the parser.
+func EscapeSQLString(in string) string {
+	var buf bytes.Buffer
+	encodeSQLString(&buf, in)
+	return buf.String()
+}
+
 // encodeSQLStringWithFlags writes a string literal to buf. All unicode and
 // non-printable characters are escaped. FmtFlags controls the output format:
 // if f.bareStrings is true, the output string will not be wrapped in quotes

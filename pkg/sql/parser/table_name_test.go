@@ -35,12 +35,13 @@ func TestNormalizeTableName(t *testing.T) {
 		{`foo`, `test.foo`, `test`, ``},
 		{`test.foo`, `test.foo`, ``, ``},
 		{`bar.foo`, `bar.foo`, `test`, ``},
+		{`p.foo.bar`, `p.foo.bar`, ``, ``},
 
 		{`""`, ``, ``, `empty table name`},
 		{`foo`, ``, ``, `no database specified`},
 		{`foo@bar`, ``, ``, `syntax error`},
-		{`test.foo.bar`, ``, ``, `invalid table name: "test.foo.bar"`},
-		{`test.*`, ``, ``, `invalid table name: "test.*"`},
+		{`test.*`, ``, ``, `invalid table name: "test\.\*"`},
+		{`p."".bar`, ``, ``, `empty database name: "p.\\"\\".bar"`},
 	}
 
 	for _, tc := range testCases {
@@ -50,7 +51,7 @@ func TestNormalizeTableName(t *testing.T) {
 		}
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
+				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.err, err.Error())
 			}
 			continue
 		}

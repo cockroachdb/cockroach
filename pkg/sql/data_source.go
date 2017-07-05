@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -282,16 +283,48 @@ func (p *planner) getVirtualDataSource(
 	}
 	if virtual.desc != nil {
 		columns, constructor := virtual.getPlanInfo(ctx)
+
+		// The virtual table constructor takes the target database
+		// as "prefix" argument. This is either the prefix in the
+		// virtual table name given in the SQL query explicitly,
+		// or, if no prefix is given,
+		// the current database if one is set,
+		// or the empty prefix if the user is root (to show everything),
+		// or "system" otherwise (to only show virt tables to non-root users).
+		//
+		// It is particularly important to not use the empty prefix for
+		// non-root users, because client libraries that mistakenly do not
+		// set a current database tend to be badly, badly behaved if they
+		// see tables from multiple databases (as in, "drop tables from
+		// the wrong db" mis-behaved). Lack of data in the vtable in the
+		// case where there is no current database is thus safer.
+		//
+		// Meanwhile the root user probably would be inconvenienced by
+		// this.
+		prefix := tn.PrefixName.Normalize()
+		if !tn.PrefixOriginallySpecified {
+			prefix = p.session.Database
+			if prefix == "" && p.session.User != security.RootUser {
+				prefix = sqlbase.SystemDB.Name
+			}
+		}
+
+		// Define the name of the source visible in EXPLAIN(NOEXPAND).
 		sourceName := parser.TableName{
+			PrefixName:   parser.Name(prefix),
 			TableName:    parser.Name(virtual.desc.Name),
 			DatabaseName: tn.DatabaseName,
 		}
+
+		// The resulting node.
 		return planDataSource{
 			info: newSourceInfoForSingleTable(sourceName, columns),
 			plan: &delayedNode{
-				name:        sourceName.String(),
-				columns:     columns,
-				constructor: constructor,
+				name:    sourceName.String(),
+				columns: columns,
+				constructor: func(ctx context.Context, p *planner) (planNode, error) {
+					return constructor(ctx, p, prefix)
+				},
 			},
 		}, true, nil
 	}
@@ -482,6 +515,11 @@ func (p *planner) getTableScanOrViewPlan(
 	hints *parser.IndexHints,
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
+	if tn.PrefixOriginallySpecified {
+		// Prefixes are currently only supported for virtual tables.
+		return planDataSource{}, parser.NewInvalidTableNameError(tn.String())
+	}
+
 	var desc *sqlbase.TableDescriptor
 	var err error
 	if p.avoidCachedDescriptors {
