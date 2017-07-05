@@ -278,7 +278,7 @@ query ITTTTT
 EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
 0  render                             ("count(*)", "k + v")
-0          render 0     count(*)
+0          render 0     "count(*)"
 0          render 1     k + v
 1  group                              ("count(*)", k, v)
 1          aggregate 0  count_rows()

@@ -1,0 +1,63 @@
+# Check that the various things in a table definition are properly escaped when
+# printed out.
+statement ok
+CREATE table "woo; DROP USER humpty;" (x INT PRIMARY KEY); CREATE TABLE ";--notbetter" (
+  x INT, y INT,
+  "welp INT); -- concerning much
+DROP USER dumpty;
+CREATE TABLE unused (x " INT,
+  INDEX "helpme ON (x)); -- this must stop!
+DROP USER alice;
+CREATE TABLE unused2(x INT, INDEX woo ON " (x ASC),
+  FAMILY "nonotagain (x)); -- welp!
+DROP USER queenofhearts;
+CREATE TABLE unused3(x INT, y INT, FAMILY woo " (x, y),
+  CONSTRAINT "getmeoutofhere PRIMARY KEY (x ASC)); -- saveme!
+DROP USER madhatter;
+CREATE TABLE unused4(x INT, CONSTRAINT woo " PRIMARY KEY (x)
+) INTERLEAVE IN PARENT "woo; DROP USER humpty;" (x);
+
+query TT
+SHOW CREATE TABLE ";--notbetter"
+----
+";--notbetter"  CREATE TABLE ";--notbetter" (
+                x INT NOT NULL,
+                y INT NULL,
+                "welp INT); -- concerning much
+DROP USER dumpty;
+CREATE TABLE unused (x " INT NULL,
+  CONSTRAINT "getmeoutofhere PRIMARY KEY (x ASC)); -- saveme!
+DROP USER madhatter;
+CREATE TABLE unused4(x INT, CONSTRAINT woo " PRIMARY KEY (x ASC),
+  INDEX "helpme ON (x)); -- this must stop!
+DROP USER alice;
+CREATE TABLE unused2(x INT, INDEX woo ON " (x ASC),
+  FAMILY "nonotagain (x)); -- welp!
+DROP USER queenofhearts;
+CREATE TABLE unused3(x INT, y INT, FAMILY woo " (x, y, "welp INT); -- concerning much
+DROP USER dumpty;
+CREATE TABLE unused (x ")
+) INTERLEAVE IN PARENT "woo; DROP USER humpty;" (x)
+
+# Check that view creates handle strange things properly.
+statement ok
+CREATE VIEW ";--alsoconcerning" AS SELECT @1, @2, @3 FROM ";--notbetter"
+
+query TT
+SHOW CREATE VIEW ";--alsoconcerning"
+----
+";--alsoconcerning"  CREATE VIEW ";--alsoconcerning" AS SELECT @1, @2, @3 FROM test.";--notbetter"
+
+# Check that "create table as" handles strange things properly.
+statement ok
+CREATE TABLE ";--dontask" AS SELECT @1, @2, @3 FROM ";--notbetter"
+
+query TT
+SHOW CREATE TABLE ";--dontask"
+----
+";--dontask"  CREATE TABLE ";--dontask" (
+              "@1" INT NULL,
+              "@2" INT NULL,
+              "@3" INT NULL,
+              FAMILY "primary" ("@1", "@2", "@3", rowid)
+)
