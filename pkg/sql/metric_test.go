@@ -161,9 +161,15 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// otherwise the INSERT below would be automatically retried.
+	if _, err := txn.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
 	_, err = txn.Exec("INSERT INTO db.t VALUES ('key', 'marker')")
 	if !testutils.IsError(err, "aborted") {
-		t.Fatal(err)
+		t.Fatalf("expected aborted error, got: %v", err)
 	}
 
 	if err = txn.Rollback(); err != nil {
