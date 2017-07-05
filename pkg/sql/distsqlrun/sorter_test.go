@@ -242,18 +242,19 @@ func BenchmarkSortAll(b *testing.B) {
 	post := PostProcessSpec{}
 
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		input := make(sqlbase.EncDatumRows, inputSize)
-		for i := range input {
-			input[i] = sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(rng.Int()))),
+		b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
+			input := make(sqlbase.EncDatumRows, inputSize)
+			for i := range input {
+				input[i] = sqlbase.EncDatumRow{
+					sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(rng.Int()))),
+				}
 			}
-		}
-		rowSource := NewRepeatableRowSource(types, input)
-		s, err := newSorter(&flowCtx, &spec, rowSource, &post, &RowDisposer{})
-		if err != nil {
-			b.Fatal(err)
-		}
-		b.Run(fmt.Sprintf("InputSize%d", inputSize), func(b *testing.B) {
+			rowSource := NewRepeatableRowSource(types, input)
+			s, err := newSorter(&flowCtx, &spec, rowSource, &post, &RowDisposer{})
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				s.Run(ctx, nil)
 				rowSource.Reset()
@@ -281,27 +282,30 @@ func BenchmarkSortLimit(b *testing.B) {
 		OutputOrdering: convertToSpecOrdering(sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}),
 	}
 
-	inputSize := 1 << 16
-	input := make(sqlbase.EncDatumRows, inputSize)
-	for i := range input {
-		input[i] = sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(rng.Int()))),
-		}
-	}
-	rowSource := NewRepeatableRowSource(types, input)
-
-	for _, limit := range []uint64{1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		s, err := newSorter(
-			&flowCtx, &spec, rowSource, &PostProcessSpec{Limit: limit}, &RowDisposer{},
-		)
-		if err != nil {
-			b.Fatal(err)
-		}
-		b.Run(fmt.Sprintf("InputSize%dLimit%d", inputSize, limit), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				s.Run(ctx, nil)
-				rowSource.Reset()
+	const inputSize = 1 << 16
+	b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
+		input := make(sqlbase.EncDatumRows, inputSize)
+		for i := range input {
+			input[i] = sqlbase.EncDatumRow{
+				sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(rng.Int()))),
 			}
-		})
-	}
+		}
+		rowSource := NewRepeatableRowSource(types, input)
+
+		for _, limit := range []uint64{1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
+				s, err := newSorter(
+					&flowCtx, &spec, rowSource, &PostProcessSpec{Limit: limit}, &RowDisposer{},
+				)
+				if err != nil {
+					b.Fatal(err)
+				}
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					s.Run(ctx, nil)
+					rowSource.Reset()
+				}
+			})
+		}
+	})
 }

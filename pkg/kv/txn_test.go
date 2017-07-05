@@ -103,12 +103,12 @@ func TestTxnDBBasics(t *testing.T) {
 	}
 }
 
-// benchmarkSingleRoundtripWithLatency runs a number of transactions writing to
-// the same key back to back in a single round-trip. Latency is simulated
+// BenchmarkSingleRoundtripWithLatency runs a number of transactions writing
+// to the same key back to back in a single round-trip. Latency is simulated
 // by pausing before each RPC sent.
 func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 	for _, latency := range []time.Duration{0, 10 * time.Millisecond} {
-		b.Run(latency.String(), func(b *testing.B) {
+		b.Run(fmt.Sprintf("latency=%s", latency), func(b *testing.B) {
 			var s localtestcluster.LocalTestCluster
 			s.Latency = latency
 			s.Start(b, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
