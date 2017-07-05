@@ -509,11 +509,14 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 				}
 			}
 			if customColNames {
-				colNames := make([]string, 0, len(desc.Columns))
-				for _, col := range desc.Columns {
-					colNames = append(colNames, col.Name)
+				buf.WriteByte('(')
+				for i, col := range desc.Columns {
+					if i > 0 {
+						buf.WriteString(", ")
+					}
+					parser.Name(col.Name).Format(&buf, parser.FmtSimple)
 				}
-				fmt.Fprintf(&buf, "(%s) ", strings.Join(colNames, ", "))
+				buf.WriteString(") ")
 			}
 
 			fmt.Fprintf(&buf, "AS %s", desc.ViewQuery)
