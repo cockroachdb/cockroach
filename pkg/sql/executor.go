@@ -958,7 +958,7 @@ func runTxnAttempt(
 	}
 
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
-		session, stmts, pinfo, opt.AutoCommit, /* implicitTxn */
+		session, stmts, pinfo,
 		opt.AutoRetry /* txnBeginning */, avoidCachedDescriptors, automaticRetryCount)
 
 	if opt.AutoCommit && len(remainingStmts) > 0 {
@@ -987,11 +987,6 @@ func runTxnAttempt(
 // session: the session to execute the statement in.
 // stmts: the semicolon-separated list of statements to execute.
 // pinfo: the placeholders to use in the statements.
-// implicitTxn: set if the current transaction was implicitly
-//  created by the system (i.e. the client sent the statement outside of
-//  a transaction).
-//  COMMIT/ROLLBACK statements are rejected if set. Also, the transaction
-//  might be auto-committed in this function.
 // avoidCachedDescriptors: set if the statement execution should avoid
 //  using cached descriptors.
 // automaticRetryCount: increases with each retry; 0 for the first attempt.
@@ -1009,7 +1004,6 @@ func (e *Executor) execStmtsInCurrentTxn(
 	session *Session,
 	stmts StatementList,
 	pinfo *parser.PlaceholderInfo,
-	implicitTxn bool,
 	txnBeginning bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
@@ -1048,12 +1042,12 @@ func (e *Executor) execStmtsInCurrentTxn(
 		// Run SHOW TRANSACTION STATUS in a separate code path so it is
 		// always guaranteed to execute regardless of the current transaction state.
 		if _, ok := stmt.AST.(*parser.ShowTransactionStatus); ok {
-			res, err = runShowTransactionState(session, implicitTxn)
+			res, err = runShowTransactionState(session)
 		} else {
 			switch txnState.State {
 			case Open:
 				res, err = e.execStmtInOpenTxn(
-					session, stmt, pinfo, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
+					session, stmt, pinfo, txnBeginning && (i == 0), /* firstInTxn */
 					avoidCachedDescriptors, automaticRetryCount)
 			case Aborted, RestartWait:
 				res, err = e.execStmtInAbortedTxn(session, stmt)
@@ -1091,16 +1085,16 @@ func (e *Executor) execStmtsInCurrentTxn(
 }
 
 // getTransactionState retrieves a text representation of the given state.
-func getTransactionState(txnState *txnState, implicitTxn bool) string {
+func getTransactionState(txnState *txnState) string {
 	state := txnState.State
-	if implicitTxn {
+	if txnState.implicitTxn {
 		state = NoTxn
 	}
 	return state.String()
 }
 
 // runShowTransactionState returns the state of current transaction.
-func runShowTransactionState(session *Session, implicitTxn bool) (Result, error) {
+func runShowTransactionState(session *Session) (Result, error) {
 	var result Result
 	result.PGTag = (*parser.Show)(nil).StatementTag()
 	result.Type = (*parser.Show)(nil).StatementType()
@@ -1108,7 +1102,7 @@ func runShowTransactionState(session *Session, implicitTxn bool) (Result, error)
 	result.Rows = sqlbase.NewRowContainer(
 		session.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(result.Columns), 0,
 	)
-	state := getTransactionState(&session.TxnState, implicitTxn)
+	state := getTransactionState(&session.TxnState)
 	if _, err := result.Rows.AddRow(
 		session.Ctx(), parser.Datums{parser.NewDString(state)},
 	); err != nil {
@@ -1231,11 +1225,6 @@ func sessionEventf(session *Session, format string, args ...interface{}) {
 // session: the session to execute the statement in.
 // stmt: the statement to execute.
 // pinfo: the placeholders to use in the statement.
-// implicitTxn: set if the current transaction was implicitly
-//  created by the system (i.e. the client sent the statement outside of
-//  a transaction).
-//  COMMIT/ROLLBACK statements are rejected if set. Also, the transaction
-//  might be auto-committed in this function.
 // firstInTxn: set for the first statement in a transaction. Used
 //  so that nested BEGIN statements are caught.
 // avoidCachedDescriptors: set if the statement execution should avoid
@@ -1249,7 +1238,6 @@ func (e *Executor) execStmtInOpenTxn(
 	session *Session,
 	stmt Statement,
 	pinfo *parser.PlaceholderInfo,
-	implicitTxn bool,
 	firstInTxn bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
@@ -1286,7 +1274,7 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 	}
 
-	if implicitTxn && !stmtAllowedInImplicitTxn(stmt) {
+	if txnState.implicitTxn && !stmtAllowedInImplicitTxn(stmt) {
 		return Result{}, errNoTransactionInProgress
 	}
 
@@ -1363,7 +1351,7 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	var p *planner
-	runInParallel := parallelize && !implicitTxn
+	runInParallel := parallelize && !txnState.implicitTxn
 	if runInParallel {
 		// Create a new planner from the Session to execute the statement, since
 		// we're executing in parallel.
@@ -1395,7 +1383,7 @@ func (e *Executor) execStmtInOpenTxn(
 		// immediately blocking.
 		result, err = e.execStmtInParallel(stmt, p)
 	} else {
-		p.autoCommit = implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
+		p.autoCommit = txnState.implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
 		result, err = e.execStmt(stmt, p,
 			automaticRetryCount, parallelize /* mockResults */)
 		// Zeroing the cached planner allows the GC to clean up any memory hanging
