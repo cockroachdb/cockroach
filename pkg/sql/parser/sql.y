@@ -492,6 +492,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> help_stmt
 %type <Statement> prepare_stmt
 %type <Statement> preparable_stmt
+%type <Statement> explainable_stmt
 %type <Statement> execute_stmt
 %type <Statement> deallocate_stmt
 %type <Statement> grant_stmt
@@ -1216,11 +1217,11 @@ attrs:
 
 // EXPLAIN (options) query
 explain_stmt:
-  EXPLAIN preparable_stmt
+  EXPLAIN explainable_stmt
   {
     $$.val = &Explain{Statement: $2.stmt()}
   }
-| EXPLAIN '(' explain_option_list ')' preparable_stmt
+| EXPLAIN '(' explain_option_list ')' explainable_stmt
   {
     $$.val = &Explain{Options: $3.strs(), Statement: $5.stmt()}
   }
@@ -1230,12 +1231,15 @@ preparable_stmt:
   {
     $$.val = $1.slct()
   }
-| create_stmt
-| drop_stmt
-| alter_table_stmt
 | insert_stmt
 | update_stmt
 | delete_stmt
+
+explainable_stmt:
+  preparable_stmt
+| create_stmt
+| drop_stmt
+| alter_table_stmt
 | show_stmt
 | help_stmt
 | split_stmt
@@ -1742,11 +1746,11 @@ show_stmt:
   {
     $$.val = &ShowTrace{Statement: nil, OnlyKVTrace: true}
   }
-| SHOW TRACE FOR preparable_stmt
+| SHOW TRACE FOR explainable_stmt
   {
     $$.val = &ShowTrace{Statement: $4.stmt()}
   }
-| SHOW KV TRACE FOR preparable_stmt
+| SHOW KV TRACE FOR explainable_stmt
   {
     $$.val = &ShowTrace{Statement: $5.stmt(), OnlyKVTrace: true }
   }
@@ -3286,7 +3290,7 @@ table_ref:
 //   is going on and may be pushed by the unusual syntax to
 //   investigate further in the docs.
 
-| '[' preparable_stmt ']' opt_ordinality opt_alias_clause
+| '[' explainable_stmt ']' opt_ordinality opt_alias_clause
   {
       $$.val = &AliasedTableExpr{Expr: &StatementSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
   }
