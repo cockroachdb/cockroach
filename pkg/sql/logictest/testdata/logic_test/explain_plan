@@ -96,6 +96,23 @@ EXPLAIN (EXPRS) SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
 2                 table     t@primary
 2                 spans     ALL
 
+# Ensure EXPLAIN EXECUTE works properly
+
+statement ok
+PREPARE x AS SELECT DISTINCT * from t LIMIT $1
+
+query ITTT
+EXPLAIN (EXPRS) EXECUTE x(3)
+----
+0  limit
+0                 count     3
+0                 offset    3
+1  distinct
+1                 key       k
+2  scan
+2                 table     t@primary
+2                 spans     ALL
+
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
