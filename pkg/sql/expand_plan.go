@@ -223,7 +223,7 @@ func doExpandPlan(
 	case *splitNode:
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
 
-	case *relocateNode:
+	case *testingRelocateNode:
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
 
 	case *valuesNode:
@@ -535,7 +535,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 	case *splitNode:
 		n.rows = simplifyOrderings(n.rows, nil)
 
-	case *relocateNode:
+	case *testingRelocateNode:
 		n.rows = simplifyOrderings(n.rows, nil)
 
 	case *valuesNode:

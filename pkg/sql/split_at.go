@@ -157,10 +157,12 @@ var splitNodeColumns = sqlbase.ResultColumns{
 	},
 }
 
-// Relocate moves ranges to specific stores
+// TestingRelocate moves ranges to specific stores
 // (`ALTER TABLE/INDEX ... TESTING_RELOCATE ...` statement)
 // Privileges: INSERT on table.
-func (p *planner) Relocate(ctx context.Context, n *parser.Relocate) (planNode, error) {
+func (p *planner) TestingRelocate(
+	ctx context.Context, n *parser.TestingRelocate,
+) (planNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
 		return nil, err
@@ -206,7 +208,7 @@ func (p *planner) Relocate(ctx context.Context, n *parser.Relocate) (planNode, e
 		}
 	}
 
-	return &relocateNode{
+	return &testingRelocateNode{
 		p:         p,
 		tableDesc: tableDesc,
 		index:     index,
@@ -215,7 +217,7 @@ func (p *planner) Relocate(ctx context.Context, n *parser.Relocate) (planNode, e
 	}, nil
 }
 
-type relocateNode struct {
+type testingRelocateNode struct {
 	optColumnsSlot
 
 	p                 *planner
@@ -229,7 +231,7 @@ type relocateNode struct {
 	storeMap map[roachpb.StoreID]roachpb.NodeID
 }
 
-func (n *relocateNode) Start(ctx context.Context) error {
+func (n *testingRelocateNode) Start(ctx context.Context) error {
 	return n.rows.Start(ctx)
 }
 
@@ -255,7 +257,7 @@ func lookupRangeDescriptor(
 	return desc, nil
 }
 
-func (n *relocateNode) Next(ctx context.Context) (bool, error) {
+func (n *testingRelocateNode) Next(ctx context.Context) (bool, error) {
 	// Each Next call relocates one range (corresponding to one row from n.rows).
 	// TODO(radu): perform multiple relocations in parallel.
 
@@ -311,21 +313,21 @@ func (n *relocateNode) Next(ctx context.Context) (bool, error) {
 	}
 	n.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 
-	if err := storage.RelocateRange(ctx, n.p.ExecCfg().DB, rangeDesc, targets); err != nil {
+	if err := storage.TestingRelocateRange(ctx, n.p.ExecCfg().DB, rangeDesc, targets); err != nil {
 		return false, err
 	}
 
 	return true, nil
 }
 
-func (n *relocateNode) Values() parser.Datums {
+func (n *testingRelocateNode) Values() parser.Datums {
 	return parser.Datums{
 		parser.NewDBytes(parser.DBytes(n.lastRangeStartKey)),
 		parser.NewDString(keys.PrettyPrint(n.lastRangeStartKey)),
 	}
 }
 
-func (n *relocateNode) Close(ctx context.Context) {
+func (n *testingRelocateNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
 }
 

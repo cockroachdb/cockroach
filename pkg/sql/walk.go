@@ -273,7 +273,7 @@ func (v *planVisitor) visit(plan planNode) {
 	case *splitNode:
 		v.visit(n.rows)
 
-	case *relocateNode:
+	case *testingRelocateNode:
 		v.visit(n.rows)
 
 	case *insertNode:
@@ -512,7 +512,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&joinNode{}):             "join",
 	reflect.TypeOf(&limitNode{}):            "limit",
 	reflect.TypeOf(&ordinalityNode{}):       "ordinality",
-	reflect.TypeOf(&relocateNode{}):         "relocate",
+	reflect.TypeOf(&testingRelocateNode{}):  "testingRelocate",
 	reflect.TypeOf(&renderNode{}):           "render",
 	reflect.TypeOf(&scanNode{}):             "scan",
 	reflect.TypeOf(&scatterNode{}):          "scatter",

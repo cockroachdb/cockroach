@@ -185,7 +185,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *splitNode:
 		setNeededColumns(n.rows, allColumns(n.rows))
 
-	case *relocateNode:
+	case *testingRelocateNode:
 		setNeededColumns(n.rows, allColumns(n.rows))
 
 	case *alterTableNode:

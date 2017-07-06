@@ -154,7 +154,7 @@ var _ planNode = &insertNode{}
 var _ planNode = &joinNode{}
 var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
-var _ planNode = &relocateNode{}
+var _ planNode = &testingRelocateNode{}
 var _ planNode = &renderNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &scatterNode{}
@@ -360,8 +360,8 @@ func (p *planner) newPlan(
 		return p.newPlan(ctx, n.Select, desiredTypes)
 	case *parser.PauseJob:
 		return p.PauseJob(ctx, n)
-	case *parser.Relocate:
-		return p.Relocate(ctx, n)
+	case *parser.TestingRelocate:
+		return p.TestingRelocate(ctx, n)
 	case *parser.RenameColumn:
 		return p.RenameColumn(ctx, n)
 	case *parser.RenameDatabase:
@@ -491,8 +491,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.ShowRanges(ctx, n)
 	case *parser.Split:
 		return p.Split(ctx, n)
-	case *parser.Relocate:
-		return p.Relocate(ctx, n)
+	case *parser.TestingRelocate:
+		return p.TestingRelocate(ctx, n)
 	case *parser.Scatter:
 		return p.Scatter(ctx, n)
 	case *parser.Update:
