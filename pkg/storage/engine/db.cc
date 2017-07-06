@@ -69,6 +69,7 @@ struct DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
   virtual DBIterator* NewIter(rocksdb::ReadOptions*) = 0;
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
+  virtual DBString GetCompactionStats() = 0;
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents) = 0;
 
   DBSSTable* GetSSTables(int* n);
@@ -110,6 +111,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
 };
 
@@ -131,6 +133,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
 };
 
@@ -152,6 +155,7 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
 };
 
@@ -175,6 +179,7 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
 };
 
@@ -2007,6 +2012,24 @@ DBStatus DBSnapshot::GetStats(DBStatsResult* stats) {
   return FmtStatus("unsupported");
 }
 
+DBString DBImpl::GetCompactionStats() {
+  std::string tmp;
+  rep->GetProperty("rocksdb.cfstats", &tmp);
+  return ToDBString(tmp);
+}
+
+DBString DBBatch::GetCompactionStats() {
+  return ToDBString("unsupported");
+}
+
+DBString DBWriteOnlyBatch::GetCompactionStats() {
+  return ToDBString("unsupported");
+}
+
+DBString DBSnapshot::GetCompactionStats() {
+  return ToDBString("unsupported");
+}
+
 // EnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBImpl::EnvWriteFile(DBSlice path, DBSlice contents) {
   rocksdb::Status s;
@@ -2321,6 +2344,10 @@ MVCCStatsResult MVCCComputeStats(
 // write them to the provided DBStatsResult instance.
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) {
   return db->GetStats(stats);
+}
+
+DBString DBGetCompactionStats(DBEngine* db) {
+  return db->GetCompactionStats();
 }
 
 DBSSTable* DBGetSSTables(DBEngine* db, int* n) {
