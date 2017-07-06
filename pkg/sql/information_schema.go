@@ -596,6 +596,11 @@ func forEachDatabaseDesc(
 // with respect primarily to database name and secondarily to table name. For
 // each table, the function will call fn with its respective database and table
 // descriptor.
+//
+// The prefix argument specifies in which database context we are
+// requesting the descriptors. In context "" all descriptors are
+// visible, in non-empty contexts only the descriptors of that
+// database are visible.
 func forEachTableDesc(
 	ctx context.Context,
 	p *planner,
@@ -603,6 +608,23 @@ func forEachTableDesc(
 	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
 ) error {
 	return forEachTableDescWithTableLookup(ctx, p, prefix, func(
+		db *sqlbase.DatabaseDescriptor,
+		table *sqlbase.TableDescriptor,
+		_ tableLookupFn,
+	) error {
+		return fn(db, table)
+	})
+}
+
+// forEachTableDescAll does the same as forEachTableDesc but also
+// includes newly added non-public descriptors.
+func forEachTableDescAll(
+	ctx context.Context,
+	p *planner,
+	prefix string,
+	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
+) error {
+	return forEachTableDescWithTableLookupInternal(ctx, p, prefix, true /* allowAdding */, func(
 		db *sqlbase.DatabaseDescriptor,
 		table *sqlbase.TableDescriptor,
 		_ tableLookupFn,
@@ -640,13 +662,30 @@ func isSystemDatabaseName(name string) bool {
 // tableLookupFn when calling fn to allow callers to lookup fetched table descriptors
 // on demand. This is important for callers dealing with objects like foreign keys, where
 // the metadata for each object must be augmented by looking at the referenced table.
-// The prefix argument specifies in which database context we are requesting the descriptors.
-// In context "" all descriptors are visible, in non-empty contexts only the descriptors
-// of that database are visible.
+//
+// The prefix argument specifies in which database context we are
+// requesting the descriptors.  In context "" all descriptors are
+// visible, in non-empty contexts only the descriptors of that
+// database are visible.
 func forEachTableDescWithTableLookup(
 	ctx context.Context,
 	p *planner,
 	prefix string,
+	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor, tableLookupFn) error,
+) error {
+	return forEachTableDescWithTableLookupInternal(ctx, p, prefix, false /* allowAdding */, fn)
+}
+
+// forEachTableDescWithTableLookupInternal is the logic that supports
+// forEachTableDescWithTableLookup.
+//
+// The allowAdding argument if true includes newly added tables that
+// are not yet public.
+func forEachTableDescWithTableLookupInternal(
+	ctx context.Context,
+	p *planner,
+	prefix string,
+	allowAdding bool,
 	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor, tableLookupFn) error,
 ) error {
 	type dbDescTables struct {
@@ -732,7 +771,7 @@ func forEachTableDescWithTableLookup(
 		sort.Strings(dbTableNames)
 		for _, tableName := range dbTableNames {
 			tableDesc := db.tables[tableName]
-			if userCanSeeTable(tableDesc, p.session.User) {
+			if userCanSeeTable(tableDesc, p.session.User, allowAdding) {
 				if err := fn(db.desc, tableDesc, tableLookup); err != nil {
 					return err
 				}
@@ -829,6 +868,10 @@ func userCanSeeDatabase(db *sqlbase.DatabaseDescriptor, user string) bool {
 	return userCanSeeDescriptor(db, user)
 }
 
-func userCanSeeTable(table *sqlbase.TableDescriptor, user string) bool {
-	return userCanSeeDescriptor(table, user) && table.State == sqlbase.TableDescriptor_PUBLIC
+func userCanSeeTable(table *sqlbase.TableDescriptor, user string, allowAdding bool) bool {
+	if !(table.State == sqlbase.TableDescriptor_PUBLIC ||
+		(allowAdding && table.State == sqlbase.TableDescriptor_ADD)) {
+		return false
+	}
+	return userCanSeeDescriptor(table, user)
 }

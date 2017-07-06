@@ -165,9 +165,12 @@ func (p *planner) ShowColumns(ctx context.Context, n *parser.ShowColumns) (planN
 }
 
 // showTableDetails extracts information about the given table using
-// the given query patterns in SQL. The query pattern must accept two
-// formatting parameters: the database and the table name, in that
-// order. They will be pre-formatted as SQL string literals.
+// the given query patterns in SQL. The query pattern must accept
+// three formatting parameters:
+// %[1]s the database name as SQL string literal.
+// %[2]s the unqualified table name as SQL string literal.
+// %[3]s the given table name as SQL string literal.
+// %[4]s the database name as SQL identifier.
 func (p *planner) showTableDetails(
 	ctx context.Context, showType string, t parser.NormalizableTableName, query string,
 ) (planNode, error) {
@@ -181,7 +184,7 @@ func (p *planner) showTableDetails(
 		if err := checkDBExists(ctx, p, db); err != nil {
 			return err
 		}
-		desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /* allowAdding */)
+		desc, err := mustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /* allowAdding */)
 		if err != nil {
 			return err
 		}
@@ -190,8 +193,10 @@ func (p *planner) showTableDetails(
 
 	return p.delegateQuery(ctx, showType,
 		fmt.Sprintf(query,
-			parser.EscapeSQLString(tn.Database()),
-			parser.EscapeSQLString(tn.Table())),
+			parser.EscapeSQLString(db),
+			parser.EscapeSQLString(tn.Table()),
+			parser.EscapeSQLString(tn.String()),
+			tn.DatabaseName.String()),
 		initialCheck, nil)
 }
 
@@ -200,88 +205,41 @@ func (p *planner) showTableDetails(
 func (p *planner) ShowCreateTable(
 	ctx context.Context, n *parser.ShowCreateTable,
 ) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
-	if err != nil {
-		return nil, err
-	}
-
-	desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.anyPrivilege(desc); err != nil {
-		return nil, err
-	}
-
-	columns := sqlbase.ResultColumns{
-		{Name: "Table", Typ: parser.TypeString},
-		{Name: "CreateTable", Typ: parser.TypeString},
-	}
-
-	return &delayedNode{
-		name:    "SHOW CREATE TABLE " + tn.String(),
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
-
-			s, err := p.showCreateTable(ctx, tn.TableName, desc)
-			if err != nil {
-				v.rows.Close(ctx)
-				return nil, err
-			}
-
-			if _, err := v.rows.AddRow(ctx, parser.Datums{
-				parser.NewDString(tn.String()),
-				parser.NewDString(s),
-			}); err != nil {
-				v.rows.Close(ctx)
-				return nil, err
-			}
-			return v, nil
-		},
-	}, nil
+	// We make the check whether the name points to a table or not in
+	// SQL, so as to avoid a double lookup (a first one to check if the
+	// descriptor is of the right type, another to populate the
+	// create_statements vtable).
+	const showCreateTableQuery = `
+     SELECT %[3]s AS "Table",
+            IFNULL(create_statement,
+                   crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
+                                             %[1]s || '.' || %[2]s || ' is not a table')::string
+            ) AS "CreateTable"
+       FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
+              WHERE database_name = %[1]s AND descriptor_name = %[2]s AND descriptor_type = 'table'
+              UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
+  `
+	return p.showTableDetails(ctx, "SHOW CREATE TABLE", n.Table, showCreateTableQuery)
 }
 
 // ShowCreateView returns a CREATE VIEW statement for the specified view.
 // Privileges: Any privilege on view.
 func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) (planNode, error) {
-	tn, err := n.View.NormalizeWithDatabaseName(p.session.Database)
-	if err != nil {
-		return nil, err
-	}
-
-	desc, err := mustGetViewDesc(ctx, p.txn, p.getVirtualTabler(), tn)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.anyPrivilege(desc); err != nil {
-		return nil, err
-	}
-
-	columns := sqlbase.ResultColumns{
-		{Name: "View", Typ: parser.TypeString},
-		{Name: "CreateView", Typ: parser.TypeString},
-	}
-	return &delayedNode{
-		name:    "SHOW CREATE VIEW " + tn.String(),
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			createView, err := p.showCreateView(ctx, tn.TableName, desc)
-			if err != nil {
-				return nil, err
-			}
-
-			v := p.newContainerValuesNode(columns, 0)
-			if _, err := v.rows.AddRow(ctx, parser.Datums{
-				parser.NewDString(n.View.String()),
-				parser.NewDString(createView),
-			}); err != nil {
-				v.rows.Close(ctx)
-				return nil, err
-			}
-			return v, nil
-		},
-	}, nil
+	// We make the check whether the name points to a view or not in
+	// SQL, so as to avoid a double lookup (a first one to check if the
+	// descriptor is of the right type, another to populate the
+	// create_statements vtable).
+	const showCreateViewQuery = `
+     SELECT %[3]s AS "View",
+            IFNULL(create_statement,
+                   crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
+                                             %[1]s || '.' || %[2]s || ' is not a view')::string
+            ) AS "CreateView"
+       FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
+              WHERE database_name = %[1]s AND descriptor_name = %[2]s AND descriptor_type = 'view'
+              UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
+  `
+	return p.showTableDetails(ctx, "SHOW CREATE VIEW", n.View, showCreateViewQuery)
 }
 
 // ShowTrace shows the current stored session trace.
