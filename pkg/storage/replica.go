@@ -2898,7 +2898,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	// blips or worse, and it's good to be able to pick them from traces.
 	//
 	// TODO(tschottdorf): can we mark them so lightstep can group them?
-	if size := len(p.command.WriteBatch.Data); size > largeProposalEventThresholdBytes {
+	if size := len(data); size > largeProposalEventThresholdBytes {
 		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(size)))
 	}
 
