@@ -108,8 +108,12 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 		setUnlimited(n.table)
 
 	case *unionNode:
-		applyLimit(n.right, numRows, true)
-		applyLimit(n.left, numRows, true)
+		if n.right != nil {
+			applyLimit(n.right, numRows, true)
+		}
+		if n.left != nil {
+			applyLimit(n.left, numRows, true)
+		}
 
 	case *distinctNode:
 		applyLimit(n.plan, numRows, true)
