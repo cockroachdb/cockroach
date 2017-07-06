@@ -198,7 +198,7 @@ CREATE VIEW XV AS SELECT X, "Y" FROM foo
 query TT
 SHOW CREATE VIEW xv
 ----
-xv  CREATE VIEW xv AS SELECT x, "Y" FROM test.foo
+xv  CREATE VIEW xv (x, "Y") AS SELECT x, "Y" FROM test.foo
 
 query error relation "XV" does not exist
 SHOW CREATE VIEW "XV"
@@ -209,7 +209,7 @@ CREATE VIEW "YV" AS SELECT X, "Y" FROM foo
 query TT
 SHOW CREATE VIEW "YV"
 ----
-"YV"  CREATE VIEW "YV" AS SELECT x, "Y" FROM test.foo
+"YV"  CREATE VIEW "YV" (x, "Y") AS SELECT x, "Y" FROM test.foo
 
 query error relation "yv" does not exist
 SHOW CREATE VIEW YV
