@@ -2651,3 +2651,18 @@ func TestSnapshotRateLimit(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkStoreGetReplica(b *testing.B) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store, _ := createTestStore(b, stopper)
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, err := store.GetReplica(1)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
