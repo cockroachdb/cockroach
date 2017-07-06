@@ -378,7 +378,10 @@ type raftRequestInfo struct {
 	respStream RaftMessageResponseStream
 }
 
-type raftRequestQueue []raftRequestInfo
+type raftRequestQueue struct {
+	syncutil.Mutex
+	infos []raftRequestInfo
+}
 
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
@@ -560,10 +563,7 @@ type Store struct {
 	// avoid reworking the locking in getOrCreateReplica which requires
 	// Replica.raftMu to be held while a replica is being inserted into
 	// Store.mu.replicas.
-	replicaQueues struct {
-		syncutil.Mutex
-		m map[roachpb.RangeID]raftRequestQueue
-	}
+	replicaQueues syncmap.Map // map[roachpb.RangeID]*raftRequestQueue
 
 	tsCacheMu struct {
 		// Protects all fields in the tsCacheMu struct.
@@ -933,10 +933,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
-
-	s.replicaQueues.Lock()
-	s.replicaQueues.m = map[roachpb.RangeID]raftRequestQueue{}
-	s.replicaQueues.Unlock()
 
 	s.tsCacheMu.Lock()
 	s.tsCacheMu.cache = newTimestampCache(s.cfg.Clock)
@@ -1919,9 +1915,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 		}
 		delete(s.mu.uninitReplicas, newDesc.RangeID)
 		s.mu.replicas.Delete(newDesc.RangeID)
-		s.replicaQueues.Lock()
-		delete(s.replicaQueues.m, newDesc.RangeID)
-		s.replicaQueues.Unlock()
+		s.replicaQueues.Delete(newDesc.RangeID)
 	}
 
 	// Replace the end key of the original range with the start key of
@@ -2227,9 +2221,7 @@ func (s *Store) removeReplicaImpl(
 	defer s.mu.Unlock()
 	s.mu.replicas.Delete(rep.RangeID)
 	delete(s.mu.uninitReplicas, rep.RangeID)
-	s.replicaQueues.Lock()
-	delete(s.replicaQueues.m, rep.RangeID)
-	s.replicaQueues.Unlock()
+	s.replicaQueues.Delete(rep.RangeID)
 	if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
@@ -2914,20 +2906,24 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		return s.processRaftRequest(ctx, req, IncomingSnapshot{})
 	}
 
-	s.replicaQueues.Lock()
-	q := s.replicaQueues.m[req.RangeID]
-	if len(q) >= replicaRequestQueueSize {
-		s.replicaQueues.Unlock()
+	value, ok := s.replicaQueues.Load(req.RangeID)
+	if !ok {
+		value, _ = s.replicaQueues.LoadOrStore(req.RangeID, &raftRequestQueue{})
+	}
+	q := value.(*raftRequestQueue)
+	q.Lock()
+	if len(q.infos) >= replicaRequestQueueSize {
+		q.Unlock()
 		// TODO(peter): Return an error indicating the request was dropped. Note
 		// that dropping the request is safe. Raft will retry.
 		s.metrics.RaftRcvdMsgDropped.Inc(1)
 		return nil
 	}
-	s.replicaQueues.m[req.RangeID] = append(q, raftRequestInfo{
+	q.infos = append(q.infos, raftRequestInfo{
 		req:        req,
 		respStream: respStream,
 	})
-	s.replicaQueues.Unlock()
+	q.Unlock()
 
 	s.scheduler.EnqueueRaftRequest(req.RangeID)
 	return nil
@@ -3510,15 +3506,26 @@ func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 func (s *Store) processRequestQueue(rangeID roachpb.RangeID) {
-	s.replicaQueues.Lock()
-	q, ok := s.replicaQueues.m[rangeID]
-	if ok {
-		delete(s.replicaQueues.m, rangeID)
+	value, ok := s.replicaQueues.Load(rangeID)
+	if !ok {
+		return
 	}
-	s.replicaQueues.Unlock()
+	q := value.(*raftRequestQueue)
+	q.Lock()
+	infos := q.infos
+	q.infos = nil
+	q.Unlock()
 
-	for _, info := range q {
+	for _, info := range infos {
 		if pErr := s.processRaftRequest(info.respStream.Context(), info.req, IncomingSnapshot{}); pErr != nil {
+			// If we're unable to process the request, clear the request queue. This
+			// only happens if we couldn't create the replica because the request was
+			// target to a removed range.
+			q.Lock()
+			if len(q.infos) == 0 {
+				s.replicaQueues.Delete(rangeID)
+			}
+			q.Unlock()
 			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
 				// Seems excessive to log this on every occurrence as the other side
 				// might have closed.
@@ -3847,9 +3854,7 @@ func (s *Store) tryGetOrCreateReplica(
 		s.mu.Lock()
 		s.mu.replicas.Delete(rangeID)
 		delete(s.mu.uninitReplicas, rangeID)
-		s.replicaQueues.Lock()
-		delete(s.replicaQueues.m, rangeID)
-		s.replicaQueues.Unlock()
+		s.replicaQueues.Delete(rangeID)
 		s.mu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, err
