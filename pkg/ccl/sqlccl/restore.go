@@ -703,7 +703,7 @@ func Restore(
 	// The Import (and resulting WriteBatch) requests made below run on
 	// leaseholders, so presplit the ranges to balance the work among many
 	// nodes
-	splitKeys := make([]roachpb.Key, len(importRequests))
+	splitKeys := make([]roachpb.Key, len(importRequests)+1)
 	for i, r := range importRequests {
 		var ok bool
 		splitKeys[i], ok, _ = kr.RewriteKey(append([]byte(nil), r.Key...))
@@ -711,6 +711,15 @@ func Restore(
 			return failed, errors.Errorf("failed to rewrite key: %s", r.Key)
 		}
 	}
+	// Split at the end of the last table; otherwise, the last range will span
+	// to MaxKey and potentially contain data, which breaks scatter.
+	var maxID sqlbase.ID
+	for _, id := range newTableIDs {
+		if id > maxID {
+			maxID = id
+		}
+	}
+	splitKeys[len(splitKeys)-1] = keys.MakeTablePrefix(uint32(maxID + 1))
 	if err := PresplitRanges(ctx, db, splitKeys); err != nil {
 		return failed, errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
 	}
