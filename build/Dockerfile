@@ -1,4 +1,4 @@
-FROM ubuntu:xenial-20170214
+FROM ubuntu:xenial-20170619
 
 MAINTAINER Tamir Duberstein <tamird@gmail.com>
 
@@ -17,8 +17,7 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
  && curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
  && echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list
 
-# autoconf - crosstool-ng/bootstrap / c-deps: jemalloc/snappy
-# automake - c-deps: snappy
+# autoconf - crosstool-ng/bootstrap / c-deps: jemalloc
 # bison - crosstool-ng/configure
 # bzip2 - crosstool-ng/configure
 # clang - msan: -fsanitize
@@ -33,7 +32,6 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # help2man - crosstool-ng/configure
 # iptables - acceptance tests' partition nemesis
 # libncurses-dev - crosstool-ng/configure
-# libtool - c-deps: snappy
 # make - crosstool-ng boostrap / CRDB build system
 # nodejs - ui: all
 # openssh-client - terraform / jepsen
@@ -45,7 +43,6 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # yarn - ui: all
 RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf \
-    automake \
     bison \
     bzip2 \
     clang \
@@ -60,7 +57,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     help2man \
     iptables \
     libncurses-dev \
-    libtool \
     make \
     nodejs \
     openssh-client \

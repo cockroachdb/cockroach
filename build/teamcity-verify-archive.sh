@@ -10,4 +10,4 @@ docker run \
   --rm \
   --volume="$(cd "$(dirname "$0")" && pwd):/work" \
   --workdir="/work" \
-  golang:1.8.1 ./verify-archive.sh
+  golang:stretch ./verify-archive.sh
