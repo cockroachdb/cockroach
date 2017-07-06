@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"golang.org/x/net/context"
+	"golang.org/x/sync/syncmap"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -42,11 +43,13 @@ import (
 // information to be read at node startup.
 type Stores struct {
 	log.AmbientContext
-	clock      *hlc.Clock
-	mu         syncutil.RWMutex           // Protects storeMap and addrs
-	storeMap   map[roachpb.StoreID]*Store // Map from StoreID to Store
-	biLatestTS hlc.Timestamp              // Timestamp of gossip bootstrap info
-	latestBI   *gossip.BootstrapInfo      // Latest cached bootstrap info
+	clock *hlc.Clock
+	mu    struct {
+		syncutil.RWMutex
+		storeMap   syncmap.Map           // map[roachpb.StoreID]*Store
+		biLatestTS hlc.Timestamp         // Timestamp of gossip bootstrap info
+		latestBI   *gossip.BootstrapInfo // Latest cached bootstrap info
+	}
 }
 
 var _ client.Sender = &Stores{}  // Stores implements the client.Sender interface
@@ -58,49 +61,45 @@ func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
 	return &Stores{
 		AmbientContext: ambient,
 		clock:          clock,
-		storeMap:       map[roachpb.StoreID]*Store{},
 	}
 }
 
 // GetStoreCount returns the number of stores this node is exporting.
 func (ls *Stores) GetStoreCount() int {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
-	return len(ls.storeMap)
+	var count int
+	ls.mu.storeMap.Range(func(k, v interface{}) bool {
+		count++
+		return true
+	})
+	return count
 }
 
 // HasStore returns true if the specified store is owned by this Stores.
 func (ls *Stores) HasStore(storeID roachpb.StoreID) bool {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
-	_, ok := ls.storeMap[storeID]
+	_, ok := ls.mu.storeMap.Load(storeID)
 	return ok
 }
 
 // GetStore looks up the store by store ID. Returns an error
 // if not found.
 func (ls *Stores) GetStore(storeID roachpb.StoreID) (*Store, error) {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
-	store, ok := ls.storeMap[storeID]
-	if !ok {
-		return nil, roachpb.NewStoreNotFoundError(storeID)
+	if value, ok := ls.mu.storeMap.Load(storeID); ok {
+		return value.(*Store), nil
 	}
-	return store, nil
+	return nil, roachpb.NewStoreNotFoundError(storeID)
 }
 
 // AddStore adds the specified store to the store map.
 func (ls *Stores) AddStore(s *Store) {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	if _, ok := ls.storeMap[s.Ident.StoreID]; ok {
+	if _, loaded := ls.mu.storeMap.LoadOrStore(s.Ident.StoreID, s); loaded {
 		panic(fmt.Sprintf("cannot add store twice: %+v", s.Ident))
 	}
-	ls.storeMap[s.Ident.StoreID] = s
 	// If we've already read the gossip bootstrap info, ensure that
 	// all stores have the most recent values.
-	if ls.biLatestTS != (hlc.Timestamp{}) {
-		if err := ls.updateBootstrapInfo(ls.latestBI); err != nil {
+	if ls.mu.biLatestTS != (hlc.Timestamp{}) {
+		if err := ls.updateBootstrapInfoLocked(ls.mu.latestBI); err != nil {
 			ctx := ls.AnnotateCtx(context.TODO())
 			log.Errorf(ctx, "failed to update bootstrap info on newly added store: %s", err)
 		}
@@ -111,7 +110,7 @@ func (ls *Stores) AddStore(s *Store) {
 func (ls *Stores) RemoveStore(s *Store) {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	delete(ls.storeMap, s.Ident.StoreID)
+	ls.mu.storeMap.Delete(s.Ident.StoreID)
 }
 
 // VisitStores implements a visitor pattern over stores in the
@@ -121,18 +120,12 @@ func (ls *Stores) RemoveStore(s *Store) {
 // functions may call back into the Stores object. Stores are visited
 // in random order.
 func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
-	ls.mu.RLock()
-	stores := make([]*Store, 0, len(ls.storeMap))
-	for _, s := range ls.storeMap {
-		stores = append(stores, s)
-	}
-	ls.mu.RUnlock()
-	for _, s := range stores {
-		if err := visitor(s); err != nil {
-			return err
-		}
-	}
-	return nil
+	var err error
+	ls.mu.storeMap.Range(func(k, v interface{}) bool {
+		err = visitor(v.(*Store))
+		return err == nil
+	})
+	return err
 }
 
 // Send implements the client.Sender interface. The store is looked up from the
@@ -205,10 +198,12 @@ func (ls *Stores) LookupReplica(
 	var rangeID roachpb.RangeID
 	var repDesc roachpb.ReplicaDescriptor
 	var repDescFound bool
-	for _, store := range ls.storeMap {
+	var err error
+	ls.mu.storeMap.Range(func(k, v interface{}) bool {
+		store := v.(*Store)
 		replica := store.LookupReplica(start, nil)
 		if replica == nil {
-			continue
+			return true
 		}
 
 		// Verify that the descriptor contains the entire range.
@@ -216,13 +211,12 @@ func (ls *Stores) LookupReplica(
 			ctx := ls.AnnotateCtx(context.TODO())
 			log.Warningf(ctx, "range not contained in one range: [%s,%s), but have [%s,%s)",
 				start, end, desc.StartKey, desc.EndKey)
-			err := roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), desc)
-			return 0, roachpb.ReplicaDescriptor{}, err
+			err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), desc)
+			return false
 		}
 
 		rangeID = replica.RangeID
 
-		var err error
 		repDesc, err = replica.GetReplicaDescriptor()
 		if err != nil {
 			if _, ok := err.(*roachpb.RangeNotFoundError); ok {
@@ -230,18 +224,22 @@ func (ls *Stores) LookupReplica(
 				// been removed from the range (via down-replication) between the
 				// LookupReplica and the GetReplicaDescriptor calls. In this case just
 				// ignore this replica.
-				continue
+				err = nil
 			}
-			return 0, roachpb.ReplicaDescriptor{}, err
+			return err == nil
 		}
 
 		if repDescFound {
 			// We already found the range; this should never happen outside of tests.
-			err := errors.Errorf("range %+v exists on additional store: %+v", replica, store)
-			return 0, roachpb.ReplicaDescriptor{}, err
+			err = errors.Errorf("range %+v exists on additional store: %+v", replica, store)
+			return false
 		}
 
 		repDescFound = true
+		return true // loop to see if another store also contains the replica
+	})
+	if err != nil {
+		return 0, roachpb.ReplicaDescriptor{}, err
 	}
 	if !repDescFound {
 		return 0, roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(0)
@@ -275,26 +273,33 @@ func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, error) {
 // stores (but excluding the case in which no data has been persisted
 // yet).
 func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
 	var latestTS hlc.Timestamp
 
 	ctx := ls.AnnotateCtx(context.TODO())
+	var err error
 
 	// Find the most recent bootstrap info.
-	for _, s := range ls.storeMap {
+	ls.mu.storeMap.Range(func(k, v interface{}) bool {
+		s := v.(*Store)
 		var storeBI gossip.BootstrapInfo
-		ok, err := engine.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.Timestamp{}, true, nil, &storeBI)
+		var ok bool
+		ok, err = engine.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.Timestamp{}, true, nil, &storeBI)
 		if err != nil {
-			return err
+			return false
 		}
 		if ok && latestTS.Less(storeBI.Timestamp) {
 			latestTS = storeBI.Timestamp
 			*bi = storeBI
 		}
+		return true
+	})
+	if err != nil {
+		return err
 	}
 	log.Infof(ctx, "read %d node addresses from persistent storage", len(bi.Addresses))
-	return ls.updateBootstrapInfo(bi)
+	return ls.updateBootstrapInfoLocked(bi)
 }
 
 // WriteBootstrapInfo implements the gossip.Storage interface. Write
@@ -302,10 +307,10 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 // nil on success; otherwise returns first error encountered writing
 // to the stores.
 func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
 	bi.Timestamp = ls.clock.Now()
-	if err := ls.updateBootstrapInfo(bi); err != nil {
+	if err := ls.updateBootstrapInfoLocked(bi); err != nil {
 		return err
 	}
 	ctx := ls.AnnotateCtx(context.TODO())
@@ -313,19 +318,20 @@ func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	return nil
 }
 
-func (ls *Stores) updateBootstrapInfo(bi *gossip.BootstrapInfo) error {
-	if bi.Timestamp.Less(ls.biLatestTS) {
+func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
+	if bi.Timestamp.Less(ls.mu.biLatestTS) {
 		return nil
 	}
 	ctx := ls.AnnotateCtx(context.TODO())
 	// Update the latest timestamp and set cached version.
-	ls.biLatestTS = bi.Timestamp
-	ls.latestBI = protoutil.Clone(bi).(*gossip.BootstrapInfo)
+	ls.mu.biLatestTS = bi.Timestamp
+	ls.mu.latestBI = protoutil.Clone(bi).(*gossip.BootstrapInfo)
 	// Update all stores.
-	for _, s := range ls.storeMap {
-		if err := engine.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.Timestamp{}, nil, bi); err != nil {
-			return err
-		}
-	}
-	return nil
+	var err error
+	ls.mu.storeMap.Range(func(k, v interface{}) bool {
+		s := v.(*Store)
+		err = engine.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.Timestamp{}, nil, bi)
+		return err == nil
+	})
+	return err
 }
