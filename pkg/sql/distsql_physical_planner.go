@@ -329,9 +329,10 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *valuesNode:
 		rec := shouldNotDistribute
-		if n.n != nil {
-			// valuesNode source is a sql clause
-			// TODO: check other sources of valuesNode
+		var err error
+		if n.n == nil {
+			err = newQueryNotSupportedErrorf("unsupported node %T without SQL VALUES clause", node)
+		} else {
 			for _, tuple := range n.tuples {
 				for _, expr := range tuple {
 					if err := dsp.checkExpr(expr); err != nil {
@@ -341,7 +342,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			}
 			rec = shouldDistribute
 		}
-		return rec, nil
+		return rec, err
 
 	case *insertNode, *updateNode, *deleteNode:
 		// This is a potential hot path.
