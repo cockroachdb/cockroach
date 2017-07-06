@@ -347,16 +347,16 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 	}
 	tableDesc.Mutations = []sqlbase.DescriptorMutation{{Descriptor_: &sqlbase.DescriptorMutation_Column{Column: &tableDesc.Columns[len(tableDesc.Columns)-1]}}}
 	tableDesc.Columns = tableDesc.Columns[:len(tableDesc.Columns)-1]
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, col i, id 3") {
+	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = sqlbase.DescriptorMutation_DELETE_ONLY
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, "mutation in state DELETE_ONLY, direction NONE, col i, id 3") {
+	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = sqlbase.DescriptorMutation_UNKNOWN
 	tableDesc.Mutations[0].Direction = sqlbase.DescriptorMutation_DROP
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, "mutation in state UNKNOWN, direction DROP, col i, id 3") {
+	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
 		t.Fatal(err)
 	}
 }

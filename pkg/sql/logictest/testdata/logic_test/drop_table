@@ -32,10 +32,10 @@ SHOW TABLES FROM test
 Table
 b
 
-statement error table "a" does not exist
+statement error relation "a" does not exist
 SELECT * FROM a
 
-statement error table "a" does not exist
+statement error relation "a" does not exist
 DROP TABLE a
 
 statement ok

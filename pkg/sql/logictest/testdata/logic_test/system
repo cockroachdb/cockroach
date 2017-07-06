@@ -343,11 +343,11 @@ somesetting   somevalue
 
 user testuser
 
-statement error user testuser does not have SELECT privilege on table settings
+statement error user testuser does not have SELECT privilege on relation settings
 select name from system.settings
 ----
 
-statement error user testuser does not have INSERT privilege on table settings
+statement error user testuser does not have INSERT privilege on relation settings
 UPSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalueother')
 
 user root

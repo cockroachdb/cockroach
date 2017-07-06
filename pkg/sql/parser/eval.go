@@ -2018,16 +2018,18 @@ type regTypeInfo struct {
 	nameCol string
 	// objName is a human-readable name describing the objects in the table.
 	objName string
+	// errType is the pg error code in case the object does not exist.
+	errType string
 }
 
 // regTypeInfos maps an OidColType to a regTypeInfo that describes the
 // pg_catalog table that contains the entities of the type of the key.
 var regTypeInfos = map[*OidColType]regTypeInfo{
-	oidColTypeRegClass:     {"pg_class", "relname", "relation"},
-	oidColTypeRegType:      {"pg_type", "typname", "type"},
-	oidColTypeRegProc:      {"pg_proc", "proname", "function"},
-	oidColTypeRegProcedure: {"pg_proc", "proname", "function"},
-	oidColTypeRegNamespace: {"pg_namespace", "nspname", "namespace"},
+	oidColTypeRegClass:     {"pg_class", "relname", "relation", pgerror.CodeUndefinedTableError},
+	oidColTypeRegType:      {"pg_type", "typname", "type", pgerror.CodeUndefinedObjectError},
+	oidColTypeRegProc:      {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
+	oidColTypeRegProcedure: {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
+	oidColTypeRegNamespace: {"pg_namespace", "nspname", "namespace", pgerror.CodeUndefinedObjectError},
 }
 
 // queryOidWithJoin looks up the name or OID of an input OID or string in the
@@ -2060,12 +2062,13 @@ func queryOidWithJoin(
 		d)
 	if err != nil {
 		if _, ok := err.(*MultipleResultsError); ok {
-			return nil, errors.Errorf("more than one %s named %s", info.objName, d)
+			return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+				"more than one %s named %s", info.objName, d)
 		}
 		return nil, err
 	}
 	if results.Len() == 0 {
-		return nil, errors.Errorf("%s %s does not exist", info.objName, d)
+		return nil, pgerror.NewErrorf(info.errType, "%s %s does not exist", info.objName, d)
 	}
 	ret.DInt = results[0].(*DOid).DInt
 	ret.name = AsStringWithFlags(results[1], FmtBareStrings)

@@ -903,7 +903,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// customers is aware of the view that depends on it.
 		if _, err := db.DB.Exec(`DROP TABLE store.customers`); !testutils.IsError(err,
-			`cannot drop table "customers" because view "early_customers" depends on it`,
+			`cannot drop relation "customers" because view "early_customers" depends on it`,
 		) {
 			t.Fatal(err)
 		}
@@ -935,7 +935,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// customers is aware of the view that depends on it.
 		if _, err := db.DB.Exec(`DROP TABLE store.customers`); !testutils.IsError(err,
-			`cannot drop table "customers" because view "storestats.ordercounts" depends on it`,
+			`cannot drop relation "customers" because view "storestats.ordercounts" depends on it`,
 		) {
 			t.Fatal(err)
 		}
@@ -946,7 +946,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// orders is aware of the view that depends on it.
 		if _, err := db.DB.Exec(`DROP TABLE store.orders`); !testutils.IsError(err,
-			`cannot drop table "orders" because view "storestats.ordercounts" depends on it`,
+			`cannot drop relation "orders" because view "storestats.ordercounts" depends on it`,
 		) {
 			t.Fatal(err)
 		}

@@ -80,12 +80,13 @@ type virtualSchemaEntry struct {
 	orderedTableNames []string
 }
 
-func (e virtualSchemaEntry) tableNames() parser.TableNames {
+func (e virtualSchemaEntry) tableNames(dbNameOriginallyOmitted bool) parser.TableNames {
 	var res parser.TableNames
 	for _, tableName := range e.orderedTableNames {
 		tn := parser.TableName{
-			DatabaseName: parser.Name(e.desc.Name),
-			TableName:    parser.Name(tableName),
+			DatabaseName:            parser.Name(e.desc.Name),
+			TableName:               parser.Name(tableName),
+			DBNameOriginallyOmitted: dbNameOriginallyOmitted,
 		}
 		res = append(res, tn)
 	}
@@ -241,7 +242,7 @@ func (vs *virtualSchemaHolder) getVirtualTableEntry(
 		if t, ok := db.tables[tn.TableName.Normalize()]; ok {
 			return t, nil
 		}
-		return virtualTableEntry{}, sqlbase.NewUndefinedTableError(tn.String())
+		return virtualTableEntry{}, sqlbase.NewUndefinedRelationError(tn)
 	}
 	return virtualTableEntry{}, nil
 }

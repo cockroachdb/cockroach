@@ -1097,7 +1097,7 @@ func TestPGPreparedExec(t *testing.T) {
 			"DROP TABLE d.t",
 			[]preparedExecTest{
 				baseTest,
-				baseTest.Error(`pq: table "d.t" does not exist`),
+				baseTest.Error(`pq: relation "d.t" does not exist`),
 			},
 		},
 		{

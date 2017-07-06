@@ -73,7 +73,7 @@ SELECT * FROM smtng.something ORDER BY 1 LIMIT 1
 ----
 cups 10
 
-statement error pq: table "something" does not exist
+statement error pq: relation "something" does not exist
 SELECT * FROM something LIMIT 1
 
 # Check for memory leak (#10466)

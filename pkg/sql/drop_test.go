@@ -529,12 +529,12 @@ func TestDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Test that dropped table cannot be used. This prevents
+	// Test that deleted table cannot be used. This prevents
 	// regressions where name -> descriptor ID caches might make
 	// this statement erronously work.
 	if _, err := sqlDB.Exec(
 		`SELECT * FROM t.kv`,
-	); !testutils.IsError(err, `table "t.kv" does not exist`) {
+	); !testutils.IsError(err, `relation "t.kv" does not exist`) {
 		t.Fatalf("different error than expected: %+v", err)
 	}
 
@@ -667,7 +667,7 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 	// Test that deleted table cannot be used. This prevents regressions where
 	// name -> descriptor ID caches might make this statement erronously work.
 	if _, err := sqlDB.Exec(`SELECT * FROM t.intlv`); !testutils.IsError(
-		err, `table "t.intlv" does not exist`,
+		err, `relation "t.intlv" does not exist`,
 	) {
 		t.Fatalf("different error than expected: %v", err)
 	}

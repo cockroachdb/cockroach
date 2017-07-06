@@ -52,7 +52,7 @@ SELECT COUNT(*) FROM numbers
 ----
 0
 
-query error pq: table "words" does not exist
+query error pq: relation "words" does not exist
 SELECT COUNT(*) FROM words
 
 query I
@@ -86,7 +86,7 @@ SELECT COUNT(DISTINCT(1)) FROM pg_tables
 statement ok
 SET DATABASE = t2
 
-query error pq: table "numbers" does not exist
+query error pq: relation "numbers" does not exist
 SELECT COUNT(*) FROM numbers
 
 query I

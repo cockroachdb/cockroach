@@ -131,7 +131,7 @@ test
 statement ok
 CREATE DATABASE b
 
-statement error table "b.a" does not exist
+statement error relation "b.a" does not exist
 SELECT * FROM b.a
 
 statement ok

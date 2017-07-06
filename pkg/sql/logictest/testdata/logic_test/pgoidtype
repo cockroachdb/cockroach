@@ -135,7 +135,7 @@ numeric  numeric
 query error type 'foo.' does not exist
 SELECT 'foo.'::REGTYPE
 
-query error table "blah" does not exist
+query error relation "blah" does not exist
 SELECT 'blah'::REGCLASS
 
 query error unknown function: blah\(\)
@@ -222,7 +222,7 @@ SET DATABASE = otherdb
 
 user testuser
 
-query error table "a" does not exist
+query error relation "a" does not exist
 SELECT 'a'::regclass
 
 user root
@@ -260,5 +260,5 @@ SET DATABASE = thirddb
 # still exists in another database, the query does fail (regclass
 # does not automatically search in other dbs, even for the root user).
 
-query error table "a" does not exist
+query error relation "a" does not exist
 SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass

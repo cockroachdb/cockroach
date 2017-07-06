@@ -65,7 +65,7 @@ func TestAsOfTime(t *testing.T) {
 	if err := db.QueryRow("CREATE DATABASE d; SELECT cluster_logical_timestamp()").Scan(&tsDBExists); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Query(fmt.Sprintf(query, tsDBExists), 0); !testutils.IsError(err, `pq: table "d.t" does not exist`) {
+	if _, err := db.Query(fmt.Sprintf(query, tsDBExists), 0); !testutils.IsError(err, `pq: relation "d.t" does not exist`) {
 		t.Fatal(err)
 	}
 

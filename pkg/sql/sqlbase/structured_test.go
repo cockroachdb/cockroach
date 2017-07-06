@@ -635,7 +635,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			}},
 		},
 		{
-			err: `missing fk back reference to foo.bar from baz.qux`,
+			err: `missing fk back reference to "foo"@"bar" from "baz"@"qux"`,
 			desc: TableDescriptor{
 				ID:   51,
 				Name: "foo",
@@ -679,7 +679,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			}},
 		},
 		{
-			err: `broken fk backward reference from foo.bar to baz.qux`,
+			err: `broken fk backward reference from "foo"@"bar" to "baz"@"qux"`,
 			desc: TableDescriptor{
 				ID:   51,
 				Name: "foo",
@@ -730,7 +730,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			}},
 		},
 		{
-			err: `missing interleave back reference to foo.bar from baz.qux`,
+			err: `missing interleave back reference to "foo"@"bar" from "baz"@"qux"`,
 			desc: TableDescriptor{
 				ID:   51,
 				Name: "foo",
@@ -776,7 +776,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			}},
 		},
 		{
-			err: `broken interleave backward reference from foo.bar to baz.qux`,
+			err: `broken interleave backward reference from "foo"@"bar" to "baz"@"qux"`,
 			desc: TableDescriptor{
 				ID:   51,
 				Name: "foo",

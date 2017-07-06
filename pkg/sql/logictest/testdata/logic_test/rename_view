@@ -1,6 +1,6 @@
 # LogicTest: default parallel-stmts distsql
 
-statement error pgcode 42P01 view "foo" does not exist
+statement error pgcode 42P01 relation "foo" does not exist
 ALTER VIEW foo RENAME TO bar
 
 statement ok
@@ -39,7 +39,7 @@ ALTER TABLE v RENAME TO new_v
 statement ok
 ALTER VIEW v RENAME TO new_v
 
-statement error pgcode 42P01 table "v" does not exist
+statement error pgcode 42P01 relation "v" does not exist
 SELECT * FROM v
 
 query II rowsort
@@ -86,7 +86,7 @@ ALTER VIEW v RENAME TO new_v
 
 user testuser
 
-statement error user testuser does not have DROP privilege on view v
+statement error user testuser does not have DROP privilege on relation v
 ALTER VIEW test.v RENAME TO v2
 
 user root
@@ -166,14 +166,14 @@ SELECT * FROM test2.v2
 statement ok
 CREATE VIEW v3 AS SELECT COUNT(*) FROM test2.v AS v JOIN test2.v2 AS v2 ON v.k > v2.c1
 
-statement error cannot rename view "test2.v" because view "test.v3" depends on it
+statement error cannot rename relation "test2.v" because view "test.v3" depends on it
 ALTER VIEW test2.v RENAME TO test2.v3
 
-statement error cannot rename view "test2.v2" because view "test.v3" depends on it
+statement error cannot rename relation "test2.v2" because view "test.v3" depends on it
 ALTER VIEW test2.v2 RENAME TO v4
 
 statement ok
 ALTER VIEW v3 RENAME TO v4
 
-statement error cannot rename view "test2.v2" because view "test.v4" depends on it
+statement error cannot rename relation "test2.v2" because view "test.v4" depends on it
 ALTER VIEW test2.v2 RENAME TO v5
