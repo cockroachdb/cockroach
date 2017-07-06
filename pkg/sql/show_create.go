@@ -46,8 +46,18 @@ func (p *planner) showCreateView(
 
 // showCreateTable returns a valid SQL representation of the CREATE
 // TABLE statement used to create the given table.
+//
+// The names of the tables references by foreign keys, and the
+// interleaved parent if any, are prefixed by their own database name
+// unless it is equal to the given dbPrefix. This allows us to elide
+// the prefix when the given table references other tables in the
+// current database.
 func (p *planner) showCreateTable(
-	ctx context.Context, tn parser.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context,
+	tn parser.Name,
+	dbPrefix string,
+	desc *sqlbase.TableDescriptor,
+	deps map[parser.TableName]struct{},
 ) (string, error) {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s (", tn)
@@ -73,25 +83,33 @@ func (p *planner) showCreateTable(
 			if err != nil {
 				return "", err
 			}
+			fkDb, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, fkTable.ParentID)
+			if err != nil {
+				return "", err
+			}
 			fkIdx, err := fkTable.FindIndexByID(fk.Index)
 			if err != nil {
 				return "", err
 			}
+			fkTableName := parser.TableName{
+				DatabaseName:            parser.Name(fkDb.Name),
+				TableName:               parser.Name(fkTable.Name),
+				DBNameOriginallyOmitted: fkDb.Name == dbPrefix,
+			}
 			fmt.Fprintf(&buf, ",\n\tCONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
 				parser.Name(fk.Name),
 				quoteNames(idx.ColumnNames...),
-				parser.Name(fkTable.Name),
+				&fkTableName,
 				quoteNames(fkIdx.ColumnNames...),
 			)
+			if deps != nil {
+				deps[fkTableName] = struct{}{}
+			}
 		}
-		interleave, err := p.showCreateInterleave(ctx, &idx)
-		if err != nil {
+		fmt.Fprintf(&buf, ",\n\t%s", idx.SQLString(""))
+		if err := p.showCreateInterleave(ctx, &idx, &buf, dbPrefix, deps); err != nil {
 			return "", err
 		}
-		fmt.Fprintf(&buf, ",\n\t%s%s",
-			idx.SQLString(""),
-			interleave,
-		)
 	}
 
 	for _, fam := range desc.Families {
@@ -117,11 +135,9 @@ func (p *planner) showCreateTable(
 
 	buf.WriteString("\n)")
 
-	interleave, err := p.showCreateInterleave(ctx, &desc.PrimaryIndex)
-	if err != nil {
+	if err := p.showCreateInterleave(ctx, &desc.PrimaryIndex, &buf, dbPrefix, deps); err != nil {
 		return "", err
 	}
-	buf.WriteString(interleave)
 
 	return buf.String(), nil
 }
@@ -137,31 +153,42 @@ func quoteNames(names ...string) string {
 
 // showCreateInterleave returns an INTERLEAVE IN PARENT clause for the specified
 // index, if applicable.
+//
+// The name of the parent table is prefixed by its database name unless
+// it is equal to the given dbPrefix. This allows us to elide the prefix
+// when the given index is interleaved in a table of the current database.
 func (p *planner) showCreateInterleave(
-	ctx context.Context, idx *sqlbase.IndexDescriptor,
-) (string, error) {
+	ctx context.Context,
+	idx *sqlbase.IndexDescriptor,
+	buf *bytes.Buffer,
+	dbPrefix string,
+	deps map[parser.TableName]struct{},
+) error {
 	if len(idx.Interleave.Ancestors) == 0 {
-		return "", nil
+		return nil
 	}
 	intl := idx.Interleave
 	parentTable, err := sqlbase.GetTableDescFromID(ctx, p.txn, intl.Ancestors[len(intl.Ancestors)-1].TableID)
 	if err != nil {
-		return "", err
+		return err
 	}
-	parentDb, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, parentTable.ParentID)
+	parentDbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, parentTable.ParentID)
 	if err != nil {
-		return "", err
+		return err
 	}
 	parentName := parser.TableName{
-		DatabaseName:            parser.Name(parentDb.Name),
+		DatabaseName:            parser.Name(parentDbDesc.Name),
 		TableName:               parser.Name(parentTable.Name),
-		DBNameOriginallyOmitted: parentDb.Name == p.session.Database,
+		DBNameOriginallyOmitted: parentDbDesc.Name == dbPrefix,
+	}
+	if deps != nil {
+		deps[parentName] = struct{}{}
 	}
 	var sharedPrefixLen int
 	for _, ancestor := range intl.Ancestors {
 		sharedPrefixLen += int(ancestor.SharedPrefixLen)
 	}
 	interleavedColumnNames := quoteNames(idx.ColumnNames[:sharedPrefixLen]...)
-	s := fmt.Sprintf(" INTERLEAVE IN PARENT %s (%s)", &parentName, interleavedColumnNames)
-	return s, nil
+	fmt.Fprintf(buf, " INTERLEAVE IN PARENT %s (%s)", &parentName, interleavedColumnNames)
+	return nil
 }
