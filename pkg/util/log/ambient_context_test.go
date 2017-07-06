@@ -47,7 +47,7 @@ func TestAnnotateCtxTags(t *testing.T) {
 
 func TestAnnotateCtxSpan(t *testing.T) {
 	tracer := tracing.NewTracer()
-	tracer.(*tracing.Tracer).SetForceRealSpans(true)
+	tracer.SetForceRealSpans(true)
 
 	ac := AmbientContext{}
 	ac.AddLogTag("ambient", nil)

@@ -127,7 +127,7 @@ func createLightStepTracer(token string) (shadowTracerManager, opentracing.Trace
 var zipkinCollector = settings.RegisterStringSetting(
 	"trace.zipkin.collector",
 	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.",
-	"127.0.0.1:9411",
+	"",
 )
 
 func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.Tracer) {
@@ -137,7 +137,8 @@ func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.
 		zipkin.HTTPLogger(zipkin.LoggerFunc(func(keyvals ...interface{}) error {
 			// These logs are from the collector (e.g. errors sending data, dropped
 			// traces). We can't use `log` from this package so print them to stderr.
-			fmt.Fprintln(os.Stderr, "Zipkin collector: ", keyvals...)
+			toPrint := append([]interface{}{"Zipkin collector"}, keyvals...)
+			fmt.Fprintln(os.Stderr, toPrint)
 			return nil
 		})),
 	)

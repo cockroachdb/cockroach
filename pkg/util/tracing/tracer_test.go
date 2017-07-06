@@ -265,7 +265,7 @@ func TestLightstepContext(t *testing.T) {
 		MaxLogsPerSpan: maxLogsPerSpan,
 		UseGRPC:        true,
 	})
-	tr.(*Tracer).setShadowTracer(lightStepManager{}, lsTr)
+	tr.setShadowTracer(lightStepManager{}, lsTr)
 	s := tr.StartSpan("test")
 
 	const testBaggageKey = "test-baggage"
