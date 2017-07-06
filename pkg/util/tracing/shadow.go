@@ -23,9 +23,14 @@
 package tracing
 
 import (
+	"bytes"
+	"fmt"
+	"os"
+
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	zipkin "github.com/openzipkin/zipkin-go-opentracing"
 )
 
 type shadowTracerManager interface {
@@ -47,6 +52,18 @@ func (lightStepManager) Close(tr opentracing.Tracer) {
 	// https://github.com/lightstep/lightstep-tracer-go/pull/85#discussion_r123800322).
 	_ = lightstep.FlushLightStepTracer(tr)
 	_ = lightstep.CloseTracer(tr)
+}
+
+type zipkinManager struct {
+	collector zipkin.Collector
+}
+
+func (zipkinManager) Name() string {
+	return "zipkin"
+}
+
+func (m zipkinManager) Close(tr opentracing.Tracer) {
+	_ = m.collector.Close()
 }
 
 type shadowTracer struct {
@@ -99,8 +116,8 @@ var lightStepToken = settings.RegisterStringSetting(
 	"",
 )
 
-func createLightStepTracer(token string) opentracing.Tracer {
-	return lightstep.NewTracer(lightstep.Options{
+func createLightStepTracer(token string) (shadowTracerManager, opentracing.Tracer) {
+	return lightStepManager{}, lightstep.NewTracer(lightstep.Options{
 		AccessToken:      token,
 		MaxLogsPerSpan:   maxLogsPerSpan,
 		MaxBufferedSpans: 10000,
@@ -108,13 +125,58 @@ func createLightStepTracer(token string) opentracing.Tracer {
 	})
 }
 
+var zipkinCollector = settings.RegisterStringSetting(
+	"trace.zipkin.collector",
+	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411')",
+	"",
+)
+
+func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.Tracer) {
+	// Create our HTTP collector.
+	collector, err := zipkin.NewHTTPCollector(fmt.Sprintf("http://%s/api/v1/spans", collectorAddr))
+	if err != nil {
+		panic(err)
+	}
+
+	// Create our recorder.
+	recorder := zipkin.NewRecorder(collector, false /* debug */, "0.0.0.0:0", "cockroach")
+
+	// Create our tracer.
+	zipkinTr, err := zipkin.NewTracer(
+		recorder,
+		zipkin.WithLogger(zipkin.LoggerFunc(func(keyvals ...interface{}) error {
+			var buf bytes.Buffer
+			for i := 0; i < len(keyvals); i += 2 {
+				if i > 0 {
+					buf.WriteByte(' ')
+				}
+				if i == len(keyvals)-1 {
+					fmt.Fprintf(&buf, "%s=(MISSING)", keyvals[i])
+				} else {
+					fmt.Fprintf(&buf, "%s=%q", keyvals[i], keyvals[i+1])
+				}
+			}
+			buf.WriteString("\n")
+			_, _ = buf.WriteTo(os.Stderr)
+			return nil
+		})),
+	)
+	if err != nil {
+		panic(err)
+	}
+	return zipkinManager{collector: collector}, zipkinTr
+}
+
 // We don't call OnChange inline above because it causes an "initialization
 // loop" compile error.
 var _ = lightStepToken.OnChange(updateShadowTracers)
+var _ = zipkinCollector.OnChange(updateShadowTracers)
 
 func updateShadowTracer(t *Tracer) {
 	if lsToken := lightStepToken.Get(); lsToken != "" {
-		t.setShadowTracer(lightStepManager{}, createLightStepTracer(lsToken))
+		t.setShadowTracer(createLightStepTracer(lsToken))
+	} else if zipkinAddr := zipkinCollector.Get(); zipkinAddr != "" {
+		t.setShadowTracer(createZipkinTracer(zipkinAddr))
 	} else {
 		t.setShadowTracer(nil, nil)
 	}

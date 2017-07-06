@@ -39,6 +39,12 @@
   revision = "d311c76e775b5092c023569caacdbb4e569c3243"
 
 [[projects]]
+  name = "github.com/Shopify/sarama"
+  packages = ["."]
+  revision = "c01858abb625b73a3af51d0798e4ad42c8147093"
+  version = "v1.12.0"
+
+[[projects]]
   name = "github.com/Sirupsen/logrus"
   packages = ["."]
   revision = "5e5dc898656f695e2a086b8e12559febbfc01562"
@@ -57,6 +63,12 @@
   name = "github.com/abourget/teamcity"
   packages = ["."]
   revision = "e241104394f91bf4e65048f9ea5d0c0f3c25b35e"
+
+[[projects]]
+  name = "github.com/apache/thrift"
+  packages = ["lib/go/thrift"]
+  revision = "b2a4d4ae21c789b689dd162deb819665567f481c"
+  version = "0.10.0"
 
 [[projects]]
   name = "github.com/armon/go-radix"
@@ -149,6 +161,12 @@
   revision = "bcc0a711c5e6bbe72c7cb13d81c7109b45267fd2"
 
 [[projects]]
+  name = "github.com/davecgh/go-spew"
+  packages = ["spew"]
+  revision = "346938d642f2ec3594ed81d874461961cd0faa76"
+  version = "v1.1.0"
+
+[[projects]]
   name = "github.com/dgrijalva/jwt-go"
   packages = ["."]
   revision = "d2709f9f1f31ebcda9651b03077758c1f3a0018c"
@@ -180,6 +198,24 @@
   revision = "259d2a102b871d17f30e3cd9881a642961a1e486"
 
 [[projects]]
+  name = "github.com/eapache/go-resiliency"
+  packages = ["breaker"]
+  revision = "6800482f2c813e689c88b7ed3282262385011890"
+  version = "v1.0.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/eapache/go-xerial-snappy"
+  packages = ["."]
+  revision = "bb955e01b9346ac19dc29eb16586c90ded99a98c"
+
+[[projects]]
+  name = "github.com/eapache/queue"
+  packages = ["."]
+  revision = "ded5959c0d4e360646dc9e9908cff48666781367"
+  version = "v1.0.2"
+
+[[projects]]
   name = "github.com/elastic/gosigar"
   packages = [".","sys/windows"]
   revision = "6c665a6256a84b6a2d1e207216e0e0d315e84135"
@@ -209,6 +245,12 @@
   name = "github.com/go-ini/ini"
   packages = ["."]
   revision = "e7fea39b01aea8d5671f6858f0532f56e8bff3a5"
+
+[[projects]]
+  name = "github.com/go-logfmt/logfmt"
+  packages = ["."]
+  revision = "390ab7935ee28ec6b286364bba9b4dd6410cb3d5"
+  version = "v0.3.0"
 
 [[projects]]
   name = "github.com/go-ole/go-ole"
@@ -343,6 +385,12 @@
   revision = "813725a7c183ac304d1ed8fb7e37a567733e9c05"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/kr/logfmt"
+  packages = ["."]
+  revision = "b84e30acd515aadc4b783ad4ff83aff3299bdfe0"
+
+[[projects]]
   name = "github.com/kr/pretty"
   packages = ["."]
   revision = "cfb55aafdaf3ec08f0db22699ab822c50091b1c4"
@@ -421,6 +469,12 @@
   revision = "eaaf4e1eeb7a5373b38e70901270c83577dc6fb9"
 
 [[projects]]
+  name = "github.com/openzipkin/zipkin-go-opentracing"
+  packages = [".","_thrift/gen-go/scribe","_thrift/gen-go/zipkincore","flag","types","wire"]
+  revision = "d88c90182f3fb514be54a1c7adc11a04d41c7da9"
+  version = "v0.2.4"
+
+[[projects]]
   name = "github.com/pelletier/go-buffruneio"
   packages = ["."]
   revision = "c37440a7cf42ac63b919c752ca73a85067e05992"
@@ -441,6 +495,18 @@
   name = "github.com/petermattis/goid"
   packages = ["."]
   revision = "0ded85884ba5c4c9267fcd5a149061f7c3455eee"
+
+[[projects]]
+  name = "github.com/pierrec/lz4"
+  packages = ["."]
+  revision = "5c9560bfa9ace2bf86080bf40d46b34ae44604df"
+  version = "v1.0"
+
+[[projects]]
+  name = "github.com/pierrec/xxHash"
+  packages = ["xxHash32"]
+  revision = "f051bb7f1d1aaf1b5a665d74fb6b0217712c69f7"
+  version = "v0.1.1"
 
 [[projects]]
   name = "github.com/pkg/errors"
@@ -535,7 +601,7 @@
 
 [[projects]]
   name = "golang.org/x/sync"
-  packages = ["errgroup","singleflight"]
+  packages = ["errgroup","singleflight","syncmap"]
   revision = "f52d1811a62927559de87708c8913c1650ce4f26"
 
 [[projects]]
@@ -592,6 +658,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c0370c19c12f78eb457fb3f4aea735bc7fe630af4c6f8a9294e9db502ec87dfa"
+  inputs-digest = "5a95f194fa4c92f3800085915804b2703bfce2e1cb32c9edeb7e090d5df35d25"
   solver-name = "gps-cdcl"
   solver-version = 1
