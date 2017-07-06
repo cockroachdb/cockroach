@@ -239,55 +239,82 @@ func TestShowCreateView(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tests := []string{
-		`CREATE VIEW %s AS SELECT i, s, v, t FROM d.t`,
-		`CREATE VIEW %s AS SELECT i, s, t FROM d.t`,
-		`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM d.t`,
-		`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM d.t AS foo WHERE foo.i > 3`,
-		`CREATE VIEW %s AS SELECT count(*) FROM d.t`,
-		`CREATE VIEW %s AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3:::INT`,
-		`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM d.t`,
-		`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.t`,
+	tests := []struct {
+		create   string
+		expected string
+	}{
+		{
+			`CREATE VIEW %s AS SELECT i, s, v, t FROM t`,
+			`CREATE VIEW %s (i, s, v, t) AS SELECT i, s, v, t FROM d.t`,
+		},
+		{
+			`CREATE VIEW %s AS SELECT i, s, t FROM t`,
+			`CREATE VIEW %s (i, s, t) AS SELECT i, s, t FROM d.t`,
+		},
+		{
+			`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM t`,
+			`CREATE VIEW %s (i, s, t) AS SELECT t.i, t.s, t.t FROM d.t`,
+		},
+		{
+			`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM t AS foo WHERE foo.i > 3`,
+			`CREATE VIEW %s (i, s, t) AS SELECT foo.i, foo.s, foo.t FROM d.t AS foo WHERE foo.i > 3`,
+		},
+		{
+			`CREATE VIEW %s AS SELECT count(*) FROM t`,
+			`CREATE VIEW %s ("count(*)") AS SELECT count(*) FROM d.t`,
+		},
+		{
+			`CREATE VIEW %s AS SELECT s, count(*) FROM t GROUP BY s HAVING count(*) > 3:::INT`,
+			`CREATE VIEW %s (s, "count(*)") AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3:::INT`,
+		},
+		{
+			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM t`,
+			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM d.t`,
+		},
+		{
+			`CREATE VIEW %s (a, b) AS SELECT i, v FROM t`,
+			`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.t`,
+		},
 	}
 	for i, test := range tests {
-		name := fmt.Sprintf("t%d", i)
-		stmt := fmt.Sprintf(test, name)
-		expect := stmt
-		if _, err := sqlDB.Exec(stmt); err != nil {
-			t.Fatal(err)
-		}
-		row := sqlDB.QueryRow(fmt.Sprintf("SHOW CREATE VIEW %s", name))
-		var scanName, create string
-		if err := row.Scan(&scanName, &create); err != nil {
-			t.Fatal(err)
-		}
-		if scanName != name {
-			t.Fatalf("expected view name %s, got %s", name, scanName)
-		}
-		if create != expect {
-			t.Fatalf("statement: %s\ngot: %s\nexpected: %s", stmt, create, expect)
-			continue
-		}
-		if _, err := sqlDB.Exec(fmt.Sprintf("DROP VIEW %s", name)); err != nil {
-			t.Fatal(err)
-		}
-		// Re-insert to make sure it's round-trippable.
-		name += "_2"
-		expect = fmt.Sprintf(test, name)
-		if _, err := sqlDB.Exec(expect); err != nil {
-			t.Fatalf("reinsert failure: %s: %s", expect, err)
-		}
-		row = sqlDB.QueryRow(fmt.Sprintf("SHOW CREATE VIEW %s", name))
-		if err := row.Scan(&scanName, &create); err != nil {
-			t.Fatal(err)
-		}
-		if create != expect {
-			t.Errorf("round trip statement: %s\ngot: %s", expect, create)
-			continue
-		}
-		if _, err := sqlDB.Exec(fmt.Sprintf("DROP VIEW %s", name)); err != nil {
-			t.Fatal(err)
-		}
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			name := fmt.Sprintf("t%d", i)
+			stmt := fmt.Sprintf(test.create, name)
+			expect := fmt.Sprintf(test.expected, name)
+			if _, err := sqlDB.Exec(stmt); err != nil {
+				t.Fatal(err)
+			}
+			row := sqlDB.QueryRow(fmt.Sprintf("SHOW CREATE VIEW %s", name))
+			var scanName, create string
+			if err := row.Scan(&scanName, &create); err != nil {
+				t.Fatal(err)
+			}
+			if scanName != name {
+				t.Fatalf("expected view name %s, got %s", name, scanName)
+			}
+			if create != expect {
+				t.Fatalf("statement: %s\ngot: %s\nexpected: %s", stmt, create, expect)
+			}
+			if _, err := sqlDB.Exec(fmt.Sprintf("DROP VIEW %s", name)); err != nil {
+				t.Fatal(err)
+			}
+			// Re-insert to make sure it's round-trippable.
+			name += "_2"
+			expect = fmt.Sprintf(test.expected, name)
+			if _, err := sqlDB.Exec(expect); err != nil {
+				t.Fatalf("reinsert failure: %s: %s", expect, err)
+			}
+			row = sqlDB.QueryRow(fmt.Sprintf("SHOW CREATE VIEW %s", name))
+			if err := row.Scan(&scanName, &create); err != nil {
+				t.Fatal(err)
+			}
+			if create != expect {
+				t.Fatalf("round trip statement: %s\ngot: %s", expect, create)
+			}
+			if _, err := sqlDB.Exec(fmt.Sprintf("DROP VIEW %s", name)); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

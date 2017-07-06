@@ -17,12 +17,12 @@ package sql
 
 import (
 	"bytes"
-	"context"
 	"fmt"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 // showCreateView returns a valid SQL representation of the CREATE
@@ -31,47 +31,16 @@ func (p *planner) showCreateView(
 	ctx context.Context, tn parser.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "CREATE VIEW %s ", tn)
-
-	// Determine whether custom column names were specified when the view
-	// was created, and include them if so.
-	customColNames := false
-	stmt, err := parser.ParseOne(desc.ViewQuery)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to parse underlying query from view %q", tn)
-	}
-	sel, ok := stmt.(*parser.Select)
-	if !ok {
-		return "", errors.Errorf("failed to parse underlying query from view %q as a select", tn)
-	}
-
-	// When constructing the Select plan, make sure we don't require any
-	// privileges on the underlying tables.
-	p.skipSelectPrivilegeChecks = true
-	defer func() { p.skipSelectPrivilegeChecks = false }()
-
-	sourcePlan, err := p.Select(ctx, sel, []parser.Type{})
-	if err != nil {
-		return "", err
-	}
-	for i, col := range planColumns(sourcePlan) {
-		if col.Name != desc.Columns[i].Name {
-			customColNames = true
-			break
+	buf.WriteString("CREATE VIEW ")
+	tn.Format(&buf, parser.FmtSimple)
+	buf.WriteString(" (")
+	for i, col := range desc.Columns {
+		if i > 0 {
+			buf.WriteString(", ")
 		}
+		parser.Name(col.Name).Format(&buf, parser.FmtSimple)
 	}
-	if customColNames {
-		buf.WriteByte('(')
-		for i, col := range desc.Columns {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			parser.Name(col.Name).Format(&buf, parser.FmtSimple)
-		}
-		buf.WriteString(") ")
-	}
-
-	fmt.Fprintf(&buf, "AS %s", desc.ViewQuery)
+	fmt.Fprintf(&buf, ") AS %s", desc.ViewQuery)
 	return buf.String(), nil
 }
 
