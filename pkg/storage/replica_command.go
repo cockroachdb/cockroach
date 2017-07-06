@@ -28,6 +28,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -3787,12 +3788,12 @@ func evalLeaseInfo(
 	return EvalResult{}, nil
 }
 
-// RelocateRange relocates a given range to a given set of stores. The first
+// TestingRelocateRange relocates a given range to a given set of stores. The first
 // store in the slice becomes the new leaseholder.
 //
 // This is best-effort; if replication queues are enabled and a change in
 // membership happens at the same time, there will be errors.
-func RelocateRange(
+func TestingRelocateRange(
 	ctx context.Context,
 	db *client.DB,
 	rangeDesc roachpb.RangeDescriptor,
@@ -3817,22 +3818,50 @@ func RelocateRange(
 			addTargets = append(addTargets, t)
 		}
 	}
-	if len(addTargets) > 0 {
-		if err := db.AdminChangeReplicas(
-			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, addTargets,
-		); err != nil {
+
+	canRetry := func(err error) bool {
+		whitelist := []string{
+			"snapshot intersects existing range",
+		}
+		for _, substr := range whitelist {
+			if strings.Contains(err.Error(), substr) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for len(addTargets) > 0 {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
+
+		target := addTargets[0]
+		if err := db.AdminChangeReplicas(
+			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
+		); err != nil {
+			returnErr := errors.Wrapf(err, "while adding target %v", target)
+			if !canRetry(err) {
+				return returnErr
+			}
+			log.Warning(ctx, returnErr)
+			continue
+		}
+		addTargets = addTargets[1:]
 	}
 
 	// Step 2: Transfer the lease to the first target. This needs to happen before
 	// we remove replicas or we may try to remove the lease holder.
 
-	if err := db.AdminTransferLease(
-		ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
-	); err != nil {
-		return err
+	transferLease := func() {
+		if err := db.AdminTransferLease(
+			ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
+		); err != nil {
+			log.Warningf(ctx, "while transferring lease: %s", err)
+		}
 	}
+
+	transferLease()
 
 	// Step 3: Remove any replicas that are not targets.
 
@@ -3852,14 +3881,26 @@ func RelocateRange(
 			})
 		}
 	}
-	if len(removeTargets) > 0 {
-		if err := db.AdminChangeReplicas(
-			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, removeTargets,
-		); err != nil {
+
+	for len(removeTargets) > 0 {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
+
+		target := removeTargets[0]
+		transferLease()
+		if err := db.AdminChangeReplicas(
+			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
+		); err != nil {
+			log.Warningf(ctx, "while removing target %v: %s", target, err)
+			if !canRetry(err) {
+				return err
+			}
+			continue
+		}
+		removeTargets = removeTargets[1:]
 	}
-	return nil
+	return ctx.Err()
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.
@@ -3893,7 +3934,7 @@ func (r *Replica) adminScatter(
 	}
 	targets := stores[:num]
 
-	relocateErr := RelocateRange(ctx, db, rangeDesc, targets)
+	relocateErr := TestingRelocateRange(ctx, db, rangeDesc, targets)
 
 	res := roachpb.AdminScatterResponse{
 		Ranges: []roachpb.AdminScatterResponse_Range{{

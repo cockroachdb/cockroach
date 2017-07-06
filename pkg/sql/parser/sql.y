@@ -1872,12 +1872,12 @@ testing_relocate_stmt:
   ALTER TABLE qualified_name TESTING_RELOCATE select_stmt
   {
     /* SKIP DOC */
-    $$.val = &Relocate{Table: $3.newNormalizableTableName(), Rows: $5.slct()}
+    $$.val = &TestingRelocate{Table: $3.newNormalizableTableName(), Rows: $5.slct()}
   }
 | ALTER INDEX table_name_with_index TESTING_RELOCATE select_stmt
   {
     /* SKIP DOC */
-    $$.val = &Relocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
+    $$.val = &TestingRelocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
   }
 
 scatter_stmt:

@@ -7396,14 +7396,14 @@ sqldefault:
 		//line sql.y:1852
 		{
 			/* SKIP DOC */
-			sqlVAL.union.val = &Relocate{Table: sqlDollar[3].union.newNormalizableTableName(), Rows: sqlDollar[5].union.slct()}
+			sqlVAL.union.val = &TestingRelocate{Table: sqlDollar[3].union.newNormalizableTableName(), Rows: sqlDollar[5].union.slct()}
 		}
 	case 265:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:1856
 		{
 			/* SKIP DOC */
-			sqlVAL.union.val = &Relocate{Index: sqlDollar[3].union.tableWithIdx(), Rows: sqlDollar[5].union.slct()}
+			sqlVAL.union.val = &TestingRelocate{Index: sqlDollar[3].union.tableWithIdx(), Rows: sqlDollar[5].union.slct()}
 		}
 	case 266:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]

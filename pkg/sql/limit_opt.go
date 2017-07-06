@@ -163,7 +163,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 	case *splitNode:
 		setUnlimited(n.rows)
 
-	case *relocateNode:
+	case *testingRelocateNode:
 		setUnlimited(n.rows)
 
 	case *valuesNode:
