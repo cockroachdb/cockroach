@@ -121,7 +121,7 @@ output row: [2 2 2]
 fetched: /t/primary/1/b/c -> /1/1
 output row: [1 1 1]
 
-statement error pgcode 42P01 table "foo" does not exist
+statement error pgcode 42P01 relation "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
 
 statement ok
@@ -135,7 +135,7 @@ CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 
 user testuser
 
-statement error user testuser does not have CREATE privilege on table privs
+statement error user testuser does not have CREATE privilege on relation privs
 CREATE INDEX foo ON privs (b)
 
 user root

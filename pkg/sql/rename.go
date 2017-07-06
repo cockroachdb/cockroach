@@ -144,10 +144,10 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 				return &emptyNode{}, nil
 			}
 			// Key does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedViewError(oldTn.String())
+			return nil, sqlbase.NewUndefinedTableError(oldTn)
 		}
 		if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-			return nil, sqlbase.NewUndefinedViewError(oldTn.String())
+			return nil, sqlbase.NewUndefinedTableError(oldTn)
 		}
 	} else {
 		tableDesc, err = getTableDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
@@ -160,10 +160,10 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 				return &emptyNode{}, nil
 			}
 			// Key does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedTableError(oldTn.String())
+			return nil, sqlbase.NewUndefinedTableError(oldTn)
 		}
 		if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-			return nil, sqlbase.NewUndefinedTableError(oldTn.String())
+			return nil, sqlbase.NewUndefinedTableError(oldTn)
 		}
 	}
 

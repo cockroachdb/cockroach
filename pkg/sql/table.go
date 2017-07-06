@@ -141,7 +141,7 @@ func getTableDesc(
 		return desc, err
 	}
 	if desc != nil && !desc.IsTable() {
-		return nil, sqlbase.NewWrongObjectTypeError(tn.String(), "table")
+		return nil, sqlbase.NewWrongObjectTypeError(tn, "table")
 	}
 	return desc, nil
 }
@@ -159,7 +159,7 @@ func getViewDesc(
 		return desc, err
 	}
 	if desc != nil && !desc.IsView() {
-		return nil, sqlbase.NewWrongObjectTypeError(tn.String(), "view")
+		return nil, sqlbase.NewWrongObjectTypeError(tn, "view")
 	}
 	return desc, nil
 }
@@ -175,7 +175,7 @@ func mustGetTableOrViewDesc(
 		return nil, err
 	}
 	if desc == nil {
-		return nil, sqlbase.NewUndefinedTableError(tn.String())
+		return nil, sqlbase.NewUndefinedTableError(tn)
 	}
 	if err := filterTableState(desc); err != nil {
 		if !allowAdding && err != errTableAdding {
@@ -196,7 +196,7 @@ func mustGetTableDesc(
 		return nil, err
 	}
 	if desc == nil {
-		return nil, sqlbase.NewUndefinedTableError(tn.String())
+		return nil, sqlbase.NewUndefinedTableError(tn)
 	}
 	if err := filterTableState(desc); err != nil {
 		if !allowAdding && err != errTableAdding {
@@ -216,7 +216,7 @@ func mustGetViewDesc(
 		return nil, err
 	}
 	if desc == nil {
-		return nil, sqlbase.NewUndefinedViewError(tn.String())
+		return nil, sqlbase.NewUndefinedTableError(tn)
 	}
 	if err := filterTableState(desc); err != nil {
 		return nil, err
@@ -329,7 +329,7 @@ func (tc *TableCollection) getTableVersion(
 		if err == sqlbase.ErrDescriptorNotFound {
 			// Transform the descriptor error into an error that references the
 			// table's name.
-			return nil, sqlbase.NewUndefinedTableError(tn.String())
+			return nil, sqlbase.NewUndefinedTableError(tn)
 		}
 		return nil, err
 	}
@@ -383,7 +383,11 @@ func (tc *TableCollection) getTableVersionByID(
 		if err == sqlbase.ErrDescriptorNotFound {
 			// Transform the descriptor error into an error that references the
 			// table's ID.
-			return nil, sqlbase.NewUndefinedTableError(fmt.Sprintf("<id=%d>", tableID))
+			return nil, sqlbase.NewUndefinedTableError(
+				&parser.TableName{
+					TableName:               parser.Name(fmt.Sprintf("<id=%d>", tableID)),
+					DBNameOriginallyOmitted: true,
+				})
 		}
 		return nil, err
 	}
@@ -591,7 +595,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *parser.Table
 		}
 	}
 
-	return sqlbase.NewUndefinedTableError(string(t.TableName))
+	return sqlbase.NewUndefinedTableError(&t)
 }
 
 // getQualifiedTableName returns the database-qualified name of the table
@@ -704,7 +708,7 @@ func (p *planner) getTableAndIndex(
 		return nil, nil, err
 	}
 	if tableDesc == nil {
-		return nil, nil, sqlbase.NewUndefinedTableError(tn.String())
+		return nil, nil, sqlbase.NewUndefinedTableError(tn)
 	}
 	if err := p.CheckPrivilege(tableDesc, privilege); err != nil {
 		return nil, nil, err

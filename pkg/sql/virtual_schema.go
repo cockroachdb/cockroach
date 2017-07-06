@@ -241,7 +241,7 @@ func (vs *virtualSchemaHolder) getVirtualTableEntry(
 		if t, ok := db.tables[tn.TableName.Normalize()]; ok {
 			return t, nil
 		}
-		return virtualTableEntry{}, sqlbase.NewUndefinedTableError(tn.String())
+		return virtualTableEntry{}, sqlbase.NewUndefinedTableError(tn)
 	}
 	return virtualTableEntry{}, nil
 }

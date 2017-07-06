@@ -728,7 +728,7 @@ SELECT COUNT(*) FROM kv WHERE k = 'savepoint'
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart
 
-statement error pq: table "bogus_name" does not exist
+statement error pq: relation "bogus_name" does not exist
 SELECT * from bogus_name
 
 query T
@@ -763,7 +763,7 @@ ROLLBACK
 statement ok
 BEGIN
 
-statement error pq: table "bogus_name" does not exist
+statement error pq: relation "bogus_name" does not exist
 SELECT * from bogus_name
 
 statement error SAVEPOINT COCKROACH_RESTART has not been used

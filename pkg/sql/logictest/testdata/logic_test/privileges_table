@@ -57,40 +57,40 @@ SET DATABASE = a
 statement ok
 SHOW GRANTS ON t
 
-statement error pq: user testuser has no privileges on table t
+statement error pq: user testuser has no privileges on relation t
 SHOW COLUMNS FROM t
 
-statement error user testuser does not have GRANT privilege on table t
+statement error user testuser does not have GRANT privilege on relation t
 GRANT ALL ON t TO bar
 
-statement error user testuser does not have GRANT privilege on table t
+statement error user testuser does not have GRANT privilege on relation t
 REVOKE ALL ON t FROM bar
 
-statement error user testuser does not have INSERT privilege on table t
+statement error user testuser does not have INSERT privilege on relation t
 INSERT INTO t VALUES(1, 1),(2, 2)
 
-statement error user testuser does not have SELECT privilege on table t
+statement error user testuser does not have SELECT privilege on relation t
 SELECT * FROM t
 
 statement ok
 SELECT 1
 
-statement error user testuser does not have DELETE privilege on table t
+statement error user testuser does not have DELETE privilege on relation t
 DELETE FROM t
 
-statement error user testuser does not have DELETE privilege on table t
+statement error user testuser does not have DELETE privilege on relation t
 DELETE FROM t where k = 1
 
-statement error user testuser does not have UPDATE privilege on table t
+statement error user testuser does not have UPDATE privilege on relation t
 UPDATE t SET v = 0
 
-statement error user testuser does not have UPDATE privilege on table t
+statement error user testuser does not have UPDATE privilege on relation t
 UPDATE t SET v = 2 WHERE k = 2
 
-statement error user testuser does not have DROP privilege on table t
+statement error user testuser does not have DROP privilege on relation t
 TRUNCATE t
 
-statement error user testuser does not have DROP privilege on table t
+statement error user testuser does not have DROP privilege on relation t
 DROP TABLE t
 
 # Grant SELECT privilege.
@@ -107,13 +107,13 @@ SHOW COLUMNS FROM t
 k INT false NULL {primary}
 v INT true  NULL {}
 
-statement error user testuser does not have GRANT privilege on table t
+statement error user testuser does not have GRANT privilege on relation t
 GRANT ALL ON t TO bar
 
-statement error user testuser does not have GRANT privilege on table t
+statement error user testuser does not have GRANT privilege on relation t
 REVOKE ALL ON t FROM bar
 
-statement error user testuser does not have INSERT privilege on table t
+statement error user testuser does not have INSERT privilege on relation t
 INSERT INTO t VALUES(1, 1),(2, 2)
 
 statement ok
@@ -122,22 +122,22 @@ SELECT * FROM t
 statement ok
 SELECT 1
 
-statement error user testuser does not have DELETE privilege on table t
+statement error user testuser does not have DELETE privilege on relation t
 DELETE FROM t
 
-statement error user testuser does not have DELETE privilege on table t
+statement error user testuser does not have DELETE privilege on relation t
 DELETE FROM t where k = 1
 
-statement error user testuser does not have UPDATE privilege on table t
+statement error user testuser does not have UPDATE privilege on relation t
 UPDATE t SET v = 0
 
-statement error user testuser does not have UPDATE privilege on table t
+statement error user testuser does not have UPDATE privilege on relation t
 UPDATE t SET v = 2 WHERE k = 2
 
-statement error user testuser does not have DROP privilege on table t
+statement error user testuser does not have DROP privilege on relation t
 TRUNCATE t
 
-statement error user testuser does not have DROP privilege on table t
+statement error user testuser does not have DROP privilege on relation t
 DROP TABLE t
 
 # Grant all but SELECT privilege.
@@ -160,22 +160,22 @@ REVOKE ALL ON t FROM bar
 statement ok
 INSERT INTO t VALUES(1, 1),(2, 2)
 
-statement error user testuser does not have SELECT privilege on table t
+statement error user testuser does not have SELECT privilege on relation t
 SELECT * FROM t
 
 statement ok
 SELECT 1
 
-statement error user testuser does not have SELECT privilege on table t
+statement error user testuser does not have SELECT privilege on relation t
 DELETE FROM t
 
-statement error user testuser does not have SELECT privilege on table t
+statement error user testuser does not have SELECT privilege on relation t
 DELETE FROM t where k = 1
 
-statement error user testuser does not have SELECT privilege on table t
+statement error user testuser does not have SELECT privilege on relation t
 UPDATE t SET v = 0
 
-statement error user testuser does not have SELECT privilege on table t
+statement error user testuser does not have SELECT privilege on relation t
 UPDATE t SET v = 2 WHERE k = 2
 
 statement ok
@@ -242,7 +242,7 @@ user testuser
 statement ok
 INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
 
-statement error user testuser does not have UPDATE privilege on table t
+statement error user testuser does not have UPDATE privilege on relation t
 INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
 
 # Grant UPDATE privilege (in addition to INSERT).
@@ -271,16 +271,16 @@ CREATE TABLE t (k INT PRIMARY KEY, v int)
 
 user testuser
 
-statement error user testuser has no privileges on table t
+statement error user testuser has no privileges on relation t
 SHOW COLUMNS FROM t
 
-statement error user testuser has no privileges on table t
+statement error user testuser has no privileges on relation t
 SHOW CREATE TABLE t
 
-statement error user testuser has no privileges on table t
+statement error user testuser has no privileges on relation t
 SHOW INDEX FROM t
 
-statement error user testuser has no privileges on table t
+statement error user testuser has no privileges on relation t
 SHOW CONSTRAINTS FROM t
 
 user root

@@ -19,13 +19,13 @@ a
 b
 c
 
-statement error cannot drop table "a" because view "b" depends on it
+statement error cannot drop relation "a" because view "b" depends on it
 DROP TABLE a
 
 statement error pgcode 42809 "b" is not a table
 DROP TABLE b
 
-statement error cannot drop view "b" because view "c" depends on it
+statement error cannot drop relation "b" because view "c" depends on it
 DROP VIEW b
 
 statement ok
@@ -34,7 +34,7 @@ CREATE VIEW d AS SELECT k,v FROM a
 statement ok
 CREATE VIEW diamond AS SELECT COUNT(*) FROM b AS b JOIN d AS d ON b.k = d.k
 
-statement error cannot drop view "d" because view "diamond" depends on it
+statement error cannot drop relation "d" because view "diamond" depends on it
 DROP VIEW d
 
 statement ok
@@ -51,10 +51,10 @@ diamond
 
 user testuser
 
-statement error user testuser does not have DROP privilege on view diamond
+statement error user testuser does not have DROP privilege on relation diamond
 DROP VIEW diamond
 
-statement error cannot drop view "d" because view "diamond" depends on it
+statement error cannot drop relation "d" because view "diamond" depends on it
 DROP VIEW d
 
 user root
@@ -101,10 +101,10 @@ d
 testuser1
 testuser2
 
-statement error cannot drop view "testuser1" because view "testuser2" depends on it
+statement error cannot drop relation "testuser1" because view "testuser2" depends on it
 DROP VIEW testuser1
 
-statement error cannot drop view "testuser1" because view "testuser2" depends on it
+statement error cannot drop relation "testuser1" because view "testuser2" depends on it
 DROP VIEW testuser1 RESTRICT
 
 statement ok
@@ -115,7 +115,7 @@ SHOW TABLES FROM test
 ----
 d
 
-statement error pgcode 42P01 view "testuser2" does not exist
+statement error pgcode 42P01 relation "testuser2" does not exist
 DROP VIEW testuser2
 
 user root
@@ -134,7 +134,7 @@ GRANT ALL ON d to testuser
 
 user testuser
 
-statement error user testuser does not have DROP privilege on view diamond
+statement error user testuser does not have DROP privilege on relation diamond
 DROP TABLE a CASCADE
 
 user root
@@ -152,7 +152,7 @@ CREATE VIEW x AS VALUES (1, 2), (3, 4)
 statement ok
 CREATE VIEW y AS SELECT column1, column2 FROM x
 
-statement error cannot drop view "x" because view "y" depends on it
+statement error cannot drop relation "x" because view "y" depends on it
 DROP VIEW x
 
 statement ok
@@ -164,7 +164,7 @@ CREATE VIEW x AS VALUES (1, 2), (3, 4)
 statement ok
 CREATE VIEW y AS SELECT column1, column2 FROM x
 
-statement error cannot drop view "x" because view "y" depends on it
+statement error cannot drop relation "x" because view "y" depends on it
 DROP VIEW x
 
 statement ok

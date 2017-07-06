@@ -364,7 +364,7 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 	}
 
 	const badTablePath = "databases/system/tables/" + fakename
-	const tableErrPattern = `table \\"system.` + fakename + `\\" does not exist`
+	const tableErrPattern = `relation \\"system.` + fakename + `\\" does not exist`
 	if err := getAdminJSONProto(s, badTablePath, nil); !testutils.IsError(err, tableErrPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, tableErrPattern)
 	}
@@ -390,7 +390,7 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 
 	const fakeTable = "users;DROP DATABASE system;"
 	const path = "databases/system/tables/" + fakeTable
-	const errPattern = `table \"system.\\\"` + fakeTable + `\\\"\" does not exist`
+	const errPattern = `relation \"system.` + fakeTable + `\" does not exist`
 	if err := getAdminJSONProto(s, path, nil); !testutils.IsError(err, regexp.QuoteMeta(errPattern)) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}

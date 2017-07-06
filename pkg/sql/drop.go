@@ -430,10 +430,10 @@ func (p *planner) DropView(ctx context.Context, n *parser.DropView) (planNode, e
 				continue
 			}
 			// View does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedViewError(name.String())
+			return nil, sqlbase.NewUndefinedTableError(tn)
 		}
 		if !droppedDesc.IsView() {
-			return nil, sqlbase.NewWrongObjectTypeError(name.String(), "view")
+			return nil, sqlbase.NewWrongObjectTypeError(tn, "view")
 		}
 
 		td = append(td, droppedDesc)
@@ -535,10 +535,10 @@ func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode,
 				continue
 			}
 			// Table does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedTableError(name.String())
+			return nil, sqlbase.NewUndefinedTableError(tn)
 		}
 		if !droppedDesc.IsTable() {
-			return nil, sqlbase.NewWrongObjectTypeError(name.String(), "table")
+			return nil, sqlbase.NewWrongObjectTypeError(tn, "table")
 		}
 		td = append(td, droppedDesc)
 	}

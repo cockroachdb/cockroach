@@ -53,7 +53,7 @@ func (p *planner) AlterTable(ctx context.Context, n *parser.AlterTable) (planNod
 		if n.IfExists {
 			return &emptyNode{}, nil
 		}
-		return nil, sqlbase.NewUndefinedTableError(tn.String())
+		return nil, sqlbase.NewUndefinedTableError(tn)
 	}
 
 	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {

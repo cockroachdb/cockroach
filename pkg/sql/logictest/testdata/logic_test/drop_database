@@ -100,7 +100,7 @@ GRANT ALL ON d2.v3 TO testuser
 
 user testuser
 
-statement error user testuser does not have DROP privilege on view v4
+statement error user testuser does not have DROP privilege on relation v4
 DROP DATABASE d1
 
 user root
@@ -153,13 +153,13 @@ test
 query error database "d1" does not exist
 SELECT * FROM d1.v2
 
-query error table "d2.v2" does not exist
+query error relation "d2.v2" does not exist
 SELECT * FROM d2.v2
 
-query error table "d2.v3" does not exist
+query error relation "d2.v3" does not exist
 SELECT * FROM d2.v3
 
-query error table "d2.v4" does not exist
+query error relation "d2.v4" does not exist
 SELECT * FROM d2.v4
 
 query TT

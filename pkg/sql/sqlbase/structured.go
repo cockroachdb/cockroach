@@ -309,10 +309,7 @@ func (desc *TableDescriptor) SetID(id ID) {
 
 // TypeName returns the plain type of this descriptor.
 func (desc *TableDescriptor) TypeName() string {
-	if desc.IsView() {
-		return "view"
-	}
-	return "table"
+	return "relation"
 }
 
 // SetName implements the DescriptorProto interface.
