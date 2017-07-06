@@ -127,8 +127,9 @@ func (p *planner) makeUpsertHelper(
 	var evalExprs []parser.TypedExpr
 	ivarHelper := parser.MakeIndexedVarHelper(helper, len(sourceInfo.sourceColumns)+len(excludedSourceInfo.sourceColumns))
 	sources := multiSourceInfo{sourceInfo, excludedSourceInfo}
-	for _, expr := range untupledExprs {
-		normExpr, err := p.analyzeExpr(ctx, expr, sources, ivarHelper, parser.TypeAny, false, "")
+	for i, expr := range untupledExprs {
+		typ := updateCols[i].Type.ToDatumType()
+		normExpr, err := p.analyzeExpr(ctx, expr, sources, ivarHelper, typ, true, "ON CONFLICT")
 		if err != nil {
 			return nil, err
 		}
