@@ -34,7 +34,7 @@ SELECT * FROM kv
 statement ok
 ALTER DATABASE test RENAME TO u
 
-statement error table "kv" does not exist
+statement error relation "kv" does not exist
 SELECT * FROM kv
 ----
 

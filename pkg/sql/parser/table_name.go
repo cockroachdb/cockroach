@@ -135,9 +135,11 @@ func (t *TableName) NormalizeTableName() (*TableName, error) { return t, nil }
 // and performs Unicode Normalization.
 func (t *TableName) NormalizedTableName() TableName {
 	return TableName{
-		PrefixName:   Name(t.PrefixName.Normalize()),
-		DatabaseName: Name(t.DatabaseName.Normalize()),
-		TableName:    Name(t.TableName.Normalize()),
+		PrefixName:                Name(t.PrefixName.Normalize()),
+		DatabaseName:              Name(t.DatabaseName.Normalize()),
+		TableName:                 Name(t.TableName.Normalize()),
+		DBNameOriginallyOmitted:   t.DBNameOriginallyOmitted,
+		PrefixOriginallySpecified: t.PrefixOriginallySpecified,
 	}
 }
 
@@ -151,9 +153,9 @@ func (t *TableName) Database() string {
 	return string(t.DatabaseName)
 }
 
-// NewInvalidTableNameError initializes an error carrying the pg code CodeInvalidNameError.
-func NewInvalidTableNameError(tn string) error {
-	return pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table name: %s", tn)
+// NewInvalidNameErrorf initializes an error carrying the pg code CodeInvalidNameError.
+func NewInvalidNameErrorf(fmt string, args ...interface{}) error {
+	return pgerror.NewErrorf(pgerror.CodeInvalidNameError, fmt, args...)
 }
 
 // normalizeTableNameAsValue transforms an UnresolvedName to a TableName.
@@ -162,16 +164,16 @@ func NewInvalidTableNameError(tn string) error {
 // (AS) or is qualified later using the QualifyWithDatabase method.
 func (n UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) {
 	if len(n) == 0 || len(n) > 3 {
-		return res, NewInvalidTableNameError(fmt.Sprintf("%q", n))
+		return res, NewInvalidNameErrorf("invalid table name: %q", ErrString(n))
 	}
 
 	name, ok := n[len(n)-1].(Name)
 	if !ok {
-		return res, NewInvalidTableNameError(fmt.Sprintf("%q", n))
+		return res, NewInvalidNameErrorf("invalid table name: %q", ErrString(n))
 	}
 
 	if len(name) == 0 {
-		return res, fmt.Errorf("empty table name: %q", n)
+		return res, NewInvalidNameErrorf("empty table name: %q", ErrString(n))
 	}
 
 	res = TableName{TableName: name, DBNameOriginallyOmitted: true}
@@ -179,11 +181,11 @@ func (n UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) {
 	if len(n) > 1 {
 		res.DatabaseName, ok = n[len(n)-2].(Name)
 		if !ok {
-			return res, fmt.Errorf("invalid database name: %q", n[len(n)-2])
+			return res, NewInvalidNameErrorf("invalid database name: %q", ErrString(n[len(n)-2]))
 		}
 
 		if len(res.DatabaseName) == 0 {
-			return res, fmt.Errorf("empty database name: %q", n)
+			return res, NewInvalidNameErrorf("empty database name: %q", ErrString(n))
 		}
 
 		res.DBNameOriginallyOmitted = false
@@ -192,7 +194,7 @@ func (n UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) {
 			res.PrefixName, ok = n[len(n)-3].(Name)
 
 			if !ok {
-				return res, fmt.Errorf("invalid prefix: %q", n[len(n)-3])
+				return res, NewInvalidNameErrorf("invalid prefix: %q", ErrString(n[len(n)-3]))
 			}
 
 			res.PrefixOriginallySpecified = true
@@ -216,7 +218,7 @@ func (n UnresolvedName) NormalizeTableName() (*TableName, error) {
 // table       -> database.table
 // table@index -> database.table@index
 func (t *TableName) QualifyWithDatabase(database string) error {
-	if t.DatabaseName != "" {
+	if !t.DBNameOriginallyOmitted {
 		return nil
 	}
 	if database == "" {
