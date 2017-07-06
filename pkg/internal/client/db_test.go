@@ -387,6 +387,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "EnsureProto"}:                     {},
 		{txnType, "InternalSetPriority"}:             {},
 		{txnType, "IsFinalized"}:                     {},
+		{txnType, "IsSerializableRestart"}:           {},
 		{txnType, "NewBatch"}:                        {},
 		{txnType, "Exec"}:                            {},
 		{txnType, "ResetDeadline"}:                   {},
