@@ -591,7 +591,7 @@ func (node *FamilyTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 // InterleaveDef represents an interleave definition within a CREATE TABLE
 // or CREATE INDEX statement.
 type InterleaveDef struct {
-	Parent       NormalizableTableName
+	Parent       *NormalizableTableName
 	Fields       NameList
 	DropBehavior DropBehavior
 }

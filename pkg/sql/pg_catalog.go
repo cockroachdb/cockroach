@@ -955,15 +955,20 @@ func indexDefFromDescriptor(
 		if err != nil {
 			return "", err
 		}
+		parentDb, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, parentTable.ParentID)
+		if err != nil {
+			return "", err
+		}
 		var sharedPrefixLen int
 		for _, ancestor := range intl.Ancestors {
 			sharedPrefixLen += int(ancestor.SharedPrefixLen)
 		}
 		fields := index.ColumnNames[:sharedPrefixLen]
 		intlDef := &parser.InterleaveDef{
-			Parent: parser.NormalizableTableName{
+			Parent: &parser.NormalizableTableName{
 				TableNameReference: &parser.TableName{
-					TableName: parser.Name(parentTable.Name),
+					DatabaseName: parser.Name(parentDb.Name),
+					TableName:    parser.Name(parentTable.Name),
 				},
 			},
 			Fields: make(parser.NameList, len(fields)),
