@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -101,7 +102,7 @@ type reportingInfo struct {
 	Node       nodeInfo                                          `json:"node"`
 	Stores     []storeInfo                                       `json:"stores"`
 	Schema     []sqlbase.TableDescriptor                         `json:"schema"`
-	QueryStats map[string]map[string]roachpb.StatementStatistics `json:"sqlstats"`
+	QueryStats map[string][]sql.CollectedStats `json:"queryStats"`
 	// UnimplementedErrors reports when unimplemented features are encountered.
 	UnimplementedErrors map[string]uint `json:"unimplemented"`
 }

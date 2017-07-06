@@ -278,11 +278,11 @@ func TestReportUsage(t *testing.T) {
 				t.Fatalf("expected %d statements in app %s report, got %d", expected, appName, actual)
 			}
 			keys := make(map[string]struct{})
-			for k := range app {
-				keys[k] = struct{}{}
+			for _, q := range app {
+				keys[q.Query] = struct{}{}
 			}
 			for _, expected := range expectedStatements {
-				if _, ok := app[expected]; !ok {
+				if _, ok := keys[expected]; !ok {
 					t.Fatalf("expected %q in app %s: %+v", expected, appName, keys)
 				}
 			}
