@@ -1543,6 +1543,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.statistics = rocksdb::CreateDBStatistics();
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   options.max_open_files = db_opts.max_open_files;
+  options.compaction_pri = rocksdb::kMinOverlappingRatio;
   // Periodically sync the WAL to smooth out writes. Not performing
   // such syncs can be faster but can cause performance blips when the
   // OS decides it needs to flush data.
