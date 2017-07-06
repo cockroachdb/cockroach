@@ -70,6 +70,8 @@ var (
 			regexp.QuoteMeta("connection refused"),
 			// Windows
 			regexp.QuoteMeta("No connection could be made because the target machine actively refused it"),
+			// Host removed from the network and no longer resolvable
+			regexp.QuoteMeta("no such host"),
 		}, "|"),
 	)
 )
