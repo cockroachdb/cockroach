@@ -7,7 +7,7 @@ set -euxo pipefail
 
 sudo apt-get update
 sudo apt-get dist-upgrade -y
-sudo apt-get install -y --no-install-recommends docker.io git autoconf automake cmake libtool
+sudo apt-get install -y --no-install-recommends docker.io git autoconf cmake
 
 sudo adduser "${USER}" docker
 
