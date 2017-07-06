@@ -1634,7 +1634,7 @@ func (dsp *distSQLPlanner) createPlanForValues(
 			Node: dsp.nodeDesc.NodeID,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:   distsqlrun.ProcessorCoreUnion{Values: &s},
-				Output: []distsqlrun.OutputRouterSpec{distsqlrun.OutputRouterSpec{Type: 0}},
+				Output: []distsqlrun.OutputRouterSpec{{Type: 0}},
 			},
 		}},
 		ResultRouters: []distsqlplan.ProcessorIdx{0},
