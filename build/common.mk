@@ -327,7 +327,7 @@ $(CGO_FLAGS_FILES): $(REPO_ROOT)/build/common.mk
 	@echo 'package $(notdir $(@D))' >> $@
 	@echo >> $@
 	@echo '// #cgo CPPFLAGS: -I$(JEMALLOC_DIR)/include' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR)/.libs $(ROCKSDB_DIR))' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(ROCKSDB_DIR))' >> $@
 	@echo 'import "C"' >> $@
 
 # BUILD ARTIFACT CACHING
@@ -351,7 +351,7 @@ $(CGO_FLAGS_FILES): $(REPO_ROOT)/build/common.mk
 # past, when the tarballs were packaged), and so the build artifacts always look
 # up-to-date.
 
-$(JEMALLOC_SRC_DIR)/configure:
+$(JEMALLOC_SRC_DIR)/configure: $(JEMALLOC_SRC_DIR)/configure.ac
 	cd $(JEMALLOC_SRC_DIR) && autoconf
 
 $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/configure
@@ -387,21 +387,18 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | libsnappy $(if $(USE_ST
 	@# $(C_DEPS_DIR)/rocksdb-rebuild. See above for rationale.
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
 	  $(if $(findstring release,$(TYPE)),,-DWITH_$(if $(findstring mingw,$(TARGET_TRIPLE)),AVX2,SSE42)=OFF) \
-	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR="$(SNAPPY_SRC_DIR);$(SNAPPY_DIR)" -DWITH_SNAPPY=ON \
+	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/libsnappy.a -DSNAPPY_INCLUDE_DIR="$(SNAPPY_SRC_DIR);$(SNAPPY_DIR)" -DWITH_SNAPPY=ON \
 	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
 	  $(if $(ENABLE_ROCKSDB_ASSERTIONS),,-DCMAKE_CXX_FLAGS=-DNDEBUG)
 	@# TODO(benesch): Tweak how we pass -DNDEBUG above when we upgrade to a
 	@# RocksDB release that includes https://github.com/facebook/rocksdb/pull/2300.
 
-$(SNAPPY_SRC_DIR)/configure:
-	cd $(SNAPPY_SRC_DIR) && autoreconf -i
-
-$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild $(SNAPPY_SRC_DIR)/configure
+$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild
 	rm -rf $(SNAPPY_DIR)
 	mkdir -p $(SNAPPY_DIR)
-	@# NOTE: If you change the configure flags below, bump the version in
+	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
-	cd $(SNAPPY_DIR) && $(SNAPPY_SRC_DIR)/configure $(CONFIGURE_FLAGS) --disable-shared --disable-gtest
+	cd $(SNAPPY_DIR) && cmake $(CMAKE_FLAGS) $(SNAPPY_SRC_DIR)
 
 # We mark C and C++ dependencies as .PHONY (or .ALWAYS_REBUILD) to avoid
 # having to name the artifact (for .PHONY), which can vary by platform, and so
@@ -430,7 +427,7 @@ librocksdb: $(ROCKSDB_DIR)/Makefile $(BOOTSTRAP_TARGET)
 
 .PHONY: clean-c-deps
 clean-c-deps:
-	rm -rf $(JEMALLOC_DIR) && cd $(JEMALLOC_SRC_DIR) && git clean -dxf
-	rm -rf $(PROTOBUF_DIR) && cd $(PROTOBUF_SRC_DIR) && git clean -dxf
-	rm -rf $(ROCKSDB_DIR) && cd $(ROCKSDB_SRC_DIR) && git clean -dxf
-	rm -rf $(SNAPPY_DIR) && cd $(SNAPPY_SRC_DIR) && git clean -dxf
+	rm -rf $(JEMALLOC_DIR) && git -C $(JEMALLOC_SRC_DIR) clean -dxf
+	rm -rf $(PROTOBUF_DIR) && git -C $(PROTOBUF_SRC_DIR) clean -dxf
+	rm -rf $(ROCKSDB_DIR)  && git -C $(ROCKSDB_SRC_DIR)  clean -dxf
+	rm -rf $(SNAPPY_DIR)   && git -C $(SNAPPY_SRC_DIR)   clean -dxf
