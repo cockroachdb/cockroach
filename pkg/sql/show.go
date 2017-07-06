@@ -74,7 +74,7 @@ func checkTableExists(ctx context.Context, p *planner, tn *parser.TableName) err
 		return err
 	}
 	if len(values) == 0 {
-		return sqlbase.NewUndefinedTableError(tn.String())
+		return sqlbase.NewUndefinedRelationError(tn)
 	}
 	return nil
 }
@@ -95,7 +95,7 @@ func checkTablePrivileges(ctx context.Context, p *planner, tn *parser.TableName)
 		return err
 	}
 	if len(values) == 0 {
-		return fmt.Errorf("user %s has no privileges on table %s", p.session.User, tn.String())
+		return fmt.Errorf("user %s has no privileges on relation %s", p.session.User, tn.String())
 	}
 	return nil
 }
@@ -736,7 +736,7 @@ func (p *planner) ShowConstraints(
 
 	desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
 	if err != nil {
-		return nil, err
+		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}
 	if err := p.anyPrivilege(desc); err != nil {
 		return nil, err

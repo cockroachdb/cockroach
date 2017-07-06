@@ -229,7 +229,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatalf(`still have lease on "t"`)
 	}
 	if _, err := db.Exec("SELECT * FROM test.t"); !testutils.IsError(
-		err, `table "test.t" does not exist`) {
+		err, `relation "test.t" does not exist`) {
 		t.Fatal(err)
 	}
 	close(renameUnblocked)

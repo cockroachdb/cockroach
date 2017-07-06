@@ -67,7 +67,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *parser.RenameDatabase) 
 	// are currently just stored as strings, they explicitly specify the database
 	// name. Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
-	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc)
+	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, false)
 	if err != nil {
 		return nil, err
 	}
@@ -144,10 +144,10 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 				return &emptyNode{}, nil
 			}
 			// Key does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedViewError(oldTn.String())
+			return nil, sqlbase.NewUndefinedRelationError(oldTn)
 		}
 		if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-			return nil, sqlbase.NewUndefinedViewError(oldTn.String())
+			return nil, sqlbase.NewUndefinedRelationError(oldTn)
 		}
 	} else {
 		tableDesc, err = getTableDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
@@ -160,10 +160,10 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 				return &emptyNode{}, nil
 			}
 			// Key does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedTableError(oldTn.String())
+			return nil, sqlbase.NewUndefinedRelationError(oldTn)
 		}
 		if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-			return nil, sqlbase.NewUndefinedTableError(oldTn.String())
+			return nil, sqlbase.NewUndefinedRelationError(oldTn)
 		}
 	}
 

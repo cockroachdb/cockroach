@@ -67,7 +67,7 @@ users  bar      true    2    name    ASC        false    false
 
 user testuser
 
-statement error user testuser does not have CREATE privilege on table users
+statement error user testuser does not have CREATE privilege on relation users
 DROP INDEX users@bar
 
 user root
@@ -151,7 +151,7 @@ GRANT ALL ON v to testuser
 
 user testuser
 
-statement error user testuser does not have DROP privilege on view v2
+statement error user testuser does not have DROP privilege on relation v2
 DROP INDEX users@foo CASCADE
 
 user root

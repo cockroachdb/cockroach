@@ -423,7 +423,7 @@ func TestDropTable(t *testing.T) {
 		// this statement erronously work.
 		if _, err := sqlDB.Exec(
 			`SELECT * FROM t.kv`,
-		); !testutils.IsError(err, `table "t.kv" does not exist`) {
+		); !testutils.IsError(err, `relation "t.kv" does not exist`) {
 			return errors.Errorf("different error than expected: %+v", err)
 		}
 
@@ -486,7 +486,7 @@ func TestDropTableInterleaved(t *testing.T) {
 	// Test that deleted table cannot be used. This prevents regressions where
 	// name -> descriptor ID caches might make this statement erronously work.
 	if _, err := sqlDB.Exec(`SELECT * FROM t.intlv`); !testutils.IsError(
-		err, `table "t.intlv" does not exist`,
+		err, `relation "t.intlv" does not exist`,
 	) {
 		t.Fatalf("different error than expected: %v", err)
 	}

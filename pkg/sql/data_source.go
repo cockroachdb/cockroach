@@ -517,7 +517,8 @@ func (p *planner) getTableScanOrViewPlan(
 ) (planDataSource, error) {
 	if tn.PrefixOriginallySpecified {
 		// Prefixes are currently only supported for virtual tables.
-		return planDataSource{}, parser.NewInvalidTableNameError(tn.String())
+		return planDataSource{}, parser.NewInvalidNameErrorf(
+			"invalid table name: %q", parser.ErrString(tn))
 	}
 
 	desc, err := p.getTableDesc(ctx, tn)
@@ -557,8 +558,8 @@ func (p *planner) getPlanForDesc(
 		}
 		return p.getViewPlan(ctx, tn, desc)
 	} else if !desc.IsTable() {
-		return planDataSource{},
-			errors.Errorf("unexpected table descriptor of type %s for %q", desc.TypeName(), tn)
+		return planDataSource{}, errors.Errorf(
+			"unexpected table descriptor of type %s for %q", desc.TypeName(), parser.ErrString(tn))
 	}
 
 	// This name designates a real table.
@@ -649,7 +650,8 @@ func (src *dataSourceInfo) expandStar(
 	v parser.VarName, ivarHelper parser.IndexedVarHelper,
 ) (columns sqlbase.ResultColumns, exprs []parser.TypedExpr, err error) {
 	if len(src.sourceColumns) == 0 {
-		return nil, nil, fmt.Errorf("cannot use %q without a FROM clause", v)
+		return nil, nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+			"cannot use %q without a FROM clause", parser.ErrString(v))
 	}
 
 	colSel := func(idx int) {
@@ -661,7 +663,7 @@ func (src *dataSourceInfo) expandStar(
 		}
 	}
 
-	tableName := parser.TableName{}
+	tableName := parser.TableName{DBNameOriginallyOmitted: true}
 	if a, ok := v.(*parser.AllColumnsSelector); ok {
 		tableName = a.TableName
 	}
@@ -679,7 +681,7 @@ func (src *dataSourceInfo) expandStar(
 
 		colRange, ok := src.sourceAliases.columnRange(qualifiedTn)
 		if !ok {
-			return nil, nil, fmt.Errorf("table %q not found", tableName.String())
+			return nil, nil, sqlbase.NewUndefinedRelationError(&tableName)
 		}
 		for _, i := range colRange {
 			colSel(i)
@@ -691,6 +693,22 @@ func (src *dataSourceInfo) expandStar(
 
 type multiSourceInfo []*dataSourceInfo
 
+func newUnknownSourceError(tn *parser.TableName) error {
+	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
+		"source name %q not found in FROM clause", parser.ErrString(tn))
+}
+
+func newAmbiguousSourceError(t parser.Name, dbContext parser.Name) error {
+	if dbContext == "" {
+		return pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+			"ambiguous source name: %q", parser.ErrString(t))
+
+	}
+	return pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+		"ambiguous source name: %q (within database %q)",
+		parser.ErrString(t), parser.ErrString(dbContext))
+}
+
 // checkDatabaseName checks whether the given TableName is unambiguous
 // for the set of sources and if it is, qualifies the missing database name.
 func (sources multiSourceInfo) checkDatabaseName(tn parser.TableName) (parser.TableName, error) {
@@ -701,7 +719,7 @@ func (sources multiSourceInfo) checkDatabaseName(tn parser.TableName) (parser.Ta
 			for _, alias := range src.sourceAliases {
 				if alias.name.TableName == tn.TableName {
 					if found {
-						return parser.TableName{}, fmt.Errorf("ambiguous source name: %q", tn.TableName)
+						return parser.TableName{}, newAmbiguousSourceError(tn.TableName, "")
 					}
 					tn.DatabaseName = alias.name.DatabaseName
 					found = true
@@ -709,7 +727,7 @@ func (sources multiSourceInfo) checkDatabaseName(tn parser.TableName) (parser.Ta
 			}
 		}
 		if !found {
-			return parser.TableName{}, fmt.Errorf("source name %q not found in FROM clause", tn.TableName)
+			return parser.TableName{}, newUnknownSourceError(&tn)
 		}
 		return tn, nil
 	}
@@ -719,14 +737,13 @@ func (sources multiSourceInfo) checkDatabaseName(tn parser.TableName) (parser.Ta
 	for _, src := range sources {
 		if _, ok := src.sourceAliases.srcIdx(tn); ok {
 			if found {
-				return parser.TableName{}, fmt.Errorf("ambiguous source name: %q (within database %q)",
-					tn.TableName, tn.DatabaseName)
+				return parser.TableName{}, newAmbiguousSourceError(tn.TableName, tn.DatabaseName)
 			}
 			found = true
 		}
 	}
 	if !found {
-		return parser.TableName{}, fmt.Errorf("table %q not selected in FROM clause", &tn)
+		return parser.TableName{}, newUnknownSourceError(&tn)
 	}
 	return tn, nil
 }
@@ -740,21 +757,21 @@ func (src *dataSourceInfo) checkDatabaseName(tn parser.TableName) (parser.TableN
 		for _, alias := range src.sourceAliases {
 			if alias.name.TableName == tn.TableName {
 				if found {
-					return parser.TableName{}, fmt.Errorf("ambiguous source name: %q", tn.TableName)
+					return parser.TableName{}, newAmbiguousSourceError(tn.TableName, "")
 				}
 				found = true
 				tn.DatabaseName = alias.name.DatabaseName
 			}
 		}
 		if !found {
-			return parser.TableName{}, fmt.Errorf("source name %q not found in FROM clause", tn.TableName)
+			return parser.TableName{}, newUnknownSourceError(&tn)
 		}
 		return tn, nil
 	}
 
 	// Database given.
 	if _, found := src.sourceAliases.srcIdx(tn); !found {
-		return parser.TableName{}, fmt.Errorf("table %q not selected in FROM clause", &tn)
+		return parser.TableName{}, newUnknownSourceError(&tn)
 	}
 	return tn, nil
 }
@@ -791,7 +808,8 @@ func (sources multiSourceInfo) findColumn(
 		col := src.sourceColumns[idx]
 		if parser.ReNormalizeName(col.Name) == colName {
 			if colIdx != invalidColIdx {
-				return invalidSrcIdx, invalidColIdx, fmt.Errorf("column reference %q is ambiguous", c)
+				return invalidSrcIdx, invalidColIdx, pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
+					"column reference %q is ambiguous", parser.ErrString(c))
 			}
 			srcIdx = iSrc
 			colIdx = idx
@@ -829,7 +847,9 @@ func (sources multiSourceInfo) findColumn(
 	}
 
 	if colIdx == invalidColIdx {
-		return invalidSrcIdx, invalidColIdx, fmt.Errorf("column name %q not found", c)
+		return invalidSrcIdx, invalidColIdx,
+			pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+				"column name %q not found", parser.ErrString(c))
 	}
 
 	return srcIdx, colIdx, nil
