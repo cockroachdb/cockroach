@@ -271,26 +271,30 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	return parser.AsStringWithFlags(stmt, formatter), true
 }
 
-// AppStatementStatistics is a map: for each app name (as set in sql sessions),
-// it maps statements to their collected statistics.
-type AppStatementStatistics map[string]map[string]roachpb.StatementStatistics
+// CollectedStats wraps collected timings and metadata for some query's execution.
+type CollectedStats struct {
+	Query   string                      `json:"query"`
+	DistSQL bool                        `json:"distSQL"`
+	Failed  bool                        `json:"failed"`
+	Stats   roachpb.StatementStatistics `json:"stats"`
+}
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
 // queries scrubbed of their identifiers. Any statements which cannot be
 // scrubbed will be omitted from the returned map.
-func (e *Executor) GetScrubbedStmtStats() AppStatementStatistics {
-	ret := make(AppStatementStatistics)
+func (e *Executor) GetScrubbedStmtStats() map[string][]CollectedStats {
+	ret := make(map[string][]CollectedStats)
 	vt := e.virtualSchemas
 	e.sqlStats.Lock()
 	for appName, a := range e.sqlStats.apps {
 		hashedApp := HashAppName(appName)
 		a.Lock()
-		m := make(map[string]roachpb.StatementStatistics)
+		m := make([]CollectedStats, 0, len(a.stmts))
 		for q, stats := range a.stmts {
 			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
 			if ok {
 				stats.Lock()
-				m[scrubbed] = stats.data
+				m = append(m, CollectedStats{scrubbed, q.distSQLUsed, q.failed, stats.data})
 				stats.Unlock()
 			}
 		}
