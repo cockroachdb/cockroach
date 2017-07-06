@@ -482,7 +482,7 @@ func nodeName(plan planNode) string {
 }
 
 // planNodeNames is the mapping from node type to strings.  The
-// strings are constant and not precomptued so that the type names can
+// strings are constant and not precomputed so that the type names can
 // be changed without changing the output of "EXPLAIN".
 var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableNode{}):       "alter table",
