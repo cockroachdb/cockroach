@@ -103,7 +103,7 @@ var _ opentracing.Tracer = &Tracer{}
 
 // NewTracer creates a Tracer. The cluster settings control whether
 // we trace to net/trace and/or lightstep.
-func NewTracer() opentracing.Tracer {
+func NewTracer() *Tracer {
 	t := &Tracer{}
 	t.noopSpan.tracer = t
 	updateShadowTracer(t)
