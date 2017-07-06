@@ -82,7 +82,7 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		// Nodes with a fixed schema.
 	case *explainDistSQLNode:
 		return n.getColumns(mut, explainDistSQLColumns)
-	case *relocateNode:
+	case *testingRelocateNode:
 		return n.getColumns(mut, relocateNodeColumns)
 	case *scatterNode:
 		return n.getColumns(mut, scatterNodeColumns)

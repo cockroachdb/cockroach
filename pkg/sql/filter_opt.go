@@ -314,7 +314,7 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
-	case *relocateNode:
+	case *testingRelocateNode:
 		if n.rows, err = p.triggerFilterPropagation(ctx, n.rows); err != nil {
 			return plan, extraFilter, err
 		}
