@@ -247,3 +247,16 @@ query ITII
 SELECT * FROM issue_14052_2;
 ----
 1  BAR  5  5
+
+# Make sure the column types are propagated when type checking the ON CONFLICT
+# expressions. See #16873.
+statement ok
+CREATE TABLE issue_16873 (col int PRIMARY KEY, date TIMESTAMP);
+
+statement ok
+INSERT INTO issue_16873 VALUES (1,clock_timestamp())
+ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE col = 1;
+
+statement ok
+INSERT INTO issue_16873 VALUES (1,clock_timestamp())
+ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE col = 1;
