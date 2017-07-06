@@ -10,7 +10,6 @@ package storageccl
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 
 	"github.com/pkg/errors"
@@ -24,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // importRequestLimit is the number of Import requests that can run at once.
@@ -201,19 +200,15 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		}
 	}
 
-	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("Import [%s,%s)", importStart, importEnd))
-	defer tracing.FinishSpan(span)
-
 	if err := importRequestLimiter.beginLimitedRequest(ctx); err != nil {
 		return nil, err
 	}
 	defer importRequestLimiter.endLimitedRequest()
-	log.Infof(ctx, "import [%s,%s)", importStart, importEnd)
 
 	var rows rowCounter
 	var iters []engine.SimpleIterator
 	for _, file := range args.Files {
-		log.VEventf(ctx, 2, "import file [%s,%s) %s", importStart, importEnd, file.Path)
+		log.VEventf(ctx, 2, "import file %s", file.Path)
 
 		dir, err := MakeExportStorage(ctx, file.Dir)
 		if err != nil {
@@ -238,9 +233,10 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		}); err != nil {
 			return nil, errors.Wrapf(err, "fetching %q", file.Path)
 		}
-		log.Event(ctx, "read file")
+		dataSize := int64(len(fileContents))
+		log.Eventf(ctx, "fetched file (%s)", humanizeutil.IBytes(dataSize))
 
-		rows.BulkOpSummary.DataSize += int64(len(fileContents))
+		rows.BulkOpSummary.DataSize += dataSize
 
 		if len(file.Sha512) > 0 {
 			checksum, err := sha512ChecksumData(fileContents)
@@ -266,7 +262,6 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		if batcher != nil {
 			return errors.New("cannot overwrite a batcher")
 		}
-		log.Event(ctx, "resetting batcher")
 
 		if AddSSTableEnabled.Get() {
 			sstWriter, err := engine.MakeRocksDBSstFileWriter()
@@ -336,10 +331,12 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			return nil, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 
-		if batcher.Size() > importBatchSize.Get() {
+		if size := batcher.Size(); size > importBatchSize.Get() {
 			finishBatcher := batcher
 			batcher = nil
+			log.Eventf(gCtx, "triggering finish of batch of size %s", humanizeutil.IBytes(size))
 			g.Go(func() error {
+				defer log.Event(ctx, "finished batch")
 				defer finishBatcher.Close()
 				return finishBatcher.Finish(gCtx, db)
 			})
@@ -351,6 +348,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	// Flush out the last batch.
 	if batcher.Size() > 0 {
 		g.Go(func() error {
+			defer log.Event(ctx, "finished batch")
 			defer batcher.Close()
 			return batcher.Finish(gCtx, db)
 		})

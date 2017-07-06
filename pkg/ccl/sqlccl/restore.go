@@ -26,9 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -625,7 +627,15 @@ func Restore(
 			"(but you can use 'RESTORE somedb.*' to restore all backed up tables for a given DB).")
 	}
 
-	backupDescs, err := loadBackupDescs(ctx, uris)
+	// A note about contexts and spans in this method: the top-level context
+	// `ctx` is used for orchestration logging. All operations that carry out
+	// work get their individual contexts.
+	initCtx, initSpan := tracing.ChildSpan(ctx, "init")
+	defer func() {
+		tracing.FinishSpan(initSpan) // want late binding
+	}()
+
+	backupDescs, err := loadBackupDescs(initCtx, uris)
 	if err != nil {
 		return failed, err
 	}
@@ -653,9 +663,11 @@ func Restore(
 		}
 	}
 
+	log.Eventf(ctx, "starting restore for %d tables", len(tables))
+
 	// Fail fast if the necessary databases don't exist since the below logic
 	// leaks table IDs when Restore fails.
-	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(initCtx, func(ctx context.Context, txn *client.Txn) error {
 		return reassignParentIDs(ctx, txn, p, databasesByID, tables, opt)
 	}); err != nil {
 		return failed, err
@@ -672,7 +684,7 @@ func Restore(
 	// restore since restarts would be terrible (and our bulk import primitive
 	// are non-transactional), but this does mean if something fails during Import,
 	// we've "leaked" the IDs, in that the generator will have been incremented.
-	newTableIDs, kr, rekeys, err := reassignTableIDs(ctx, db, tables, opt)
+	newTableIDs, kr, rekeys, err := reassignTableIDs(initCtx, db, tables, opt)
 	if err != nil {
 		// We expect user-facing usage errors here, so don't wrapf.
 		return failed, err
@@ -688,10 +700,10 @@ func Restore(
 	for _, desc := range newTableIDs {
 		jobLogger.Job.DescriptorIDs = append(jobLogger.Job.DescriptorIDs, desc)
 	}
-	if err := jobLogger.Created(ctx); err != nil {
+	if err := jobLogger.Created(initCtx); err != nil {
 		return failed, err
 	}
-	if err := jobLogger.Started(ctx); err != nil {
+	if err := jobLogger.Started(initCtx); err != nil {
 		return failed, err
 	}
 
@@ -699,6 +711,14 @@ func Restore(
 		jobLogger:   jobLogger,
 		totalChunks: len(importRequests),
 	}
+
+	tracing.FinishSpan(initSpan)
+	initCtx, initSpan = nil, nil
+
+	splitCtx, splitSpan := tracing.ChildSpan(ctx, "presplit")
+	defer func() {
+		tracing.FinishSpan(splitSpan) // want late binding
+	}()
 
 	// The Import (and resulting WriteBatch) requests made below run on
 	// leaseholders, so presplit the ranges to balance the work among many
@@ -711,19 +731,26 @@ func Restore(
 			return failed, errors.Errorf("failed to rewrite key: %s", r.Key)
 		}
 	}
-	if err := PresplitRanges(ctx, db, splitKeys); err != nil {
+	if err := PresplitRanges(splitCtx, db, splitKeys); err != nil {
 		return failed, errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
 	}
+	log.Eventf(ctx, "presplit ranges along %d keys", len(splitKeys))
+	tracing.FinishSpan(splitSpan)
+	splitCtx, splitSpan = nil, nil
+
 	{
 		newSpans := spansForAllTableIndexes(tables)
 		g, gCtx := errgroup.WithContext(ctx)
 		for i := range newSpans {
 			span := newSpans[i]
 			g.Go(func() error {
+				scatterCtx, sp := tracing.ChildSpan(gCtx, "scatter")
+				defer tracing.FinishSpan(sp)
+
 				req := &roachpb.AdminScatterRequest{
 					Span: roachpb.Span{Key: span.Key, EndKey: span.EndKey},
 				}
-				res, pErr := client.SendWrapped(gCtx, db.GetSender(), req)
+				res, pErr := client.SendWrapped(scatterCtx, db.GetSender(), req)
 				if pErr != nil {
 					return pErr.GoError()
 				}
@@ -731,7 +758,7 @@ func Restore(
 				// didn't get scattered.
 				for _, r := range res.(*roachpb.AdminScatterResponse).Ranges {
 					if r.Error != nil {
-						log.Warningf(ctx, "error scattering range [%s,%s): %+v",
+						log.Warningf(scatterCtx, "error scattering range [%s,%s): %+v",
 							r.Span.Key, r.Span.EndKey, r.Error.GoError())
 					}
 				}
@@ -741,6 +768,7 @@ func Restore(
 		if err := g.Wait(); err != nil {
 			return failed, errors.Wrapf(err, "scattering %d ranges", len(importRequests))
 		}
+		log.Eventf(ctx, "scattered lease holders for %d key spans", len(newSpans))
 	}
 
 	// We're already limiting these on the server-side, but sending all the
@@ -759,10 +787,16 @@ func Restore(
 	maxConcurrentImports := clusterNodeCount(p.ExecCfg().Gossip)
 	importsSem := make(chan struct{}, maxConcurrentImports)
 
+	log.Eventf(ctx, "commencing import of data with at concurrency %d", maxConcurrentImports)
+	tBegin := timeutil.Now()
+
 	mu := struct {
 		syncutil.Mutex
 		res roachpb.BulkOpSummary
 	}{}
+
+	progressCtx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
+	defer tracing.FinishSpan(progressSpan)
 
 	g, gCtx := errgroup.WithContext(ctx)
 	for i := range importRequests {
@@ -771,28 +805,33 @@ func Restore(
 		case <-ctx.Done():
 			return failed, ctx.Err()
 		}
+		log.Eventf(ctx, "importing %d of %d", i+1, len(importRequests))
 
 		ir := importRequests[i]
 		g.Go(func() error {
+			importCtx, span := tracing.ChildSpan(gCtx, "import")
+			defer tracing.FinishSpan(span)
 			defer func() { <-importsSem }()
+			log.Event(importCtx, "acquired semaphore")
 
-			res, err := Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr, rekeys)
+			res, err := Import(importCtx, db, ir.Key, ir.EndKey, ir.files, kr, rekeys)
 			if err != nil {
 				return err
 			}
 			mu.Lock()
 			mu.res.Add(res.Imported)
 			mu.Unlock()
-			if err := progressLogger.chunkFinished(gCtx); err != nil {
+			if err := progressLogger.chunkFinished(progressCtx); err != nil {
 				// Errors while updating progress are not important enough to merit
 				// failing the entire restore.
-				log.Errorf(ctx, "RESTORE ignoring error while updating progress on job %d (%s): %+v",
+				log.Errorf(progressCtx, "RESTORE ignoring error while updating progress on job %d (%s): %+v",
 					jobLogger.JobID(), jobLogger.Job.Description, err)
 			}
 			return nil
 		})
 	}
 
+	log.Event(ctx, "wait for outstanding imports to finish")
 	if err := g.Wait(); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
@@ -800,10 +839,14 @@ func Restore(
 		return failed, errors.Wrapf(err, "importing %d ranges", len(importRequests))
 	}
 
+	log.Event(ctx, "making tables live")
+
+	makeLiveCtx, makeLiveSpan := tracing.ChildSpan(ctx, "make-live")
+	defer tracing.FinishSpan(makeLiveSpan)
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
-	if err := restoreTableDescs(ctx, db, tables); err != nil {
+	if err := restoreTableDescs(makeLiveCtx, db, tables); err != nil {
 		return failed, errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
 	}
 
@@ -811,6 +854,10 @@ func Restore(
 	// assumes that it's operating on a new cluster. If it's not empty,
 	// everything works but the table data is left abandoned.
 
+	// Don't need the lock any more; we're the only moving part at this stage.
+	log.Eventf(ctx, "restore completed: ingested %s of data (before replication) at %s/sec",
+		humanizeutil.IBytes(mu.res.DataSize), humanizeutil.IBytes(mu.res.DataSize/int64(1+timeutil.Since(tBegin).Seconds())),
+	)
 	return mu.res, nil
 }
 
@@ -871,14 +918,16 @@ func restorePlanHook(
 			restore.Options,
 			jobLogger,
 		)
+		jobCtx, jobSpan := tracing.ChildSpan(ctx, "log-job")
+		defer tracing.FinishSpan(jobSpan)
 		if err != nil {
-			jobLogger.Failed(ctx, err)
+			jobLogger.Failed(jobCtx, err)
 			return nil, err
 		}
-		if err := jobLogger.Succeeded(ctx); err != nil {
+		if err := jobLogger.Succeeded(jobCtx); err != nil {
 			// An error while marking the job as successful is not important enough to
 			// merit failing the entire restore.
-			log.Errorf(ctx, "RESTORE ignoring error while marking job %d (%s) as successful: %+v",
+			log.Errorf(jobCtx, "RESTORE ignoring error while marking job %d (%s) as successful: %+v",
 				jobLogger.JobID(), description, err)
 		}
 		// TODO(benesch): emit periodic progress updates once we have the
