@@ -259,12 +259,21 @@ func (p *planner) showCreateInterleave(
 	if err != nil {
 		return "", err
 	}
+	parentDb, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, parentTable.ParentID)
+	if err != nil {
+		return "", err
+	}
+	parentName := parser.TableName{
+		DatabaseName:            parser.Name(parentDb.Name),
+		TableName:               parser.Name(parentTable.Name),
+		DBNameOriginallyOmitted: parentDb.Name == p.session.Database,
+	}
 	var sharedPrefixLen int
 	for _, ancestor := range intl.Ancestors {
 		sharedPrefixLen += int(ancestor.SharedPrefixLen)
 	}
 	interleavedColumnNames := quoteNames(idx.ColumnNames[:sharedPrefixLen]...)
-	s := fmt.Sprintf(" INTERLEAVE IN PARENT %s (%s)", parser.Name(parentTable.Name), interleavedColumnNames)
+	s := fmt.Sprintf(" INTERLEAVE IN PARENT %s (%s)", &parentName, interleavedColumnNames)
 	return s, nil
 }
 
