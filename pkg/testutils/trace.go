@@ -43,6 +43,7 @@ func MakeRecordCtx() (context.Context, func() string) {
 			dump = tracing.FormatRecordedSpans(tracing.GetRecording(sp))
 			tracing.StopRecording(sp)
 			sp.Finish()
+			tr.Close()
 			cancel()
 		})
 		return dump
