@@ -335,6 +335,13 @@ disabled by setting the environment variable COCKROACH_SKIP_KEY_PERMISSION_CHECK
 		Description: `Path to the CA key.`,
 	}
 
+	// TODO(tschottdorf): once clockless mode becomes non-experimental, explain it here:
+	// <PRE>
+	//
+	// </PRE>
+	// Specifying the string value 'experimental-clockless' instead of a duration runs the cluster
+	// in clockless reads mode. In that mode, reads are routed through Raft and subsequently
+	// performance is reduced, but clock synchronization is not relied upon for correctness.
 	MaxOffset = FlagInfo{
 		Name: "max-offset",
 		Description: `
@@ -346,8 +353,8 @@ failures as well as the frequency of uncertainty-based read restarts.
 
 </PRE>
 Note that this value must be the same on all nodes in the cluster. In order to
-change it, every node in the cluster must be stopped and restarted with the new
-value.`,
+change it, all nodes in the cluster must be stopped simultaneously and restarted
+with the new value.`,
 	}
 
 	Store = FlagInfo{

@@ -17,10 +17,16 @@
 package timeutil
 
 import (
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
+
+// ClocklessMaxOffset is a special-cased value that is used when the cluster
+// runs in "clockless" mode. In that (experimental) mode, we operate without
+// assuming any bound on the clock drift.
+const ClocklessMaxOffset = math.MaxInt64
 
 var nowFunc = now
 

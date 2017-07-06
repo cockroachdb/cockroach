@@ -103,7 +103,7 @@ func TestClockOffsetFlagValue(t *testing.T) {
 		if err := f.Parse(td.args); err != nil {
 			t.Fatal(err)
 		}
-		if td.expected != serverCfg.MaxOffset {
+		if td.expected != time.Duration(serverCfg.MaxOffset) {
 			t.Errorf("%d. MaxOffset expected %v, but got %v", i, td.expected, serverCfg.RaftTickInterval)
 		}
 	}

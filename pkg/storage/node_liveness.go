@@ -66,6 +66,10 @@ var (
 )
 
 func (l *Liveness) isLive(now hlc.Timestamp, maxOffset time.Duration) bool {
+	if maxOffset == timeutil.ClocklessMaxOffset {
+		// When using clockless reads, we're live without a buffer period.
+		maxOffset = 0
+	}
 	expiration := l.Expiration.Add(-maxOffset.Nanoseconds(), 0)
 	return now.Less(expiration)
 }
@@ -387,9 +391,16 @@ func (nl *NodeLiveness) heartbeatInternal(
 			}
 		}
 		// We need to add the maximum clock offset to the expiration because it's
-		// used when determining liveness for a node.
-		newLiveness.Expiration = nl.clock.Now().Add(
-			(nl.livenessThreshold + nl.clock.MaxOffset()).Nanoseconds(), 0)
+		// used when determining liveness for a node (unless we're configured for
+		// clockless reads).
+		{
+			maxOffset := nl.clock.MaxOffset()
+			if maxOffset == timeutil.ClocklessMaxOffset {
+				maxOffset = 0
+			}
+			newLiveness.Expiration = nl.clock.Now().Add(
+				(nl.livenessThreshold + maxOffset).Nanoseconds(), 0)
+		}
 		if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
 			// Update liveness to actual value on mismatch.
 			nl.setSelf(actual)

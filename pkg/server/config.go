@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Context defaults.
@@ -69,6 +70,39 @@ var timeUntilStoreDead = settings.RegisterNonNegativeDurationSetting(
 	"server.time_until_store_dead",
 	"the time after which if there is no new gossiped information about a store, it is considered dead",
 	5*time.Minute)
+
+// MaxOffsetType stores the configured MaxOffset.
+type MaxOffsetType time.Duration
+
+// Type implements the pflag.Value interface.
+func (mo *MaxOffsetType) Type() string {
+	return "MaxOffset"
+}
+
+// Set implements the pflag.Value interface.
+func (mo *MaxOffsetType) Set(v string) error {
+	if v == "experimental-clockless" {
+		*mo = MaxOffsetType(timeutil.ClocklessMaxOffset)
+		return nil
+	}
+	nanos, err := time.ParseDuration(v)
+	if err != nil {
+		return err
+	}
+	if nanos == timeutil.ClocklessMaxOffset {
+		return errors.Errorf("%s is not a valid MaxOffset", v)
+	}
+	*mo = MaxOffsetType(nanos)
+	return nil
+}
+
+// String implements the pflag.Value interface.
+func (mo *MaxOffsetType) String() string {
+	if *mo == timeutil.ClocklessMaxOffset {
+		return "experimental-clockless"
+	}
+	return time.Duration(*mo).String()
+}
 
 // Config holds parameters needed to setup a server.
 type Config struct {
@@ -130,7 +164,7 @@ type Config struct {
 	// Increasing this value will increase time to recovery after
 	// failures, and increase the frequency and impact of
 	// ReadWithinUncertaintyIntervalError.
-	MaxOffset time.Duration
+	MaxOffset MaxOffsetType
 
 	// RaftTickInterval is the resolution of the Raft timer.
 	RaftTickInterval time.Duration
@@ -323,7 +357,7 @@ func MakeConfig() Config {
 	}
 	cfg := Config{
 		Config:                   new(base.Config),
-		MaxOffset:                base.DefaultMaxClockOffset,
+		MaxOffset:                MaxOffsetType(base.DefaultMaxClockOffset),
 		CacheSize:                defaultCacheSize,
 		SQLMemoryPoolSize:        defaultSQLMemoryPoolSize,
 		ScanInterval:             defaultScanInterval,
