@@ -335,13 +335,6 @@ func StartChildSpan(
 		linkShadowSpan(s, pSpan.shadowTr, pSpan.shadowSpan.Context(), opentracing.ChildOfRef)
 	}
 
-	if pSpan.netTr != nil || pSpan.shadowTr != nil {
-		// Copy baggage items to tags so they show up in the shadow tracer UI or x/net/trace.
-		for k, v := range s.mu.Baggage {
-			s.SetTag(k, v)
-		}
-	}
-
 	// Start recording if necessary.
 	if pSpan.isRecording() {
 		recordingGroup := pSpan.mu.recordingGroup
@@ -349,6 +342,18 @@ func StartChildSpan(
 			recordingGroup = new(spanGroup)
 		}
 		s.enableRecording(recordingGroup, pSpan.mu.recordingType)
+	}
+
+	if pSpan.netTr != nil {
+		s.netTr = trace.New("tracing", operationName)
+		s.netTr.SetMaxEvents(maxLogsPerSpan)
+	}
+
+	if pSpan.netTr != nil || pSpan.shadowTr != nil {
+		// Copy baggage items to tags so they show up in the shadow tracer UI or x/net/trace.
+		for k, v := range s.mu.Baggage {
+			s.SetTag(k, v)
+		}
 	}
 
 	pSpan.mu.Unlock()
