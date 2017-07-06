@@ -351,7 +351,7 @@ $(CGO_FLAGS_FILES): $(REPO_ROOT)/build/common.mk
 # past, when the tarballs were packaged), and so the build artifacts always look
 # up-to-date.
 
-$(JEMALLOC_SRC_DIR)/configure:
+$(JEMALLOC_SRC_DIR)/configure: $(JEMALLOC_SRC_DIR)/configure.ac
 	cd $(JEMALLOC_SRC_DIR) && autoconf
 
 $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/configure
