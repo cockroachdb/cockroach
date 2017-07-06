@@ -309,10 +309,7 @@ func (desc *TableDescriptor) SetID(id ID) {
 
 // TypeName returns the plain type of this descriptor.
 func (desc *TableDescriptor) TypeName() string {
-	if desc.IsView() {
-		return "view"
-	}
-	return "table"
+	return "relation"
 }
 
 // SetName implements the DescriptorProto interface.
@@ -668,7 +665,7 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 					continue
 				}
 				if index.ContainsColumnID(col.ID) {
-					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
+					return fmt.Errorf("index %q already contains column %q", index.Name, col.Name)
 				}
 				if indexHasOldStoredColumns {
 					index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.ID)
@@ -869,7 +866,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 				}
 			}
 			if !found {
-				return errors.Errorf("missing fk back reference to %s.%s from %s.%s",
+				return errors.Errorf("missing fk back reference to %q@%q from %q@%q",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
 		}
@@ -890,7 +887,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 					targetTable.Name, backref.Index)
 			}
 			if fk := targetIndex.ForeignKey; fk.Table != desc.ID || fk.Index != index.ID {
-				return errors.Errorf("broken fk backward reference from %s.%s to %s.%s",
+				return errors.Errorf("broken fk backward reference from %q@%q to %q@%q",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
 		}
@@ -913,7 +910,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 			}
 			if !found {
 				return errors.Errorf(
-					"missing interleave back reference to %s.%s from %s.%s",
+					"missing interleave back reference to %q@%q from %q@%q",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
 		}
@@ -935,14 +932,14 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 			}
 			if len(targetIndex.Interleave.Ancestors) == 0 {
 				return errors.Errorf(
-					"broken interleave backward reference from %s.%s to %s.%s",
+					"broken interleave backward reference from %q@%q to %q@%q",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
 			// The last ancestor is required to be a backreference.
 			ancestor := targetIndex.Interleave.Ancestors[len(targetIndex.Interleave.Ancestors)-1]
 			if ancestor.TableID != desc.ID || ancestor.IndexID != index.ID {
 				return errors.Errorf(
-					"broken interleave backward reference from %s.%s to %s.%s",
+					"broken interleave backward reference from %q@%q to %q@%q",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
 		}
@@ -1011,18 +1008,18 @@ func (desc *TableDescriptor) ValidateTable() error {
 
 		normName := parser.ReNormalizeName(column.Name)
 		if _, ok := columnNames[normName]; ok {
-			return fmt.Errorf("duplicate column name: \"%s\"", column.Name)
+			return fmt.Errorf("duplicate column name: %q", column.Name)
 		}
 		columnNames[normName] = column.ID
 
 		if other, ok := columnIDs[column.ID]; ok {
-			return fmt.Errorf("column \"%s\" duplicate ID of column \"%s\": %d",
+			return fmt.Errorf("column %q duplicate ID of column %q: %d",
 				column.Name, other, column.ID)
 		}
 		columnIDs[column.ID] = column.Name
 
 		if column.ID >= desc.NextColumnID {
-			return fmt.Errorf("column \"%s\" invalid ID (%d) > next column ID (%d)",
+			return fmt.Errorf("column %q invalid ID (%d) > next column ID (%d)",
 				column.Name, column.ID, desc.NextColumnID)
 		}
 	}
@@ -1033,7 +1030,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 		case *DescriptorMutation_Column:
 			col := desc.Column
 			if unSetEnums {
-				return errors.Errorf("mutation in state %s, direction %s, col %s, id %v", m.State, m.Direction, col.Name, col.ID)
+				return errors.Errorf("mutation in state %s, direction %s, col %q, id %v", m.State, m.Direction, col.Name, col.ID)
 			}
 			columnIDs[col.ID] = col.Name
 		case *DescriptorMutation_Index:
@@ -1084,18 +1081,18 @@ func (desc *TableDescriptor) validateColumnFamilies(
 
 		normName := parser.ReNormalizeName(family.Name)
 		if _, ok := familyNames[normName]; ok {
-			return nil, fmt.Errorf("duplicate family name: \"%s\"", family.Name)
+			return nil, fmt.Errorf("duplicate family name: %q", family.Name)
 		}
 		familyNames[normName] = struct{}{}
 
 		if other, ok := familyIDs[family.ID]; ok {
-			return nil, fmt.Errorf("family \"%s\" duplicate ID of family \"%s\": %d",
+			return nil, fmt.Errorf("family %q duplicate ID of family %q: %d",
 				family.Name, other, family.ID)
 		}
 		familyIDs[family.ID] = family.Name
 
 		if family.ID >= desc.NextFamilyID {
-			return nil, fmt.Errorf("family \"%s\" invalid family ID (%d) > next family ID (%d)",
+			return nil, fmt.Errorf("family %q invalid family ID (%d) > next family ID (%d)",
 				family.Name, family.ID, desc.NextFamilyID)
 		}
 
@@ -1107,10 +1104,10 @@ func (desc *TableDescriptor) validateColumnFamilies(
 		for i, colID := range family.ColumnIDs {
 			name, ok := columnIDs[colID]
 			if !ok {
-				return nil, fmt.Errorf("family \"%s\" contains unknown column \"%d\"", family.Name, colID)
+				return nil, fmt.Errorf("family %q contains unknown column \"%d\"", family.Name, colID)
 			}
 			if parser.ReNormalizeName(name) != parser.ReNormalizeName(family.ColumnNames[i]) {
-				return nil, fmt.Errorf("family \"%s\" column %d should have name %q, but found name %q",
+				return nil, fmt.Errorf("family %q column %d should have name %q, but found name %q",
 					family.Name, colID, name, family.ColumnNames[i])
 			}
 		}
@@ -1151,18 +1148,18 @@ func (desc *TableDescriptor) validateTableIndexes(
 
 		normName := parser.ReNormalizeName(index.Name)
 		if _, ok := indexNames[normName]; ok {
-			return fmt.Errorf("duplicate index name: \"%s\"", index.Name)
+			return fmt.Errorf("duplicate index name: %q", index.Name)
 		}
 		indexNames[normName] = struct{}{}
 
 		if other, ok := indexIDs[index.ID]; ok {
-			return fmt.Errorf("index \"%s\" duplicate ID of index \"%s\": %d",
+			return fmt.Errorf("index %q duplicate ID of index %q: %d",
 				index.Name, other, index.ID)
 		}
 		indexIDs[index.ID] = index.Name
 
 		if index.ID >= desc.NextIndexID {
-			return fmt.Errorf("index \"%s\" invalid index ID (%d) > next index ID (%d)",
+			return fmt.Errorf("index %q invalid index ID (%d) > next index ID (%d)",
 				index.Name, index.ID, desc.NextIndexID)
 		}
 
@@ -1176,16 +1173,16 @@ func (desc *TableDescriptor) validateTableIndexes(
 		}
 
 		if len(index.ColumnIDs) == 0 {
-			return fmt.Errorf("index \"%s\" must contain at least 1 column", index.Name)
+			return fmt.Errorf("index %q must contain at least 1 column", index.Name)
 		}
 
 		for i, name := range index.ColumnNames {
 			colID, ok := columnNames[parser.ReNormalizeName(name)]
 			if !ok {
-				return fmt.Errorf("index \"%s\" contains unknown column \"%s\"", index.Name, name)
+				return fmt.Errorf("index %q contains unknown column %q", index.Name, name)
 			}
 			if colID != index.ColumnIDs[i] {
-				return fmt.Errorf("index \"%s\" column \"%s\" should have ID %d, but found ID %d",
+				return fmt.Errorf("index %q column %q should have ID %d, but found ID %d",
 					index.Name, name, colID, index.ColumnIDs[i])
 			}
 		}

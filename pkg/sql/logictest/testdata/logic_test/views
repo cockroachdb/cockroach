@@ -24,7 +24,7 @@ CREATE VIEW v3 (x) AS select a, b from t
 statement error pgcode 42601 CREATE VIEW specifies 3 column names, but data source has 2 columns
 CREATE VIEW v4 (x, y, z) AS select a, b from t
 
-statement error pgcode 42P01 table "dne" does not exist
+statement error pgcode 42P01 relation "dne" does not exist
 CREATE VIEW v5 AS select a, b from dne
 
 statement ok
@@ -156,13 +156,13 @@ SELECT * FROM t
 2 98
 3 97
 
-query error user testuser does not have SELECT privilege on view v1
+query error user testuser does not have SELECT privilege on relation v1
 SELECT * FROM v1
 
-query error user testuser does not have SELECT privilege on view v6
+query error user testuser does not have SELECT privilege on relation v6
 SELECT * FROM v6
 
-query error user testuser has no privileges on view v1
+query error user testuser has no privileges on relation v1
 SHOW CREATE VIEW v1
 
 user root
@@ -175,7 +175,7 @@ GRANT SELECT ON v1 TO testuser
 
 user testuser
 
-query error user testuser does not have SELECT privilege on table t
+query error user testuser does not have SELECT privilege on relation t
 SELECT * FROM t
 
 query II rowsort
@@ -185,7 +185,7 @@ SELECT * FROM v1
 2 98
 3 97
 
-query error user testuser does not have SELECT privilege on view v6
+query error user testuser does not have SELECT privilege on relation v6
 SELECT * FROM v6
 
 query TT
@@ -203,10 +203,10 @@ GRANT SELECT ON v6 TO testuser
 
 user testuser
 
-query error user testuser does not have SELECT privilege on table t
+query error user testuser does not have SELECT privilege on relation t
 SELECT * FROM t
 
-query error user testuser does not have SELECT privilege on view v1
+query error user testuser does not have SELECT privilege on relation v1
 SELECT * FROM v1
 
 query II rowsort
@@ -224,10 +224,10 @@ DROP TABLE v1
 statement error pgcode 42809 "t" is not a view
 DROP VIEW t
 
-statement error cannot drop view "v1" because view "v6" depends on it
+statement error cannot drop relation "v1" because view "v6" depends on it
 DROP VIEW v1
 
-statement error cannot drop view "v2" because view "test2.v1" depends on it
+statement error cannot drop relation "v2" because view "test2.v1" depends on it
 DROP VIEW v2
 
 statement ok
@@ -242,7 +242,7 @@ DROP VIEW v2
 statement ok
 DROP VIEW v1
 
-statement error pgcode 42P01 view "v1" does not exist
+statement error pgcode 42P01 relation "v1" does not exist
 DROP VIEW v1
 
 # Verify correct rejection of star expressions

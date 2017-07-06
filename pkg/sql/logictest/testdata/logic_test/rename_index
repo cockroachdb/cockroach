@@ -52,7 +52,7 @@ users  bar      true    2    name    ASC        false    false
 
 user testuser
 
-statement error user testuser does not have CREATE privilege on table users
+statement error user testuser does not have CREATE privilege on relation users
 ALTER INDEX users@bar RENAME TO rar
 
 user root
