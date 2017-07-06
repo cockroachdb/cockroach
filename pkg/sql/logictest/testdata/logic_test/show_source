@@ -50,7 +50,7 @@ query TTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE name != 'diagnostics.reporting.enabled'
 ----
 name                                               current_value  type  description
-cluster.organization                     					           			s     organization name
+cluster.organization                                              s     organization name
 diagnostics.reporting.interval                     1h0m0s         d     interval at which diagnostics data should be reported
 diagnostics.reporting.report_metrics               true           b     enable collection and reporting diagnostic metrics to cockroach labs
 diagnostics.reporting.send_crash_reports           true           b     send crash and panic reports
@@ -75,6 +75,7 @@ sql.trace.session_eventlog.enabled                 false          b     set to t
 sql.trace.txn.enable_threshold                     0s             d     duration beyond which all transactions are traced (set to 0 to disable)
 trace.debug.enable                                 false          b     if set, traces for recent requests can be seen in the /debug page
 trace.lightstep.token                                             s     if set, traces go to Lightstep using this token
+trace.zipkin.collector                                            s     if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.
 
 
 
