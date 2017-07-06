@@ -20,19 +20,16 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
@@ -103,71 +100,57 @@ func checkTablePrivileges(ctx context.Context, p *planner, tn *parser.TableName)
 	return nil
 }
 
-func (p *planner) showClusterSetting(name string) (planNode, error) {
-	var columns sqlbase.ResultColumns
-	var populate func(ctx context.Context, v *valuesNode) error
-
-	switch name {
-	case "all":
-		columns = sqlbase.ResultColumns{
-			{Name: "name", Typ: parser.TypeString},
-			{Name: "current_value", Typ: parser.TypeString},
-			{Name: "type", Typ: parser.TypeString},
-			{Name: "description", Typ: parser.TypeString},
-		}
-		populate = func(ctx context.Context, v *valuesNode) error {
-			for _, k := range settings.Keys() {
-				setting, _ := settings.Lookup(k)
-				if _, err := v.rows.AddRow(ctx, parser.Datums{
-					parser.NewDString(k),
-					parser.NewDString(setting.String()),
-					parser.NewDString(setting.Typ()),
-					parser.NewDString(setting.Description()),
-				}); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-
-	default:
-		val, ok := settings.Lookup(name)
-		if !ok {
-			return nil, errors.Errorf("unknown setting: %q", name)
-		}
-		var d parser.Datum
-		switch s := val.(type) {
-		case *settings.IntSetting:
-			d = parser.NewDInt(parser.DInt(s.Get()))
-		case *settings.StringSetting:
-			d = parser.NewDString(s.String())
-		case *settings.BoolSetting:
-			d = parser.MakeDBool(parser.DBool(s.Get()))
-		case *settings.FloatSetting:
-			d = parser.NewDFloat(parser.DFloat(s.Get()))
-		case *settings.DurationSetting:
-			d = &parser.DInterval{Duration: duration.Duration{Nanos: s.Get().Nanoseconds()}}
-		case *settings.EnumSetting:
-			d = parser.NewDInt(parser.DInt(s.Get()))
-		case *settings.ByteSizeSetting:
-			d = parser.NewDString(s.String())
-		default:
-			return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
-		}
-		columns = sqlbase.ResultColumns{{Name: name, Typ: d.ResolvedType()}}
-		populate = func(ctx context.Context, v *valuesNode) error {
-			_, err := v.rows.AddRow(ctx, parser.Datums{d})
-			return err
-		}
+func (p *planner) showClusterSetting(ctx context.Context, name string) (planNode, error) {
+	if name == "all" {
+		return p.delegateQuery(ctx, "SHOW CLUSTER SETTINGS",
+			"TABLE crdb_internal.cluster_settings", nil, nil)
 	}
 
+	val, ok := settings.Lookup(name)
+	if !ok {
+		return nil, errors.Errorf("unknown setting: %q", name)
+	}
+	var dType parser.Type
+	switch val.(type) {
+	case *settings.IntSetting, *settings.EnumSetting:
+		dType = parser.TypeInt
+	case *settings.StringSetting, *settings.ByteSizeSetting:
+		dType = parser.TypeString
+	case *settings.BoolSetting:
+		dType = parser.TypeBool
+	case *settings.FloatSetting:
+		dType = parser.TypeFloat
+	case *settings.DurationSetting:
+		dType = parser.TypeInterval
+	default:
+		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
+	}
+
+	columns := sqlbase.ResultColumns{{Name: name, Typ: dType}}
 	return &delayedNode{
 		name:    "SHOW CLUSTER SETTING " + name,
 		columns: columns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 1)
+			d := parser.DNull
+			switch s := val.(type) {
+			case *settings.IntSetting:
+				d = parser.NewDInt(parser.DInt(s.Get()))
+			case *settings.StringSetting:
+				d = parser.NewDString(s.String())
+			case *settings.BoolSetting:
+				d = parser.MakeDBool(parser.DBool(s.Get()))
+			case *settings.FloatSetting:
+				d = parser.NewDFloat(parser.DFloat(s.Get()))
+			case *settings.DurationSetting:
+				d = &parser.DInterval{Duration: duration.Duration{Nanos: s.Get().Nanoseconds()}}
+			case *settings.EnumSetting:
+				d = parser.NewDInt(parser.DInt(s.Get()))
+			case *settings.ByteSizeSetting:
+				d = parser.NewDString(s.String())
+			}
 
-			if err := populate(ctx, v); err != nil {
+			v := p.newContainerValuesNode(columns, 0)
+			if _, err := v.rows.AddRow(ctx, parser.Datums{d}); err != nil {
 				v.rows.Close(ctx)
 				return nil, err
 			}
@@ -177,61 +160,30 @@ func (p *planner) showClusterSetting(name string) (planNode, error) {
 }
 
 // Show a session-local variable name.
-func (p *planner) Show(n *parser.Show) (planNode, error) {
+func (p *planner) Show(ctx context.Context, n *parser.Show) (planNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
 
 	if n.ClusterSetting {
-		return p.showClusterSetting(name)
+		return p.showClusterSetting(ctx, name)
 	}
 
-	var columns sqlbase.ResultColumns
-
-	switch name {
-	case `all`:
-		columns = sqlbase.ResultColumns{
-			{Name: "Variable", Typ: parser.TypeString},
-			{Name: "Value", Typ: parser.TypeString},
-		}
-	default:
-		if _, ok := varGen[name]; !ok {
-			return nil, fmt.Errorf("unknown variable: %q", origName)
-		}
-		columns = sqlbase.ResultColumns{{Name: name, Typ: parser.TypeString}}
+	if name == "all" {
+		return p.delegateQuery(ctx, "SHOW SESSION ALL", "TABLE crdb_internal.session_variables",
+			nil, nil)
 	}
 
-	return &delayedNode{
-		name:    "SHOW " + origName,
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
+	if _, ok := varGen[name]; !ok {
+		return nil, fmt.Errorf("unknown variable: %q", origName)
+	}
 
-			switch name {
-			case `all`:
-				for _, vName := range varNames {
-					gen := varGen[vName]
-					value := gen.Get(p.session)
-					if _, err := v.rows.AddRow(
-						ctx, parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
-					); err != nil {
-						v.rows.Close(ctx)
-						return nil, err
-					}
-				}
-			default:
-				// The key in varGen is guaranteed to exist thanks to the
-				// check above.
-				gen := varGen[name]
-				value := gen.Get(p.session)
-				if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
-					v.rows.Close(ctx)
-					return nil, err
-				}
-			}
-
-			return v, nil
-		},
-	}, nil
+	varName := parser.EscapeSQLString(name)
+	return p.delegateQuery(ctx, "SHOW "+varName,
+		fmt.Sprintf(
+			`SELECT value AS %[1]s FROM crdb_internal.session_variables `+
+				`WHERE variable = %[2]s`,
+			parser.Name(name).String(), varName),
+		nil, nil)
 }
 
 // ShowColumns of a table.
@@ -849,88 +801,11 @@ func (p *planner) ShowConstraints(
 }
 
 func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planNode, error) {
-	columns := sqlbase.ResultColumns{
-		{Name: "node_id", Typ: parser.TypeInt},
-		{Name: "username", Typ: parser.TypeString},
-		{Name: "start", Typ: parser.TypeTimestamp},
-		{Name: "query", Typ: parser.TypeString},
-		{Name: "client_address", Typ: parser.TypeString},
-		{Name: "application_name", Typ: parser.TypeString},
-		{Name: "distributed", Typ: parser.TypeBool},
-		{Name: "phase", Typ: parser.TypeString},
+	query := `TABLE crdb_internal.node_queries`
+	if n.Cluster {
+		query = `TABLE crdb_internal.cluster_queries`
 	}
-
-	return &delayedNode{
-		name:    n.String(),
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			statusServer := p.session.execCfg.StatusServer
-
-			var response *serverpb.ListSessionsResponse
-			var err error
-			sessionsRequest := &serverpb.ListSessionsRequest{Username: p.session.User}
-			if n.Cluster {
-				response, err = statusServer.ListSessions(ctx, sessionsRequest)
-			} else {
-				response, err = statusServer.ListLocalSessions(ctx, sessionsRequest)
-			}
-
-			if err != nil {
-				return nil, err
-			}
-
-			v := p.newContainerValuesNode(columns, 0)
-			for _, session := range response.Sessions {
-				for _, query := range session.ActiveQueries {
-					isDistributedDatum := parser.DNull
-					if query.Phase.String() == "EXECUTING" {
-						isDistributedDatum = parser.DBoolFalse
-						if query.IsDistributed {
-							isDistributedDatum = parser.DBoolTrue
-						}
-					}
-					row := parser.Datums{
-						parser.NewDInt(parser.DInt(session.NodeID)),
-						parser.NewDString(session.Username),
-						parser.MakeDTimestamp(query.Start, time.Microsecond),
-						parser.NewDString(query.Sql),
-						parser.NewDString(session.ClientAddress),
-						parser.NewDString(session.ApplicationName),
-						isDistributedDatum,
-						parser.NewDString(strings.ToLower(query.Phase.String())),
-					}
-					if _, err := v.rows.AddRow(ctx, row); err != nil {
-						v.Close(ctx)
-						return nil, err
-					}
-				}
-			}
-
-			for _, rpcErr := range response.Errors {
-				if rpcErr.NodeID != 0 {
-					// Add a row with this node ID, and nulls for all other columns
-					_, err := v.rows.AddRow(ctx, parser.Datums{
-						parser.NewDInt(parser.DInt(rpcErr.NodeID)),
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-					})
-					if err != nil {
-						v.Close(ctx)
-						return nil, err
-					}
-				}
-				log.Warning(ctx, rpcErr.Message)
-			}
-
-			return v, nil
-		},
-	}, nil
-
+	return p.delegateQuery(ctx, "SHOW QUERIES", query, nil, nil)
 }
 
 // ShowJobs returns all the jobs.
@@ -940,103 +815,11 @@ func (p *planner) ShowJobs(ctx context.Context, n *parser.ShowJobs) (planNode, e
 }
 
 func (p *planner) ShowSessions(ctx context.Context, n *parser.ShowSessions) (planNode, error) {
-	columns := sqlbase.ResultColumns{
-		{Name: "node_id", Typ: parser.TypeInt},
-		{Name: "username", Typ: parser.TypeString},
-		{Name: "client_address", Typ: parser.TypeString},
-		{Name: "application_name", Typ: parser.TypeString},
-		{Name: "active_queries", Typ: parser.TypeString},
-		{Name: "session_start", Typ: parser.TypeTimestamp},
-		{Name: "oldest_query_start", Typ: parser.TypeTimestamp},
-		{Name: "kv_txn", Typ: parser.TypeString},
+	query := `TABLE crdb_internal.node_sessions`
+	if n.Cluster {
+		query = `TABLE crdb_internal.cluster_sessions`
 	}
-	return &delayedNode{
-		name:    n.String(),
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			statusServer := p.session.execCfg.StatusServer
-
-			var response *serverpb.ListSessionsResponse
-			var err error
-			sessionsRequest := &serverpb.ListSessionsRequest{Username: p.session.User}
-			if n.Cluster {
-				response, err = statusServer.ListSessions(ctx, sessionsRequest)
-			} else {
-				response, err = statusServer.ListLocalSessions(ctx, sessionsRequest)
-			}
-
-			if err != nil {
-				return nil, err
-			}
-
-			v := p.newContainerValuesNode(columns, len(response.Sessions))
-			for _, session := range response.Sessions {
-
-				// Generate active_queries and oldest_query_start
-				var activeQueries bytes.Buffer
-				var oldestStart time.Time
-				var oldestStartDatum parser.Datum
-
-				for _, query := range session.ActiveQueries {
-					activeQueries.WriteString(query.Sql)
-					activeQueries.WriteString("; ")
-
-					if oldestStart.IsZero() || query.Start.Before(oldestStart) {
-						oldestStart = query.Start
-					}
-				}
-
-				if oldestStart.IsZero() {
-					oldestStartDatum = parser.DNull
-				} else {
-					oldestStartDatum = parser.MakeDTimestamp(oldestStart, time.Microsecond)
-				}
-
-				kvTxnIDDatum := parser.DNull
-				if session.KvTxnID != nil {
-					kvTxnIDDatum = parser.NewDString(session.KvTxnID.String())
-				}
-
-				row := parser.Datums{
-					parser.NewDInt(parser.DInt(session.NodeID)),
-					parser.NewDString(session.Username),
-					parser.NewDString(session.ClientAddress),
-					parser.NewDString(session.ApplicationName),
-					parser.NewDString(activeQueries.String()),
-					parser.MakeDTimestamp(session.Start, time.Microsecond),
-					oldestStartDatum,
-					kvTxnIDDatum,
-				}
-				if _, err := v.rows.AddRow(ctx, row); err != nil {
-					v.Close(ctx)
-					return nil, err
-				}
-			}
-
-			for _, rpcErr := range response.Errors {
-				if rpcErr.NodeID != 0 {
-					// Add a row with this node ID, and nulls for all other columns
-					_, err := v.rows.AddRow(ctx, parser.Datums{
-						parser.NewDInt(parser.DInt(rpcErr.NodeID)),
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
-					})
-					if err != nil {
-						v.Close(ctx)
-						return nil, err
-					}
-				}
-				log.Warning(ctx, rpcErr.Message)
-			}
-
-			return v, nil
-		},
-	}, nil
+	return p.delegateQuery(ctx, "SHOW SESSIONS", query, nil, nil)
 }
 
 // ShowTables returns all the tables.
@@ -1069,8 +852,8 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 // ShowTransactionStatus implements the plan for SHOW TRANSACTION STATUS.
 // This statement is usually handled as a special case in Executor,
 // but for FROM [SHOW TRANSACTION STATUS] we will arrive here too.
-func (p *planner) ShowTransactionStatus() (planNode, error) {
-	return p.Show(&parser.Show{Name: "transaction status"})
+func (p *planner) ShowTransactionStatus(ctx context.Context) (planNode, error) {
+	return p.Show(ctx, &parser.Show{Name: "transaction status"})
 }
 
 // ShowUsers returns all the users.
@@ -1080,41 +863,10 @@ func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode,
 		`SELECT username FROM system.users ORDER BY 1`, nil, nil)
 }
 
-// Help returns usage information for the builtin functions
+// Help returns usage information for the given builtin function.
 // Privileges: None
 func (p *planner) Help(ctx context.Context, n *parser.Help) (planNode, error) {
-	name := strings.ToLower(string(n.Name))
-	columns := sqlbase.ResultColumns{
-		{Name: "Function", Typ: parser.TypeString},
-		{Name: "Signature", Typ: parser.TypeString},
-		{Name: "Category", Typ: parser.TypeString},
-		{Name: "Details", Typ: parser.TypeString},
-	}
-	return &delayedNode{
-		name:    "HELP " + name,
-		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
-
-			matches, ok := parser.Builtins[name]
-			// TODO(dt): support fuzzy matching.
-			if !ok {
-				return v, nil
-			}
-
-			for _, f := range matches {
-				row := parser.Datums{
-					parser.NewDString(name),
-					parser.NewDString(f.Signature()),
-					parser.NewDString(f.Category()),
-					parser.NewDString(f.Info),
-				}
-				if _, err := v.rows.AddRow(ctx, row); err != nil {
-					v.Close(ctx)
-					return nil, err
-				}
-			}
-			return v, nil
-		},
-	}, nil
+	return p.delegateQuery(ctx, "HELP", fmt.Sprintf(
+		`SELECT * FROM crdb_internal.builtin_functions WHERE function ILIKE %s`,
+		parser.EscapeSQLString(string(n.Name))), nil, nil)
 }

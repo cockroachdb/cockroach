@@ -221,22 +221,27 @@ func (b Builtin) Signature() string {
 	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.FixedReturnType())
 }
 
+// AllBuiltinNames is an array containing all the built-in function
+// names, sorted in alphabetical order. This can be used for a
+// deterministic walk through the Builtins map.
+var AllBuiltinNames []string
+
 func init() {
 	initAggregateBuiltins()
 	initWindowBuiltins()
 	initGeneratorBuiltins()
 	initPGBuiltins()
 
-	names := make([]string, 0, len(Builtins))
+	AllBuiltinNames = make([]string, 0, len(Builtins))
 	funDefs = make(map[string]*FunctionDefinition)
 	for name, def := range Builtins {
 		funDefs[name] = newFunctionDefinition(name, def)
-		names = append(names, name)
+		AllBuiltinNames = append(AllBuiltinNames, name)
 	}
 
 	// We alias the builtins to uppercase to hasten the lookup in the
 	// common case.
-	for _, name := range names {
+	for _, name := range AllBuiltinNames {
 		uname := strings.ToUpper(name)
 		def := Builtins[name]
 		Builtins[uname] = def
