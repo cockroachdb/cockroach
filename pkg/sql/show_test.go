@@ -240,12 +240,12 @@ func TestShowCreateView(t *testing.T) {
 	}
 
 	tests := []string{
-		`CREATE VIEW %s AS SELECT i, s, v, t FROM d.t`,
-		`CREATE VIEW %s AS SELECT i, s, t FROM d.t`,
-		`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM d.t`,
-		`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM d.t AS foo WHERE foo.i > 3`,
-		`CREATE VIEW %s AS SELECT count(*) FROM d.t`,
-		`CREATE VIEW %s AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3:::INT`,
+		`CREATE VIEW %s (i, s, v, t) AS SELECT i, s, v, t FROM d.t`,
+		`CREATE VIEW %s (i, s, t) AS SELECT i, s, t FROM d.t`,
+		`CREATE VIEW %s (i, s, t) AS SELECT t.i, t.s, t.t FROM d.t`,
+		`CREATE VIEW %s (i, s, t) AS SELECT foo.i, foo.s, foo.t FROM d.t AS foo WHERE foo.i > 3`,
+		`CREATE VIEW %s ("count(*)") AS SELECT count(*) FROM d.t`,
+		`CREATE VIEW %s (s, "count(*)") AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3:::INT`,
 		`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM d.t`,
 		`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.t`,
 	}

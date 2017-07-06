@@ -32,36 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-const (
-	checkSchemaQuery = `
-		SELECT SCHEMA_NAME
-		FROM "".information_schema.schemata
-		WHERE SCHEMA_NAME=$1
-		LIMIT 1`
-	checkTableQuery = `
-		SELECT TABLE_SCHEMA
-		FROM "".information_schema.tables
-		WHERE
-			TABLE_SCHEMA=$1 AND
-			TABLE_NAME=$2
-		LIMIT 1`
-	checkTablePrivilegesQuery = `
-		SELECT TABLE_NAME
-		FROM "".information_schema.table_privileges
-		WHERE
-			TABLE_SCHEMA=$1 AND
-			TABLE_NAME=$2 AND
-			GRANTEE=$3
-		LIMIT 1`
-)
-
 // checkDBExists checks if the database exists by using the security.RootUser.
 func checkDBExists(ctx context.Context, p *planner, db string) error {
-	values, err := p.queryRowsAsRoot(ctx, checkSchemaQuery, db)
-	if err != nil {
-		return err
-	}
-	if len(values) == 0 {
+	if _, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), db); err != nil {
 		return sqlbase.NewUndefinedDatabaseError(db)
 	}
 	return nil
@@ -69,33 +42,8 @@ func checkDBExists(ctx context.Context, p *planner, db string) error {
 
 // checkTableExists checks if the table exists by using the security.RootUser.
 func checkTableExists(ctx context.Context, p *planner, tn *parser.TableName) error {
-	values, err := p.queryRowsAsRoot(ctx, checkTableQuery, tn.Database(), tn.Table())
-	if err != nil {
-		return err
-	}
-	if len(values) == 0 {
+	if _, err := mustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/); err != nil {
 		return sqlbase.NewUndefinedRelationError(tn)
-	}
-	return nil
-}
-
-// checkTablePrivileges checks if the user has been granted privileges to
-// see the specified table.
-func checkTablePrivileges(ctx context.Context, p *planner, tn *parser.TableName) error {
-	// Skip the checking if the table is a virtual table.
-	if virDesc, err := p.session.virtualSchemas.getVirtualTableDesc(tn); err != nil {
-		return err
-	} else if virDesc != nil {
-		return nil
-	}
-
-	values, err := p.queryRowsAsRoot(
-		ctx, checkTablePrivilegesQuery, tn.Database(), tn.Table(), p.session.User)
-	if err != nil {
-		return err
-	}
-	if len(values) == 0 {
-		return fmt.Errorf("user %s has no privileges on relation %s", p.session.User, tn.String())
 	}
 	return nil
 }
@@ -233,10 +181,11 @@ func (p *planner) showTableDetails(
 		if err := checkDBExists(ctx, p, db); err != nil {
 			return err
 		}
-		if err := checkTableExists(ctx, p, tn); err != nil {
+		desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /* allowAdding */)
+		if err != nil {
 			return err
 		}
-		return checkTablePrivileges(ctx, p, tn)
+		return p.anyPrivilege(desc)
 	}
 
 	return p.delegateQuery(ctx, showType,

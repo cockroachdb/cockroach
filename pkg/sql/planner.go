@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -235,17 +234,6 @@ func (p *planner) queryRows(
 		}
 	}
 	return rows, nil
-}
-
-// queryRowsAsRoot executes a SQL query string using security.RootUser
-// and multiple result rows are returned.
-func (p *planner) queryRowsAsRoot(
-	ctx context.Context, sql string, args ...interface{},
-) ([]parser.Datums, error) {
-	currentUser := p.session.User
-	defer func() { p.session.User = currentUser }()
-	p.session.User = security.RootUser
-	return p.queryRows(ctx, sql, args...)
 }
 
 // exec executes a SQL query string and returns the number of rows
