@@ -98,7 +98,7 @@ func (w WrappedMemoryAccount) ResizeItem(ctx context.Context, oldSize, newSize i
 // noteworthyMemoryUsageBytes is the minimum size tracked by a
 // transaction or session monitor before the monitor starts explicitly
 // logging overall usage growth in the log.
-var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_SESSION_MEMORY_USAGE", 10*1024)
+var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_SESSION_MEMORY_USAGE", 1024*1024)
 
 // StartMonitor interfaces between Session and mon.MemoryMonitor
 func (s *Session) StartMonitor(pool *mon.MemoryMonitor, reserved mon.BoundAccount) {
