@@ -62,7 +62,6 @@ LINKFLAGS ?=
 BUILD_TYPE := development
 ifeq ($(TYPE),)
 else ifeq ($(TYPE),msan)
-NATIVE_SUFFIX := _msan
 override GOFLAGS += -msan
 # NB: using jemalloc with msan causes segfaults. See
 # https://github.com/jemalloc/jemalloc/issues/821.
@@ -121,7 +120,22 @@ override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILD_
 
 REPO_ROOT := .
 include $(REPO_ROOT)/build/common.mk
-override TAGS += make $(NATIVE_SPECIFIER_TAG)
+override TAGS += make $(NATIVE_TAG)
+
+# Go's default of using `$GOOS_$GOARCH[_race][_msan]` to isolate compilation
+# artifacts for different platforms isn't sufficient. We also want to isolate
+# artifacts from our stdmalloc and deadlock builds, for example, and by compiler
+# when targeting e.g. different versions of glibc on the same machine.
+# Unfortunately, attempting to use -installsuffix for this purpose (which is
+# literally the point of -installsuffix, to be clear) causes Go to attempt to
+# write some core packages to $GOROOT, where it often doesn't have write access.
+#
+# Since we're already constructing NATIVE_TAG to isolate artifacts from C and
+# C++ dependencies, just use that same tag to construct our own pkgdir. Note
+# that -pkgdir completely overrides the automatic -installsuffix, so we're
+# careful to include _race and/or _msan in NATIVE_TAG when GOFLAGS contains
+# -race and/or -msan, respectively.
+override GOFLAGS += -pkgdir $(GOPATH)/pkg/$(NATIVE_TAG)
 
 # On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
 # symbols that don't exist until macOS 10.12. Setting MACOSX_DEPLOYMENT_TARGET
