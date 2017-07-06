@@ -866,7 +866,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 	responseCh chan response,
 ) bool {
 	if err := ds.rpcContext.Stopper.RunLimitedAsyncTask(
-		ctx, "kv.DistSEnder: sending partial batch",
+		ctx, "kv.DistSender: sending partial batch",
 		ds.asyncSenderSem, false, /* !wait */
 		func(ctx context.Context) {
 			atomic.AddInt32(&ds.asyncSenderCount, 1)
