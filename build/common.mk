@@ -430,7 +430,7 @@ librocksdb: $(ROCKSDB_DIR)/Makefile $(BOOTSTRAP_TARGET)
 
 .PHONY: clean-c-deps
 clean-c-deps:
-	rm -rf $(JEMALLOC_DIR) && cd $(JEMALLOC_SRC_DIR) && git clean -dxf
-	rm -rf $(PROTOBUF_DIR) && cd $(PROTOBUF_SRC_DIR) && git clean -dxf
-	rm -rf $(ROCKSDB_DIR) && cd $(ROCKSDB_SRC_DIR) && git clean -dxf
-	rm -rf $(SNAPPY_DIR) && cd $(SNAPPY_SRC_DIR) && git clean -dxf
+	rm -rf $(JEMALLOC_DIR) && git -C $(JEMALLOC_SRC_DIR) clean -dxf
+	rm -rf $(PROTOBUF_DIR) && git -C $(PROTOBUF_SRC_DIR) clean -dxf
+	rm -rf $(ROCKSDB_DIR)  && git -C $(ROCKSDB_SRC_DIR)  clean -dxf
+	rm -rf $(SNAPPY_DIR)   && git -C $(SNAPPY_SRC_DIR)   clean -dxf
