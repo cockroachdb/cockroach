@@ -476,6 +476,7 @@ func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- 
 		t.mtc.mu.RUnlock()
 		// Make a copy and clone txn of batch args for sending.
 		baCopy := t.args
+		baCopy.Replica = rep.ReplicaDescriptor
 		if txn := baCopy.Txn; txn != nil {
 			txnClone := baCopy.Txn.Clone()
 			baCopy.Txn = &txnClone

@@ -1166,6 +1166,17 @@ func runSetupSplitSnapshotRace(
 	// Store 3 still has the old value, but 4 and 5 are up to date.
 	mtc.waitForValues(rightKey, []int64{0, 0, 0, 2, 5, 5})
 
+	// Scan the meta ranges to resolve all intents
+	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0],
+		&roachpb.ScanRequest{
+			Span: roachpb.Span{
+				Key:    keys.MetaMin,
+				EndKey: keys.MetaMax,
+			},
+		}); pErr != nil {
+		t.Fatal(pErr)
+	}
+
 	// Stop the remaining data stores.
 	mtc.stopStore(1)
 	mtc.stopStore(2)
