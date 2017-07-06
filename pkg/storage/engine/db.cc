@@ -2014,7 +2014,7 @@ DBStatus DBSnapshot::GetStats(DBStatsResult* stats) {
 
 DBString DBImpl::GetCompactionStats() {
   std::string tmp;
-  rep->GetProperty("rocksdb.cfstats", &tmp);
+  rep->GetProperty("rocksdb.cfstats-no-file-histogram", &tmp);
   return ToDBString(tmp);
 }
 
