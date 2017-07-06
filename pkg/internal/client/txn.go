@@ -668,6 +668,17 @@ func (txn *Txn) Exec(
 				// `cluster_logical_timestamp()` is consistent with the commit
 				// (serializable) ordering.
 				txn.mu.Proto.OrigTimestamp = txn.db.clock.Now()
+				// Assigning Timestamp, besides OrigTimestamp, should not be necessary -
+				// if the proto is not initialized, someone else generally is in charge
+				// of assigning it. However, it can be that Timestamp is initialized
+				// even though txn.mu.Proto.IsInitialized() returns false, in which case
+				// we have overwrite it here (otherwise it's not set again and Timestamp
+				// remains < OrigTimestamp, which is no good). The case where this is
+				// exercised with Timestamp set and IsInitialized() = false is a
+				// TestTxnUserRestart, which probably injects retryable errors into
+				// uninitialized txns. See also #16827.
+				// TODO(andrei): revisit this when Proto.IsInitialized() goes away.
+				txn.mu.Proto.Timestamp = txn.mu.Proto.OrigTimestamp
 			}
 			txn.mu.Unlock()
 		}

@@ -1299,6 +1299,18 @@ func (e *Executor) execStmtInOpenTxn(
 				// txn in the Aborted state; we transition back to NoTxn.
 				txnState.resetStateAndTxn(NoTxn)
 			}
+		} else if txnState.State() == FirstBatch && txnState.isSerializableRestart() {
+			txnState.mu.txn.Proto().Restart(
+				0 /* userPriority */, 0 /* upgradePriority */, e.cfg.Clock.Now())
+			// Force an auto-retry by returning a retryable error to the higher
+			// levels.
+			err = roachpb.NewHandledRetryableTxnError(
+				"serializable transaction timestamp pushed (detected by sql Executor)",
+				txnState.mu.txn.ID(),
+				// No updated transaction required; we've already manually updated our
+				// client.Txn.
+				roachpb.Transaction{},
+			)
 		} else if txnState.State() == FirstBatch &&
 			!canStayInFirstBatchState(stmt) {
 			// Transition from FirstBatch to Open except in the case of special
@@ -1375,6 +1387,8 @@ func (e *Executor) execStmtInOpenTxn(
 		// restart the client txn's proto to increment the epoch. The SQL
 		// txn's state is already set to OPEN.
 		if txnState.mu.txn.CommandCount() > 0 {
+			// TODO(andrei): Should the timestamp below be e.cfg.Clock.Now(), so that
+			// the transaction gets a new timestamp?
 			txnState.mu.txn.Proto().Restart(
 				0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
 		}
