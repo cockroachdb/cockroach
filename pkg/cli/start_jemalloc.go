@@ -21,7 +21,7 @@ package cli
 // #cgo CPPFLAGS: -DJEMALLOC_NO_DEMANGLE
 // #cgo LDFLAGS: -ljemalloc
 // #cgo dragonfly freebsd LDFLAGS: -lm
-// #cgo linux LDFLAGS: -lrt -lm -lpthread
+// #cgo linux LDFLAGS: -lrt -lm -lpthread -ldl
 //
 // #include <jemalloc/jemalloc.h>
 // #include <stddef.h>
