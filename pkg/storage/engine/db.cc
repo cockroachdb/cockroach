@@ -1568,37 +1568,26 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.table_properties_collector_factories.push_back(time_bound_prop_collector);
 
   // The write buffer size is the size of the in memory structure that
-  // will be flushed to create L0 files. Note that 8 MB is larger than
-  // 4 MB (the target L0 file size), but that reflects the
-  // uncompressed nature of the MemTable vs SSTables.
-  options.write_buffer_size = 8 << 20; // 8 MB
+  // will be flushed to create L0 files.
+  options.write_buffer_size = 64 << 20; // 64 MB
   // How much memory should be allotted to memtables? Note that this
   // is a peak setting, steady state should be lower. We set this
   // relatively high to account for bursts of writes (e.g. due to a
-  // range deletion). In particular, we want this to be somewhat
-  // larger than than typical range size so that deletion of a range
-  // does not cause write stalls.
-  //
-  // TODO(peter): Will deletion of a range that is larger than this
-  // cause write stalls?
-  const uint64_t memtable_budget = 128 << 20; // 128 MB
-  options.max_write_buffer_number =
-      std::max<int>(memtable_budget / options.write_buffer_size, 2);
+  // deletion of a large range of keys). In particular, we want this
+  // to be somewhat larger than than typical range size so that
+  // deletion of a range worth of keys does not cause write stalls.
+  options.max_write_buffer_number = 4;
   // Number of files to trigger L0 compaction. We set this low so that
   // we quickly move files out of L0 as each L0 file increases read
   // amplification.
-  options.level0_file_num_compaction_trigger = 1;
+  options.level0_file_num_compaction_trigger = 2;
   // Soft limit on number of L0 files. Writes are slowed down when
   // this number is reached.
-  //
-  // TODO(peter): untuned.
   options.level0_slowdown_writes_trigger = 20;
   // Maximum number of L0 files. Writes are stopped at this
   // point. This is set significantly higher than
   // level0_slowdown_writes_trigger to avoid completely blocking
   // writes.
-  //
-  // TODO(peter): untuned.
   options.level0_stop_writes_trigger = 32;
   // Flush write buffers to L0 as soon as they are full. A higher
   // value could be beneficial if there are duplicate records in each
@@ -1611,27 +1600,30 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.level_compaction_dynamic_level_bytes = true;
   // Follow the RocksDB recommendation to configure the size of L1 to
   // be the same as the estimated size of L0.
-  options.max_bytes_for_level_base = 16 << 20; // 16 MB
+  options.max_bytes_for_level_base = 64 << 20; // 64 MB
   options.max_bytes_for_level_multiplier = 10;
-  // Target the base file size as 1/4 of the base size which will give
-  // us ~4 files in the base level (level 0). Each additional level
-  // grows the file size by 2. If max_bytes_for_level_base is 16 MB,
-  // this translates into the following target level and file sizes
-  // for each level:
+  // Target the base file size (L1) as 4 MB. Each additional level
+  // grows the file size by 2. With max_bytes_for_level_base set to 64
+  // MB, this translates into the following target level and file
+  // sizes for each level:
   //
   //       level-size  file-size  max-files
-  //   L1:      16 MB       4 MB          4
-  //   L2:     160 MB       8 MB         20
-  //   L3:     1.6 GB      16 MB        100
-  //   L4:      16 GB      32 MB        500
-  //   L5:     156 GB      64 MB       2500
-  //   L6:     1.6 TB     128 MB      12500
+  //   L1:      64 MB       4 MB         16
+  //   L2:     640 MB       8 MB         80
+  //   L3:    6.25 GB      16 MB        400
+  //   L4:    62.5 GB      32 MB       2000
+  //   L5:     625 GB      64 MB      10000
+  //   L6:     6.1 TB     128 MB      50000
+  //
+  // Due to the use of level_compaction_dynamic_level_bytes most data
+  // will be in L6. The number of files will be approximately
+  // total-data-size / 128 MB.
   //
   // We don't want the target file size to be too large, otherwise
   // individual compactions become more expensive. We don't want the
   // target file size to be too small or else we get an overabundance
   // of sstables.
-  options.target_file_size_base = options.max_bytes_for_level_base / 4;
+  options.target_file_size_base = 4 << 20; // 4 MB
   options.target_file_size_multiplier = 2;
 
   return options;
