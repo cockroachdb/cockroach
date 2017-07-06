@@ -27,7 +27,7 @@ package status
 // // Manually force the presence of these symbols on macOS.
 // #cgo darwin LDFLAGS: -u_je_zone_register
 // #cgo dragonfly freebsd LDFLAGS: -lm
-// #cgo linux LDFLAGS: -lrt -lm -lpthread
+// #cgo linux LDFLAGS: -lrt -lm -lpthread -ldl
 //
 // #include <jemalloc/jemalloc.h>
 //
