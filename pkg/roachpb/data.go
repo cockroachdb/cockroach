@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -683,6 +684,15 @@ func NewTransaction(
 	maxOffset int64,
 ) *Transaction {
 	u := uuid.MakeV4()
+	var maxTS hlc.Timestamp
+	if maxOffset == timeutil.ClocklessMaxOffset {
+		// For clockless reads, use the largest possible maxTS. This means we'll
+		// always restart if we see something in our future (but we do so at
+		// most once thanks to ObservedTimestamps).
+		maxTS.WallTime = math.MaxInt64
+	} else {
+		maxTS = now.Add(maxOffset, 0)
+	}
 
 	return &Transaction{
 		TxnMeta: enginepb.TxnMeta{
@@ -696,7 +706,7 @@ func NewTransaction(
 		Name:          name,
 		LastHeartbeat: now,
 		OrigTimestamp: now,
-		MaxTimestamp:  now.Add(maxOffset, 0),
+		MaxTimestamp:  maxTS,
 	}
 }
 

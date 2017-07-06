@@ -136,7 +136,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s := &Server{
 		mux:      http.NewServeMux(),
-		clock:    hlc.NewClock(hlc.UnixNano, cfg.MaxOffset),
+		clock:    hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset)),
 		stopper:  stopper,
 		cfg:      cfg,
 		registry: metric.NewRegistry(),
@@ -707,7 +707,12 @@ func (s *Server) Start(ctx context.Context) error {
 			}
 		}
 		if anyStoreBootstrapped {
-			sleepDuration := s.clock.MaxOffset() - timeutil.Since(startTime)
+			var sleepDuration time.Duration
+			// Don't have to sleep for monotonicity when using clockless reads
+			// (nor can we, for we would sleep forever).
+			if maxOffset := s.clock.MaxOffset(); maxOffset != timeutil.ClocklessMaxOffset {
+				sleepDuration = maxOffset - timeutil.Since(startTime)
+			}
 			if sleepDuration > 0 {
 				log.Infof(ctx, "sleeping for %s to guarantee HLC monotonicity", sleepDuration)
 				time.Sleep(sleepDuration)
