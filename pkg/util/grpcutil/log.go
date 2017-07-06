@@ -70,6 +70,9 @@ var (
 			regexp.QuoteMeta("connection refused"),
 			// Windows
 			regexp.QuoteMeta("No connection could be made because the target machine actively refused it"),
+			// Host removed from the network and no longer resolvable:
+			// https://github.com/golang/go/blob/go1.8.3/src/net/net.go#L566
+			regexp.QuoteMeta("no such host"),
 		}, "|"),
 	)
 )
