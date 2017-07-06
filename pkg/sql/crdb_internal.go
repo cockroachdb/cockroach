@@ -55,6 +55,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalLocalSessionsTable,
 		crdbInternalClusterSessionsTable,
 		crdbInternalBuiltinFunctionsTable,
+		crdbInternalCreateStmtsTable,
 	},
 }
 
@@ -104,8 +105,7 @@ CREATE TABLE crdb_internal.tables (
   format_version           STRING NOT NULL,
   state                    STRING NOT NULL,
   sc_lease_node_id         INT,
-  sc_lease_expiration_time TIMESTAMP,
-  create_table             STRING NOT NULL
+  sc_lease_expiration_time TIMESTAMP
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
@@ -140,10 +140,6 @@ CREATE TABLE crdb_internal.tables (
 					time.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
 				)
 			}
-			create, err := p.showCreateTable(ctx, parser.Name(table.Name), table)
-			if err != nil {
-				return err
-			}
 			if err := addRow(
 				parser.NewDInt(parser.DInt(int64(table.ID))),
 				parser.NewDInt(parser.DInt(int64(table.ParentID))),
@@ -156,7 +152,6 @@ CREATE TABLE crdb_internal.tables (
 				parser.NewDString(table.State.String()),
 				leaseNodeDatum,
 				leaseExpDatum,
-				parser.NewDString(create),
 			); err != nil {
 				return err
 			}
@@ -776,5 +771,72 @@ CREATE TABLE crdb_internal.builtin_functions (
 			}
 		}
 		return nil
+	},
+}
+
+var typeView = parser.DString("view")
+var typeTable = parser.DString("table")
+
+// crdbInternalCreateStmtsTable exposes the CREATE TABLE/CREATE VIEW
+// statements.
+var crdbInternalCreateStmtsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.create_statements (
+  database_name    STRING NOT NULL,
+  descriptor_type  STRING NOT NULL,
+  descriptor_name  STRING NOT NULL,
+  create_statement STRING NOT NULL,
+  dependencies     STRING NOT NULL,
+  state            STRING NOT NULL
+)
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return forEachTableDescAll(ctx, p, prefix,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				var descType parser.Datum
+				var stmt string
+				var err error
+				deps := make(map[parser.TableName]struct{})
+				if table.IsView() {
+					descType = &typeView
+					stmt, err = p.showCreateView(ctx, parser.Name(table.Name), table)
+					for _, id := range table.DependsOn {
+						depTable, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
+						if err != nil {
+							return err
+						}
+						depDb, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, depTable.ParentID)
+						if err != nil {
+							return err
+						}
+						tn := parser.TableName{
+							DatabaseName:            parser.Name(depDb.Name),
+							TableName:               parser.Name(depTable.Name),
+							DBNameOriginallyOmitted: depDb.Name == prefix,
+						}
+						deps[tn] = struct{}{}
+					}
+				} else {
+					descType = &typeTable
+					stmt, err = p.showCreateTable(ctx, parser.Name(table.Name), prefix, table, deps)
+				}
+				if err != nil {
+					return err
+				}
+				depNames := make([]string, 0, len(deps))
+				for depName := range deps {
+					depNames = append(depNames, depName.String())
+				}
+				sort.Strings(depNames)
+
+				return addRow(
+					parser.NewDString(db.Name),
+					descType,
+					parser.NewDString(table.Name),
+					parser.NewDString(stmt),
+					parser.NewDString(strings.Join(depNames, ", ")),
+					parser.NewDString(table.State.String()),
+				)
+			})
 	},
 }

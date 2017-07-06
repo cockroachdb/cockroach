@@ -48,6 +48,8 @@ func TestShowCreateTable(t *testing.T) {
 			c int unique,
 			primary key (a, b)
 		);
+		CREATE DATABASE o;
+		CREATE TABLE o.foo(x int primary key);
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -160,6 +162,8 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (a, b, rowid)
 )`,
 		},
+		// Check that FK dependencies inside the current database
+		// have their db name omitted.
 		{
 			stmt: `CREATE TABLE %s (
 	i int,
@@ -177,6 +181,47 @@ func TestShowCreateTable(t *testing.T) {
 	INDEX t7_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
+		},
+		// Check that FK dependencies outside of the current database
+		// have their db name prefixed.
+		{
+			stmt: `CREATE TABLE %s (
+	x INT,
+	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.foo (x)
+)`,
+			expect: `CREATE TABLE %s (
+	x INT NULL,
+	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.foo (x),
+	INDEX t8_auto_index_fk_ref (x ASC),
+	FAMILY "primary" (x, rowid)
+)`,
+		},
+		// Check that INTERLEAVE dependencies inside the current database
+		// have their db name omitted.
+		{
+			stmt: `CREATE TABLE %s (
+	a INT,
+	b INT,
+	PRIMARY KEY (a, b)
+) INTERLEAVE IN PARENT items (a, b)`,
+			expect: `CREATE TABLE %s (
+	a INT NOT NULL,
+	b INT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+	FAMILY "primary" (a, b)
+) INTERLEAVE IN PARENT items (a, b)`,
+		},
+		// Check that INTERLEAVE dependencies outside of the current
+		// database are prefixed by their db name.
+		{
+			stmt: `CREATE TABLE %s (
+	x INT PRIMARY KEY
+) INTERLEAVE IN PARENT o.foo (x)`,
+			expect: `CREATE TABLE %s (
+	x INT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (x ASC),
+	FAMILY "primary" (x)
+) INTERLEAVE IN PARENT o.foo (x)`,
 		},
 	}
 	for i, test := range tests {

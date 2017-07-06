@@ -206,24 +206,6 @@ func mustGetTableDesc(
 	return desc, nil
 }
 
-// mustGetViewDesc returns a table descriptor for a view, or an error if the
-// descriptor is not found or descriptor.Dropped().
-func mustGetViewDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
-) (*sqlbase.TableDescriptor, error) {
-	desc, err := getViewDesc(ctx, txn, vt, tn)
-	if err != nil {
-		return nil, err
-	}
-	if desc == nil {
-		return nil, sqlbase.NewUndefinedRelationError(tn)
-	}
-	if err := filterTableState(desc); err != nil {
-		return nil, err
-	}
-	return desc, nil
-}
-
 var errTableDropped = errors.New("table is being dropped")
 var errTableAdding = errors.New("table is being added")
 
