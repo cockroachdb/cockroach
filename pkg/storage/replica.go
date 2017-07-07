@@ -619,6 +619,10 @@ func (r *Replica) init(
 func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
 ) error {
+	// Replicas without a replicaID don't have a sideloaded storage. If the
+	// replicaID is nontrivial, we'll recreate the storage later.
+	r.raftMu.sideloaded = nil
+
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.mu.state.Desc != nil && r.isInitializedRLocked() {
 		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
@@ -626,8 +630,6 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	if desc.IsInitialized() && replicaID != 0 {
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
-
-	r.raftMu.sideloaded = newInMemSideloadStorage(desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir())
 
 	r.cmdQMu.Lock()
 	r.cmdQMu.global = NewCommandQueue(true /* optimizeOverlap */)
@@ -682,6 +684,18 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	if err := r.setReplicaIDLocked(replicaID); err != nil {
 		return err
 	}
+
+	{
+		// Initialize the sideloaded storage. Note that we only do this if
+		// there's a ReplicaID.
+		var err error
+		if r.raftMu.sideloaded, err = newDiskSideloadStorage(
+			desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
+		); err != nil {
+			return errors.Wrap(err, "while initializing sideloaded storage")
+		}
+	}
+
 	r.assertStateLocked(ctx, r.store.Engine())
 	return nil
 }
@@ -727,6 +741,9 @@ func (r *Replica) destroyDataRaftMuLocked(
 	}
 	commitTime := timeutil.Now()
 
+	// TODO(tschottdorf): at node startup, we should remove all on-disk
+	// directories belonging to replicas which aren't present. A crash
+	// here will currently leave the files around forever.
 	if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
 		return err
 	}
