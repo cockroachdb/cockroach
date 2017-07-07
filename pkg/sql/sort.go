@@ -138,9 +138,9 @@ func (p *planner) orderBy(
 				// handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY b
-				target := c.ColumnName.Normalize()
+				target := string(c.ColumnName)
 				for j, col := range columns {
-					if parser.ReNormalizeName(col.Name) == target {
+					if col.Name == target {
 						if index != -1 {
 							// There is more than one render alias that matches the ORDER BY
 							// clause. Here, SQL92 is specific as to what should be done:

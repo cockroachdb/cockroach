@@ -267,8 +267,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 		return nil, err
 	}
 
-	normIdxName := n.Index.Index.Normalize()
-	idx, _, err := tableDesc.FindIndexByName(n.Index.Index)
+	idx, _, err := tableDesc.FindIndexByName(string(n.Index.Index))
 	if err != nil {
 		if n.IfExists {
 			// Noop.
@@ -293,18 +292,17 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 	if n.NewName == "" {
 		return nil, errEmptyIndexName
 	}
-	normNewIdxName := n.NewName.Normalize()
 
-	if normIdxName == normNewIdxName {
+	if n.Index.Index == n.NewName {
 		// Noop.
 		return &emptyNode{}, nil
 	}
 
-	if _, _, err := tableDesc.FindIndexByName(n.NewName); err == nil {
-		return nil, fmt.Errorf("index name %q already exists", n.NewName)
+	if _, _, err := tableDesc.FindIndexByName(string(n.NewName)); err == nil {
+		return nil, fmt.Errorf("index name %q already exists", string(n.NewName))
 	}
 
-	tableDesc.RenameIndexDescriptor(idx, normNewIdxName)
+	tableDesc.RenameIndexDescriptor(idx, string(n.NewName))
 
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err
@@ -350,10 +348,8 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 	if n.NewName == "" {
 		return nil, errEmptyColumnName
 	}
-	normNewColName := n.NewName.Normalize()
-	normColName := n.Name.Normalize()
 
-	col, _, err := tableDesc.FindColumnByName(n.Name)
+	col, _, err := tableDesc.FindColumnByName(string(n.Name))
 	// n.IfExists only applies to table, no need to check here.
 	if err != nil {
 		return nil, err
@@ -372,12 +368,12 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 		}
 	}
 
-	if normColName == normNewColName {
+	if n.Name == n.NewName {
 		// Noop.
 		return &emptyNode{}, nil
 	}
 
-	if _, _, err := tableDesc.FindColumnByName(n.NewName); err == nil {
+	if _, _, err := tableDesc.FindColumnByName(string(n.NewName)); err == nil {
 		return nil, fmt.Errorf("column name %q already exists", string(n.NewName))
 	}
 
@@ -388,7 +384,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 				return err, false, nil
 			}
 			if c, ok := v.(*parser.ColumnItem); ok {
-				if c.ColumnName.Normalize() == normColName {
+				if string(c.ColumnName) == string(n.Name) {
 					c.ColumnName = n.NewName
 				}
 			}
@@ -416,7 +412,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 		}
 	}
 	// Rename the column in the indexes.
-	tableDesc.RenameColumnDescriptor(col, normNewColName)
+	tableDesc.RenameColumnDescriptor(col, string(n.NewName))
 
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err

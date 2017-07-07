@@ -206,7 +206,7 @@ func upsertExprsAndIndex(
 			return false
 		}
 		for i, colName := range index.ColumnNames {
-			if parser.ReNormalizeName(colName) != onConflict.Columns[i].Normalize() {
+			if colName != string(onConflict.Columns[i]) {
 				return false
 			}
 		}

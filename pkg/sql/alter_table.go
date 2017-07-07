@@ -86,7 +86,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			_, dropped, err := n.tableDesc.FindColumnByName(d.Name)
+			_, dropped, err := n.tableDesc.FindColumnByName(string(d.Name))
 			if err == nil {
 				if dropped {
 					return fmt.Errorf("column %q being dropped, try again later", col.Name)
@@ -131,7 +131,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err
 				}
-				_, dropped, err := n.tableDesc.FindIndexByName(d.Name)
+				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
 				if err == nil {
 					if dropped {
 						return fmt.Errorf("index %q being dropped, try again later", d.Name)
@@ -169,7 +169,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			}
 
 		case *parser.AlterTableDropColumn:
-			col, dropped, err := n.tableDesc.FindColumnByName(t.Column)
+			col, dropped, err := n.tableDesc.FindColumnByName(string(t.Column))
 			if err != nil {
 				if t.IfExists {
 					// Noop.
@@ -397,7 +397,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 
 		case parser.ColumnMutationCmd:
 			// Column mutations
-			col, dropped, err := n.tableDesc.FindColumnByName(t.GetColumn())
+			col, dropped, err := n.tableDesc.FindColumnByName(string(t.GetColumn()))
 			if err != nil {
 				return err
 			}

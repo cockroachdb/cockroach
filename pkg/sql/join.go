@@ -174,7 +174,7 @@ func commonColumns(left, right *dataSourceInfo) parser.NameList {
 				continue
 			}
 
-			if parser.ReNormalizeName(cLeft.Name) == parser.ReNormalizeName(cRight.Name) {
+			if cLeft.Name == cRight.Name {
 				res = append(res, parser.Name(cLeft.Name))
 			}
 		}

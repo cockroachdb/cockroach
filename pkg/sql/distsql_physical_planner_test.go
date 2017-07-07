@@ -245,7 +245,7 @@ func TestDistBackfill(t *testing.T) {
 	cdb := tc.Server(0).KVClient().(*client.DB)
 
 	sqlutils.CreateTable(
-		t, tc.ServerConn(0), "NumToSquare", "x INT PRIMARY KEY, xsquared INT",
+		t, tc.ServerConn(0), "numtosquare", "x INT PRIMARY KEY, xsquared INT",
 		n,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, func(row int) parser.Datum {
 			return parser.NewDInt(parser.DInt(row * row))
@@ -253,12 +253,12 @@ func TestDistBackfill(t *testing.T) {
 	)
 
 	sqlutils.CreateTable(
-		t, tc.ServerConn(0), "NumToStr", "y INT PRIMARY KEY, str STRING",
+		t, tc.ServerConn(0), "numtostr", "y INT PRIMARY KEY, str STRING",
 		n*n,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
 	)
 	// Split the table into multiple ranges.
-	descNumToStr := sqlbase.GetTableDescriptor(cdb, "test", "NumToStr")
+	descNumToStr := sqlbase.GetTableDescriptor(cdb, "test", "numtostr")
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
 	for i := numNodes - 1; i > 0; i-- {
@@ -268,11 +268,11 @@ func TestDistBackfill(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
 	r.DB.SetMaxOpenConns(1)
 	r.Exec("SET DISTSQL = OFF")
-	if _, err := tc.ServerConn(0).Exec("CREATE INDEX foo ON NumToStr (str)"); err != nil {
+	if _, err := tc.ServerConn(0).Exec(`CREATE INDEX foo ON numtostr (str)`); err != nil {
 		t.Fatal(err)
 	}
 	r.Exec("SET DISTSQL = ALWAYS")
-	res := r.QueryStr("SELECT str FROM NumToStr@foo")
+	res := r.QueryStr(`SELECT str FROM numtostr@foo`)
 	if len(res) != n*n {
 		t.Errorf("expected %d entries, got %d", n*n, len(res))
 	}
@@ -421,7 +421,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	// of the splits and still holds the state after the first dummy query at the
 	// beginning of the test, which had everything on the first node.
 	query := `SELECT COUNT(1) FROM "left" INNER JOIN "right" USING (num)`
-	row := db3.QueryRow(fmt.Sprintf("SELECT JSON FROM [EXPLAIN (DISTSQL) %v]", query))
+	row := db3.QueryRow(fmt.Sprintf(`SELECT "JSON" FROM [EXPLAIN (DISTSQL) %v]`, query))
 	var json string
 	if err := row.Scan(&json); err != nil {
 		t.Fatal(err)
@@ -448,7 +448,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	// Now assert that new plans correctly contain all the nodes. This is expected
 	// to be a result of the caches having been updated on the gateway by the
 	// previous query.
-	row = db3.QueryRow(fmt.Sprintf("SELECT JSON FROM [EXPLAIN (DISTSQL) %v]", query))
+	row = db3.QueryRow(fmt.Sprintf(`SELECT "JSON" FROM [EXPLAIN (DISTSQL) %v]`, query))
 	if err := row.Scan(&json); err != nil {
 		t.Fatal(err)
 	}

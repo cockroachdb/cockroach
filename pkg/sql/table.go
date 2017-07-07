@@ -315,7 +315,7 @@ func (tc *TableCollection) getTableVersion(
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
 	for _, table := range tc.tables {
-		if parser.ReNormalizeName(table.Name) == tn.TableName.Normalize() &&
+		if table.Name == string(tn.TableName) &&
 			table.ParentID == dbID {
 			if log.V(2) {
 				log.Infof(ctx, "found table in table collection for table '%s'", tn)
@@ -621,7 +621,7 @@ func (p *planner) getQualifiedTableName(
 func (p *planner) findTableContainingIndex(
 	ctx context.Context, txn *client.Txn, vt VirtualTabler, dbName parser.Name, idxName parser.Name,
 ) (result *parser.TableName, err error) {
-	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, dbName.Normalize())
+	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, string(dbName))
 	if err != nil {
 		return nil, err
 	}
@@ -631,7 +631,6 @@ func (p *planner) findTableContainingIndex(
 		return nil, err
 	}
 
-	normName := idxName.Normalize()
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
@@ -641,18 +640,18 @@ func (p *planner) findTableContainingIndex(
 		if err != nil {
 			return nil, err
 		}
-		_, dropped, err := tableDesc.FindIndexByName(idxName)
+		_, dropped, err := tableDesc.FindIndexByName(string(idxName))
 		if err != nil || dropped {
 			continue
 		}
 		if result != nil {
 			return nil, fmt.Errorf("index name %q is ambiguous (found in %s and %s)",
-				normName, tn.String(), result.String())
+				idxName, tn.String(), result.String())
 		}
 		result = tn
 	}
 	if result == nil {
-		return nil, fmt.Errorf("index %q does not exist", normName)
+		return nil, fmt.Errorf("index %q does not exist", idxName)
 	}
 	return result, nil
 }
@@ -719,7 +718,7 @@ func (p *planner) getTableAndIndex(
 	if tableWithIndex == nil {
 		index = tableDesc.PrimaryIndex
 	} else {
-		idx, dropped, err := tableDesc.FindIndexByName(tableWithIndex.Index)
+		idx, dropped, err := tableDesc.FindIndexByName(string(tableWithIndex.Index))
 		if err != nil {
 			return nil, nil, err
 		}

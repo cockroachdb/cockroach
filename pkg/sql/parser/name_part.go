@@ -82,13 +82,6 @@ func (n Name) Normalize() string {
 	return norm.NFC.String(lower)
 }
 
-// ReNormalizeName performs the same work as NormalizeName but when
-// the string originates from the database. We define a different
-// function so as to be able to track usage of this function (cf. #8200).
-func ReNormalizeName(name string) string {
-	return Name(name).Normalize()
-}
-
 // ToStrings converts the name list to an array of regular strings.
 func (l NameList) ToStrings() []string {
 	if l == nil {

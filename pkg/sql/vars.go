@@ -191,14 +191,14 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			switch parser.Name(s).Normalize() {
-			case parser.ReNormalizeName("off"):
+			switch strings.ToLower(s) {
+			case "off":
 				session.DistSQLMode = DistSQLOff
-			case parser.ReNormalizeName("on"):
+			case "on":
 				session.DistSQLMode = DistSQLOn
-			case parser.ReNormalizeName("auto"):
+			case "auto":
 				session.DistSQLMode = DistSQLAuto
-			case parser.ReNormalizeName("always"):
+			case "always":
 				session.DistSQLMode = DistSQLAlways
 			default:
 				return fmt.Errorf("set distsql: \"%s\" not supported", s)
@@ -244,7 +244,7 @@ var varGen = map[string]sessionVar{
 				if s == pgCatalogName {
 					foundPgCatalog = true
 				}
-				newSearchPath[i] = parser.Name(s).Normalize()
+				newSearchPath[i] = s
 			}
 			if !foundPgCatalog {
 				// "The system catalog schema, pg_catalog, is always searched,
@@ -281,7 +281,7 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			if parser.Name(s).Normalize() != parser.ReNormalizeName("on") {
+			if strings.ToLower(s) != "on" {
 				return fmt.Errorf("set standard_conforming_strings: \"%s\" not supported", s)
 			}
 
