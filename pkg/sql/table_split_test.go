@@ -46,7 +46,7 @@ func TestSplitAtTableBoundary(t *testing.T) {
 
 	const tableIDQuery = `
 SELECT tables.id FROM system.namespace tables
-  JOIN system.namespace dbs ON dbs.id = tables.parentid
+  JOIN system.namespace dbs ON dbs.id = tables."parentID"
   WHERE dbs.name = $1 AND tables.name = $2
 `
 	var tableID uint32

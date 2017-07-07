@@ -45,7 +45,7 @@ func (s *Store) insertRangeLogEvent(
 
 	const insertEventTableStmt = `
 INSERT INTO system.rangelog (
-  timestamp, rangeID, storeID, eventType, otherRangeID, info
+  timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info
 )
 VALUES(
   $1, $2, $3, $4, $5, $6

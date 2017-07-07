@@ -322,8 +322,8 @@ func (s *adminServer) TableDetails(
 	// grammar to allow that.
 	escTableName := parser.Name(req.Table).String()
 	escQualTable := fmt.Sprintf("%s.%s", escDBName, escTableName)
-	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s; SHOW CREATE TABLE %s;",
-		escQualTable, escQualTable, escQualTable, escQualTable)
+	query := fmt.Sprintf("SHOW COLUMNS FROM %[1]s; SHOW INDEX FROM %[1]s; SHOW GRANTS ON TABLE %[1]s; SHOW CREATE TABLE %[1]s;",
+		escQualTable)
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
 	defer r.Close(ctx)
 	if err := s.firstNotFoundError(r.ResultList); err != nil {
@@ -693,14 +693,14 @@ func (s *adminServer) Events(
 
 	// Execute the query.
 	q := makeSQLQuery()
-	q.Append("SELECT timestamp, eventType, targetID, reportingID, info, uniqueID ")
+	q.Append(`SELECT timestamp, "eventType", "targetID", "reportingID", info, "uniqueID" `)
 	q.Append("FROM system.eventlog ")
 	q.Append("WHERE true ") // This simplifies the WHERE clause logic below.
 	if len(req.Type) > 0 {
-		q.Append("AND eventType = $ ", parser.NewDString(req.Type))
+		q.Append(`AND "eventType" = $ `, parser.NewDString(req.Type))
 	}
 	if req.TargetId > 0 {
-		q.Append("AND targetID = $ ", parser.NewDInt(parser.DInt(req.TargetId)))
+		q.Append(`AND "targetID" = $ `, parser.NewDInt(parser.DInt(req.TargetId)))
 	}
 	q.Append("ORDER BY timestamp DESC ")
 	if limit > 0 {
@@ -762,10 +762,10 @@ func (s *adminServer) RangeLog(
 
 	// Execute the query.
 	q := makeSQLQuery()
-	q.Append("SELECT timestamp, rangeID, storeID, eventType, otherRangeID, info ")
+	q.Append(`SELECT timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info `)
 	q.Append("FROM system.rangelog ")
 	rangeID := parser.NewDInt(parser.DInt(req.RangeId))
-	q.Append("WHERE rangeID = $ OR otherRangeID = $", rangeID, rangeID)
+	q.Append(`WHERE "rangeID" = $ OR "otherRangeID" = $`, rangeID, rangeID)
 	q.Append("ORDER BY timestamp DESC ")
 	if limit > 0 {
 		q.Append("LIMIT $", parser.NewDInt(parser.DInt(limit)))
@@ -846,7 +846,7 @@ func (s *adminServer) getUIData(
 
 	// Query database.
 	query := makeSQLQuery()
-	query.Append("SELECT key, value, lastUpdated FROM system.ui WHERE key IN (")
+	query.Append(`SELECT key, value, "lastUpdated" FROM system.ui WHERE key IN (`)
 	for i, key := range keys {
 		if i != 0 {
 			query.Append(",")
@@ -904,7 +904,7 @@ func (s *adminServer) SetUIData(
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
-		query := "UPSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, NOW())"
+		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, NOW())`
 		qargs := parser.MakePlaceholderInfo()
 		qargs.SetValue(`1`, parser.NewDString(key))
 		qargs.SetValue(`2`, parser.NewDBytes(parser.DBytes(val)))
@@ -1325,10 +1325,10 @@ func (s *adminServer) queryZonePath(
 func (s *adminServer) queryNamespaceID(
 	ctx context.Context, session *sql.Session, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
-	const query = `SELECT id FROM system.namespace WHERE parentID = $1 AND name = $2`
+	const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
 	params := parser.MakePlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(parentID)))
-	params.SetValue(`2`, parser.NewDString(parser.ReNormalizeName(name)))
+	params.SetValue(`2`, parser.NewDString(name))
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, &params)
 	defer r.Close(ctx)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {

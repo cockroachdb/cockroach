@@ -186,7 +186,7 @@ hascase
 statement ok
 CREATE TABLE "quotedCase" (id INT PRIMARY KEY)
 
-query error relation 'quotedcase' does not exist
+query error relation "quotedcase" does not exist
 SELECT relname from pg_class where oid='quotedCase'::regclass
 
 query T

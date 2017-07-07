@@ -73,7 +73,7 @@ func Load(
 		SELECT
 			d.descriptor
 		FROM system.namespace n INNER JOIN system.descriptor d ON n.id = d.id
-		WHERE n.parentID = $1
+		WHERE n."parentID" = $1
 		AND n.name = $2`,
 		keys.RootNamespaceID,
 		database,
@@ -174,7 +174,7 @@ func Load(
 			if tableDesc == nil {
 				return BackupDescriptor{}, errors.Errorf("expected previous CREATE TABLE %s statement", name)
 			}
-			if parser.ReNormalizeName(name) != parser.ReNormalizeName(tableName) {
+			if name != tableName {
 				return BackupDescriptor{}, errors.Errorf("unexpected INSERT for table %s after CREATE TABLE %s", name, tableName)
 			}
 			outOfOrder := false
