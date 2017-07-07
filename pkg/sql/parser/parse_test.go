@@ -805,6 +805,8 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t1 RIGHT OUTER JOIN t2 ON a = b`,
 			`SELECT a FROM t1 RIGHT JOIN t2 ON a = b`},
 		// Some functions are nearly keywords.
+		{`SELECT CURRENT_SCHEMA`,
+			`SELECT current_schema()`},
 		{`SELECT CURRENT_TIMESTAMP`,
 			`SELECT current_timestamp()`},
 		{`SELECT CURRENT_DATE`,
