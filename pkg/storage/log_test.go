@@ -46,7 +46,7 @@ func TestLogSplits(t *testing.T) {
 	countSplits := func() int {
 		var count int
 		err := db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM system.rangelog WHERE eventType = $1`,
+			`SELECT COUNT(*) FROM system.rangelog WHERE "eventType" = $1`,
 			storage.RangeLogEventType_split.String()).Scan(&count)
 		if err != nil {
 			t.Fatal(err)
@@ -77,7 +77,7 @@ func TestLogSplits(t *testing.T) {
 	// verify that RangeID always increases (a good way to see that the splits
 	// are logged correctly)
 	rows, err := db.QueryContext(ctx,
-		`SELECT rangeID, otherRangeID, info FROM system.rangelog WHERE eventType = $1`,
+		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
 		storage.RangeLogEventType_split.String(),
 	)
 	if err != nil {
@@ -191,7 +191,7 @@ func TestLogRebalances(t *testing.T) {
 
 	// verify that two add replica events have been logged.
 	rows, err := sqlDB.QueryContext(ctx,
-		`SELECT rangeID, info FROM system.rangelog WHERE eventType = $1`,
+		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
 		storage.RangeLogEventType_add.String(),
 	)
 	if err != nil {
@@ -235,7 +235,7 @@ func TestLogRebalances(t *testing.T) {
 
 	// verify that one remove replica event was logged.
 	rows, err = sqlDB.QueryContext(ctx,
-		`SELECT rangeID, info FROM system.rangelog WHERE eventType = $1`,
+		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
 		storage.RangeLogEventType_remove.String(),
 	)
 	if err != nil {

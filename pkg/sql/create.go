@@ -148,7 +148,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *parser.CreateIndex) (planN
 }
 
 func (n *createIndexNode) Start(ctx context.Context) error {
-	_, dropped, err := n.tableDesc.FindIndexByName(n.n.Name)
+	_, dropped, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
 		if dropped {
 			return fmt.Errorf("index %q being dropped, try again later", string(n.n.Name))
@@ -1034,7 +1034,7 @@ func addInterleave(
 		if err != nil {
 			return err
 		}
-		if interleave.Fields[i].Normalize() != parser.ReNormalizeName(col.Name) {
+		if string(interleave.Fields[i]) != col.Name {
 			return fmt.Errorf("declared columns must match index being interleaved")
 		}
 		if !col.Type.Equal(targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
@@ -1289,7 +1289,7 @@ func MakeTableDesc(
 			if d.PrimaryKey {
 				primaryIndexColumnSet = make(map[string]struct{})
 				for _, c := range d.Columns {
-					primaryIndexColumnSet[c.Column.Normalize()] = struct{}{}
+					primaryIndexColumnSet[string(c.Column)] = struct{}{}
 				}
 			}
 			if d.Interleave != nil {
@@ -1307,7 +1307,7 @@ func MakeTableDesc(
 	if primaryIndexColumnSet != nil {
 		// Primary index columns are not nullable.
 		for i := range desc.Columns {
-			if _, ok := primaryIndexColumnSet[parser.ReNormalizeName(desc.Columns[i].Name)]; ok {
+			if _, ok := primaryIndexColumnSet[desc.Columns[i].Name]; ok {
 				desc.Columns[i].Nullable = false
 			}
 		}
@@ -1486,7 +1486,7 @@ func makeCheckConstraint(
 			return nil, true, expr
 		}
 
-		col, err := desc.FindActiveColumnByName(c.ColumnName)
+		col, err := desc.FindActiveColumnByName(string(c.ColumnName))
 		if err != nil {
 			return fmt.Errorf("column %q not found for constraint %q",
 				c.ColumnName, d.Expr.String()), false, nil

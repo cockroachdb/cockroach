@@ -327,7 +327,7 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string) error {
 	{
 		var rebalanceIntervalStr string
 		if err := db.QueryRow(
-			`SELECT (SELECT MAX(timestamp) FROM rangelog) - (SELECT MAX(timestamp) FROM eventlog WHERE eventType=$1)`,
+			`SELECT (SELECT MAX(timestamp) FROM rangelog) - (SELECT MAX(timestamp) FROM eventlog WHERE "eventType"=$1)`,
 			sql.EventLogNodeJoin,
 		).Scan(&rebalanceIntervalStr); err != nil {
 			return err
@@ -393,8 +393,8 @@ func (at *allocatorTest) allocatorStats(db *gosql.DB) (s replicationStats, err e
 		storage.RangeLogEventType_remove.String(),
 	}
 
-	q := `SELECT NOW()-timestamp, rangeID, storeID, eventType FROM rangelog WHERE ` +
-		`timestamp=(SELECT MAX(timestamp) FROM rangelog WHERE eventType IN ($1, $2, $3))`
+	q := `SELECT NOW()-timestamp, "rangeID", "storeID", "eventType" FROM rangelog WHERE ` +
+		`timestamp=(SELECT MAX(timestamp) FROM rangelog WHERE "eventType" IN ($1, $2, $3))`
 
 	var elapsedStr string
 

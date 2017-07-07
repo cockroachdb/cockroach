@@ -674,7 +674,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	query := `
-INSERT INTO system.users (username, hashedPassword)
+INSERT INTO system.users (username, "hashedPassword")
 VALUES ('admin', 'abc'), ('bob', 'xyz')`
 	res := ts.sqlExecutor.ExecuteStatements(session, query, nil)
 	defer res.Close(ctx)

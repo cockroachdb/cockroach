@@ -201,7 +201,7 @@ func (s LeaseStore) acquire(
 		}
 		p := makeInternalPlanner("lease-insert", txn, security.RootUser, s.memMetrics)
 		defer finishInternalPlanner(p)
-		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
+		const insertLease = `INSERT INTO system.lease ("descID", version, "nodeID", expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
 		leaseExpiration := table.leaseExpiration()
 		count, err := p.exec(
@@ -234,7 +234,7 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 			p := makeInternalPlanner("lease-release", txn, security.RootUser, s.memMetrics)
 			defer finishInternalPlanner(p)
 			const deleteLease = `DELETE FROM system.lease ` +
-				`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
+				`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
 			leaseExpiration := table.leaseExpiration()
 			count, err := p.exec(
 				ctx, deleteLease, table.ID, int(table.Version), nodeID, &leaseExpiration)
@@ -417,7 +417,7 @@ func (s LeaseStore) countLeases(
 		p := makeInternalPlanner("leases-count", txn, security.RootUser, s.memMetrics)
 		defer finishInternalPlanner(p)
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
-			`WHERE descID = $1 AND version = $2 AND expiration > $3`
+			`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
 		values, err := p.QueryRow(ctx, countLeases, descID, int(version), expiration)
 		if err != nil {
 			return err
@@ -999,7 +999,7 @@ func (c *tableNameCache) remove(table *tableVersionState) {
 }
 
 func makeTableNameCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey {
-	return tableNameCacheKey{dbID, parser.ReNormalizeName(tableName)}
+	return tableNameCacheKey{dbID, tableName}
 }
 
 // LeaseManager manages acquiring and releasing per-table leases. It also
@@ -1067,8 +1067,7 @@ func NewLeaseManager(
 }
 
 func nameMatchesTable(table sqlbase.TableDescriptor, dbID sqlbase.ID, tableName string) bool {
-	return table.ParentID == dbID &&
-		parser.ReNormalizeName(table.Name) == parser.ReNormalizeName(tableName)
+	return table.ParentID == dbID && table.Name == tableName
 }
 
 // AcquireByName acquires a read lease for the specified table.

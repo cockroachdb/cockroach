@@ -23,23 +23,23 @@ NULL       /100     {1}       1
 /400       NULL     {5}       5
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 100]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 100]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lE1rwkAQhu_9FeU9TyFfWptTrvagRXorOaTZQQK6E3Y3paX430vcQqPoWhE97sw88-Q9ZL6hRfGsWrNF_oYYhASEFIQMhBFKQmukZmvF9CMemKpP5BGh0W3nfNk1bsXI0Wkxig0rEBS7qln1_XJTEmoxjPxvdCYP0u6NEaRzv0tLgnXVkpGnGxqI44H4wNrX6n3FC64Um53l-CgcCPPO5fdFjGOu-BzXszT6kKo1zboyX0MhFQkV6VFtsqNNbhjxhOtaEdMbRjzhulbE7IYRT7iuFTEKaxdsW9GW__WXR_2RYLVkf1GsdKbmFyP1VuOf8y23LSi2znef_GOqfav_wCEcB-EkDCdBONqB4304DcJZ2JxdYh4F4XHYPL7E_BiEJ2Hz5Cxzubn7CQAA___NyjVY
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 100 ORDER BY v]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 100 ORDER BY v]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lDFr8zAQhvfvV3y8a69gy06aevKaDkkJ3YoH1TqCIbGMJJeW4v9eYhUah0RpCPEo6Z577h10X6i14oXcskX2ihgEAUICQgrCBAWhMbpka7XZlXhgrj6QRYSqblrnr13lNowM2ig2rEBQ7GS16fvm4g5FVxBKbRjZb_VC3-tmUFt0BN26n74FwTq5ZmRJR3vueM99pO2LfNvwiqViMxzkPXcgLFuX_c9jygVO6eJLdE-6qo_ZGlNtpfk8cFKenNSKgVaMm_KM7lYpk3FTntHdKmU6bsozululjMLaFdtG15b_9OOj3cJgtWa_YKxuTcnPRpe9xh-XPddfKLbOvz76w7z2T7sB9-E4CIswLIJwNIDjQzgJwmnYnF5jngThadg8vcb8EIRnYfPsInPR_fsOAAD__wDzN84=
 
 # Here we care about ordering by v, but v is not otherwise used.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 100 ORDER BY v]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 100 ORDER BY v]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lDFr8zAQhvfvV3y8a69gy06aevKaDkkJ3YoH1TqCIbGMJJeW4v9eYhVql1RpCPEo6Z577h10H6i14pXcs0X2jBgEAUICQgrCDAWhMbpka7U5lHhgqd6QRYSqblrnr13ldowM2ig2rEBQ7GS16_vm4gZFVxBKbRjZd_VK3-pmVFt0BN26r74FwTq5ZWRJRwN3PHAfafskX3a8YanYjAd5zR0I69Zl__OYcoHfdPE5ugdd1cdsjan20rwPnEnIKUZOMW3EE7qrREymjXhCd5WI6bQRT-iuEjEKOzdsG11b_tMvjw5LgtWW_VKxujUlPxpd9hp_XPdcf6HYOv967w_L2j8dBhzCcRAWYVgE4WgExz_hJAinYXN6iXkWhOdh8_wS810QXoTNi7PMRffvMwAA__-JWjVa
 
 # The single join reader should be on node 5, and doesn't need to output v.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 400 ORDER BY v]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 400 ORDER BY v]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkT1PwzAQhnd-BXpnI8WJWDx1LUOLKjaUwcSnylLqs-wLAlX57yjxQIpooON9PO9jnc8I7GhnT5RhXqGh8IhWISbuKGdOU7ssbd0HTKXgQxxkarcKHSeCOUO89ASDHT9whIIjsb6fl0YFHuQbyWKPBNOMahGr12Nf7FtPB7KO0kU43jcChf0g5n6jcc2lb3E9sQ-_qWLyJ5s-F8LmqrC-EP5xswPlyCHTv85Wja0CuSOVf8k8pI6eE3ezppT7mZsbjrKUaVOKbSij6YFLWK_C9Tpcr8LVD7gd774CAAD__z-Sz4E=

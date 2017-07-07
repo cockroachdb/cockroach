@@ -320,7 +320,7 @@ func checkQueryResults(results []sql.Result, numResults int) error {
 }
 
 func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
-	const alterStmt = "ALTER TABLE system.eventlog ALTER COLUMN uniqueID SET DEFAULT uuid_v4();"
+	const alterStmt = `ALTER TABLE system.eventlog ALTER COLUMN "uniqueID" SET DEFAULT uuid_v4();`
 
 	// System tables can only be modified by a privileged internal user.
 	session := r.newRootSession(ctx)

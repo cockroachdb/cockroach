@@ -237,10 +237,9 @@ func fillColumnRange(firstIdx, lastIdx int) columnRange {
 func newSourceInfoForSingleTable(
 	tn parser.TableName, columns sqlbase.ResultColumns,
 ) *dataSourceInfo {
-	norm := tn.NormalizedTableName()
 	return &dataSourceInfo{
 		sourceColumns: columns,
-		sourceAliases: sourceAliases{{name: norm, columnRange: fillColumnRange(0, len(columns)-1)}},
+		sourceAliases: sourceAliases{{name: tn, columnRange: fillColumnRange(0, len(columns)-1)}},
 	}
 }
 
@@ -301,7 +300,7 @@ func (p *planner) getVirtualDataSource(
 		//
 		// Meanwhile the root user probably would be inconvenienced by
 		// this.
-		prefix := tn.PrefixName.Normalize()
+		prefix := string(tn.PrefixName)
 		if !tn.PrefixOriginallySpecified {
 			prefix = p.session.Database
 			if prefix == "" && p.session.User != security.RootUser {
@@ -419,7 +418,7 @@ func (p *planner) getDataSource(
 		var tableAlias parser.TableName
 		if t.As.Alias != "" {
 			// If an alias was specified, use that.
-			tableAlias.TableName = parser.Name(t.As.Alias.Normalize())
+			tableAlias.TableName = t.As.Alias
 			src.info.sourceAliases = sourceAliases{{
 				name:        tableAlias,
 				columnRange: fillColumnRange(0, len(src.info.sourceColumns)-1),
@@ -672,9 +671,7 @@ func (src *dataSourceInfo) expandStar(
 			colSel(i)
 		}
 	} else {
-		norm := tableName.NormalizedTableName()
-
-		qualifiedTn, err := src.checkDatabaseName(norm)
+		qualifiedTn, err := src.checkDatabaseName(tableName)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -788,12 +785,10 @@ func (sources multiSourceInfo) findColumn(
 		return invalidSrcIdx, invalidColIdx, pgerror.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", c)
 	}
 
-	colName := c.ColumnName.Normalize()
+	colName := string(c.ColumnName)
 	var tableName parser.TableName
 	if c.TableName.Table() != "" {
-		tableName = c.TableName.NormalizedTableName()
-
-		tn, err := sources.checkDatabaseName(tableName)
+		tn, err := sources.checkDatabaseName(c.TableName)
 		if err != nil {
 			return invalidSrcIdx, invalidColIdx, err
 		}
@@ -806,7 +801,7 @@ func (sources multiSourceInfo) findColumn(
 
 	findColHelper := func(src *dataSourceInfo, iSrc, srcIdx, colIdx int, idx int) (int, int, error) {
 		col := src.sourceColumns[idx]
-		if parser.ReNormalizeName(col.Name) == colName {
+		if col.Name == colName {
 			if colIdx != invalidColIdx {
 				return invalidSrcIdx, invalidColIdx, pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
 					"column reference %q is ambiguous", parser.ErrString(c))

@@ -281,7 +281,7 @@ func (p *planner) dropIndexByName(
 	behavior parser.DropBehavior,
 	stmt string,
 ) error {
-	idx, dropped, err := tableDesc.FindIndexByName(idxName)
+	idx, dropped, err := tableDesc.FindIndexByName(string(idxName))
 	if err != nil {
 		if ifExists {
 			// Noop.
