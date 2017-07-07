@@ -140,7 +140,7 @@ and, based on those options, executes the callback possibly multiple
 times and commits the transaction afterwards. If allowed by the
 options, the callback might be called multiple times, to deal with
 retries of transactions that are [sometimes
-necessary](https://www.cockroachlabs.com/docs/transactions.html#transaction-retries)
+necessary](https://www.cockroachlabs.com/docs/stable/transactions.html#transaction-retries)
 in CockroachDB (usually because of data contention). The SQL
 `Executor` might or might not want to let the KV client perform such
 retries automatically.
@@ -157,7 +157,7 @@ be retried verbatim (i.e. different results for a `SELECT` might
 trigger different subsequent statements). In this case, we bubble up a
 retryable error to the client; more details about this can be read in
 our [transaction
-documentation](https://www.cockroachlabs.com/docs/transactions.html#client-side-intervention). This
+documentation](https://www.cockroachlabs.com/docs/stable/transactions.html#client-side-intervention). This
 complexity is captured in
 [`Executor.execRequest()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L495),
 which has logic for setting the different execution options and
@@ -548,7 +548,7 @@ SELECT * FROM Orders o inner join Customers c ON o.CustomerID = c.ID WHERE Order
       decoding all the keys and values in SQL column values, dealing with
       differences between the primary index and other indexes and with
       the [layout of a
-      table](https://www.cockroachlabs.com/docs/column-families.html). For
+      table](https://www.cockroachlabs.com/docs/stable/column-families.html). For
       details on the mapping between SQL rows and KV pairs, see the
       [corresponding section from the Design
       Doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#data-mapping-between-the-sql-model-and-kv) and the [encoding tech note](encoding.md).

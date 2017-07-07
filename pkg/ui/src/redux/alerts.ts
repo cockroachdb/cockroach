@@ -139,7 +139,7 @@ export const newVersionNotificationSelector = createSelector(
       level: AlertLevel.NOTIFICATION,
       title: "New Version Available",
       text: "A new version of CockroachDB is available.",
-      link: "https://www.cockroachlabs.com/docs/install-cockroachdb.html",
+      link: "https://www.cockroachlabs.com/docs/stable/install-cockroachdb.html",
       dismiss: (dispatch) => {
         const dismissedAt = moment();
         // Dismiss locally.

@@ -2,7 +2,7 @@
 
 This directory contains the client-side code for CockroachDB's web-based admin
 UI, which provides details about a cluster's performance and health. See the
-[Admin UI docs](https://www.cockroachlabs.com/docs/explore-the-admin-ui.html)
+[Admin UI docs](https://www.cockroachlabs.com/docs/stable/explore-the-admin-ui.html)
 for an expanded overview.
 
 ## Getting Started

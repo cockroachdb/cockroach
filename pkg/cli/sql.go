@@ -184,8 +184,8 @@ Type:
   \? or "help"      print this help.
 
 More documentation about our SQL dialect and the CLI shell is available online:
-https://www.cockroachlabs.com/docs/sql-statements.html
-https://www.cockroachlabs.com/docs/use-the-built-in-sql-client.html
+https://www.cockroachlabs.com/docs/stable/sql-statements.html
+https://www.cockroachlabs.com/docs/stable/use-the-built-in-sql-client.html
 
 `)
 }
