@@ -87,7 +87,7 @@ export default function (props: GraphDashboardProps) {
                 Control this value per node with the
                   <code>
                   <a
-                    href="https://www.cockroachlabs.com/docs/start-a-node.html#flags"
+                    href="https://www.cockroachlabs.com/docs/stable/start-a-node.html#flags"
                     target="_blank"
                   >
                     --store
