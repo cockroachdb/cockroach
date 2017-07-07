@@ -32,6 +32,26 @@ if [ "${1-}" = "version" ]; then
   exit 0
 fi
 
+volume_mode=
+if [ "${COCKROACH_BUILDER_TURBO:-0}" != 0 ]; then
+  volume_mode=:delegated
+elif [ "$(uname)" = "Darwin" ]; then
+  yellow=$'\e[33m'
+  underline=$'\e[4m'
+  reset=$'\e[0m'
+  echo >&2 \
+"${yellow}Shared filesystems in Docker for Mac are extremely slow. To improve
+performance by giving up consistency guarantees that are usually
+unnecessary during development, add
+
+    export COCKROACH_BUILDER_TURBO=1
+
+to your shell startup file.
+
+For details, see: ${underline}https://docs.docker.com/docker-for-mac/osxfs-caching/${reset}
+"
+fi
+
 GOPATH=$(go env GOPATH)
 gopath0=${GOPATH%%:*}
 gocache=${GOCACHEPATH-$gopath0}
@@ -112,52 +132,52 @@ vols=
 # build static binaries in the container and then run them on the host).
 #
 # vols="${vols} --volume=/var/run/docker.sock:/var/run/docker.sock"
-vols="${vols} --volume=${passwd_file}:/etc/passwd"
-vols="${vols} --volume=${host_home}:${container_home}"
+vols="${vols} --volume=${passwd_file}:/etc/passwd${volume_mode}"
+vols="${vols} --volume=${host_home}:${container_home}${volume_mode}"
 
 mkdir -p "${HOME}"/.yarn-cache
-vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
+vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache${volume_mode}"
 
 # If we're running in an environment that's using git alternates, like TeamCity,
 # we must mount the path to the real git objects for git to work in the container.
 alternates_file=${cockroach_toplevel}/.git/objects/info/alternates
 if test -e "${alternates_file}"; then
   alternates_path=$(cat "${alternates_file}")
-  vols="${vols} --volume=${alternates_path}:${alternates_path}"
+  vols="${vols} --volume=${alternates_path}:${alternates_path}${volume_mode}"
 fi
 
 backtrace_dir=${cockroach_toplevel}/../../cockroachlabs/backtrace
 if test -d "${backtrace_dir}"; then
-  vols="${vols} --volume=${backtrace_dir}:/opt/backtrace"
-  vols="${vols} --volume=${backtrace_dir}/cockroach.cf:${container_home}/.coroner.cf"
+  vols="${vols} --volume=${backtrace_dir}:/opt/backtrace${volume_mode}"
+  vols="${vols} --volume=${backtrace_dir}/cockroach.cf:${container_home}/.coroner.cf${volume_mode}"
 fi
 
 if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
-  vols="${vols} --volume=${gopath0}/src:/go/src"
+  vols="${vols} --volume=${gopath0}/src:/go/src${volume_mode}"
 fi
-vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
+vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach${volume_mode}"
 
 mkdir -p "${cockroach_toplevel}"/bin.docker_amd64
-vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin"
+vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin${volume_mode}"
 
 mkdir -p "${gocache}"/docker/bin
-vols="${vols} --volume=${gocache}/docker/bin:/go/bin"
+vols="${vols} --volume=${gocache}/docker/bin:/go/bin${volume_mode}"
 mkdir -p "${gocache}"/docker/native
-vols="${vols} --volume=${gocache}/docker/native:/go/native"
+vols="${vols} --volume=${gocache}/docker/native:/go/native${volume_mode}"
 mkdir -p "${gocache}"/docker/pkg
-vols="${vols} --volume=${gocache}/docker/pkg:/go/pkg"
+vols="${vols} --volume=${gocache}/docker/pkg:/go/pkg${volume_mode}"
 
 # TODO(tamird,benesch): this is horrible, but we do it because we want to
 # cache stdlib artifacts and we can't mount over GOROOT. Replace with
 # `-pkgdir` when the kinks are worked out.
 for pkgdir in {darwin,windows}_amd64{,_race}; do
   mkdir -p "${gocache}/docker/pkg/${pkgdir}"
-  vols="${vols} --volume=${gocache}/docker/pkg/${pkgdir}:/usr/local/go/pkg/${pkgdir}"
+  vols="${vols} --volume=${gocache}/docker/pkg/${pkgdir}:/usr/local/go/pkg/${pkgdir}${volume_mode}"
 done
 # Linux supports more stuff, so it needs a separate loop.
 for pkgdir in linux_amd64{,_release-{gnu,musl}}{,_msan,_race}; do
   mkdir -p "${gocache}/docker/pkg/${pkgdir}"
-  vols="${vols} --volume=${gocache}/docker/pkg/${pkgdir}:/usr/local/go/pkg/${pkgdir}"
+  vols="${vols} --volume=${gocache}/docker/pkg/${pkgdir}:/usr/local/go/pkg/${pkgdir}${volume_mode}"
 done
 
 # -i causes some commands (including `git diff`) to attempt to use
