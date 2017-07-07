@@ -100,6 +100,7 @@ EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v
 2          table        t@primary
 2          filter       ((v)[int] > (123)[int])[bool]
 
+
 query ITTTTT
 EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2
 ----
@@ -302,4 +303,3 @@ EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 1  render                                                         (x int[])
 1           render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]
 2  nullrow                                                        ()
-

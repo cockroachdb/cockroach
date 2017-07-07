@@ -350,7 +350,7 @@ func (p *planner) showCreateInterleave(
 		sharedPrefixLen += int(ancestor.SharedPrefixLen)
 	}
 	interleavedColumnNames := quoteNames(idx.ColumnNames[:sharedPrefixLen]...)
-	s := fmt.Sprintf(" INTERLEAVE IN PARENT %s (%s)", parentTable.Name, interleavedColumnNames)
+	s := fmt.Sprintf(" INTERLEAVE IN PARENT %s (%s)", parser.Name(parentTable.Name), interleavedColumnNames)
 	return s, nil
 }
 
@@ -575,11 +575,14 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 				}
 			}
 			if customColNames {
-				colNames := make([]string, 0, len(desc.Columns))
-				for _, col := range desc.Columns {
-					colNames = append(colNames, col.Name)
+				buf.WriteByte('(')
+				for i, col := range desc.Columns {
+					if i > 0 {
+						buf.WriteString(", ")
+					}
+					parser.Name(col.Name).Format(&buf, parser.FmtSimple)
 				}
-				fmt.Fprintf(&buf, "(%s) ", strings.Join(colNames, ", "))
+				buf.WriteString(") ")
 			}
 
 			fmt.Fprintf(&buf, "AS %s", desc.ViewQuery)

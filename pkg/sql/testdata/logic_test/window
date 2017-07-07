@@ -775,7 +775,7 @@ SELECT k, (avg(w) OVER w + rank() OVER w), k FROM kv WINDOW w AS (PARTITION BY v
 8   3                      8
 9   8.25                   9
 10  8.3333333333333333333  10
-11  9                      11  
+11  9                      11
 
 query II
 SELECT k, dense_rank() OVER () FROM kv ORDER BY 1
