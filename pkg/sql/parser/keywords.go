@@ -58,6 +58,7 @@ var keywords = map[string]int{
 	"CURRENT_CATALOG":           CURRENT_CATALOG,
 	"CURRENT_DATE":              CURRENT_DATE,
 	"CURRENT_ROLE":              CURRENT_ROLE,
+	"CURRENT_SCHEMA":            CURRENT_SCHEMA,
 	"CURRENT_TIME":              CURRENT_TIME,
 	"CURRENT_TIMESTAMP":         CURRENT_TIMESTAMP,
 	"CURRENT_USER":              CURRENT_USER,
