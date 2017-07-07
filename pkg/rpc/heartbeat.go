@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var _ security.RequestWithUser = &PingRequest{}
@@ -65,7 +66,10 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	// Commit suicide in the event that this is ever untrue.
 	// This check is ignored if either offset is set to 0 (for unittests).
 	mo, amo := hs.clock.MaxOffset(), time.Duration(args.MaxOffsetNanos)
-	if mo != 0 && amo != 0 && mo != amo {
+	if mo != 0 && amo != 0 &&
+		mo != timeutil.ClocklessMaxOffset && amo != timeutil.ClocklessMaxOffset &&
+		mo != amo {
+
 		panic(fmt.Sprintf("locally configured maximum clock offset (%s) "+
 			"does not match that of node %s (%s)", mo, args.Addr, amo))
 	}
