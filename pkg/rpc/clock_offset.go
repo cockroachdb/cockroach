@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/montanaflynn/stats"
 	"github.com/pkg/errors"
 )
@@ -185,10 +186,13 @@ func (r *RemoteClockMonitor) UpdateOffset(
 // return indicates that this node's clock is unreliable, and that the node
 // should terminate.
 func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
-	// By the contract of the hlc, if the value is 0, then safety checking
-	// of the max offset is disabled. However we may still want to
-	// propagate the information to a status node.
-	if maxOffset := r.clock.MaxOffset(); maxOffset != 0 {
+	// By the contract of the hlc, if the value is 0, then safety checking of
+	// the max offset is disabled. However we may still want to propagate the
+	// information to a status node.
+	//
+	// TODO(tschottdorf): disallow maxOffset == 0 but probably lots of tests to
+	// fix.
+	if maxOffset := r.clock.MaxOffset(); maxOffset != 0 && maxOffset != timeutil.ClocklessMaxOffset {
 		now := r.clock.PhysicalTime()
 
 		healthyOffsetCount := 0

@@ -106,7 +106,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	if knobs := params.Knobs.Store; knobs != nil {
 		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != 0 {
-			cfg.MaxOffset = mo
+			cfg.MaxOffset = MaxOffsetType(mo)
 		}
 	}
 	if params.ScanInterval != 0 {
