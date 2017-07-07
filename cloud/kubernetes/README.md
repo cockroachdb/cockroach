@@ -157,7 +157,7 @@ $ kubectl run -it --rm cockroach-client --image=cockroachdb/cockroach --restart=
 You can see example SQL statements for inserting and querying data in the
 included [demo script](demo.sh), but can use almost any Postgres-style SQL
 commands. Some more basic examples can be found within
-[CockroachDB's documentation](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html).
+[CockroachDB's documentation](https://www.cockroachlabs.com/docs/stable/learn-cockroachdb-sql.html).
 
 ## Accessing the admin UI
 

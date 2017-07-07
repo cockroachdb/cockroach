@@ -63,7 +63,7 @@ const (
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
 
-	productionSettingsWebpage = "please see https://www.cockroachlabs.com/docs/recommended-production-settings.html for more details"
+	productionSettingsWebpage = "please see https://www.cockroachlabs.com/docs/stable/recommended-production-settings.html for more details"
 )
 
 var timeUntilStoreDead = settings.RegisterNonNegativeDurationSetting(
