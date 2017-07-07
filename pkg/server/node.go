@@ -194,7 +194,9 @@ func bootstrapCluster(
 	cfg.MetricsSampleInterval = time.Duration(math.MaxInt64)
 	cfg.HistogramWindowInterval = time.Duration(math.MaxInt64)
 	cfg.ConsistencyCheckInterval = 10 * time.Minute
-	cfg.AmbientCtx.Tracer = tracing.NewTracer()
+	tr := tracing.NewTracer()
+	defer tr.Close()
+	cfg.AmbientCtx.Tracer = tr
 	// Create a KV DB with a local sender.
 	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock)
 	sender := kv.NewTxnCoordSender(cfg.AmbientCtx, stores, cfg.Clock, false, stopper, txnMetrics)
