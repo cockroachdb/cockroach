@@ -52,7 +52,9 @@ case ${1-} in
 
     rsync -az "$(dirname "${0}")/../build/bootstrap/" "${USER}@${FQDN}:bootstrap/"
     rsync -az "$(dirname "${0}")/../build/parallelbuilds-"* "${USER}@${FQDN}:bootstrap/"
+    rsync -az "$(dirname "${0}")/../build/disable-hyperv-timesync.sh" "${USER}@${FQDN}:./"
     ssh -A "${USER}@${FQDN}" ./bootstrap/bootstrap-debian.sh
+    ssh -A "${USER}@${FQDN}" ./disable-hyperv-timesync.sh
 
     # TODO(bdarnell): autoshutdown.cron.sh does not work on azure. It
     # halts the VM, but halting the VM doesn't stop billing. The VM
