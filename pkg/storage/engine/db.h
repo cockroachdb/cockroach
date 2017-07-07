@@ -101,6 +101,7 @@ void DBClose(DBEngine* db);
 // Flushes all mem-table data to disk, blocking until the operation is
 // complete.
 DBStatus DBFlush(DBEngine* db);
+DBStatus DBSyncWAL(DBEngine* db);
 
 // Forces an immediate compaction over all keys.
 DBStatus DBCompact(DBEngine* db);
