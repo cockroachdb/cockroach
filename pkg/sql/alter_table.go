@@ -131,7 +131,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err
 				}
-				_, dropped, err := n.tableDesc.FindIndexByName(d.Name)
+				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
 				if err == nil {
 					if dropped {
 						return fmt.Errorf("index %q being dropped, try again later", d.Name)

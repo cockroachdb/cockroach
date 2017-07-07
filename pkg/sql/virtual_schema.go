@@ -238,8 +238,8 @@ func (e *Executor) IsVirtualDatabase(name string) bool {
 func (vs *virtualSchemaHolder) getVirtualTableEntry(
 	tn *parser.TableName,
 ) (virtualTableEntry, error) {
-	if db, ok := vs.getVirtualSchemaEntry(tn.DatabaseName.Normalize()); ok {
-		if t, ok := db.tables[tn.TableName.Normalize()]; ok {
+	if db, ok := vs.getVirtualSchemaEntry(string(tn.DatabaseName)); ok {
+		if t, ok := db.tables[string(tn.TableName)]; ok {
 			return t, nil
 		}
 		return virtualTableEntry{}, sqlbase.NewUndefinedRelationError(tn)

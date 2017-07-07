@@ -369,7 +369,7 @@ func (p *planner) processColumns(
 			return nil, pgerror.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", n)
 		}
 
-		col, err := tableDesc.FindActiveColumnByName(c.ColumnName)
+		col, err := tableDesc.FindActiveColumnByName(string(c.ColumnName))
 		if err != nil {
 			return nil, err
 		}
