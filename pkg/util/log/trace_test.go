@@ -71,7 +71,7 @@ func TestTrace(t *testing.T) {
 	Event(ctx, "should-not-show-up")
 
 	tracer := tracing.NewTracer()
-	tracer.(*tracing.Tracer).SetForceRealSpans(true)
+	tracer.SetForceRealSpans(true)
 	sp := tracer.StartSpan("s")
 	tracing.StartRecording(sp, tracing.SingleNodeRecording)
 	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
@@ -101,7 +101,7 @@ func TestTraceWithTags(t *testing.T) {
 	ctx = WithLogTagInt(ctx, "tag", 1)
 
 	tracer := tracing.NewTracer()
-	tracer.(*tracing.Tracer).SetForceRealSpans(true)
+	tracer.SetForceRealSpans(true)
 	sp := tracer.StartSpan("s")
 	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
 	tracing.StartRecording(sp, tracing.SingleNodeRecording)
@@ -187,7 +187,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	ErrEvent(ctxWithEventLog, "testerr")
 
 	tracer := tracing.NewTracer()
-	tracer.(*tracing.Tracer).SetForceRealSpans(true)
+	tracer.SetForceRealSpans(true)
 	sp := tracer.StartSpan("s")
 	tracing.StartRecording(sp, tracing.SingleNodeRecording)
 	ctxWithBoth := opentracing.ContextWithSpan(ctxWithEventLog, sp)
