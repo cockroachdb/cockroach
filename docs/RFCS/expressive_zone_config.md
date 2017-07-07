@@ -23,7 +23,7 @@ range_max_bytes: <size-in-bytes>
 gc:
   ttlseconds: <time-in-seconds>
 ```
-https://www.cockroachlabs.com/docs/configure-replication-zones.html#replicaton-zone-format
+https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html#replicaton-zone-format
 
 ## Number of replicas
 

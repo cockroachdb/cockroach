@@ -28,7 +28,7 @@ minimal latency disruption and no manual intervention; supports
 **strongly-consistent** ACID transactions; and provides a familiar
 **SQL** API for structuring, manipulating, and querying data.
 
-For more details, see our [FAQ](https://cockroachlabs.com/docs/frequently-asked-questions.html) and original [design document](
+For more details, see our [FAQ](https://cockroachlabs.com/docs/stable/frequently-asked-questions.html) and original [design document](
 https://github.com/cockroachdb/cockroach#design).
 
 ## Status
@@ -38,42 +38,42 @@ CockroachDB is production-ready. See our
 
 ## Docs
 
-For guidance on installation, development, deployment, and administration, see our [User Documentation](https://cockroachlabs.com/docs/).
+For guidance on installation, development, deployment, and administration, see our [User Documentation](https://cockroachlabs.com/docs/stable/).
 
 ## Quickstart
 
-1. [Install CockroachDB](https://www.cockroachlabs.com/docs/install-cockroachdb.html).
+1. [Install CockroachDB](https://www.cockroachlabs.com/docs/stable/install-cockroachdb.html).
 
-1. [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html)
-   and talk to it via the [built-in SQL client](https://www.cockroachlabs.com/docs/use-the-built-in-sql-client.html).
+1. [Start a local cluster](https://www.cockroachlabs.com/docs/stable/start-a-local-cluster.html)
+   and talk to it via the [built-in SQL client](https://www.cockroachlabs.com/docs/stable/use-the-built-in-sql-client.html).
 
-1. [Learn more about CockroachDB SQL](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html).
+1. [Learn more about CockroachDB SQL](https://www.cockroachlabs.com/docs/stable/learn-cockroachdb-sql.html).
 
 1. Use a PostgreSQL-compatible driver or ORM to
-   [build an app with CockroachDB](https://www.cockroachlabs.com/docs/build-an-app-with-cockroachdb.html).
+   [build an app with CockroachDB](https://www.cockroachlabs.com/docs/stable/build-an-app-with-cockroachdb.html).
 
-1. [Explore core features](https://www.cockroachlabs.com/docs/demo-data-replication.html),
+1. [Explore core features](https://www.cockroachlabs.com/docs/stable/demo-data-replication.html),
    such as data replication, automatic rebalancing, and fault tolerance and recovery.
 
 ## Client Drivers
 
 CockroachDB supports the PostgreSQL wire protocol, so you can use any available PostgreSQL client drivers to connect from various languages.
 
-- For recommended drivers that we've tested, see [Install Client Drivers](https://www.cockroachlabs.com/docs/install-client-drivers.html).
+- For recommended drivers that we've tested, see [Install Client Drivers](https://www.cockroachlabs.com/docs/stable/install-client-drivers.html).
 
-- For tutorials using these drivers, as well as supported ORMs, see [Build an App with CockroachDB](https://www.cockroachlabs.com/docs/build-an-app-with-cockroachdb.html).
+- For tutorials using these drivers, as well as supported ORMs, see [Build an App with CockroachDB](https://www.cockroachlabs.com/docs/stable/build-an-app-with-cockroachdb.html).
 
 ## Deployment
 
-- [Manual Deployment](https://www.cockroachlabs.com/docs/manual-deployment.html) - Steps to deploy a CockroachDB cluster manually on multiple machines.
+- [Manual Deployment](https://www.cockroachlabs.com/docs/stable/manual-deployment.html) - Steps to deploy a CockroachDB cluster manually on multiple machines.
 
-- [Cloud Deployment](https://www.cockroachlabs.com/docs/cloud-deployment.html) - Guides for deploying CockroachDB on various cloud platforms.
+- [Cloud Deployment](https://www.cockroachlabs.com/docs/stable/cloud-deployment.html) - Guides for deploying CockroachDB on various cloud platforms.
 
-- [Orchestration](https://www.cockroachlabs.com/docs/orchestration.html) - Guides for running CockroachDB with popular open-source orchestration systems.
+- [Orchestration](https://www.cockroachlabs.com/docs/stable/orchestration.html) - Guides for running CockroachDB with popular open-source orchestration systems.
 
 ## Need Help?
 
-- [Troubleshooting documentation](https://www.cockroachlabs.com/docs/troubleshooting-overview.html) -
+- [Troubleshooting documentation](https://www.cockroachlabs.com/docs/stable/troubleshooting-overview.html) -
   Learn how to troubleshoot common errors, cluster and node setup, and SQL query behavior,
   and how to use debug and error logs.
 
@@ -169,12 +169,12 @@ groups.
 ## Comparison with Other Databases
 
 To see how key features of CockroachDB stack up against other databases,
-visit the [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/cockroachdb-in-comparison.html) page on our website.
+visit the [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/stable/cockroachdb-in-comparison.html) page on our website.
 
 ## See Also
 
 - [Tech Talks](https://www.cockroachlabs.com/community/tech-talks/) by CockroachDB founders and engineers
-- [The CockroachDB User documentation](https://cockroachlabs.com/docs/)
+- [The CockroachDB User documentation](https://cockroachlabs.com/docs/stable/)
 - [The CockroachDB Blog](https://www.cockroachlabs.com/blog/)
 - Key Design documents:
   - [Serializable, Lockless, Distributed: Isolation in CockroachDB](https://www.cockroachlabs.com/blog/serializable-lockless-distributed-isolation-cockroachdb/)
