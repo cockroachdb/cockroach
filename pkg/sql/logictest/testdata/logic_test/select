@@ -170,7 +170,7 @@ k
 a
 
 query T
-SELECT "Foo"."V" FROM kv AS foo WHERE foo.k = 'a'
+SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
 ----
 NULL
 

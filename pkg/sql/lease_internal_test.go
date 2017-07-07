@@ -325,8 +325,8 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 }
 
-// Test that table names are not treated as case sensitive by the name cache.
-func TestTableNameNotCaseSensitive(t *testing.T) {
+// Test that table names are treated as case sensitive by the name cache.
+func TestTableNameCaseSensitive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
@@ -346,13 +346,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	// Check that we can get the table by a different name.
+	// Check that we cannot get the table by a different name.
 	lease := leaseManager.tableNames.get(tableDesc.ParentID, "tEsT", s.Clock())
-	if lease == nil {
-		t.Fatalf("no name cache entry")
-	}
-	if err := leaseManager.Release(lease.TableDescriptor); err != nil {
-		t.Fatal(err)
+	if lease != nil {
+		t.Fatalf("lease manager incorrectly found table with different case")
 	}
 }
 

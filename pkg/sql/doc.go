@@ -66,7 +66,7 @@ database/table name to ID and from ID to descriptor:
     "parentID" INT,
     "name"     CHAR,
     "id"       INT,
-    PRIMARY KEY (parentID, name)
+    PRIMARY KEY ("parentID", name)
   );
 
   Create TABLE system.descriptor (
@@ -79,7 +79,7 @@ databases reside. In order to look up the ID of a database given its name, the
 system runs the underlying key-value operations that correspond to the following
 query:
 
-  SELECT id FROM system.namespace WHERE parentID = 0 AND name = <database-name>
+  SELECT id FROM system.namespace WHERE "parentID" = 0 AND name = <database-name>
 
 And given a database/table ID, the system looks up the descriptor using the
 following query:

@@ -99,8 +99,7 @@ func (mt mutationTest) makeMutationsActive() {
 // writeColumnMutation adds column as a mutation and writes the
 // descriptor to the DB.
 func (mt mutationTest) writeColumnMutation(column string, m sqlbase.DescriptorMutation) {
-	name := parser.Name(column)
-	col, _, err := mt.tableDesc.FindColumnByName(name)
+	col, _, err := mt.tableDesc.FindColumnByName(parser.Name(column))
 	if err != nil {
 		mt.Fatal(err)
 	}
@@ -365,8 +364,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 // descriptor to the DB.
 func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMutation) {
 	tableDesc := mt.tableDesc
-	name := parser.Name(index)
-	idx, _, err := tableDesc.FindIndexByName(name)
+	idx, _, err := tableDesc.FindIndexByName(index)
 	if err != nil {
 		mt.Fatal(err)
 	}

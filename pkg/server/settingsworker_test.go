@@ -73,7 +73,7 @@ func TestSettingsRefresh(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(t, rawDB)
 
-	insertQ := `UPSERT INTO system.settings (name, value, lastUpdated, valueType)
+	insertQ := `UPSERT INTO system.settings (name, value, "lastUpdated", "valueType")
 		VALUES ($1, $2, NOW(), $3)`
 	deleteQ := "DELETE FROM system.settings WHERE name = $1"
 

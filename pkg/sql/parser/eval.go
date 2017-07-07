@@ -2471,7 +2471,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				// when creating tables - table names are normalized (downcased) unless
 				// they're double quoted.
 				if !hadQuotes {
-					s = ReNormalizeName(s)
+					s = Name(s).Normalize()
 				}
 				t := &NormalizableTableName{
 					TableNameReference: UnresolvedName{
