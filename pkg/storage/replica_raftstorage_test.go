@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -27,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -106,5 +109,51 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 			after, rep.GetMaxBytes(),
 			rep.needsSplitBySize(), rep.exceedsDoubleSplitSizeRLocked(), err,
 		)
+	}
+}
+
+// BenchmarkSerialPuts benchmarks write performance for different payload sizes
+// on an on disk RocksDB instance.
+func BenchmarkSerialPuts(b *testing.B) {
+	b.ReportAllocs()
+	valSizes := []int{1 << 4, 1 << 5, 1 << 6, 1 << 7, 1 << 8, 1 << 9,
+		1 << 10, 1 << 12, 1 << 14, 1 << 16, 1 << 18, 1 << 20}
+
+	for _, valSize := range valSizes {
+		b.Run(fmt.Sprintf("valSize=%d", valSize), func(b *testing.B) {
+			tc := testContext{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+
+			tc.engine = engine.NewTestRocksDB(fmt.Sprintf("BenchmarkSerialPuts_%d", valSize))
+			stopper.AddCloser(tc.engine)
+			tc.Start(b, stopper)
+
+			rep, err := tc.store.GetReplica(rangeID)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			if _, pErr := rep.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+				b.Fatal(pErr)
+			}
+
+			keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+			rng := rand.New(rand.NewSource(123))
+			valBuf := make([]byte, valSize, valSize)
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				value := randutil.FillRandBytes(valBuf, rng)
+				key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+				pArgs := putArgs(key, value)
+				if _, pErr := client.SendWrappedWith(context.Background(), rep, roachpb.Header{
+					RangeID: rangeID,
+				}, &pArgs); pErr != nil {
+					b.Fatal(pErr)
+				}
+			}
+			b.StopTimer()
+		})
 	}
 }

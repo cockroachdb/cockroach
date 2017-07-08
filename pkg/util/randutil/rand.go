@@ -65,6 +65,13 @@ func RandBytes(r *rand.Rand, size int) []byte {
 	return arr
 }
 
+func FillRandBytes(arr []byte, r *rand.Rand) []byte {
+	for i := 0; i < len(arr); i++ {
+		arr[i] = randLetters[r.Intn(len(randLetters))]
+	}
+	return arr
+}
+
 // SeedForTests seeds the random number generator and prints the seed
 // value used. This value can be specified via an environment variable
 // COCKROACH_RANDOM_SEED=x to reuse the same value later. This function should
