@@ -70,7 +70,6 @@ typedef struct {
   DBCache *cache;
   uint64_t block_size;
   uint64_t wal_ttl_seconds;
-  bool use_direct_writes;
   bool logging_enabled;
   int num_cpu;
   int max_open_files;
