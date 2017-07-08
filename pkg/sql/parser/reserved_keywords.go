@@ -38,6 +38,7 @@ var reservedKeywords = map[string]struct{}{
 	"CURRENT_CATALOG":   {},
 	"CURRENT_DATE":      {},
 	"CURRENT_ROLE":      {},
+	"CURRENT_SCHEMA":    {},
 	"CURRENT_TIME":      {},
 	"CURRENT_TIMESTAMP": {},
 	"CURRENT_USER":      {},
