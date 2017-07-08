@@ -103,8 +103,6 @@ var txnAutoGC = true
 
 var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 
-// TODO(peter): Off by default until we can figure out the performance
-// degradation see on test clusters.
 var syncRaftLog = settings.RegisterBoolSetting(
 	"kv.raft_log.synchronize",
 	"set to true to synchronize on Raft log writes to persistent storage",
