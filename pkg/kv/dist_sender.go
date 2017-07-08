@@ -655,8 +655,9 @@ func (ds *DistSender) Send(
 }
 
 type response struct {
-	reply *roachpb.BatchResponse
-	pErr  *roachpb.Error
+	reply     *roachpb.BatchResponse
+	positions []int
+	pErr      *roachpb.Error
 }
 
 // divideAndSendBatchToRanges sends the supplied batch to all of the
@@ -673,6 +674,8 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// implicated in the span (rs) and combines them into a single
 	// BatchResponse when finished.
 	var responseChs []chan response
+	var be roachpb.BatchResponse
+	var seekKey roachpb.RKey
 	defer func() {
 		if r := recover(); r != nil {
 			// If we're in the middle of a panic, don't wait on responseChs.
@@ -686,18 +689,20 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				}
 				continue
 			}
+
 			if br == nil {
 				// First response from a Range.
-				br = resp.reply
-			} else {
-				// This was the second or later call in a cross-Range request.
-				// Combine the new response with the existing one.
-				if err := br.Combine(resp.reply); err != nil {
-					pErr = roachpb.NewError(err)
-					return
-				}
-				br.Txn.Update(resp.reply.Txn)
+				be = *(resp.reply)
+				br = &be
+				br.Responses = make([]roachpb.ResponseUnion, len(ba.Requests))
 			}
+			// This was the second or later call in a cross-Range request.
+			// Combine the new response with the existing one.
+			if err := br.Combine(resp.reply, resp.positions); err != nil {
+				pErr = roachpb.NewError(err)
+				return
+			}
+			br.Txn.Update(resp.reply.Txn)
 		}
 
 		// If we experienced an error, don't neglect to update the error's
@@ -706,11 +711,73 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			if br != nil {
 				pErr.UpdateTxn(br.Txn)
 			}
+		} else {
+			for i := range br.Responses {
+				req := ba.Requests[i].GetInner()
+				if br.Responses[i] == (roachpb.ResponseUnion{}) {
+					var reply roachpb.Response
+					switch t := req.(type) {
+					case *roachpb.ScanRequest:
+						reply = &roachpb.ScanResponse{}
+
+					case *roachpb.ReverseScanRequest:
+						reply = &roachpb.ReverseScanResponse{}
+
+					case *roachpb.DeleteRangeRequest:
+						reply = &roachpb.DeleteRangeResponse{}
+
+					case *roachpb.PutRequest:
+						reply = &roachpb.PutResponse{}
+
+					case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+						continue
+
+					default:
+						panic(fmt.Sprintf("bad type %T", t))
+					}
+					br.Responses[i].MustSetInner(reply)
+				}
+				// Set the ResumeSpan for future batch requests.
+				isReverse := ba.IsReverse()
+				if !roachpb.IsRange(req) {
+					continue
+				}
+				hdr := br.Responses[i].GetInner().Header()
+				origSpan := req.Header()
+				if isReverse {
+					if hdr.ResumeSpan != nil {
+						// The ResumeSpan.Key might be set to the StartKey of a range;
+						// correctly set it to the Key of the original request span.
+						hdr.ResumeSpan.Key = origSpan.Key
+					} else if roachpb.RKey(origSpan.Key).Less(seekKey) {
+						// Some keys have yet to be processed.
+						hdr.ResumeSpan = &origSpan
+						if seekKey.Less(roachpb.RKey(origSpan.EndKey)) {
+							// The original span has been partially processed.
+							hdr.ResumeSpan.EndKey = seekKey.AsRawKey()
+						}
+					}
+				} else {
+					if hdr.ResumeSpan != nil {
+						// The ResumeSpan.EndKey might be set to the EndKey of a
+						// range; correctly set it to the EndKey of the original
+						// request span.
+						hdr.ResumeSpan.EndKey = origSpan.EndKey
+					} else if seekKey.Less(roachpb.RKey(origSpan.EndKey)) {
+						// Some keys have yet to be processed.
+						hdr.ResumeSpan = &origSpan
+						if roachpb.RKey(origSpan.Key).Less(seekKey) {
+							// The original span has been partially processed.
+							hdr.ResumeSpan.Key = seekKey.AsRawKey()
+						}
+					}
+				}
+				br.Responses[i].GetInner().SetHeader(hdr)
+			}
 		}
 	}()
 
 	// Get initial seek key depending on direction of iteration.
-	var seekKey roachpb.RKey
 	var scanDir ScanDirection
 	if !ba.IsReverse() {
 		scanDir = Ascending
@@ -825,7 +892,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.MaxSpanRequestKeys -= numResults
 				// Exiting; fill in missing responses.
 				if ba.MaxSpanRequestKeys == 0 {
-					fillSkippedResponses(ba, resp.reply, seekKey)
 					return
 				}
 			}
@@ -910,8 +976,8 @@ func (ds *DistSender) sendPartialBatch(
 	if err != nil {
 		return response{pErr: roachpb.NewError(err)}
 	}
-	truncBA, numActive, err := truncate(ba, intersected)
-	if numActive == 0 && err == nil {
+	truncBA, positions, err := truncate(ba, intersected)
+	if len(positions) == 0 && err == nil {
 		// This shouldn't happen in the wild, but some tests exercise it.
 		return response{
 			pErr: roachpb.NewErrorf("truncation resulted in empty batch on %s: %s", intersected, ba),
@@ -942,7 +1008,7 @@ func (ds *DistSender) sendPartialBatch(
 
 		// If sending succeeded, return immediately.
 		if pErr == nil {
-			return response{reply: reply}
+			return response{reply: reply, positions: positions}
 		}
 
 		log.ErrEventf(ctx, "reply error %s: %s", ba, pErr)
@@ -994,8 +1060,8 @@ func (ds *DistSender) sendPartialBatch(
 			// sending batch to just the partial span this descriptor was
 			// supposed to cover.
 			log.VEventf(ctx, 1, "likely split; resending batch to span: %s", tErr)
-			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, intersected, batchIdx)
-			return response{reply: reply, pErr: pErr}
+			reply, pErr = ds.divideAndSendBatchToRanges(ctx, truncBA, intersected, batchIdx)
+			return response{reply: reply, positions: positions, pErr: pErr}
 		}
 		break
 	}
@@ -1029,79 +1095,6 @@ func includesFrontOfCurSpan(isReverse bool, rd *roachpb.RangeDescriptor, rs roac
 		return rd.ContainsExclusiveEndKey(rs.EndKey)
 	}
 	return rd.ContainsKey(rs.Key)
-}
-
-// fillSkippedResponses after meeting the batch key max limit for range
-// requests.
-func fillSkippedResponses(
-	ba roachpb.BatchRequest, br *roachpb.BatchResponse, nextKey roachpb.RKey,
-) {
-	// Some requests might have NoopResponses; we must replace them with empty
-	// responses of the proper type.
-	for i, req := range ba.Requests {
-		if _, ok := br.Responses[i].GetInner().(*roachpb.NoopResponse); !ok {
-			continue
-		}
-		var reply roachpb.Response
-		switch t := req.GetInner().(type) {
-		case *roachpb.ScanRequest:
-			reply = &roachpb.ScanResponse{}
-
-		case *roachpb.ReverseScanRequest:
-			reply = &roachpb.ReverseScanResponse{}
-
-		case *roachpb.DeleteRangeRequest:
-			reply = &roachpb.DeleteRangeResponse{}
-
-		case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
-			continue
-
-		default:
-			panic(fmt.Sprintf("bad type %T", t))
-		}
-		union := roachpb.ResponseUnion{}
-		union.MustSetInner(reply)
-		br.Responses[i] = union
-	}
-	// Set the ResumeSpan for future batch requests.
-	isReverse := ba.IsReverse()
-	for i, resp := range br.Responses {
-		req := ba.Requests[i].GetInner()
-		if !roachpb.IsRange(req) {
-			continue
-		}
-		hdr := resp.GetInner().Header()
-		origSpan := req.Header()
-		if isReverse {
-			if hdr.ResumeSpan != nil {
-				// The ResumeSpan.Key might be set to the StartKey of a range;
-				// correctly set it to the Key of the original request span.
-				hdr.ResumeSpan.Key = origSpan.Key
-			} else if roachpb.RKey(origSpan.Key).Less(nextKey) {
-				// Some keys have yet to be processed.
-				hdr.ResumeSpan = &origSpan
-				if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
-					// The original span has been partially processed.
-					hdr.ResumeSpan.EndKey = nextKey.AsRawKey()
-				}
-			}
-		} else {
-			if hdr.ResumeSpan != nil {
-				// The ResumeSpan.EndKey might be set to the EndKey of a
-				// range; correctly set it to the EndKey of the original
-				// request span.
-				hdr.ResumeSpan.EndKey = origSpan.EndKey
-			} else if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
-				// Some keys have yet to be processed.
-				hdr.ResumeSpan = &origSpan
-				if roachpb.RKey(origSpan.Key).Less(nextKey) {
-					// The original span has been partially processed.
-					hdr.ResumeSpan.Key = nextKey.AsRawKey()
-				}
-			}
-		}
-		br.Responses[i].GetInner().SetHeader(hdr)
-	}
 }
 
 // sendToReplicas sends one or more RPCs to clients specified by the
