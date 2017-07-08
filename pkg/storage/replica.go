@@ -288,8 +288,11 @@ type Replica struct {
 		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
-		// Last index persisted to the raft log (not necessarily committed).
-		lastIndex uint64
+		// Last index/term persisted to the raft log (not necessarily
+		// committed). Note that lastTerm may be 0 (and thus invalid) even when
+		// lastIndex is known, in which case the term will have to be retrieved
+		// from the Raft log entry.
+		lastIndex, lastTerm uint64
 		// The most recent commit index seen in a message from the leader. Used by
 		// the follower to estimate the number of Raft log entries it is
 		// behind. This field is only valid when the Replica is a follower.
@@ -656,6 +659,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	if err != nil {
 		return err
 	}
+	r.mu.lastTerm = 0
 
 	pErr, err := r.mu.stateLoader.loadReplicaDestroyedError(ctx, r.store.Engine())
 	if err != nil {
@@ -3053,6 +3057,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.Lock()
 
 	lastIndex := r.mu.lastIndex // used for append below
+	lastTerm := r.mu.lastTerm
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
@@ -3175,12 +3180,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if err != nil {
 			return stats, err
 		}
-		if lastIndex, raftLogSize, err = r.append(
-			ctx,
-			writer,
-			lastIndex,
-			raftLogSize,
-			thinEntries,
+		if lastIndex, lastTerm, raftLogSize, err = r.append(
+			ctx, writer, lastIndex, lastTerm, raftLogSize, thinEntries,
 		); err != nil {
 			return stats, err
 		}
@@ -3227,6 +3228,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.Lock()
 	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
+	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
 	r.mu.leaderID = leaderID
 	r.mu.Unlock()
