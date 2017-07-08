@@ -56,6 +56,15 @@ func verifyGet(
 	if nextIndex != expNextIndex {
 		t.Fatalf("expected next index %d; got %d", nextIndex, expNextIndex)
 	}
+	for _, e := range ents {
+		term, ok := rec.getTerm(rangeID, e.Index)
+		if !ok {
+			t.Fatalf("expected to be able to retrieve term")
+		}
+		if term != e.Term {
+			t.Fatalf("expected term %d, but got %d", e.Term, term)
+		}
+	}
 }
 
 func TestEntryCache(t *testing.T) {
