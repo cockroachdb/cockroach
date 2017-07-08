@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-const errOffsetGreaterThanMaxOffset = "fewer than half the known nodes are within the maximum offset"
+const errOffsetGreaterThanMaxOffset = "fewer than half the known nodes are within the maximum clock offset"
 
 // TestUpdateOffset tests the three cases that UpdateOffset should or should
 // not update the offset for an addr.

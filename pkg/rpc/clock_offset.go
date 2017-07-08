@@ -226,10 +226,12 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 		r.metrics.ClockOffsetStdDevNanos.Update(int64(stdDev))
 
 		if numClocks > 0 && healthyOffsetCount <= numClocks/2 {
-			return errors.Errorf("fewer than half the known nodes are within the maximum offset of %s (%d of %d)", maxOffset, healthyOffsetCount, numClocks)
+			return errors.Errorf(
+				"fewer than half the known nodes are within the maximum clock offset of %s (%d of %d); "+
+					"check your machines' clock synchronization", maxOffset, healthyOffsetCount, numClocks)
 		}
 		if log.V(1) {
-			log.Infof(ctx, "%d of %d nodes are within the maximum offset of %s", healthyOffsetCount, numClocks, maxOffset)
+			log.Infof(ctx, "%d of %d nodes are within the maximum clock offset of %s", healthyOffsetCount, numClocks, maxOffset)
 		}
 	}
 
