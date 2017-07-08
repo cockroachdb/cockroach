@@ -380,7 +380,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
 %token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
 %token <str>   COPY COVERING CREATE
-%token <str>   CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
+%token <str>   CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str>   CURRENT_USER CYCLE
 
@@ -4494,6 +4494,14 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
+| CURRENT_SCHEMA
+  {
+    $$.val = &FuncExpr{Func: wrapFunction($1)}
+  }
+| CURRENT_SCHEMA '(' ')'
+  {
+    $$.val = &FuncExpr{Func: wrapFunction($1)}
+  }
 | CURRENT_TIMESTAMP
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
@@ -5643,6 +5651,7 @@ reserved_keyword:
 | CURRENT_CATALOG
 | CURRENT_DATE
 | CURRENT_ROLE
+| CURRENT_SCHEMA
 | CURRENT_TIME
 | CURRENT_TIMESTAMP
 | CURRENT_USER
