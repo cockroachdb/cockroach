@@ -25,6 +25,8 @@ PKG          := ./pkg/...
 TAGS         :=
 TESTS        := .
 BENCHES      :=
+CPUPROFILE   :=
+MEMPROFILE   :=
 FILES        :=
 TESTTIMEOUT  := 4m
 RACETIMEOUT  := 15m
@@ -200,7 +202,7 @@ bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
 .PHONY: check test testshort testrace testlogic bench
 check test testshort testrace bench: gotestdashi
-	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) $(if $(CPUPROFILE),-cpuprofile "$(CPUPROFILE)") $(if $(MEMPROFILE),-memprofile "$(MEMPROFILE)")
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
 # with make testlogic FILES="foo bar".
@@ -215,7 +217,7 @@ testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 .PHONY: testslow testraceslow
 testslow testraceslow: override TESTFLAGS += -v
 testslow testraceslow: gotestdashi
-	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) $(if $(CPUPROFILE),-cpuprofile "$(CPUPROFILE)") $(if $(MEMPROFILE),-memprofile "$(MEMPROFILE)") | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 stressrace: override GOFLAGS += -race
 stressrace: TESTTIMEOUT := $(RACETIMEOUT)
@@ -231,7 +233,7 @@ stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 # checks for the presence of a test binary before running `stress` on it.
 .PHONY: stress stressrace
 stress stressrace: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
-	$(GO) list -tags '$(TAGS)' -f '$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
+	$(GO) list -tags '$(TAGS)' -f '$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') $(if $(CPUPROFILE),-test.cpuprofile '\''$(CPUPROFILE)'\'') $(if $(MEMPROFILE),-test.memprofile '\''$(MEMPROFILE)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 
 .PHONY: upload-coverage
 upload-coverage: $(BOOTSTRAP_TARGET)
