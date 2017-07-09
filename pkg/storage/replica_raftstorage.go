@@ -78,10 +78,11 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // maxBytes. Passing maxBytes equal to zero disables size checking. Sideloaded
 // proposals count towards maxBytes with their payloads inlined.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	snap := r.store.NewSnapshot()
-	defer snap.Close()
+	readonly := r.store.Engine().NewReadOnly()
+	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return entries(ctx, snap, r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
+	return entries(ctx, readonly, r.RangeID, r.store.raftEntryCache,
+		r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
 // raftEntriesLocked requires that r.mu is held.
@@ -242,10 +243,10 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	if term, ok := r.store.raftEntryCache.getTerm(r.RangeID, i); ok {
 		return term, nil
 	}
-	snap := r.store.NewSnapshot()
-	defer snap.Close()
+	readonly := r.store.Engine().NewReadOnly()
+	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return term(ctx, snap, r.RangeID, r.store.raftEntryCache, i)
+	return term(ctx, readonly, r.RangeID, r.store.raftEntryCache, i)
 }
 
 // raftTermLocked requires that r.mu is held.
