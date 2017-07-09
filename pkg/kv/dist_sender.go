@@ -469,7 +469,6 @@ func (ds *DistSender) sendSingleRange(
 		}
 	}
 
-	// TODO(tschottdorf): should serialize the trace here, not higher up.
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
