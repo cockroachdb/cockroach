@@ -24,19 +24,19 @@ import (
 )
 
 var emptySpan = roachpb.Span{}
-var noopRequest = roachpb.NoopRequest{}
 
-// truncate restricts all contained requests to the given key range
-// and returns a new BatchRequest.
-// All requests contained in that batch are "truncated" to the given
-// span, inserting NoopRequest appropriately to replace requests which
-// are left without a key range to operate on. The number of non-noop
-// requests after truncation is returned.
-func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, int, error) {
+// truncate restricts all contained requests to the given key range and returns
+// a new, truncated, BatchRequest. All requests contained in that batch are
+// "truncated" to the given span, and requests which are found to not overlap
+// the given span at all are removed. A mapping of response index to batch index
+// is returned. For example, if
+//
+// ba = Put[a], Put[c], Put[b],
+// rs = [a,bb],
+//
+// then truncate(ba,rs) returns a batch (Put[a], Put[b]) and positions [0,2].
+func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, []int, error) {
 	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
-		if _, ok := args.(*roachpb.NoopRequest); ok {
-			return true, emptySpan, nil
-		}
 		header := args.Header()
 		if !roachpb.IsRange(args) {
 			// This is a point request.
@@ -98,33 +98,32 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		return true, header, nil
 	}
 
-	var numNoop int
+	// TODO(tschottdorf): optimize so that we don't always make a new request
+	// slice, only when something changed (copy-on-write).
+
+	var positions []int
 	truncBA := ba
-	truncBA.Requests = make([]roachpb.RequestUnion, len(ba.Requests))
+	truncBA.Requests = nil
 	for pos, arg := range ba.Requests {
 		hasRequest, newHeader, err := truncateOne(arg.GetInner())
-		if !hasRequest {
-			// We omit this one, i.e. replace it with a Noop.
-			numNoop++
-			union := roachpb.RequestUnion{}
-			union.MustSetInner(&noopRequest)
-			truncBA.Requests[pos] = union
-		} else {
+		if hasRequest {
 			// Keep the old one. If we must adjust the header, must copy.
 			if inner := ba.Requests[pos].GetInner(); newHeader.Equal(inner.Header()) {
-				truncBA.Requests[pos] = ba.Requests[pos]
+				truncBA.Requests = append(truncBA.Requests, ba.Requests[pos])
 			} else {
+				var union roachpb.RequestUnion
 				shallowCopy := inner.ShallowCopy()
 				shallowCopy.SetHeader(newHeader)
-				union := &truncBA.Requests[pos] // avoid operating on copy
 				union.MustSetInner(shallowCopy)
+				truncBA.Requests = append(truncBA.Requests, union)
 			}
+			positions = append(positions, pos)
 		}
 		if err != nil {
-			return roachpb.BatchRequest{}, 0, err
+			return roachpb.BatchRequest{}, nil, err
 		}
 	}
-	return truncBA, len(ba.Requests) - numNoop, nil
+	return truncBA, positions, nil
 }
 
 // prev gives the right boundary of the union of all requests which don't
