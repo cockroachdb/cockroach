@@ -346,7 +346,7 @@ message DecommissionResponse {
   message Value {
     int32 node_id = 1 [ (gogoproto.customname) = "NodeID"];
     bool is_live = 2;
-    int64 range_count = 3;
+    int64 replica_count = 3;
     bool decommissioning = 4;
     bool draining = 5;
   }

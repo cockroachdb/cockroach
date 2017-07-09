@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
@@ -1092,7 +1093,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 
 // Decommission sets the decommission flag to the specified value on the specified node(s).
 func (s *adminServer) Decommission(
-	_ context.Context, req *serverpb.DecommissionRequest,
+	ctx context.Context, req *serverpb.DecommissionRequest,
 ) (*serverpb.DecommissionResponse, error) {
 	nodeIDs := make([]roachpb.NodeID, len(req.NodeID))
 	for i, sNodeID := range req.NodeID {
@@ -1103,8 +1104,26 @@ func (s *adminServer) Decommission(
 		}
 	}
 	s.server.Decommission(req.Decommissioning, nodeIDs)
+	// Get the number of replicas on each node.
+	var nodeStatuses []status.NodeStatus
+	if res, err := s.server.status.Nodes(ctx, &serverpb.NodesRequest{}); err != nil {
+		return nil, err
+	} else {
+		nodeStatuses = res.Nodes
+	}
+	nodeReplicas := make(map[roachpb.NodeID]int64)
+	for _, nodeStatus := range nodeStatuses {
+		nodeID := nodeStatus.Desc.NodeID
+		var replicas float64 = 0
+		for _, storeStatus := range nodeStatus.StoreStatuses {
+			replicas += storeStatus.Metrics["replicas"]
+		}
+		nodeReplicas[nodeID] = int64(replicas)
+	}
+	// Get node liveness.
 	nl := s.server.nodeLiveness
 	ls := nl.GetLivenesses()
+	// Construct response.
 	res := serverpb.DecommissionResponse{
 		Nodes: make([]serverpb.DecommissionResponse_Value, len(ls)),
 	}
@@ -1113,9 +1132,8 @@ func (s *adminServer) Decommission(
 		res.Nodes[i].NodeID = int32(l.NodeID)
 		if live, err := nl.IsLive(l.NodeID); err != nil {
 			res.Nodes[i].IsLive = live
-		} // else false
-		// TODO (ND) add call to server.ReplicaCount when cherry-pick other branch
-		res.Nodes[i].RangeCount = 1
+		} // Else default value is false
+		res.Nodes[i].ReplicaCount = nodeReplicas[l.NodeID]
 		res.Nodes[i].Decommissioning = l.Decommissioning
 		res.Nodes[i].Draining = l.Draining
 	}

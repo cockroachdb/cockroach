@@ -6620,7 +6620,7 @@ export const cockroach = $root.cockroach = (() => {
                      * @type {Object}
                      * @property {number} [node_id] Value node_id.
                      * @property {boolean} [is_live] Value is_live.
-                     * @property {Long} [range_count] Value range_count.
+                     * @property {Long} [replica_count] Value replica_count.
                      * @property {boolean} [decommissioning] Value decommissioning.
                      * @property {boolean} [draining] Value draining.
                      */
@@ -6651,10 +6651,10 @@ export const cockroach = $root.cockroach = (() => {
                     Value.prototype.is_live = false;
 
                     /**
-                     * Value range_count.
+                     * Value replica_count.
                      * @type {Long}
                      */
-                    Value.prototype.range_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+                    Value.prototype.replica_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * Value decommissioning.
@@ -6690,8 +6690,8 @@ export const cockroach = $root.cockroach = (() => {
                             writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
                         if (message.is_live != null && message.hasOwnProperty("is_live"))
                             writer.uint32(/* id 2, wireType 0 =*/16).bool(message.is_live);
-                        if (message.range_count != null && message.hasOwnProperty("range_count"))
-                            writer.uint32(/* id 3, wireType 0 =*/24).int64(message.range_count);
+                        if (message.replica_count != null && message.hasOwnProperty("replica_count"))
+                            writer.uint32(/* id 3, wireType 0 =*/24).int64(message.replica_count);
                         if (message.decommissioning != null && message.hasOwnProperty("decommissioning"))
                             writer.uint32(/* id 4, wireType 0 =*/32).bool(message.decommissioning);
                         if (message.draining != null && message.hasOwnProperty("draining"))
@@ -6731,7 +6731,7 @@ export const cockroach = $root.cockroach = (() => {
                                 message.is_live = reader.bool();
                                 break;
                             case 3:
-                                message.range_count = reader.int64();
+                                message.replica_count = reader.int64();
                                 break;
                             case 4:
                                 message.decommissioning = reader.bool();
@@ -6774,9 +6774,9 @@ export const cockroach = $root.cockroach = (() => {
                         if (message.is_live != null && message.hasOwnProperty("is_live"))
                             if (typeof message.is_live !== "boolean")
                                 return "is_live: boolean expected";
-                        if (message.range_count != null && message.hasOwnProperty("range_count"))
-                            if (!$util.isInteger(message.range_count) && !(message.range_count && $util.isInteger(message.range_count.low) && $util.isInteger(message.range_count.high)))
-                                return "range_count: integer|Long expected";
+                        if (message.replica_count != null && message.hasOwnProperty("replica_count"))
+                            if (!$util.isInteger(message.replica_count) && !(message.replica_count && $util.isInteger(message.replica_count.low) && $util.isInteger(message.replica_count.high)))
+                                return "replica_count: integer|Long expected";
                         if (message.decommissioning != null && message.hasOwnProperty("decommissioning"))
                             if (typeof message.decommissioning !== "boolean")
                                 return "decommissioning: boolean expected";
@@ -6799,15 +6799,15 @@ export const cockroach = $root.cockroach = (() => {
                             message.node_id = object.node_id | 0;
                         if (object.is_live != null)
                             message.is_live = Boolean(object.is_live);
-                        if (object.range_count != null)
+                        if (object.replica_count != null)
                             if ($util.Long)
-                                (message.range_count = $util.Long.fromValue(object.range_count)).unsigned = false;
-                            else if (typeof object.range_count === "string")
-                                message.range_count = parseInt(object.range_count, 10);
-                            else if (typeof object.range_count === "number")
-                                message.range_count = object.range_count;
-                            else if (typeof object.range_count === "object")
-                                message.range_count = new $util.LongBits(object.range_count.low >>> 0, object.range_count.high >>> 0).toNumber();
+                                (message.replica_count = $util.Long.fromValue(object.replica_count)).unsigned = false;
+                            else if (typeof object.replica_count === "string")
+                                message.replica_count = parseInt(object.replica_count, 10);
+                            else if (typeof object.replica_count === "number")
+                                message.replica_count = object.replica_count;
+                            else if (typeof object.replica_count === "object")
+                                message.replica_count = new $util.LongBits(object.replica_count.low >>> 0, object.replica_count.high >>> 0).toNumber();
                         if (object.decommissioning != null)
                             message.decommissioning = Boolean(object.decommissioning);
                         if (object.draining != null)
@@ -6839,9 +6839,9 @@ export const cockroach = $root.cockroach = (() => {
                             object.is_live = false;
                             if ($util.Long) {
                                 let long = new $util.Long(0, 0, false);
-                                object.range_count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                                object.replica_count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                             } else
-                                object.range_count = options.longs === String ? "0" : 0;
+                                object.replica_count = options.longs === String ? "0" : 0;
                             object.decommissioning = false;
                             object.draining = false;
                         }
@@ -6849,11 +6849,11 @@ export const cockroach = $root.cockroach = (() => {
                             object.node_id = message.node_id;
                         if (message.is_live != null && message.hasOwnProperty("is_live"))
                             object.is_live = message.is_live;
-                        if (message.range_count != null && message.hasOwnProperty("range_count"))
-                            if (typeof message.range_count === "number")
-                                object.range_count = options.longs === String ? String(message.range_count) : message.range_count;
+                        if (message.replica_count != null && message.hasOwnProperty("replica_count"))
+                            if (typeof message.replica_count === "number")
+                                object.replica_count = options.longs === String ? String(message.replica_count) : message.replica_count;
                             else
-                                object.range_count = options.longs === String ? $util.Long.prototype.toString.call(message.range_count) : options.longs === Number ? new $util.LongBits(message.range_count.low >>> 0, message.range_count.high >>> 0).toNumber() : message.range_count;
+                                object.replica_count = options.longs === String ? $util.Long.prototype.toString.call(message.replica_count) : options.longs === Number ? new $util.LongBits(message.replica_count.low >>> 0, message.replica_count.high >>> 0).toNumber() : message.replica_count;
                         if (message.decommissioning != null && message.hasOwnProperty("decommissioning"))
                             object.decommissioning = message.decommissioning;
                         if (message.draining != null && message.hasOwnProperty("draining"))

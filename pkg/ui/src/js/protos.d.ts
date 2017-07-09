@@ -3713,7 +3713,7 @@ export namespace cockroach {
                 type Value$Properties = {
                     node_id?: number;
                     is_live?: boolean;
-                    range_count?: Long;
+                    replica_count?: Long;
                     decommissioning?: boolean;
                     draining?: boolean;
                 };
@@ -3747,10 +3747,10 @@ export namespace cockroach {
                     public is_live: boolean;
 
                     /**
-                     * Value range_count.
+                     * Value replica_count.
                      * @type {Long}
                      */
-                    public range_count: Long;
+                    public replica_count: Long;
 
                     /**
                      * Value decommissioning.

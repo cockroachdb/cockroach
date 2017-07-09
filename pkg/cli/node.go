@@ -188,20 +188,10 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 
 var decommissionNodesColumnHeaders = []string{
 	"id",
-	"address",
-	"build",
-	"updated_at",
-	"started_at",
-	"live_bytes",
-	"key_bytes",
-	"value_bytes",
-	"intent_bytes",
-	"system_bytes",
-	"replicas_leaders",
-	"replicas_leaseholders",
-	"ranges",
-	"ranges_unavailable",
-	"ranges_underreplicated",
+	"is_live",
+	"replicas",
+	"is_decommissioning",
+	"is_draining",
 }
 
 var decommissionNodeCmd = &cobra.Command{
@@ -209,9 +199,31 @@ var decommissionNodeCmd = &cobra.Command{
 	Short: "decommissions the node(s)",
 	Long: `
 	Marks the nodes, provided in a comma-separated list, as decommissioning.
-	This will cause leases and replicas to be removed from the node.
+	This will cause leases and replicas to be removed from these nodes.
 	`,
-	RunE: MaybeDecorateGRPCError(runStatusNode),
+	RunE: MaybeDecorateGRPCError(runDecommissionNode),
+}
+
+func setDecommission(nodeIDs []string, decommission bool) error {
+	c, stopper, err := getAdminClient()
+	if err != nil {
+		return err
+	}
+	ctx := stopperContext(stopper)
+	defer stopper.Stop(ctx)
+
+	req := &serverpb.DecommissionRequest{
+		NodeID:          nodeIDs,
+		Decommissioning: decommission,
+	}
+	//var resp &serverpb.DecommissionResponse
+	resp, err := c.Decommission(ctx, req)
+	if err != nil {
+		return err
+	}
+	//var xnodeStatuses []serverpb.DecommissionResponse_Value = resp.Nodes
+	return printQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
+		newRowSliceIter(decommissionResponseValueToRows(resp.Nodes)), "", cliCtx.tableDisplayFormat)
 }
 
 func runDecommissionNode(cmd *cobra.Command, args []string) error {
@@ -222,76 +234,49 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	default:
 		return usageAndError(cmd)
 	}
-	nodeIDs = nodeIDs
-
-	var nodeStatuses []status.NodeStatus
-
-	c, stopper, err := getStatusClient()
-	if err != nil {
-		return err
-	}
-	ctx := stopperContext(stopper)
-	defer stopper.Stop(ctx)
-
-	switch len(args) {
-	case 0:
-		nodes, err := c.Nodes(ctx, &serverpb.NodesRequest{})
-		if err != nil {
-			return err
-		}
-		nodeStatuses = nodes.Nodes
-	case 1:
-		nodeID := args[0]
-		nodeStatus, err := c.Node(ctx, &serverpb.NodeRequest{NodeId: nodeID})
-		if err != nil {
-			return err
-		}
-		nodeStatuses = []status.NodeStatus{*nodeStatus}
-	}
-
-	return printQueryOutput(os.Stdout, statusNodesColumnHeaders, newRowSliceIter(nodeStatusesToRows(nodeStatuses)), "",
-		cliCtx.tableDisplayFormat)
+	return setDecommission(nodeIDs, true)
 }
 
-// nodeStatusesToRows converts NodeStatuses to SQL-like result rows, so that we can pretty-print
-// them.
-func nodeDecommissionToRows(statuses []status.NodeStatus) [][]string {
+// decommissionResponseValueToRow converts DecommissionResponse_Values to
+// SQL-like result rows, so that we can pretty-print them.
+func decommissionResponseValueToRows(statuses []serverpb.DecommissionResponse_Value) [][]string {
 	// Create results that are like the results for SQL results, so that we can pretty-print them.
 	var rows [][]string
-	for _, nodeStatus := range statuses {
-		hostPort := nodeStatus.Desc.Address.AddressField
-		updatedAt := time.Unix(0, nodeStatus.UpdatedAt)
-		updatedAtStr := updatedAt.Format(localTimeFormat)
-		startedAt := time.Unix(0, nodeStatus.StartedAt)
-		startedAtStr := startedAt.Format(localTimeFormat)
-		build := nodeStatus.BuildInfo.Tag
-
-		metricVals := map[string]float64{}
-		for _, storeStatus := range nodeStatus.StoreStatuses {
-			for key, val := range storeStatus.Metrics {
-				metricVals[key] += val
-			}
-		}
-
+	for _, node := range statuses {
 		rows = append(rows, []string{
-			strconv.FormatInt(int64(nodeStatus.Desc.NodeID), 10),
-			hostPort,
-			build,
-			updatedAtStr,
-			startedAtStr,
-			strconv.FormatInt(int64(metricVals["livebytes"]), 10),
-			strconv.FormatInt(int64(metricVals["keybytes"]), 10),
-			strconv.FormatInt(int64(metricVals["valbytes"]), 10),
-			strconv.FormatInt(int64(metricVals["intentbytes"]), 10),
-			strconv.FormatInt(int64(metricVals["sysbytes"]), 10),
-			strconv.FormatInt(int64(metricVals["replicas.leaders"]), 10),
-			strconv.FormatInt(int64(metricVals["replicas.leaseholders"]), 10),
-			strconv.FormatInt(int64(metricVals["ranges"]), 10),
-			strconv.FormatInt(int64(metricVals["ranges.unavailable"]), 10),
-			strconv.FormatInt(int64(metricVals["ranges.underreplicated"]), 10),
+			strconv.FormatInt(int64(node.NodeID), 10),
+			strconv.FormatBool(node.IsLive),
+			strconv.FormatInt(node.ReplicaCount, 10),
+			strconv.FormatBool(node.Decommissioning),
+			strconv.FormatBool(node.Draining),
 		})
 	}
 	return rows
+}
+
+var recommissionNodeCmd = &cobra.Command{
+	Use:   "recommission [<node ID>]+",
+	Short: "recommissions the node(s)",
+	Long: `
+	Resets the decommissioning state for the nodes, provided in a comma-separated
+	list. For this to take effect, you must restart these nodes.
+	`,
+	RunE: MaybeDecorateGRPCError(runRecommissionNode),
+}
+
+func runRecommissionNode(cmd *cobra.Command, args []string) error {
+	var nodeIDs []string
+	switch len(args) {
+	case 1:
+		nodeIDs = strings.Split(args[0], ",")
+	default:
+		return usageAndError(cmd)
+	}
+	if err := setDecommission(nodeIDs, false); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stdout, "The affected nodes must be restarted for changes to take effect.")
+	return nil
 }
 
 // Sub-commands for node command.
@@ -299,7 +284,7 @@ var nodeCmds = []*cobra.Command{
 	lsNodesCmd,
 	statusNodeCmd,
 	decommissionNodeCmd,
-	//	recommissionNodeCmd,
+	recommissionNodeCmd,
 }
 
 var nodeCmd = &cobra.Command{
