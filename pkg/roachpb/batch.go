@@ -229,12 +229,12 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(key, endKey
 // TODO(tschottdorf): write tests.
 func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) error {
 	for i, l := 0, len(otherBatch.Responses); i < l; i++ {
-		id := positions[i]
-		if br.Responses[id] == (ResponseUnion{}) {
-			br.Responses[id] = otherBatch.Responses[i]
+		pos := positions[i]
+		if br.Responses[pos] == (ResponseUnion{}) {
+			br.Responses[pos] = otherBatch.Responses[i]
 			continue
 		}
-		valLeft := br.Responses[id].GetInner()
+		valLeft := br.Responses[pos].GetInner()
 		valRight := otherBatch.Responses[i].GetInner()
 		cValLeft, lOK := valLeft.(combinable)
 		cValRight, rOK := valRight.(combinable)

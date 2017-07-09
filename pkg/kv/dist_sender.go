@@ -469,7 +469,6 @@ func (ds *DistSender) sendSingleRange(
 		}
 	}
 
-	// TODO(tschottdorf): should serialize the trace here, not higher up.
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
@@ -691,12 +690,13 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			}
 
 			if br == nil {
-				// First response from a Range.
+				// First response from a Range, and thus our initial response.
+				// Make an empty slice of responses so that the call to
+				// Combine() below can start populating it.
 				br = &roachpb.BatchResponse{}
-				*br = *(resp.reply)
+				*br = *resp.reply
 				br.Responses = make([]roachpb.ResponseUnion, len(ba.Requests))
 			}
-			// This was the second or later call in a cross-Range request.
 			// Combine the new response with the existing one.
 			if err := br.Combine(resp.reply, resp.positions); err != nil {
 				pErr = roachpb.NewError(err)
@@ -1052,18 +1052,16 @@ func fillSkippedResponses(
 	// limit, and add any other requests at higher keys at the end of the
 	// batch -- they'll all come back without any response since they never
 	// execute.
-	var scratchBA *roachpb.BatchRequest // allocate only when needed
+	var scratchBA roachpb.BatchRequest
 	for i := range br.Responses {
 		req := ba.Requests[i].GetInner()
 		if br.Responses[i] != (roachpb.ResponseUnion{}) {
 			continue
 		}
-		// We need to summon an empty response. Not the most efficient
-		// (but most convenient) way is to use (*BatchRequest).CreateReply.
-		if scratchBA == nil {
-			scratchBA = &roachpb.BatchRequest{
-				Requests: make([]roachpb.RequestUnion, 1),
-			}
+		// We need to summon an empty response. The most convenient (but not
+		// most efficient) way is to use (*BatchRequest).CreateReply.
+		if scratchBA.Requests == nil {
+			scratchBA.Requests = make([]roachpb.RequestUnion, 1)
 		}
 		scratchBA.Requests[0].MustSetInner(req)
 		br.Responses[i] = scratchBA.CreateReply().Responses[0]

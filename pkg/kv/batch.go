@@ -25,17 +25,18 @@ import (
 
 var emptySpan = roachpb.Span{}
 
-// truncate restricts all contained requests to the given key range
-// and returns a new BatchRequest.
-// All requests contained in that batch are "truncated" to the given
-// span, inserting NoopRequest appropriately to replace requests which
-// are left without a key range to operate on. The number of non-noop
-// requests after truncation is returned.
+// truncate restricts all contained requests to the given key range and returns
+// a new, truncated, BatchRequest. All requests contained in that batch are
+// "truncated" to the given span, and requests which are found to not overlap
+// the active key range at all are removed. A mapping of response index to
+// batch index is returned. For example, if
+//
+// ba = Put[a], Put[c], Put[b],
+// rs = [a,bb],
+//
+// then truncate(ba,rs) returns a batch (Put[a], Put[b]) and positions [0,2].
 func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, []int, error) {
 	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
-		if _, ok := args.(*roachpb.NoopRequest); ok {
-			return true, emptySpan, nil
-		}
 		header := args.Header()
 		if !roachpb.IsRange(args) {
 			// This is a point request.
