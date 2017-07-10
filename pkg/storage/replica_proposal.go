@@ -218,6 +218,20 @@ func coalesceBool(lhs *bool, rhs *bool) {
 	*rhs = false
 }
 
+// IsZero used to estimate whether current EvalResult is a empty struct.
+func (p EvalResult) IsZero() bool {
+	if p.Local != (LocalEvalResult{}) {
+		return false
+	}
+	if !p.Replicated.Equal(storagebase.ReplicatedEvalResult{}) {
+		return false
+	}
+	if p.WriteBatch != nil {
+		return false
+	}
+	return true
+}
+
 // MergeAndDestroy absorbs the supplied EvalResult while validating that the
 // resulting EvalResult makes sense. For example, it is forbidden to absorb
 // two lease updates or log truncations, or multiple splits and/or merges.
@@ -339,7 +353,7 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Local.updatedTxn = nil
 
-	if !reflect.DeepEqual(q, EvalResult{}) {
+	if !q.IsZero() {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, EvalResult{}))
 	}
 

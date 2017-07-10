@@ -114,6 +114,7 @@ message StoreIdent {
 // allows the final bookkeeping for the split to be completed and the
 // new range put into operation.
 message SplitTrigger {
+  option (gogoproto.equal) = true;
   optional RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   optional RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
   reserved 3;
@@ -127,6 +128,7 @@ message SplitTrigger {
 // (right_desc). This information allows the final bookkeeping for the
 // merge to be completed and put into operation.
 message MergeTrigger {
+  option (gogoproto.equal) = true;
   optional RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   optional RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
 }
@@ -140,6 +142,7 @@ enum ReplicaChangeType {
 }
 
 message ChangeReplicasTrigger {
+  option (gogoproto.equal) = true;
   optional ReplicaChangeType change_type = 1 [(gogoproto.nullable) = false];
   // The replica being modified.
   optional ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
@@ -315,6 +318,7 @@ message Intent {
 // Lease contains information about range leases including the
 // expiration and lease holder.
 message Lease {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 

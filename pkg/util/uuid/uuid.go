@@ -75,6 +75,13 @@ func (u *UUID) Unmarshal(data []byte) error {
 	return u.UUID.UnmarshalBinary(data)
 }
 
+// Equal judge whether two UUID is equal.
+func (u UUID) Equal(t UUID) bool {
+	u128 := u.ToUint128()
+	t128 := t.ToUint128()
+	return u128.Equal(t128)
+}
+
 // MakeV4 delegates to "github.com/satori/go.uuid".NewV4 and wraps the result in
 // a UUID.
 func MakeV4() UUID {

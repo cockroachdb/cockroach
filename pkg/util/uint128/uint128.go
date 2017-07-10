@@ -53,6 +53,11 @@ func (u Uint128) Sub(n uint64) Uint128 {
 	return Uint128{hi, lo}
 }
 
+// Equal judge whether two Uint128 is equal.
+func (u Uint128) Equal(t Uint128) bool {
+	return u.hi == t.hi && u.lo == t.lo
+}
+
 // FromBytes parses the byte slice as a 128 bit big-endian unsigned integer.
 func FromBytes(b []byte) Uint128 {
 	hi := binary.BigEndian.Uint64(b[:8])
