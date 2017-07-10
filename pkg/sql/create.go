@@ -19,7 +19,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"regexp"
 	"strings"
 
@@ -1038,9 +1037,7 @@ func addInterleave(
 		if interleave.Fields[i].Normalize() != parser.ReNormalizeName(col.Name) {
 			return fmt.Errorf("declared columns must match index being interleaved")
 		}
-		if !reflect.DeepEqual(col.Type, targetCol.Type) ||
-			index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
-
+		if !col.Type.Equal(targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
 			return fmt.Errorf("interleaved columns must match parent")
 		}
 	}

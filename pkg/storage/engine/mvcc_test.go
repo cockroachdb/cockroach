@@ -1262,7 +1262,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 		!bytes.Equal(kvs[0].Value.RawBytes, value2.RawBytes) {
 		t.Fatal("the value should not be empty")
 	}
-	if expected := (roachpb.Span{Key: testKey3, EndKey: testKey4}); !resumeSpan.Equal(expected) {
+	if expected := (roachpb.Span{Key: testKey3, EndKey: testKey4}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 
@@ -1273,7 +1273,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 	if len(kvs) != 0 {
 		t.Fatal("the value should be empty")
 	}
-	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey4}); !resumeSpan.Equal(expected) {
+	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey4}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 }
@@ -1470,7 +1470,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if num != 2 {
 		t.Fatalf("incorrect number of keys deleted: %d", num)
 	}
-	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.Equal(expected) {
+	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
@@ -1499,7 +1499,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if num != 0 {
 		t.Fatalf("incorrect number of keys deleted: %d", num)
 	}
-	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey6}); !resumeSpan.Equal(expected) {
+	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
@@ -1601,7 +1601,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	if expected, actual := testKey3, deleted[1]; !expected.Equal(actual) {
 		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
 	}
-	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.Equal(expected) {
+	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
@@ -1630,7 +1630,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	if num != 0 {
 		t.Fatalf("incorrect number of keys deleted: %d", num)
 	}
-	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey6}); !resumeSpan.Equal(expected) {
+	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
@@ -1837,7 +1837,7 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 	if expected := []roachpb.Key{testKey2, testKey3}; !reflect.DeepEqual(deleted, expected) {
 		t.Fatalf("got deleted values = %v, expected = %v", deleted, expected)
 	}
-	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.Equal(expected) {
+	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("got resume span = %s, expected = %s", resumeSpan, expected)
 	}
 
@@ -2264,7 +2264,7 @@ func TestMVCCReverseScan(t *testing.T) {
 		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) {
 		t.Errorf("unexpected value: %v", kvs)
 	}
-	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey2.Next()}); !resumeSpan.Equal(expected) {
+	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey2.Next()}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine, testKey2, testKey4, 0, hlc.Timestamp{WallTime: 1}, true, nil)
@@ -2274,7 +2274,7 @@ func TestMVCCReverseScan(t *testing.T) {
 	if len(kvs) != 0 {
 		t.Errorf("unexpected value: %v", kvs)
 	}
-	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey4}); !resumeSpan.Equal(expected) {
+	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey4}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 }

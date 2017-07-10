@@ -22,6 +22,8 @@ import "gogoproto/gogo.proto";
 
 // Timestamp represents a state of the hybrid logical clock.
 message Timestamp {
+  option (gogoproto.equal) = true;
+
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 

@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -606,7 +605,7 @@ func (d *debugRangeData) postProcessing() {
 				continue
 			}
 
-			if !reflect.DeepEqual(leaderStoreInfo.Span, info.Span) {
+			if leaderStoreInfo.Span.Equal(info.Span) {
 				d.Results[debugRangeHeaderKeyRange][d.HeaderFakeStoreID].Class = debugRangeClassWarning
 				d.Results[debugRangeHeaderKeyRange][info.SourceStoreID].Class = debugRangeClassWarning
 			}
@@ -631,7 +630,7 @@ func (d *debugRangeData) postProcessing() {
 					repHeader := replicaHeader(desc.ReplicaID)
 					d.Results[repHeader][d.HeaderFakeStoreID].Class = debugRangeClassWarning
 					d.Results[repHeader][info.SourceStoreID].Class = debugRangeClassMissing
-				} else if !reflect.DeepEqual(leaderDesc, desc) {
+				} else if !leaderDesc.Equal(desc) {
 					// The leader's version of this replica is different.
 					repHeader := replicaHeader(desc.ReplicaID)
 					d.Results[repHeader][d.HeaderFakeStoreID].Class = debugRangeClassWarning

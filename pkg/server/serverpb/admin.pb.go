@@ -50,6 +50,7 @@
 		NodeRequest
 		RaftState
 		RangeProblems
+		PrettySpan
 		RangeInfo
 		RangesRequest
 		RangesResponse
@@ -77,7 +78,6 @@
 		ProblemRangesRequest
 		Failure
 		ProblemRangesResponse
-		PrettySpan
 */
 package serverpb
 
