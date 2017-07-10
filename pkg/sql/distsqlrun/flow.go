@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -46,6 +47,8 @@ type FlowID struct {
 // FlowCtx encompasses the contexts needed for various flow components.
 type FlowCtx struct {
 	log.AmbientContext
+
+	stopper *stop.Stopper
 
 	// id is a unique identifier for a flow.
 	id FlowID

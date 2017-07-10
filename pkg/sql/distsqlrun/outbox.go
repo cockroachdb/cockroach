@@ -187,6 +187,12 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		}
 	}
 
+	flushTicker := time.NewTicker(outboxFlushPeriod)
+	defer flushTicker.Stop()
+
+	draining := false
+	defer m.RowChannel.ConsumerClosed()
+
 	// TODO(andrei): It's unfortunate that we're spawning a goroutine for every
 	// outgoing stream, but I'm not sure what to do instead. The streams don't
 	// have a non-blocking API. We could start this goroutine only after a
@@ -195,15 +201,10 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	// producer to drain). Perhaps what we want is a way to tell when all the rows
 	// corresponding to the first KV batch have been sent and only start the
 	// goroutine if more batches are needed to satisfy the query.
-	drainCh := m.waitForDrainSignalFromConsumer()
-
-	flushTicker := time.NewTicker(outboxFlushPeriod)
-	defer flushTicker.Stop()
-
-	draining := false
-	defer func() {
-		m.RowChannel.ConsumerClosed()
-	}()
+	drainCh, err := m.listenForDrainSignalFromConsumer(ctx)
+	if err != nil {
+		return err
+	}
 
 	// Send a first message that will contain the header (i.e. the StreamID), so
 	// that the stream is properly initialized on the consumer. The consumer has
@@ -270,21 +271,18 @@ type drainSignal struct {
 	err error
 }
 
-// waitForDrainSignalFromConsumer returns a channel that will be pinged once the
+// listenForDrainSignalFromConsumer returns a channel that will be pinged once the
 // consumer has closed its send-side of the stream, or has sent a drain signal.
-func (m *outbox) waitForDrainSignalFromConsumer() <-chan drainSignal {
+func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan drainSignal, error) {
 	ch := make(chan drainSignal, 1)
 
-	go func(
-		stream DistSQL_FlowStreamClient,
-		syncFlowStream DistSQL_RunSyncFlowServer,
-	) {
+	if err := m.flowCtx.stopper.RunAsyncTask(ctx, "drain", func(ctx context.Context) {
 		var signal *ConsumerSignal
 		var err error
-		if stream != nil {
-			signal, err = stream.Recv()
+		if m.stream != nil {
+			signal, err = m.stream.Recv()
 		} else {
-			signal, err = syncFlowStream.Recv()
+			signal, err = m.syncFlowStream.Recv()
 		}
 		if err == io.EOF {
 			ch <- drainSignal{drainRequested: false, err: nil}
@@ -295,8 +293,10 @@ func (m *outbox) waitForDrainSignalFromConsumer() <-chan drainSignal {
 			return
 		}
 		ch <- drainSignal{drainRequested: signal.DrainRequest != nil, err: nil}
-	}(m.stream, m.syncFlowStream)
-	return ch
+	}); err != nil {
+		return nil, err
+	}
+	return ch, nil
 }
 
 func (m *outbox) run(ctx context.Context) {
