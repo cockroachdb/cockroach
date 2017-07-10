@@ -58,6 +58,8 @@ type raftEntryCache struct {
 	syncutil.Mutex                     // protects Cache for concurrent access.
 	bytes          uint64              // total size of the cache in bytes
 	cache          *cache.OrderedCache // LRU cache of log entries, keyed by rangeID / log index
+	fromKey        entryCacheKey       // used to avoid allocations on lookup
+	toKey          entryCacheKey       // ^^^
 }
 
 // newRaftEntryCache returns a new RaftEntryCache with the given
@@ -114,6 +116,25 @@ func (rec *raftEntryCache) addEntries(rangeID roachpb.RangeID, ents []raftpb.Ent
 	}
 }
 
+// getTerm returns the term for the specified index and true for the second
+// return value. If the index is not present in the cache, false is returned.
+func (rec *raftEntryCache) getTerm(rangeID roachpb.RangeID, index uint64) (uint64, bool) {
+	rec.Lock()
+	defer rec.Unlock()
+
+	rec.fromKey = entryCacheKey{RangeID: rangeID, Index: index}
+	k, v, ok := rec.cache.Ceil(&rec.fromKey)
+	if !ok {
+		return 0, false
+	}
+	ecKey := k.(*entryCacheKey)
+	if ecKey.RangeID != rangeID || ecKey.Index != index {
+		return 0, false
+	}
+	ent := v.(*raftpb.Entry)
+	return ent.Term, true
+}
+
 // getEntries returns entries between [lo, hi) for specified range.
 // If any entries are returned for the specified indexes, they will
 // start with index lo and proceed sequentially without gaps until
@@ -127,8 +148,8 @@ func (rec *raftEntryCache) getEntries(
 	var bytes uint64
 	nextIndex := lo
 
-	fromKey := &entryCacheKey{RangeID: rangeID, Index: lo}
-	toKey := &entryCacheKey{RangeID: rangeID, Index: hi}
+	rec.fromKey = entryCacheKey{RangeID: rangeID, Index: lo}
+	rec.toKey = entryCacheKey{RangeID: rangeID, Index: hi}
 	rec.cache.DoRange(func(k, v interface{}) bool {
 		ecKey := k.(*entryCacheKey)
 		if ecKey.Index != nextIndex {
@@ -142,7 +163,7 @@ func (rec *raftEntryCache) getEntries(
 			return true
 		}
 		return false
-	}, fromKey, toKey)
+	}, &rec.fromKey, &rec.toKey)
 
 	return ents, bytes, nextIndex
 }
@@ -155,12 +176,12 @@ func (rec *raftEntryCache) delEntries(rangeID roachpb.RangeID, lo, hi uint64) {
 		return
 	}
 	var keys []*entryCacheKey
-	fromKey := &entryCacheKey{RangeID: rangeID, Index: lo}
-	toKey := &entryCacheKey{RangeID: rangeID, Index: hi}
+	rec.fromKey = entryCacheKey{RangeID: rangeID, Index: lo}
+	rec.toKey = entryCacheKey{RangeID: rangeID, Index: hi}
 	rec.cache.DoRange(func(k, v interface{}) bool {
 		keys = append(keys, k.(*entryCacheKey))
 		return false
-	}, fromKey, toKey)
+	}, &rec.fromKey, &rec.toKey)
 
 	for _, k := range keys {
 		rec.cache.Del(k)
