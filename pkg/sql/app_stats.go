@@ -271,34 +271,34 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	return parser.AsStringWithFlags(stmt, formatter), true
 }
 
-// CollectedStats wraps collected timings and metadata for some query's execution.
-type CollectedStats struct {
-	Query   string                      `json:"query"`
-	DistSQL bool                        `json:"distSQL"`
-	Failed  bool                        `json:"failed"`
-	Stats   roachpb.StatementStatistics `json:"stats"`
-}
-
 // GetScrubbedStmtStats returns the statement statistics by app, with the
 // queries scrubbed of their identifiers. Any statements which cannot be
 // scrubbed will be omitted from the returned map.
-func (e *Executor) GetScrubbedStmtStats() map[string][]CollectedStats {
-	ret := make(map[string][]CollectedStats)
+func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics {
+	var ret []roachpb.CollectedStatementStatistics
 	vt := e.virtualSchemas
 	e.sqlStats.Lock()
 	for appName, a := range e.sqlStats.apps {
+		if cap(ret) == 0 {
+			// guesitmate that we'll need apps*(queries-per-app).
+			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(e.sqlStats.apps))
+		}
 		hashedApp := HashAppName(appName)
 		a.Lock()
-		m := make([]CollectedStats, 0, len(a.stmts))
 		for q, stats := range a.stmts {
 			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
 			if ok {
+				k := roachpb.StatementStatisticsKey{
+					Query:   scrubbed,
+					DistSQL: q.distSQLUsed,
+					Failed:  q.failed,
+					App:     hashedApp,
+				}
 				stats.Lock()
-				m = append(m, CollectedStats{scrubbed, q.distSQLUsed, q.failed, stats.data})
+				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: stats.data})
 				stats.Unlock()
 			}
 		}
-		ret[hashedApp] = m
 		a.Unlock()
 	}
 	e.sqlStats.Unlock()
@@ -322,7 +322,7 @@ func (e *Executor) ResetStatementStats(ctx context.Context) {
 
 // FillUnimplementedErrorCounts fills the passed map with the executor's current
 // counts of how often individual unimplemented features have been encountered.
-func (e *Executor) FillUnimplementedErrorCounts(fill map[string]uint) {
+func (e *Executor) FillUnimplementedErrorCounts(fill map[string]int64) {
 	e.unimplementedErrors.Lock()
 	for k, v := range e.unimplementedErrors.counts {
 		fill[k] = v
@@ -336,7 +336,7 @@ func (e *Executor) recordUnimplementedFeature(feature string) {
 	}
 	e.unimplementedErrors.Lock()
 	if e.unimplementedErrors.counts == nil {
-		e.unimplementedErrors.counts = make(map[string]uint)
+		e.unimplementedErrors.counts = make(map[string]int64)
 	}
 	e.unimplementedErrors.counts[feature]++
 	e.unimplementedErrors.Unlock()
@@ -345,6 +345,6 @@ func (e *Executor) recordUnimplementedFeature(feature string) {
 // ResetUnimplementedCounts resets counting of unimplemented errors.
 func (e *Executor) ResetUnimplementedCounts() {
 	e.unimplementedErrors.Lock()
-	e.unimplementedErrors.counts = make(map[string]uint, len(e.unimplementedErrors.counts))
+	e.unimplementedErrors.counts = make(map[string]int64, len(e.unimplementedErrors.counts))
 	e.unimplementedErrors.Unlock()
 }

@@ -68,3 +68,16 @@ message NumericStat {
   optional double mean = 1 [(gogoproto.nullable) = false];
   optional double squared_diffs = 2 [(gogoproto.nullable) = false];
 }
+
+message StatementStatisticsKey {
+  optional string query = 1 [(gogoproto.nullable) = false];
+  optional string app = 2 [(gogoproto.nullable) = false];
+  optional bool distSQL = 3 [(gogoproto.nullable) = false];
+  optional bool failed = 4 [(gogoproto.nullable) = false];
+}
+
+// CollectedStats wraps collected timings and metadata for some query's execution.
+message CollectedStatementStatistics {
+  optional StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
+  optional StatementStatistics stats = 2 [(gogoproto.nullable) = false];
+}
