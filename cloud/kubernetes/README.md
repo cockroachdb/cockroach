@@ -27,6 +27,29 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start
 
 The minimum kubernetes version to successfully run the examples in this directory is `1.6`.
 
+For secure mode, the controller must enable `certificatesigningrequests`.
+You can check if this is enabled by looking at the controller logs:
+```
+# On cloud platform:
+# Find the controller:
+$ kubectl get pods --all-namespaces | grep controller
+kube-system   po/kube-controller-manager-k8s-master-5ef244d4-0   1/1       Running   0          7m
+
+# Check the logs:
+$ kubectl logs kube-controller-manager-k8s-master-5ef244d4-0 -n kube-system | grep certificate
+I0628 12:38:23.471365       1 controllermanager.go:427] Starting "certificatesigningrequests"
+E0628 12:38:23.473076       1 certificates.go:38] Failed to start certificate controller: open /etc/kubernetes/ca/ca.pem: no such file or directory
+W0628 12:38:23.473106       1 controllermanager.go:434] Skipping "certificatesigningrequests"
+# This shows that the certificate controller is not running, approved CSRs will not trigger a certificate.
+
+# On minikube:
+$ minikube logs|grep certificate
+Jun 28 12:49:00 minikube localkube[3440]: I0628 12:49:00.224903    3440 controllermanager.go:437] Started "certificatesigningrequests"
+Jun 28 12:49:00 minikube localkube[3440]: I0628 12:49:00.231134    3440 certificate_controller.go:120] Starting certificate controller manager
+# This shows that the certificate controller is running, approved CSRs will get a certificate.
+
+```
+
 ### StatefulSet limitations
 
 There is currently no possibility to use node-local storage (outside of
@@ -97,22 +120,32 @@ Run: `kubectl create -f cockroachdb-statefulset.yaml`
 
 ### Secure mode
 
+**REQUIRED**: the kubernetes cluster must run with the certificate controller enabled.
+This is done by passing the `--cluster-signing-cert-file` and `--cluster-signing-key-file` flags.
+On minikube, you can tell it to use the minikube-generated CA by specifying:
+```
+$ minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/ca.key"
+```
+
 Run: `kubectl create -f cockroachdb-statefulset-secure.yaml`
 
 Each new node will request a certificate from the kubernetes CA during its initialization phase.
 Statefulsets create pods one at a time, waiting for each previous pod to be initialized.
 This means that you must approve podN's certificate for podN+1 to be created.
 
+
+If a pod is rescheduled, it will reuse the previously-generated certificate.
+
 You can view pending certificates and approve them using:
 ```
 # List CSRs:
 $ kubectl get csr
-NAME                 AGE       REQUESTOR                               CONDITION
-node-cockroachdb-0   4s        system:serviceaccount:default:default   Pending
+NAME                         AGE       REQUESTOR                               CONDITION
+default.node.cockroachdb-0   4s        system:serviceaccount:default:default   Pending
 
 # Examine the CSR:
-$ kubecrtl describe csr node-cockroachdb-0
-Name:                   node-cockroachdb-0
+$ kubectl describe csr default.node.cockroachdb-0
+Name:                   default.node.cockroachdb-0
 Labels:                 <none>
 Annotations:            <none>
 CreationTimestamp:      Thu, 22 Jun 2017 09:56:49 -0400
@@ -131,12 +164,12 @@ Subject Alternative Names:
 Events: <none>
 
 # If everything checks out, approve the CSR:
-$ kubectl certificate approve node-cockroachdb-0
-certificatesigningrequest "node-cockroachdb-0" approved
+$ kubectl certificate approve default.node.cockroachdb-0
+certificatesigningrequest "default.node.cockroachdb-0" approved
 
 # Otherwise, deny the CSR:
-$ kubectl certificate deny node-cockroachdb-0
-certificatesigningrequest "node-cockroachdb-0" denied
+$ kubectl certificate deny default.node.cockroachdb-0
+certificatesigningrequest "default.node.cockroachdb-0" denied
 ```
 
 ## Accessing the database
@@ -174,7 +207,7 @@ http://localhost:8080/ in your web browser.
 
 ## Running the example app
 
-This directory contains the configuration to launch a simple load generator with 2 pods.
+This directory contains the configuration to launch a simple load generator with one pod.
 
 If you created an insecure cockroach cluster, run:
 ```shell
@@ -186,10 +219,15 @@ If you created a secure cockroach cluster, run:
 kubectl create -f example_app_secure.yaml
 ```
 
-For every pod being created, you will need to approve its client certificate request:
+When the first pod is being initialized, you will need to approve its client certificate request:
 ```shell
-kubectl certificate approve client.root-example-secure-etc..
+kubectl certificate approve default.client.root
 ```
+
+If more pods are then added through `kubectl scale deployment example-secure --replicas=X`, the generated
+certificate will be reused.
+**WARNING**: the example app in secure mode should be started with only one replica, or concurrent and
+conflicting certificate requests will be sent, causing issues.
 
 ## Simulating failures
 
