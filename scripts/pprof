@@ -36,4 +36,4 @@ cleanup() {
 
 trap cleanup EXIT
 
-go tool pprof cockroach "http://127.0.0.1:${port}/debug/pprof/${profile_type}"
+go tool pprof "http://127.0.0.1:${port}/debug/pprof/${profile_type}"
