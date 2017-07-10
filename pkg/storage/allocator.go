@@ -213,10 +213,13 @@ func (a *Allocator) ComputeAction(
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	need := int(zone.NumReplicas)
 	have := len(desc.Replicas)
-	if have < need {
-		// Range is under-replicated, and should add an additional replica.
-		// Priority is adjusted by the difference between the current replica
-		// count and the quorum of the desired replica count.
+	decommissioningReplicas := a.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas)
+	if have < need || (have == need && len(decommissioningReplicas) > 0) {
+		// TODO: If the add is due to decommissioningReplicas, should that be
+		// communicated using a different action?
+		// Range is under-replicated or has decomissioning replicas, and should add
+		// an additional replica.  Priority is adjusted by the difference between
+		// the current replica count and the quorum of the desired replica count.
 		neededQuorum := computeQuorum(need)
 		priority := addMissingReplicaPriority + float64(neededQuorum-have)
 		if log.V(3) {
@@ -226,8 +229,8 @@ func (a *Allocator) ComputeAction(
 	}
 	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
 	if len(deadReplicas) > 0 {
-		// The range has dead replicas, which should be removed immediately.
-		// Adjust the priority by the number of dead replicas the range has.
+		// The range has dead or decomissioning replicas, which should be removed
+		// immediately.  Adjust the priority by the number of non-live replicas.
 		quorum := computeQuorum(len(desc.Replicas))
 		if lr := len(liveReplicas); lr >= quorum {
 			// Only allow removal of a dead replica if we have a suitable allocation
