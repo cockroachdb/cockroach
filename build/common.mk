@@ -351,6 +351,8 @@ $(CGO_FLAGS_FILES): $(REPO_ROOT)/build/common.mk
 # past, when the tarballs were packaged), and so the build artifacts always look
 # up-to-date.
 
+$(JEMALLOC_SRC_DIR)/configure.ac: $(BOOTSTRAP_TARGET)
+
 $(JEMALLOC_SRC_DIR)/configure: $(JEMALLOC_SRC_DIR)/configure.ac
 	cd $(JEMALLOC_SRC_DIR) && autoconf
 
@@ -364,7 +366,7 @@ $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/con
 	@# https://github.com/jemalloc/jemalloc/issues/585.
 	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(CONFIGURE_FLAGS) $(if $(findstring musl,$(TARGET_TRIPLE)),,--enable-prof)
 
-$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild
+$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(BOOTSTRAP_TARGET)
 	rm -rf $(PROTOBUF_DIR)
 	mkdir -p $(PROTOBUF_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -372,7 +374,7 @@ $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild
 	cd $(PROTOBUF_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 
 ifneq ($(PROTOC_DIR),$(PROTOBUF_DIR))
-$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild
+$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(BOOTSTRAP_TARGET)
 	rm -rf $(PROTOC_DIR)
 	mkdir -p $(PROTOC_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -380,7 +382,7 @@ $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild
 	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 endif
 
-$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | libsnappy $(if $(USE_STDMALLOC),,libjemalloc)
+$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(BOOTSTRAP_TARGET) | libsnappy $(if $(USE_STDMALLOC),,libjemalloc)
 	rm -rf $(ROCKSDB_DIR)
 	mkdir -p $(ROCKSDB_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -393,7 +395,7 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | libsnappy $(if $(USE_ST
 	@# TODO(benesch): Tweak how we pass -DNDEBUG above when we upgrade to a
 	@# RocksDB release that includes https://github.com/facebook/rocksdb/pull/2300.
 
-$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild
+$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild $(BOOTSTRAP_TARGET)
 	rm -rf $(SNAPPY_DIR)
 	mkdir -p $(SNAPPY_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -406,23 +408,23 @@ $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild
 # .PHONY and .ALWAYS_REBUILD). We don't have the targets' prerequisites here,
 # and we certainly don't want to duplicate them.
 
-$(PROTOC): $(PROTOC_DIR)/Makefile $(BOOTSTRAP_TARGET) .ALWAYS_REBUILD
+$(PROTOC): $(PROTOC_DIR)/Makefile .ALWAYS_REBUILD
 	@$(MAKE) --no-print-directory -C $(PROTOC_DIR) -j$(NCPUS) protoc
 
 .PHONY: libjemalloc
-libjemalloc: $(JEMALLOC_DIR)/Makefile $(BOOTSTRAP_TARGET)
+libjemalloc: $(JEMALLOC_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(JEMALLOC_DIR) -j$(NCPUS) build_lib_static
 
 .PHONY: libprotobuf
-libprotobuf: $(PROTOBUF_DIR)/Makefile $(BOOTSTRAP_TARGET)
+libprotobuf: $(PROTOBUF_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(PROTOBUF_DIR) -j$(NCPUS) libprotobuf
 
 .PHONY: libsnappy
-libsnappy: $(SNAPPY_DIR)/Makefile $(BOOTSTRAP_TARGET)
+libsnappy: $(SNAPPY_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(SNAPPY_DIR) -j$(NCPUS)
 
 .PHONY: librocksdb
-librocksdb: $(ROCKSDB_DIR)/Makefile $(BOOTSTRAP_TARGET)
+librocksdb: $(ROCKSDB_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) -j$(NCPUS) rocksdb
 
 .PHONY: clean-c-deps
