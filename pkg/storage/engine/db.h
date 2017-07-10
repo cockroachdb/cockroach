@@ -102,6 +102,10 @@ void DBClose(DBEngine* db);
 // complete.
 DBStatus DBFlush(DBEngine* db);
 
+// Syncs the RocksDB WAL ensuring all data is persisted to
+// disk. Blocks until the operation is complete.
+DBStatus DBSyncWAL(DBEngine* db);
+
 // Forces an immediate compaction over all keys.
 DBStatus DBCompact(DBEngine* db);
 
