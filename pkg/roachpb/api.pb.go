@@ -1755,8 +1755,8 @@ type BatchResponse_Header struct {
 	// transaction. The transaction timestamp and/or priority may have
 	// been updated, depending on the outcome of the request.
 	Txn *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
-	// now is the current time at the node sending the response,
-	// which can be used by the receiver to update its local HLC.
+	// now is the highest current time from any node contacted during the request.
+	// It can be used by the receiver to update its local HLC.
 	Now cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=now" json:"now"`
 	// collected_spans stores trace spans recorded during the execution of this
 	// request.

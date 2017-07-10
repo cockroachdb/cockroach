@@ -469,7 +469,6 @@ func (ds *DistSender) sendSingleRange(
 		}
 	}
 
-	// TODO(tschottdorf): should serialize the trace here, not higher up.
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
@@ -655,8 +654,9 @@ func (ds *DistSender) Send(
 }
 
 type response struct {
-	reply *roachpb.BatchResponse
-	pErr  *roachpb.Error
+	reply     *roachpb.BatchResponse
+	positions []int
+	pErr      *roachpb.Error
 }
 
 // divideAndSendBatchToRanges sends the supplied batch to all of the
@@ -669,10 +669,17 @@ type response struct {
 func (ds *DistSender) divideAndSendBatchToRanges(
 	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	// Make an empty slice of responses which will be populated with responses
+	// as they come in via Combine().
+	br = &roachpb.BatchResponse{
+		Responses: make([]roachpb.ResponseUnion, len(ba.Requests)),
+	}
 	// This function builds a channel of responses for each range
 	// implicated in the span (rs) and combines them into a single
 	// BatchResponse when finished.
 	var responseChs []chan response
+	var seekKey roachpb.RKey
+	var couldHaveSkippedResponses bool
 	defer func() {
 		if r := recover(); r != nil {
 			// If we're in the middle of a panic, don't wait on responseChs.
@@ -686,31 +693,33 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				}
 				continue
 			}
-			if br == nil {
-				// First response from a Range.
-				br = resp.reply
-			} else {
-				// This was the second or later call in a cross-Range request.
-				// Combine the new response with the existing one.
-				if err := br.Combine(resp.reply); err != nil {
-					pErr = roachpb.NewError(err)
-					return
-				}
-				br.Txn.Update(resp.reply.Txn)
+
+			// Combine the new response with the existing one (including updating
+			// the headers).
+			if err := br.Combine(resp.reply, resp.positions); err != nil {
+				pErr = roachpb.NewError(err)
+				return
 			}
 		}
 
 		// If we experienced an error, don't neglect to update the error's
 		// attached transaction with any responses which were received.
 		if pErr != nil {
-			if br != nil {
+			// The br.Txn != nil check looks unnecessary, but note that we might
+			// be returning errNo1PCTxn which is a singleton, so we could end up
+			// with data races.
+			//
+			// TODO(tschottdorf): get rid of the errNo1PCTxn singleton. It's
+			// ugly.
+			if br.Txn != nil {
 				pErr.UpdateTxn(br.Txn)
 			}
+		} else if couldHaveSkippedResponses {
+			fillSkippedResponses(ba, br, seekKey)
 		}
 	}()
 
 	// Get initial seek key depending on direction of iteration.
-	var seekKey roachpb.RKey
 	var scanDir ScanDirection
 	if !ba.IsReverse() {
 		scanDir = Ascending
@@ -811,6 +820,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			if resp.pErr != nil {
 				return
 			}
+			// Update the transaction from the response. Note that this wouldn't happen
+			// on the asynchronous path, but if we have newer information it's good to
+			// use it.
 			ba.UpdateTxn(resp.reply.Txn)
 
 			// Check whether we've received enough responses to exit query loop.
@@ -823,9 +835,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 					panic(fmt.Sprintf("received %d results, limit was %d", numResults, ba.MaxSpanRequestKeys))
 				}
 				ba.MaxSpanRequestKeys -= numResults
-				// Exiting; fill in missing responses.
+				// Exiting; any missing responses will be filled in via defer().
 				if ba.MaxSpanRequestKeys == 0 {
-					fillSkippedResponses(ba, resp.reply, seekKey)
+					couldHaveSkippedResponses = true
 					return
 				}
 			}
@@ -910,8 +922,8 @@ func (ds *DistSender) sendPartialBatch(
 	if err != nil {
 		return response{pErr: roachpb.NewError(err)}
 	}
-	truncBA, numActive, err := truncate(ba, intersected)
-	if numActive == 0 && err == nil {
+	truncBA, positions, err := truncate(ba, intersected)
+	if len(positions) == 0 && err == nil {
 		// This shouldn't happen in the wild, but some tests exercise it.
 		return response{
 			pErr: roachpb.NewErrorf("truncation resulted in empty batch on %s: %s", intersected, ba),
@@ -942,7 +954,7 @@ func (ds *DistSender) sendPartialBatch(
 
 		// If sending succeeded, return immediately.
 		if pErr == nil {
-			return response{reply: reply}
+			return response{reply: reply, positions: positions}
 		}
 
 		log.ErrEventf(ctx, "reply error %s: %s", ba, pErr)
@@ -992,10 +1004,14 @@ func (ds *DistSender) sendPartialBatch(
 			// On addressing errors (likely a split), we need to re-invoke
 			// the range descriptor lookup machinery, so we recurse by
 			// sending batch to just the partial span this descriptor was
-			// supposed to cover.
+			// supposed to cover. Note that for the resending, we use the
+			// already truncated batch, so that we know that the response
+			// to it matches the positions into our batch (using the full
+			// batch here would give a potentially larger response slice
+			// with unknown mapping to our truncated reply).
 			log.VEventf(ctx, 1, "likely split; resending batch to span: %s", tErr)
-			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, intersected, batchIdx)
-			return response{reply: reply, pErr: pErr}
+			reply, pErr = ds.divideAndSendBatchToRanges(ctx, truncBA, intersected, batchIdx)
+			return response{reply: reply, positions: positions, pErr: pErr}
 		}
 		break
 	}
@@ -1036,32 +1052,28 @@ func includesFrontOfCurSpan(isReverse bool, rd *roachpb.RangeDescriptor, rs roac
 func fillSkippedResponses(
 	ba roachpb.BatchRequest, br *roachpb.BatchResponse, nextKey roachpb.RKey,
 ) {
-	// Some requests might have NoopResponses; we must replace them with empty
-	// responses of the proper type.
-	for i, req := range ba.Requests {
-		if _, ok := br.Responses[i].GetInner().(*roachpb.NoopResponse); !ok {
+	// Some requests might have no response at all if we used a batch-wide
+	// limit; simply create trivial responses for those. Note that any type
+	// of request can crop up here - simply take a batch that exceeds the
+	// limit, and add any other requests at higher keys at the end of the
+	// batch -- they'll all come back without any response since they never
+	// execute.
+	var scratchBA roachpb.BatchRequest
+	for i := range br.Responses {
+		if br.Responses[i] != (roachpb.ResponseUnion{}) {
 			continue
 		}
-		var reply roachpb.Response
-		switch t := req.GetInner().(type) {
-		case *roachpb.ScanRequest:
-			reply = &roachpb.ScanResponse{}
-
-		case *roachpb.ReverseScanRequest:
-			reply = &roachpb.ReverseScanResponse{}
-
-		case *roachpb.DeleteRangeRequest:
-			reply = &roachpb.DeleteRangeResponse{}
-
-		case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
-			continue
-
-		default:
-			panic(fmt.Sprintf("bad type %T", t))
+		req := ba.Requests[i].GetInner()
+		// We need to summon an empty response. The most convenient (but not
+		// most efficient) way is to use (*BatchRequest).CreateReply.
+		//
+		// TODO(tschottdorf): can autogenerate CreateReply for individual
+		// requests, see roachpb/gen_batch.go.
+		if scratchBA.Requests == nil {
+			scratchBA.Requests = make([]roachpb.RequestUnion, 1)
 		}
-		union := roachpb.ResponseUnion{}
-		union.MustSetInner(reply)
-		br.Responses[i] = union
+		scratchBA.Requests[0].MustSetInner(req)
+		br.Responses[i] = scratchBA.CreateReply().Responses[0]
 	}
 	// Set the ResumeSpan for future batch requests.
 	isReverse := ba.IsReverse()

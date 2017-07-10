@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"github.com/rlmcpherson/s3gof3r"
 )
 
@@ -298,6 +299,24 @@ func (rh Span) Header() Span {
 // SetHeader implements the Request interface.
 func (rh *Span) SetHeader(other Span) {
 	*rh = other
+}
+
+func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
+	if h.Error != nil || o.Error != nil {
+		return errors.Errorf(
+			"can't combine batch responses with errors, have errors %q and %q",
+			h.Error, o.Error,
+		)
+	}
+	h.Timestamp.Forward(o.Timestamp)
+	if h.Txn == nil {
+		h.Txn = o.Txn
+	} else {
+		h.Txn.Update(o.Txn)
+	}
+	h.Now.Forward(o.Now)
+	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
+	return nil
 }
 
 // Header implements the Request interface.
