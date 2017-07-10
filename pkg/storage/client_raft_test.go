@@ -2432,6 +2432,67 @@ func TestReplicaGCRace(t *testing.T) {
 	}
 }
 
+// TestStoreRangeMoveDecommissioning verifies that if a store is set to
+// decommission, the ReplicateQueue will notice and move any replicas on it.
+func TestStoreRangeMoveDecommissioning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicaRebalancing = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 4)
+	mtc.initGossipNetwork()
+
+	// Replicate the range to 2 more stores. Note that there are 4 stores in the
+	// cluster leaving an extra store available as a replication target once the
+	// replica on the dead node is removed.
+	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+	mtc.replicateRange(replica.RangeID, 1, 2)
+
+	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+
+	ctx := context.Background()
+	decommingNodeIdx := 2
+	decommingNodeID := mtc.idents[decommingNodeIdx].NodeID
+	mtc.nodeLivenesses[decommingNodeIdx].
+		SetDecommissioning(ctx, decommingNodeID, true)
+
+	replacementNodeIdx := 2
+	replacementNodeID := mtc.idents[replacementNodeIdx].NodeID
+	replacementStoreID := mtc.idents[replacementNodeIdx].StoreID
+
+	var movedReplicas []roachpb.ReplicaDescriptor
+	for _, r := range origReplicas {
+		if r.NodeID == decommingNodeID {
+			movedReplicas = append(movedReplicas,
+				roachpb.ReplicaDescriptor{
+					NodeID:    replacementNodeID,
+					StoreID:   replacementStoreID,
+					ReplicaID: r.ReplicaID,
+				})
+		} else {
+			movedReplicas = append(movedReplicas, r)
+		}
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		// Force the repair queues on all stores to run.
+		for _, s := range mtc.stores {
+			s.ForceReplicationScanAndProcess()
+		}
+		// Wait for a replacement replica for the decommissioning node to be added
+		// and the replica on the decommissioning node to be removed.
+		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+		if len(curReplicas) != 3 {
+			return errors.Errorf("Expected 3 replicas, got %v", curReplicas)
+		}
+		if !reflect.DeepEqual(movedReplicas, curReplicas) {
+			return errors.Errorf("Want: %s, have: %s", movedReplicas, curReplicas)
+		}
+		return nil
+	})
+}
+
 // TestStoreRangeRemoveDead verifies that if a store becomes dead, the
 // ReplicateQueue will notice and remove any replicas on it.
 func TestStoreRangeRemoveDead(t *testing.T) {
