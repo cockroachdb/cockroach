@@ -14,6 +14,7 @@ package ccl
 import (
 	// ccl init hooks
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/cliccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
