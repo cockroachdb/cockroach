@@ -34,9 +34,8 @@ if ! echo -n "${dev_id}" | sudo tee ${UNBIND_PATH} > /dev/null; then
   echo 'Time sync device already unbound, or error encountered.'
 fi
 
-# Install ntpdate.
+# Force an NTP time sync.
 sudo apt-get -qqy install ntpdate
-# Stop ntp, force ntp sync, restart ntp.
-sudo service ntp stop
+sudo timedatectl set-ntp false
 sudo ntpdate -b ntp.ubuntu.com
-sudo service ntp start
+sudo timedatectl set-ntp true
