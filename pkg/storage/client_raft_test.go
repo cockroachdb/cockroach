@@ -2432,6 +2432,49 @@ func TestReplicaGCRace(t *testing.T) {
 	}
 }
 
+// TestStoreRangeMoveDecommissioning verifies that if a store is set to
+// decommission, the ReplicateQueue will notice and move any replicas on it.
+func TestStoreRangeMoveDecommissioning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicaRebalancing = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 4)
+	mtc.initGossipNetwork()
+
+	// Replicate the range to 2 more stores. Note that there are 4 stores in the
+	// cluster leaving an extra store available as a replication target once the
+	// replica on the dead node is removed.
+	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+	mtc.replicateRange(replica.RangeID, 1, 2)
+
+	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+
+	ctx := context.Background()
+	decommingNodeIdx := 2
+	decommingNodeID := mtc.gossips[decommingNodeIdx].NodeID.Get()
+	mtc.nodeLivenesses[decommingNodeIdx].
+		SetDecommissioning(ctx, decommingNodeID, true)
+
+	testutils.SucceedsSoon(t, func() error {
+		// Force the repair queues on all stores to run.
+		for _, s := range mtc.stores {
+			s.ForceReplicationScanAndProcess()
+		}
+		// Wait for a replacement replica for the decommissioning node to be added
+		// and the replica on the decommissioning node to be removed.
+		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+		if len(curReplicas) != 3 {
+			return errors.Errorf("Expected 3 replicas, got %v", curReplicas)
+		}
+		if reflect.DeepEqual(origReplicas, curReplicas) {
+			return errors.Errorf("Expected replica to be moved, but found them to be same as original %v", origReplicas)
+		}
+		return nil
+	})
+}
+
 // TestStoreRangeRemoveDead verifies that if a store becomes dead, the
 // ReplicateQueue will notice and remove any replicas on it.
 func TestStoreRangeRemoveDead(t *testing.T) {
