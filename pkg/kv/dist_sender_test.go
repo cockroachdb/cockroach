@@ -1809,7 +1809,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 			// would actually be fine, but it doesn't seem worth optimizing at
 			// this point.
 			roachpb.Key("a1"), roachpb.Key("b1"), roachpb.Key("a1"),
-			[][]roachpb.Method{{roachpb.Put, roachpb.Noop}, {roachpb.Noop, roachpb.Put}, {roachpb.EndTransaction}},
+			[][]roachpb.Method{{roachpb.Put}, {roachpb.Put}, {roachpb.EndTransaction}},
 		},
 		{
 			// Both writes go to the second range, but not EndTransaction.

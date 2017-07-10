@@ -1073,12 +1073,13 @@ message BatchResponse {
     // transaction. The transaction timestamp and/or priority may have
     // been updated, depending on the outcome of the request.
     optional Transaction txn = 3;
-    // now is the current time at the node sending the response,
-    // which can be used by the receiver to update its local HLC.
+    // now is the highest current time from any node contacted during the request.
+    // It can be used by the receiver to update its local HLC.
     optional util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
     // collected_spans stores trace spans recorded during the execution of this
     // request.
     repeated util.tracing.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
+    // NB: if you add a field here, don't forget to update combine().
   }
   optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
