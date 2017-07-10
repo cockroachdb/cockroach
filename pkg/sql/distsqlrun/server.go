@@ -191,6 +191,7 @@ func (ds *ServerImpl) setupFlow(
 	// txnProto).
 	flowCtx := FlowCtx{
 		AmbientContext: ds.AmbientContext,
+		stopper:        ds.Stopper,
 		id:             req.Flow.FlowID,
 		evalCtx:        evalCtx,
 		rpcCtx:         ds.RPCContext,
