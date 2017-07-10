@@ -50,6 +50,14 @@ func (UUID) Bytes() {
 // Silence unused warning for UUID.Bytes.
 var _ = (UUID).Bytes
 
+// Equal returns true iff the receiver equals the argument.
+//
+// This method exists only to conform to the API expected by gogoproto's
+// generated Equal implementations.
+func (u UUID) Equal(t UUID) bool {
+	return u == t
+}
+
 // GetBytes returns the UUID as a byte slice.
 func (u UUID) GetBytes() []byte {
 	return u.UUID.Bytes()

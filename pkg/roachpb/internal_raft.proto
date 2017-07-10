@@ -26,6 +26,7 @@ import "gogoproto/gogo.proto";
 // Raft requires access to the term of the last truncated log entry even after the
 // rest of the entry has been discarded.
 message RaftTruncatedState {
+  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // The highest index that has been removed from the log.

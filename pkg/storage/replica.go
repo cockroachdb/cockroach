@@ -1602,7 +1602,7 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
-	if !reflect.DeepEqual(diskState, r.mu.state) {
+	if !diskState.Equal(r.mu.state) {
 		// The roundabout way of printing here is to expose this information in sentry.io.
 		//
 		// TODO(dt): expose properly once #15892 is addressed.

@@ -1124,8 +1124,8 @@ func AsIntents(spans []Span, txn *Transaction) []Intent {
 	return ret
 }
 
-// Equal compares for equality.
-func (s Span) Equal(o Span) bool {
+// EqualValue compares for equality.
+func (s Span) EqualValue(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
 }
 
