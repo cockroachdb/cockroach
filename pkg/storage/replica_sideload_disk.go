@@ -63,7 +63,9 @@ func (imss *diskSideloadStorage) Get(ctx context.Context, index, term uint64) ([
 	filename := imss.filename(ctx, index, term)
 	if _, err := os.Stat(filename); err == nil {
 		// File exists.
-	} else if !os.IsNotExist(err) {
+	} else if os.IsNotExist(err) {
+		return nil, errSideloadedFileNotFound
+	} else if err != nil {
 		return nil, err
 	}
 	return ioutil.ReadFile(filename)

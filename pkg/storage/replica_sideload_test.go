@@ -385,6 +385,12 @@ func proposeAddSSTable(
 	return kv
 }
 
+func makeInMemSideloaded(repl *Replica) {
+	repl.raftMu.Lock()
+	repl.raftMu.sideloaded = newInMemSideloadStorage(repl.RangeID, 0, "")
+	repl.raftMu.Unlock()
+}
+
 // TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
 func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -402,6 +408,8 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 		key = "foo"
 		val = "bar"
 	)
+
+	makeInMemSideloaded(tc.repl)
 
 	ts := hlc.Timestamp{Logical: 1}
 
@@ -652,6 +660,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
+	makeInMemSideloaded(tc.repl)
 	ctx := context.Background()
 
 	const count = 10
