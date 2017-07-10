@@ -6243,6 +6243,126 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type PrettySpan$Properties = {
+                start_key?: string;
+                end_key?: string;
+            };
+
+            /**
+             * Constructs a new PrettySpan.
+             * @exports cockroach.server.serverpb.PrettySpan
+             * @constructor
+             * @param {cockroach.server.serverpb.PrettySpan$Properties=} [properties] Properties to set
+             */
+            class PrettySpan {
+
+                /**
+                 * Constructs a new PrettySpan.
+                 * @exports cockroach.server.serverpb.PrettySpan
+                 * @constructor
+                 * @param {cockroach.server.serverpb.PrettySpan$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.PrettySpan$Properties);
+
+                /**
+                 * PrettySpan start_key.
+                 * @type {string}
+                 */
+                public start_key: string;
+
+                /**
+                 * PrettySpan end_key.
+                 * @type {string}
+                 */
+                public end_key: string;
+
+                /**
+                 * Creates a new PrettySpan instance using the specified properties.
+                 * @param {cockroach.server.serverpb.PrettySpan$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.PrettySpan$Properties): cockroach.server.serverpb.PrettySpan;
+
+                /**
+                 * Encodes the specified PrettySpan message. Does not implicitly {@link cockroach.server.serverpb.PrettySpan.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.PrettySpan$Properties} message PrettySpan message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.PrettySpan$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified PrettySpan message, length delimited. Does not implicitly {@link cockroach.server.serverpb.PrettySpan.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.PrettySpan$Properties} message PrettySpan message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.PrettySpan$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a PrettySpan message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.PrettySpan;
+
+                /**
+                 * Decodes a PrettySpan message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.PrettySpan;
+
+                /**
+                 * Verifies a PrettySpan message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a PrettySpan message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.PrettySpan;
+
+                /**
+                 * Creates a PrettySpan message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.PrettySpan.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.PrettySpan;
+
+                /**
+                 * Creates a plain object from a PrettySpan message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.PrettySpan} message PrettySpan
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.PrettySpan, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this PrettySpan message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this PrettySpan to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type RangeInfo$Properties = {
                 span?: cockroach.server.serverpb.PrettySpan$Properties;
                 raft_state?: cockroach.server.serverpb.RaftState$Properties;
@@ -9741,126 +9861,6 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public problemRanges(request: (cockroach.server.serverpb.ProblemRangesRequest|{ [k: string]: any }), callback: Status_problemRanges_Callback): void;
-            }
-
-            type PrettySpan$Properties = {
-                start_key?: string;
-                end_key?: string;
-            };
-
-            /**
-             * Constructs a new PrettySpan.
-             * @exports cockroach.server.serverpb.PrettySpan
-             * @constructor
-             * @param {cockroach.server.serverpb.PrettySpan$Properties=} [properties] Properties to set
-             */
-            class PrettySpan {
-
-                /**
-                 * Constructs a new PrettySpan.
-                 * @exports cockroach.server.serverpb.PrettySpan
-                 * @constructor
-                 * @param {cockroach.server.serverpb.PrettySpan$Properties=} [properties] Properties to set
-                 */
-                constructor(properties?: cockroach.server.serverpb.PrettySpan$Properties);
-
-                /**
-                 * PrettySpan start_key.
-                 * @type {string}
-                 */
-                public start_key: string;
-
-                /**
-                 * PrettySpan end_key.
-                 * @type {string}
-                 */
-                public end_key: string;
-
-                /**
-                 * Creates a new PrettySpan instance using the specified properties.
-                 * @param {cockroach.server.serverpb.PrettySpan$Properties=} [properties] Properties to set
-                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan instance
-                 */
-                public static create(properties?: cockroach.server.serverpb.PrettySpan$Properties): cockroach.server.serverpb.PrettySpan;
-
-                /**
-                 * Encodes the specified PrettySpan message. Does not implicitly {@link cockroach.server.serverpb.PrettySpan.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.PrettySpan$Properties} message PrettySpan message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                public static encode(message: cockroach.server.serverpb.PrettySpan$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                /**
-                 * Encodes the specified PrettySpan message, length delimited. Does not implicitly {@link cockroach.server.serverpb.PrettySpan.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.PrettySpan$Properties} message PrettySpan message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                public static encodeDelimited(message: cockroach.server.serverpb.PrettySpan$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                /**
-                 * Decodes a PrettySpan message from the specified reader or buffer.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @param {number} [length] Message length if known beforehand
-                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.PrettySpan;
-
-                /**
-                 * Decodes a PrettySpan message from the specified reader or buffer, length delimited.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.PrettySpan;
-
-                /**
-                 * Verifies a PrettySpan message.
-                 * @param {Object.<string,*>} message Plain object to verify
-                 * @returns {?string} `null` if valid, otherwise the reason why it is not
-                 */
-                public static verify(message: { [k: string]: any }): string;
-
-                /**
-                 * Creates a PrettySpan message from a plain object. Also converts values to their respective internal types.
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
-                 */
-                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.PrettySpan;
-
-                /**
-                 * Creates a PrettySpan message from a plain object. Also converts values to their respective internal types.
-                 * This is an alias of {@link cockroach.server.serverpb.PrettySpan.fromObject}.
-                 * @function
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
-                 */
-                public static from(object: { [k: string]: any }): cockroach.server.serverpb.PrettySpan;
-
-                /**
-                 * Creates a plain object from a PrettySpan message. Also converts values to other types if specified.
-                 * @param {cockroach.server.serverpb.PrettySpan} message PrettySpan
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                public static toObject(message: cockroach.server.serverpb.PrettySpan, options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                /**
-                 * Creates a plain object from this PrettySpan message. Also converts values to other types if specified.
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                /**
-                 * Converts this PrettySpan to JSON.
-                 * @returns {Object.<string,*>} JSON object
-                 */
-                public toJSON(): { [k: string]: any };
             }
         }
 

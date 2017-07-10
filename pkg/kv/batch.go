@@ -106,7 +106,7 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		hasRequest, newHeader, err := truncateOne(arg.GetInner())
 		if hasRequest {
 			// Keep the old one. If we must adjust the header, must copy.
-			if inner := ba.Requests[pos].GetInner(); newHeader.Equal(inner.Header()) {
+			if inner := ba.Requests[pos].GetInner(); newHeader.EqualValue(inner.Header()) {
 				truncBA.Requests = append(truncBA.Requests, ba.Requests[pos])
 			} else {
 				var union roachpb.RequestUnion
