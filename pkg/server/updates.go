@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -99,9 +100,11 @@ type versionInfo struct {
 }
 
 type reportingInfo struct {
-	Node       nodeInfo                                          `json:"node"`
-	Stores     []storeInfo                                       `json:"stores"`
-	Schema     []sqlbase.TableDescriptor                         `json:"schema"`
+	// Retired fields (do not reuse, consumers may have legacy handling):
+	//	- "sqlstats", "schema" (1.0.x).
+	Node       nodeInfo                        `json:"node"`
+	Stores     []storeInfo                     `json:"stores"`
+	Schema     []string                        `json:"tabledescs"`
 	QueryStats map[string][]sql.CollectedStats `json:"queryStats"`
 	// UnimplementedErrors reports when unimplemented features are encountered.
 	UnimplementedErrors map[string]uint `json:"unimplemented"`
@@ -284,7 +287,7 @@ func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 		info.Node.Bytes += bytes
 	}
 
-	schema, err := s.collectSchemaInfo(ctx)
+	schema, err := s.collectAndEncodeSchemaInfo(ctx)
 	if err != nil {
 		log.Warningf(ctx, "error collecting schema info for diagnostic report: %+v", err)
 		schema = nil
@@ -325,14 +328,29 @@ func (s *Server) reportDiagnostics(runningTime time.Duration) {
 	}
 }
 
-func (s *Server) collectSchemaInfo(ctx context.Context) ([]sqlbase.TableDescriptor, error) {
+func (s *Server) collectAndEncodeSchemaInfo(ctx context.Context) ([]string, error) {
+	schema, err := s.collectSchemaInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ret := make([]string, len(schema))
+	for i, t := range schema {
+		bytes, err := t.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		ret[i] = base64.StdEncoding.EncodeToString(bytes)
+	}
+	return ret, nil
+}
+func (s *Server) collectSchemaInfo(ctx context.Context) ([]*sqlbase.TableDescriptor, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
 	kvs, err := s.db.Scan(ctx, startKey, endKey, 0)
 	if err != nil {
 		return nil, err
 	}
-	tables := make([]sqlbase.TableDescriptor, 0, len(kvs))
+	tables := make([]*sqlbase.TableDescriptor, 0, len(kvs))
 	redactor := stringRedactor{}
 	for _, kv := range kvs {
 		var desc sqlbase.Descriptor
@@ -343,7 +361,7 @@ func (s *Server) collectSchemaInfo(ctx context.Context) ([]sqlbase.TableDescript
 			if err := reflectwalk.Walk(t, redactor); err != nil {
 				panic(err) // stringRedactor never returns a non-nil err
 			}
-			tables = append(tables, *t)
+			tables = append(tables, t)
 		}
 	}
 	return tables, nil
