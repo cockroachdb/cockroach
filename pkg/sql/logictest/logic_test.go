@@ -1704,6 +1704,7 @@ func (t *logicTest) Error(args ...interface{}) {
 	if *showSQL {
 		t.outf("\t-- FAIL")
 	}
+	log.Error(context.Background(), args...)
 	t.t.Error(args...)
 	t.failures++
 }
@@ -1715,6 +1716,7 @@ func (t *logicTest) Errorf(format string, args ...interface{}) {
 	if *showSQL {
 		t.outf("\t-- FAIL")
 	}
+	log.Errorf(context.Background(), format, args...)
 	t.t.Errorf(format, args...)
 	t.failures++
 }
@@ -1725,6 +1727,7 @@ func (t *logicTest) Fatal(args ...interface{}) {
 	if *showSQL {
 		fmt.Println()
 	}
+	log.Error(context.Background(), args...)
 	t.t.Fatal(args...)
 }
 
@@ -1734,6 +1737,7 @@ func (t *logicTest) Fatalf(format string, args ...interface{}) {
 	if *showSQL {
 		fmt.Println()
 	}
+	log.Errorf(context.Background(), format, args...)
 	t.t.Fatalf(format, args...)
 }
 
