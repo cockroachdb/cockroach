@@ -20,6 +20,8 @@ package roachpb
 import (
 	"reflect"
 	"testing"
+
+	"github.com/kr/pretty"
 )
 
 func TestBatchSplit(t *testing.T) {
@@ -210,5 +212,63 @@ func TestIntentSpanIterate(t *testing.T) {
 	}
 	if e := (Span{Key("g"), Key("h")}); !reflect.DeepEqual(e, spans[0]) {
 		t.Fatalf("unexpected spans: e = %+v, found = %+v", e, spans[0])
+	}
+}
+
+func TestBatchResponseCombine(t *testing.T) {
+	br := &BatchResponse{}
+	{
+		brTxn := &BatchResponse{
+			BatchResponse_Header: BatchResponse_Header{
+				Txn: &Transaction{Name: "test"},
+			},
+		}
+		if err := br.Combine(brTxn, nil); err != nil {
+			t.Fatal(err)
+		}
+		if br.Txn.Name != "test" {
+			t.Fatal("Combine() did not update the header")
+		}
+	}
+
+	br.Responses = make([]ResponseUnion, 1)
+
+	singleScanBR := func() *BatchResponse {
+		var union ResponseUnion
+		union.MustSetInner(&ScanResponse{
+			Rows: []KeyValue{{
+				Key: Key("bar"),
+			}},
+		})
+		return &BatchResponse{
+			Responses: []ResponseUnion{union},
+		}
+	}
+	// Combine twice with a single scan result: first one should simply copy over, second
+	// one should add on top. Slightly different code paths internally, hence the distinction.
+	for i := 0; i < 2; i++ {
+		if err := br.Combine(singleScanBR(), []int{0}); err != nil {
+			t.Fatal(err)
+		}
+		if exp := i + 1; len(br.Responses[0].GetInner().(*ScanResponse).Rows) != exp {
+			t.Fatalf("expected %d rows, got %+v", exp, br)
+		}
+	}
+
+	var union ResponseUnion
+	union.MustSetInner(&PutResponse{})
+	br.Responses = []ResponseUnion{union, br.Responses[0]}
+
+	// Now we have br = [Put, Scan]. Combine should use the position to
+	// combine singleScanBR on top of the Scan at index one.
+	if err := br.Combine(singleScanBR(), []int{1}); err != nil {
+		t.Fatal(err)
+	}
+	if exp, scan := 3, br.Responses[1].GetInner().(*ScanResponse); len(scan.Rows) != exp {
+		t.Fatalf("expected %d rows, got %s", exp, pretty.Sprint(scan))
+	}
+	if err := br.Combine(singleScanBR(), []int{0}); err.Error() !=
+		`can not combine *roachpb.PutResponse and *roachpb.ScanResponse` {
+		t.Fatal(err)
 	}
 }
