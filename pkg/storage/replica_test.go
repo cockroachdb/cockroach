@@ -5184,7 +5184,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// The term of the last truncated entry is still available.
 	tc.repl.mu.Lock()
-	term, err := tc.repl.raftTermLocked(indexes[4])
+	term, err := tc.repl.raftTermRLocked(indexes[4])
 	tc.repl.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -5195,7 +5195,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// The terms of older entries are gone.
 	tc.repl.mu.Lock()
-	_, err = tc.repl.raftTermLocked(indexes[3])
+	_, err = tc.repl.raftTermRLocked(indexes[3])
 	tc.repl.mu.Unlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
@@ -5217,7 +5217,7 @@ func TestTruncateLog(t *testing.T) {
 
 	tc.repl.mu.Lock()
 	// The term of the last truncated entry is still available.
-	term, err = tc.repl.raftTermLocked(indexes[4])
+	term, err = tc.repl.raftTermRLocked(indexes[4])
 	tc.repl.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -6143,20 +6143,20 @@ func TestTerm(t *testing.T) {
 	}
 
 	// Truncated logs should return an ErrCompacted error.
-	if _, err := tc.repl.raftTermLocked(indexes[1]); err != raft.ErrCompacted {
+	if _, err := tc.repl.raftTermRLocked(indexes[1]); err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
-	if _, err := tc.repl.raftTermLocked(indexes[3]); err != raft.ErrCompacted {
+	if _, err := tc.repl.raftTermRLocked(indexes[3]); err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 
 	// FirstIndex-1 should return the term of firstIndex.
-	firstIndexTerm, err := tc.repl.raftTermLocked(firstIndex)
+	firstIndexTerm, err := tc.repl.raftTermRLocked(firstIndex)
 	if err != nil {
 		t.Errorf("expect no error, got %s", err)
 	}
 
-	term, err := tc.repl.raftTermLocked(indexes[4])
+	term, err := tc.repl.raftTermRLocked(indexes[4])
 	if err != nil {
 		t.Errorf("expect no error, got %s", err)
 	}
@@ -6170,15 +6170,15 @@ func TestTerm(t *testing.T) {
 	}
 
 	// Last index should return correctly.
-	if _, err := tc.repl.raftTermLocked(lastIndex); err != nil {
+	if _, err := tc.repl.raftTermRLocked(lastIndex); err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
 
 	// Terms for after the last index should return ErrUnavailable.
-	if _, err := tc.repl.raftTermLocked(lastIndex + 1); err != raft.ErrUnavailable {
+	if _, err := tc.repl.raftTermRLocked(lastIndex + 1); err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
-	if _, err := tc.repl.raftTermLocked(indexes[9] + 1000); err != raft.ErrUnavailable {
+	if _, err := tc.repl.raftTermRLocked(indexes[9] + 1000); err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
 }

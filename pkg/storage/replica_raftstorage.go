@@ -78,10 +78,11 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // maxBytes. Passing maxBytes equal to zero disables size checking. Sideloaded
 // proposals count towards maxBytes with their payloads inlined.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	snap := r.store.NewSnapshot()
-	defer snap.Close()
+	readonly := r.store.Engine().NewReadOnly()
+	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return entries(ctx, snap, r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
+	return entries(ctx, readonly, r.RangeID, r.store.raftEntryCache,
+		r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
 // raftEntriesLocked requires that r.mu is held.
@@ -235,14 +236,21 @@ func iterateEntries(
 
 // Term implements the raft.Storage interface.
 func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
-	snap := r.store.NewSnapshot()
-	defer snap.Close()
+	if r.mu.lastIndex == i && r.mu.lastTerm != 0 {
+		return r.mu.lastTerm, nil
+	}
+	// Try to retrieve the term for the desired entry from the entry cache.
+	if term, ok := r.store.raftEntryCache.getTerm(r.RangeID, i); ok {
+		return term, nil
+	}
+	readonly := r.store.Engine().NewReadOnly()
+	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return term(ctx, snap, r.RangeID, r.store.raftEntryCache, i)
+	return term(ctx, readonly, r.RangeID, r.store.raftEntryCache, i)
 }
 
-// raftTermLocked requires that r.mu is held.
-func (r *Replica) raftTermLocked(i uint64) (uint64, error) {
+// raftTermLocked requires that r.mu is locked for reading.
+func (r *Replica) raftTermRLocked(i uint64) (uint64, error) {
 	return (*replicaRaftStorage)(r).Term(i)
 }
 
@@ -517,11 +525,12 @@ func (r *Replica) append(
 	ctx context.Context,
 	batch engine.ReadWriter,
 	prevLastIndex uint64,
+	prevLastTerm uint64,
 	prevRaftLogSize int64,
 	entries []raftpb.Entry,
-) (uint64, int64, error) {
+) (uint64, uint64, int64, error) {
 	if len(entries) == 0 {
-		return prevLastIndex, prevRaftLogSize, nil
+		return prevLastIndex, prevLastTerm, prevRaftLogSize, nil
 	}
 	var diff enginepb.MVCCStats
 	var value roachpb.Value
@@ -530,7 +539,7 @@ func (r *Replica) append(
 		key := r.raftMu.stateLoader.RaftLogKey(ent.Index)
 
 		if err := value.SetProto(ent); err != nil {
-			return 0, 0, err
+			return 0, 0, 0, err
 		}
 		value.InitChecksum(key)
 		var err error
@@ -540,29 +549,30 @@ func (r *Replica) append(
 			err = engine.MVCCPut(ctx, batch, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		}
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, 0, err
 		}
 	}
 
 	// Delete any previously appended log entries which never committed.
 	lastIndex := entries[len(entries)-1].Index
+	lastTerm := entries[len(entries)-1].Term
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		// Note that the caller is in charge of deleting any sideloaded payloads
 		// (which they must only do *after* the batch has committed).
 		err := engine.MVCCDelete(ctx, batch, &diff, r.raftMu.stateLoader.RaftLogKey(i),
 			hlc.Timestamp{}, nil /* txn */)
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, 0, err
 		}
 	}
 
 	if err := r.raftMu.stateLoader.setLastIndex(ctx, batch, lastIndex); err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 
 	raftLogSize := prevRaftLogSize + diff.SysBytes
 
-	return lastIndex, raftLogSize, nil
+	return lastIndex, lastTerm, raftLogSize, nil
 }
 
 // updateRangeInfo is called whenever a range is updated by ApplySnapshot
@@ -725,12 +735,8 @@ func (r *Replica) applySnapshot(
 		return err
 	}
 	// Write the snapshot's Raft log into the range.
-	_, raftLogSize, err = r.append(
-		ctx,
-		distinctBatch,
-		0,
-		raftLogSize,
-		thinEntries,
+	_, _, raftLogSize, err = r.append(
+		ctx, distinctBatch, 0, 0, raftLogSize, thinEntries,
 	)
 	if err != nil {
 		return err
@@ -775,6 +781,7 @@ func (r *Replica) applySnapshot(
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
 	r.mu.lastIndex = s.RaftAppliedIndex
+	r.mu.lastTerm = 0
 	r.mu.raftLogSize = raftLogSize
 	// Update the range and store stats.
 	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
