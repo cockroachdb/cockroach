@@ -292,7 +292,10 @@ func (rq *replicateQueue) processOneChange(
 		// failure tolerance properties than a group of size 2n - 1 because it has a
 		// larger quorum. For example, up-replicating from 1 to 2 replicas only
 		// makes sense if it is possible to be able to go to 3 replicas.
-		if willHave != need && willHave%2 == 0 {
+		//
+		// NB: If willHave > need, then always allow up-replicating as that will be
+		// the case when up-replicating a range with a decommissioning replica.
+		if willHave < need && willHave%2 == 0 {
 			// This means we are going to up-replicate to an even replica state.
 			// Check if it is possible to go to an odd replica state beyond it.
 			oldPlusNewReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
@@ -327,15 +330,24 @@ func (rq *replicateQueue) processOneChange(
 			log.Infof(ctx, "removing a replica")
 		}
 		candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas)
-		removeReplica, err := rq.allocator.RemoveTarget(
-			ctx,
-			zone.Constraints,
-			candidates,
-		)
-		if err != nil {
-			return false, err
+		// If there is any removable decommissioning replica, remove that first.
+		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(desc.RangeID, candidates)
+		var removeReplica roachpb.ReplicaDescriptor
+		if len(decommissioningReplicas) > 0 {
+			removeReplica = decommissioningReplicas[0]
+		} else {
+			removeReplica, err = rq.allocator.RemoveTarget(
+				ctx,
+				zone.Constraints,
+				candidates,
+			)
+			if err != nil {
+				return false, err
+			}
 		}
 		if removeReplica.StoreID == repl.store.StoreID() {
+			// TODO: Does this need special consideration in case of removing a
+			// decommissioning replica?
 			// The local replica was selected as the removal target, but that replica
 			// is the leaseholder, so transfer the lease instead. We don't check that
 			// the current store has too many leases in this case under the
@@ -377,7 +389,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 	case AllocatorRemoveDead:
 		if log.V(1) {
-			log.Infof(ctx, "removing a dead replica")
+			log.Infof(ctx, "removing a dead or decommissioning replica")
 		}
 		if len(deadReplicas) == 0 {
 			if log.V(1) {
