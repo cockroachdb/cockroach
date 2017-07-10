@@ -54,6 +54,7 @@ func TestOutbox(t *testing.T) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
+		stopper: stopper,
 		evalCtx: evalCtx,
 		rpcCtx:  newInsecureRPCContext(stopper),
 	}
@@ -208,6 +209,7 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
+		stopper: stopper,
 		evalCtx: evalCtx,
 		rpcCtx:  newInsecureRPCContext(stopper),
 	}
@@ -272,6 +274,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
+				stopper: stopper,
 				evalCtx: evalCtx,
 				rpcCtx:  newInsecureRPCContext(stopper),
 			}
@@ -342,6 +345,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				// Wait for the consumer to connect.
 				call := <-mockServer.runSyncFlowCalls
 				outbox = newOutboxSyncFlowStream(call.stream)
+				outbox.setFlowCtx(&FlowCtx{stopper: stopper})
 				// In a RunSyncFlow call, the outbox runs under the call's context.
 				outbox.start(call.stream.Context(), &wg)
 				// Wait for the consumer to receive the header message that the outbox
