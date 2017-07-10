@@ -240,11 +240,12 @@ func clusterNodeCount(g *gossip.Gossip) int {
 	return nodes
 }
 
-type backupFileDescriptors []BackupDescriptor_File
+// BackupFileDescriptors is a slice of BackupDescriptor_File.
+type BackupFileDescriptors []BackupDescriptor_File
 
-func (r backupFileDescriptors) Len() int      { return len(r) }
-func (r backupFileDescriptors) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
-func (r backupFileDescriptors) Less(i, j int) bool {
+func (r BackupFileDescriptors) Len() int      { return len(r) }
+func (r BackupFileDescriptors) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r BackupFileDescriptors) Less(i, j int) bool {
 	if cmp := bytes.Compare(r[i].Span.Key, r[j].Span.Key); cmp != 0 {
 		return cmp < 0
 	}
@@ -449,7 +450,7 @@ func Backup(
 		NodeID:        p.ExecCfg().NodeID.Get(),
 		ClusterID:     p.ExecCfg().ClusterID(),
 	}
-	sort.Sort(backupFileDescriptors(desc.Files))
+	sort.Sort(BackupFileDescriptors(desc.Files))
 
 	descBuf, err := desc.Marshal()
 	if err != nil {

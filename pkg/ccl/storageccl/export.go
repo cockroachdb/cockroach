@@ -182,7 +182,7 @@ func evalExport(
 	}
 
 	// Compute the checksum before we upload and remove the local file.
-	checksum, err := sha512ChecksumData(sstContents)
+	checksum, err := SHA512ChecksumData(sstContents)
 	if err != nil {
 		return storage.EvalResult{}, err
 	}
@@ -202,7 +202,8 @@ func evalExport(
 	return storage.EvalResult{}, nil
 }
 
-func sha512ChecksumData(data []byte) ([]byte, error) {
+// SHA512ChecksumData returns the SHA512 checksum of data.
+func SHA512ChecksumData(data []byte) ([]byte, error) {
 	h := sha512.New()
 	if _, err := h.Write(data); err != nil {
 		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))

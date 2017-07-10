@@ -264,7 +264,7 @@ func insertStmtToKVs(
 		return errors.Errorf("load insert: expected VALUES clause: %q", stmt)
 	}
 
-	b := inserter(f)
+	b := Inserter(f)
 	for _, tuple := range values.Tuples {
 		row := make([]parser.Datum, len(tuple.Exprs))
 		for i, expr := range tuple.Exprs {
@@ -295,13 +295,17 @@ func insertStmtToKVs(
 	return nil
 }
 
-type inserter func(roachpb.KeyValue)
+// Inserter implements the sqlbase.puter interface for use with RowInserter. It
+// invokes the function for every call to Put.
+type Inserter func(roachpb.KeyValue)
 
-func (i inserter) CPut(key, value, expValue interface{}) {
+// CPut implements sqlbase.puter.
+func (i Inserter) CPut(key, value, expValue interface{}) {
 	panic("unimplemented")
 }
 
-func (i inserter) Put(key, value interface{}) {
+// Put implements sqlbase.puter.
+func (i Inserter) Put(key, value interface{}) {
 	i(roachpb.KeyValue{
 		Key:   *key.(*roachpb.Key),
 		Value: *value.(*roachpb.Value),
