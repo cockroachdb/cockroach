@@ -25,6 +25,8 @@ import "cockroach/pkg/sql/sqlbase/privilege.proto";
 import "gogoproto/gogo.proto";
 
 message ColumnType {
+  option (gogoproto.equal) = true;
+
   // These mirror the types supported by the sql/parser. See
   // sql/parser/col_types.go.
   enum SemanticType {

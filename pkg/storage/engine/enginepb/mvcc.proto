@@ -118,6 +118,7 @@ message MVCCMetadata {
 // so that it can predict its own impact on the size of the system-local
 // kv-pairs.
 message MVCCStats {
+  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // contains_estimates indicates that the MVCCStats object contains values

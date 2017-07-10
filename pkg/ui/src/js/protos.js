@@ -11083,6 +11083,201 @@ export const cockroach = $root.cockroach = (() => {
                 return RangeProblems;
             })();
 
+            serverpb.PrettySpan = (function() {
+
+                /**
+                 * Properties of a PrettySpan.
+                 * @typedef cockroach.server.serverpb.PrettySpan$Properties
+                 * @type {Object}
+                 * @property {string} [start_key] PrettySpan start_key.
+                 * @property {string} [end_key] PrettySpan end_key.
+                 */
+
+                /**
+                 * Constructs a new PrettySpan.
+                 * @exports cockroach.server.serverpb.PrettySpan
+                 * @constructor
+                 * @param {cockroach.server.serverpb.PrettySpan$Properties=} [properties] Properties to set
+                 */
+                function PrettySpan(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * PrettySpan start_key.
+                 * @type {string}
+                 */
+                PrettySpan.prototype.start_key = "";
+
+                /**
+                 * PrettySpan end_key.
+                 * @type {string}
+                 */
+                PrettySpan.prototype.end_key = "";
+
+                /**
+                 * Creates a new PrettySpan instance using the specified properties.
+                 * @param {cockroach.server.serverpb.PrettySpan$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan instance
+                 */
+                PrettySpan.create = function create(properties) {
+                    return new PrettySpan(properties);
+                };
+
+                /**
+                 * Encodes the specified PrettySpan message. Does not implicitly {@link cockroach.server.serverpb.PrettySpan.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.PrettySpan$Properties} message PrettySpan message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                PrettySpan.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.start_key != null && message.hasOwnProperty("start_key"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.start_key);
+                    if (message.end_key != null && message.hasOwnProperty("end_key"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.end_key);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified PrettySpan message, length delimited. Does not implicitly {@link cockroach.server.serverpb.PrettySpan.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.PrettySpan$Properties} message PrettySpan message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                PrettySpan.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a PrettySpan message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                PrettySpan.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.PrettySpan();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.start_key = reader.string();
+                            break;
+                        case 2:
+                            message.end_key = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a PrettySpan message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                PrettySpan.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a PrettySpan message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                PrettySpan.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.start_key != null && message.hasOwnProperty("start_key"))
+                        if (!$util.isString(message.start_key))
+                            return "start_key: string expected";
+                    if (message.end_key != null && message.hasOwnProperty("end_key"))
+                        if (!$util.isString(message.end_key))
+                            return "end_key: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a PrettySpan message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
+                 */
+                PrettySpan.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.PrettySpan)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.PrettySpan();
+                    if (object.start_key != null)
+                        message.start_key = String(object.start_key);
+                    if (object.end_key != null)
+                        message.end_key = String(object.end_key);
+                    return message;
+                };
+
+                /**
+                 * Creates a PrettySpan message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.PrettySpan.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
+                 */
+                PrettySpan.from = PrettySpan.fromObject;
+
+                /**
+                 * Creates a plain object from a PrettySpan message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.PrettySpan} message PrettySpan
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                PrettySpan.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.start_key = "";
+                        object.end_key = "";
+                    }
+                    if (message.start_key != null && message.hasOwnProperty("start_key"))
+                        object.start_key = message.start_key;
+                    if (message.end_key != null && message.hasOwnProperty("end_key"))
+                        object.end_key = message.end_key;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this PrettySpan message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                PrettySpan.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this PrettySpan to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                PrettySpan.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return PrettySpan;
+            })();
+
             serverpb.RangeInfo = (function() {
 
                 /**
@@ -17634,201 +17829,6 @@ export const cockroach = $root.cockroach = (() => {
                  */
 
                 return Status;
-            })();
-
-            serverpb.PrettySpan = (function() {
-
-                /**
-                 * Properties of a PrettySpan.
-                 * @typedef cockroach.server.serverpb.PrettySpan$Properties
-                 * @type {Object}
-                 * @property {string} [start_key] PrettySpan start_key.
-                 * @property {string} [end_key] PrettySpan end_key.
-                 */
-
-                /**
-                 * Constructs a new PrettySpan.
-                 * @exports cockroach.server.serverpb.PrettySpan
-                 * @constructor
-                 * @param {cockroach.server.serverpb.PrettySpan$Properties=} [properties] Properties to set
-                 */
-                function PrettySpan(properties) {
-                    if (properties)
-                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            if (properties[keys[i]] != null)
-                                this[keys[i]] = properties[keys[i]];
-                }
-
-                /**
-                 * PrettySpan start_key.
-                 * @type {string}
-                 */
-                PrettySpan.prototype.start_key = "";
-
-                /**
-                 * PrettySpan end_key.
-                 * @type {string}
-                 */
-                PrettySpan.prototype.end_key = "";
-
-                /**
-                 * Creates a new PrettySpan instance using the specified properties.
-                 * @param {cockroach.server.serverpb.PrettySpan$Properties=} [properties] Properties to set
-                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan instance
-                 */
-                PrettySpan.create = function create(properties) {
-                    return new PrettySpan(properties);
-                };
-
-                /**
-                 * Encodes the specified PrettySpan message. Does not implicitly {@link cockroach.server.serverpb.PrettySpan.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.PrettySpan$Properties} message PrettySpan message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                PrettySpan.encode = function encode(message, writer) {
-                    if (!writer)
-                        writer = $Writer.create();
-                    if (message.start_key != null && message.hasOwnProperty("start_key"))
-                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.start_key);
-                    if (message.end_key != null && message.hasOwnProperty("end_key"))
-                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.end_key);
-                    return writer;
-                };
-
-                /**
-                 * Encodes the specified PrettySpan message, length delimited. Does not implicitly {@link cockroach.server.serverpb.PrettySpan.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.PrettySpan$Properties} message PrettySpan message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                PrettySpan.encodeDelimited = function encodeDelimited(message, writer) {
-                    return this.encode(message, writer).ldelim();
-                };
-
-                /**
-                 * Decodes a PrettySpan message from the specified reader or buffer.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @param {number} [length] Message length if known beforehand
-                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                PrettySpan.decode = function decode(reader, length) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader.create(reader);
-                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.PrettySpan();
-                    while (reader.pos < end) {
-                        let tag = reader.uint32();
-                        switch (tag >>> 3) {
-                        case 1:
-                            message.start_key = reader.string();
-                            break;
-                        case 2:
-                            message.end_key = reader.string();
-                            break;
-                        default:
-                            reader.skipType(tag & 7);
-                            break;
-                        }
-                    }
-                    return message;
-                };
-
-                /**
-                 * Decodes a PrettySpan message from the specified reader or buffer, length delimited.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                PrettySpan.decodeDelimited = function decodeDelimited(reader) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader(reader);
-                    return this.decode(reader, reader.uint32());
-                };
-
-                /**
-                 * Verifies a PrettySpan message.
-                 * @param {Object.<string,*>} message Plain object to verify
-                 * @returns {?string} `null` if valid, otherwise the reason why it is not
-                 */
-                PrettySpan.verify = function verify(message) {
-                    if (typeof message !== "object" || message === null)
-                        return "object expected";
-                    if (message.start_key != null && message.hasOwnProperty("start_key"))
-                        if (!$util.isString(message.start_key))
-                            return "start_key: string expected";
-                    if (message.end_key != null && message.hasOwnProperty("end_key"))
-                        if (!$util.isString(message.end_key))
-                            return "end_key: string expected";
-                    return null;
-                };
-
-                /**
-                 * Creates a PrettySpan message from a plain object. Also converts values to their respective internal types.
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
-                 */
-                PrettySpan.fromObject = function fromObject(object) {
-                    if (object instanceof $root.cockroach.server.serverpb.PrettySpan)
-                        return object;
-                    let message = new $root.cockroach.server.serverpb.PrettySpan();
-                    if (object.start_key != null)
-                        message.start_key = String(object.start_key);
-                    if (object.end_key != null)
-                        message.end_key = String(object.end_key);
-                    return message;
-                };
-
-                /**
-                 * Creates a PrettySpan message from a plain object. Also converts values to their respective internal types.
-                 * This is an alias of {@link cockroach.server.serverpb.PrettySpan.fromObject}.
-                 * @function
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.PrettySpan} PrettySpan
-                 */
-                PrettySpan.from = PrettySpan.fromObject;
-
-                /**
-                 * Creates a plain object from a PrettySpan message. Also converts values to other types if specified.
-                 * @param {cockroach.server.serverpb.PrettySpan} message PrettySpan
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                PrettySpan.toObject = function toObject(message, options) {
-                    if (!options)
-                        options = {};
-                    let object = {};
-                    if (options.defaults) {
-                        object.start_key = "";
-                        object.end_key = "";
-                    }
-                    if (message.start_key != null && message.hasOwnProperty("start_key"))
-                        object.start_key = message.start_key;
-                    if (message.end_key != null && message.hasOwnProperty("end_key"))
-                        object.end_key = message.end_key;
-                    return object;
-                };
-
-                /**
-                 * Creates a plain object from this PrettySpan message. Also converts values to other types if specified.
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                PrettySpan.prototype.toObject = function toObject(options) {
-                    return this.constructor.toObject(this, options);
-                };
-
-                /**
-                 * Converts this PrettySpan to JSON.
-                 * @returns {Object.<string,*>} JSON object
-                 */
-                PrettySpan.prototype.toJSON = function toJSON() {
-                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                };
-
-                return PrettySpan;
             })();
 
             return serverpb;

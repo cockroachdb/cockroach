@@ -287,7 +287,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			rec = rec.compose(shouldDistribute)
 		}
 		// Check if we are doing a full scan.
-		if len(n.spans) == 1 && n.spans[0].Equal(n.desc.IndexSpan(n.index.ID)) {
+		if len(n.spans) == 1 && n.spans[0].EqualValue(n.desc.IndexSpan(n.index.ID)) {
 			rec = rec.compose(shouldDistribute)
 		}
 		return rec, nil

@@ -862,7 +862,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 				case 1:
 					// Ensure that the second backfill attempt provides the
 					// same span as the first.
-					if sp.Equal(retriedSpan) {
+					if sp.EqualValue(retriedSpan) {
 						atomic.AddInt64(&retriedBackfill, 1)
 					}
 				}
@@ -894,7 +894,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 				case 1:
 					// Ensure that the second backfill attempt provides the
 					// same span as the first.
-					if sp.Equal(retriedSpan) {
+					if sp.EqualValue(retriedSpan) {
 						atomic.AddInt64(&retriedBackfill, 1)
 					}
 				}

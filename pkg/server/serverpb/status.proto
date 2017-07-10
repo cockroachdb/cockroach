@@ -124,6 +124,13 @@ message RangeProblems {
     bool no_lease = 5;
 }
 
+message PrettySpan {
+  option (gogoproto.equal) = true;
+
+  string start_key = 1;
+  string end_key = 2;
+}
+
 message RangeInfo {
   PrettySpan span = 1 [(gogoproto.nullable) = false];
   RaftState raft_state = 2 [(gogoproto.nullable) = false];
@@ -462,10 +469,4 @@ service Status {
       get: "/_status/problemranges"
     };
   }
-}
-
-// PrettySpan holds a pretty-printed key range.
-message PrettySpan {
-  string start_key = 1;
-  string end_key = 2;
 }

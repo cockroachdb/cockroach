@@ -638,7 +638,7 @@ func (s *statusServer) RaftDebug(
 			// Check for replica descs not matching.
 			if j > 0 {
 				prevDesc := rng.Nodes[j-1].Range.State.Desc
-				if !reflect.DeepEqual(&desc, &prevDesc) {
+				if !desc.Equal(&prevDesc) {
 					prevNodeID := rng.Nodes[j-1].NodeID
 					rng.Errors = append(rng.Errors, serverpb.RaftRangeError{
 						Message: fmt.Sprintf("node %d range descriptor does not match node %d", node.NodeID, prevNodeID),

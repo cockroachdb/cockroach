@@ -27,7 +27,6 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -3614,7 +3613,7 @@ func (r *Replica) changeReplicas(
 			return err
 		}
 
-		if oldDesc.RangeID != 0 && !reflect.DeepEqual(oldDesc, desc) {
+		if oldDesc.RangeID != 0 && !oldDesc.Equal(desc) {
 			// We read the previous value, it wasn't what we supposedly used in
 			// the CPut, but we still overwrote in the CPut above.
 			panic(fmt.Sprintf("committed replica change, but oldDesc != assumedOldDesc:\n%+v\n%+v\nnew desc:\n%+v",

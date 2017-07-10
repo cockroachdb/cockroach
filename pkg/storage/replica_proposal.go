@@ -21,7 +21,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"reflect"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -212,6 +211,20 @@ type EvalResult struct {
 	WriteBatch *storagebase.WriteBatch
 }
 
+// IsZero reports whether p is the zero value.
+func (p *EvalResult) IsZero() bool {
+	if p.Local != (LocalEvalResult{}) {
+		return false
+	}
+	if !p.Replicated.Equal(storagebase.ReplicatedEvalResult{}) {
+		return false
+	}
+	if p.WriteBatch != nil {
+		return false
+	}
+	return true
+}
+
 // coalesceBool ORs rhs into lhs and then zeroes rhs.
 func coalesceBool(lhs *bool, rhs *bool) {
 	*lhs = *lhs || *rhs
@@ -339,7 +352,7 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Local.updatedTxn = nil
 
-	if !reflect.DeepEqual(q, EvalResult{}) {
+	if !q.IsZero() {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, EvalResult{}))
 	}
 
@@ -638,7 +651,7 @@ func (r *Replica) handleReplicatedEvalResult(
 
 	// The above are always present, so we assert only if there are
 	// "nontrivial" actions below.
-	shouldAssert = !reflect.DeepEqual(rResult, storagebase.ReplicatedEvalResult{})
+	shouldAssert = !rResult.Equal(storagebase.ReplicatedEvalResult{})
 
 	// Process Split or Merge. This needs to happen after stats update because
 	// of the ContainsEstimates hack.
@@ -790,7 +803,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		}
 	}
 
-	if !reflect.DeepEqual(rResult, storagebase.ReplicatedEvalResult{}) {
+	if !rResult.Equal(storagebase.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, storagebase.ReplicatedEvalResult{}))
 	}
 	return shouldAssert

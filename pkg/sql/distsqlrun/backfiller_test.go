@@ -140,7 +140,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t.Fatalf("expected = %+v\n got = %+v", expected, got)
 	}
 	for i, e := range expected {
-		if !e.Equal(got[i]) {
+		if !e.EqualValue(got[i]) {
 			t.Fatalf("expected = %+v, got = %+v", e, got[i])
 		}
 	}
