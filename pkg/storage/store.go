@@ -674,10 +674,13 @@ type StoreConfig struct {
 
 	TestingKnobs StoreTestingKnobs
 
-	// concurrentSnapshotApplyLimit specifies the maximum number of empty
-	// snapshots and the maximum number of non-empty snapshots that are permitted
-	// to be applied concurrently.
-	concurrentSnapshotApplyLimit int
+	// concurrentNonEmptySnapshotApplyLimit specifies maximum number of non-empty
+	// snapshots that are permitted to be applied concurrently.
+	concurrentNonEmptySnapshotApplyLimit int
+
+	// concurrentNonEmptySnapshotApplyLimit specifies maximum number of empty
+	// snapshots that are permitted to be applied concurrently.
+	concurrentEmptySnapshotApplyLimit int
 
 	// RangeLeaseActiveDuration is the duration of the active period of leader
 	// leases requested.
@@ -866,11 +869,15 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
-	if sc.concurrentSnapshotApplyLimit == 0 {
+	if sc.concurrentNonEmptySnapshotApplyLimit == 0 {
 		// NB: setting this value higher than 1 is likely to degrade client
 		// throughput.
-		sc.concurrentSnapshotApplyLimit =
+		sc.concurrentNonEmptySnapshotApplyLimit =
 			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", 1)
+	}
+	if sc.concurrentEmptySnapshotApplyLimit == 0 {
+		sc.concurrentEmptySnapshotApplyLimit =
+			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_EMPTY_SNAPSHOT_APPLY_LIMIT", 128)
 	}
 
 	rangeLeaseActiveDuration, rangeLeaseRenewalDuration :=
@@ -943,8 +950,8 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.tsCacheMu.cache = newTimestampCache(s.cfg.Clock)
 	s.tsCacheMu.Unlock()
 
-	s.nonEmptySnapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
-	s.emptySnapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
+	s.nonEmptySnapshotApplySem = make(chan struct{}, cfg.concurrentNonEmptySnapshotApplyLimit)
+	s.emptySnapshotApplySem = make(chan struct{}, cfg.concurrentEmptySnapshotApplyLimit)
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
