@@ -640,6 +640,8 @@ func (rec ReplicaEvalContext) FirstIndex() (uint64, error) {
 
 // Term returns the term of the given entry in the raft log.
 func (rec ReplicaEvalContext) Term(i uint64) (uint64, error) {
+	rec.repl.mu.RLock()
+	defer rec.repl.mu.RUnlock()
 	return rec.repl.raftTermLocked(i)
 }
 
