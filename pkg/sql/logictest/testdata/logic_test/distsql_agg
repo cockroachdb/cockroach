@@ -439,7 +439,7 @@ SELECT SUM(a), SUM(b), SUM(c) FROM data GROUP BY d HAVING SUM(a+b) > 10
 query T
 SELECT URL FROM [EXPLAIN (DISTSQL) SELECT AVG(a+b), c FROM data GROUP BY c, d HAVING c = d]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzcls9r2zAUx-_7K8w7tUxjlX9krWGgsR-QQ9ORNqdhhho9XENqGVmBlZL_fcg-OE5bvRb1kORmy_r4Pfnz5eFHqLXCmbzHFvI_wIFBDAwSYJACgwwKBo3RS2xbbdyWHpiqf5CfMajqZm3dcsFgqQ1C_gi2siuEHG7k7QrnKBUaYKDQymrVFWlMdS_Ng1DSSmDwq1pZNHkkkuhrJFzVOdaqX2GRSFkk-EcRQ7FhoNd2KNhaWSLkfMNe39S3sjRYSqt3ehKcCXfw6Y-fs5sTwU-H69hdXy8uT0Tirr5fLdxqcjraPW5uqHf7EN3J9u65YsVmOEP84hmGV61rbRQaVKOXdW95_1NeLy7_Tt16urUnOx3J-dy5yV4Uk7zvoWb6k252tj1fOB0V5vsYU6Kpg4gpP8aYxvuYFqKpg0hLfIxpSfYxLURTB5GW5BjTku5jWoimDiIt6TGmhfiTnWPb6LrFV_0RnblDoyqx_0KtXpsl_jZ62ZXpb686rltQ2Nr-Ke9vpnX_yDW4DfNdmG_D8Qjmb4MnIfBFCMyD-uaZn4693zvxw4lf1sRvK_XSmR_OQlT7YUK1HyZU-2FKNUETqichqr944XO_rPMQWX6YkOWHCVl-mJJF0ISsixBZnJii1BgNm6NhgzRskgaO0rBZyoOGKSemaUpIezJO3yTNT1PS_DQlzU-T0gickvZkqHqlFZsP_wMAAP__ALeCAg==  
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzcls9r2zAUx-_7K8w7tUxjlX9krWGgsR-QQ9ORNqdhhho9XENqGVmBlZL_fcg-OE5bvRb1kORmy_r4Pfnz5eFHqLXCmbzHFvI_wIFBDAwSYJACgwwKBo3RS2xbbdyWHpiqf5CfMajqZm3dcsFgqQ1C_gi2siuEHG7k7QrnKBUaYKDQymrVFWlMdS_Ng1DSSmDwq1pZNHkkkuhrJFzVOdaqX2GRSFkk-EcRQ7FhoNd2KNhaWSLkfMNe39S3sjRYSqt3ehKcCXfw6Y-fs5sTwU-H69hdXy8uT0Tirr5fLdxqcjraPW5uqHf7EN3J9u65YsVmOEP84hmGV61rbRQaVKOXdW95_1NeLy7_Tt16urUnOx3J-dy5yV4Uk7zvoWb6k252tj1fOB0V5vsYU6Kpg4gpP8aYxvuYFqKpg0hLfIxpSfYxLURTB5GW5BjTku5jWoimDiIt6TGmhfiTnWPb6LrFV_0RnblDoyqx_0KtXpsl_jZ62ZXpb686rltQ2Nr-Ke9vpnX_yDW4DfNdmG_D8Qjmb4MnIfBFCMyD-uaZn4693zvxw4lf1sRvK_XSmR_OQlT7YUK1HyZU-2FKNUETqichqr944XO_rPMQWX6YkOWHCVl-mJJF0ISsixBZnJii1BgNm6NhgzRskgaO0rBZyoOGKSemaUpIezJO3yTNT1PS_DQlzU-T0gickvZkqHqlFZsP_wMAAP__ALeCAg==
 
 query RI rowsort
 SELECT AVG(a+b), c FROM data GROUP BY c, d HAVING c = d
@@ -505,3 +505,29 @@ query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT XOR_AGG(a) FROM data]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzElMFruzAUx--_v-LH97RBDo3arvPUnkov6yg7DIaMzDxEaI0kETaK__tQD12lTQY6PCbx8z7vG8M7oVCSnsSRDOI3cDAEYAjBEIFhjoSh1ColY5RuPumArfxEPGPIi7KyzXbCkCpNiE-wuT0QYryIjwPtSUjSYJBkRX5oJaXOj0J_raSwAgy7ysb_VxxJzaAqey5orMgIMa_Z76XrLNOUCat6ztfd_n292dyt-P1NUXBTdK5fFUpL0iQvyif1yK2EF63wKS7aIx3vooMp0nmk46ULp0jnkY6XLpoinUf6NyPgimhPplSFod4ouF551owIkhl188SoSqf0rFXaarrlruXaDUnGdqe8W2yL7qhp8CfMnXBwAfM-HLjNHnXopCM3HA3pe-6EF27zYoj5wQkv3eblEPOj-1_NPM_E_cj67qT-9x0AAP__oluqJA==
+
+query IIRT
+VALUES (1, 2, 1.0, 'string1'), (4, 3, 2.3, 'string2')
+----
+1 2 1.0 string1
+4 3 2.3 string2
+
+query IIR
+SELECT MAX(t.a), MIN(t.b), AVG(t.c) FROM (VALUES (1, 2, 3), (4, 5, 6), (7, 8, 0)) AS t(a, b, c) WHERE b > 3
+----
+7 5 3
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT MAX(t.a), MIN(t.b), AVG(t.c)  FROM (VALUES (1, 2, 3), (4, 5, 6), (7, 8, 0)) AS t(a, b, c) WHERE b > 3]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkE9LxDAUxO9-ijCnLuTQPxfJqfWg9LBVRBZBeyjtoxZrUvISEJZ-d0lz0BVW3FveTCa_yTtCm4Ga7oMY6gUZWonFmp6YjQ1SvFAPn1CpxKQX74LcSvTGEtQRbnIzQeHQzZ4YEgO5bprje9fiRiSF6N-8fucdJG6n2ZFVoszFq0_TgkShlKqbJ7SrhPHuG8CuGwkqXeX_S1TjaGnsnLGnRfbVc1JmocC-bpIyD6fqcJeUxe4sOLsE_Ei8GM10gj3_pVaChpHihtl429ODNf2GieP9ltuEgdhFN4tDraMVCv4MZ3-G81_hdr36CgAA__91iaO-
+
+query ITIR
+SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (3, 32.0)) t2(a,b) ON t1.a = t2.a
+----
+1 222 1 100.0
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (3, 32.0)) t2(a,b) ON t1.a = t2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJykkDFrwzAQhff-CnNTAjfYTuggKJhOTYemdOhSNBjrapu6OqOToBD834ulIXVoWkI26e6-e-_eASwbeqo_SUC9QQEaYXTckAi7uZQGduYLVI7Q2zH4uawRGnYE6gC-9wOBgtd6CCSAYMjX_ZD2bbP7bFVmTRfsh6xBTwgc_HGJ-LolUPmEVwrdXit03B8sO0OOzEJCz-R_I7-4faile-Tekls6Hujdr6pifef6tosvQNgHr7KqwKrEaoPV9uwdxSWBvZCMbIVO7zmTkEYg01IKRTi4hp4dN1EmffeRiwVD4lO3TJ-dja1o8CdcXACXp3D5J7xZwPmkp5vvAAAA__-HZe5E
