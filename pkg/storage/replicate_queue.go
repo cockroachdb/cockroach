@@ -67,11 +67,12 @@ var (
 
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.
 type ReplicateQueueMetrics struct {
-	AddReplicaCount        *metric.Counter
-	RemoveReplicaCount     *metric.Counter
-	RemoveDeadReplicaCount *metric.Counter
-	RebalanceReplicaCount  *metric.Counter
-	TransferLeaseCount     *metric.Counter
+	AddReplicaCount                   *metric.Counter
+	RemoveReplicaCount                *metric.Counter
+	RemoveDeadReplicaCount            *metric.Counter
+	RemoveDecommissioningReplicaCount *metric.Counter
+	RebalanceReplicaCount             *metric.Counter
+	TransferLeaseCount                *metric.Counter
 }
 
 func makeReplicateQueueMetrics() ReplicateQueueMetrics {
@@ -292,7 +293,10 @@ func (rq *replicateQueue) processOneChange(
 		// failure tolerance properties than a group of size 2n - 1 because it has a
 		// larger quorum. For example, up-replicating from 1 to 2 replicas only
 		// makes sense if it is possible to be able to go to 3 replicas.
-		if willHave != need && willHave%2 == 0 {
+		//
+		// NB: If willHave > need, then always allow up-replicating as that will be
+		// the case when up-replicating a range with a decommissioning replica.
+		if willHave < need && willHave%2 == 0 {
 			// This means we are going to up-replicate to an even replica state.
 			// Check if it is possible to go to an odd replica state beyond it.
 			oldPlusNewReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
@@ -374,6 +378,23 @@ func (rq *replicateQueue) processOneChange(
 			if err := rq.removeReplica(ctx, repl, target, desc); err != nil {
 				return false, err
 			}
+		}
+	case AllocatorRemoveDecommissioning:
+		if log.V(1) {
+			log.Infof(ctx, "removing a decommissioning replica")
+		}
+		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas)
+		decommissioningReplica := decommissioningReplicas[0]
+		rq.metrics.RemoveDecommissioningReplicaCount.Inc(1)
+		if log.V(1) {
+			log.Infof(ctx, "removing decommissioning replica %+v from store", decommissioningReplica)
+		}
+		target := roachpb.ReplicationTarget{
+			NodeID:  decommissioningReplica.NodeID,
+			StoreID: decommissioningReplica.StoreID,
+		}
+		if err := rq.removeReplica(ctx, repl, target, desc); err != nil {
+			return false, err
 		}
 	case AllocatorRemoveDead:
 		if log.V(1) {

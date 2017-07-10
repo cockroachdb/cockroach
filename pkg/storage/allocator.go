@@ -54,9 +54,11 @@ const (
 	minReplicaWeight = 0.001
 
 	// priorities for various repair operations.
-	addMissingReplicaPriority  float64 = 10000
-	removeDeadReplicaPriority  float64 = 1000
-	removeExtraReplicaPriority float64 = 100
+	addMissingReplicaPriority             float64 = 10000
+	addDecommissioningReplacementPriority float64 = 5000
+	removeDeadReplicaPriority             float64 = 1000
+	removeDecommissioningReplicaPriority  float64 = 200
+	removeExtraReplicaPriority            float64 = 100
 )
 
 var (
@@ -101,13 +103,15 @@ const (
 	AllocatorRemove
 	AllocatorAdd
 	AllocatorRemoveDead
+	AllocatorRemoveDecommissioning
 )
 
 var allocatorActionNames = map[AllocatorAction]string{
-	AllocatorNoop:       "noop",
-	AllocatorRemove:     "remove",
-	AllocatorAdd:        "add",
-	AllocatorRemoveDead: "remove dead",
+	AllocatorNoop:                  "noop",
+	AllocatorRemove:                "remove",
+	AllocatorAdd:                   "add",
+	AllocatorRemoveDead:            "remove dead",
+	AllocatorRemoveDecommissioning: "remove decommissioning",
 }
 
 func (a AllocatorAction) String() string {
@@ -220,15 +224,28 @@ func (a *Allocator) ComputeAction(
 		neededQuorum := computeQuorum(need)
 		priority := addMissingReplicaPriority + float64(neededQuorum-have)
 		if log.V(3) {
-			log.Infof(ctx, "AllocatorAdd - need=%d, have=%d, priority=%.2f", need, have, priority)
+			log.Infof(ctx, "AllocatorAdd - missing replica need=%d, have=%d, priority=%.2f", need, have, priority)
 		}
 		return AllocatorAdd, priority
 	}
+
+	decommissioningReplicas := a.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas)
+	if have == need && len(decommissioningReplicas) > 0 {
+		// Range has decommissioning replica(s). We should up-replicate to add
+		// another replica. The decommissioning replica(s) will be down-replicated
+		// later.
+		priority := addDecommissioningReplacementPriority
+		if log.V(3) {
+			log.Infof(ctx, "AllocatorAdd - replacement for %d decommissioning replicas priority=%.2f", len(decommissioningReplicas), priority)
+		}
+		return AllocatorAdd, priority
+	}
+
 	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
 	if len(deadReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
 		// Adjust the priority by the number of dead replicas the range has.
-		quorum := computeQuorum(len(desc.Replicas))
+		quorum := computeQuorum(need)
 		if lr := len(liveReplicas); lr >= quorum {
 			// Only allow removal of a dead replica if we have a suitable allocation
 			// target that we can up-replicate to. This isn't necessarily the target
@@ -250,6 +267,19 @@ func (a *Allocator) ComputeAction(
 			}
 		}
 	}
+
+	if have > need && len(decommissioningReplicas) > 0 {
+		// Range is over-replicated, and has a decommissioning replica which should
+		// be removed.
+		priority := removeDecommissioningReplicaPriority
+		if log.V(3) {
+			log.Infof(
+				ctx, "AllocatorRemoveDecommissioning - need=%d, have=%d, num_decommissioning=%d, priority=%.2f",
+				need, have, len(decommissioningReplicas), priority)
+		}
+		return AllocatorRemoveDecommissioning, priority
+	}
+
 	if have > need {
 		// Range is over-replicated, and should remove a replica.
 		// Ranges with an even number of replicas get extra priority because

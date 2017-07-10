@@ -69,6 +69,8 @@ const (
 	nodeStatusUnknown
 	// The node is considered live.
 	nodeStatusLive
+	// The node is decommissioning.
+	nodeStatusDecommissioning
 )
 
 // A NodeLivenessFunc accepts a node ID, current time and threshold before
@@ -81,14 +83,21 @@ type NodeLivenessFunc func(roachpb.NodeID, time.Time, time.Duration) nodeStatus
 func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc {
 	return func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) nodeStatus {
 		liveness, err := nodeLiveness.GetLiveness(nodeID)
-		if err == nil && !liveness.Draining {
-			if liveness.isLive(hlc.Timestamp{WallTime: now.UnixNano()}, nodeLiveness.clock.MaxOffset()) {
-				return nodeStatusLive
-			}
-			deadAsOf := liveness.Expiration.GoTime().Add(threshold)
-			if !now.Before(deadAsOf) {
-				return nodeStatusDead
-			}
+		if err != nil {
+			return nodeStatusUnknown
+		}
+		if liveness.Decommissioning {
+			return nodeStatusDecommissioning
+		}
+		if liveness.Draining {
+			return nodeStatusUnknown
+		}
+		if liveness.isLive(hlc.Timestamp{WallTime: now.UnixNano()}, nodeLiveness.clock.MaxOffset()) {
+			return nodeStatusLive
+		}
+		deadAsOf := liveness.Expiration.GoTime().Add(threshold)
+		if !now.Before(deadAsOf) {
+			return nodeStatusDead
 		}
 		return nodeStatusUnknown
 	}
@@ -131,6 +140,8 @@ const (
 	storeStatusReplicaCorrupted
 	// The store is alive and available.
 	storeStatusAvailable
+	// The store is decommissioning.
+	storeStatusDecommissioning
 )
 
 // status returns the current status of the store, including whether
@@ -157,6 +168,8 @@ func (sd *storeDetail) status(
 	switch nl(sd.desc.Node.NodeID, now, threshold) {
 	case nodeStatusDead:
 		return storeStatusDead
+	case nodeStatusDecommissioning:
+		return storeStatusDecommissioning
 	case nodeStatusUnknown:
 		return storeStatusUnknown
 	}
@@ -345,10 +358,31 @@ func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreD
 	return roachpb.StoreDescriptor{}, false
 }
 
-// liveAndDeadReplicas divides the provided repls slice into two
-// slices: the first for live replicas, and the second for dead
-// replicas. Replicas for which liveness or deadness cannot be
-// ascertained are excluded from the returned slices.
+// decommissioningReplicas filters out replicas on decommissioning node/store
+// from the provided repls and returns them in a slice.
+func (sp *StorePool) decommissioningReplicas(
+	rangeID roachpb.RangeID, repls []roachpb.ReplicaDescriptor,
+) (decommissioningReplicas []roachpb.ReplicaDescriptor) {
+	sp.detailsMu.Lock()
+	defer sp.detailsMu.Unlock()
+
+	now := sp.clock.PhysicalTime()
+	for _, repl := range repls {
+		detail := sp.getStoreDetailLocked(repl.StoreID)
+		// Mark replica as dead if store is dead.
+		switch detail.status(now, sp.timeUntilStoreDead.Get(), rangeID, sp.nodeLivenessFn) {
+		case storeStatusDecommissioning:
+			decommissioningReplicas = append(decommissioningReplicas, repl)
+		}
+	}
+	return
+}
+
+// liveAndDeadReplicas divides the provided repls slice into two slices: the
+// first for live replicas, and the second for dead replicas.
+// Replicas for which liveness or deadness cannot be ascertained are excluded
+// from the returned slices.  Replicas on decommissioning node/store are
+// also excluded from the returned slices.
 func (sp *StorePool) liveAndDeadReplicas(
 	rangeID roachpb.RangeID, repls []roachpb.ReplicaDescriptor,
 ) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
@@ -535,7 +569,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 		case storeStatusAvailable:
 			aliveStoreCount++
 			storeDescriptors = append(storeDescriptors, *detail.desc)
-		case storeStatusDead, storeStatusUnknown:
+		case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning:
 			// Do nothing; this node cannot be used.
 		default:
 			panic(fmt.Sprintf("unknown store status: %d", s))

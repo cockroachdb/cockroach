@@ -191,7 +191,7 @@ func createTestAllocator(
 // ranges in deadReplicas.
 func mockStorePool(
 	storePool *StorePool,
-	aliveStoreIDs, deadStoreIDs []roachpb.StoreID,
+	aliveStoreIDs, deadStoreIDs, decommissioningStoreIDs []roachpb.StoreID,
 	deadReplicas []roachpb.ReplicaIdent,
 ) {
 	storePool.detailsMu.Lock()
@@ -209,6 +209,14 @@ func mockStorePool(
 	}
 	for _, storeID := range deadStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = nodeStatusDead
+		detail := storePool.getStoreDetailLocked(storeID)
+		detail.desc = &roachpb.StoreDescriptor{
+			StoreID: storeID,
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
+		}
+	}
+	for _, storeID := range decommissioningStoreIDs {
+		liveNodeSet[roachpb.NodeID(storeID)] = nodeStatusDecommissioning
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -669,6 +677,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	mockStorePool(sp,
 		[]roachpb.StoreID{1, 2, 3, 4, 5, 6},
 		[]roachpb.StoreID{7, 8},
+		nil,
 		nil)
 
 	ranges := func(rangeCount int32) roachpb.StoreCapacity {
@@ -1824,6 +1833,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 	mockStorePool(sp,
 		[]roachpb.StoreID{1, 2, 3, 4, 5, 8},
 		[]roachpb.StoreID{6, 7},
+		nil,
 		[]roachpb.ReplicaIdent{{
 			RangeID: 0,
 			Replica: roachpb.ReplicaDescriptor{
@@ -1922,7 +1932,227 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for i, tcase := range testCases {
-		mockStorePool(sp, tcase.live, tcase.dead, nil)
+		mockStorePool(sp, tcase.live, tcase.dead, nil, nil)
+
+		action, _ := a.ComputeAction(ctx, tcase.zone, &tcase.desc)
+		if tcase.expectedAction != action {
+			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+			continue
+		}
+	}
+}
+
+func TestAllocatorComputeActionDecommission(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		zone            config.ZoneConfig
+		desc            roachpb.RangeDescriptor
+		expectedAction  AllocatorAction
+		live            []roachpb.StoreID
+		dead            []roachpb.StoreID
+		decommissioning []roachpb.StoreID
+	}{
+		// Has three replicas, but one is in decommissioning status
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction:  AllocatorAdd,
+			live:            []roachpb.StoreID{1, 2},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{3},
+		},
+		// Has three replicas, one is in decommissioning status, and one is on a
+		// dead node.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction:  AllocatorAdd,
+			live:            []roachpb.StoreID{1},
+			dead:            []roachpb.StoreID{2},
+			decommissioning: []roachpb.StoreID{3},
+		},
+		// Needs three replicas, has four, where one is decommissioning and one is
+		// dead but there is no replacement for the dead replica.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction:  AllocatorRemoveDecommissioning,
+			live:            []roachpb.StoreID{1, 4},
+			dead:            []roachpb.StoreID{2},
+			decommissioning: []roachpb.StoreID{3},
+		},
+		// Needs three replicas, has four, where one is decommissioning and one is
+		// dead but there is a replacement for the dead replica.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction:  AllocatorRemoveDead,
+			live:            []roachpb.StoreID{1, 4, 5},
+			dead:            []roachpb.StoreID{2},
+			decommissioning: []roachpb.StoreID{3},
+		},
+		// Needs three replicas, has three, all decommissioning
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction:  AllocatorAdd,
+			live:            nil,
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{1, 2, 3},
+		},
+		// Needs 3. Has 1 live, 3 decommissioning.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction:  AllocatorRemoveDecommissioning,
+			live:            []roachpb.StoreID{4},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{1, 2, 3},
+		},
+	}
+
+	stopper, _, sp, a, _ := createTestAllocator( /* deterministic */ false)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	for i, tcase := range testCases {
+		mockStorePool(sp, tcase.live, tcase.dead, tcase.decommissioning, nil)
 
 		action, _ := a.ComputeAction(ctx, tcase.zone, &tcase.desc)
 		if tcase.expectedAction != action {
