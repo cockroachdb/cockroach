@@ -113,7 +113,10 @@ $(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(YARN_INSTALLED_TARGET)
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	pbjs -t static-module -w es6 --strict-long --keep-case --path $(ORG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
 
-$(UI_TS): $(UI_JS)
+$(UI_TS): $(UI_JS) $(YARN_INSTALLED_TARGET)
+	# Install a known-good version of jsdoc; see
+	# https://github.com/dcodeIO/protobuf.js/issues/716.
+	(cd $(UI_ROOT)/node_modules/protobufjs/cli && npm install --silent jsdoc@3.4.3)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	pbts $(UI_JS) >> $@
