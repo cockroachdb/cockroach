@@ -83,6 +83,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 		verbose: testing.Verbose() || log.V(1),
 	}
 	if err := l.processTestFile(path, testClusterConfig{}); err != nil {
+		log.Errorf(context.Background(), "error processing %s: %s", path, err)
 		t.Error(err)
 	}
 }
@@ -243,12 +244,20 @@ func TestParallel(t *testing.T) {
 		t.Fatalf("No testfiles found (glob: %s)", glob)
 	}
 	total := 0
+	failed := 0
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			pt := parallelTest{T: t, ctx: context.Background()}
 			pt.run(path)
 			total++
+			if t.Failed() {
+				failed++
+			}
 		})
 	}
-	log.Infof(context.Background(), "%d parallel tests passed", total)
+	if failed == 0 {
+		log.Infof(context.Background(), "%d parallel tests passed", total)
+	} else {
+		log.Infof(context.Background(), "%d out of %d parallel tests failed", failed, total)
+	}
 }
