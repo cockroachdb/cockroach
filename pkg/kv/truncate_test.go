@@ -113,7 +113,7 @@ func TestTruncate(t *testing.T) {
 		{
 			// Key range touching and intersecting active range.
 			keys:    [][2]string{{"a", "b"}, {"a", "c"}, {"p", "q"}, {"p", "r"}, {"a", "z"}},
-			expKeys: [][2]string{{}, {"b", "c"}, {"p", "q"}, {"p", "q"}, {"b", "q"}},
+			expKeys: [][2]string{{"b", "c"}, {"p", "q"}, {"p", "q"}, {"b", "q"}},
 			from:    "b", to: "q",
 		},
 		// Active key range is intersection of descriptor and [from,to).
@@ -167,7 +167,7 @@ func TestTruncate(t *testing.T) {
 			t.Errorf("%d: intersection failure: %v", i, err)
 			continue
 		}
-		ba, num, err := truncate(original, rs)
+		ba, pos, err := truncate(original, rs)
 		if err != nil || test.err != "" {
 			if !testutils.IsError(err, test.err) {
 				t.Errorf("%d: %v (expected: %q)", i, err, test.err)
@@ -177,19 +177,14 @@ func TestTruncate(t *testing.T) {
 		var reqs int
 		for j, arg := range ba.Requests {
 			req := arg.GetInner()
-			if _, ok := req.(*roachpb.NoopRequest); ok {
-				continue
-			}
 			if h := req.Header(); !bytes.Equal(h.Key, roachpb.Key(test.expKeys[j][0])) || !bytes.Equal(h.EndKey, roachpb.Key(test.expKeys[j][1])) {
 				t.Errorf("%d.%d: range mismatch: actual [%q,%q), wanted [%q,%q)", i, j,
 					h.Key, h.EndKey, test.expKeys[j][0], test.expKeys[j][1])
-			} else if _, ok := req.(*roachpb.NoopRequest); ok != (len(h.Key) == 0) {
-				t.Errorf("%d.%d: expected NoopRequest, got %T", i, j, req)
 			} else if len(h.Key) != 0 {
 				reqs++
 			}
 		}
-		if reqs != num {
+		if num := len(pos); reqs != num {
 			t.Errorf("%d: counted %d requests, but truncation indicated %d", i, reqs, num)
 		}
 		if !reflect.DeepEqual(original, goldenOriginal) {
