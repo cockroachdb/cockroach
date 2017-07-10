@@ -62,6 +62,7 @@ kv.raft_log.synchronize                            true           b     set to t
 kv.snapshot_rebalance.max_rate                     2.0 MiB        z     the rate limit (bytes/sec) to use for rebalance snapshots
 kv.snapshot_recovery.max_rate                      8.0 MiB        z     the rate limit (bytes/sec) to use for recovery snapshots
 kv.transaction.max_intents                         100000         i     maximum number of write intents allowed for a KV transaction
+rocksdb.min_wal_sync_interval                      1ms            d     minimum duration between syncs of the RocksDB WAL
 server.declined_reservation_timeout                1s             d     the amount of time to consider the store throttled for up-replication after a reservation was declined
 server.failed_reservation_timeout                  5s             d     the amount of time to consider the store throttled for up-replication after a failed reservation call
 server.remote_debugging.mode                       local          s     set to enable remote debugging, localhost-only or disable (any, local, off)

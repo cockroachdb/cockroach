@@ -3194,6 +3194,17 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	writer.Close()
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
+	//
+	// Note that the data is visible to other goroutines before it is synced to
+	// disk. This is fine. The important constraints are that these syncs happen
+	// before Raft messages are sent and before the call to RawNode.Advance. Our
+	// regular locking is sufficient for this and if other goroutines can see the
+	// data early, that's fine. In particular, snapshots are not a problem (I
+	// think they're the only thing that might access log entries or HardState
+	// from other goroutines). Snapshots do not include either the HardState or
+	// uncommitted log entries, and even if they did include log entries that
+	// were not persisted to disk, it wouldn't be a problem because raft does not
+	// infer the that entries are persisted on the node that sends a snapshot.
 	start := timeutil.Now()
 	if err := batch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
 		return stats, err

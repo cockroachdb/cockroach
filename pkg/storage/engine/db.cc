@@ -1667,6 +1667,10 @@ DBStatus DBFlush(DBEngine* db) {
   return ToDBStatus(db->rep->Flush(options));
 }
 
+DBStatus DBSyncWAL(DBEngine* db) {
+  return ToDBStatus(db->rep->SyncWAL());
+}
+
 DBStatus DBCompact(DBEngine* db) {
   rocksdb::CompactRangeOptions options;
   // By default, RocksDB doesn't recompact the bottom level (unless
