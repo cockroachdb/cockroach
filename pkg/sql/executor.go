@@ -230,7 +230,7 @@ type Executor struct {
 	// Attempts to use unimplemented features.
 	unimplementedErrors struct {
 		syncutil.Mutex
-		counts map[string]uint
+		counts map[string]int64
 	}
 }
 
