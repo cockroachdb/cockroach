@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -227,11 +228,11 @@ func TestReportUsage(t *testing.T) {
 		t.Fatalf("%q should not appear in %q", elemName, r.last.rawReportBody)
 	}
 
-	if expected, actual := len(tables), len(r.last.Schema); expected != actual {
+	if expected, actual := len(tables), len(r.last.decodedSchema); expected != actual {
 		t.Fatalf("expected %d tables in schema, got %d", expected, actual)
 	}
 	reportedByID := make(map[sqlbase.ID]sqlbase.TableDescriptor, len(tables))
-	for _, tbl := range r.last.Schema {
+	for _, tbl := range r.last.decodedSchema {
 		reportedByID[tbl.ID] = tbl
 	}
 	for _, tbl := range tables {
@@ -239,8 +240,8 @@ func TestReportUsage(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected table %d to be in reported schema", tbl.ID)
 		}
-		if !reflect.DeepEqual(r, tbl) {
-			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, tbl, r)
+		if !reflect.DeepEqual(r, *tbl) {
+			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, *tbl, r)
 		}
 	}
 	if expected, actual := 1, len(r.last.UnimplementedErrors); expected != actual {
@@ -303,6 +304,7 @@ type mockRecorder struct {
 		version string
 		reportingInfo
 		rawReportBody string
+		decodedSchema []sqlbase.TableDescriptor
 	}
 }
 
@@ -326,6 +328,18 @@ func makeMockRecorder(t *testing.T) *mockRecorder {
 		// TODO(dt): switch on the request path to handle different request types.
 		if err := json.NewDecoder(bytes.NewReader(body)).Decode(&rec.last.reportingInfo); err != nil && err != io.EOF {
 			panic(err)
+		}
+		rec.last.decodedSchema = rec.last.decodedSchema[:0]
+		for _, s := range rec.last.Schema {
+			raw, err := base64.StdEncoding.DecodeString(s)
+			if err != nil {
+				panic(err)
+			}
+			table := sqlbase.TableDescriptor{}
+			if err := table.Unmarshal(raw); err != nil {
+				panic(err)
+			}
+			rec.last.decodedSchema = append(rec.last.decodedSchema, table)
 		}
 	}))
 
