@@ -249,8 +249,8 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	return term(ctx, readonly, r.RangeID, r.store.raftEntryCache, i)
 }
 
-// raftTermLocked requires that r.mu is held.
-func (r *Replica) raftTermLocked(i uint64) (uint64, error) {
+// raftTermLocked requires that r.mu is locked for reading.
+func (r *Replica) raftTermRLocked(i uint64) (uint64, error) {
 	return (*replicaRaftStorage)(r).Term(i)
 }
 
