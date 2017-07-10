@@ -56,5 +56,9 @@ func TestEvalResultIsZero(t *testing.T) {
 				t.Fatalf("%#v unexpectedly zero", p)
 			}
 		}()
+
+		if !p.IsZero() {
+			t.Fatalf("%v unexpectedly non-zero", p)
+		}
 	}
 }
