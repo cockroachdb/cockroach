@@ -69,6 +69,13 @@ send "\\q\r"
 eexpect $prompt
 end_test
 
+start_test "Check that root cannot user password."
+# Run as root but with a non-existent certs directory.
+send "$argv sql --certs-dir=non-existent-dir\r"
+eexpect "Error: connections with user root must use a client certificate"
+eexpect "Failed running \"sql\""
+end_test
+
 start_test "Check that CREATE USER WITH PASSWORD can be used from transactions."
 # Create a user from a transaction.
 send "$argv sql --certs-dir=$certs_dir\r"

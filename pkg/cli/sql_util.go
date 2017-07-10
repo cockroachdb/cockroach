@@ -374,20 +374,23 @@ func makeSQLConn(url string) *sqlConn {
 }
 
 // getPasswordAndMakeSQLClient prompts for a password if running in secure mode
-// and no certificates have been supplied. security.RootUser won't be prompted
-// for a password as the only authentication method available for this user is
-// certificate authentication.
+// and no certificates have been supplied.
+// Attempting to use security.RootUser without valid certificates will return an error.
 func getPasswordAndMakeSQLClient() (*sqlConn, error) {
 	if len(sqlConnURL) != 0 {
 		return makeSQLConn(sqlConnURL), nil
 	}
 	var user *url.Userinfo
-	if !baseCfg.Insecure && sqlConnUser != security.RootUser &&
-		!baseCfg.ClientHasValidCerts(sqlConnUser) {
+	if !baseCfg.Insecure && !baseCfg.ClientHasValidCerts(sqlConnUser) {
+		if sqlConnUser == security.RootUser {
+			return nil, errors.Errorf("connections with user %s must use a client certificate", security.RootUser)
+		}
+
 		pwd, err := security.PromptForPassword()
 		if err != nil {
 			return nil, err
 		}
+
 		user = url.UserPassword(sqlConnUser, pwd)
 	} else {
 		user = url.User(sqlConnUser)
