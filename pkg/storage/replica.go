@@ -4073,12 +4073,14 @@ func (r *Replica) processRaftCommand(
 	r.mu.Lock()
 	proposal, proposedLocally := r.mu.proposals[idKey]
 
+	var batch engine.Batch
 	// TODO(tschottdorf): consider the Trace situation here.
 	if proposedLocally {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = proposal.ctx
 		proposal.ctx = nil // avoid confusion
 		delete(r.mu.proposals, idKey)
+		batch = proposal.Local.batch
 	}
 
 	leaseIndex, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)
@@ -4122,6 +4124,10 @@ func (r *Replica) processRaftCommand(
 			// Apply an empty entry.
 			raftCmd.ReplicatedEvalResult = storagebase.ReplicatedEvalResult{}
 			raftCmd.WriteBatch = nil
+			if batch != nil {
+				batch.Close()
+				batch = nil
+			}
 		}
 		raftCmd.ReplicatedEvalResult.State.RaftAppliedIndex = index
 		raftCmd.ReplicatedEvalResult.State.LeaseAppliedIndex = leaseIndex
@@ -4133,7 +4139,7 @@ func (r *Replica) processRaftCommand(
 		r.store.Clock().Update(ts)
 
 		var pErr *roachpb.Error
-		if raftCmd.WriteBatch != nil {
+		if raftCmd.WriteBatch != nil && batch == nil {
 			writeBatch = raftCmd.WriteBatch
 		}
 
@@ -4159,7 +4165,7 @@ func (r *Replica) processRaftCommand(
 		}
 
 		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
-			ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch)
+			ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch, batch)
 
 		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
@@ -4299,6 +4305,7 @@ func (r *Replica) applyRaftCommand(
 	idKey storagebase.CmdIDKey,
 	rResult storagebase.ReplicatedEvalResult,
 	writeBatch *storagebase.WriteBatch,
+	batch engine.Batch,
 ) (enginepb.MVCCStats, *roachpb.Error) {
 	if rResult.State.RaftAppliedIndex <= 0 {
 		log.Fatalf(ctx, "raft command index is <= 0")
@@ -4320,7 +4327,9 @@ func (r *Replica) applyRaftCommand(
 				oldRaftAppliedIndex, rResult.State.RaftAppliedIndex)))
 	}
 
-	batch := r.store.Engine().NewWriteOnlyBatch()
+	if batch == nil {
+		batch = r.store.Engine().NewWriteOnlyBatch()
+	}
 	defer batch.Close()
 
 	if writeBatch != nil {
@@ -4408,6 +4417,7 @@ func (r *Replica) evaluateProposalInner(
 		result.Replicated.Delta = ms
 		result.Local.Reply = br
 		result.Local.Err = pErr
+		result.Local.batch = batch
 		if batch == nil {
 			return result
 		}
@@ -4423,6 +4433,7 @@ func (r *Replica) evaluateProposalInner(
 			// proposal.
 			batch.Close()
 			batch = nil
+			result.Local.batch = nil
 			// Restore the original txn's Writing bool if pd.Err specifies
 			// a transaction.
 			if txn := result.Local.Err.GetTxn(); txn != nil && txn.Equal(ba.Txn) {
@@ -4440,11 +4451,6 @@ func (r *Replica) evaluateProposalInner(
 	result.WriteBatch = &storagebase.WriteBatch{
 		Data: batch.Repr(),
 	}
-	// TODO(tschottdorf): could keep this open and commit as the proposal
-	// applies, saving work on the proposer. Take care to discard batches
-	// properly whenever the command leaves `r.mu.proposals` without coming
-	// back.
-	batch.Close()
 	return result
 }
 
