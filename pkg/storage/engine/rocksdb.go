@@ -1002,6 +1002,7 @@ func (r *distinctBatch) NewIterator(prefix bool) Iterator {
 		if r.writeOnly {
 			iter.rocksDBIterator.init(r.parent.rdb, prefix, r)
 		} else {
+			r.ensureBatch()
 			iter.rocksDBIterator.init(r.batch, prefix, r)
 		}
 	}
@@ -1016,6 +1017,7 @@ func (r *distinctBatch) Get(key MVCCKey) ([]byte, error) {
 	if r.writeOnly {
 		return dbGet(r.parent.rdb, key)
 	}
+	r.ensureBatch()
 	return dbGet(r.batch, key)
 }
 
@@ -1025,10 +1027,12 @@ func (r *distinctBatch) GetProto(
 	if r.writeOnly {
 		return dbGetProto(r.parent.rdb, key, msg)
 	}
+	r.ensureBatch()
 	return dbGetProto(r.batch, key, msg)
 }
 
 func (r *distinctBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+	r.ensureBatch()
 	return dbIterate(r.batch, r, start, end, f)
 }
 
@@ -1053,12 +1057,14 @@ func (r *distinctBatch) ClearRange(start, end MVCCKey) error {
 	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	r.ensureBatch()
 	return dbClearRange(r.batch, start, end)
 }
 
 func (r *distinctBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	r.ensureBatch()
 	return dbClearIterRange(r.batch, iter, start, end)
 }
 
@@ -1170,6 +1176,8 @@ type rocksDBBatch struct {
 	distinctNeedsFlush bool
 	writeOnly          bool
 	syncCommit         bool
+	closed             bool
+	committed          bool
 	commitErr          error
 	commitWG           sync.WaitGroup
 }
@@ -1177,14 +1185,22 @@ type rocksDBBatch struct {
 func newRocksDBBatch(parent *RocksDB, writeOnly bool) *rocksDBBatch {
 	r := &rocksDBBatch{
 		parent:    parent,
-		batch:     C.DBNewBatch(parent.rdb, C.bool(writeOnly)),
 		writeOnly: writeOnly,
 	}
 	r.distinct.rocksDBBatch = r
 	return r
 }
 
+func (r *rocksDBBatch) ensureBatch() {
+	if r.batch == nil {
+		r.batch = C.DBNewBatch(r.parent.rdb, C.bool(r.writeOnly))
+	}
+}
+
 func (r *rocksDBBatch) Close() {
+	if r.closed {
+		panic("this batch was already closed")
+	}
 	r.distinct.close()
 	if i := &r.prefixIter.iter; i.iter != nil {
 		i.destroy()
@@ -1196,11 +1212,12 @@ func (r *rocksDBBatch) Close() {
 		C.DBClose(r.batch)
 		r.batch = nil
 	}
+	r.closed = true
 }
 
 // Closed returns true if the engine is closed.
 func (r *rocksDBBatch) Closed() bool {
-	return r.batch == nil
+	return r.closed || r.committed
 }
 
 func (r *rocksDBBatch) Put(key MVCCKey, value []byte) error {
@@ -1227,9 +1244,7 @@ func (r *rocksDBBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
-	r.flushMutations()
-	r.flushes++ // make sure that Repr() doesn't take a shortcut
-	return dbApplyBatchRepr(r.batch, repr, sync)
+	return r.builder.ApplyRepr(repr)
 }
 
 func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
@@ -1240,6 +1255,7 @@ func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	r.ensureBatch()
 	return dbGet(r.batch, key)
 }
 
@@ -1253,6 +1269,7 @@ func (r *rocksDBBatch) GetProto(
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	r.ensureBatch()
 	return dbGetProto(r.batch, key, msg)
 }
 
@@ -1264,6 +1281,7 @@ func (r *rocksDBBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, e
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	r.ensureBatch()
 	return dbIterate(r.batch, r, start, end, f)
 }
 
@@ -1285,6 +1303,7 @@ func (r *rocksDBBatch) ClearRange(start, end MVCCKey) error {
 	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	r.ensureBatch()
 	return dbClearRange(r.batch, start, end)
 }
 
@@ -1294,6 +1313,7 @@ func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	r.ensureBatch()
 	return dbClearIterRange(r.batch, iter, start, end)
 }
 
@@ -1314,6 +1334,7 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 		iter = &r.prefixIter
 	}
 	if iter.iter.iter == nil {
+		r.ensureBatch()
 		iter.iter.init(r.batch, prefix, r)
 	}
 	if iter.batch != nil {
@@ -1340,83 +1361,90 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	// batching. Instrumentation shows that internally RocksDB almost never
 	// batches commits together. While the batching below often can batch 20 or
 	// 30 concurrent commits.
-	if r.writeOnly {
-		c := &r.parent.commit
-		r.commitWG.Add(1)
-		r.syncCommit = syncCommit
+	c := &r.parent.commit
+	r.commitWG.Add(1)
+	r.syncCommit = syncCommit
 
-		// The leader for the commit is the first batch to be added to the pending
-		// slice. Every batch has an associated wait group which is signalled when
-		// the commit is complete.
-		c.Lock()
-		leader := len(c.pending) == 0
-		c.pending = append(c.pending, r)
+	// The leader for the commit is the first batch to be added to the pending
+	// slice. Every batch has an associated wait group which is signalled when
+	// the commit is complete.
+	c.Lock()
+	leader := len(c.pending) == 0
+	c.pending = append(c.pending, r)
 
-		if leader {
-			// We're the leader. Wait for any running commit to finish.
-			for c.committing {
-				c.cond.Wait()
-			}
-			pending := c.pending
-			c.pending = nil
-			c.committing = true
-			c.Unlock()
-
-			// Bundle all of the batches together.
-			var err error
-			for _, b := range pending[1:] {
-				if err = r.ApplyBatchRepr(b.Repr(), false /* sync */); err != nil {
-					break
-				}
-			}
-
-			if err == nil {
-				err = r.commitInternal(false /* sync */)
-			}
-
-			// We're done committing the batch, let the next group of batches
-			// proceed.
-			c.Lock()
-			c.committing = false
-			c.cond.Signal()
-			c.Unlock()
-
-			// Propagate the error to all of the batches involved in the commit. If a
-			// batch requires syncing and the commit was successful, add it to the
-			// syncing list. Note that we're reusing the pending list here for the
-			// syncing list.
-			syncing := pending[:0]
-			for _, b := range pending {
-				if err != nil || !b.syncCommit {
-					b.commitErr = err
-					b.commitWG.Done()
-				} else {
-					syncing = append(syncing, b)
-				}
-			}
-
-			if len(syncing) > 0 {
-				// The commit was successful and one or more of the batches requires
-				// syncing: notify the sync goroutine.
-				s := &r.parent.syncer
-				s.Lock()
-				if len(s.pending) == 0 {
-					s.pending = syncing
-				} else {
-					s.pending = append(s.pending, syncing...)
-				}
-				s.cond.Signal()
-				s.Unlock()
-			}
-		} else {
-			c.Unlock()
+	if leader {
+		// We're the leader. Wait for any running commit to finish.
+		for c.committing {
+			c.cond.Wait()
 		}
-		// Wait for the commit/sync to finish.
-		r.commitWG.Wait()
-		return r.commitErr
-	}
+		pending := c.pending
+		c.pending = nil
+		c.committing = true
+		c.Unlock()
 
-	return r.commitInternal(syncCommit)
+		// We want the batch that is performing the commit to be write-only in
+		// order to avoid the (significant) overhead of indexing the operations in
+		// the other batches when they are applied.
+		committer := r
+		merge := pending[1:]
+		if !r.writeOnly && len(merge) > 0 {
+			committer = newRocksDBBatch(r.parent, true /* writeOnly */)
+			defer committer.Close()
+			merge = pending
+		}
+
+		// Bundle all of the batches together.
+		var err error
+		for _, b := range merge {
+			if err = committer.ApplyBatchRepr(b.unsafeRepr(), false /* sync */); err != nil {
+				break
+			}
+		}
+
+		if err == nil {
+			err = committer.commitInternal(false /* sync */)
+		}
+
+		// We're done committing the batch, let the next group of batches
+		// proceed.
+		c.Lock()
+		c.committing = false
+		c.cond.Signal()
+		c.Unlock()
+
+		// Propagate the error to all of the batches involved in the commit. If a
+		// batch requires syncing and the commit was successful, add it to the
+		// syncing list. Note that we're reusing the pending list here for the
+		// syncing list.
+		syncing := pending[:0]
+		for _, b := range pending {
+			if err != nil || !b.syncCommit {
+				b.commitErr = err
+				b.commitWG.Done()
+			} else {
+				syncing = append(syncing, b)
+			}
+		}
+
+		if len(syncing) > 0 {
+			// The commit was successful and one or more of the batches requires
+			// syncing: notify the sync goroutine.
+			s := &r.parent.syncer
+			s.Lock()
+			if len(s.pending) == 0 {
+				s.pending = syncing
+			} else {
+				s.pending = append(s.pending, syncing...)
+			}
+			s.cond.Signal()
+			s.Unlock()
+		}
+	} else {
+		c.Unlock()
+	}
+	// Wait for the commit/sync to finish.
+	r.commitWG.Wait()
+	return r.commitErr
 }
 
 func (r *rocksDBBatch) commitInternal(sync bool) error {
@@ -1427,6 +1455,7 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 		// We've previously flushed mutations to the C++ batch, so we have to flush
 		// any remaining mutations as well and then commit the batch.
 		r.flushMutations()
+		r.ensureBatch()
 		if err := statusToError(C.DBCommitAndCloseBatch(r.batch, C.bool(sync))); err != nil {
 			return err
 		}
@@ -1440,9 +1469,12 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 		if err := r.parent.ApplyBatchRepr(r.builder.Finish(), sync); err != nil {
 			return err
 		}
-		C.DBClose(r.batch)
-		r.batch = nil
+		if r.batch != nil {
+			C.DBClose(r.batch)
+			r.batch = nil
+		}
 	}
+	r.committed = true
 
 	warnLargeBatches := r.parent.cfg.WarnLargeBatchThreshold > 0
 	if elapsed := timeutil.Since(start); warnLargeBatches && (elapsed >= r.parent.cfg.WarnLargeBatchThreshold) {
@@ -1462,6 +1494,15 @@ func (r *rocksDBBatch) Repr() []byte {
 	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
 }
 
+func (r *rocksDBBatch) unsafeRepr() []byte {
+	if r.flushes == 0 {
+		// We've never flushed to C++. Return the mutations only.
+		return r.builder.getRepr()
+	}
+	r.flushMutations()
+	return cSliceToUnsafeGoBytes(C.DBBatchRepr(r.batch))
+}
+
 func (r *rocksDBBatch) Distinct() ReadWriter {
 	if r.distinctNeedsFlush {
 		r.flushMutations()
@@ -1477,11 +1518,12 @@ func (r *rocksDBBatch) flushMutations() {
 	if r.builder.count == 0 {
 		return
 	}
+	r.ensureBatch()
 	r.distinctNeedsFlush = false
 	r.flushes++
 	r.flushedCount += r.builder.count
 	r.flushedSize += len(r.builder.repr)
-	if err := r.ApplyBatchRepr(r.builder.Finish(), false); err != nil {
+	if err := dbApplyBatchRepr(r.batch, r.builder.Finish(), false); err != nil {
 		panic(err)
 	}
 	// Force a seek of the underlying iterator on the next Seek/ReverseSeek.
