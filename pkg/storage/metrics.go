@@ -155,6 +155,9 @@ var (
 	metaSysCount = metric.Metadata{
 		Name: "syscount",
 		Help: "Count of system KV pairs"}
+	metaWritesPerSecond = metric.Metadata{
+		Name: "writes_per_second",
+		Help: "Approximate number of keys written per second to the store"}
 
 	// RocksDB metrics.
 	metaRdbBlockCacheHits = metric.Metadata{
@@ -509,6 +512,7 @@ type StoreMetrics struct {
 	Reserved        *metric.Counter
 	SysBytes        *metric.Gauge
 	SysCount        *metric.Gauge
+	WritesPerSecond *metric.GaugeFloat64
 
 	// RocksDB metrics.
 	RdbBlockCacheHits           *metric.Gauge
@@ -692,6 +696,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		Reserved:        metric.NewCounter(metaReserved),
 		SysBytes:        metric.NewGauge(metaSysBytes),
 		SysCount:        metric.NewGauge(metaSysCount),
+		WritesPerSecond: metric.NewGaugeFloat64(metaWritesPerSecond),
 
 		// RocksDB metrics.
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),
