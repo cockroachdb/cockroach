@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -310,7 +311,7 @@ type mockRecorder struct {
 	last     struct {
 		uuid    string
 		version string
-		DiagnosticReport
+		diagnosticspb.DiagnosticReport
 		rawReportBody string
 	}
 }
