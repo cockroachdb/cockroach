@@ -1139,9 +1139,8 @@ func (ds *DistSender) sendToReplicas(
 	var haveCommit bool
 	// We only check for committed txns, not aborts because aborts may
 	// be retried without any risk of inconsistencies.
-	if etArg, ok := args.GetArg(roachpb.EndTransaction); ok &&
-		etArg.(*roachpb.EndTransactionRequest).Commit {
-		haveCommit = true
+	if etArg, ok := args.GetArg(roachpb.EndTransaction); ok {
+		haveCommit = etArg.(*roachpb.EndTransactionRequest).Commit
 	}
 	done := make(chan BatchCall, len(replicas))
 
