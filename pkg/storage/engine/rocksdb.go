@@ -22,6 +22,7 @@ package engine
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -339,8 +340,7 @@ func NewRocksDB(
 		maxOpenFiles: maxOpenFiles,
 	}
 
-	auxDir := filepath.Join(dir, "auxiliary")
-	if err := r.SetAuxiliaryDir(auxDir); err != nil {
+	if err := r.setAuxiliaryDir(filepath.Join(dir, "auxiliary")); err != nil {
 		return nil, err
 	}
 
@@ -358,7 +358,11 @@ func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) 
 		maxSize: maxSize,
 	}
 
-	if err := r.SetAuxiliaryDir(os.TempDir()); err != nil {
+	tempDir, err := ioutil.TempDir(os.TempDir(), ".inmemrocksdb")
+	if err != nil {
+		return nil, err
+	}
+	if err := r.setAuxiliaryDir(filepath.Join(tempDir, "./auxiliary")); err != nil {
 		return nil, err
 	}
 
@@ -490,6 +494,10 @@ func (r *RocksDB) Close() {
 	if len(r.dir) == 0 {
 		if log.V(1) {
 			log.Infof(context.TODO(), "closing in-memory rocksdb instance")
+		}
+		// Remove the temporary directory when the engine is in-memory.
+		if err := os.RemoveAll(r.auxDir); err != nil {
+			log.Warning(context.TODO(), err)
 		}
 	} else {
 		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.dir)
@@ -2035,12 +2043,7 @@ func (r *RocksDB) GetAuxiliaryDir() string {
 	return r.auxDir
 }
 
-// SetAuxiliaryDir changes the auxiliary storage path for this engine.
-// Never call this.
-//
-// TODO(tschottdorf,danhhz): remove the only "real" use in backup_test.go
-// and this method.
-func (r *RocksDB) SetAuxiliaryDir(d string) error {
+func (r *RocksDB) setAuxiliaryDir(d string) error {
 	if err := os.MkdirAll(d, 0755); err != nil {
 		return err
 	}

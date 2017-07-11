@@ -73,16 +73,7 @@ func backupRestoreTestSetupWithParams(
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 
-	temp := filepath.Join(dir, "must-be-cleaned-up")
-
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
-	for _, s := range tc.Servers {
-		for _, e := range s.Engines() {
-			if err := e.SetAuxiliaryDir(temp); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
 
 	const payloadSize = 100
 	splits := 10
@@ -101,18 +92,27 @@ func backupRestoreTestSetupWithParams(
 	}
 
 	cleanupFn := func() {
-		testutils.SucceedsSoon(t, func() error {
-			items, err := ioutil.ReadDir(temp)
-			if err != nil && !os.IsNotExist(err) {
-				t.Fatal(err)
+		tempDirs := []string{dir}
+		for _, s := range tc.Servers {
+			for _, e := range s.Engines() {
+				tempDirs = append(tempDirs, e.GetAuxiliaryDir())
 			}
-			for _, leftover := range items {
-				return errors.Errorf("found %q remaining in tempdir", leftover.Name())
-			}
-			return nil
-		})
-		tc.Stopper().Stop(context.TODO())
-		dirCleanupFn()
+		}
+		tc.Stopper().Stop(context.TODO()) // cleans up in memory storage's auxiliary dirs
+		dirCleanupFn()                    // cleans up dir, which is the nodelocal:// storage
+
+		for _, temp := range tempDirs {
+			testutils.SucceedsSoon(t, func() error {
+				items, err := ioutil.ReadDir(temp)
+				if err != nil && !os.IsNotExist(err) {
+					t.Fatal(err)
+				}
+				for _, leftover := range items {
+					return errors.Errorf("found %q remaining in %s", leftover.Name(), temp)
+				}
+				return nil
+			})
+		}
 	}
 
 	return ctx, "nodelocal://" + dir, tc, sqlDB, cleanupFn

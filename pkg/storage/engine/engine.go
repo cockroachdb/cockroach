@@ -201,10 +201,6 @@ type Engine interface {
 	//
 	// Not thread safe.
 	GetAuxiliaryDir() string
-	// SetAuxiliaryDir changes the path returned by GetAuxiliaryDir.
-	//
-	// Not thread safe.
-	SetAuxiliaryDir(string) error
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
