@@ -1883,17 +1883,34 @@ func evalTruncateLog(
 	if err != nil {
 		return EvalResult{}, err
 	}
-	start := keys.RaftLogKey(cArgs.EvalCtx.RangeID(), 0)
-	end := keys.RaftLogKey(cArgs.EvalCtx.RangeID(), args.Index)
-	var diff enginepb.MVCCStats
-	// Passing zero timestamp to MVCCDeleteRange is equivalent to a ranged clear
-	// but it also computes stats. Note that any sideloaded payloads that may be
-	// removed by this truncation don't matter; they're not tracked in the raft
-	// log delta.
-	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, math.MaxInt64, /* max */
-		hlc.Timestamp{}, nil /* txn */, false /* returnKeys */); err != nil {
-		return EvalResult{}, err
+
+	// We start at index zero because it's always possible that a previous
+	// truncation did not clean up entries made obsolete by the previous
+	// truncation.
+	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.RangeID(), 0))
+	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.RangeID(), args.Index-1).PrefixEnd())
+	// Compute the stats delta that were to occur should the log entries be
+	// purged. Compute this by passing zero timestamp to MVCCDeleteRange,
+	// which is equivalent to a ranged clear but it also computes stats.
+	// Pass a throwaway batch since we don't actually want to delete through
+	// Raft - that is expensive, and the removed entries are not part of
+	// consistent replicated state, so we just have followers clean them up
+	// as a side effect. They may miss one in the event of an ill-timed
+	// crash, but that's OK since the next truncation will get everything.
+	//
+	// Note that any sideloaded payloads that may be removed by this
+	// truncation don't matter; they're not tracked in the raft log delta.
+	//
+	// TODO(tschottdorf): this is a pretty ludicrous way of computing the
+	// stats.
+	iter := batch.NewIterator(false /* !prefix */)
+	defer iter.Close()
+	// We can pass zero as nowNanos because we're only interested in SysBytes.
+	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
+	if err != nil {
+		return EvalResult{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 	}
+	ms.SysBytes = -ms.SysBytes // simulate the deletion
 
 	tState := &roachpb.RaftTruncatedState{
 		Index: args.Index - 1,
@@ -1902,7 +1919,7 @@ func evalTruncateLog(
 
 	var pd EvalResult
 	pd.Replicated.State.TruncatedState = tState
-	pd.Replicated.RaftLogDelta = &diff.SysBytes
+	pd.Replicated.RaftLogDelta = &ms.SysBytes
 
 	return pd, makeReplicaStateLoader(cArgs.EvalCtx.RangeID()).setTruncatedState(ctx, batch, cArgs.Stats, tState)
 }
