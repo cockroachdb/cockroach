@@ -49,29 +49,34 @@ func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, error) {
 }
 
 func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
+	var iso enginepb.IsolationType
 	switch level {
 	case parser.UnspecifiedIsolation:
 		return nil
 	case parser.SnapshotIsolation:
-		return p.txn.SetIsolation(enginepb.SNAPSHOT)
+		iso = enginepb.SNAPSHOT
 	case parser.SerializableIsolation:
-		return p.txn.SetIsolation(enginepb.SERIALIZABLE)
+		iso = enginepb.SERIALIZABLE
 	default:
 		return errors.Errorf("unknown isolation level: %s", level)
 	}
+
+	return p.session.TxnState.setIsolationLevel(iso)
 }
 
 func (p *planner) setUserPriority(userPriority parser.UserPriority) error {
+	var up roachpb.UserPriority
 	switch userPriority {
 	case parser.UnspecifiedUserPriority:
 		return nil
 	case parser.Low:
-		return p.txn.SetUserPriority(roachpb.MinUserPriority)
+		up = roachpb.MinUserPriority
 	case parser.Normal:
-		return p.txn.SetUserPriority(roachpb.NormalUserPriority)
+		up = roachpb.NormalUserPriority
 	case parser.High:
-		return p.txn.SetUserPriority(roachpb.MaxUserPriority)
+		up = roachpb.MaxUserPriority
 	default:
 		return errors.Errorf("unknown user priority: %s", userPriority)
 	}
+	return p.session.TxnState.setPriority(up)
 }
