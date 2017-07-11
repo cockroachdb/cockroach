@@ -47,6 +47,7 @@ const (
 	// The batch header is composed of an 8-byte sequence number (all zeroes) and
 	// 4-byte count of the number of entries in the batch.
 	headerSize       int = 12
+	countPos             = 8
 	initialBatchSize     = 1 << 10
 	maxVarintLen32       = 5
 )
@@ -116,7 +117,7 @@ func (b *RocksDBBatchBuilder) Len() int {
 // getRepr constructs the batch representation and returns it.
 func (b *RocksDBBatchBuilder) getRepr() []byte {
 	b.maybeInit()
-	buf := b.repr[8:headerSize]
+	buf := b.repr[countPos:headerSize]
 	v := uint32(b.count)
 	buf[0] = byte(v)
 	buf[1] = byte(v >> 8)
@@ -238,6 +239,20 @@ func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 	pos := len(b.repr)
 	b.encodeKey(key, 0)
 	b.repr[pos] = byte(BatchTypeDeletion)
+}
+
+// ApplyRepr applies the mutations in repr to the current batch.
+func (b *RocksDBBatchBuilder) ApplyRepr(repr []byte) error {
+	if len(repr) < headerSize {
+		return errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
+	}
+	b.maybeInit()
+	pos := len(b.repr)
+	data := repr[headerSize:]
+	b.grow(len(data))
+	copy(b.repr[pos:], data)
+	b.count += int(binary.LittleEndian.Uint32(repr[countPos:headerSize]))
+	return nil
 }
 
 // EncodeKey encodes an engine.MVCC key into the RocksDB representation. This
