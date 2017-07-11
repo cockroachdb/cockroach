@@ -21,7 +21,7 @@ The backup file format is set of SST files. These files must be non-overlapping.
 
 A coordinator node receives a SQL command to import a set of CSVs that represent a single table from a specific directory that is relative to each machine, for example:
 
-`LOAD CSV FROM “/data/csv”`
+`LOAD CSV FROM "/data/csv"`
 
 The coordinator instructs (with some new RPCs) all nodes to read all CSV files from the `/data/csv` directory local to each of them. The nodes read all of their CSV files, convert each row into KVs, and write those KVs to a single RocksDB instance. The cockroach store temp directory is used as temp space for the RocksDB instance.
 
@@ -41,12 +41,13 @@ This design also depends on a new kind of export storage that uses a subdirector
 
 So the full statement may be something like:
 
-`LOAD CSV FROM “/data/csv” TO “cockroach-tmp://csv”`
+`LOAD CSV FROM "/data/csv" TO "cockroach-tmp://csv"`
 
 ## RPCs
 
 The new RPCs outlined below.
 
+```
 // Initial message from coordinator to all nodes to read CSVs in a directory.
 message ReadCSVRequest {
 string path = 1;
@@ -92,6 +93,7 @@ message WriteSSTRequest {
 // An empty message is sent after each node has completed writing SSTs.
 mesage WriteSSTResponse {
 }
+```
 
 # Drawbacks
 
