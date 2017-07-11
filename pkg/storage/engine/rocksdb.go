@@ -980,6 +980,7 @@ func (r *distinctBatch) NewIterator(prefix bool) Iterator {
 		if r.writeOnly {
 			iter.rocksDBIterator.init(r.parent.rdb, prefix, r)
 		} else {
+			r.ensureBatch()
 			iter.rocksDBIterator.init(r.batch, prefix, r)
 		}
 	}
@@ -994,6 +995,7 @@ func (r *distinctBatch) Get(key MVCCKey) ([]byte, error) {
 	if r.writeOnly {
 		return dbGet(r.parent.rdb, key)
 	}
+	r.ensureBatch()
 	return dbGet(r.batch, key)
 }
 
@@ -1003,10 +1005,12 @@ func (r *distinctBatch) GetProto(
 	if r.writeOnly {
 		return dbGetProto(r.parent.rdb, key, msg)
 	}
+	r.ensureBatch()
 	return dbGetProto(r.batch, key, msg)
 }
 
 func (r *distinctBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+	r.ensureBatch()
 	return dbIterate(r.batch, r, start, end, f)
 }
 
@@ -1031,12 +1035,14 @@ func (r *distinctBatch) ClearRange(start, end MVCCKey) error {
 	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	r.ensureBatch()
 	return dbClearRange(r.batch, start, end)
 }
 
 func (r *distinctBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	r.ensureBatch()
 	return dbClearIterRange(r.batch, iter, start, end)
 }
 
@@ -1148,6 +1154,8 @@ type rocksDBBatch struct {
 	distinctNeedsFlush bool
 	writeOnly          bool
 	syncCommit         bool
+	closed             bool
+	committed          bool
 	commitErr          error
 	commitWG           sync.WaitGroup
 }
@@ -1155,14 +1163,22 @@ type rocksDBBatch struct {
 func newRocksDBBatch(parent *RocksDB, writeOnly bool) *rocksDBBatch {
 	r := &rocksDBBatch{
 		parent:    parent,
-		batch:     C.DBNewBatch(parent.rdb, C.bool(writeOnly)),
 		writeOnly: writeOnly,
 	}
 	r.distinct.rocksDBBatch = r
 	return r
 }
 
+func (r *rocksDBBatch) ensureBatch() {
+	if r.batch == nil {
+		r.batch = C.DBNewBatch(r.parent.rdb, C.bool(r.writeOnly))
+	}
+}
+
 func (r *rocksDBBatch) Close() {
+	if r.closed {
+		panic("this batch was already closed")
+	}
 	r.distinct.close()
 	if i := &r.prefixIter.iter; i.iter != nil {
 		i.destroy()
@@ -1174,11 +1190,12 @@ func (r *rocksDBBatch) Close() {
 		C.DBClose(r.batch)
 		r.batch = nil
 	}
+	r.closed = true
 }
 
 // Closed returns true if the engine is closed.
 func (r *rocksDBBatch) Closed() bool {
-	return r.batch == nil
+	return r.closed || r.committed
 }
 
 func (r *rocksDBBatch) Put(key MVCCKey, value []byte) error {
@@ -1206,7 +1223,11 @@ func (r *rocksDBBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	if r.flushes == 0 {
+		return r.builder.setRepr(repr)
+	}
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	r.ensureBatch()
 	return dbApplyBatchRepr(r.batch, repr, sync)
 }
 
@@ -1218,6 +1239,7 @@ func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	r.ensureBatch()
 	return dbGet(r.batch, key)
 }
 
@@ -1231,6 +1253,7 @@ func (r *rocksDBBatch) GetProto(
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	r.ensureBatch()
 	return dbGetProto(r.batch, key, msg)
 }
 
@@ -1242,6 +1265,7 @@ func (r *rocksDBBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, e
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	r.ensureBatch()
 	return dbIterate(r.batch, r, start, end, f)
 }
 
@@ -1263,6 +1287,7 @@ func (r *rocksDBBatch) ClearRange(start, end MVCCKey) error {
 	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	r.ensureBatch()
 	return dbClearRange(r.batch, start, end)
 }
 
@@ -1272,6 +1297,7 @@ func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	r.ensureBatch()
 	return dbClearIterRange(r.batch, iter, start, end)
 }
 
@@ -1292,6 +1318,7 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 		iter = &r.prefixIter
 	}
 	if iter.iter.iter == nil {
+		r.ensureBatch()
 		iter.iter.init(r.batch, prefix, r)
 	}
 	if iter.batch != nil {
@@ -1412,6 +1439,7 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 		// We've previously flushed mutations to the C++ batch, so we have to flush
 		// any remaining mutations as well and then commit the batch.
 		r.flushMutations()
+		r.ensureBatch()
 		if err := statusToError(C.DBCommitAndCloseBatch(r.batch, C.bool(sync))); err != nil {
 			return err
 		}
@@ -1425,9 +1453,12 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 		if err := r.parent.ApplyBatchRepr(r.builder.Finish(), sync); err != nil {
 			return err
 		}
-		C.DBClose(r.batch)
-		r.batch = nil
+		if r.batch != nil {
+			C.DBClose(r.batch)
+			r.batch = nil
+		}
 	}
+	r.committed = true
 
 	const batchCommitWarnThreshold = 500 * time.Millisecond
 	if elapsed := timeutil.Since(start); elapsed >= batchCommitWarnThreshold {

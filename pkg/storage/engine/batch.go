@@ -47,6 +47,7 @@ const (
 	// The batch header is composed of an 8-byte sequence number (all zeroes) and
 	// 4-byte count of the number of entries in the batch.
 	headerSize       int = 12
+	countPos             = 8
 	initialBatchSize     = 1 << 10
 	maxVarintLen32       = 5
 )
@@ -113,10 +114,19 @@ func (b *RocksDBBatchBuilder) Len() int {
 	return len(b.repr)
 }
 
+func (b *RocksDBBatchBuilder) setRepr(repr []byte) error {
+	if len(repr) < headerSize {
+		return errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
+	}
+	b.repr = repr
+	b.count = int(binary.LittleEndian.Uint32(repr[countPos:headerSize]))
+	return nil
+}
+
 // getRepr constructs the batch representation and returns it.
 func (b *RocksDBBatchBuilder) getRepr() []byte {
 	b.maybeInit()
-	buf := b.repr[8:headerSize]
+	buf := b.repr[countPos:headerSize]
 	v := uint32(b.count)
 	buf[0] = byte(v)
 	buf[1] = byte(v >> 8)
