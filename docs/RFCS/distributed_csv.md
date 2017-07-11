@@ -50,7 +50,7 @@ The new RPCs outlined below.
 ```
 // Initial message from coordinator to all nodes to read CSVs in a directory.
 message ReadCSVRequest {
-string path = 1;
+	string path = 1;
 }
 
 // After reading CSVs, nodes send a single message containing a sampling of the KVs from the CSVs.
@@ -59,7 +59,7 @@ message ReadCSVResponse {
 		//
 	}
 
-repeated Sample samples = 1;
+	repeated Sample samples = 1;
 }
 
 // After the coordinator has collected all samplings and calculated splits, the splits are sent to each node.
