@@ -14,8 +14,8 @@
 //
 
 syntax = "proto3";
-package cockroach.server;
-option go_package = "server";
+package cockroach.server.diagnosticspb;
+option go_package = "diagnosticspb";
 
 import "gogoproto/gogo.proto";
 import "cockroach/pkg/roachpb/app_stats.proto";
