@@ -210,8 +210,6 @@ type Config struct {
 	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
 	TimeUntilStoreDead *settings.DurationSetting
 
-	PendingRPCTimeout time.Duration
-
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
@@ -378,7 +376,6 @@ func MakeConfig() Config {
 		ConsistencyCheckInterval: defaultConsistencyCheckInterval,
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
 		TimeUntilStoreDead:       timeUntilStoreDead,
-		PendingRPCTimeout:        base.DefaultPendingRPCTimeout,
 		EventLogEnabled:          defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
@@ -402,7 +399,6 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "consistency check interval\t", cfg.ConsistencyCheckInterval)
 	fmt.Fprintln(w, "metrics sample interval\t", cfg.MetricsSampleInterval)
 	fmt.Fprintln(w, "time until store dead\t", cfg.TimeUntilStoreDead)
-	fmt.Fprintln(w, "pending RPC timeout\t", cfg.PendingRPCTimeout)
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
 	if cfg.ListeningURLFile != "" {

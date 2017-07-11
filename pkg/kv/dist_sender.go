@@ -19,7 +19,6 @@ package kv
 import (
 	"fmt"
 	"sync/atomic"
-	"time"
 	"unsafe"
 
 	"google.golang.org/grpc"
@@ -136,13 +135,12 @@ type DistSender struct {
 	rangeCache           *RangeDescriptorCache
 	rangeLookupMaxRanges int32
 	// leaseHolderCache caches range lease holders by range ID.
-	leaseHolderCache  *LeaseHolderCache
-	transportFactory  TransportFactory
-	rpcContext        *rpc.Context
-	rpcRetryOptions   retry.Options
-	pendingRPCTimeout time.Duration
-	asyncSenderSem    chan struct{}
-	asyncSenderCount  int32
+	leaseHolderCache *LeaseHolderCache
+	transportFactory TransportFactory
+	rpcContext       *rpc.Context
+	rpcRetryOptions  retry.Options
+	asyncSenderSem   chan struct{}
+	asyncSenderCount int32
 }
 
 var _ client.Sender = &DistSender{}
@@ -168,7 +166,6 @@ type DistSenderConfig struct {
 	TransportFactory  TransportFactory
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
-	PendingRPCTimeout time.Duration
 	// SenderConcurrency specifies the parallelization available when
 	// splitting batches into multiple requests when they span ranges.
 	// TODO(spencer): This is per-process. We should add a per-batch limit.
@@ -223,11 +220,6 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 		if ds.rpcRetryOptions.Closer == nil {
 			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 		}
-	}
-	if cfg.PendingRPCTimeout != 0 {
-		ds.pendingRPCTimeout = cfg.PendingRPCTimeout
-	} else {
-		ds.pendingRPCTimeout = base.DefaultPendingRPCTimeout
 	}
 	if cfg.SenderConcurrency != 0 {
 		ds.asyncSenderSem = make(chan struct{}, cfg.SenderConcurrency)
@@ -1206,29 +1198,28 @@ func (ds *DistSender) sendToReplicas(
 				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
 
 				if propagateError {
-					if pending > 0 {
-						// If there are still pending RPCs, try to wait them out.
-						//
-						// Note that ambiguous result errors can arrive from these
-						// in-flight RPCs, so if we've sent any, we better wait
-						// for them, even if we're not going to generate ambiguous
-						// results from them ourselves.
-						timer := time.NewTimer(ds.pendingRPCTimeout)
-						defer timer.Stop()
-					pendingLoop:
-						for pending > 0 {
-							select {
-							case pendingCall := <-done:
-								pending--
-								if err := pendingCall.Err; err != nil {
-									if grpc.Code(err) != codes.Unavailable {
-										ambiguousError = err
-									}
-								} else if pendingCall.Reply.Error == nil {
-									return pendingCall.Reply, nil
+					// If there are still pending RPCs, wait them out.
+					//
+					// Note that ambiguous result errors can arrive from these
+					// in-flight RPCs, so if we've sent any, we better wait
+					// for them, even if we're not going to generate ambiguous
+					// results from them ourselves.
+					for pending > 0 {
+						select {
+						case <-slowTimer.C:
+							log.Warningf(ctx, "have been waiting %s sending RPC to r%d for batch: %s",
+								base.SlowRequestThreshold, rangeID, args)
+							ds.metrics.SlowRequestsCount.Inc(1)
+							defer ds.metrics.SlowRequestsCount.Dec(1)
+
+						case pendingCall := <-done:
+							pending--
+							if err := pendingCall.Err; err != nil {
+								if grpc.Code(err) != codes.Unavailable {
+									ambiguousError = err
 								}
-							case <-timer.C:
-								break pendingLoop
+							} else if pendingCall.Reply.Error == nil {
+								return pendingCall.Reply, nil
 							}
 						}
 					}
@@ -1236,16 +1227,12 @@ func (ds *DistSender) sendToReplicas(
 					// The error received is likely not specific to this
 					// replica, so we should return it instead of trying other
 					// replicas. However, if we're trying to commit a
-					// transaction and there are still other RPCs outstanding
-					// or an ambiguous RPC error was already received, we must
-					// return an ambiguous commit error instead of the
-					// returned error.
-					if haveCommit {
-						if pending > 0 || ambiguousError != nil {
-							log.ErrEventf(ctx, "returning ambiguous result (error=%v pending=%d)", ambiguousError, pending)
-							return nil, roachpb.NewAmbiguousResultError(
-								fmt.Sprintf("error=%v pending=%d", ambiguousError, pending))
-						}
+					// transaction and an ambiguous RPC error was already
+					// received, we must return an ambiguous commit error
+					// instead of the returned error.
+					if haveCommit && ambiguousError != nil {
+						log.ErrEventf(ctx, "returning ambiguous result (error=%s)", ambiguousError)
+						return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s", ambiguousError))
 					}
 					return call.Reply, nil
 				}

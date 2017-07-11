@@ -283,17 +283,7 @@ func makeReplicas(addrs ...net.Addr) ReplicaSlice {
 func sendBatch(
 	ctx context.Context, opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context,
 ) (*roachpb.BatchResponse, error) {
-	ds := NewDistSender(DistSenderConfig{
-		// After an error, we wait for up to PendingRPCTimeout to reduce
-		// the chance of returning AmbiguousResultError. These tests
-		// predate that mechanism and will wait for the full duration of
-		// PendingRPCTimeout (specifically in
-		// TestSendNext_NonRetryableApplicationError, so set it to
-		// something small.
-		// TODO(bdarnell): this is related to #16181. If we come up with
-		// an alternative solution there, we may be able to remove this.
-		PendingRPCTimeout: time.Millisecond,
-	}, nil)
+	ds := NewDistSender(DistSenderConfig{}, nil)
 	opts.metrics = &ds.metrics
 	return ds.sendToReplicas(ctx, opts, 0, makeReplicas(addrs...), roachpb.BatchRequest{}, rpcContext)
 }
