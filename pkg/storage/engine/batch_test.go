@@ -717,6 +717,7 @@ func TestBatchBuilder(t *testing.T) {
 	stopper.AddCloser(e)
 
 	batch := e.NewBatch().(*rocksDBBatch)
+	batch.ensureBatch()
 	// Ensure that, even though we reach into the batch's internals with
 	// dbPut etc, asking for the batch's Repr will get data from C++ and
 	// not its unused builder.
@@ -772,6 +773,7 @@ func TestBatchBuilderStress(t *testing.T) {
 
 		func() {
 			batch := e.NewBatch().(*rocksDBBatch)
+			batch.ensureBatch()
 			// Ensure that, even though we reach into the batch's internals with
 			// dbPut etc, asking for the batch's Repr will get data from C++ and
 			// not its unused builder.
