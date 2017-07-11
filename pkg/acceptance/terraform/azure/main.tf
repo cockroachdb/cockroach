@@ -207,8 +207,8 @@ resource "null_resource" "cockroach-runner" {
   }
 
   provisioner "file" {
-    source = "disable-hyperv"
-    destination = "/home/ubuntu/disable-hyperv"
+    source = "../../../../build/disable-hyperv-timesync.sh"
+    destination = "/home/ubuntu/disable-hyperv-timesync.sh"
   }
 
   # This writes the filled-in supervisor template. It would be nice if we could
@@ -230,7 +230,7 @@ FILE
   # Launch CockroachDB.
   provisioner "remote-exec" {
     inline = [
-      "chmod 755 cockroach nodectl disable-hyperv",
+      "chmod 755 cockroach nodectl disable-hyperv-timesync.sh",
       # For consistency with other Terraform configs, we create the store in
       # /mnt/data0.
       "sudo mkdir /mnt/data0",
@@ -256,7 +256,7 @@ FILE
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
       # Disable hypervisor clock sync, because it can cause an unrecoverable
       # amount of clock skew. This also forces an NTP sync.
-      "./disable-hyperv",
+      "./disable-hyperv-timesync.sh",
       # Start CockroachDB.
       "supervisorctl -c supervisor.conf start cockroach",
       # Install load generators.
