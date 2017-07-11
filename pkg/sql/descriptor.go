@@ -152,6 +152,10 @@ func (p *planner) createDescriptorWithID(
 		return expectDescriptor(systemConfig, descKey, descDesc)
 	})
 
+	if desc, ok := descriptor.(*sqlbase.TableDescriptor); ok {
+		p.session.tables.addUncommittedTable(*desc)
+	}
+
 	return p.txn.Run(ctx, b)
 }
 
