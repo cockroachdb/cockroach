@@ -156,7 +156,7 @@ type RowInserter struct {
 
 // MakeRowInserter creates a RowInserter for the given table.
 //
-// InsertCols must contain every column in the primary key.
+// insertCols must contain every column in the primary key.
 func MakeRowInserter(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
@@ -200,7 +200,7 @@ func MakeRowInserter(
 // insertCPutFn is used by insertRow when conflicts (i.e. the key already exists)
 // should generate errors.
 func insertCPutFn(
-	ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
 ) {
 	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
 	// client.Batch wrapper instead of inlining it everywhere.
@@ -212,7 +212,7 @@ func insertCPutFn(
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
 func insertPutFn(
-	ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
 ) {
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", *key, value.PrettyPrint())
@@ -220,7 +220,7 @@ func insertPutFn(
 	b.Put(key, value)
 }
 
-type puter interface {
+type putter interface {
 	CPut(key, value, expValue interface{})
 	Put(key, value interface{})
 }
@@ -228,7 +228,7 @@ type puter interface {
 // InsertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
 func (ri *RowInserter) InsertRow(
-	ctx context.Context, b puter, values []parser.Datum, ignoreConflicts bool, traceKV bool,
+	ctx context.Context, b putter, values []parser.Datum, ignoreConflicts bool, traceKV bool,
 ) error {
 	if len(values) != len(ri.InsertCols) {
 		return errors.Errorf("got %d values but expected %d", len(values), len(ri.InsertCols))
@@ -353,6 +353,9 @@ type RowUpdater struct {
 	deleteOnlyIndex       map[int]struct{}
 	primaryKeyColChange   bool
 
+	// rd and ri are used when the update this RowUpdater is created for modifies
+	// the primary key of the table. In that case, rows must be deleted and
+	// re-added instead of merely updated, since the keys are changing.
 	rd RowDeleter
 	ri RowInserter
 
@@ -434,6 +437,13 @@ func MakeRowUpdater(
 		}
 	}
 
+	// Columns of the table to update, including those in delete/write-only state
+	tableCols := tableDesc.Columns
+	if len(tableDesc.Mutations) > 0 {
+		tableCols = make([]ColumnDescriptor, 0, len(tableDesc.Columns)+len(tableDesc.Mutations))
+		tableCols = append(tableCols, tableDesc.Columns...)
+	}
+
 	var deleteOnlyIndex map[int]struct{}
 	for _, m := range tableDesc.Mutations {
 		if index := m.GetIndex(); index != nil {
@@ -451,6 +461,8 @@ func MakeRowUpdater(
 				case DescriptorMutation_DELETE_AND_WRITE_ONLY:
 				}
 			}
+		} else if col := m.GetColumn(); col != nil {
+			tableCols = append(tableCols, *col)
 		}
 	}
 
@@ -461,20 +473,20 @@ func MakeRowUpdater(
 		deleteOnlyIndex:       deleteOnlyIndex,
 		primaryKeyColChange:   primaryKeyColChange,
 		marshalled:            make([]roachpb.Value, len(updateCols)),
-		newValues:             make([]parser.Datum, len(tableDesc.Columns)+len(tableDesc.Mutations)),
+		newValues:             make([]parser.Datum, len(tableCols)),
 	}
 
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
-		var err error
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
-		if ru.rd, err = MakeRowDeleter(txn, tableDesc, fkTables, tableDesc.Columns, SkipFKs); err != nil {
+		var err error
+		if ru.rd, err = MakeRowDeleter(txn, tableDesc, fkTables, tableCols, SkipFKs); err != nil {
 			return RowUpdater{}, err
 		}
 		ru.FetchCols = ru.rd.FetchCols
 		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
-		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables, tableDesc.Columns, SkipFKs); err != nil {
+		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables, tableCols, SkipFKs); err != nil {
 			return RowUpdater{}, err
 		}
 	} else {
