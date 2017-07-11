@@ -622,14 +622,14 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1;
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT CRDB_INTERNAL.FORCE_RETRY('50ms':::INTERVAL)
+SELECT CRDB_INTERNAL.FORCE_RETRY('1h':::INTERVAL)
 
 statement ok
 ROLLBACK TO SAVEPOINT COCKROACH_RESTART;
 
 # This is the automatic retry we care about.
 statement ok
-SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+SELECT CRDB_INTERNAL.FORCE_RETRY('50ms':::INTERVAL)
 
 statement ok
 ROLLBACK
