@@ -3963,6 +3963,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseEpochCount               int64
 		raftLeaderNotLeaseHolderCount int64
 		quiescentCount                int64
+		AveragewritesPerSecond        float64
 
 		rangeCount                int64
 		unavailableRangeCount     int64
@@ -4009,6 +4010,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		}
 		behindCount += metrics.BehindCount
 		selfBehindCount += metrics.SelfBehindCount
+		qps, _ := rep.writeStats.avgQPS()
+		AveragewritesPerSecond += qps
 		return true // more
 	})
 
@@ -4018,6 +4021,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
+	s.metrics.AverageWritesPerSecond.Update(AveragewritesPerSecond)
 
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
