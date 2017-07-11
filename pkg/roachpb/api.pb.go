@@ -97,6 +97,8 @@
 		BatchResponse
 		StatementStatistics
 		NumericStat
+		StatementStatisticsKey
+		CollectedStatementStatistics
 		Span
 		Value
 		KeyValue

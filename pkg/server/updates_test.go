@@ -15,10 +15,7 @@
 package server
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -170,21 +167,21 @@ func TestReportUsage(t *testing.T) {
 		node := ts.node.recorder.GetStatusSummary(ctx)
 		ts.reportDiagnostics(0)
 
-		keyCounts := make(map[roachpb.StoreID]int)
-		rangeCounts := make(map[roachpb.StoreID]int)
-		totalKeys := 0
-		totalRanges := 0
+		keyCounts := make(map[roachpb.StoreID]int64)
+		rangeCounts := make(map[roachpb.StoreID]int64)
+		totalKeys := int64(0)
+		totalRanges := int64(0)
 
 		for _, store := range node.StoreStatuses {
 			if keys, ok := store.Metrics["keycount"]; ok {
-				totalKeys += int(keys)
-				keyCounts[store.Desc.StoreID] = int(keys)
+				totalKeys += int64(keys)
+				keyCounts[store.Desc.StoreID] = int64(keys)
 			} else {
 				t.Fatal("keycount not in metrics")
 			}
 			if replicas, ok := store.Metrics["replicas"]; ok {
-				totalRanges += int(replicas)
-				rangeCounts[store.Desc.StoreID] = int(replicas)
+				totalRanges += int64(replicas)
+				rangeCounts[store.Desc.StoreID] = int64(replicas)
 			} else {
 				t.Fatal("replicas not in metrics")
 			}
@@ -223,6 +220,9 @@ func TestReportUsage(t *testing.T) {
 		return nil
 	})
 
+	// This check isn't clean, since the body is a raw proto binary and thus could
+	// easily contain some encoded form of elemName, but *if* it ever does fail,
+	// that is probably very interesting.
 	if strings.Contains(r.last.rawReportBody, elemName) {
 		t.Fatalf("%q should not appear in %q", elemName, r.last.rawReportBody)
 	}
@@ -246,14 +246,23 @@ func TestReportUsage(t *testing.T) {
 	if expected, actual := 1, len(r.last.UnimplementedErrors); expected != actual {
 		t.Fatalf("expected %d unimplemented feature errors, got %d", expected, actual)
 	}
-	if expected, actual := uint(10), r.last.UnimplementedErrors["alter table rename constraint"]; expected != actual {
+	if expected, actual := int64(10), r.last.UnimplementedErrors["alter table rename constraint"]; expected != actual {
 		t.Fatalf(
 			"unexpected %d hits to unimplemented alter table rename constrain, got %d from %v",
 			expected, actual, r.last.UnimplementedErrors,
 		)
 	}
 
-	if expected, actual := 2, len(r.last.QueryStats); expected != actual {
+	if expected, actual := 8, len(r.last.SqlStats); expected != actual {
+		t.Fatalf("expected %d queries in stats report, got %d", expected, actual)
+	}
+
+	bucketByApp := make(map[string][]roachpb.CollectedStatementStatistics)
+	for _, s := range r.last.SqlStats {
+		bucketByApp[s.Key.App] = append(bucketByApp[s.Key.App], s)
+	}
+
+	if expected, actual := 2, len(bucketByApp); expected != actual {
 		t.Fatalf("expected %d apps in stats report, got %d", expected, actual)
 	}
 
@@ -271,18 +280,18 @@ func TestReportUsage(t *testing.T) {
 			`UPDATE _ SET _ = _ + _`,
 		},
 	} {
-		if app, ok := r.last.QueryStats[sql.HashAppName(appName)]; !ok {
+		if app, ok := bucketByApp[sql.HashAppName(appName)]; !ok {
 			t.Fatalf("missing stats for default app")
 		} else {
 			if actual, expected := len(app), len(expectedStatements); expected != actual {
 				t.Fatalf("expected %d statements in app %s report, got %d", expected, appName, actual)
 			}
 			keys := make(map[string]struct{})
-			for k := range app {
-				keys[k] = struct{}{}
+			for _, q := range app {
+				keys[q.Key.Query] = struct{}{}
 			}
 			for _, expected := range expectedStatements {
-				if _, ok := app[expected]; !ok {
+				if _, ok := keys[expected]; !ok {
 					t.Fatalf("expected %q in app %s: %+v", expected, appName, keys)
 				}
 			}
@@ -301,7 +310,7 @@ type mockRecorder struct {
 	last     struct {
 		uuid    string
 		version string
-		reportingInfo
+		DiagnosticReport
 		rawReportBody string
 	}
 }
@@ -324,7 +333,7 @@ func makeMockRecorder(t *testing.T) *mockRecorder {
 		}
 		rec.last.rawReportBody = string(body)
 		// TODO(dt): switch on the request path to handle different request types.
-		if err := json.NewDecoder(bytes.NewReader(body)).Decode(&rec.last.reportingInfo); err != nil && err != io.EOF {
+		if err := rec.last.DiagnosticReport.Unmarshal(body); err != nil {
 			panic(err)
 		}
 	}))

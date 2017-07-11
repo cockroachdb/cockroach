@@ -97,30 +97,6 @@ type versionInfo struct {
 	Details string `json:"details"`
 }
 
-type reportingInfo struct {
-	Node       nodeInfo                                          `json:"node"`
-	Stores     []storeInfo                                       `json:"stores"`
-	Schema     []sqlbase.TableDescriptor                         `json:"schema"`
-	QueryStats map[string]map[string]roachpb.StatementStatistics `json:"sqlstats"`
-	// UnimplementedErrors reports when unimplemented features are encountered.
-	UnimplementedErrors map[string]uint `json:"unimplemented"`
-}
-
-type nodeInfo struct {
-	NodeID     roachpb.NodeID `json:"node_id"`
-	Bytes      int            `json:"bytes"`
-	KeyCount   int            `json:"key_count"`
-	RangeCount int            `json:"range_count"`
-}
-
-type storeInfo struct {
-	NodeID     roachpb.NodeID  `json:"node_id"`
-	StoreID    roachpb.StoreID `json:"store_id"`
-	Bytes      int             `json:"bytes"`
-	KeyCount   int             `json:"key_count"`
-	RangeCount int             `json:"range_count"`
-}
-
 // PeriodicallyCheckForUpdates starts a background worker that periodically
 // phones home to check for updates and report usage.
 func (s *Server) PeriodicallyCheckForUpdates() {
@@ -265,20 +241,20 @@ func (s *Server) maybeReportDiagnostics(
 	return scheduled.Add(diagnosticReportFrequency.Get())
 }
 
-func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
-	info := reportingInfo{}
+func (s *Server) getReportingInfo(ctx context.Context) *DiagnosticReport {
+	info := DiagnosticReport{}
 	n := s.node.recorder.GetStatusSummary(ctx)
-	info.Node = nodeInfo{NodeID: s.node.Descriptor.NodeID}
+	info.Node = NodeInfo{NodeID: s.node.Descriptor.NodeID}
 
-	info.Stores = make([]storeInfo, len(n.StoreStatuses))
+	info.Stores = make([]StoreInfo, len(n.StoreStatuses))
 	for i, r := range n.StoreStatuses {
 		info.Stores[i].NodeID = r.Desc.Node.NodeID
 		info.Stores[i].StoreID = r.Desc.StoreID
-		info.Stores[i].KeyCount = int(r.Metrics["keycount"])
+		info.Stores[i].KeyCount = int64(r.Metrics["keycount"])
 		info.Node.KeyCount += info.Stores[i].KeyCount
-		info.Stores[i].RangeCount = int(r.Metrics["replicas"])
+		info.Stores[i].RangeCount = int64(r.Metrics["replicas"])
 		info.Node.RangeCount += info.Stores[i].RangeCount
-		bytes := int(r.Metrics["sysbytes"] + r.Metrics["intentbytes"] + r.Metrics["valbytes"] + r.Metrics["keybytes"])
+		bytes := int64(r.Metrics["sysbytes"] + r.Metrics["intentbytes"] + r.Metrics["valbytes"] + r.Metrics["keybytes"])
 		info.Stores[i].Bytes = bytes
 		info.Node.Bytes += bytes
 	}
@@ -289,24 +265,24 @@ func (s *Server) getReportingInfo(ctx context.Context) reportingInfo {
 		schema = nil
 	}
 	info.Schema = schema
-	info.QueryStats = s.sqlExecutor.GetScrubbedStmtStats()
-	info.UnimplementedErrors = make(map[string]uint)
+	info.SqlStats = s.sqlExecutor.GetScrubbedStmtStats()
+	info.UnimplementedErrors = make(map[string]int64)
 	s.sqlExecutor.FillUnimplementedErrorCounts(info.UnimplementedErrors)
-	return info
+	return &info
 }
 
 func (s *Server) reportDiagnostics(runningTime time.Duration) {
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
 	defer span.Finish()
 
-	b := new(bytes.Buffer)
-	if err := json.NewEncoder(b).Encode(s.getReportingInfo(ctx)); err != nil {
+	b, err := s.getReportingInfo(ctx).Marshal()
+	if err != nil {
 		log.Warning(ctx, err)
 		return
 	}
 
 	addInfoToURL(reportingURL, s, runningTime)
-	res, err := http.Post(reportingURL.String(), "application/json", b)
+	res, err := http.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
 
 	if err != nil {
 		if log.V(2) {
