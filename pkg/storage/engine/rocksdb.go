@@ -1318,83 +1318,90 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	// batching. Instrumentation shows that internally RocksDB almost never
 	// batches commits together. While the batching below often can batch 20 or
 	// 30 concurrent commits.
-	if r.writeOnly {
-		c := &r.parent.commit
-		r.commitWG.Add(1)
-		r.syncCommit = syncCommit
+	c := &r.parent.commit
+	r.commitWG.Add(1)
+	r.syncCommit = syncCommit
 
-		// The leader for the commit is the first batch to be added to the pending
-		// slice. Every batch has an associated wait group which is signalled when
-		// the commit is complete.
-		c.Lock()
-		leader := len(c.pending) == 0
-		c.pending = append(c.pending, r)
+	// The leader for the commit is the first batch to be added to the pending
+	// slice. Every batch has an associated wait group which is signalled when
+	// the commit is complete.
+	c.Lock()
+	leader := len(c.pending) == 0
+	c.pending = append(c.pending, r)
 
-		if leader {
-			// We're the leader. Wait for any running commit to finish.
-			for c.committing {
-				c.cond.Wait()
-			}
-			pending := c.pending
-			c.pending = nil
-			c.committing = true
-			c.Unlock()
-
-			// Bundle all of the batches together.
-			var err error
-			for _, b := range pending[1:] {
-				if err = r.ApplyBatchRepr(b.Repr(), false /* sync */); err != nil {
-					break
-				}
-			}
-
-			if err == nil {
-				err = r.commitInternal(false /* sync */)
-			}
-
-			// We're done committing the batch, let the next group of batches
-			// proceed.
-			c.Lock()
-			c.committing = false
-			c.cond.Signal()
-			c.Unlock()
-
-			// Propagate the error to all of the batches involved in the commit. If a
-			// batch requires syncing and the commit was successful, add it to the
-			// syncing list. Note that we're reusing the pending list here for the
-			// syncing list.
-			syncing := pending[:0]
-			for _, b := range pending {
-				if err != nil || !b.syncCommit {
-					b.commitErr = err
-					b.commitWG.Done()
-				} else {
-					syncing = append(syncing, b)
-				}
-			}
-
-			if len(syncing) > 0 {
-				// The commit was successful and one or more of the batches requires
-				// syncing: notify the sync goroutine.
-				s := &r.parent.syncer
-				s.Lock()
-				if len(s.pending) == 0 {
-					s.pending = syncing
-				} else {
-					s.pending = append(s.pending, syncing...)
-				}
-				s.cond.Signal()
-				s.Unlock()
-			}
-		} else {
-			c.Unlock()
+	if leader {
+		// We're the leader. Wait for any running commit to finish.
+		for c.committing {
+			c.cond.Wait()
 		}
-		// Wait for the commit/sync to finish.
-		r.commitWG.Wait()
-		return r.commitErr
-	}
+		pending := c.pending
+		c.pending = nil
+		c.committing = true
+		c.Unlock()
 
-	return r.commitInternal(syncCommit)
+		// We want the batch that is performing the commit to be write-only in
+		// order to avoid the (significant) overhead of indexing the operations in
+		// the other batches when they are applied.
+		committer := r
+		merge := pending[1:]
+		if !r.writeOnly && len(merge) > 0 {
+			committer = newRocksDBBatch(r.parent, true /* writeOnly */)
+			defer committer.Close()
+			merge = pending
+		}
+
+		// Bundle all of the batches together.
+		var err error
+		for _, b := range merge {
+			if err = committer.ApplyBatchRepr(b.unsafeRepr(), false /* sync */); err != nil {
+				break
+			}
+		}
+
+		if err == nil {
+			err = committer.commitInternal(false /* sync */)
+		}
+
+		// We're done committing the batch, let the next group of batches
+		// proceed.
+		c.Lock()
+		c.committing = false
+		c.cond.Signal()
+		c.Unlock()
+
+		// Propagate the error to all of the batches involved in the commit. If a
+		// batch requires syncing and the commit was successful, add it to the
+		// syncing list. Note that we're reusing the pending list here for the
+		// syncing list.
+		syncing := pending[:0]
+		for _, b := range pending {
+			if err != nil || !b.syncCommit {
+				b.commitErr = err
+				b.commitWG.Done()
+			} else {
+				syncing = append(syncing, b)
+			}
+		}
+
+		if len(syncing) > 0 {
+			// The commit was successful and one or more of the batches requires
+			// syncing: notify the sync goroutine.
+			s := &r.parent.syncer
+			s.Lock()
+			if len(s.pending) == 0 {
+				s.pending = syncing
+			} else {
+				s.pending = append(s.pending, syncing...)
+			}
+			s.cond.Signal()
+			s.Unlock()
+		}
+	} else {
+		c.Unlock()
+	}
+	// Wait for the commit/sync to finish.
+	r.commitWG.Wait()
+	return r.commitErr
 }
 
 func (r *rocksDBBatch) commitInternal(sync bool) error {
@@ -1438,6 +1445,15 @@ func (r *rocksDBBatch) Repr() []byte {
 	}
 	r.flushMutations()
 	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
+}
+
+func (r *rocksDBBatch) unsafeRepr() []byte {
+	if r.flushes == 0 {
+		// We've never flushed to C++. Return the mutations only.
+		return r.builder.getRepr()
+	}
+	r.flushMutations()
+	return cSliceToUnsafeGoBytes(C.DBBatchRepr(r.batch))
 }
 
 func (r *rocksDBBatch) Distinct() ReadWriter {
