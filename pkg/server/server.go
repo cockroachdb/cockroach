@@ -210,7 +210,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Clock:             s.clock,
 		RPCContext:        s.rpcContext,
 		RPCRetryOptions:   &retryOpts,
-		SendNextTimeout:   s.cfg.SendNextTimeout,
 		PendingRPCTimeout: s.cfg.PendingRPCTimeout,
 	}
 	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)

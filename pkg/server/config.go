@@ -210,11 +210,6 @@ type Config struct {
 	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
 	TimeUntilStoreDead *settings.DurationSetting
 
-	// SendNextTimeout is the time after which an alternate replica will
-	// be used to attempt sending a KV batch.
-	// Environment Variable: COCKROACH_SEND_NEXT_TIMEOUT
-	SendNextTimeout time.Duration
-
 	PendingRPCTimeout time.Duration
 
 	// TestingKnobs is used for internal test controls only.
@@ -383,7 +378,6 @@ func MakeConfig() Config {
 		ConsistencyCheckInterval: defaultConsistencyCheckInterval,
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
 		TimeUntilStoreDead:       timeUntilStoreDead,
-		SendNextTimeout:          base.DefaultSendNextTimeout,
 		PendingRPCTimeout:        base.DefaultPendingRPCTimeout,
 		EventLogEnabled:          defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
@@ -408,7 +402,6 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "consistency check interval\t", cfg.ConsistencyCheckInterval)
 	fmt.Fprintln(w, "metrics sample interval\t", cfg.MetricsSampleInterval)
 	fmt.Fprintln(w, "time until store dead\t", cfg.TimeUntilStoreDead)
-	fmt.Fprintln(w, "send next timeout\t", cfg.SendNextTimeout)
 	fmt.Fprintln(w, "pending RPC timeout\t", cfg.PendingRPCTimeout)
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
@@ -597,7 +590,6 @@ func (cfg *Config) readEnvironmentVariables() {
 	cfg.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", cfg.MetricsSampleInterval)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
-	cfg.SendNextTimeout = envutil.EnvOrDefaultDuration("COCKROACH_SEND_NEXT_TIMEOUT", cfg.SendNextTimeout)
 	cfg.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("COCKROACH_CONSISTENCY_CHECK_INTERVAL", cfg.ConsistencyCheckInterval)
 }
 

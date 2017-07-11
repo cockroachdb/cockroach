@@ -67,9 +67,6 @@ var (
 	metaTransportLocalSentCount = metric.Metadata{
 		Name: "distsender.rpc.sent.local",
 		Help: "Number of local RPCs sent"}
-	metaDistSenderSendNextTimeoutCount = metric.Metadata{
-		Name: "distsender.rpc.sent.sendnexttimeout",
-		Help: "Number of RPCs sent due to outstanding RPCs not returning promptly"}
 	metaDistSenderNextReplicaErrCount = metric.Metadata{
 		Name: "distsender.rpc.sent.nextreplicaerror",
 		Help: "Number of RPCs sent due to per-replica errors"}
@@ -87,7 +84,6 @@ type DistSenderMetrics struct {
 	PartialBatchCount      *metric.Counter
 	SentCount              *metric.Counter
 	LocalSentCount         *metric.Counter
-	SendNextTimeoutCount   *metric.Counter
 	NextReplicaErrCount    *metric.Counter
 	NotLeaseHolderErrCount *metric.Counter
 	SlowRequestsCount      *metric.Gauge
@@ -99,7 +95,6 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		PartialBatchCount:      metric.NewCounter(metaDistSenderPartialBatchCount),
 		SentCount:              metric.NewCounter(metaTransportSentCount),
 		LocalSentCount:         metric.NewCounter(metaTransportLocalSentCount),
-		SendNextTimeoutCount:   metric.NewCounter(metaDistSenderSendNextTimeoutCount),
 		NextReplicaErrCount:    metric.NewCounter(metaDistSenderNextReplicaErrCount),
 		NotLeaseHolderErrCount: metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
 		SlowRequestsCount:      metric.NewGauge(metaSlowDistSenderRequests),
@@ -145,7 +140,6 @@ type DistSender struct {
 	transportFactory  TransportFactory
 	rpcContext        *rpc.Context
 	rpcRetryOptions   retry.Options
-	sendNextTimeout   time.Duration
 	pendingRPCTimeout time.Duration
 	asyncSenderSem    chan struct{}
 	asyncSenderCount  int32
@@ -174,7 +168,6 @@ type DistSenderConfig struct {
 	TransportFactory  TransportFactory
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
-	SendNextTimeout   time.Duration
 	PendingRPCTimeout time.Duration
 	// SenderConcurrency specifies the parallelization available when
 	// splitting batches into multiple requests when they span ranges.
@@ -230,11 +223,6 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 		if ds.rpcRetryOptions.Closer == nil {
 			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 		}
-	}
-	if cfg.SendNextTimeout != 0 {
-		ds.sendNextTimeout = cfg.SendNextTimeout
-	} else {
-		ds.sendNextTimeout = base.DefaultSendNextTimeout
 	}
 	if cfg.PendingRPCTimeout != 0 {
 		ds.pendingRPCTimeout = cfg.PendingRPCTimeout
@@ -398,7 +386,6 @@ func (ds *DistSender) sendRPC(
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
-		SendNextTimeout:  ds.sendNextTimeout,
 		transportFactory: ds.transportFactory,
 		metrics:          &ds.metrics,
 	}
@@ -1169,29 +1156,11 @@ func (ds *DistSender) sendToReplicas(
 	// Wait for completions. This loop will retry operations that fail
 	// with errors that reflect per-replica state and may succeed on
 	// other replicas.
-	sendNextTimer := timeutil.NewTimer()
 	slowTimer := timeutil.NewTimer()
-	defer sendNextTimer.Stop()
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
-		if timeout, ok := transport.SendNextTimeout(opts.SendNextTimeout); ok {
-			// Only start the send-next timer if we haven't exhausted the transport
-			// (i.e. there is another replica to send to).
-			sendNextTimer.Reset(timeout)
-		}
-
 		select {
-		case <-sendNextTimer.C:
-			sendNextTimer.Read = true
-			// On successive RPC timeouts, send to additional replicas if available.
-			if !transport.IsExhausted() {
-				ds.metrics.SendNextTimeoutCount.Inc(1)
-				log.VEventf(ctx, 2, "timeout, trying next peer: %s", transport.NextReplica())
-				pending++
-				transport.SendNext(ctx, done)
-			}
-
 		case <-slowTimer.C:
 			log.Warningf(ctx, "have been waiting %s sending RPC to r%d for batch: %s",
 				base.SlowRequestThreshold, rangeID, args)

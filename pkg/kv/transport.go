@@ -39,13 +39,8 @@ import (
 // more replicas, depending on error conditions and how many successful
 // responses are required.
 type SendOptions struct {
-	// SendNextTimeout is the duration after which RPCs are sent to
-	// other replicas in a set.
-	SendNextTimeout time.Duration
-
 	transportFactory TransportFactory
-
-	metrics *DistSenderMetrics
+	metrics          *DistSenderMetrics
 }
 
 type batchClient struct {
@@ -88,12 +83,6 @@ type TransportFactory func(
 type Transport interface {
 	// IsExhausted returns true if there are no more replicas to try.
 	IsExhausted() bool
-
-	// SendNextTimeout returns the timeout after which the next untried,
-	// or retryable, replica may be attempted. Returns a duration
-	// indicating when another replica should be tried, and a bool
-	// indicating whether one should be (if false, duration will be 0).
-	SendNextTimeout(time.Duration) (time.Duration, bool)
 
 	// SendNext sends the rpc (captured at creation time) to the next
 	// replica. May panic if the transport is exhausted. Should not
@@ -190,31 +179,6 @@ func (gt *grpcTransport) maybeResurrectRetryables() bool {
 		gt.moveToFrontLocked(c.args.Replica)
 	}
 	return len(resurrect) > 0
-}
-
-// SendNextTimeout returns the default SendOpts.SendNextTimeout if
-// there are any untried replicas in the transport. Otherwise, it
-// returns the earliest deadline of any replicas which experienced
-// retryable errors.
-func (gt *grpcTransport) SendNextTimeout(defaultTimeout time.Duration) (time.Duration, bool) {
-	gt.clientPendingMu.Lock()
-	defer gt.clientPendingMu.Unlock()
-	if gt.clientIndex < len(gt.orderedClients) {
-		return defaultTimeout, true
-	}
-	var deadline time.Time
-	for i := 0; i < gt.clientIndex; i++ {
-		if c := gt.orderedClients[i]; !c.pending && c.retryable {
-			if (deadline == time.Time{}) || c.deadline.Before(deadline) {
-				deadline = c.deadline
-			}
-		}
-	}
-	if (deadline == time.Time{}) {
-		return 0, false
-	}
-	// Returning a negative duration is legal.
-	return deadline.Sub(timeutil.Now()), true
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
@@ -337,7 +301,7 @@ func (gt *grpcTransport) setState(replica roachpb.ReplicaDescriptor, pending, re
 			gt.orderedClients[i].pending = pending
 			gt.orderedClients[i].retryable = retryable
 			if retryable {
-				gt.orderedClients[i].deadline = timeutil.Now().Add(gt.opts.SendNextTimeout)
+				gt.orderedClients[i].deadline = timeutil.Now().Add(time.Second)
 			}
 			return
 		}
@@ -388,13 +352,6 @@ type senderTransport struct {
 
 func (s *senderTransport) IsExhausted() bool {
 	return s.called
-}
-
-func (s *senderTransport) SendNextTimeout(defaultTimeout time.Duration) (time.Duration, bool) {
-	if s.IsExhausted() {
-		return 0, false
-	}
-	return defaultTimeout, true
 }
 
 func (s *senderTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
