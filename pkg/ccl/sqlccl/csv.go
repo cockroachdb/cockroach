@@ -332,7 +332,11 @@ func writeRocksDB(
 
 	cache := engine.NewRocksDBCache(0)
 	defer cache.Release()
-	r, err := engine.NewRocksDB(roachpb.Attributes{}, rocksdbDir, cache, 0 /* maxSize */, 1024 /* maxOpenFiles */)
+	r, err := engine.NewRocksDB(engine.RocksDBConfig{
+		Dir:          rocksdbDir,
+		MaxSizeBytes: 0,
+		MaxOpenFiles: 1024,
+	}, cache)
 	if err != nil {
 		return 0, errors.Wrap(err, "create rocksdb instance")
 	}
