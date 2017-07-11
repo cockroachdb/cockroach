@@ -2,7 +2,7 @@ import React from "react";
 import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import { Metric, Axis} from "src/views/shared/components/metricQuery";
+import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeAddress, storeIDsForNode } from "./dashboardUtils";
 
@@ -43,6 +43,36 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.store.replicas.leaseholders"
+              title={nodeAddress(nodesSummary, nid)}
+              sources={storeIDsForNode(nodesSummary, nid)}
+            />
+          ))
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Live Bytes per Store" tooltip={`The number of live bytes of data on each store.`}>
+      <Axis units={AxisUnits.Bytes}>
+        {
+          _.map(nodeIDs, (nid) => (
+            <Metric
+              key={nid}
+              name="cr.store.livebytes"
+              title={nodeAddress(nodesSummary, nid)}
+              sources={storeIDsForNode(nodesSummary, nid)}
+            />
+          ))
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Keys Written per Second per Store" tooltip={`The average number of KV keys written (i.e. applied by raft) per second on each store.`}>
+      <Axis>
+        {
+          _.map(nodeIDs, (nid) => (
+            <Metric
+              key={nid}
+              name="cr.store.rebalancing.writespersecond"
               title={nodeAddress(nodesSummary, nid)}
               sources={storeIDsForNode(nodesSummary, nid)}
             />
