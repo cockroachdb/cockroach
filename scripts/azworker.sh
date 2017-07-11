@@ -24,10 +24,14 @@ FQDN=${DOMAIN}.${LOCATION}.cloudapp.azure.com
 
 case ${1-} in
     create)
-    # To support multiple workers per user, factor the group and vnet creation out.
-    azure group create "${RG}" -l "${LOCATION}"
-    azure network vnet create -g "${RG}" -n "${NET}" -a 192.168.0.0/16 -l "${LOCATION}"
-    azure network vnet subnet create -g "${RG}" -e "${NET}" -n "${SUBNET}" -a 192.168.1.0/24
+    if azure group show "${RG}" >/dev/null 2>/dev/null; then
+      echo "Resource group ${RG} already exists; adding worker VM to it"
+    else
+      echo "Creating resource group ${RG}"
+      azure group create "${RG}" -l "${LOCATION}"
+      azure network vnet create -g "${RG}" -n "${NET}" -a 192.168.0.0/16 -l "${LOCATION}"
+      azure network vnet subnet create -g "${RG}" -e "${NET}" -n "${SUBNET}" -a 192.168.1.0/24
+    fi
 
     azure network public-ip create -g "${RG}" -n "${IP}" -l "${LOCATION}" -d "${DOMAIN}"
     azure network nic create -g "${RG}" -n "${NIC}" -l "${LOCATION}" -p "${IP}" --subnet-name "${SUBNET}" --subnet-vnet-name "${NET}"
@@ -52,7 +56,9 @@ case ${1-} in
 
     rsync -az "$(dirname "${0}")/../build/bootstrap/" "${USER}@${FQDN}:bootstrap/"
     rsync -az "$(dirname "${0}")/../build/parallelbuilds-"* "${USER}@${FQDN}:bootstrap/"
+    rsync -az "$(dirname "${0}")/../build/disable-hyperv-timesync.sh" "${USER}@${FQDN}:bootstrap/"
     ssh -A "${USER}@${FQDN}" ./bootstrap/bootstrap-debian.sh
+    ssh -A "${USER}@${FQDN}" ./bootstrap/disable-hyperv-timesync.sh
 
     # TODO(bdarnell): autoshutdown.cron.sh does not work on azure. It
     # halts the VM, but halting the VM doesn't stop billing. The VM
@@ -70,7 +76,20 @@ case ${1-} in
     azure vm deallocate "${RG}" "${NAME}"
     ;;
     delete)
-    azure group delete "${RG}"
+    # The straightforward thing to do would be to first delete the VM, then
+    # check if there are any virtual machines left in the group. However, the
+    # deleted VM doesn't disappear right away from the listing. So we instead
+    # count the initial number of VMs.
+    NUM_VMS=$(azure group show "${RG}" | (grep -c "Type *: *virtualMachines" || true))
+    azure vm delete "${RG}" "${NAME}"
+    if [ "$NUM_VMS" -gt 1 ]; then
+      azure network nic delete -g "${RG}" -n "${NIC}" -q
+      azure network public-ip delete -g "${RG}" -n "${IP}" -q
+      echo "Resource group ${RG} still contains VMs; leaving in place"
+    else
+      echo "Deleting resource group ${RG}"
+      azure group delete "${RG}" -q
+    fi
     ;;
     ssh)
     shift
