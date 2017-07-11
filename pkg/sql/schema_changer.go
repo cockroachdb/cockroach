@@ -596,7 +596,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	if err := sc.RunStateMachineBeforeBackfill(ctx); err != nil {
 		return err
 	}
-	if err := sc.jobLogger.Progressed(ctx, .1); err != nil {
+	if err := sc.jobLogger.Progressed(ctx, .1, jobs.Noop); err != nil {
 		log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
 			sc.jobLogger.JobID(), err)
 	}

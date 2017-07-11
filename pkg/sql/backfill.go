@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -449,7 +450,7 @@ func (sc *SchemaChanger) distBackfill(
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				if err := sc.jobLogger.Progressed(ctx, fractionCompleted); err != nil {
+				if err := sc.jobLogger.Progressed(ctx, fractionCompleted, jobs.Noop); err != nil {
 					log.Infof(ctx, "Ignoring error reporting progress %f for job %d: %v", fractionCompleted, *sc.jobLogger.JobID(), err)
 				}
 			}

@@ -709,11 +709,6 @@ func Restore(
 		return failed, err
 	}
 
-	progressLogger := jobProgressLogger{
-		jobLogger:   jobLogger,
-		totalChunks: len(importRequests),
-	}
-
 	tracing.FinishSpan(initSpan)
 	initCtx, initSpan = nil, nil
 
@@ -804,8 +799,30 @@ func Restore(
 
 	mu := struct {
 		syncutil.Mutex
-		res roachpb.BulkOpSummary
-	}{}
+		res               roachpb.BulkOpSummary
+		requestsCompleted []bool
+		lowWaterMark      int
+	}{
+		requestsCompleted: make([]bool, len(importRequests)),
+		lowWaterMark:      -1,
+	}
+
+	progressLogger := jobProgressLogger{
+		jobLogger:   jobLogger,
+		totalChunks: len(importRequests),
+		progressedFn: func(ctx context.Context, details interface{}) {
+			switch d := details.(type) {
+			case *jobs.JobPayload_Restore:
+				mu.Lock()
+				if mu.lowWaterMark >= 0 {
+					d.Restore.LowWaterMark = importRequests[mu.lowWaterMark].Key
+				}
+				mu.Unlock()
+			default:
+				log.Errorf(ctx, "job payload had unexpected type %T", d)
+			}
+		},
+	}
 
 	progressCtx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
 	defer tracing.FinishSpan(progressSpan)
@@ -820,6 +837,8 @@ func Restore(
 		log.Eventf(ctx, "importing %d of %d", i+1, len(importRequests))
 
 		ir := importRequests[i]
+		idx := i
+
 		g.Go(func() error {
 			importCtx, span := tracing.ChildSpan(gCtx, "import")
 			defer tracing.FinishSpan(span)
@@ -830,9 +849,15 @@ func Restore(
 			if err != nil {
 				return err
 			}
+
 			mu.Lock()
 			mu.res.Add(res.Imported)
+			mu.requestsCompleted[idx] = true
+			for j := mu.lowWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
+				mu.lowWaterMark = j
+			}
 			mu.Unlock()
+
 			if err := progressLogger.chunkFinished(progressCtx); err != nil {
 				// Errors while updating progress are not important enough to merit
 				// failing the entire restore.
