@@ -25,16 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-func setupMVCCRocksDB(b testing.TB, loc string) Engine {
+func setupMVCCRocksDB(b testing.TB, dir string) Engine {
 	rocksdb, err := NewRocksDB(
-		roachpb.Attributes{},
-		loc,
+		RocksDBConfig{Dir: dir},
 		RocksDBCache{},
-		0,
-		DefaultMaxOpenFiles,
 	)
 	if err != nil {
-		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
+		b.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
 	}
 	return rocksdb
 }

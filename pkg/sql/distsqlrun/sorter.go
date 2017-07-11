@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -43,6 +44,12 @@ type sorter struct {
 	// procOutputHelper. 0 if the sorter should sort and push all the rows from
 	// the input.
 	count int64
+	// tempStorage is used to store rows when the working set is larger than can
+	// be stored in memory.
+	tempStorage engine.Engine
+	// tempStorageID is a unique (to this node) ID prefixed before every row, to
+	// ensure that this processor's rows do not overlap with any other processors.
+	tempStorageID uint64
 }
 
 var _ processor = &sorter{}
@@ -56,13 +63,19 @@ func newSorter(
 		// will discard the first Offset ones.
 		count = int64(post.Limit) + int64(post.Offset)
 	}
+	var tempStorageID uint64
+	if flowCtx.tempStorage != nil {
+		tempStorageID = flowCtx.tempStorageIDGenerator.NewID()
+	}
 	s := &sorter{
-		flowCtx:  flowCtx,
-		input:    MakeNoMetadataRowSource(input, output),
-		rawInput: input,
-		ordering: convertToColumnOrdering(spec.OutputOrdering),
-		matchLen: spec.OrderingMatchLen,
-		count:    count,
+		flowCtx:       flowCtx,
+		input:         MakeNoMetadataRowSource(input, output),
+		rawInput:      input,
+		ordering:      convertToColumnOrdering(spec.OutputOrdering),
+		matchLen:      spec.OrderingMatchLen,
+		count:         count,
+		tempStorage:   flowCtx.tempStorage,
+		tempStorageID: tempStorageID,
 	}
 	if err := s.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
 		return nil, err

@@ -51,11 +51,8 @@ func loadTestData(
 	}
 
 	eng, err := engine.NewRocksDB(
-		roachpb.Attributes{},
-		dir,
+		engine.RocksDBConfig{Dir: dir},
 		engine.RocksDBCache{},
-		0,
-		engine.DefaultMaxOpenFiles,
 	)
 	if err != nil {
 		return nil, err

@@ -24,6 +24,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"sync/atomic"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -90,9 +93,26 @@ type ServerConfig struct {
 	Counter             *metric.Counter
 	Hist                *metric.Histogram
 
+	// TempStorage is used by some DistSQL processors to store rows when the
+	// working set is larger than can be stored in memory. It can be nil, if this
+	// cockroach node does not have an engine for temporary storage.
+	TempStorage engine.Engine
+
 	// NodeID is the id of the node on which this Server is running.
 	NodeID    *base.NodeIDContainer
 	ClusterID uuid.UUID
+}
+
+// TempStorageIDGenerator generates unique IDs for each processor to use as a
+// unique (unique to this node, on this uptime) prefix when writing to temp
+// storage.
+type TempStorageIDGenerator struct {
+	nextID uint64
+}
+
+// NewID generates a new unique ID.
+func (t *TempStorageIDGenerator) NewID() uint64 {
+	return atomic.AddUint64(&t.nextID, 1)
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -102,6 +122,13 @@ type ServerImpl struct {
 	flowScheduler *flowScheduler
 	memMonitor    mon.MemoryMonitor
 	regexpCache   *parser.RegexpCache
+	// tempStorage is used by some DistSQL processors to store working sets
+	// larger than memory. It can be nil, in which case processors should still
+	// gracefully OOM if the working set gets too large.
+	tempStorage engine.Engine
+	// tempStorageIDGenerator is used to generate unique prefixes per processor so that
+	// each processor uses a nonoverlapping part of the localStorage keyspace.
+	tempStorageIDGenerator TempStorageIDGenerator
 }
 
 var _ DistSQLServer = &ServerImpl{}
@@ -115,6 +142,8 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper),
 		memMonitor: mon.MakeMonitor("distsql",
 			cfg.Counter, cfg.Hist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
+		tempStorage:            cfg.TempStorage,
+		tempStorageIDGenerator: TempStorageIDGenerator{},
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 	return ds
@@ -190,16 +219,18 @@ func (ds *ServerImpl) setupFlow(
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
 	flowCtx := FlowCtx{
-		AmbientContext: ds.AmbientContext,
-		stopper:        ds.Stopper,
-		id:             req.Flow.FlowID,
-		evalCtx:        evalCtx,
-		rpcCtx:         ds.RPCContext,
-		txnProto:       &req.Txn,
-		clientDB:       ds.DB,
-		remoteTxnDB:    ds.FlowDB,
-		testingKnobs:   ds.TestingKnobs,
-		nodeID:         nodeID,
+		AmbientContext:         ds.AmbientContext,
+		stopper:                ds.Stopper,
+		id:                     req.Flow.FlowID,
+		evalCtx:                evalCtx,
+		rpcCtx:                 ds.RPCContext,
+		txnProto:               &req.Txn,
+		clientDB:               ds.DB,
+		remoteTxnDB:            ds.FlowDB,
+		testingKnobs:           ds.TestingKnobs,
+		nodeID:                 nodeID,
+		tempStorageIDGenerator: &ds.tempStorageIDGenerator,
+		tempStorage:            ds.tempStorage,
 	}
 
 	ctx = flowCtx.AnnotateCtx(ctx)
