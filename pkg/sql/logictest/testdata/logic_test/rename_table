@@ -158,3 +158,99 @@ ALTER TABLE test2.v1 RENAME TO test2.v1
 
 statement error cannot rename table "test2.t2" because view "v1" depends on it
 ALTER TABLE test2.t2 RENAME TO test2.t3
+
+# Tests that uncommitted database or table names can be used by statements
+# in the same transaction. Also tests that if the transaction doesn't commit
+# the names are discarded and cannot be used by future transactions.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE DATABASE d; CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+
+statement ok
+INSERT INTO d.kv (k,v) VALUES ('a', 'b')
+
+statement ok
+COMMIT
+
+statement ok
+INSERT INTO d.kv (k,v) VALUES ('c', 'd')
+
+# A table rename disallows the use of the old name
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE d.kv RENAME TO d.kv2
+
+statement ok
+INSERT INTO d.kv2 (k,v) VALUES ('e', 'f')
+
+statement error table \"d.kv\" does not exist
+INSERT INTO d.kv (k,v) VALUES ('g', 'h')
+
+statement ok
+ROLLBACK
+
+# A database rename disallows the use of the old name.
+statement ok
+BEGIN
+
+statement ok
+ALTER DATABASE d RENAME TO dnew
+
+statement ok
+INSERT INTO dnew.kv (k,v) VALUES ('e', 'f')
+
+statement error table \"d.kv\" does not exist
+INSERT INTO d.kv (k,v) VALUES ('g', 'h')
+
+statement ok
+ROLLBACK
+
+# The reuse of a name is allowed.
+statement ok
+BEGIN
+
+statement ok
+ALTER DATABASE d RENAME TO dnew; CREATE DATABASE d; CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR)
+
+statement ok
+INSERT INTO d.kv (k,v) VALUES ('a', 'b')
+
+statement ok
+COMMIT
+
+# Check that on a rollback a database name cannot be used.
+statement ok
+BEGIN
+
+statement ok
+CREATE DATABASE dd; CREATE TABLE dd.kv (k CHAR PRIMARY KEY, v CHAR)
+
+statement ok
+INSERT INTO dd.kv (k,v) VALUES ('a', 'b')
+
+statement ok
+ROLLBACK
+
+statement error database \"dd\" does not exist
+INSERT INTO dd.kv (k,v) VALUES ('c', 'd')
+
+# Check that on a rollback a table name cannot be used.
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE d.kv2 (k CHAR PRIMARY KEY, v CHAR)
+
+statement ok
+INSERT INTO d.kv2 (k,v) VALUES ('a', 'b')
+
+statement ok
+ROLLBACK
+
+statement error table \"d.kv2\" does not exist
+INSERT INTO d.kv2 (k,v) VALUES ('c', 'd')

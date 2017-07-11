@@ -239,6 +239,15 @@ func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	return nil
 }
 
+// An uncommitted database is a database that has been created/dropped
+// within the current transaction using the TableCollection. A rename
+// is a drop of the old name and creation of the new name.
+type uncommittedDatabase struct {
+	name    string
+	id      sqlbase.ID
+	dropped bool
+}
+
 // TableCollection is a collection of tables held by a single session that
 // serves SQL requests, or a background job using a table descriptor.
 type TableCollection struct {
@@ -248,6 +257,21 @@ type TableCollection struct {
 	// If the transaction gets pushed and the timestamp changes,
 	// the tables are released.
 	tables []sqlbase.TableDescriptor
+
+	// Tables modified by the uncommitted transaction affiliated
+	// with this TableCollection. This allows a transaction to see
+	// its own modifications while bypassing the table lease mechanism.
+	// The table lease mechanism will its own transaction to read
+	// the table and will hang waiting for the uncommitted changes to
+	// the table. These table descriptors are local to this
+	// TableCollection and invisible to other transactions. A dropped
+	// table is marked dropped.
+	uncommittedTables []sqlbase.TableDescriptor
+
+	// Same as uncommittedTables applying to databases modified within
+	// an uncommitted transaction.
+	uncommittedDatabases []uncommittedDatabase
+
 	// leaseMgr manages acquiring and releasing per-table leases.
 	leaseMgr *LeaseManager
 	// databaseCache is used as a cache for database names.
@@ -301,9 +325,31 @@ func (tc *TableCollection) getTableVersion(
 		return tbl, nil
 	}
 
-	dbID, err := tc.databaseCache.getDatabaseID(ctx, txn, vt, tn.Database())
+	dbID, err := tc.getUncommittedDatabaseID(tn)
 	if err != nil {
 		return nil, err
+	}
+
+	if dbID == 0 {
+		if err := tc.leaseMgr.LeaseStore.db.Txn(
+			ctx,
+			func(ctx context.Context, txn *client.Txn) error {
+				var err error
+				dbID, err = tc.databaseCache.getDatabaseID(ctx, txn, vt, tn.Database())
+				return err
+			},
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if table, err := tc.getUncommittedTable(dbID, tn); err != nil {
+		return nil, err
+	} else if table != nil {
+		if log.V(2) {
+			log.Infof(ctx, "found uncommitted table %d", table.ID)
+		}
+		return table, nil
 	}
 
 	// If the txn has been pushed the table collection is released and
@@ -363,6 +409,18 @@ func (tc *TableCollection) getTableVersionByID(
 		return table, nil
 	}
 
+	for i, table := range tc.uncommittedTables {
+		if table.ID == tableID {
+			if log.V(2) {
+				log.Infof(ctx, "found uncommitted table %d", tableID)
+			}
+			if table.Dropped() {
+				return nil, sqlbase.NewUndefinedTableError(fmt.Sprintf("<id=%d>", tableID))
+			}
+			return &tc.uncommittedTables[i], nil
+		}
+	}
+
 	// If the txn has been pushed the table collection is released and
 	// txn deadline is reset.
 	tc.maybeChangeTimestamp(ctx, txn)
@@ -400,6 +458,7 @@ func (tc *TableCollection) getTableVersionByID(
 
 // releaseTables releases all tables currently held by the Session.
 func (tc *TableCollection) releaseTables(ctx context.Context) {
+	tc.timestamp = hlc.Timestamp{}
 	if tc.tables != nil {
 		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
 		for _, table := range tc.tables {
@@ -409,6 +468,69 @@ func (tc *TableCollection) releaseTables(ctx context.Context) {
 		}
 		tc.tables = nil
 	}
+	tc.uncommittedTables = nil
+	tc.uncommittedDatabases = nil
+}
+
+func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
+	for i, table := range tc.uncommittedTables {
+		if table.ID == desc.ID {
+			tc.uncommittedTables[i] = desc
+			return
+		}
+	}
+	tc.uncommittedTables = append(tc.uncommittedTables, desc)
+}
+
+func (tc *TableCollection) addUncommittedDatabase(name string, id sqlbase.ID, dropped bool) {
+	db := uncommittedDatabase{name: name, id: id, dropped: dropped}
+	tc.uncommittedDatabases = append(tc.uncommittedDatabases, db)
+}
+
+// getUncommittedDatabaseID returns a database ID for the requested tablename
+// if the requested tablename is for a database modified within the transaction
+// affiliated with the LeaseCollection.
+func (tc *TableCollection) getUncommittedDatabaseID(tn *parser.TableName) (sqlbase.ID, error) {
+	// Walk latest to earliest.
+	for i := len(tc.uncommittedDatabases) - 1; i >= 0; i-- {
+		db := tc.uncommittedDatabases[i]
+		if tn.Database() == db.name {
+			if db.dropped {
+				return 0, sqlbase.NewUndefinedTableError(tn.String())
+			}
+			return db.id, nil
+		}
+	}
+	return 0, nil
+}
+
+// getUncommittedTable returns a table for the requested tablename
+// if the requested tablename is for a table modified within the transaction
+// affiliated with the LeaseCollection.
+func (tc *TableCollection) getUncommittedTable(
+	dbID sqlbase.ID, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	for i, table := range tc.uncommittedTables {
+		if parser.ReNormalizeName(table.Name) == tn.TableName.Normalize() &&
+			table.ParentID == dbID {
+			if err := filterTableState(&table); err != nil {
+				return nil, sqlbase.NewUndefinedTableError(tn.String())
+			}
+			return &tc.uncommittedTables[i], nil
+		}
+		// If a table has gotten renamed we'd like to disallow using the old names.
+		// The renames could have happened in another transaction but it's still okay
+		// to disallow the use of the old name in this transaction because the other
+		// transaction has already committed and this transaction is seeing the
+		// effect of it.
+		for _, rename := range table.GetRenames() {
+			if parser.ReNormalizeName(rename.OldName) == tn.TableName.Normalize() &&
+				rename.OldParentID == dbID {
+				return nil, sqlbase.NewUndefinedTableError(tn.String())
+			}
+		}
+	}
+	return nil, nil
 }
 
 // getTableNames retrieves the list of qualified names of tables
@@ -502,6 +624,8 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	// the descriptor the verification of the overwritten descriptor cannot be
 	// done.
 	p.session.setTestingVerifyMetadata(nil)
+
+	p.session.tables.addUncommittedTable(*tableDesc)
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	descVal := sqlbase.WrapDescriptor(tableDesc)
