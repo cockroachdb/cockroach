@@ -51,7 +51,7 @@ type replicaStats struct {
 	mu struct {
 		syncutil.Mutex
 		idx        int
-		requests   [5]perLocalityCounts
+		requests   [6]perLocalityCounts
 		lastRotate time.Time
 		lastReset  time.Time
 	}
