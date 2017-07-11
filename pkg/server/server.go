@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -280,6 +281,34 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetric(distSQLMetrics.CurBytesCount)
 	s.registry.AddMetric(distSQLMetrics.MaxBytesHist)
 
+	// Set up the DistSQL temp engine.
+
+	// Check if all our configured stores are in-memory. if this is the case, we
+	// are probably in a testing scenario, and don't want to use a physical store
+	// for temp storage.
+	allInMemory := true
+	for _, storeSpec := range s.cfg.Stores.Specs {
+		if !storeSpec.InMemory {
+			allInMemory = false
+			break
+		}
+	}
+	var tempEngine engine.Engine
+
+	if allInMemory {
+		log.Warning(ctx, "all stores are configured as in-memory stores, so not setting up a temporary store. Queries with working set larger than memory will fail")
+	} else {
+		var err error
+		// Set up TempEngine for DistSQL. Note that it could be nil, which we support,
+		// gracefully erroring out on queries that don't fit in memory.
+		tempEngine, err = engine.NewTempEngine(ctx, s.cfg.TempStore)
+		if err != nil {
+			log.Warningf(ctx, "could not create temporary store. Queries with working set larger than memory will fail: %v", err)
+		} else {
+			s.stopper.AddCloser(tempEngine)
+		}
+	}
+
 	// Set up the DistSQL server.
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
@@ -290,6 +319,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Stopper:    s.stopper,
 		NodeID:     &s.nodeIDContainer,
 
+		TempStorage: tempEngine,
+
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 		Counter:             distSQLMetrics.CurBytesCount,
 		Hist:                distSQLMetrics.MaxBytesHist,
@@ -297,6 +328,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if s.cfg.TestingKnobs.DistSQL != nil {
 		distSQLCfg.TestingKnobs = *s.cfg.TestingKnobs.DistSQL.(*distsqlrun.TestingKnobs)
 	}
+
 	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
