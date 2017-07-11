@@ -23,7 +23,7 @@ DOMAIN=cockroach-${NAME}
 FQDN=${DOMAIN}.${LOCATION}.cloudapp.azure.com
 
 case ${1-} in
-    create)
+  create)
     if azure group show "${RG}" >/dev/null 2>/dev/null; then
       echo "Resource group ${RG} already exists; adding worker VM to it"
     else
@@ -60,6 +60,15 @@ case ${1-} in
     ssh -A "${USER}@${FQDN}" ./bootstrap/bootstrap-debian.sh
     ssh -A "${USER}@${FQDN}" ./bootstrap/disable-hyperv-timesync.sh
 
+    # Set up tmux configuration (for persistent SSH).
+    if [ -e ~/.tmux.conf ]; then
+      rsync -azL ~/.tmux.conf "${USER}@${FQDN}:./"
+    else
+      # Present a color terminal and disalbe tmux scrollback.
+      ssh -A "${USER}@${FQDN}" "echo 'set -g default-terminal screen-256color' > .tmux.conf"
+      ssh -A "${USER}@${FQDN}" "echo 'set -g terminal-overrides \"xterm*:XT:smcup@:rmcup@\"' >> .tmux.conf"
+    fi
+
     # TODO(bdarnell): autoshutdown.cron.sh does not work on azure. It
     # halts the VM, but halting the VM doesn't stop billing. The VM
     # must instead be "deallocated" with the azure API.
@@ -69,13 +78,13 @@ case ${1-} in
 
     echo "VM now running at ${FQDN}"
     ;;
-    start)
+  start)
     azure vm start "${RG}" "${NAME}"
     ;;
-    stop)
+  stop)
     azure vm deallocate "${RG}" "${NAME}"
     ;;
-    delete)
+  delete)
     # The straightforward thing to do would be to first delete the VM, then
     # check if there are any virtual machines left in the group. However, the
     # deleted VM doesn't disappear right away from the listing. So we instead
@@ -91,13 +100,48 @@ case ${1-} in
       azure group delete "${RG}" -q
     fi
     ;;
-    ssh)
+  ssh)
     shift
     # shellcheck disable=SC2029
     ssh -A "${USER}@${FQDN}" "$@"
     ;;
-    *)
-    echo "$0: unknown command: ${1-}, use one of create, start, stop, delete, or ssh"
+  sshmux)
+    shift
+    if [ -z "${1:-}" ]; then
+      ssh -A "${USER}@${FQDN}" "tmux list-sessions"
+    else
+      ssh -A -t "${USER}@${FQDN}" "tmux attach -t $1 || tmux new-session -s $1"
+    fi
+    ;;
+  *)
+    if [ -n "${1:-}" ]; then
+      echo "$0: unknown command: ${1-}"
+    fi
+    cat <<EOF
+Usage:
+  $0 create
+     Creates a new azure worker VM.
+
+  $0 start
+     Powers on an azure worker VM.
+
+  $0 stop
+     Powers off an azure worker VM.
+
+  $0 delete
+     Deletes an azure worker VM.
+
+  $0 ssh
+     SSH into an azure worker VM.
+
+  $0 sshmux <session-name>
+     Creates or reconnects to a persistent SSH session with the given name.
+
+  $0 sshmux
+     List persistent SSH sessions.
+
+For all commands, worker VM name can be customized via AZWORKER_NAME.
+EOF
     exit 1
     ;;
 esac
