@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -241,12 +242,12 @@ func (s *Server) maybeReportDiagnostics(
 	return scheduled.Add(diagnosticReportFrequency.Get())
 }
 
-func (s *Server) getReportingInfo(ctx context.Context) *DiagnosticReport {
-	info := DiagnosticReport{}
+func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.DiagnosticReport {
+	info := diagnosticspb.DiagnosticReport{}
 	n := s.node.recorder.GetStatusSummary(ctx)
-	info.Node = NodeInfo{NodeID: s.node.Descriptor.NodeID}
+	info.Node = diagnosticspb.NodeInfo{NodeID: s.node.Descriptor.NodeID}
 
-	info.Stores = make([]StoreInfo, len(n.StoreStatuses))
+	info.Stores = make([]diagnosticspb.StoreInfo, len(n.StoreStatuses))
 	for i, r := range n.StoreStatuses {
 		info.Stores[i].NodeID = r.Desc.Node.NodeID
 		info.Stores[i].StoreID = r.Desc.StoreID
