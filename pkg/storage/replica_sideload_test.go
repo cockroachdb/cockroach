@@ -17,9 +17,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/rand"
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -74,6 +76,172 @@ func mkEnt(
 	ent.Index, ent.Term = index, term
 	ent.Data = encodeRaftCommand(v, storagebase.CmdIDKey(cmdIDKey), b)
 	return ent
+}
+
+func TestSideloadingSideloadedStorage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Run("Mem", func(t *testing.T) {
+		testSideloadingSideloadedStorage(t, newInMemSideloadStorage)
+	})
+	t.Run("Disk", func(t *testing.T) {
+		testSideloadingSideloadedStorage(t, newDiskSideloadStorage)
+	})
+}
+
+func testSideloadingSideloadedStorage(
+	t *testing.T, maker func(roachpb.RangeID, roachpb.ReplicaID, string) (sideloadStorage, error),
+) {
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	ss, err := maker(1, 2, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, isInMem := ss.(*inMemSideloadStorage) // some things don't make sense for inMem
+	_ = isInMem
+	const (
+		lowTerm = 1
+		highTerm
+	)
+
+	file := func(i uint64) []byte { // take uint64 for convenience
+		return []byte("content-" + strconv.Itoa(int(i)))
+	}
+
+	if err := ss.PutIfNotExists(ctx, 1, highTerm, file(1)); err != nil {
+		t.Fatal(err)
+	}
+
+	if c, err := ss.Get(ctx, 1, highTerm); err != nil {
+		t.Fatal(err)
+	} else if exp := file(1); !bytes.Equal(c, exp) {
+		t.Fatalf("got %q, wanted %q", c, exp)
+	}
+
+	// Should be a no-op because the slot is occupied.
+	if err := ss.PutIfNotExists(ctx, 1, highTerm, file(12345)); err != nil {
+		t.Fatal(err)
+	}
+
+	// ... consequently the old entry is still there.
+	if c, err := ss.Get(ctx, 1, highTerm); err != nil {
+		t.Fatal(err)
+	} else if exp := file(1); !bytes.Equal(c, exp) {
+		t.Fatalf("got %q, wanted %q", c, exp)
+	}
+
+	if err := ss.Clear(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	for n, test := range []struct {
+		fun func() error
+		err error
+	}{
+		{
+			err: errSideloadedFileNotFound,
+			fun: func() error {
+				_, err = ss.Get(ctx, 123, 456)
+				return err
+			},
+		},
+		{
+			err: errSideloadedFileNotFound,
+			fun: func() error {
+				return ss.Purge(ctx, 123, 456)
+			},
+		},
+		{
+			err: nil,
+			fun: func() error {
+				return ss.TruncateTo(ctx, 123)
+			},
+		},
+		{
+			err: nil,
+			fun: func() error {
+				_, err = ss.Filename(ctx, 123, 456)
+				return err
+			},
+		},
+	} {
+		if err := test.fun(); err != test.err {
+			t.Fatalf("%d: expected %v, got %v", n, test.err, err)
+		}
+		if err := ss.Clear(ctx); err != nil {
+			t.Fatalf("%d: %s", n, err)
+		}
+	}
+
+	// Write some payloads at various indexes. Note that this tests PutIfNotExists
+	// on a recently Clear()ed storage. Randomize order for fun.
+	payloads := []uint64{3, 5, 7, 9, 10}
+	for n := range rand.Perm(len(payloads)) {
+		i := payloads[n]
+		if err := ss.PutIfNotExists(ctx, i, highTerm, file(i*highTerm)); err != nil {
+			t.Fatalf("%d: %s", i, err)
+		}
+	}
+
+	// Write some more payloads, overlapping, at the past term.
+	pastPayloads := append([]uint64{81}, payloads...)
+	for _, i := range pastPayloads {
+		if err := ss.PutIfNotExists(ctx, i, lowTerm, file(i*lowTerm)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify a sideloaded storage for another ReplicaID doesn't see the files.
+	if otherSS, err := maker(1, 999 /* ReplicaID */, dir); err != nil {
+		t.Fatal(err)
+	} else if _, err = otherSS.Get(ctx, payloads[0], highTerm); err != errSideloadedFileNotFound {
+		t.Fatal("expected not found")
+	}
+
+	// Just for fun, recreate the original storage (unless it's the in-memory
+	// one), which shouldn't change anything about its state.
+	if !isInMem {
+		var err error
+		ss, err = maker(1, 2, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Just a sanity check that for the overlapping terms, we see both entries.
+	for _, term := range []uint64{lowTerm, highTerm} {
+		index := payloads[0] // exists at both lowTerm and highTerm
+		if c, err := ss.Get(ctx, index, term); err != nil {
+			t.Fatal(err)
+		} else if exp := file(term * index); !bytes.Equal(c, exp) {
+			t.Fatalf("got %q, wanted %q", c, exp)
+		}
+	}
+
+	for n := range payloads {
+		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
+		if err := ss.TruncateTo(ctx, payloads[n]); err != nil {
+			t.Fatalf("%d: %s", n, err)
+		}
+		// Index payloads[n] and above are still there (truncation is exclusive)
+		// at both terms.
+		for _, term := range []uint64{lowTerm, highTerm} {
+			for _, i := range payloads[n:] {
+				if _, err := ss.Get(ctx, i, term); err != nil {
+					t.Fatalf("%d.%d: %s", n, i, err)
+				}
+			}
+			// Indexes below are gone.
+			for _, i := range payloads[:n] {
+				if _, err := ss.Get(ctx, i, term); err != errSideloadedFileNotFound {
+					t.Fatalf("%d.%d: %v", n, i, err)
+				}
+			}
+		}
+	}
 }
 
 func TestRaftSSTableSideloadingInline(t *testing.T) {
@@ -140,7 +308,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		ctx, collect := testutils.MakeRecordCtx()
 
 		ec := newRaftEntryCache(1024) // large enough
-		ss := newInMemSideloadStorage(rangeID, roachpb.ReplicaID(1), ".")
+		ss := mustNewInMemSideloadStorage(rangeID, roachpb.ReplicaID(1), ".")
 		if test.setup != nil {
 			test.setup(ec, ss)
 		}
@@ -187,7 +355,7 @@ func TestRaftSSTableSideloadingInflight(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx, collect := testutils.MakeRecordCtx()
-	sideloaded := newInMemSideloadStorage(roachpb.RangeID(5), roachpb.ReplicaID(7), ".")
+	sideloaded := mustNewInMemSideloadStorage(roachpb.RangeID(5), roachpb.ReplicaID(7), ".")
 
 	// We'll set things up so that while sideloading this entry, there
 	// unmarshaled one is already in memory (so the payload here won't even be
@@ -279,7 +447,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			sideloaded := newInMemSideloadStorage(roachpb.RangeID(3), roachpb.ReplicaID(17), ".")
+			sideloaded := mustNewInMemSideloadStorage(roachpb.RangeID(3), roachpb.ReplicaID(17), ".")
 			postEnts, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded, noCmd)
 			if err != nil {
 				t.Fatal(err)
@@ -385,6 +553,12 @@ func proposeAddSSTable(
 	return kv
 }
 
+func makeInMemSideloaded(repl *Replica) {
+	repl.raftMu.Lock()
+	repl.raftMu.sideloaded = mustNewInMemSideloadStorage(repl.RangeID, 0, "")
+	repl.raftMu.Unlock()
+}
+
 // TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
 func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -402,6 +576,8 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 		key = "foo"
 		val = "bar"
 	)
+
+	makeInMemSideloaded(tc.repl)
 
 	ts := hlc.Timestamp{Logical: 1}
 
@@ -430,7 +606,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 
 	tc.repl.raftMu.Lock()
 	defer tc.repl.raftMu.Unlock()
-	if imss := tc.repl.raftMu.sideloaded.(*inMemSideloadStorage); len(imss.m) < 1 {
+	if ss := tc.repl.raftMu.sideloaded.(*inMemSideloadStorage); len(ss.m) < 1 {
 		t.Fatal("sideloaded storage is empty")
 	}
 
@@ -652,6 +828,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
+	makeInMemSideloaded(tc.repl)
 	ctx := context.Background()
 
 	const count = 10
