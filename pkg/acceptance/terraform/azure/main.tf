@@ -245,7 +245,7 @@ FILE
       "echo \"deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main\" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list",
       "curl -sS https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -",
       "sudo apt-get -qqy update >/dev/null",
-      "sudo apt-get -qqy install google-cloud-sdk ntp supervisor ntpdate >/dev/null",
+      "sudo apt-get -qqy install google-cloud-sdk supervisor >/dev/null",
       # Install CockroachDB.
       "mkdir /mnt/data0/logs",
       "ln -sf /mnt/data0/logs logs",
