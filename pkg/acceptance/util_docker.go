@@ -16,6 +16,8 @@ package acceptance
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -79,7 +81,15 @@ func testDocker(
 		if len(l.Nodes) > 0 {
 			containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
 		}
-		hostConfig := container.HostConfig{NetworkMode: "host"}
+		var pwd string
+		pwd, err = os.Getwd()
+		if err != nil {
+			return
+		}
+		hostConfig := container.HostConfig{
+			NetworkMode: "host",
+			Binds:       []string{filepath.Join(pwd, "testdata") + ":/testdata"},
+		}
 		err = l.OneShot(
 			ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
 		)
