@@ -369,18 +369,28 @@ func (sl *StoreList) Stores() []roachpb.StoreDescriptor {
 	return stores
 }
 
-func (r *Replica) PutBogusSideloadedData(index, term uint64) {
+const (
+	sideloadBogusIndex = 12345
+	sideloadBogusTerm  = 67890
+)
+
+func (r *Replica) PutBogusSideloadedData() {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	if err := r.raftMu.sideloaded.PutIfNotExists(context.Background(), index, term, []byte("bogus")); err != nil {
+	if err := r.raftMu.sideloaded.PutIfNotExists(context.Background(), sideloadBogusIndex, sideloadBogusTerm, []byte("bogus")); err != nil {
 		panic(err)
 	}
 }
 
-func (r *Replica) SideloadedDataCount() int {
+func (r *Replica) HasBogusSideloadedData() bool {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	return len(r.raftMu.sideloaded.(*inMemSideloadStorage).m)
+	if _, err := r.raftMu.sideloaded.Get(context.Background(), sideloadBogusIndex, sideloadBogusTerm); err == errSideloadedFileNotFound {
+		return false
+	} else if err != nil {
+		panic(err)
+	}
+	return true
 }
 
 // IsQuiescent returns whether the replica is quiescent or not.

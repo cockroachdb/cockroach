@@ -2386,20 +2386,29 @@ func TestRemovedReplicaTombstone(t *testing.T) {
 			// process by taking the store lock and inserting a short sleep to cause
 			// the goroutine to start running the setReplicaID call.
 			errChan := make(chan error)
-			s.mu.Lock()
-			go func() {
-				desc := roachpb.RangeDescriptor{
-					RangeID:       rangeID,
-					NextReplicaID: c.descNextReplicaID,
-				}
-				errChan <- s.RemoveReplica(context.Background(), repl1, desc, true)
-			}()
 
-			time.Sleep(1 * time.Millisecond)
-			if err := repl1.setReplicaID(c.setReplicaID); err != nil {
-				t.Fatal(err)
-			}
-			s.mu.Unlock()
+			func() {
+				repl1.raftMu.Lock()
+				defer repl1.raftMu.Unlock()
+				repl1.mu.Lock()
+				defer repl1.mu.Unlock()
+				s.mu.Lock()
+				defer s.mu.Unlock()
+
+				go func() {
+					desc := roachpb.RangeDescriptor{
+						RangeID:       rangeID,
+						NextReplicaID: c.descNextReplicaID,
+					}
+					errChan <- s.RemoveReplica(context.Background(), repl1, desc, true)
+				}()
+
+				time.Sleep(1 * time.Millisecond)
+
+				if err := repl1.setReplicaIDRaftMuLockedMuLocked(c.setReplicaID); err != nil {
+					t.Fatal(err)
+				}
+			}()
 
 			if err := <-errChan; testutils.IsError(err, "replica ID has changed") {
 				// We didn't trigger the race, so just return success.
