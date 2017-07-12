@@ -450,6 +450,7 @@ func (ds *DistSender) sendSingleRange(
 
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
+		log.ErrEvent(ctx, err.Error())
 		return nil, roachpb.NewError(err)
 	}
 
@@ -1114,14 +1115,12 @@ func (ds *DistSender) sendToReplicas(
 				len(replicas), 1))
 	}
 
-	var ambiguousError error
 	var haveCommit bool
 	// We only check for committed txns, not aborts because aborts may
 	// be retried without any risk of inconsistencies.
 	if etArg, ok := args.GetArg(roachpb.EndTransaction); ok {
 		haveCommit = etArg.(*roachpb.EndTransactionRequest).Commit
 	}
-	done := make(chan BatchCall, len(replicas))
 
 	transportFactory := opts.transportFactory
 	if transportFactory == nil {
@@ -1136,13 +1135,10 @@ func (ds *DistSender) sendToReplicas(
 		return nil, roachpb.NewSendError(
 			fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
 	}
-
-	// Send the first request.
-	pending := 1
-	if log.V(2) || log.HasSpanOrEvent(ctx) {
-		log.VEventf(ctx, 2, "r%d: sending batch %s to %s",
-			rangeID, args.Summary(), transport.NextReplica())
-	}
+	// Must be unbuffered because tests have blocking SendNext
+	// implementations.
+	done := make(chan BatchCall, 1)
+	log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, args.Summary(), transport.NextReplica())
 	transport.SendNext(ctx, done)
 
 	// Wait for completions. This loop will retry operations that fail
@@ -1160,92 +1156,7 @@ func (ds *DistSender) sendToReplicas(
 			defer ds.metrics.SlowRequestsCount.Dec(1)
 
 		case call := <-done:
-			pending--
-			err := call.Err
-			if err == nil {
-				// Determine whether the error must be propagated immediately or whether
-				// sending can continue to alternate replicas.
-				propagateError := false
-				switch tErr := call.Reply.Error.GetDetail().(type) {
-				case nil:
-					return call.Reply, nil
-				case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
-					// These errors are likely to be unique to the replica that reported
-					// them, so no action is required before the next retry.
-				case *roachpb.NotLeaseHolderError:
-					ds.metrics.NotLeaseHolderErrCount.Inc(1)
-					if lh := tErr.LeaseHolder; lh != nil {
-						// If the replica we contacted knows the new lease holder, update the cache.
-						ds.updateLeaseHolderCache(ctx, rangeID, *lh)
-
-						// If the implicated leaseholder is not a known replica,
-						// return a RangeNotFoundError to signal eviction of the
-						// cached RangeDescriptor and re-send.
-						if replicas.FindReplica(lh.StoreID) == -1 {
-							// Replace NotLeaseHolderError with RangeNotFoundError.
-							log.ErrEventf(ctx, "reported lease holder %s not in replicas slice %+v", lh, replicas)
-							call.Reply.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(rangeID))
-							propagateError = true
-						} else {
-							// Move the new lease holder to the head of the queue for the next retry.
-							transport.MoveToFront(*lh)
-						}
-					}
-				default:
-					propagateError = true
-				}
-
-				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
-
-				if propagateError {
-					// If there are still pending RPCs, wait them out.
-					//
-					// Note that ambiguous result errors can arrive from these
-					// in-flight RPCs, so if we've sent any, we better wait
-					// for them, even if we're not going to generate ambiguous
-					// results from them ourselves.
-					for pending > 0 {
-						select {
-						case <-slowTimer.C:
-							log.Warningf(ctx, "have been waiting %s sending RPC to r%d for batch: %s",
-								base.SlowRequestThreshold, rangeID, args)
-							ds.metrics.SlowRequestsCount.Inc(1)
-							defer ds.metrics.SlowRequestsCount.Dec(1)
-
-						case pendingCall := <-done:
-							pending--
-							if err := pendingCall.Err; err != nil {
-								if grpc.Code(err) != codes.Unavailable {
-									ambiguousError = err
-								}
-							} else if pendingCall.Reply.Error == nil {
-								return pendingCall.Reply, nil
-							}
-						}
-					}
-
-					// The error received is likely not specific to this
-					// replica, so we should return it instead of trying other
-					// replicas. However, if we're trying to commit a
-					// transaction and an ambiguous RPC error was already
-					// received, we must return an ambiguous commit error
-					// instead of the returned error.
-					if haveCommit && ambiguousError != nil {
-						log.ErrEventf(ctx, "returning ambiguous result (error=%s)", ambiguousError)
-						return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s", ambiguousError))
-					}
-					return call.Reply, nil
-				}
-
-				// Extract the detail so it can be included in the error
-				// message if this is our last replica.
-				//
-				// TODO(bdarnell): The last error is not necessarily the best
-				// one to return; we may want to remember the "best" error
-				// we've seen (for example, a NotLeaseHolderError conveys more
-				// information than a RangeNotFound).
-				err = call.Reply.Error.GoError()
-			} else {
+			if err := call.Err; err != nil {
 				// All connection errors except for an unavailable node (this
 				// is GRPC's fail-fast error), may mean that the request
 				// succeeded on the remote server, but we were unable to
@@ -1268,37 +1179,64 @@ func (ds *DistSender) sendToReplicas(
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/call.go#L182
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/stream.go#L158
 				if haveCommit && grpc.Code(err) != codes.Unavailable {
-					log.ErrEventf(ctx, "txn may have committed despite RPC error: %s", err)
-					ambiguousError = err
-				} else {
-					log.ErrEventf(ctx, "RPC error: %s", err)
+					return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s", err))
 				}
+				log.ErrEventf(ctx, "RPC error: %s", err)
+			} else {
+				// Determine whether the error must be propagated immediately or whether
+				// sending can continue to alternate replicas.
+				propagateError := false
+				switch tErr := call.Reply.Error.GetDetail().(type) {
+				case nil:
+					return call.Reply, nil
+				case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
+					// These errors are likely to be unique to the replica that reported
+					// them, so no action is required before the next retry.
+				case *roachpb.NotLeaseHolderError:
+					ds.metrics.NotLeaseHolderErrCount.Inc(1)
+					if lh := tErr.LeaseHolder; lh != nil {
+						// If the replica we contacted knows the new lease holder, update the cache.
+						ds.updateLeaseHolderCache(ctx, rangeID, *lh)
+
+						// If the implicated leaseholder is not a known replica,
+						// return a RangeNotFoundError to signal eviction of the
+						// cached RangeDescriptor and re-send.
+						if replicas.FindReplica(lh.StoreID) == -1 {
+							// Replace NotLeaseHolderError with RangeNotFoundError.
+							call.Reply.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(rangeID))
+							propagateError = true
+						} else {
+							// Move the new lease holder to the head of the queue for the next retry.
+							transport.MoveToFront(*lh)
+						}
+					}
+				default:
+					propagateError = true
+				}
+
+				if propagateError {
+					// The error received is likely not specific to this
+					// replica, so we should return it instead of trying other
+					// replicas.
+					return call.Reply, nil
+				}
+
+				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
 			}
 
-			// Send to additional replicas if available.
-			if !transport.IsExhausted() {
-				ds.metrics.NextReplicaErrCount.Inc(1)
-				log.VEventf(ctx, 2, "error, trying next peer: %s", transport.NextReplica())
-				pending++
-				transport.SendNext(ctx, done)
+			if transport.IsExhausted() {
+				// TODO(bdarnell): The last error is not necessarily the best
+				// one to return; we may want to remember the "best" error
+				// we've seen (for example, a NotLeaseHolderError conveys more
+				// information than a RangeNotFound).
+				return nil, roachpb.NewSendError(
+					fmt.Sprintf("sending to all %d replicas failed; last error: %v", len(replicas), call),
+				)
 			}
-			if pending == 0 {
-				if ambiguousError != nil {
-					err = roachpb.NewAmbiguousResultError(
-						fmt.Sprintf(
-							"sending to all %d replicas failed, but txn commit was possibly masked by: %s",
-							len(replicas),
-							ambiguousError,
-						),
-					)
-				} else {
-					err = roachpb.NewSendError(
-						fmt.Sprintf("sending to all %d replicas failed; last error: %s", len(replicas), err),
-					)
-				}
-				log.ErrEvent(ctx, err.Error())
-				return nil, err
-			}
+
+			ds.metrics.NextReplicaErrCount.Inc(1)
+			log.VEventf(ctx, 2, "error: %v; trying next peer %s", call, transport.NextReplica())
+			transport.SendNext(ctx, done)
 		}
 	}
 }
