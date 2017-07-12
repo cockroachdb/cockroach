@@ -1205,73 +1205,94 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 	if err != nil {
 		return nil, b, err
 	}
+	// NULL, true, and false are special, because their values are fully encoded by their value tag.
 	if typ == encoding.Null {
 		return parser.DNull, b[dataOffset:], nil
+	} else if typ == encoding.True {
+		return parser.MakeDBool(parser.DBool(true)), b[dataOffset:], nil
+	} else if typ == encoding.False {
+		return parser.MakeDBool(parser.DBool(false)), b[dataOffset:], nil
 	}
-	switch valType {
-	case parser.TypeBool:
-		var x bool
-		b, x, err = encoding.DecodeBoolValue(b)
-		// No need to chunk allocate DBool as MakeDBool returns either
-		// parser.DBoolTrue or parser.DBoolFalse.
-		return parser.MakeDBool(parser.DBool(x)), b, err
-	case parser.TypeInt:
-		var i int64
-		b, i, err = encoding.DecodeIntValue(b)
-		return a.NewDInt(parser.DInt(i)), b, err
-	case parser.TypeFloat:
-		var f float64
-		b, f, err = encoding.DecodeFloatValue(b)
-		return a.NewDFloat(parser.DFloat(f)), b, err
-	case parser.TypeDecimal:
-		var d apd.Decimal
-		b, d, err = encoding.DecodeDecimalValue(b)
-		dd := a.NewDDecimal(parser.DDecimal{Decimal: d})
-		return dd, b, err
-	case parser.TypeString:
-		var data []byte
-		b, data, err = encoding.DecodeBytesValue(b)
-		return a.NewDString(parser.DString(data)), b, err
-	case parser.TypeName:
-		var data []byte
-		b, data, err = encoding.DecodeBytesValue(b)
-		return a.NewDName(parser.DString(data)), b, err
-	case parser.TypeBytes:
-		var data []byte
-		b, data, err = encoding.DecodeBytesValue(b)
-		return a.NewDBytes(parser.DBytes(data)), b, err
-	case parser.TypeDate:
-		var i int64
-		b, i, err = encoding.DecodeIntValue(b)
-		return a.NewDDate(parser.DDate(i)), b, err
-	case parser.TypeTimestamp:
-		var t time.Time
-		b, t, err = encoding.DecodeTimeValue(b)
-		return a.NewDTimestamp(parser.DTimestamp{Time: t}), b, err
-	case parser.TypeTimestampTZ:
-		var t time.Time
-		b, t, err = encoding.DecodeTimeValue(b)
-		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: t}), b, err
-	case parser.TypeInterval:
-		var d duration.Duration
-		b, d, err = encoding.DecodeDurationValue(b)
-		return a.NewDInterval(parser.DInterval{Duration: d}), b, err
-	case parser.TypeUUID:
-		var u uuid.UUID
-		b, u, err = encoding.DecodeUUIDValue(b)
-		return a.NewDUuid(parser.DUuid{UUID: u}), b, err
+	return decodeUntaggedDatum(a, valType, b[dataOffset:])
+}
 
+// decodeUntaggedDatum is used to decode a Datum whose type is known, and which
+// doesn't have a value tag (either due to it having been consumed already or
+// not having one in the first place).
+func decodeUntaggedDatum(a *DatumAlloc, t parser.Type, buf []byte) (parser.Datum, []byte, error) {
+	switch t {
+	case parser.TypeInt:
+		b, i, err := encoding.DecodeUntaggedIntValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDInt(parser.DInt(i)), b, nil
+	case parser.TypeString, parser.TypeName:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDString(parser.DString(data)), b, nil
+	case parser.TypeBool:
+		// The value of booleans are encoded in their tag, so we don't have an
+		// "Untagged" version of this function.
+		b, data, err := encoding.DecodeBoolValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		d := parser.DBool(data)
+		return &d, b, nil
+	case parser.TypeFloat:
+		b, data, err := encoding.DecodeUntaggedFloatValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDFloat(parser.DFloat(data)), b, nil
+	case parser.TypeDecimal:
+		b, data, err := encoding.DecodeUntaggedDecimalValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDDecimal(parser.DDecimal{Decimal: data}), b, nil
+	case parser.TypeBytes:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDBytes(parser.DBytes(data)), b, nil
+	case parser.TypeDate:
+		b, data, err := encoding.DecodeUntaggedIntValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDDate(parser.DDate(data)), b, nil
+	case parser.TypeTimestamp:
+		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTimestamp(parser.DTimestamp{Time: data}), b, nil
+	case parser.TypeTimestampTZ:
+		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: data}), b, nil
+	case parser.TypeInterval:
+		b, data, err := encoding.DecodeUntaggedDurationValue(buf)
+		return a.NewDInterval(parser.DInterval{Duration: data}), b, err
+	case parser.TypeUUID:
+		b, data, err := encoding.DecodeUntaggedUUIDValue(buf)
+		return a.NewDUuid(parser.DUuid{UUID: data}), b, err
 	case parser.TypeOid:
-		var i int64
-		b, i, err = encoding.DecodeIntValue(b)
-		return a.NewDOid(parser.MakeDOid(parser.DInt(i))), b, err
+		b, data, err := encoding.DecodeUntaggedIntValue(buf)
+		return a.NewDOid(parser.MakeDOid(parser.DInt(data))), b, err
 	default:
-		if typ, ok := valType.(parser.TCollatedString); ok {
-			var data []byte
-			b, data, err = encoding.DecodeBytesValue(b)
+		if typ, ok := t.(parser.TCollatedString); ok {
+			b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 			return parser.NewDCollatedString(string(data), typ.Locale, &a.env), b, err
 		}
-		return nil, nil, errors.Errorf("TODO(pmattis): decoded index value: %s", valType)
+		return nil, buf, errors.Errorf("couldn't decode type %s", t)
 	}
 }
 
