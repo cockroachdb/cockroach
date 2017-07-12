@@ -13,8 +13,9 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-// +build race
+// +build !race
 
-package storage
+package engine
 
-const raceEnabled = true
+// RaceEnabled is true if CockroachDB was built with the race build tag.
+const RaceEnabled = false

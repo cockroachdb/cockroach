@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
@@ -3522,114 +3523,139 @@ func TestMVCCStatsBasic(t *testing.T) {
 	verifyStats("after sys-local key", ms, &expMS6, t)
 }
 
+var mvccStatsTests = []struct {
+	name string
+	fn   func(Iterator, MVCCKey, MVCCKey, int64) (enginepb.MVCCStats, error)
+}{
+	{
+		name: "ComputeStats",
+		fn: func(iter Iterator, start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
+			return iter.ComputeStats(start, end, nowNanos)
+		},
+	},
+	{
+		name: "ComputeStatsGo",
+		fn: func(iter Iterator, start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
+			return ComputeStatsGo(iter, start, end, nowNanos)
+		},
+	},
+}
+
 // TestMVCCStatsWithRandomRuns creates a random sequence of puts,
 // deletes and delete ranges and at each step verifies that the mvcc
 // stats match a manual computation of range stats via a scan of the
 // underlying engine.
 func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng, seed := randutil.NewPseudoRand()
+	seed := randutil.NewPseudoSeed()
 	log.Infof(context.Background(), "using pseudo random number generator with seed %d", seed)
-	engine := createTestEngine()
-	defer engine.Close()
 
-	ms := &enginepb.MVCCStats{}
+	for _, mvccStatsTest := range mvccStatsTests {
+		t.Run(mvccStatsTest.name, func(t *testing.T) {
+			rng := rand.New(rand.NewSource(seed))
 
-	// Now, generate a random sequence of puts, deletes and resolves.
-	// Each put and delete may or may not involve a txn. Resolves may
-	// either commit or abort.
-	keys := map[int32][]byte{}
-	var lastWT int64
-	for i := int32(0); i < int32(1000); i++ {
-		// Create random future timestamp, up to a few seconds ahead.
-		ts := hlc.Timestamp{WallTime: lastWT + int64(rng.Float32()*4E9), Logical: int32(rng.Int())}
-		lastWT = ts.WallTime
+			engine := createTestEngine()
+			defer engine.Close()
 
-		if log.V(1) {
-			log.Infof(context.Background(), "*** cycle %d @ %s", i, ts)
-		}
-		// Manually advance aggregate intent age based on one extra second of simulation.
-		// Same for aggregate gc'able bytes age.
-		key := []byte(fmt.Sprintf("%s-%d", randutil.RandBytes(rng, int(rng.Int31n(32))), i))
-		keys[i] = key
+			ms := &enginepb.MVCCStats{}
 
-		var txn *roachpb.Transaction
-		if rng.Int31n(2) == 0 { // create a txn with 50% prob
-			u := uuid.MakeV4()
-			txn = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: &u, Timestamp: ts}}
-		}
-		// With 25% probability, put a new value; otherwise, delete an earlier
-		// key. Because an earlier step in this process may have itself been
-		// a delete, we could end up deleting a non-existent key, which is good;
-		// we don't mind testing that case as well.
-		isDelete := rng.Int31n(4) == 0
-		if i > 0 && isDelete {
-			idx := rng.Int31n(i)
-			if log.V(1) {
-				log.Infof(context.Background(), "*** DELETE index %d", idx)
-			}
-			if err := MVCCDelete(context.Background(), engine, ms, keys[idx], ts, txn); err != nil {
-				// Abort any write intent on an earlier, unresolved txn.
-				if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
-					wiErr.Intents[0].Status = roachpb.ABORTED
+			// Now, generate a random sequence of puts, deletes and resolves.
+			// Each put and delete may or may not involve a txn. Resolves may
+			// either commit or abort.
+			keys := map[int32][]byte{}
+			var lastWT int64
+			for i := int32(0); i < int32(1000); i++ {
+				// Create random future timestamp, up to a few seconds ahead.
+				ts := hlc.Timestamp{WallTime: lastWT + int64(rng.Float32()*4E9), Logical: int32(rng.Int())}
+				lastWT = ts.WallTime
+
+				if log.V(1) {
+					log.Infof(context.Background(), "*** cycle %d @ %s", i, ts)
+				}
+				// Manually advance aggregate intent age based on one extra second of simulation.
+				// Same for aggregate gc'able bytes age.
+				key := []byte(fmt.Sprintf("%s-%d", randutil.RandBytes(rng, int(rng.Int31n(32))), i))
+				keys[i] = key
+
+				var txn *roachpb.Transaction
+				if rng.Int31n(2) == 0 { // create a txn with 50% prob
+					u := uuid.MakeV4()
+					txn = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: &u, Timestamp: ts}}
+				}
+				// With 25% probability, put a new value; otherwise, delete an earlier
+				// key. Because an earlier step in this process may have itself been
+				// a delete, we could end up deleting a non-existent key, which is good;
+				// we don't mind testing that case as well.
+				isDelete := rng.Int31n(4) == 0
+				if i > 0 && isDelete {
+					idx := rng.Int31n(i)
 					if log.V(1) {
-						log.Infof(context.Background(), "*** ABORT index %d", idx)
-					}
-					// Note that this already incorporates committing an intent
-					// at a later time (since we use a potentially later ts here
-					// for the resolution).
-					if err := MVCCResolveWriteIntent(context.Background(), engine, ms, wiErr.Intents[0]); err != nil {
-						t.Fatal(err)
-					}
-					// Now, re-delete.
-					if log.V(1) {
-						log.Infof(context.Background(), "*** RE-DELETE index %d", idx)
+						log.Infof(context.Background(), "*** DELETE index %d", idx)
 					}
 					if err := MVCCDelete(context.Background(), engine, ms, keys[idx], ts, txn); err != nil {
-						t.Fatal(err)
+						// Abort any write intent on an earlier, unresolved txn.
+						if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
+							wiErr.Intents[0].Status = roachpb.ABORTED
+							if log.V(1) {
+								log.Infof(context.Background(), "*** ABORT index %d", idx)
+							}
+							// Note that this already incorporates committing an intent
+							// at a later time (since we use a potentially later ts here
+							// for the resolution).
+							if err := MVCCResolveWriteIntent(context.Background(), engine, ms, wiErr.Intents[0]); err != nil {
+								t.Fatal(err)
+							}
+							// Now, re-delete.
+							if log.V(1) {
+								log.Infof(context.Background(), "*** RE-DELETE index %d", idx)
+							}
+							if err := MVCCDelete(context.Background(), engine, ms, keys[idx], ts, txn); err != nil {
+								t.Fatal(err)
+							}
+						} else {
+							t.Fatal(err)
+						}
 					}
 				} else {
-					t.Fatal(err)
+					rngVal := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, int(rng.Int31n(128))))
+					if log.V(1) {
+						log.Infof(context.Background(), "*** PUT index %d; TXN=%t", i, txn != nil)
+					}
+					if err := MVCCPut(context.Background(), engine, ms, key, ts, rngVal, txn); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if !isDelete && txn != nil && rng.Int31n(2) == 0 { // resolve txn with 50% prob
+					txn.Status = roachpb.COMMITTED
+					if rng.Int31n(10) == 0 { // abort txn with 10% prob
+						txn.Status = roachpb.ABORTED
+					}
+					if log.V(1) {
+						log.Infof(context.Background(), "*** RESOLVE index %d; COMMIT=%t", i, txn.Status == roachpb.COMMITTED)
+					}
+					if err := MVCCResolveWriteIntent(context.Background(), engine, ms, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				ms.AgeTo(ts.WallTime) // a noop may not have updated the stats
+				// Every 10th step, verify the stats via manual engine scan.
+				if i%10 == 0 {
+					// Compute the stats manually.
+					iter := engine.NewIterator(false)
+					expMS, err := mvccStatsTest.fn(iter, mvccKey(roachpb.KeyMin),
+						mvccKey(roachpb.KeyMax), ts.WallTime)
+					iter.Close()
+					if err != nil {
+						t.Fatal(err)
+					}
+					verifyStats(fmt.Sprintf("cycle %d", i), ms, &expMS, t)
+					if t.Failed() {
+						t.Fatal("giving up")
+					}
 				}
 			}
-		} else {
-			rngVal := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, int(rng.Int31n(128))))
-			if log.V(1) {
-				log.Infof(context.Background(), "*** PUT index %d; TXN=%t", i, txn != nil)
-			}
-			if err := MVCCPut(context.Background(), engine, ms, key, ts, rngVal, txn); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if !isDelete && txn != nil && rng.Int31n(2) == 0 { // resolve txn with 50% prob
-			txn.Status = roachpb.COMMITTED
-			if rng.Int31n(10) == 0 { // abort txn with 10% prob
-				txn.Status = roachpb.ABORTED
-			}
-			if log.V(1) {
-				log.Infof(context.Background(), "*** RESOLVE index %d; COMMIT=%t", i, txn.Status == roachpb.COMMITTED)
-			}
-			if err := MVCCResolveWriteIntent(context.Background(), engine, ms, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		ms.AgeTo(ts.WallTime) // a noop may not have updated the stats
-		// Every 10th step, verify the stats via manual engine scan.
-		if i%10 == 0 {
-			// Compute the stats manually.
-			iter := engine.NewIterator(false)
-			expMS, err := iter.ComputeStats(mvccKey(roachpb.KeyMin),
-				mvccKey(roachpb.KeyMax), ts.WallTime)
-			iter.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-			verifyStats(fmt.Sprintf("cycle %d", i), ms, &expMS, t)
-			if t.Failed() {
-				t.Fatal("giving up")
-			}
-		}
+		})
 	}
 }
 
@@ -3731,13 +3757,17 @@ func TestMVCCGarbageCollect(t *testing.T) {
 
 	// Verify aggregated stats match computed stats after GC.
 	iter := engine.NewIterator(false)
-	expMS, err := iter.ComputeStats(mvccKey(roachpb.KeyMin),
-		mvccKey(roachpb.KeyMax), ts3.WallTime)
-	iter.Close()
-	if err != nil {
-		t.Fatal(err)
+	defer iter.Close()
+	for _, mvccStatsTest := range mvccStatsTests {
+		t.Run(mvccStatsTest.name, func(t *testing.T) {
+			expMS, err := mvccStatsTest.fn(iter, mvccKey(roachpb.KeyMin),
+				mvccKey(roachpb.KeyMax), ts3.WallTime)
+			if err != nil {
+				t.Fatal(err)
+			}
+			verifyStats("verification", ms, &expMS, t)
+		})
 	}
-	verifyStats("verification", ms, &expMS, t)
 }
 
 func TestMVCCComputeStatsError(t *testing.T) {
@@ -3752,11 +3782,14 @@ func TestMVCCComputeStatsError(t *testing.T) {
 	}
 
 	iter := engine.NewIterator(false)
-	_, err := iter.ComputeStats(mvccKey(roachpb.KeyMin),
-		mvccKey(roachpb.KeyMax), 100)
-	iter.Close()
-	if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
-		t.Fatalf("expected %s, got %v", e, err)
+	defer iter.Close()
+	for _, mvccStatsTest := range mvccStatsTests {
+		t.Run(mvccStatsTest.name, func(t *testing.T) {
+			_, err := mvccStatsTest.fn(iter, mvccKey(roachpb.KeyMin), mvccKey(roachpb.KeyMax), 100)
+			if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
+				t.Fatalf("expected %s, got %v", e, err)
+			}
+		})
 	}
 }
 
