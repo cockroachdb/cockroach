@@ -252,7 +252,7 @@ type Replica struct {
 		// Note that there are two replicaStateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
 		stateLoader replicaStateLoader
-		// sideloaded SSTables.
+		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
 		sideloaded sideloadStorage
 	}
 
@@ -627,8 +627,6 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
 
-	r.raftMu.sideloaded = newInMemSideloadStorage(desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir())
-
 	r.cmdQMu.Lock()
 	r.cmdQMu.global = NewCommandQueue(true /* optimizeOverlap */)
 	r.cmdQMu.local = NewCommandQueue(false /* !optimizeOverlap */)
@@ -679,9 +677,10 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		replicaID = repDesc.ReplicaID
 	}
 	r.rangeStr.store(replicaID, r.mu.state.Desc)
-	if err := r.setReplicaIDLocked(replicaID); err != nil {
+	if err := r.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
 		return err
 	}
+
 	r.assertStateLocked(ctx, r.store.Engine())
 	return nil
 }
@@ -727,8 +726,17 @@ func (r *Replica) destroyDataRaftMuLocked(
 	}
 	commitTime := timeutil.Now()
 
-	if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
-		return err
+	// NB: we need the nil check below because it's possible that we're
+	// GC'ing a Replica without a replicaID, in which case it does not
+	// have a sideloaded storage.
+	//
+	// TODO(tschottdorf): at node startup, we should remove all on-disk
+	// directories belonging to replicas which aren't present. A crash
+	// here will currently leave the files around forever.
+	if r.raftMu.sideloaded != nil {
+		if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
+			return err
+		}
 	}
 
 	ms := r.GetMVCCStats()
@@ -793,13 +801,23 @@ func (r *Replica) nextReplicaIDLocked(externalDesc *roachpb.RangeDescriptor) roa
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.setReplicaIDLocked(replicaID)
+	return r.setReplicaIDRaftMuLockedMuLocked(replicaID)
 }
 
-// setReplicaIDLocked requires that the replica lock is held.
-func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
+func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) error {
+	if r.raftMu.sideloaded == nil || r.mu.replicaID != replicaID {
+		var err error
+		if r.raftMu.sideloaded, err = newDiskSideloadStorage(
+			r.mu.state.Desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
+		); err != nil {
+			return errors.Wrap(err, "while initializing sideloaded storage")
+		}
+	}
+
 	if r.mu.replicaID == replicaID {
 		// The common case: the replica ID is unchanged.
 		return nil

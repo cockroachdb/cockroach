@@ -3795,10 +3795,13 @@ func (s *Store) tryGetOrCreateReplica(
 			}
 			return nil, false, errRetry
 		}
-		if err := repl.setReplicaID(replicaID); err != nil {
+		repl.mu.Lock()
+		if err := repl.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
+			repl.mu.Unlock()
 			repl.raftMu.Unlock()
 			return nil, false, err
 		}
+		repl.mu.Unlock()
 		return repl, false, nil
 	}
 
