@@ -36,6 +36,7 @@ type flowScheduler struct {
 	log.AmbientContext
 	stopper    *stop.Stopper
 	flowDoneCh chan *Flow
+	metrics    *DistSQLMetrics
 
 	mu struct {
 		syncutil.Mutex
@@ -52,11 +53,14 @@ type flowWithCtx struct {
 	flow *Flow
 }
 
-func newFlowScheduler(ambient log.AmbientContext, stopper *stop.Stopper) *flowScheduler {
+func newFlowScheduler(
+	ambient log.AmbientContext, stopper *stop.Stopper, metrics *DistSQLMetrics,
+) *flowScheduler {
 	fs := &flowScheduler{
 		AmbientContext: ambient,
 		stopper:        stopper,
 		flowDoneCh:     make(chan *Flow, flowDoneChanSize),
+		metrics:        metrics,
 	}
 	fs.mu.queue = list.New()
 	return fs
@@ -71,6 +75,7 @@ func (fs *flowScheduler) canRunFlow(_ *Flow) bool {
 // runFlowNow starts the given flow; does not wait for the flow to complete.
 func (fs *flowScheduler) runFlowNow(ctx context.Context, f *Flow) {
 	fs.mu.numRunning++
+	fs.metrics.FlowStart()
 	f.Start(ctx, func() { fs.flowDoneCh <- f })
 	// TODO(radu): we could replace the WaitGroup with a structure that keeps a
 	// refcount and automatically runs Cleanup() when the count reaches 0.
@@ -116,6 +121,7 @@ func (fs *flowScheduler) Start() {
 			case <-fs.flowDoneCh:
 				fs.mu.Lock()
 				fs.mu.numRunning--
+				fs.metrics.FlowStop()
 				if !stopped {
 					if frElem := fs.mu.queue.Front(); frElem != nil {
 						n := frElem.Value.(*flowWithCtx)

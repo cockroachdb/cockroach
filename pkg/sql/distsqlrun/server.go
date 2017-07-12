@@ -98,6 +98,8 @@ type ServerConfig struct {
 	// cockroach node does not have an engine for temporary storage.
 	TempStorage engine.Engine
 
+	Metrics *DistSQLMetrics
+
 	// NodeID is the id of the node on which this Server is running.
 	NodeID    *base.NodeIDContainer
 	ClusterID uuid.UUID
@@ -139,7 +141,7 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		ServerConfig:  cfg,
 		regexpCache:   parser.NewRegexpCache(512),
 		flowRegistry:  makeFlowRegistry(),
-		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper),
+		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Metrics),
 		memMonitor: mon.MakeMonitor("distsql",
 			cfg.Counter, cfg.Hist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
 		tempStorage:            cfg.TempStorage,
