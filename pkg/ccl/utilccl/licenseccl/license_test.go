@@ -24,10 +24,11 @@ func TestLicense(t *testing.T) {
 
 	clustersA, clustersB := []uuid.UUID{clusterA}, []uuid.UUID{clusterB}
 
-	epoch := time.Unix(0, 0)
-	after := epoch.Add(time.Hour * 24)
-	before := epoch.Add(time.Hour * -24)
-	wayAfter := epoch.Add(time.Hour * 24 * 365 * 200)
+	t0 := time.Unix(0, 0)
+	ts := t0.AddDate(40, 0, 0)
+	after := ts.Add(time.Hour * 24)
+	before := ts.Add(time.Hour * -24)
+	wayAfter := ts.Add(time.Hour * 24 * 365 * 200)
 
 	for i, tc := range []struct {
 		licType      License_Type
@@ -39,27 +40,29 @@ func TestLicense(t *testing.T) {
 		err          string
 	}{
 		{licType: -1, err: "requires an enterprise license"},
-		{License_Evaluation, clustersA, epoch, clusterA, "", epoch, ""},
-		{License_Enterprise, clustersA, epoch, clusterA, "", epoch, ""},
-		{License_NonCommercial, clustersA, epoch, clusterA, "", epoch, ""},
-		{License_Evaluation, clustersA, after, clusterA, "", epoch, ""},
-		{License_Evaluation, clustersA, epoch, clusterA, "", before, ""},
-		{License_Evaluation, clustersA, wayAfter, clusterA, "", epoch, ""},
+		{License_Evaluation, clustersA, ts, clusterA, "", ts, ""},
+		{License_Enterprise, clustersA, ts, clusterA, "", ts, ""},
+		{License_NonCommercial, clustersA, ts, clusterA, "", ts, ""},
+		{License_Evaluation, clustersA, after, clusterA, "", ts, ""},
+		{License_Evaluation, clustersA, ts, clusterA, "", before, ""},
+		{License_Evaluation, clustersA, wayAfter, clusterA, "", ts, ""},
 
 		// expirations.
-		{License_Evaluation, clustersA, epoch, clusterA, "", after, "expired"},
+		{License_Evaluation, clustersA, ts, clusterA, "", after, "expired"},
 		{License_Evaluation, clustersA, after, clusterA, "", wayAfter, "expired"},
 		{License_NonCommercial, clustersA, after, clusterA, "", wayAfter, "expired"},
+		{License_NonCommercial, clustersA, t0, clusterA, "", wayAfter, ""},
+		{License_Evaluation, clustersA, t0, clusterA, "", wayAfter, ""},
 
 		// grace period.
 		{License_Enterprise, clustersA, after, clusterA, "", wayAfter, ""},
 
 		// mismatch.
-		{License_Enterprise, clustersA, epoch, clusterB, "", epoch, "not valid for cluster"},
-		{License_Enterprise, clustersB, epoch, clusterA, "", epoch, "not valid for cluster"},
-		{License_Enterprise, append(clustersB, clusterA), epoch, clusterA, "", epoch, ""},
-		{License_Enterprise, nil, epoch, clusterA, "", epoch, "license valid only for"},
-		{License_Enterprise, nil, epoch, clusterA, "tc-15", epoch, ""},
+		{License_Enterprise, clustersA, ts, clusterB, "", ts, "not valid for cluster"},
+		{License_Enterprise, clustersB, ts, clusterA, "", ts, "not valid for cluster"},
+		{License_Enterprise, append(clustersB, clusterA), ts, clusterA, "", ts, ""},
+		{License_Enterprise, nil, ts, clusterA, "", ts, "license valid only for"},
+		{License_Enterprise, nil, ts, clusterA, "tc-17", ts, ""},
 	} {
 		var lic *License
 		if tc.licType != -1 {
