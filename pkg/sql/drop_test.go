@@ -41,6 +41,13 @@ import (
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			// Disable the asynchronous path so that the table data left
+			// behind is not cleaned up.
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
@@ -121,16 +128,17 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
+	// Data is not GC-ed.
 	if kvs, err := kvDB.Scan(ctx, tableSpan.Key, tableSpan.EndKey, 0); err != nil {
 		t.Fatal(err)
-	} else if l := 0; len(kvs) != l {
+	} else if l := 6; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
 	if gr, err := kvDB.Get(ctx, tbDescKey); err != nil {
 		t.Fatal(err)
-	} else if gr.Exists() {
-		t.Fatalf("table descriptor still exists after database is dropped: %q", tbDescKey)
+	} else if !gr.Exists() {
+		t.Fatalf("table descriptor doesn't exist after database is dropped: %q", tbDescKey)
 	}
 
 	if gr, err := kvDB.Get(ctx, tbNameKey); err != nil {
@@ -153,14 +161,127 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	if gr, err := kvDB.Get(ctx, tbZoneKey); err != nil {
 		t.Fatal(err)
-	} else if gr.Exists() {
-		t.Fatalf("table zone config entry still exists after the database is dropped")
+	} else if !gr.Exists() {
+		t.Fatalf("table zone config entry doesn't exist after the database is dropped")
 	}
 
 	if gr, err := kvDB.Get(ctx, dbZoneKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("database zone config entry still exists after the database is dropped")
+	}
+}
+
+// Test that a dropped database's data gets GC-ed properly.
+func TestDropDatabaseGCData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			// Turn on quick garbage collection.
+			AsyncExecQuickly: true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+
+	// Fix the column families so the key counts below don't change if the
+	// family heuristics are updated.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
+INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "t")
+	r, err := kvDB.Get(ctx, dbNameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Exists() {
+		t.Fatalf(`database "t" does not exist`)
+	}
+	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(r.ValueInt()))
+	desc := &sqlbase.Descriptor{}
+	if err := kvDB.GetProto(ctx, dbDescKey, desc); err != nil {
+		t.Fatal(err)
+	}
+	dbDesc := desc.GetDatabase()
+
+	tbNameKey := sqlbase.MakeNameMetadataKey(dbDesc.ID, "kv")
+	gr, err := kvDB.Get(ctx, tbNameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gr.Exists() {
+		t.Fatalf(`table "kv" does not exist`)
+	}
+	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	if err := kvDB.GetProto(ctx, tbDescKey, desc); err != nil {
+		t.Fatal(err)
+	}
+	tbDesc := desc.GetTable()
+
+	// Add a zone config for both the table and database.
+	cfg := config.DefaultZoneConfig()
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, dbDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	tbZoneKey := sqlbase.MakeZoneKey(tbDesc.ID)
+	dbZoneKey := sqlbase.MakeZoneKey(dbDesc.ID)
+	if gr, err := kvDB.Get(ctx, tbZoneKey); err != nil {
+		t.Fatal(err)
+	} else if !gr.Exists() {
+		t.Fatalf("table zone config entry not found")
+	}
+	if gr, err := kvDB.Get(ctx, dbZoneKey); err != nil {
+		t.Fatal(err)
+	} else if !gr.Exists() {
+		t.Fatalf("database zone config entry not found")
+	}
+
+	tableSpan := tbDesc.TableSpan()
+	if kvs, err := kvDB.Scan(ctx, tableSpan.Key, tableSpan.EndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 6; len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+
+	if _, err := sqlDB.Exec(`DROP DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		if gr, err := kvDB.Get(ctx, tbDescKey); err != nil {
+			return err
+		} else if gr.Exists() {
+			return errors.Errorf("table descriptor exists after database is dropped: %q", tbDescKey)
+		}
+
+		if gr, err := kvDB.Get(ctx, tbZoneKey); err != nil {
+			return err
+		} else if gr.Exists() {
+			return errors.Errorf("table zone config entry still exists after the database is dropped")
+		}
+		return nil
+	})
+
+	// Data is GC-ed.
+	if kvs, err := kvDB.Scan(ctx, tableSpan.Key, tableSpan.EndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 0; len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 }
 
@@ -350,29 +471,16 @@ func TestDropIndexInterleaved(t *testing.T) {
 	}
 }
 
+// Tests DROP TABLE and also checks that the table data is not GC-ed
+// via the synchronous path.
 func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
-	var runAfterTableNameDropped func() error
-	errChan := make(chan error)
-	var numDropTable int
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunAfterTableNameDropped: func() error {
-				numDropTable++
-				runFunc := runAfterTableNameDropped
-				runAfterTableNameDropped = nil
-				if runFunc != nil {
-					err := runFunc()
-					go func() {
-						errChan <- err
-					}()
-					// Return an error so that the DROP TABLE is retried.
-					// This tests the idempotency of DROP TABLE.
-					return errors.Errorf("after name is dropped")
-				}
-				return nil
-			},
+			// Disable the asynchronous path so that the table data left
+			// behind is not cleaned up.
+			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -416,58 +524,131 @@ func TestDropTable(t *testing.T) {
 	}
 
 	tableSpan := tableDesc.TableSpan()
-
-	runAfterTableNameDropped = func() error {
-		// Test that deleted table cannot be used. This prevents
-		// regressions where name -> descriptor ID caches might make
-		// this statement erronously work.
-		if _, err := sqlDB.Exec(
-			`SELECT * FROM t.kv`,
-		); !testutils.IsError(err, `table "t.kv" does not exist`) {
-			return errors.Errorf("different error than expected: %+v", err)
-		}
-
-		if gr, err := kvDB.Get(ctx, nameKey); err != nil {
-			return err
-		} else if gr.Exists() {
-			return errors.Errorf("table namekey still exists")
-		}
-
-		return createKVTable(sqlDB, numRows)
-	}
-
 	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, tableSpan, 0)
 
-	if numDropTable != 2 {
-		t.Fatalf("numDropTable=%d, expected=2", numDropTable)
+	// Test that dropped table cannot be used. This prevents
+	// regressions where name -> descriptor ID caches might make
+	// this statement erronously work.
+	if _, err := sqlDB.Exec(
+		`SELECT * FROM t.kv`,
+	); !testutils.IsError(err, `table "t.kv" does not exist`) {
+		t.Fatalf("different error than expected: %+v", err)
 	}
+
+	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
+		t.Fatal(err)
+	} else if gr.Exists() {
+		t.Fatalf("table namekey still exists")
+	}
+
+	// Can create a table with the same name.
+	if err := createKVTable(sqlDB, numRows); err != nil {
+		t.Fatal(err)
+	}
+
+	// A lot of garbage has been left behind to be cleaned up by the
+	// asynchronous path.
+	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
 
 	if gr, err := kvDB.Get(ctx, descKey); err != nil {
 		t.Fatal(err)
-	} else if gr.Exists() {
-		t.Fatalf("table descriptor still exists after the table is dropped")
+	} else if !gr.Exists() {
+		t.Fatalf("table descriptor doesnt exist after the table is dropped")
 	}
 
 	if gr, err := kvDB.Get(ctx, zoneKey); err != nil {
 		t.Fatal(err)
-	} else if gr.Exists() {
-		t.Fatalf("zone config entry still exists after the table is dropped")
-	}
-
-	if err := <-errChan; err != nil {
-		t.Fatal(err)
+	} else if !gr.Exists() {
+		t.Fatalf("zone config entry doesn't exist after the table is dropped")
 	}
 }
 
-// TestDropTableInterleaved tests dropping a table that is interleaved within
-// another table.
-func TestDropTableInterleaved(t *testing.T) {
+// Test that after a DROP TABLE the table eventually gets GC-ed.
+func TestDropTableGCData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			// Turn on quick garbage collection.
+			AsyncExecQuickly: true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+
+	numRows := 2*sql.TableTruncateChunkSize + 1
+	if err := createKVTable(sqlDB, numRows); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
+	gr, err := kvDB.Get(ctx, nameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+
+	// Add a zone config for the table.
+	cfg := config.DefaultZoneConfig()
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	zoneKey := sqlbase.MakeZoneKey(tableDesc.ID)
+	if gr, err := kvDB.Get(ctx, zoneKey); err != nil {
+		t.Fatal(err)
+	} else if !gr.Exists() {
+		t.Fatalf("zone config entry not found")
+	}
+
+	tableSpan := tableDesc.TableSpan()
+	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
+	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		if gr, err := kvDB.Get(ctx, descKey); err != nil {
+			return err
+		} else if gr.Exists() {
+			return errors.Errorf("table descriptor still exists after the table is dropped")
+		}
+
+		if gr, err := kvDB.Get(ctx, zoneKey); err != nil {
+			return err
+		} else if gr.Exists() {
+			return errors.Errorf("zone config entry still exists after the table is dropped")
+		}
+		return nil
+	})
+
+	checkKeyCount(t, kvDB, tableSpan, 0)
+}
+
+// Tests dropping a table that is interleaved within
+// another table.
+func TestDropTableInterleavedGCData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			// Turn on quick garbage collection.
+			AsyncExecQuickly: true,
+		},
+	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -475,13 +656,13 @@ func TestDropTableInterleaved(t *testing.T) {
 	createKVInterleavedTable(t, sqlDB, numRows)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tableDescInterleaved := sqlbase.GetTableDescriptor(kvDB, "t", "intlv")
 	tableSpan := tableDesc.TableSpan()
 
 	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.intlv`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, tableSpan, numRows)
 
 	// Test that deleted table cannot be used. This prevents regressions where
 	// name -> descriptor ID caches might make this statement erronously work.
@@ -490,6 +671,18 @@ func TestDropTableInterleaved(t *testing.T) {
 	) {
 		t.Fatalf("different error than expected: %v", err)
 	}
+
+	descKey := sqlbase.MakeDescMetadataKey(tableDescInterleaved.ID)
+	testutils.SucceedsSoon(t, func() error {
+		if gr, err := kvDB.Get(context.TODO(), descKey); err != nil {
+			return err
+		} else if gr.Exists() {
+			return errors.Errorf("table descriptor still exists after the table is dropped")
+		}
+		return nil
+	})
+
+	checkKeyCount(t, kvDB, tableSpan, numRows)
 }
 
 func TestDropTableInTxn(t *testing.T) {

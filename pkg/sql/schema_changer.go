@@ -66,18 +66,6 @@ type SchemaChanger struct {
 	jobLogger      *jobs.JobLogger
 }
 
-func (sc *SchemaChanger) truncateAndDropTable(
-	ctx context.Context,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	tableDesc *sqlbase.TableDescriptor,
-	traceKV bool,
-) error {
-	if err := sc.ExtendLease(ctx, lease); err != nil {
-		return err
-	}
-	return truncateAndDropTable(ctx, tableDesc, &sc.db, *sc.testingKnobs, traceKV)
-}
-
 // NewSchemaChangerForTesting only for tests.
 func NewSchemaChangerForTesting(
 	tableID sqlbase.ID,
@@ -211,10 +199,60 @@ func (sc *SchemaChanger) ExtendLease(
 	return nil
 }
 
+func dropTableName(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
+) error {
+	_, nameKey, _ := GetKeysForTableDescriptor(tableDesc)
+	// The table name is no longer in use across the entire cluster.
+	// Delete the namekey so that it can be used by another table.
+	// We do this before truncating the table because the table truncation
+	// takes too much time.
+	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		b := &client.Batch{}
+		// Use CPut because we want to remove a specific name -> id map.
+		if traceKV {
+			log.VEventf(ctx, 2, "CPut %s -> nil", nameKey)
+		}
+		b.CPut(nameKey, nil, tableDesc.ID)
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		err := txn.Run(ctx, b)
+		if _, ok := err.(*roachpb.ConditionFailedError); ok {
+			return nil
+		}
+		return err
+	})
+}
+
+func dropTableDesc(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
+) error {
+	zoneKey, _, descKey := GetKeysForTableDescriptor(tableDesc)
+
+	// Finished deleting all the table data, now delete the table meta data.
+	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Delete table descriptor
+		b := &client.Batch{}
+		if traceKV {
+			log.VEventf(ctx, 2, "Del %s", descKey)
+			log.VEventf(ctx, 2, "Del %s", zoneKey)
+		}
+		b.Del(descKey)
+		// Delete the zone config entry for this table.
+		b.Del(zoneKey)
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		return txn.Run(ctx, b)
+	})
+}
+
 // maybe Add/Drop/Rename a table depending on the state of a table descriptor.
 // This method returns true if the table is deleted.
 func (sc *SchemaChanger) maybeAddDropRename(
 	ctx context.Context,
+	inSession bool,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	table *sqlbase.TableDescriptor,
 ) (bool, error) {
@@ -229,13 +267,20 @@ func (sc *SchemaChanger) maybeAddDropRename(
 			return false, err
 		}
 
-		// Truncate the table and delete the descriptor.
-		if err := sc.truncateAndDropTable(
-			ctx, lease, table /* false */, false, /* traceKV */
-		); err != nil {
+		if err := dropTableName(ctx, table /* false */, &sc.db, false /* traceKV */); err != nil {
 			return false, err
 		}
-		return true, nil
+
+		if inSession {
+			return false, nil
+		}
+
+		// Do all the hard work of GC-ing a table ID.
+		if err := truncateTableInChunks(ctx, table, &sc.db, false /* traceKV */); err != nil {
+			return false, err
+		}
+
+		return true, dropTableDesc(ctx, table, &sc.db, false /* traceKV */)
 	}
 
 	if table.Adding() {
@@ -298,7 +343,11 @@ func (sc *SchemaChanger) maybeAddDropRename(
 }
 
 // Execute the entire schema change in steps.
-func (sc *SchemaChanger) exec(ctx context.Context, evalCtx parser.EvalContext) error {
+// inSession is set to false when this is called from the asynchronous
+// schema change execution path.
+func (sc *SchemaChanger) exec(
+	ctx context.Context, inSession bool, evalCtx parser.EvalContext,
+) error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease(ctx)
 	if err != nil {
@@ -332,7 +381,7 @@ func (sc *SchemaChanger) exec(ctx context.Context, evalCtx parser.EvalContext) e
 	}
 
 	tableDesc := desc.GetTable()
-	if drop, err := sc.maybeAddDropRename(ctx, &lease, tableDesc); err != nil {
+	if drop, err := sc.maybeAddDropRename(ctx, inSession, &lease, tableDesc); err != nil {
 		return err
 	} else if drop {
 		needRelease = false
@@ -793,11 +842,6 @@ type SchemaChangerTestingKnobs struct {
 
 	// BackfillChunkSize is to be used for all backfill chunked operations.
 	BackfillChunkSize int64
-
-	// RunAfterTableNameDropped is called when a table is being dropped.
-	// It is called as soon as the table name is released and before the
-	// table is truncated.
-	RunAfterTableNameDropped func() error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -977,7 +1021,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					if timeutil.Since(sc.execAfter) > 0 {
 						evalCtx := createSchemaChangeEvalCtx(s.clock.Now())
 						// TODO(andrei): create a proper ctx for executing schema changes.
-						if err := sc.exec(ctx, evalCtx); err != nil {
+						if err := sc.exec(ctx, false /* inSession */, evalCtx); err != nil {
 							if shouldLogSchemaChangeError(err) {
 								log.Warningf(ctx, "Error executing schema change: %s", err)
 							}

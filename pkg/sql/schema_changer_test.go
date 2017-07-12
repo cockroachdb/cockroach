@@ -682,7 +682,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 // Test that a table drop in the middle of a backfill works properly.
 // The backfill will terminate in the middle, and the drop will
-// successfully delete all the table data.
+// successfully complete without GC-ing the data.
 func TestDropWhileBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// protects backfillNotification
@@ -783,13 +783,21 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	// Wait until the schema change is done.
 	wg.Wait()
 
-	// Ensure that the table data has been deleted.
+	// Ensure that the table data hasn't been GC-ed.
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
-	} else if e := 0; len(kvs) != e {
+	} else if e := 2 * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+	// Check that the table descriptor exists so we know the data will
+	// eventually be GC-ed.
+	tbDescKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
+	if gr, err := kvDB.Get(ctx, tbDescKey); err != nil {
+		t.Fatal(err)
+	} else if !gr.Exists() {
+		t.Fatalf("table descriptor doesn't exist after table is dropped: %q", tbDescKey)
 	}
 }
 
