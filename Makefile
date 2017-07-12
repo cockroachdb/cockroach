@@ -128,7 +128,7 @@ override TAGS += make $(NATIVE_SPECIFIER_TAG)
 # to the host machine's actual macOS version works around this. See:
 # https://github.com/jemalloc/jemalloc/issues/494.
 ifdef MACOS
-export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion)
+export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion | grep -oE '[0-9]+\.[0-9]+')
 endif
 
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
