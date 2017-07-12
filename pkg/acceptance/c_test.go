@@ -29,10 +29,16 @@ func TestDockerC(t *testing.T) {
 
 	ctx := context.Background()
 	t.Run("Success", func(t *testing.T) {
-		testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12", 1)})
+		testDockerSuccess(ctx, t, dockerTestConfig{
+			name: "c",
+			cmd:  []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12", 1)},
+		})
 	})
 	t.Run("Fail", func(t *testing.T) {
-		testDockerFail(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)})
+		testDockerFail(ctx, t, dockerTestConfig{
+			name: "c",
+			cmd:  []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)},
+		})
 	})
 }
 
@@ -500,12 +506,16 @@ func TestDockerPGWireVersion(t *testing.T) {
 
 	ctx := context.Background()
 	t.Run("Success", func(t *testing.T) {
-		testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c",
-			strings.Replace(cVersion, "EXPECTED_VERSION", "CockroachDB ", -1)})
+		testDockerSuccess(ctx, t, dockerTestConfig{
+			name: "c",
+			cmd:  []string{"/bin/sh", "-c", strings.Replace(cVersion, "EXPECTED_VERSION", "CockroachDB ", -1)},
+		})
 	})
 	t.Run("Fail", func(t *testing.T) {
-		testDockerFail(ctx, t, "c", []string{"/bin/sh", "-c",
-			strings.Replace(cVersion, "EXPECTED_VERSION", "--NotValid--", -1)})
+		testDockerFail(ctx, t, dockerTestConfig{
+			name: "c",
+			cmd:  []string{"/bin/sh", "-c", strings.Replace(cVersion, "EXPECTED_VERSION", "--NotValid--", -1)},
+		})
 	})
 }
 

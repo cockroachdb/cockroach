@@ -28,8 +28,14 @@ func TestDockerPHP(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "php", []string{"php", "-r", strings.Replace(php, "%v", "3", 1)})
-	testDockerFail(ctx, t, "php", []string{"php", "-r", strings.Replace(php, "%v", `"a"`, 1)})
+	testDockerSuccess(ctx, t, dockerTestConfig{
+		name: "php",
+		cmd:  []string{"php", "-r", strings.Replace(php, "%v", "3", 1)},
+	})
+	testDockerFail(ctx, t, dockerTestConfig{
+		name: "php",
+		cmd:  []string{"php", "-r", strings.Replace(php, "%v", `"a"`, 1)},
+	})
 }
 
 const php = `

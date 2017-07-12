@@ -16,6 +16,8 @@ package acceptance
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -37,20 +39,32 @@ func defaultContainerConfig() container.Config {
 	}
 }
 
+type dockerTestConfig struct {
+	name string
+	// cmd is the command that which be run within the docker container. Only
+	// needs to be set if a containerConfig has not already been produced.
+	cmd []string
+	// binds is a list of directories from the `pkg/acceptance` directory to mount
+	// onto `/` for access within the docker container. They will have the same
+	// name within the docker container as outside of it (see java_test.go which
+	// mounts the java_test directory).
+	binds []string
+}
+
 // testDockerFail ensures the specified docker cmd fails.
-func testDockerFail(ctx context.Context, t *testing.T, name string, cmd []string) {
+func testDockerFail(ctx context.Context, t *testing.T, dt dockerTestConfig) {
 	containerConfig := defaultContainerConfig()
-	containerConfig.Cmd = cmd
-	if err := testDockerSingleNode(ctx, t, name, containerConfig); err == nil {
+	containerConfig.Cmd = dt.cmd
+	if err := testDockerSingleNode(ctx, t, dt, containerConfig); err == nil {
 		t.Error("expected failure")
 	}
 }
 
 // testDockerSuccess ensures the specified docker cmd succeeds.
-func testDockerSuccess(ctx context.Context, t *testing.T, name string, cmd []string) {
+func testDockerSuccess(ctx context.Context, t *testing.T, dt dockerTestConfig) {
 	containerConfig := defaultContainerConfig()
-	containerConfig.Cmd = cmd
-	if err := testDockerSingleNode(ctx, t, name, containerConfig); err != nil {
+	containerConfig.Cmd = dt.cmd
+	if err := testDockerSingleNode(ctx, t, dt, containerConfig); err != nil {
 		t.Error(err)
 	}
 }
@@ -62,12 +76,12 @@ const (
 )
 
 func testDocker(
-	ctx context.Context, t *testing.T, num int, name string, containerConfig container.Config,
+	ctx context.Context, t *testing.T, num int, dt dockerTestConfig, containerConfig container.Config,
 ) error {
 	var err error
 	RunDocker(t, func(t *testing.T) {
 		cfg := cluster.TestConfig{
-			Name:     name,
+			Name:     dt.name,
 			Duration: *flagDuration,
 		}
 		for i := 0; i < num; i++ {
@@ -79,9 +93,21 @@ func testDocker(
 		if len(l.Nodes) > 0 {
 			containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
 		}
-		hostConfig := container.HostConfig{NetworkMode: "host"}
+		var pwd string
+		pwd, err = os.Getwd()
+		if err != nil {
+			return
+		}
+		var binds []string
+		for _, b := range dt.binds {
+			binds = append(binds, filepath.Join(pwd, b)+":/"+b)
+		}
+		hostConfig := container.HostConfig{
+			NetworkMode: "host",
+			Binds:       binds,
+		}
 		err = l.OneShot(
-			ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
+			ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+dt.name,
 		)
 		if err == nil {
 			// Clean up the log files if the run was successful.
@@ -92,13 +118,13 @@ func testDocker(
 }
 
 func testDockerSingleNode(
-	ctx context.Context, t *testing.T, name string, containerConfig container.Config,
+	ctx context.Context, t *testing.T, dt dockerTestConfig, containerConfig container.Config,
 ) error {
-	return testDocker(ctx, t, 1, name, containerConfig)
+	return testDocker(ctx, t, 1, dt, containerConfig)
 }
 
 func testDockerOneShot(
-	ctx context.Context, t *testing.T, name string, containerConfig container.Config,
+	ctx context.Context, t *testing.T, dt dockerTestConfig, containerConfig container.Config,
 ) error {
-	return testDocker(ctx, t, 0, name, containerConfig)
+	return testDocker(ctx, t, 0, dt, containerConfig)
 }

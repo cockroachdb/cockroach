@@ -28,8 +28,14 @@ func TestDockerPython(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "python", []string{"python", "-c", strings.Replace(python, "%v", "3", 1)})
-	testDockerFail(ctx, t, "python", []string{"python", "-c", strings.Replace(python, "%v", `"a"`, 1)})
+	testDockerSuccess(ctx, t, dockerTestConfig{
+		name: "python",
+		cmd:  []string{"python", "-c", strings.Replace(python, "%v", "3", 1)},
+	})
+	testDockerFail(ctx, t, dockerTestConfig{
+		name: "python",
+		cmd:  []string{"python", "-c", strings.Replace(python, "%v", `"a"`, 1)},
+	})
 }
 
 const python = `

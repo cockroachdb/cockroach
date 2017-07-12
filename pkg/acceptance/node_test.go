@@ -28,8 +28,14 @@ func TestDockerNodeJS(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "node.js", []string{"node", "-e", strings.Replace(nodeJS, "%v", "3", 1)})
-	testDockerFail(ctx, t, "node.js", []string{"node", "-e", strings.Replace(nodeJS, "%v", `'a'`, 1)})
+	testDockerSuccess(ctx, t, dockerTestConfig{
+		name: "node.js",
+		cmd:  []string{"node", "-e", strings.Replace(nodeJS, "%v", "3", 1)},
+	})
+	testDockerFail(ctx, t, dockerTestConfig{
+		name: "node.js",
+		cmd:  []string{"node", "-e", strings.Replace(nodeJS, "%v", `'a'`, 1)},
+	})
 }
 
 const nodeJS = `

@@ -45,7 +45,7 @@ func TestDockerCLI(t *testing.T) {
 		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
 	}
 	ctx := context.Background()
-	if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
+	if err := testDockerOneShot(ctx, t, dockerTestConfig{name: "cli_test"}, containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
@@ -83,7 +83,7 @@ func TestDockerCLI(t *testing.T) {
 			cmd = cmd + " -f " + testPath + " " + cluster.CockroachBinaryInContainer + ")"
 			containerConfig.Cmd = append(cmdBase, cmd)
 
-			if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
+			if err := testDockerOneShot(ctx, t, dockerTestConfig{name: "cli_test"}, containerConfig); err != nil {
 				t.Error(err)
 			}
 		})
@@ -99,7 +99,7 @@ func TestDockerStartFlags(t *testing.T) {
 		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
 	}
 	ctx := context.Background()
-	if err := testDockerOneShot(ctx, t, "start_flags_test", containerConfig); err != nil {
+	if err := testDockerOneShot(ctx, t, dockerTestConfig{name: "start_flags_test"}, containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
@@ -119,7 +119,7 @@ $bin sql --insecure --host="${HOST}" --port=12345 -e "show databases"
 $bin quit --insecure --host="${HOST}" --port=12345
 `
 	containerConfig.Cmd = []string{"/bin/bash", "-c", script}
-	if err := testDockerOneShot(ctx, t, "start_flags_test", containerConfig); err != nil {
+	if err := testDockerOneShot(ctx, t, dockerTestConfig{name: "start_flags_test"}, containerConfig); err != nil {
 		t.Error(err)
 	}
 

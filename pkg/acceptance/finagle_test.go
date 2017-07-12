@@ -30,7 +30,10 @@ func TestDockerFinagle(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	testDockerSuccess(ctx, t, "finagle", []string{"/bin/sh", "-c", finagle})
+	testDockerSuccess(ctx, t, dockerTestConfig{
+		name: "finagle",
+		cmd:  []string{"/bin/sh", "-c", finagle},
+	})
 }
 
 const finagle = `

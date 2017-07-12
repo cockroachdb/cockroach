@@ -28,8 +28,14 @@ func TestDockerCSharp(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "csharp", []string{"/bin/sh", "-c", strings.Replace(csharp, "%v", "test", 1)})
-	testDockerFail(ctx, t, "csharp", []string{"/bin/sh", "-c", strings.Replace(csharp, "%v", "other", 1)})
+	testDockerSuccess(ctx, t, dockerTestConfig{
+		name: "csharp",
+		cmd:  []string{"/bin/sh", "-c", strings.Replace(csharp, "%v", "test", 1)},
+	})
+	testDockerFail(ctx, t, dockerTestConfig{
+		name: "csharp",
+		cmd:  []string{"/bin/sh", "-c", strings.Replace(csharp, "%v", "other", 1)},
+	})
 }
 
 const csharp = `

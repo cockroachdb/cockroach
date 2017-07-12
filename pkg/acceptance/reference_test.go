@@ -30,12 +30,12 @@ func runReferenceTestWithScript(ctx context.Context, t *testing.T, script string
 		Image: postgresTestImage,
 		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
 	}
-	if err := testDockerOneShot(ctx, t, "reference", containerConfig); err != nil {
+	if err := testDockerOneShot(ctx, t, dockerTestConfig{name: "reference"}, containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
 	containerConfig.Cmd = []string{"/bin/bash", "-c", script}
-	if err := testDockerOneShot(ctx, t, "reference", containerConfig); err != nil {
+	if err := testDockerOneShot(ctx, t, dockerTestConfig{name: "reference"}, containerConfig); err != nil {
 		t.Error(err)
 	}
 }

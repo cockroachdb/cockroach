@@ -28,8 +28,14 @@ func TestDockerRuby(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", "3", 1)})
-	testDockerFail(ctx, t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", `"a"`, 1)})
+	testDockerSuccess(ctx, t, dockerTestConfig{
+		name: "ruby",
+		cmd:  []string{"ruby", "-e", strings.Replace(ruby, "%v", "3", 1)},
+	})
+	testDockerFail(ctx, t, dockerTestConfig{
+		name: "ruby",
+		cmd:  []string{"ruby", "-e", strings.Replace(ruby, "%v", `"a"`, 1)},
+	})
 }
 
 const ruby = `

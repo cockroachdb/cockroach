@@ -26,7 +26,10 @@ func TestDockerPSQL(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "psql", []string{"/bin/bash", "-c", psql})
+	testDockerSuccess(ctx, t, dockerTestConfig{
+		name: "psql",
+		cmd:  []string{"/bin/bash", "-c", psql},
+	})
 }
 
 const psql = `
