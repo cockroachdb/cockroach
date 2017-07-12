@@ -124,6 +124,13 @@ func truncateTable(
 
 // truncateTableInChunks truncates the data of a table in chunks. It deletes a
 // range of data for the table, which includes the PK and all indexes.
+// The table has already been marked for deletion and has been purged from the
+// descriptor cache on all nodes.
+//
+// TODO(vivek): No node is reading/writing data on the table at this stage,
+// therefore the entire table can be deleted with no concern for conflicts (we
+// can even eliminate the need to use a transaction for each chunk at a later
+// stage if it proves inefficient).
 func truncateTableInChunks(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
 ) error {
