@@ -218,8 +218,10 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if cfg.RangeLookupMaxRanges <= 0 {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	}
-	if cfg.TransportFactory != nil {
-		ds.transportFactory = cfg.TransportFactory
+	if tf := cfg.TransportFactory; tf != nil {
+		ds.transportFactory = tf
+	} else {
+		ds.transportFactory = grpcTransportFactory
 	}
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	if cfg.RPCRetryOptions != nil {
@@ -396,11 +398,9 @@ func (ds *DistSender) sendRPC(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
-		SendNextTimeout:  ds.sendNextTimeout,
-		transportFactory: ds.transportFactory,
-		metrics:          &ds.metrics,
+		SendNextTimeout: ds.sendNextTimeout,
+		metrics:         &ds.metrics,
 	}
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
@@ -1144,11 +1144,7 @@ func (ds *DistSender) sendToReplicas(
 	}
 	done := make(chan BatchCall, len(replicas))
 
-	transportFactory := opts.transportFactory
-	if transportFactory == nil {
-		transportFactory = grpcTransportFactory
-	}
-	transport, err := transportFactory(opts, rpcContext, replicas, args)
+	transport, err := ds.transportFactory(opts, rpcContext, replicas, args)
 	if err != nil {
 		return nil, err
 	}

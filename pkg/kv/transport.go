@@ -43,8 +43,6 @@ type SendOptions struct {
 	// other replicas in a set.
 	SendNextTimeout time.Duration
 
-	transportFactory TransportFactory
-
 	metrics *DistSenderMetrics
 }
 

@@ -91,7 +91,7 @@ func TestSendToOneClient(t *testing.T) {
 	s, ln := newTestServer(t, rpcContext)
 	roachpb.RegisterInternalServer(s, Node(0))
 
-	reply, err := sendBatch(context.Background(), SendOptions{}, []net.Addr{ln.Addr()}, rpcContext)
+	reply, err := sendBatch(context.Background(), nil, SendOptions{}, []net.Addr{ln.Addr()}, rpcContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,25 +160,27 @@ func setupSendNextTest(t *testing.T) ([]chan<- BatchCall, chan BatchCall, *stop.
 
 	doneChanChan := make(chan chan<- BatchCall, len(addrs))
 
-	opts := SendOptions{
-		SendNextTimeout: 1 * time.Millisecond,
-		transportFactory: func(_ SendOptions,
-			_ *rpc.Context,
-			replicas ReplicaSlice,
-			_ roachpb.BatchRequest,
-		) (Transport, error) {
-			return &channelSaveTransport{
-				ch:        doneChanChan,
-				remaining: len(replicas),
-			}, nil
-		},
-	}
-
 	sendChan := make(chan BatchCall, 1)
 	go func() {
 		// Send the batch. This will block until we signal one of the done
 		// channels.
-		br, err := sendBatch(context.Background(), opts, addrs, nodeContext)
+		br, err := sendBatch(
+			context.Background(),
+			func(
+				_ SendOptions,
+				_ *rpc.Context,
+				replicas ReplicaSlice,
+				_ roachpb.BatchRequest,
+			) (Transport, error) {
+				return &channelSaveTransport{
+					ch:        doneChanChan,
+					remaining: len(replicas),
+				}, nil
+			},
+			SendOptions{SendNextTimeout: time.Millisecond},
+			addrs,
+			nodeContext,
+		)
 		sendChan <- BatchCall{br, err}
 	}()
 
@@ -447,8 +449,9 @@ func TestComplexScenarios(t *testing.T) {
 				strconv.Itoa(j)))
 		}
 
-		opts := SendOptions{
-			transportFactory: func(
+		reply, err := sendBatch(
+			context.Background(),
+			func(
 				_ SendOptions,
 				_ *rpc.Context,
 				replicas ReplicaSlice,
@@ -460,9 +463,10 @@ func TestComplexScenarios(t *testing.T) {
 					numErrors: test.numErrors,
 				}, nil
 			},
-		}
-
-		reply, err := sendBatch(context.Background(), opts, serverAddrs, nodeContext)
+			SendOptions{},
+			serverAddrs,
+			nodeContext,
+		)
 		if test.success {
 			if err != nil {
 				t.Errorf("%d: unexpected error: %s", i, err)
@@ -553,9 +557,14 @@ func makeReplicas(addrs ...net.Addr) ReplicaSlice {
 
 // sendBatch sends Batch requests to specified addresses using send.
 func sendBatch(
-	ctx context.Context, opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context,
+	ctx context.Context,
+	transportFactory TransportFactory,
+	opts SendOptions,
+	addrs []net.Addr,
+	rpcContext *rpc.Context,
 ) (*roachpb.BatchResponse, error) {
 	ds := NewDistSender(DistSenderConfig{
+		TransportFactory: transportFactory,
 		// After an error, we wait for up to PendingRPCTimeout to reduce
 		// the chance of returning AmbiguousResultError. These tests
 		// predate that mechanism and will wait for the full duration of
