@@ -1285,7 +1285,11 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						// We had an active lease to begin with, but we want to trigger
 						// a lease extension. We explicitly ignore the returned channel
 						// as we won't block on it.
-						_ = r.requestLeaseLocked(ctx, status)
+						//
+						// Since we return and don't wait, our context will likely cancel
+						// soon, perhaps before the request is even in flight. Use a new
+						// context instead.
+						_ = r.requestLeaseLocked(r.AnnotateCtx(context.Background()), status)
 					}
 				}
 
