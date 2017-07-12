@@ -36,6 +36,14 @@ fi
 
 # Force an NTP time sync.
 sudo apt-get -qqy install ntpdate
+# Disable systemd-timesyncd
 sudo timedatectl set-ntp false
-sudo ntpdate -b ntp.ubuntu.com
-sudo timedatectl set-ntp true
+if systemctl is-active -q ntp.service; then
+  sudo service ntp stop
+  sudo ntpdate -b ntp.ubuntu.com
+  sudo service ntp start
+else
+  sudo ntpdate -b ntp.ubuntu.com
+  # Reenable systemd-timesyncd.
+  sudo timedatectl set-ntp true
+fi
