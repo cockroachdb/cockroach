@@ -271,19 +271,24 @@ type drainSignal struct {
 	err error
 }
 
+type receivable interface {
+	Recv() (*ConsumerSignal, error)
+}
+
 // listenForDrainSignalFromConsumer returns a channel that will be pinged once the
 // consumer has closed its send-side of the stream, or has sent a drain signal.
 func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan drainSignal, error) {
 	ch := make(chan drainSignal, 1)
 
+	var stream receivable
+	if m.stream != nil {
+		stream = m.stream
+	} else {
+		stream = m.syncFlowStream
+	}
+
 	if err := m.flowCtx.stopper.RunAsyncTask(ctx, "drain", func(ctx context.Context) {
-		var signal *ConsumerSignal
-		var err error
-		if m.stream != nil {
-			signal, err = m.stream.Recv()
-		} else {
-			signal, err = m.syncFlowStream.Recv()
-		}
+		signal, err := stream.Recv()
 		if err == io.EOF {
 			ch <- drainSignal{drainRequested: false, err: nil}
 			return
