@@ -427,13 +427,13 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.getLease()
-	ch, _, _, err := r.propose(context.TODO(), exLease, ba, nil, nil)
-	if err == nil {
+	ch, _, _, pErr := r.propose(context.TODO(), exLease, ba, nil, nil)
+	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
-		err = (<-ch).Err.GoError()
+		pErr = (<-ch).Err
 	}
-	return err
+	return pErr.GoError()
 }
 
 // TestReplicaReadConsistency verifies behavior of the range under
@@ -1160,15 +1160,15 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, _, err := tc.repl.propose(context.Background(), exLease, ba, nil, nil)
-	if err == nil {
+	ch, _, _, pErr := tc.repl.propose(context.Background(), exLease, ba, nil, nil)
+	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
 		// Remove ambiguity about where the "replica not found" error comes from.
-		err = (<-ch).Err.GoError()
+		pErr = (<-ch).Err
 	}
-	if !testutils.IsError(err, "replica not found") {
-		t.Errorf("unexpected error obtaining lease for invalid store: %v", err)
+	if !testutils.IsPError(pErr, "replica not found") {
+		t.Errorf("unexpected error obtaining lease for invalid store: %v", pErr)
 	}
 }
 
@@ -7917,11 +7917,11 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	}
 
 	exLease, _ := repl.getLease()
-	ch, _, _, err := repl.propose(
+	ch, _, _, pErr := repl.propose(
 		context.Background(), exLease, ba, nil /* endCmds */, nil, /* spans */
 	)
-	if err != nil {
-		t.Fatal(err)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 	propRes := <-ch
 	if !testutils.IsPError(propRes.Err, "boom") {

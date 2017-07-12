@@ -469,7 +469,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	repl1.mu.Lock()
-	expErr := repl1.mu.destroyed
+	expErr := roachpb.NewError(repl1.mu.destroyed)
 	lease := *repl1.mu.state.Lease
 	repl1.mu.Unlock()
 
@@ -477,10 +477,10 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 		t.Fatal("replica was not marked as destroyed")
 	}
 
-	if _, _, _, err := repl1.propose(
+	if _, _, _, pErr := repl1.propose(
 		context.Background(), lease, roachpb.BatchRequest{}, nil, nil,
-	); err != expErr {
-		t.Fatalf("expected error %s, but got %v", expErr, err)
+	); !pErr.Equal(expErr) {
+		t.Fatalf("expected error %s, but got %v", expErr, pErr)
 	}
 }
 

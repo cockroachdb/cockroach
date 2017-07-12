@@ -24,7 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
 
-func grpcTransportFactory(
+// GRPCTransportFactory is the default TransportFactory, using GRPC.
+func GRPCTransportFactory(
 	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
 	return grpcTransportFactoryImpl(opts, rpcContext, replicas, args)
