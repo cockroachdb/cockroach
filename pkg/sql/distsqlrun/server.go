@@ -95,13 +95,17 @@ type ServerConfig struct {
 	TestingKnobs TestingKnobs
 
 	ParentMemoryMonitor *mon.MemoryMonitor
-	Counter             *metric.Counter
-	Hist                *metric.Histogram
+
+	// TODO(couchand): move these into the DistSQLMetrics struct
+	Counter *metric.Counter
+	Hist    *metric.Histogram
 
 	// TempStorage is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory. It can be nil, if this
 	// cockroach node does not have an engine for temporary storage.
 	TempStorage engine.Engine
+
+	Metrics *DistSQLMetrics
 
 	// NodeID is the id of the node on which this Server is running.
 	NodeID    *base.NodeIDContainer
@@ -129,7 +133,7 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		ServerConfig:  cfg,
 		regexpCache:   parser.NewRegexpCache(512),
 		flowRegistry:  makeFlowRegistry(),
-		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper),
+		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Metrics),
 		memMonitor: mon.MakeMonitor("distsql",
 			cfg.Counter, cfg.Hist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
 		tempStorage: cfg.TempStorage,
