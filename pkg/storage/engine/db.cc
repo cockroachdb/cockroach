@@ -1548,6 +1548,16 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // OS decides it needs to flush data.
   options.wal_bytes_per_sync = 256 << 10;   // 256 KB
 
+  // Periodically sync sstables during compaction to smooth out
+  // writes. Experimentally this has had no effect.
+  // options.bytes_per_sync = 4 << 20;
+
+  // The size reads should be performed in for compaction. The
+  // internets claim this can speed up compactions, though RocksDB
+  // docs say it is only useful on spinning disks. Experimentally it
+  // has had no effect.
+  // options.compaction_readahead_size = 2 << 20;
+
   // Do not create bloom filters for the last level (i.e. the largest
   // level which contains data in the LSM store). Setting this option
   // reduces the size of the bloom filters by 10x. This is significant
