@@ -284,30 +284,21 @@ dupl: $(BOOTSTRAP_TARGET)
 	       -not -name '*.ir.go'     \
 	| dupl -files $(DUPLFLAGS)
 
-# All packages need to be installed before we can run (some) of the checks and
-# code generators reliably. More precisely, anything that uses x/tools/go/loader
-# is fragile (this includes stringer, vet and others). The blocking issue is
-# https://github.com/golang/go/issues/14120.
-
-# `go generate` uses stringer and so must depend on gotestdashi per the above
-# comment. See https://github.com/golang/go/issues/10249 for details.
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: gotestdashi
+generate: $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
-# The style checks depend on `go vet` and so must depend on gotestdashi per the
-# above comment. See https://github.com/golang/go/issues/16086 for details.
 .PHONY: lint
 lint: ## Run all style checkers and linters.
 lint: override TAGS += lint
-lint: gotestdashi
+lint: $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: lintshort
 lintshort: ## Run a fast subset of the style checkers and linters.
 lintshort: override TAGS += lint
-lintshort: gotestdashi
+lintshort: $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
