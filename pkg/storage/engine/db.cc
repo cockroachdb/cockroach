@@ -1571,6 +1571,10 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // of the memory cost.
   options.optimize_filters_for_hits = true;
 
+  // We periodically report stats ourselves and by default the info
+  // logger swallows log messages.
+  options.stats_dump_period_sec = 0;
+
   // Use the TablePropertiesCollector hook to store the min and max MVCC
   // timestamps present in each sstable in the metadata for that sstable.
   std::shared_ptr<rocksdb::TablePropertiesCollectorFactory> time_bound_prop_collector(new TimeBoundTblPropCollectorFactory());
