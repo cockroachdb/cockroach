@@ -16,6 +16,8 @@ package acceptance
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -58,7 +60,8 @@ func testDockerSuccess(ctx context.Context, t *testing.T, name string, cmd []str
 const (
 	// Iterating against a locally built version of the docker image can be done
 	// by changing postgresTestImage to the hash of the container.
-	postgresTestImage = "docker.io/cockroachdb/postgres-test:20171011-1414"
+	// postgresTestImage = "docker.io/cockroachdb/postgres-test:20171011-1414"
+	postgresTestImage = "localhost:5000/cockroachdb/postgres-test:foo"
 )
 
 func testDocker(
@@ -79,7 +82,15 @@ func testDocker(
 		if len(l.Nodes) > 0 {
 			containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
 		}
-		hostConfig := container.HostConfig{NetworkMode: "host"}
+		var pwd string
+		pwd, err = os.Getwd()
+		if err != nil {
+			return
+		}
+		hostConfig := container.HostConfig{
+			NetworkMode: "host",
+			Binds:       []string{filepath.Join(pwd, "testdata") + ":/testdata"},
+		}
 		err = l.OneShot(
 			ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
 		)
