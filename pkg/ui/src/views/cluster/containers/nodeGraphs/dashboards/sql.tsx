@@ -51,6 +51,34 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Distributed SQL Active Queries"
+      sources={nodeSources}
+      tooltip={`The total number of currently running distributed SQL queries ${tooltipSelection}.`}
+    >
+      <Axis>
+        <Metric name="cr.node.sql.distsql.queries.active" title="Active Queries" />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Distributed SQL Active Flows"
+      tooltip="Distributed queries run on multiple nodes, and a flow is the worker on a single node.  This is the number of flows on each node contributing to currently running distributed SQL queries."
+    >
+      <Axis>
+        {
+          _.map(nodeIDs, (node) => (
+            <Metric
+              key={node}
+              name="cr.node.sql.distsql.flows.active"
+              title={nodeAddress(nodesSummary, node)}
+              sources={[node]}
+            />
+          ))
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Service Latency: SQL, 99th percentile"
       tooltip={(
         <div>
