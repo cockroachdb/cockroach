@@ -281,9 +281,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(s.cfg.SQLMemoryPoolSize))
 
-	distSQLMetrics := sql.MakeMemMetrics("distsql", cfg.HistogramWindowInterval())
-	s.registry.AddMetric(distSQLMetrics.CurBytesCount)
-	s.registry.AddMetric(distSQLMetrics.MaxBytesHist)
+	distSQLMemMetrics := sql.MakeMemMetrics("distsql", cfg.HistogramWindowInterval())
+	s.registry.AddMetric(distSQLMemMetrics.CurBytesCount)
+	s.registry.AddMetric(distSQLMemMetrics.MaxBytesHist)
 
 	// Set up the DistSQL temp engine.
 
@@ -313,6 +313,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
+	distSQLMetrics := distsqlrun.MakeDistSQLMetrics()
+	s.registry.AddMetricStruct(distSQLMetrics)
+
 	// Set up the DistSQL server.
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
@@ -326,8 +329,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TempStorage: tempEngine,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
-		Counter:             distSQLMetrics.CurBytesCount,
-		Hist:                distSQLMetrics.MaxBytesHist,
+		Counter:             distSQLMemMetrics.CurBytesCount,
+		Hist:                distSQLMemMetrics.MaxBytesHist,
+
+		Metrics: &distSQLMetrics,
 	}
 	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*distsqlrun.TestingKnobs)
