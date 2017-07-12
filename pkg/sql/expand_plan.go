@@ -443,8 +443,30 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		n.source.plan = simplifyOrderings(n.source.plan, usefulOrdering)
 
 	case *joinNode:
-		n.left.plan = simplifyOrderings(n.left.plan, nil)
-		n.right.plan = simplifyOrderings(n.right.plan, nil)
+		// In DistSQL, we may take advantage of matching orderings on equality
+		// columns and use merge joins. Preserve the orderings in that case.
+		var usefulLeft, usefulRight sqlbase.ColumnOrdering
+		if n.pred.numLeftCols > 0 {
+			mergeOrd := computeMergeJoinOrdering(
+				planOrdering(n.left.plan),
+				planOrdering(n.right.plan),
+				n.pred.leftEqualityIndices,
+				n.pred.rightEqualityIndices,
+			)
+			if len(mergeOrd) > 0 {
+				usefulLeft = make(sqlbase.ColumnOrdering, len(mergeOrd))
+				usefulRight = make(sqlbase.ColumnOrdering, len(mergeOrd))
+				for i, mergedCol := range mergeOrd {
+					usefulLeft[i].ColIdx = n.pred.leftEqualityIndices[mergedCol.ColIdx]
+					usefulRight[i].ColIdx = n.pred.rightEqualityIndices[mergedCol.ColIdx]
+					usefulLeft[i].Direction = mergedCol.Direction
+					usefulRight[i].Direction = mergedCol.Direction
+				}
+			}
+		}
+
+		n.left.plan = simplifyOrderings(n.left.plan, usefulLeft)
+		n.right.plan = simplifyOrderings(n.right.plan, usefulRight)
 
 	case *ordinalityNode:
 		// The ordinality node either passes through the source ordering, or if

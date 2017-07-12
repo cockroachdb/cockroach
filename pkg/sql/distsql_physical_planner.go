@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -84,7 +85,18 @@ var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", fals
 // If true, for index joins  we instantiate a join reader on every node that
 // has a stream (usually from a table reader). If false, there is a single join
 // reader.
-var distributeIndexJoin = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_DISTRIBUTE_INDEX_JOIN", true)
+var distributeIndexJoin = settings.RegisterBoolSetting(
+	"sql.distsql.distribute_index_joins",
+	"if set, for index joins we instantiate a join reader on every node that has a "+
+		"stream; if not set, we use a single join reader",
+	true,
+)
+
+var planMergeJoins = settings.RegisterBoolSetting(
+	"sql.distsql.merge_joins.enabled",
+	"if set, we plan merge joins when possible",
+	true,
+)
 
 func newDistSQLPlanner(
 	nodeDesc roachpb.NodeDescriptor,
@@ -1221,7 +1233,7 @@ ColLoop:
 		plan.planToStreamColMap[col] = i
 	}
 
-	if distributeIndexJoin && len(plan.ResultRouters) > 1 {
+	if distributeIndexJoin.Get() && len(plan.ResultRouters) > 1 {
 		// Instantiate one join reader for every stream.
 		plan.AddNoGroupingStage(
 			distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
@@ -1316,17 +1328,26 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 
 	// Nodes where we will run the join processors.
 	var nodes []roachpb.NodeID
-	var joinerSpec distsqlrun.HashJoinerSpec
+
+	// We initialize these properties of the joiner. They will then be used to
+	// fill in the processor spec. See descriptions for HashJoinerSpec.
+	var joinType distsqlrun.JoinType
+	var onExpr distsqlrun.Expression
+	var leftEqCols, rightEqCols []uint32
+	var leftMergeOrd, rightMergeOrd distsqlrun.Ordering
+	var mergedColumns bool
 
 	switch n.joinType {
 	case joinTypeInner:
-		joinerSpec.Type = distsqlrun.JoinType_INNER
+		joinType = distsqlrun.JoinType_INNER
 	case joinTypeFullOuter:
-		joinerSpec.Type = distsqlrun.JoinType_FULL_OUTER
+		joinType = distsqlrun.JoinType_FULL_OUTER
 	case joinTypeRightOuter:
-		joinerSpec.Type = distsqlrun.JoinType_RIGHT_OUTER
+		joinType = distsqlrun.JoinType_RIGHT_OUTER
 	case joinTypeLeftOuter:
-		joinerSpec.Type = distsqlrun.JoinType_LEFT_OUTER
+		joinType = distsqlrun.JoinType_LEFT_OUTER
+	default:
+		panic(fmt.Sprintf("invalid join type %d", n.joinType))
 	}
 
 	// Figure out the left and right types.
@@ -1354,13 +1375,42 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		}
 
 		// Set up the equality columns.
-		joinerSpec.LeftEqColumns = make([]uint32, numEq)
+		leftEqCols = make([]uint32, numEq)
 		for i, leftPlanCol := range n.pred.leftEqualityIndices {
-			joinerSpec.LeftEqColumns[i] = uint32(leftPlan.planToStreamColMap[leftPlanCol])
+			leftEqCols[i] = uint32(leftPlan.planToStreamColMap[leftPlanCol])
 		}
-		joinerSpec.RightEqColumns = make([]uint32, numEq)
+		rightEqCols = make([]uint32, numEq)
 		for i, rightPlanCol := range n.pred.rightEqualityIndices {
-			joinerSpec.RightEqColumns[i] = uint32(rightPlan.planToStreamColMap[rightPlanCol])
+			rightEqCols[i] = uint32(rightPlan.planToStreamColMap[rightPlanCol])
+		}
+		if planMergeJoins.Get() && joinType == distsqlrun.JoinType_INNER {
+			mergeOrd := computeMergeJoinOrdering(
+				planOrdering(n.left.plan),
+				planOrdering(n.right.plan),
+				n.pred.leftEqualityIndices,
+				n.pred.rightEqualityIndices,
+			)
+			// TODO(radu): we currently only use merge joins when we have an ordering on
+			// all equality columns. We should relax this by either:
+			//  - implementing a hybrid hash/merge processor which implements merge
+			//    logic on the columns we have an ordering on, and within each merge
+			//    group uses a hashmap on the remaining columns
+			//  - or: adding a sort processor to complete the order
+			if len(mergeOrd) == len(n.pred.leftEqualityIndices) {
+				// Excellent! We can use the merge joiner.
+				leftMergeOrd.Columns = make([]distsqlrun.Ordering_Column, len(mergeOrd))
+				rightMergeOrd.Columns = make([]distsqlrun.Ordering_Column, len(mergeOrd))
+				for i, c := range mergeOrd {
+					leftMergeOrd.Columns[i].ColIdx = leftEqCols[c.ColIdx]
+					rightMergeOrd.Columns[i].ColIdx = rightEqCols[c.ColIdx]
+					dir := distsqlrun.Ordering_Column_ASC
+					if c.Direction == encoding.Descending {
+						dir = distsqlrun.Ordering_Column_DESC
+					}
+					leftMergeOrd.Columns[i].Direction = dir
+					rightMergeOrd.Columns[i].Direction = dir
+				}
+			}
 		}
 	} else {
 		// Without column equality, we cannot distribute the join. Run a
@@ -1411,7 +1461,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 				joinToStreamColMap[joinCol] = addOutCol(uint32(i))
 			} else {
 				// For inner joins, merged columns are always equivalent to the left columns)
-				joinToStreamColMap[joinCol] = addOutCol(joinerSpec.LeftEqColumns[i])
+				joinToStreamColMap[joinCol] = addOutCol(leftEqCols[i])
 			}
 		}
 		joinCol++
@@ -1433,10 +1483,10 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		joinCol++
 	}
 	if mergedColNum != 0 {
-		if mergedColNum != len(joinerSpec.LeftEqColumns) {
+		if mergedColNum != len(leftEqCols) {
 			panic("merged columns number is different from equality columns")
 		}
-		joinerSpec.MergedColumns = true
+		mergedColumns = true
 	}
 
 	if n.pred.onCond != nil {
@@ -1455,7 +1505,29 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		for i := 0; i < n.pred.numRightCols; i++ {
 			joinColMap = append(joinColMap, mergedColNum+rightPlan.planToStreamColMap[i]+len(leftTypes))
 		}
-		joinerSpec.OnExpr = distsqlplan.MakeExpression(n.pred.onCond, joinColMap)
+		onExpr = distsqlplan.MakeExpression(n.pred.onCond, joinColMap)
+	}
+
+	// Create the Core spec.
+	var core distsqlrun.ProcessorCoreUnion
+	if leftMergeOrd.Columns == nil {
+		core.HashJoiner = &distsqlrun.HashJoinerSpec{
+			LeftEqColumns:  leftEqCols,
+			RightEqColumns: rightEqCols,
+			OnExpr:         onExpr,
+			Type:           joinType,
+			MergedColumns:  mergedColumns,
+		}
+	} else {
+		if mergedColumns {
+			panic("merged columns not supported by merge join")
+		}
+		core.MergeJoiner = &distsqlrun.MergeJoinerSpec{
+			LeftOrdering:  leftMergeOrd,
+			RightOrdering: rightMergeOrd,
+			OnExpr:        onExpr,
+			Type:          joinType,
+		}
 	}
 
 	pIdxStart := distsqlplan.ProcessorIdx(len(p.Processors))
@@ -1469,7 +1541,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 					{ColumnTypes: leftTypes},
 					{ColumnTypes: rightTypes},
 				},
-				Core:    distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+				Core:    core,
 				Post:    post,
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 				StageID: stageID,
@@ -1489,7 +1561,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 						{ColumnTypes: leftTypes},
 						{ColumnTypes: rightTypes},
 					},
-					Core:    distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+					Core:    core,
 					Post:    post,
 					Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 					StageID: stageID,
@@ -1502,14 +1574,14 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		for _, resultProc := range leftRouters {
 			p.Processors[resultProc].Spec.Output[0] = distsqlrun.OutputRouterSpec{
 				Type:        distsqlrun.OutputRouterSpec_BY_HASH,
-				HashColumns: joinerSpec.LeftEqColumns,
+				HashColumns: leftEqCols,
 			}
 		}
 		// Set up the right routers.
 		for _, resultProc := range rightRouters {
 			p.Processors[resultProc].Spec.Output[0] = distsqlrun.OutputRouterSpec{
 				Type:        distsqlrun.OutputRouterSpec_BY_HASH,
-				HashColumns: joinerSpec.RightEqColumns,
+				HashColumns: rightEqCols,
 			}
 		}
 	}
@@ -1522,9 +1594,9 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 
 		// Connect left routers to the processor's first input. Currently the join
 		// node doesn't care about the orderings of the left and right results.
-		p.MergeResultStreams(leftRouters, bucket, distsqlrun.Ordering{}, pIdx, 0)
+		p.MergeResultStreams(leftRouters, bucket, leftMergeOrd, pIdx, 0)
 		// Connect right routers to the processor's second input.
-		p.MergeResultStreams(rightRouters, bucket, distsqlrun.Ordering{}, pIdx, 1)
+		p.MergeResultStreams(rightRouters, bucket, rightMergeOrd, pIdx, 1)
 
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}

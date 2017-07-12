@@ -150,6 +150,18 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	return "HashJoiner", details
 }
 
+func (hj *MergeJoinerSpec) summary() (string, []string) {
+	details := make([]string, 1, 2)
+	details[0] = fmt.Sprintf(
+		"left(%s)=right(%s)", hj.LeftOrdering.diagramString(), hj.RightOrdering.diagramString(),
+	)
+
+	if hj.OnExpr.Expr != "" {
+		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr.Expr))
+	}
+	return "MergeJoiner", details
+}
+
 func (s *SorterSpec) summary() (string, []string) {
 	details := []string{s.OutputOrdering.diagramString()}
 	if s.OrderingMatchLen != 0 {
