@@ -9,10 +9,14 @@
 package engineccl
 
 import (
+	"bytes"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -200,4 +204,142 @@ func (i *MVCCIncrementalIterator) UnsafeKey() engine.MVCCKey {
 // the next call to {Next,Reset,Close}.
 func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 	return i.iter.UnsafeValue()
+}
+
+const (
+	// The size of the timestamp portion of MVCC version keys (used to update stats).
+	mvccVersionTimestampSize int64 = 12
+)
+
+// MVCCComputeStats scans the underlying engine from start to end keys and
+// computes stats counters based on the values. This method is used after a
+// range is split to recompute stats for each subrange. The start key is
+// always adjusted to avoid counting local keys in the event stats are being
+// recomputed for the first range (i.e. the one with start key == KeyMin).
+// The nowNanos arg specifies the wall time in nanoseconds since the
+// epoch and is used to compute the total age of all intents.
+//
+// This implementation must match engine/db.cc:MVCCComputeStatsInternal.
+func MVCCComputeStats(
+	iter engine.SimpleIterator, start, end engine.MVCCKey, nowNanos int64,
+) (enginepb.MVCCStats, error) {
+	var ms enginepb.MVCCStats
+
+	meta := &enginepb.MVCCMetadata{}
+	var prevKey []byte
+	first := false
+
+	iter.Seek(start)
+	for ; ; iter.Next() {
+		ok, err := iter.Valid()
+		if err != nil {
+			return ms, err
+		}
+		if !ok || !iter.UnsafeKey().Less(end) {
+			break
+		}
+
+		unsafeKey := iter.UnsafeKey()
+		unsafeValue := iter.UnsafeValue()
+
+		// TODO(dan): There is an EncodedSize method on MVCCKey, but it's
+		// simpler than this. It's used in all sorts of places I didn't want to
+		// audit in this commit, so as a followup, see if we can move this logic
+		// there.
+		encodedKeyLen := len(unsafeKey.Key)
+		if unsafeKey.Timestamp != (hlc.Timestamp{}) {
+			const (
+				timestampSentinelLen = 1
+				walltimeEncodedLen   = 8
+				logicalEncodedLen    = 4
+			)
+			encodedKeyLen += timestampSentinelLen + walltimeEncodedLen
+			if unsafeKey.Timestamp.Logical != 0 {
+				encodedKeyLen += logicalEncodedLen
+			}
+		}
+
+		isSys := bytes.Compare(unsafeKey.Key, keys.LocalMax) < 0
+		isValue := unsafeKey.IsValue()
+		implicitMeta := isValue && !bytes.Equal(unsafeKey.Key, prevKey)
+		prevKey = append(prevKey[:0], unsafeKey.Key...)
+
+		if implicitMeta {
+			// No MVCCMetadata entry for this series of keys.
+			meta.Reset()
+			meta.KeyBytes = mvccVersionTimestampSize
+			meta.ValBytes = int64(len(unsafeValue))
+			meta.Deleted = len(unsafeValue) == 0
+			meta.Timestamp.WallTime = nowNanos
+		}
+
+		if !isValue || implicitMeta {
+			metaKeySize := int64(encodedKeyLen) + 1
+			var metaValSize int64
+			if !implicitMeta {
+				metaValSize = int64(len(unsafeValue))
+			}
+			totalBytes := metaKeySize + metaValSize
+			first = true
+			if err := proto.Unmarshal(unsafeValue, meta); err != nil {
+				return ms, err
+			}
+			if isSys {
+				ms.SysBytes += totalBytes
+				ms.SysCount++
+			} else {
+				if !meta.Deleted {
+					ms.LiveBytes += totalBytes
+					ms.LiveCount++
+				} else {
+					// First value is deleted, so it's GC'able; add meta key & value bytes to age stat.
+					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - meta.Timestamp.WallTime/1E9)
+				}
+				ms.KeyBytes += metaKeySize
+				ms.ValBytes += metaValSize
+				ms.KeyCount++
+				if meta.IsInline() {
+					ms.ValCount++
+				}
+			}
+			if !implicitMeta {
+				continue
+			}
+		} else {
+			totalBytes := int64(len(unsafeValue)) + mvccVersionTimestampSize
+			if isSys {
+				ms.SysBytes += totalBytes
+			} else {
+				if first {
+					first = false
+					if !meta.Deleted {
+						ms.LiveBytes += totalBytes
+					} else {
+						// First value is deleted, so it's GC'able; add key & value bytes to age stat.
+						ms.GCBytesAge += totalBytes * (nowNanos/1E9 - meta.Timestamp.WallTime/1E9)
+					}
+					if meta.Txn != nil {
+						ms.IntentBytes += totalBytes
+						ms.IntentCount++
+						ms.IntentAge += nowNanos/1E9 - meta.Timestamp.WallTime/1E9
+					}
+					if meta.KeyBytes != mvccVersionTimestampSize {
+						return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d", mvccVersionTimestampSize, meta.KeyBytes)
+					}
+					if meta.ValBytes != int64(len(unsafeValue)) {
+						return ms, errors.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(unsafeValue), meta.ValBytes)
+					}
+				} else {
+					// Overwritten value; add value bytes to the GC'able bytes age stat.
+					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - unsafeKey.Timestamp.WallTime/1E9)
+				}
+				ms.KeyBytes += mvccVersionTimestampSize
+				ms.ValBytes += int64(len(unsafeValue))
+				ms.ValCount++
+			}
+		}
+	}
+
+	ms.LastUpdateNanos = nowNanos
+	return ms, nil
 }

@@ -33,7 +33,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 	tempDir, dirCleanupFn := testutils.TempDir(b)
 	defer dirCleanupFn()
 
-	for _, numEntries := range []int{100, 1000, 10000} {
+	for _, numEntries := range []int{100, 1000, 10000, 300000} {
 		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
 			bankData := sampledataccl.BankRows(numEntries)
 			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))

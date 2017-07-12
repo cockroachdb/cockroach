@@ -2222,6 +2222,8 @@ inline int64_t age_factor(int64_t fromNS, int64_t toNS) {
 // in (*MVCCStats).AgeTo. Passing now_nanos in is semantically tricky if there
 // is a chance that we run into values ahead of now_nanos. Instead, now_nanos
 // should be taken as a hint but determined by the max timestamp encountered.
+//
+// This implementation must match engineccl.MVCCComputeStats.
 MVCCStatsResult MVCCComputeStatsInternal(
     ::rocksdb::Iterator *const iter_rep, DBKey start, DBKey end, int64_t now_nanos) {
   MVCCStatsResult stats;
@@ -2311,7 +2313,7 @@ MVCCStatsResult MVCCComputeStatsInternal(
           stats.intent_age += age_factor(meta.timestamp().wall_time(), now_nanos);
         }
         if (meta.key_bytes() != kMVCCVersionTimestampSize) {
-          stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
+          stats.status = FmtStatus("expected mvcc metadata key bytes to equal %d; got %d",
                                    kMVCCVersionTimestampSize, int(meta.key_bytes()));
           break;
         }
