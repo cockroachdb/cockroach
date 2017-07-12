@@ -101,7 +101,7 @@ RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
  && mv osxcross/target /x-tools/x86_64-apple-darwin13 \
  && rm -rf osxcross
 
-# BEGIN https://github.com/docker-library/golang/blob/master/1.8/alpine/Dockerfile
+# BEGIN https://github.com/docker-library/golang/blob/2a15dff/1.8/alpine3.5/Dockerfile
 
 COPY parallelbuilds-go1.8.patch /
 RUN curl -fsSL https://storage.googleapis.com/golang/go1.8.3.src.tar.gz -o golang.tar.gz \
@@ -120,7 +120,7 @@ ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
 WORKDIR $GOPATH
 
-# END https://github.com/docker-library/golang/blob/master/1.8/alpine/Dockerfile
+# END https://github.com/docker-library/golang/blob/2a15dff/1.8/alpine3.5/Dockerfile
 
 RUN chmod -R a+w $(go env GOTOOLDIR)
 
