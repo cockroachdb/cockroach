@@ -200,6 +200,15 @@ func (v *planVisitor) visit(plan planNode) {
 				buf.WriteByte(')')
 				v.observer.attr(name, "equality", buf.String())
 			}
+			if len(n.mergeJoinOrdering) > 0 {
+				// The ordering refers to equality columns
+				eqCols := make(sqlbase.ResultColumns, len(n.pred.leftEqualityIndices))
+				for i := range eqCols {
+					eqCols[i].Name = fmt.Sprintf("(%s=%s)", n.pred.leftColNames[i], n.pred.rightColNames[i])
+				}
+				order := orderingInfo{ordering: n.mergeJoinOrdering}
+				v.observer.attr(name, "mergeJoinOrder", order.AsString(eqCols))
+			}
 		}
 		subplans := v.expr(name, "pred", -1, n.pred.onCond, nil)
 		v.subqueries(name, subplans)

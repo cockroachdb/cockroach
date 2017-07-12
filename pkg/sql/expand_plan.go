@@ -122,6 +122,16 @@ func doExpandPlan(
 			return plan, err
 		}
 		n.right.plan, err = doExpandPlan(ctx, p, noParams, n.right.plan)
+		if err != nil {
+			return plan, err
+		}
+
+		n.mergeJoinOrdering = computeMergeJoinOrdering(
+			planOrdering(n.left.plan),
+			planOrdering(n.right.plan),
+			n.pred.leftEqualityIndices,
+			n.pred.rightEqualityIndices,
+		)
 
 	case *ordinalityNode:
 		// There may be too many columns in the required ordering. Filter them.
@@ -443,8 +453,21 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		n.source.plan = simplifyOrderings(n.source.plan, usefulOrdering)
 
 	case *joinNode:
-		n.left.plan = simplifyOrderings(n.left.plan, nil)
-		n.right.plan = simplifyOrderings(n.right.plan, nil)
+		// In DistSQL, we may take advantage of matching orderings on equality
+		// columns and use merge joins. Preserve the orderings in that case.
+		var usefulLeft, usefulRight sqlbase.ColumnOrdering
+		if len(n.mergeJoinOrdering) > 0 {
+			usefulLeft = make(sqlbase.ColumnOrdering, len(n.mergeJoinOrdering))
+			usefulRight = make(sqlbase.ColumnOrdering, len(n.mergeJoinOrdering))
+			for i, mergedCol := range n.mergeJoinOrdering {
+				usefulLeft[i].ColIdx = n.pred.leftEqualityIndices[mergedCol.ColIdx]
+				usefulRight[i].ColIdx = n.pred.rightEqualityIndices[mergedCol.ColIdx]
+				usefulLeft[i].Direction = mergedCol.Direction
+				usefulRight[i].Direction = mergedCol.Direction
+			}
+		}
+		n.left.plan = simplifyOrderings(n.left.plan, usefulLeft)
+		n.right.plan = simplifyOrderings(n.right.plan, usefulRight)
 
 	case *ordinalityNode:
 		// The ordinality node either passes through the source ordering, or if
