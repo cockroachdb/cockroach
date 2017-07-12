@@ -209,12 +209,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
 	distSenderCfg := kv.DistSenderConfig{
-		AmbientCtx:        s.cfg.AmbientCtx,
-		Clock:             s.clock,
-		RPCContext:        s.rpcContext,
-		RPCRetryOptions:   &retryOpts,
-		SendNextTimeout:   s.cfg.SendNextTimeout,
-		PendingRPCTimeout: s.cfg.PendingRPCTimeout,
+		AmbientCtx:      s.cfg.AmbientCtx,
+		Clock:           s.clock,
+		RPCContext:      s.rpcContext,
+		RPCRetryOptions: &retryOpts,
+	}
+	if distSenderTestingKnobs := s.cfg.TestingKnobs.DistSender; distSenderTestingKnobs != nil {
+		distSenderCfg.TestingKnobs = *distSenderTestingKnobs.(*kv.DistSenderTestingKnobs)
 	}
 	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
 	s.registry.AddMetricStruct(s.distSender.Metrics())
@@ -260,8 +261,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Lease Manager
 	var lmKnobs sql.LeaseManagerTestingKnobs
-	if cfg.TestingKnobs.SQLLeaseManager != nil {
-		lmKnobs = *s.cfg.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
+	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
+		lmKnobs = *leaseManagerTestingKnobs.(*sql.LeaseManagerTestingKnobs)
 	}
 	s.leaseMgr = sql.NewLeaseManager(&s.nodeIDContainer, *s.db, s.clock, lmKnobs,
 		s.stopper, &s.internalMemMetrics)
@@ -328,8 +329,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Counter:             distSQLMetrics.CurBytesCount,
 		Hist:                distSQLMetrics.MaxBytesHist,
 	}
-	if s.cfg.TestingKnobs.DistSQL != nil {
-		distSQLCfg.TestingKnobs = *s.cfg.TestingKnobs.DistSQL.(*distsqlrun.TestingKnobs)
+	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
+		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*distsqlrun.TestingKnobs)
 	}
 
 	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
@@ -369,8 +370,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		EnableEpochRangeLeases: true,
 	}
-	if s.cfg.TestingKnobs.Store != nil {
-		storeCfg.TestingKnobs = *s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs)
+	if storeTestingKnobs := s.cfg.TestingKnobs.Store; storeTestingKnobs != nil {
+		storeCfg.TestingKnobs = *storeTestingKnobs.(*storage.StoreTestingKnobs)
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock, s.nodeLiveness, s.rpcContext.RemoteClocks, s.gossip)
@@ -431,16 +432,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
 		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
 	}
-	if s.cfg.TestingKnobs.SQLExecutor != nil {
-		execCfg.TestingKnobs = s.cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	if sqlExecutorTestingKnobs := s.cfg.TestingKnobs.SQLExecutor; sqlExecutorTestingKnobs != nil {
+		execCfg.TestingKnobs = sqlExecutorTestingKnobs.(*sql.ExecutorTestingKnobs)
 	} else {
-		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
+		execCfg.TestingKnobs = new(sql.ExecutorTestingKnobs)
 	}
-	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
-		execCfg.SchemaChangerTestingKnobs =
-			s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
+	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
+		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)
 	} else {
-		execCfg.SchemaChangerTestingKnobs = &sql.SchemaChangerTestingKnobs{}
+		execCfg.SchemaChangerTestingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
 	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
 	s.registry.AddMetricStruct(s.sqlExecutor)
@@ -801,9 +801,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
-	testingKnobs := &sql.SchemaChangerTestingKnobs{}
+	var testingKnobs *sql.SchemaChangerTestingKnobs
 	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
 		testingKnobs = s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
+	} else {
+		testingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
 	sql.NewSchemaChangeManager(
 		testingKnobs,
