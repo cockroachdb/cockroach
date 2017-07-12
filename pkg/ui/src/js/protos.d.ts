@@ -3596,6 +3596,7 @@ export namespace cockroach {
             }
 
             type DecommissionResponse$Properties = {
+                node_id?: number[];
                 nodes?: cockroach.server.serverpb.DecommissionResponse.Value$Properties[];
             };
 
@@ -3614,6 +3615,12 @@ export namespace cockroach {
                  * @param {cockroach.server.serverpb.DecommissionResponse$Properties=} [properties] Properties to set
                  */
                 constructor(properties?: cockroach.server.serverpb.DecommissionResponse$Properties);
+
+                /**
+                 * DecommissionResponse node_id.
+                 * @type {Array.<number>}
+                 */
+                public node_id: number[];
 
                 /**
                  * DecommissionResponse nodes.

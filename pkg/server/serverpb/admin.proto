@@ -350,7 +350,10 @@ message DecommissionResponse {
     bool decommissioning = 4;
     bool draining = 5;
   }
-  repeated Value nodes = 1 [(gogoproto.nullable) = false];
+  // NodeIDs of affected nodes.
+  repeated int32 node_id = 1 [(gogoproto.customname) = "NodeID"];
+  // Value of all nodes.
+  repeated Value nodes = 2 [(gogoproto.nullable) = false];
 }
 
 // SettingsRequest inquires what are the current settings in the cluster.

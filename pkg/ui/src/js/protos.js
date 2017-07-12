@@ -6426,6 +6426,7 @@ export const cockroach = $root.cockroach = (() => {
                  * Properties of a DecommissionResponse.
                  * @typedef cockroach.server.serverpb.DecommissionResponse$Properties
                  * @type {Object}
+                 * @property {Array.<number>} [node_id] DecommissionResponse node_id.
                  * @property {Array.<cockroach.server.serverpb.DecommissionResponse.Value$Properties>} [nodes] DecommissionResponse nodes.
                  */
 
@@ -6436,12 +6437,19 @@ export const cockroach = $root.cockroach = (() => {
                  * @param {cockroach.server.serverpb.DecommissionResponse$Properties=} [properties] Properties to set
                  */
                 function DecommissionResponse(properties) {
+                    this.node_id = [];
                     this.nodes = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                             if (properties[keys[i]] != null)
                                 this[keys[i]] = properties[keys[i]];
                 }
+
+                /**
+                 * DecommissionResponse node_id.
+                 * @type {Array.<number>}
+                 */
+                DecommissionResponse.prototype.node_id = $util.emptyArray;
 
                 /**
                  * DecommissionResponse nodes.
@@ -6467,9 +6475,15 @@ export const cockroach = $root.cockroach = (() => {
                 DecommissionResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
+                    if (message.node_id != null && message.node_id.length) {
+                        writer.uint32(/* id 1, wireType 2 =*/10).fork();
+                        for (let i = 0; i < message.node_id.length; ++i)
+                            writer.int32(message.node_id[i]);
+                        writer.ldelim();
+                    }
                     if (message.nodes != null && message.nodes.length)
                         for (let i = 0; i < message.nodes.length; ++i)
-                            $root.cockroach.server.serverpb.DecommissionResponse.Value.encode(message.nodes[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                            $root.cockroach.server.serverpb.DecommissionResponse.Value.encode(message.nodes[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                     return writer;
                 };
 
@@ -6499,6 +6513,16 @@ export const cockroach = $root.cockroach = (() => {
                         let tag = reader.uint32();
                         switch (tag >>> 3) {
                         case 1:
+                            if (!(message.node_id && message.node_id.length))
+                                message.node_id = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.node_id.push(reader.int32());
+                            } else
+                                message.node_id.push(reader.int32());
+                            break;
+                        case 2:
                             if (!(message.nodes && message.nodes.length))
                                 message.nodes = [];
                             message.nodes.push($root.cockroach.server.serverpb.DecommissionResponse.Value.decode(reader, reader.uint32()));
@@ -6532,6 +6556,13 @@ export const cockroach = $root.cockroach = (() => {
                 DecommissionResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id")) {
+                        if (!Array.isArray(message.node_id))
+                            return "node_id: array expected";
+                        for (let i = 0; i < message.node_id.length; ++i)
+                            if (!$util.isInteger(message.node_id[i]))
+                                return "node_id: integer[] expected";
+                    }
                     if (message.nodes != null && message.hasOwnProperty("nodes")) {
                         if (!Array.isArray(message.nodes))
                             return "nodes: array expected";
@@ -6553,6 +6584,13 @@ export const cockroach = $root.cockroach = (() => {
                     if (object instanceof $root.cockroach.server.serverpb.DecommissionResponse)
                         return object;
                     let message = new $root.cockroach.server.serverpb.DecommissionResponse();
+                    if (object.node_id) {
+                        if (!Array.isArray(object.node_id))
+                            throw TypeError(".cockroach.server.serverpb.DecommissionResponse.node_id: array expected");
+                        message.node_id = [];
+                        for (let i = 0; i < object.node_id.length; ++i)
+                            message.node_id[i] = object.node_id[i] | 0;
+                    }
                     if (object.nodes) {
                         if (!Array.isArray(object.nodes))
                             throw TypeError(".cockroach.server.serverpb.DecommissionResponse.nodes: array expected");
@@ -6585,8 +6623,15 @@ export const cockroach = $root.cockroach = (() => {
                     if (!options)
                         options = {};
                     let object = {};
-                    if (options.arrays || options.defaults)
+                    if (options.arrays || options.defaults) {
+                        object.node_id = [];
                         object.nodes = [];
+                    }
+                    if (message.node_id && message.node_id.length) {
+                        object.node_id = [];
+                        for (let j = 0; j < message.node_id.length; ++j)
+                            object.node_id[j] = message.node_id[j];
+                    }
                     if (message.nodes && message.nodes.length) {
                         object.nodes = [];
                         for (let j = 0; j < message.nodes.length; ++j)

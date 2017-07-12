@@ -480,4 +480,11 @@ If specified, takes priority over host/port flags.`,
 If specified, print the system config contents. Beware that the output will be
 long and not particularly human-readable.`,
 	}
+
+	Decommission = FlagInfo{
+		Name: "decommission",
+		Description: `
+If specified, decommissions the node and waits for it to rebalance before
+shutting down the node.`,
+	}
 )

@@ -1095,13 +1095,20 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 func (s *adminServer) Decommission(
 	ctx context.Context, req *serverpb.DecommissionRequest,
 ) (*serverpb.DecommissionResponse, error) {
-	nodeIDs := make([]roachpb.NodeID, len(req.NodeID))
-	for i, sNodeID := range req.NodeID {
-		if nodeID, err := strconv.Atoi(sNodeID); err == nil {
-			nodeIDs[i] = roachpb.NodeID(nodeID)
-		} else {
-			return nil, err
+	var nodeIDs []roachpb.NodeID
+	if len(req.NodeID) > 0 {
+		nodeIDs = make([]roachpb.NodeID, len(req.NodeID))
+		for i, sNodeID := range req.NodeID {
+			if nodeID, err := strconv.Atoi(sNodeID); err == nil {
+				nodeIDs[i] = roachpb.NodeID(nodeID)
+			} else {
+				return nil, err
+			}
 		}
+	} else {
+		// If no NodeIDs are specified, decommission the current node. This is
+		// used by `quit --decommission`
+		nodeIDs = []roachpb.NodeID{s.server.NodeID()}
 	}
 	s.server.Decommission(req.Decommissioning, nodeIDs)
 	// Get the number of replicas on each node.
@@ -1125,7 +1132,11 @@ func (s *adminServer) Decommission(
 	ls := nl.GetLivenesses()
 	// Construct response.
 	res := serverpb.DecommissionResponse{
-		Nodes: make([]serverpb.DecommissionResponse_Value, len(ls)),
+		NodeID: make([]int32, len(nodeIDs)),
+		Nodes:  make([]serverpb.DecommissionResponse_Value, len(ls)),
+	}
+	for i, nodeID := range nodeIDs {
+		res.NodeID[i] = int32(nodeID)
 	}
 	for i, l := range ls {
 		res.Nodes[i] = serverpb.DecommissionResponse_Value{}

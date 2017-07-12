@@ -707,6 +707,35 @@ func checkNodeRunning(ctx context.Context, c serverpb.AdminClient) error {
 	return nil
 }
 
+// doDecommission sets the current node to decommissioning and waits until
+// it is safe (i.e. no data loss) before returning.
+func doDecommission(ctx context.Context, c serverpb.AdminClient) error {
+	req := &serverpb.DecommissionRequest{
+		NodeID:          []string{},
+		Decommissioning: true,
+	}
+	var err error
+	var res *serverpb.DecommissionResponse
+
+	for res, err = c.Decommission(ctx, req); err == nil; res, err = c.Decommission(ctx, req) {
+		if len(res.NodeID) != 1 {
+			return fmt.Errorf(
+				"requested decommission of a single node but response had %d nodes",
+				len(res.NodeID))
+		}
+		for _, node := range res.Nodes {
+			if node.NodeID != res.NodeID[0] {
+				continue
+			}
+			if node.Decommissioning && node.ReplicaCount == 0 {
+				break
+			}
+		}
+		time.Sleep(10 * time.Second)
+	}
+	return err
+}
+
 // doShutdown attempts to trigger a server shutdown. When given an empty
 // onModes slice, it's a hard shutdown.
 //
@@ -769,6 +798,11 @@ func runQuit(_ *cobra.Command, _ []string) (err error) {
 	ctx := stopperContext(stopper)
 	defer stopper.Stop(ctx)
 
+	if serverDecommission {
+		if err := doDecommission(ctx, c); err != nil {
+			return err
+		}
+	}
 	errChan := make(chan error, 1)
 	go func() {
 		errChan <- doShutdown(ctx, c, onModes)
