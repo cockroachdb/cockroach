@@ -202,9 +202,9 @@ func doExpandPlan(
 		ordering := planOrdering(n.plan)
 		if !ordering.isEmpty() {
 			n.columnsInOrder = make([]bool, len(planColumns(n.plan)))
-			for colIdx := range ordering.exactMatchCols {
+			ordering.exactMatchCols.ForEach(func(colIdx uint32) {
 				n.columnsInOrder[colIdx] = true
-			}
+			})
 			for _, c := range ordering.ordering {
 				n.columnsInOrder[c.ColIdx] = true
 			}
@@ -502,13 +502,13 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 			// the useful ordering. Check for this, ignoring any exact match columns.
 			sortOrder := make(sqlbase.ColumnOrdering, 0, len(n.ordering))
 			for _, c := range n.ordering {
-				if _, ok := exactMatchCols[c.ColIdx]; !ok {
+				if !exactMatchCols.Contains(uint32(c.ColIdx)) {
 					sortOrder = append(sortOrder, c)
 				}
 			}
 			givenOrder := make(sqlbase.ColumnOrdering, 0, len(usefulOrdering))
 			for _, c := range usefulOrdering {
-				if _, ok := exactMatchCols[c.ColIdx]; !ok {
+				if !exactMatchCols.Contains(uint32(c.ColIdx)) {
 					givenOrder = append(givenOrder, c)
 				}
 			}
