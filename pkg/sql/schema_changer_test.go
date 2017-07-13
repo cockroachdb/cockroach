@@ -532,9 +532,6 @@ func TestRaceWithBackfill(t *testing.T) {
 	var mu syncutil.Mutex
 	var backfillNotification chan struct{}
 
-	var partialBackfillDone atomic.Value
-	partialBackfillDone.Store(false)
-	var partialBackfill bool
 	const numNodes, chunkSize, maxValue = 5, 100, 4000
 	params, _ := createTestServerParams()
 	initBackfillNotification := func() chan struct{} {
@@ -557,9 +554,7 @@ func TestRaceWithBackfill(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				if !partialBackfill {
-					notifyBackfill()
-				}
+				notifyBackfill()
 				return nil
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
@@ -567,17 +562,7 @@ func TestRaceWithBackfill(t *testing.T) {
 		},
 		DistSQL: &distsqlrun.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				if partialBackfill {
-					if partialBackfillDone.Load().(bool) {
-						notifyBackfill()
-						// Returning DeadlineExceeded will result in the
-						// schema change being retried.
-						return context.DeadlineExceeded
-					}
-					partialBackfillDone.Store(true)
-				} else {
-					notifyBackfill()
-				}
+				notifyBackfill()
 				return nil
 			},
 		},
@@ -693,16 +678,90 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
+}
 
-	// Verify that a table delete in the middle of a backfill works properly.
-	// The backfill will terminate in the middle, and the delete will
-	// successfully delete all the table data.
-	//
-	// This test could be made its own test but is placed here to speed up the
-	// testing.
+// Test that a table drop in the middle of a backfill works properly.
+// The backfill will terminate in the middle, and the drop will
+// successfully delete all the table data.
+func TestDropWhileBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// protects backfillNotification
+	var mu syncutil.Mutex
+	backfillNotification := make(chan struct{})
 
-	notification := initBackfillNotification()
-	partialBackfill = true
+	var partialBackfillDone atomic.Value
+	partialBackfillDone.Store(false)
+	const numNodes, chunkSize, maxValue = 5, 100, 4000
+	params, _ := createTestServerParams()
+	notifyBackfill := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if backfillNotification != nil {
+			// Close channel to notify that the backfill has started.
+			close(backfillNotification)
+			backfillNotification = nil
+		}
+	}
+	// Disable asynchronous schema change execution to allow synchronous path
+	// to trigger start of backfill notification.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				if partialBackfillDone.Load().(bool) {
+					notifyBackfill()
+					// Returning DeadlineExceeded will result in the
+					// schema change being retried.
+					return context.DeadlineExceeded
+				}
+				partialBackfillDone.Store(true)
+				return nil
+			},
+		},
+	}
+
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop(context.TODO())
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	sqlDB := tc.ServerConn(0)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+CREATE UNIQUE INDEX vidx ON t.test (v);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Split the table into multiple ranges.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// SplitTable moves the right range, so we split things back to front
+	// in order to move less data.
+	for i := numNodes - 1; i > 0; i-- {
+		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	}
+
+	ctx := context.TODO()
+
+	// number of keys == 2 * number of rows; 1 column family and 1 index entry
+	// for each row.
+	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	notification := backfillNotification
 	// Run the schema change in a separate goroutine.
 	var wg sync.WaitGroup
 	wg.Add(1)
