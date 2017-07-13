@@ -163,7 +163,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 				if err != nil {
 					t.Fatal(err)
 				}
-				tables = append(tables, table)
+				tables = append(tables, *table)
 				expiration = exp
 				if err := leaseManager.Release(table); err != nil {
 					t.Fatal(err)
@@ -252,7 +252,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.ID != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
 	}
-	if err := leaseManager.Release(lease.TableDescriptor); err != nil {
+	if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
 		t.Fatal(err)
 	}
 
@@ -279,7 +279,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.ID != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
 	}
-	if err := leaseManager.Release(lease.TableDescriptor); err != nil {
+	if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -312,7 +312,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock()); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
 	} else {
-		if err := leaseManager.Release(lease.TableDescriptor); err != nil {
+		if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -383,7 +383,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Populate the name cache.
-	var table sqlbase.TableDescriptor
+	var table *sqlbase.TableDescriptor
 	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		var err error
 		table, _, err = leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
@@ -404,7 +404,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Release.
 	// tableChan acts as a barrier, synchornizing the two routines at every
 	// iteration.
-	tableChan := make(chan sqlbase.TableDescriptor)
+	tableChan := make(chan *sqlbase.TableDescriptor)
 	errChan := make(chan error)
 	go func() {
 		for table := range tableChan {
@@ -414,7 +414,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}()
 
 	for i := 0; i < 50; i++ {
-		var tableByName sqlbase.TableDescriptor
+		var tableByName *sqlbase.TableDescriptor
 		if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			var err error
 			table, _, err := leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")

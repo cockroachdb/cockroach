@@ -752,7 +752,7 @@ func (t *tableState) acquireNodeLease(
 	return table, nil
 }
 
-func (t *tableState) release(table sqlbase.TableDescriptor, m *LeaseManager) error {
+func (t *tableState) release(table *sqlbase.TableDescriptor, m *LeaseManager) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -863,7 +863,7 @@ func (t *tableState) purgeOldLeases(
 	if dropped := err == errTableDropped; dropped || err == nil {
 		releaseInactives(dropped)
 		if table != nil {
-			return t.release(table.TableDescriptor, m)
+			return t.release(&table.TableDescriptor, m)
 		}
 		return nil
 	}
@@ -939,7 +939,7 @@ func (c *tableNameCache) get(
 	}
 	table.mu.Lock()
 	defer table.mu.Unlock()
-	if !nameMatchesTable(table.TableDescriptor, dbID, tableName) {
+	if !nameMatchesTable(&table.TableDescriptor, dbID, tableName) {
 		panic(fmt.Sprintf("Out of sync entry in the name cache. "+
 			"Cache entry: %d.%q -> %d. Lease: %d.%q.",
 			dbID, tableName, table.ID, table.ParentID, table.Name))
@@ -1066,7 +1066,7 @@ func NewLeaseManager(
 	return lm
 }
 
-func nameMatchesTable(table sqlbase.TableDescriptor, dbID sqlbase.ID, tableName string) bool {
+func nameMatchesTable(table *sqlbase.TableDescriptor, dbID sqlbase.ID, tableName string) bool {
 	return table.ParentID == dbID && table.Name == tableName
 }
 
@@ -1075,11 +1075,11 @@ func nameMatchesTable(table sqlbase.TableDescriptor, dbID sqlbase.ID, tableName 
 // lease manager knows about.
 func (m *LeaseManager) AcquireByName(
 	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, tableName string,
-) (sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
 	// Check if we have cached an ID for this name.
 	tableVersion := m.tableNames.get(dbID, tableName, m.clock)
 	if tableVersion != nil {
-		return tableVersion.TableDescriptor, tableVersion.expiration, nil
+		return &tableVersion.TableDescriptor, tableVersion.expiration, nil
 	}
 
 	// We failed to find something in the cache, or what we found is not
@@ -1089,11 +1089,11 @@ func (m *LeaseManager) AcquireByName(
 	var err error
 	tableID, err := m.resolveName(ctx, txn, dbID, tableName)
 	if err != nil {
-		return sqlbase.TableDescriptor{}, hlc.Timestamp{}, err
+		return nil, hlc.Timestamp{}, err
 	}
 	table, expiration, err := m.Acquire(ctx, txn, tableID, 0)
 	if err != nil {
-		return sqlbase.TableDescriptor{}, hlc.Timestamp{}, err
+		return nil, hlc.Timestamp{}, err
 	}
 	if !nameMatchesTable(table, dbID, tableName) {
 		// We resolved name `tableName`, but the lease has a different name in it.
@@ -1133,7 +1133,7 @@ func (m *LeaseManager) AcquireByName(
 		}
 		table, expiration, err = m.acquireFreshestFromStore(ctx, txn, tableID)
 		if err != nil {
-			return sqlbase.TableDescriptor{}, hlc.Timestamp{}, err
+			return nil, hlc.Timestamp{}, err
 		}
 		if !nameMatchesTable(table, dbID, tableName) {
 			// If the name we had doesn't match the newest descriptor in the DB, then
@@ -1141,7 +1141,7 @@ func (m *LeaseManager) AcquireByName(
 			if err := m.Release(table); err != nil {
 				log.Warningf(ctx, "error releasing lease: %s", err)
 			}
-			return sqlbase.TableDescriptor{}, hlc.Timestamp{}, sqlbase.ErrDescriptorNotFound
+			return nil, hlc.Timestamp{}, sqlbase.ErrDescriptorNotFound
 		}
 	}
 	return table, expiration, nil
@@ -1174,16 +1174,16 @@ func (m *LeaseManager) resolveName(
 // it.
 func (m *LeaseManager) Acquire(
 	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, version sqlbase.DescriptorVersion,
-) (sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
 	table, err := t.acquire(ctx, txn, version, m)
 	if m.LeaseStore.testingKnobs.LeaseAcquiredEvent != nil {
 		m.LeaseStore.testingKnobs.LeaseAcquiredEvent(table.TableDescriptor, err)
 	}
 	if err != nil {
-		return sqlbase.TableDescriptor{}, hlc.Timestamp{}, err
+		return nil, hlc.Timestamp{}, err
 	}
-	return table.TableDescriptor, table.expiration, nil
+	return &table.TableDescriptor, table.expiration, nil
 }
 
 // acquireFreshestFromStore acquires a new lease from the store. The returned
@@ -1193,25 +1193,25 @@ func (m *LeaseManager) Acquire(
 // along with the table descriptor.
 func (m *LeaseManager) acquireFreshestFromStore(
 	ctx context.Context, txn *client.Txn, tableID sqlbase.ID,
-) (sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err := t.acquireFreshestFromStoreLocked(
 		ctx, txn, 0 /* version */, m,
 	); err != nil {
-		return sqlbase.TableDescriptor{}, hlc.Timestamp{}, err
+		return nil, hlc.Timestamp{}, err
 	}
 	table := t.active.findNewest()
 	if table == nil {
 		panic("no lease in active set after having just acquired one")
 	}
 	table.incRefcount()
-	return table.TableDescriptor, table.expiration, nil
+	return &table.TableDescriptor, table.expiration, nil
 }
 
 // Release releases a previously acquired table.
-func (m *LeaseManager) Release(desc sqlbase.TableDescriptor) error {
+func (m *LeaseManager) Release(desc *sqlbase.TableDescriptor) error {
 	t := m.findTableState(desc.ID, false /* create */)
 	if t == nil {
 		return errors.Errorf("table %d not found", desc.ID)

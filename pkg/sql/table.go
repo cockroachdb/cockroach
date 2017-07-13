@@ -314,13 +314,14 @@ func (tc *TableCollection) getTableVersion(
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
-	for _, table := range tc.tables {
+	for i := range tc.tables {
+		table := &tc.tables[i]
 		if table.Name == string(tn.TableName) &&
 			table.ParentID == dbID {
 			if log.V(2) {
 				log.Infof(ctx, "found table in table collection for table '%s'", tn)
 			}
-			return &table, nil
+			return table, nil
 		}
 	}
 
@@ -334,14 +335,14 @@ func (tc *TableCollection) getTableVersion(
 		return nil, err
 	}
 	tc.timestamp = txn.OrigTimestamp()
-	tc.tables = append(tc.tables, table)
+	tc.tables = append(tc.tables, *table)
 	if log.V(2) {
 		log.Infof(ctx, "added table '%s' to table collection", tn)
 	}
 	// If the table we just acquired expires before the txn's deadline, reduce
 	// the deadline.
 	txn.UpdateDeadlineMaybe(expiration)
-	return &table, nil
+	return &tc.tables[len(tc.tables)-1], nil
 }
 
 // getTableVersionByID is a by-ID variant of getTableVersion (i.e. uses same cache).
@@ -369,12 +370,13 @@ func (tc *TableCollection) getTableVersionByID(
 
 	// First, look to see if we already have the table -- including those
 	// via `getTableVersion`.
-	for _, table := range tc.tables {
+	for i := range tc.tables {
+		table := &tc.tables[i]
 		if table.ID == tableID {
 			if log.V(2) {
 				log.Infof(ctx, "found table %d in table cache", tableID)
 			}
-			return &table, nil
+			return table, nil
 		}
 	}
 
@@ -389,22 +391,22 @@ func (tc *TableCollection) getTableVersionByID(
 		return nil, err
 	}
 	tc.timestamp = txn.OrigTimestamp()
-	tc.tables = append(tc.tables, table)
+	tc.tables = append(tc.tables, *table)
 	if log.V(2) {
 		log.Infof(ctx, "added table '%s' to table collection", table.Name)
 	}
 	// If the table we just acquired expires before the txn's deadline, reduce
 	// the deadline.
 	txn.UpdateDeadlineMaybe(expiration)
-	return &table, nil
+	return &tc.tables[len(tc.tables)-1], nil
 }
 
 // releaseTables releases all tables currently held by the Session.
 func (tc *TableCollection) releaseTables(ctx context.Context) {
 	if tc.tables != nil {
 		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
-		for _, table := range tc.tables {
-			if err := tc.leaseMgr.Release(table); err != nil {
+		for i := range tc.tables {
+			if err := tc.leaseMgr.Release(&tc.tables[i]); err != nil {
 				log.Warning(ctx, err)
 			}
 		}
