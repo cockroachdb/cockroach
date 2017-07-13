@@ -290,6 +290,8 @@ message HashJoinerSpec {
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
+
+  optional uint32 merged_columns = 7 [(gogoproto.nullable) = false];
 }
 
 // AggregatorSpec is the specification for an "aggregator" (processor core

@@ -1392,7 +1392,8 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	//  - the columns on the left side (numLeftCols)
 	//  - the columns on the right side (numRightCols)
 	joinCol := 0
-	for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
+	mergedColNum := n.pred.numMergedEqualityColumns
+	for i := 0; i < mergedColNum; i++ {
 		if !n.columns[joinCol].Omitted {
 			// TODO(radu): for full outer joins, this will be more tricky: we would
 			// need an output column that outputs either the left or the right
@@ -1404,18 +1405,19 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	for i := 0; i < n.pred.numLeftCols; i++ {
 		if !n.columns[joinCol].Omitted {
 			joinToStreamColMap[joinCol] = addOutCol(
-				uint32(n.pred.numMergedEqualityColumns + leftPlan.planToStreamColMap[i]))
+				uint32(mergedColNum + leftPlan.planToStreamColMap[i]))
 		}
 		joinCol++
 	}
 	for i := 0; i < n.pred.numRightCols; i++ {
 		if !n.columns[joinCol].Omitted {
 			joinToStreamColMap[joinCol] = addOutCol(
-				uint32(n.pred.numMergedEqualityColumns + rightPlan.planToStreamColMap[i] + len(leftTypes)),
+				uint32(mergedColNum + rightPlan.planToStreamColMap[i] + len(leftTypes)),
 			)
 		}
 		joinCol++
 	}
+	joinerSpec.MergedColumns = uint32(mergedColNum)
 
 	if n.pred.onCond != nil {
 		// We have to remap ordinal references in the on condition (which refer to
@@ -1423,15 +1425,15 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		// joiner (0 to N-1 for the left input columns, N to N+M-1 for the right
 		// input columns).
 		joinColMap := make([]int, 0, len(n.columns))
-		for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
+		for i := 0; i < mergedColNum; i++ {
 			// Merged column. See TODO above.
 			joinColMap = append(joinColMap, int(joinerSpec.LeftEqColumns[i]))
 		}
 		for i := 0; i < n.pred.numLeftCols; i++ {
-			joinColMap = append(joinColMap, leftPlan.planToStreamColMap[i])
+			joinColMap = append(joinColMap, mergedColNum+leftPlan.planToStreamColMap[i])
 		}
 		for i := 0; i < n.pred.numRightCols; i++ {
-			joinColMap = append(joinColMap, rightPlan.planToStreamColMap[i]+len(leftTypes))
+			joinColMap = append(joinColMap, mergedColNum+rightPlan.planToStreamColMap[i]+len(leftTypes))
 		}
 		joinerSpec.OnExpr = distsqlplan.MakeExpression(n.pred.onCond, joinColMap)
 	}
