@@ -440,7 +440,7 @@ func TestStyle(t *testing.T) {
 		t.Parallel()
 		// `go tool vet` is a special snowflake that emits all its output on
 		// `stderr.
-		cmd := exec.Command("go", "tool", "vet", "-all", "-shadow", "-printfuncs",
+		cmd := exec.Command("go", "tool", "vet", "-source", "-all", "-shadow", "-printfuncs",
 			strings.Join([]string{
 				"Info:1",
 				"Infof:1",
