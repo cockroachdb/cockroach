@@ -290,6 +290,10 @@ message HashJoinerSpec {
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
+
+  // Number of extra merged columns that are added in case of OUTER JOINS.
+  // These columns occupy first positions in a row.
+  optional uint32 num_merged_columns = 7 [(gogoproto.nullable) = false];
 }
 
 // AggregatorSpec is the specification for an "aggregator" (processor core

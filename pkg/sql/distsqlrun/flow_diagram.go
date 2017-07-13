@@ -132,7 +132,7 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 }
 
 func (hj *HashJoinerSpec) summary() (string, []string) {
-	details := make([]string, 0, 2)
+	details := make([]string, 0, 3)
 
 	if len(hj.LeftEqColumns) > 0 {
 		details = append(details, fmt.Sprintf(
@@ -143,6 +143,10 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	if hj.OnExpr.Expr != "" {
 		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr.Expr))
 	}
+	if hj.NumMergedColumns != 0 {
+		details = append(details, fmt.Sprintf("Merged columns: %d", hj.NumMergedColumns))
+	}
+
 	return "HashJoiner", details
 }
 

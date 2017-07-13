@@ -53,7 +53,8 @@ func newMergeJoiner(
 	}
 
 	m := &mergeJoiner{}
-	err := m.joinerBase.init(flowCtx, leftSource, rightSource, spec.Type, spec.OnExpr, post, output)
+	// TODO: Adapt MergeJoiner to new joinerBase constructor.
+	err := m.joinerBase.init(flowCtx, leftSource, rightSource, spec.Type, spec.OnExpr, nil, nil, 0, post, output)
 	if err != nil {
 		return nil, err
 	}
