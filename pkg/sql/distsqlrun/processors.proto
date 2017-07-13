@@ -272,9 +272,16 @@ message MergeJoinerSpec {
 // left row (i+1).
 //
 // The "internal columns" of a HashJoiner (see ProcessorSpec) are the
-// concatenation of left input columns and right input columns. If the left
-// input has N columns and the right input has M columns, the first N columns
-// contain values from the left side and the following M columns contain values
+// concatenation of merged columns (if present), left input columns and right
+// input columns. Each merged column corresponds to a left and a right equality
+// column; its value is the value on the left if it is not NULL, otherwise it is
+// the value on the right. There are either zero or
+// E=len(left_eq_columns)=len(right_eq_columns) merged columns.
+//
+// If the left input has N columns and the right input has M columns, the
+// first N columns contain values from the left side and the following M columns
+// contain values from the right side. If merged columns are present, they
+// occupy first E positions followed by N values from the left side and M values
 // from the right side.
 message HashJoinerSpec {
   // The join constraints certain columns from the left stream to equal
@@ -287,9 +294,16 @@ message HashJoinerSpec {
   // stream has M columns, in this expression variables @1 to @N refer to
   // columns of the left stream and variables @N to @(N+M) refer to columns in
   // the right stream.
+  // Having "ON" expression implies no merged columns.
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
+
+  // Extra merged columns that are added in case of OUTER JOINS.
+  // These columns occupy first positions in a row and have a value
+  // either from left or right stream whatever not NULL. In INNER JOIN case
+  // no merged columns are needed since left stream values guaranteed to be not NULL.
+  optional bool merged_columns = 7 [(gogoproto.nullable) = false];
 }
 
 // AggregatorSpec is the specification for an "aggregator" (processor core

@@ -247,9 +247,6 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return rec, nil
 
 	case *joinNode:
-		if n.joinType != joinTypeInner {
-			return 0, newQueryNotSupportedError("only inner join supported")
-		}
 		if err := dsp.checkExpr(n.pred.onCond); err != nil {
 			return 0, err
 		}
@@ -1321,10 +1318,16 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	var nodes []roachpb.NodeID
 	var joinerSpec distsqlrun.HashJoinerSpec
 
-	if n.joinType != joinTypeInner {
-		panic("only inner join supported for now")
+	switch n.joinType {
+	case joinTypeInner:
+		joinerSpec.Type = distsqlrun.JoinType_INNER
+	case joinTypeFullOuter:
+		joinerSpec.Type = distsqlrun.JoinType_FULL_OUTER
+	case joinTypeRightOuter:
+		joinerSpec.Type = distsqlrun.JoinType_RIGHT_OUTER
+	case joinTypeLeftOuter:
+		joinerSpec.Type = distsqlrun.JoinType_LEFT_OUTER
 	}
-	joinerSpec.Type = distsqlrun.JoinType_INNER
 
 	// Figure out the left and right types.
 	leftTypes := leftPlan.ResultTypes
@@ -1389,29 +1392,47 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	//  - the columns on the left side (numLeftCols)
 	//  - the columns on the right side (numRightCols)
 	joinCol := 0
+
+	// In case of INNER joins there is no need there is no need for merged columns;
+	// the left equality columns are used instead.
+	// In case of OUTER joins we add extra `mergedColNum` columns and they
+	// occupy first positions in a row. Remaining left and right columns will
+	// have a corresponding "offset"
+	var mergedColNum int
+	if n.joinType == joinTypeInner {
+		mergedColNum = 0
+	} else {
+		mergedColNum = n.pred.numMergedEqualityColumns
+	}
 	for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
 		if !n.columns[joinCol].Omitted {
-			// TODO(radu): for full outer joins, this will be more tricky: we would
-			// need an output column that outputs either the left or the right
-			// equality column, whichever is not NULL.
-			joinToStreamColMap[joinCol] = addOutCol(joinerSpec.LeftEqColumns[i])
+			if mergedColNum != 0 {
+				// Reserve place for new merged columns
+				joinToStreamColMap[joinCol] = addOutCol(uint32(i))
+			} else {
+				// For inner joins, merged columns are always equivalent to the left columns)
+				joinToStreamColMap[joinCol] = addOutCol(joinerSpec.LeftEqColumns[i])
+			}
 		}
 		joinCol++
 	}
+
 	for i := 0; i < n.pred.numLeftCols; i++ {
 		if !n.columns[joinCol].Omitted {
-			joinToStreamColMap[joinCol] = addOutCol(uint32(leftPlan.planToStreamColMap[i]))
+			joinToStreamColMap[joinCol] = addOutCol(
+				uint32(mergedColNum + leftPlan.planToStreamColMap[i]))
 		}
 		joinCol++
 	}
 	for i := 0; i < n.pred.numRightCols; i++ {
 		if !n.columns[joinCol].Omitted {
 			joinToStreamColMap[joinCol] = addOutCol(
-				uint32(rightPlan.planToStreamColMap[i] + len(leftTypes)),
+				uint32(mergedColNum + rightPlan.planToStreamColMap[i] + len(leftTypes)),
 			)
 		}
 		joinCol++
 	}
+	joinerSpec.MergedColumns = mergedColNum != 0
 
 	if n.pred.onCond != nil {
 		// We have to remap ordinal references in the on condition (which refer to
@@ -1419,15 +1440,15 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		// joiner (0 to N-1 for the left input columns, N to N+M-1 for the right
 		// input columns).
 		joinColMap := make([]int, 0, len(n.columns))
-		for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
-			// Merged column. See TODO above.
-			joinColMap = append(joinColMap, int(joinerSpec.LeftEqColumns[i]))
+		// There should be no merged columns when ON clause is present
+		if n.pred.numMergedEqualityColumns != 0 {
+			panic("merged columns with ON condition")
 		}
 		for i := 0; i < n.pred.numLeftCols; i++ {
-			joinColMap = append(joinColMap, leftPlan.planToStreamColMap[i])
+			joinColMap = append(joinColMap, mergedColNum+leftPlan.planToStreamColMap[i])
 		}
 		for i := 0; i < n.pred.numRightCols; i++ {
-			joinColMap = append(joinColMap, rightPlan.planToStreamColMap[i]+len(leftTypes))
+			joinColMap = append(joinColMap, mergedColNum+rightPlan.planToStreamColMap[i]+len(leftTypes))
 		}
 		joinerSpec.OnExpr = distsqlplan.MakeExpression(n.pred.onCond, joinColMap)
 	}
