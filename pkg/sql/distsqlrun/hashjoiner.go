@@ -115,6 +115,14 @@ func newHashJoiner(
 	h.rows[leftSide] = makeRowContainer(nil /* ordering */, leftSource.Types(), &flowCtx.evalCtx)
 	h.rows[rightSide] = makeRowContainer(nil /* ordering */, rightSource.Types(), &flowCtx.evalCtx)
 
+	if spec.OnExpr.Expr == "" {
+		// `USING` or `NATURAL` join, should output merged columns
+		// TODO: move into joinerBase ctor
+		h.numMergedEqualityColumns = len(h.eqCols[leftSide])
+		h.leftEqualityIndices = h.eqCols[leftSide]
+		h.rightEqualityIndices = h.eqCols[rightSide]
+	}
+
 	if err := h.joinerBase.init(
 		flowCtx, leftSource, rightSource, spec.Type, spec.OnExpr, post, output,
 	); err != nil {

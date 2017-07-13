@@ -32,6 +32,16 @@ type joinerBase struct {
 	emptyRight  sqlbase.EncDatumRow
 	combinedRow sqlbase.EncDatumRow
 
+	// left/rightEqualityIndices give the position of USING columns
+	// on the left and right input row arrays, respectively.
+	leftEqualityIndices  []uint32
+	rightEqualityIndices []uint32
+
+	// numMergedEqualityColumns specifies how many of the equality
+	// columns must be merged at the beginning of each result row. This
+	// is the desired behavior for USING and NATURAL JOIN.
+	numMergedEqualityColumns int
+
 	out procOutputHelper
 }
 
@@ -59,9 +69,20 @@ func (jb *joinerBase) init(
 		jb.emptyRight[i].Datum = parser.DNull
 	}
 
-	jb.combinedRow = make(sqlbase.EncDatumRow, 0, len(leftTypes)+len(rightTypes))
+	jb.combinedRow = make(sqlbase.EncDatumRow, 0, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
 
-	types := make([]sqlbase.ColumnType, 0, len(leftTypes)+len(rightTypes))
+	types := make([]sqlbase.ColumnType, 0, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
+	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
+		ltype := leftTypes[jb.leftEqualityIndices[idx]]
+		rtype := rightTypes[jb.rightEqualityIndices[idx]]
+		var ctype sqlbase.ColumnType
+		if ltype.SemanticType != sqlbase.ColumnType_NULL {
+			ctype = ltype
+		} else {
+			ctype = rtype
+		}
+		types = append(types, ctype)
+	}
 	types = append(types, leftTypes...)
 	types = append(types, rightTypes...)
 
@@ -93,7 +114,21 @@ func (jb *joinerBase) renderUnmatchedRow(
 	} else {
 		rrow = row
 	}
-	jb.combinedRow = append(jb.combinedRow[:0], lrow...)
+
+	// We assume first indices are for merged columns (see distsql_physical_planner.go)
+	jb.combinedRow = append(jb.combinedRow[:0])
+	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
+		lvalue := lrow[jb.leftEqualityIndices[idx]]
+		rvalue := rrow[jb.rightEqualityIndices[idx]]
+		var value sqlbase.EncDatum
+		if lvalue.Datum != parser.DNull {
+			value = lvalue
+		} else {
+			value = rvalue
+		}
+		jb.combinedRow = append(jb.combinedRow, value)
+	}
+	jb.combinedRow = append(jb.combinedRow, lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
 	return jb.combinedRow
 }
@@ -142,7 +177,12 @@ func (jb *joinerBase) maybeEmitUnmatchedRow(
 // render constructs a row with columns from both sides. The ON condition is
 // evaluated; if it fails, returns nil.
 func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
-	jb.combinedRow = append(jb.combinedRow[:0], lrow...)
+	jb.combinedRow = append(jb.combinedRow[:0])
+	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
+		value := lrow[jb.leftEqualityIndices[idx]]
+		jb.combinedRow = append(jb.combinedRow, value)
+	}
+	jb.combinedRow = append(jb.combinedRow, lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
 	res, err := jb.onCond.evalFilter(jb.combinedRow)
 	if !res || err != nil {

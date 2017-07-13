@@ -247,9 +247,6 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return rec, nil
 
 	case *joinNode:
-		if n.joinType != joinTypeInner {
-			return 0, newQueryNotSupportedError("only inner join supported")
-		}
 		if err := dsp.checkExpr(n.pred.onCond); err != nil {
 			return 0, err
 		}
@@ -1321,10 +1318,16 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	var nodes []roachpb.NodeID
 	var joinerSpec distsqlrun.HashJoinerSpec
 
-	if n.joinType != joinTypeInner {
-		panic("only inner join supported for now")
+	switch n.joinType {
+	case joinTypeInner:
+		joinerSpec.Type = distsqlrun.JoinType_INNER
+	case joinTypeFullOuter:
+		joinerSpec.Type = distsqlrun.JoinType_FULL_OUTER
+	case joinTypeRightOuter:
+		joinerSpec.Type = distsqlrun.JoinType_RIGHT_OUTER
+	case joinTypeLeftOuter:
+		joinerSpec.Type = distsqlrun.JoinType_LEFT_OUTER
 	}
-	joinerSpec.Type = distsqlrun.JoinType_INNER
 
 	// Figure out the left and right types.
 	leftTypes := leftPlan.ResultTypes
@@ -1400,14 +1403,15 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	}
 	for i := 0; i < n.pred.numLeftCols; i++ {
 		if !n.columns[joinCol].Omitted {
-			joinToStreamColMap[joinCol] = addOutCol(uint32(leftPlan.planToStreamColMap[i]))
+			joinToStreamColMap[joinCol] = addOutCol(
+				uint32(n.pred.numMergedEqualityColumns + leftPlan.planToStreamColMap[i]))
 		}
 		joinCol++
 	}
 	for i := 0; i < n.pred.numRightCols; i++ {
 		if !n.columns[joinCol].Omitted {
 			joinToStreamColMap[joinCol] = addOutCol(
-				uint32(rightPlan.planToStreamColMap[i] + len(leftTypes)),
+				uint32(n.pred.numMergedEqualityColumns + rightPlan.planToStreamColMap[i] + len(leftTypes)),
 			)
 		}
 		joinCol++
