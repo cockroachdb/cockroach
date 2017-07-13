@@ -611,20 +611,29 @@ const (
 )
 
 func clearRangeData(
-	ctx context.Context, desc *roachpb.RangeDescriptor, eng engine.Engine, batch engine.Batch,
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	keyCount int64,
+	eng engine.Engine,
+	batch engine.Batch,
 ) error {
 	iter := eng.NewIterator(false)
 	defer iter.Close()
 
 	const metadataRanges = 2
+	// TODO(benesch): further tune this constant, or make RocksDB range deletion
+	// tombstones less expensive.
+	const clearRangeMinKeys = 64
 	for i, keyRange := range makeAllKeyRanges(desc) {
-		// The metadata ranges have a relatively small number of keys making usage
-		// of range tombstones (as created by ClearRange) a pessimization.
+		// Usage of range tombstones (as created by ClearRange) is a pessimization
+		// when the number of keys to delete is small. Metadata ranges always have
+		// too few keys, but the data range's key count needs to be explicitly
+		// checked.
 		var err error
-		if i < metadataRanges {
-			err = batch.ClearIterRange(iter, keyRange.start, keyRange.end)
-		} else {
+		if i >= metadataRanges && keyCount >= clearRangeMinKeys {
 			err = batch.ClearRange(keyRange.start, keyRange.end)
+		} else {
+			err = batch.ClearIterRange(iter, keyRange.start, keyRange.end)
 		}
 		if err != nil {
 			return err
@@ -650,6 +659,7 @@ func (r *Replica) applySnapshot(
 
 	r.mu.RLock()
 	raftLogSize := r.mu.raftLogSize
+	keyCount := r.mu.state.Stats.KeyCount
 	r.mu.RUnlock()
 
 	snapType := inSnap.snapType
@@ -707,7 +717,7 @@ func (r *Replica) applySnapshot(
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	if err := clearRangeData(ctx, s.Desc, r.store.Engine(), batch); err != nil {
+	if err := clearRangeData(ctx, s.Desc, keyCount, r.store.Engine(), batch); err != nil {
 		return err
 	}
 	stats.clear = timeutil.Now()

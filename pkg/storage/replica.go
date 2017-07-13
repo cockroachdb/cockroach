@@ -706,9 +706,11 @@ func (r *Replica) destroyDataRaftMuLocked(
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
+	ms := r.GetMVCCStats()
+
 	// NB: this uses the local descriptor instead of the consistent one to match
 	// the data on disk.
-	if err := clearRangeData(ctx, r.Desc(), r.store.Engine(), batch); err != nil {
+	if err := clearRangeData(ctx, r.Desc(), ms.KeyCount, r.store.Engine(), batch); err != nil {
 		return err
 	}
 	clearTime := timeutil.Now()
@@ -731,7 +733,6 @@ func (r *Replica) destroyDataRaftMuLocked(
 		return err
 	}
 
-	ms := r.GetMVCCStats()
 	log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 		ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
 		commitTime.Sub(startTime).Seconds()*1000,
