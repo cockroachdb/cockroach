@@ -132,3 +132,20 @@ func TestPrepareCanAcquireLeases(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Fails on master!
+func TestBasicStreaming(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	statement := `SELECT * FROM generate_series(1, 100000000)`
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: 300000,
+	})
+
+	defer s.Stopper().Stop(context.Background())
+
+	if _, err := sqlDB.Exec(statement); err != nil {
+		t.Fatalf("We should never run out of memory muhaha: %v", err)
+	}
+}
