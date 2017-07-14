@@ -37,6 +37,10 @@ type TableRef struct {
 	// Note that a nil array here means "unspecified" (all columns)
 	// whereas an array of length 0 means "zero columns".
 	Columns []ColumnID
+
+	// As determines the names that can be used in the surrounding query
+	// to refer to this source.
+	As AliasClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -51,6 +55,10 @@ func (n *TableRef) Format(buf *bytes.Buffer, f FmtFlags) {
 			fmt.Fprintf(buf, "%d", c)
 		}
 		buf.WriteByte(')')
+	}
+	if n.As.Alias != "" {
+		buf.WriteString(" AS ")
+		FormatNode(buf, f, n.As)
 	}
 	buf.WriteByte(']')
 }
