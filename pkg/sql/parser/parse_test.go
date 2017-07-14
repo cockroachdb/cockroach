@@ -510,6 +510,12 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t ORDER BY a`},
 		{`SELECT a FROM t ORDER BY a ASC`},
 		{`SELECT a FROM t ORDER BY a DESC`},
+		{`SELECT a FROM t ORDER BY PRIMARY KEY t`},
+		{`SELECT a FROM t ORDER BY PRIMARY KEY t ASC`},
+		{`SELECT a FROM t ORDER BY PRIMARY KEY t DESC`},
+		{`SELECT a FROM t ORDER BY INDEX t@foo`},
+		{`SELECT a FROM t ORDER BY INDEX t@foo ASC`},
+		{`SELECT a FROM t ORDER BY INDEX t@foo DESC`},
 
 		{`SELECT 1 FROM t GROUP BY a`},
 		{`SELECT 1 FROM t GROUP BY a, b`},
@@ -765,6 +771,12 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t WHERE a = + b`, `SELECT a FROM t WHERE a = (+b)`},
 		{`SELECT a FROM t WHERE a = - b`, `SELECT a FROM t WHERE a = (-b)`},
 		{`SELECT a FROM t WHERE a = ~ b`, `SELECT a FROM t WHERE a = (~b)`},
+
+		// Special keywords are supported for index names.
+		{`SELECT a FROM t@primary`,
+			`SELECT a FROM t@"primary"`},
+		{`SELECT a FROM t ORDER BY INDEX t@primary`,
+			`SELECT a FROM t ORDER BY INDEX t@"primary"`},
 
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to
