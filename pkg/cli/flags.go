@@ -272,6 +272,8 @@ func init() {
 
 		sqlSize := humanizeutil.NewBytesValue(&serverCfg.SQLMemoryPoolSize)
 		varFlag(f, sqlSize, cliflags.SQLMem)
+
+		stringFlag(f, &serverCfg.SQLDefaultTimeZone, cliflags.SQLTz, serverCfg.SQLDefaultTimeZone)
 	}
 
 	for _, cmd := range certCmds {

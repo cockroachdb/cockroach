@@ -24,10 +24,88 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+// This file contains the functions that manage the "SQL time zone".
+//
+// We use the term "time zone" for user-facing features: the cluster setting,
+// the SET TIME ZONE statement, etc. Internally in Go we use the term "location"
+// to align with Go's time package.
+//
+// The time zone is predominantly used to configure the conversions between
+// timestamp values and strings.
+//
+// Each SQL session can have its own time zone. This is configured as follows:
+//
+// - by the SET TIME ZONE statement, if issued by the client, otherwise
+// - by the executor default time zone, which is initialized once upon startup:
+//   - by the value set via the command-line arg --sql-time-zone, if any and valid,
+//   - otherwise, UTC.
+//
+// We don't allow updating the default time zone beyond start-up
+// because if a client reconnects and finds a different time zone, any
+// timestamp values without time zone will become silently different,
+// possibly causing client breakage or data loss. See discussion in
+// #16029.
+
+const errFmtSetDefaultLocation = "error while configuring the default SQL time zone %q"
+
+// LoadDefaultLocation is invoked once just after instantiating a new Executor.
+func (e *Executor) LoadDefaultLocation(
+	ctx context.Context, locStr string, memMetrics *MemoryMetrics,
+) error {
+	defer func() { log.Infof(ctx, "loaded default SQL time zone: %s", e.defaultLocation) }()
+	e.defaultLocation = time.UTC
+
+	if strings.ToLower(locStr) == "utc" {
+		// Fast path: don't bother with the complexity below.
+		return nil
+	}
+
+	// To load the default time zone, we simulate SET TIME ZONE
+	// in an encapsulated ("internal") session, then extract
+	// the resulting time zone from the encapsulated session
+	// as new default value for the Executor.
+
+	p := makeInternalPlanner("default time zone", nil, security.RootUser, memMetrics)
+	defer finishInternalPlanner(p)
+
+	// Prepare the fake statement.
+	stmt, err := parser.ParseOne("SET TIME ZONE " + locStr)
+	if err != nil {
+		// Maybe the time zone was a string, try enclosing it.
+		stmt, err = parser.ParseOne("SET TIME ZONE " + parser.EscapeSQLString(locStr))
+		if err != nil {
+			return errors.Wrapf(err, errFmtSetDefaultLocation, locStr)
+		}
+	}
+
+	// Run it.
+	pn, err := p.Set(ctx, stmt.(*parser.Set))
+	if err != nil {
+		return errors.Wrapf(err, errFmtSetDefaultLocation, locStr)
+	}
+	defer pn.Close(p.session.Ctx())
+
+	if _, ok := pn.(*emptyNode); !ok {
+		if err := p.startPlan(ctx, pn); err != nil {
+			return errors.Wrapf(err, errFmtSetDefaultLocation, locStr)
+		}
+		if _, err := countRowsAffected(ctx, pn); err != nil {
+			return errors.Wrapf(err, errFmtSetDefaultLocation, locStr)
+		}
+	}
+
+	// The fake statement has left its result in the encapsulated
+	// session. Use this.
+	e.defaultLocation = p.session.Location
+	return nil
+}
 
 func setTimeZone(_ context.Context, session *Session, values []parser.TypedExpr) error {
 	if len(values) != 1 {

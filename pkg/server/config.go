@@ -55,6 +55,7 @@ const (
 	defaultCGroupMemPath            = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	defaultCacheSize                = 512 << 20 // 512 MB
 	defaultSQLMemoryPoolSize        = 512 << 20 // 512 MB
+	defaultSQLDefaultTimeZone       = "UTC"
 	defaultScanInterval             = 10 * time.Minute
 	defaultConsistencyCheckInterval = 24 * time.Hour
 	defaultScanMaxIdleTime          = 200 * time.Millisecond
@@ -145,6 +146,11 @@ type Config struct {
 	// SQLMemoryPoolSize is the amount of memory in bytes that can be
 	// used by SQL clients to store row data in server RAM.
 	SQLMemoryPoolSize int64
+
+	// SQLDefaultTimeZone is the default time zone for newly
+	// created SQL sessions. See the comments at the start
+	// of time_zone.go.
+	SQLDefaultTimeZone string
 
 	// Parsed values.
 
@@ -378,6 +384,7 @@ func MakeConfig() Config {
 		MaxOffset:                MaxOffsetType(base.DefaultMaxClockOffset),
 		CacheSize:                defaultCacheSize,
 		SQLMemoryPoolSize:        defaultSQLMemoryPoolSize,
+		SQLDefaultTimeZone:       defaultSQLDefaultTimeZone,
 		ScanInterval:             defaultScanInterval,
 		ScanMaxIdleTime:          defaultScanMaxIdleTime,
 		ConsistencyCheckInterval: defaultConsistencyCheckInterval,

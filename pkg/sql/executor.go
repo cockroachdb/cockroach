@@ -224,6 +224,10 @@ type Executor struct {
 
 	distSQLPlanner *distSQLPlanner
 
+	// defaultLocation is the default time zone for new SQL
+	// sessions. See the explanatory comments in time_zone.go.
+	defaultLocation *time.Location
+
 	// Application-level SQL statistics
 	sqlStats sqlStats
 
@@ -346,13 +350,14 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 			6*metricsSampleInterval),
 		SQLServiceLatency: metric.NewLatency(MetaSQLServiceLatency,
 			6*metricsSampleInterval),
-		UpdateCount: metric.NewCounter(MetaUpdate),
-		InsertCount: metric.NewCounter(MetaInsert),
-		DeleteCount: metric.NewCounter(MetaDelete),
-		DdlCount:    metric.NewCounter(MetaDdl),
-		MiscCount:   metric.NewCounter(MetaMisc),
-		QueryCount:  metric.NewCounter(MetaQuery),
-		sqlStats:    sqlStats{apps: make(map[string]*appStats)},
+		UpdateCount:     metric.NewCounter(MetaUpdate),
+		InsertCount:     metric.NewCounter(MetaInsert),
+		DeleteCount:     metric.NewCounter(MetaDelete),
+		DdlCount:        metric.NewCounter(MetaDdl),
+		MiscCount:       metric.NewCounter(MetaMisc),
+		QueryCount:      metric.NewCounter(MetaQuery),
+		sqlStats:        sqlStats{apps: make(map[string]*appStats)},
+		defaultLocation: time.UTC,
 	}
 }
 

@@ -101,6 +101,13 @@ left unspecified, defaults to 25% of the physical memory, or 512MB if
 the memory size cannot be determined.`,
 	}
 
+	SQLTz = FlagInfo{
+		Name: "sql-time-zone",
+		Description: `
+Default time zone for newly created SQL sessions. If left unspecified,
+defaults to UTC.`,
+	}
+
 	Cache = FlagInfo{
 		Name: "cache",
 		Description: `

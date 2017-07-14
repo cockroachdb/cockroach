@@ -437,6 +437,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
+	if err := s.sqlExecutor.LoadDefaultLocation(ctx, cfg.SQLDefaultTimeZone, &s.internalMemMetrics); err != nil {
+		return nil, err
+	}
+
 	s.pgServer = pgwire.MakeServer(
 		s.cfg.AmbientCtx,
 		s.cfg.Config,

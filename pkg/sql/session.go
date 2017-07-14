@@ -412,7 +412,7 @@ func NewSession(
 		Database:         args.Database,
 		DistSQLMode:      distSQLMode,
 		SearchPath:       sqlbase.DefaultSearchPath,
-		Location:         time.UTC,
+		Location:         e.defaultLocation,
 		User:             args.User,
 		virtualSchemas:   e.virtualSchemas,
 		execCfg:          &e.cfg,
