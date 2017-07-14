@@ -57,8 +57,11 @@ case ${1-} in
     rsync -az "$(dirname "${0}")/../build/bootstrap/" "${USER}@${FQDN}:bootstrap/"
     rsync -az "$(dirname "${0}")/../build/parallelbuilds-"* "${USER}@${FQDN}:bootstrap/"
     rsync -az "$(dirname "${0}")/../build/disable-hyperv-timesync.sh" "${USER}@${FQDN}:bootstrap/"
+    # Copy the azure config (including access tokens).
+    rsync -az ~/.azure "${USER}@${FQDN}:./"
     ssh -A "${USER}@${FQDN}" ./bootstrap/bootstrap-debian.sh
     ssh -A "${USER}@${FQDN}" ./bootstrap/disable-hyperv-timesync.sh
+    ssh -A "${USER}@${FQDN}" ./bootstrap/install-azure-cli.sh
 
     # Set up tmux configuration (for persistent SSH).
     if [ -e ~/.tmux.conf ]; then
@@ -69,12 +72,8 @@ case ${1-} in
       ssh -A "${USER}@${FQDN}" "echo 'set -g terminal-overrides \"xterm*:XT:smcup@:rmcup@\"' >> .tmux.conf"
     fi
 
-    # TODO(bdarnell): autoshutdown.cron.sh does not work on azure. It
-    # halts the VM, but halting the VM doesn't stop billing. The VM
-    # must instead be "deallocated" with the azure API.
-    # Install automatic shutdown after ten minutes of operation without a
-    # logged in user. To disable this, `sudo touch /.active`.
-    #ssh "${USER}@${FQDN}" "sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
+    # shellcheck disable=SC2029
+    ssh "${USER}@${FQDN}" "echo '* * * * * /home/radu/bootstrap/autoshutdown.cron.sh 10 az vm deallocate --resource-group \"${RG}\" --name \"${NAME}\"' | crontab -"
 
     echo "VM now running at ${FQDN}"
     ;;
