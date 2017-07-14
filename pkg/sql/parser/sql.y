@@ -3007,8 +3007,17 @@ sortby_list:
 sortby:
   a_expr opt_asc_desc
   {
-    $$.val = &Order{Expr: $1.expr(), Direction: $2.dir()}
+    $$.val = &Order{OrderType: OrderByColumn, Expr: $1.expr(), Direction: $2.dir()}
   }
+| PRIMARY KEY qualified_name opt_asc_desc
+  {
+    $$.val = &Order{OrderType: OrderByIndex, Direction: $4.dir(), Table: $3.normalizableTableName()}
+  }
+| INDEX qualified_name '@' unrestricted_name opt_asc_desc
+  {
+    $$.val = &Order{OrderType: OrderByIndex, Direction: $5.dir(), Table: $2.normalizableTableName(), Index: Name($4) }
+  }
+
 // TODO(pmattis): Support ordering using arbitrary math ops?
 // | a_expr USING math_op {}
 
@@ -5178,7 +5187,7 @@ qualified_name:
   }
 
 table_name_with_index:
-  qualified_name '@' name
+  qualified_name '@' unrestricted_name
   {
     $$.val = &TableNameWithIndex{Table: $1.normalizableTableName(), Index: Name($3)}
   }

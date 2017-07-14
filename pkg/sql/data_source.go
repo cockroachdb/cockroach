@@ -520,23 +520,26 @@ func (p *planner) getTableScanOrViewPlan(
 		return planDataSource{}, parser.NewInvalidTableNameError(tn.String())
 	}
 
-	var desc *sqlbase.TableDescriptor
-	var err error
-	if p.avoidCachedDescriptors {
-		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
-		// specified time, and never lease anything. The proto transaction already
-		// has its timestamps set correctly so getTableOrViewDesc will fetch with
-		// the correct timestamp.
-		desc, err = mustGetTableOrViewDesc(
-			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
-	} else {
-		desc, err = p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
-	}
+	desc, err := p.getTableDesc(ctx, tn)
 	if err != nil {
 		return planDataSource{}, err
 	}
 
 	return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, nil)
+}
+
+func (p *planner) getTableDesc(
+	ctx context.Context, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	if p.avoidCachedDescriptors {
+		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
+		// specified time, and never lease anything. The proto transaction already
+		// has its timestamps set correctly so getTableOrViewDesc will fetch with
+		// the correct timestamp.
+		return mustGetTableOrViewDesc(
+			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
+	}
+	return p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 }
 
 func (p *planner) getPlanForDesc(
