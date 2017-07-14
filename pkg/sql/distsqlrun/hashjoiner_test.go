@@ -506,7 +506,7 @@ func TestHashJoiner(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			// Run tests with a variety of initial buffer sizes.
 			for _, initialBuffer := range []int64{0, 32, 64, 128, 1024 * 1024} {
-				t.Run(fmt.Sprintf("%d", initialBuffer), func(t *testing.T) {
+				t.Run(fmt.Sprintf("InitialBuffer=%d", initialBuffer), func(t *testing.T) {
 					hs := c.spec
 					leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
 					rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
