@@ -24,13 +24,10 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Set sets session variables.
@@ -266,63 +263,4 @@ func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, 
 		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Isolation)
 	}
 	return &emptyNode{}, nil
-}
-
-func setTimeZone(_ context.Context, session *Session, values []parser.TypedExpr) error {
-	if len(values) != 1 {
-		return errors.New("set time zone requires a single argument")
-	}
-	evalCtx := session.evalCtx()
-	d, err := values[0].Eval(&evalCtx)
-	if err != nil {
-		return err
-	}
-
-	var loc *time.Location
-	var offset int64
-	switch v := parser.UnwrapDatum(d).(type) {
-	case *parser.DString:
-		location := string(*v)
-		loc, err = timeutil.LoadLocation(location)
-		if err != nil {
-			var err1 error
-			loc, err1 = timeutil.LoadLocation(strings.ToUpper(location))
-			if err1 != nil {
-				loc, err1 = timeutil.LoadLocation(strings.ToTitle(location))
-				if err1 != nil {
-					return fmt.Errorf("cannot find time zone %q: %v", location, err)
-				}
-			}
-		}
-
-	case *parser.DInterval:
-		offset, _, _, err = v.Duration.Div(time.Second.Nanoseconds()).Encode()
-		if err != nil {
-			return err
-		}
-
-	case *parser.DInt:
-		offset = int64(*v) * 60 * 60
-
-	case *parser.DFloat:
-		offset = int64(float64(*v) * 60.0 * 60.0)
-
-	case *parser.DDecimal:
-		sixty := apd.New(60, 0)
-		ed := apd.MakeErrDecimal(parser.ExactCtx)
-		ed.Mul(sixty, sixty, sixty)
-		ed.Mul(sixty, sixty, &v.Decimal)
-		offset = ed.Int64(sixty)
-		if ed.Err() != nil {
-			return fmt.Errorf("time zone value %s would overflow an int64", sixty)
-		}
-
-	default:
-		return fmt.Errorf("bad time zone value: %s", d.String())
-	}
-	if loc == nil {
-		loc = sqlbase.FixedOffsetTimeZoneToLocation(int(offset), d.String())
-	}
-	session.Location = loc
-	return nil
 }
