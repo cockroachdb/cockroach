@@ -29,10 +29,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -470,89 +468,6 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	}
 }
 
-func setMockAddSSTable() (undo func()) {
-	prev := commands[roachpb.AddSSTable]
-
-	// TODO(tschottdorf): this already does nontrivial work. Worth open-sourcing the relevant
-	// subparts of the real evalAddSSTable to make this test less likely to rot.
-	evalAddSSTable := func(
-		ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
-	) (EvalResult, error) {
-		log.Event(ctx, "evaluated testing-only AddSSTable mock")
-		args := cArgs.Args.(*roachpb.AddSSTableRequest)
-
-		return EvalResult{
-			Replicated: storagebase.ReplicatedEvalResult{
-				AddSSTable: &storagebase.ReplicatedEvalResult_AddSSTable{
-					Data:  args.Data,
-					CRC32: util.CRC32(args.Data),
-				},
-			},
-		}, nil
-	}
-
-	SetAddSSTableCmd(Command{
-		DeclareKeys: DefaultDeclareKeys,
-		Eval:        evalAddSSTable,
-	})
-	return func() {
-		SetAddSSTableCmd(prev)
-	}
-}
-
-func makeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyValue) {
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		panic(err)
-	}
-	defer sst.Close()
-
-	v := roachpb.MakeValueFromBytes([]byte(value))
-	v.InitChecksum([]byte(key))
-
-	kv := engine.MVCCKeyValue{
-		Key: engine.MVCCKey{
-			Key:       []byte(key),
-			Timestamp: ts,
-		},
-		Value: v.RawBytes,
-	}
-
-	if err := sst.Add(kv); err != nil {
-		panic(errors.Wrap(err, "while finishing SSTable"))
-	}
-	b, err := sst.Finish()
-	if err != nil {
-		panic(errors.Wrap(err, "while finishing SSTable"))
-	}
-	return b, kv
-}
-
-func proposeAddSSTable(
-	ctx context.Context, key, val string, ts hlc.Timestamp, tc *testContext,
-) engine.MVCCKeyValue {
-	t := tc.TB
-	kv := func() engine.MVCCKeyValue {
-		var ba roachpb.BatchRequest
-		ba.RangeID = tc.repl.RangeID
-
-		var addReq roachpb.AddSSTableRequest
-		var kv engine.MVCCKeyValue
-		addReq.Data, kv = makeSSTable(key, val, ts)
-		addReq.Key = roachpb.Key(key)
-		addReq.EndKey = addReq.Key.Next()
-		ba.Add(&addReq)
-
-		_, pErr := tc.store.Send(ctx, ba)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		return kv
-	}()
-
-	return kv
-}
-
 func makeInMemSideloaded(repl *Replica) {
 	repl.raftMu.Lock()
 	repl.raftMu.sideloaded = mustNewInMemSideloadStorage(repl.RangeID, 0, "")
@@ -562,7 +477,7 @@ func makeInMemSideloaded(repl *Replica) {
 // TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
 func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer setMockAddSSTable()()
+	defer SetMockAddSSTable()()
 
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -581,7 +496,9 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 
 	ts := hlc.Timestamp{Logical: 1}
 
-	proposeAddSSTable(ctx, key, val, ts, &tc)
+	if err := ProposeAddSSTable(ctx, key, val, ts, tc.store); err != nil {
+		t.Fatal(err)
+	}
 
 	{
 		var ba roachpb.BatchRequest
@@ -646,7 +563,7 @@ func (mr *mockSender) Recv() (*SnapshotResponse, error) {
 // inlined.
 func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer setMockAddSSTable()()
+	defer SetMockAddSSTable()()
 
 	ctx := context.Background()
 	tc := testContext{}
@@ -663,7 +580,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 
 	// Put a sideloaded proposal on the Range.
 	key, val := "don't", "care"
-	origSSTData, _ := makeSSTable(key, val, hlc.Timestamp{}.Add(0, 1))
+	origSSTData, _ := MakeSSTable(key, val, hlc.Timestamp{}.Add(0, 1))
 	{
 
 		var addReq roachpb.AddSSTableRequest
@@ -822,7 +739,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 
 func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer setMockAddSSTable()()
+	defer SetMockAddSSTable()()
 
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -845,7 +762,9 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 		addLastIndex()
 		key := fmt.Sprintf("key-%d", i)
 		val := fmt.Sprintf("val-%d", i)
-		proposeAddSSTable(ctx, key, val, tc.Clock().Now(), &tc)
+		if err := ProposeAddSSTable(ctx, key, val, tc.Clock().Now(), tc.store); err != nil {
+			t.Fatal("%d: %s", i, err)
+		}
 	}
 	// Append an extra entry which, if we truncate it, should definitely also
 	// remove any leftover files (ok, unless the last one is reproposed but
