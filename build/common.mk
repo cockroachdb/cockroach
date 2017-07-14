@@ -107,7 +107,7 @@ space := $(eval) $(eval)
 # -w`, though not required by POSIX, exists on all tested platforms.
 include $(REPO_ROOT)/.go-version
 ifeq ($(shell $(GO) version | grep -qwE '$(GOVERS)' && echo y),)
-$(error "$(GOVERS) required (see CONTRIBUTING.md): $(shell $(GO) version)")
+$(error "$(GOVERS) required (see CONTRIBUTING.md): $(shell $(GO) version); use `make GOVERS=.*` for experiments")
 endif
 
 # Print an error if the user specified any variables on the command line that
