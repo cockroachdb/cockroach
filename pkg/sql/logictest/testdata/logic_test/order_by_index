@@ -1,0 +1,145 @@
+statement ok
+CREATE TABLE kv(k INT PRIMARY KEY, v INT); CREATE INDEX foo ON kv(v DESC)
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT v FROM kv ORDER BY PRIMARY KEY kv
+----
+0  nosort                     (v)
+0          order  +k
+1  render                     (v, k)  +k,unique
+2  scan                       (k, v)  +k,unique
+2          table  kv@primary
+2          spans  ALL
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT v FROM kv ORDER BY PRIMARY KEY kv ASC
+----
+0  nosort                     (v)
+0          order  +k
+1  render                     (v, k)  +k,unique
+2  scan                       (k, v)  +k,unique
+2          table  kv@primary
+2          spans  ALL
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT v FROM kv ORDER BY PRIMARY KEY kv DESC
+----
+0  nosort                      (v)
+0           order  -k
+1  render                      (v, k)  -k,unique
+2  revscan                     (k, v)  -k,unique
+2           table  kv@primary
+2           spans  ALL
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
+----
+0  sort                            (k)
+0           order  +v,+k,+"v - 2"
+1  render                          (k, v, "v - 2")  +v
+2  revscan                         (k, v)           +v
+2           table  kv@foo
+2           spans  ALL
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT k FROM kv ORDER BY INDEX kv@foo
+----
+0  nosort                 (k)
+0          order  -v
+1  scan                   (k, v)  -v
+1          table  kv@foo
+1          spans  ALL
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
+----
+0  nosort                 (k)
+0          order  -v
+1  scan                   (k, v)  -v
+1          table  kv@foo
+1          spans  ALL
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
+----
+0  nosort                  (k)
+0           order  +v
+1  revscan                 (k, v)  +v
+1           table  kv@foo
+1           spans  ALL
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT k FROM kv ORDER BY INDEX kv@foo, k
+----
+0  nosort                 (k)
+0          order  -v,+k
+1  scan                   (k, v)  -v,+k,unique
+1          table  kv@foo
+1          spans  ALL
+
+# Check the syntax can be used with joins.
+#
+# Note: an ORDER BY INDEX clause on the result of the join
+# does not imply use of that index by the underlying scan.
+#
+
+query ITTTTT
+EXPLAIN(METADATA) SELECT k FROM kv JOIN (VALUES (1,2)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
+----
+0  sort                                (k)
+0          order     -v
+1  render                              (k, v)
+2  join                                (k, v, a[omitted], b[omitted])
+2          type      inner
+2          equality  (k) = (a)
+3  scan                                (k, v)
+3          table     kv@primary
+3          spans     ALL
+3  values                              (column1, column2[omitted])
+3          size      2 columns, 1 row
+
+query ITTTTT
+EXPLAIN(METADATA) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
+----
+0  sort                               (k)
+0          order     -v
+1  render                             (k, v)
+2  join                               (k, v[omitted], k[hidden,omitted], v[hidden,omitted], k[hidden,omitted], v[hidden])
+2          type      inner
+2          equality  (k, v) = (k, v)
+3  scan                               (k, v)
+3          table     kv@primary
+3          spans     ALL
+3  scan                               (k, v)
+3          table     kv@primary
+3          spans     ALL
+
+# The underlying index can be forced manually, of course.
+query ITTTTT
+EXPLAIN(METADATA) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@foo
+----
+0  sort                               (k)
+0          order     -v
+1  render                             (k, v)
+2  join                               (k, v[omitted], k[hidden,omitted], v[hidden,omitted], k[hidden,omitted], v[hidden])
+2          type      inner
+2          equality  (k, v) = (k, v)
+3  scan                               (k, v)
+3          table     kv@foo
+3          spans     ALL
+3  scan                               (k, v)
+3          table     kv@foo
+3          spans     ALL
+
+# Check the extended syntax cannot be used in case of renames.
+statement error table "test.kv" not selected in FROM clause
+SELECT * FROM kv AS a, kv AS b ORDER BY PRIMARY KEY kv
+
+# The INDEX/PRIMARY syntax can only be used when the data source
+# is a real table, not an alias.
+#
+statement error table "test.kv" not selected in FROM clause
+SELECT k FROM (SELECT @1, @1 FROM generate_series(1,10)) AS kv(k,v) ORDER BY PRIMARY KEY kv
+
+statement error table "test.kv" not selected in FROM clause
+CREATE TABLE unrelated(x INT); SELECT * FROM unrelated ORDER BY PRIMARY KEY kv
