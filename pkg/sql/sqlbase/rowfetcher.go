@@ -25,7 +25,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -397,8 +396,9 @@ func (rf *RowFetcher) processValueSingle(
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 
-	// If this is the sentinel family, a value is not expected, so we're done.
-	if family.ID == keys.SentinelFamilyID {
+	// If this is the row sentinel (in the legacy pre-family format),
+	// a value is not expected, so we're done.
+	if family.ID == 0 {
 		return "", "", nil
 	}
 
