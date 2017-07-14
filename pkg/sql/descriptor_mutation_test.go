@@ -188,6 +188,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY} {
 			// Init table to start state.
 			mTest.Exec(`TRUNCATE TABLE t.test`)
+			// read table descriptor
+			mTest.tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
 			initRows := [][]string{{"a", "z", "q"}}
 			for _, row := range initRows {
 				if useUpsert {
@@ -417,6 +420,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
 				t.Fatal(err)
 			}
+			// read table descriptor
+			mTest.tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
 			initRows := [][]string{{"a", "z"}, {"b", "y"}}
 			for _, row := range initRows {
 				if useUpsert {
@@ -574,6 +580,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 				if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
 					t.Fatal(err)
 				}
+
+				// read table descriptor
+				mTest.tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
 				initRows := [][]string{{"a", "z", "q"}, {"b", "y", "r"}}
 				for _, row := range initRows {
 					if useUpsert {
