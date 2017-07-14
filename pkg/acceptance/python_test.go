@@ -36,6 +36,7 @@ func TestDockerPython(t *testing.T) {
 
 const python = `
 import psycopg2
+import decimal
 conn = psycopg2.connect('')
 cur = conn.cursor()
 cur.execute("SELECT 1, 2+%v")
@@ -53,4 +54,13 @@ s = ('\\\\',)
 cur.execute("SELECT %s", s)
 v = cur.fetchall()
 assert v == [s], (v, s)
+
+# Verify decimals with exponents can be parsed.
+cur = conn.cursor()
+cur.execute("SELECT 1e1::decimal")
+v = cur.fetchall()
+d = v[0][0]
+assert type(d) is decimal.Decimal
+# Use of compare_total here guarantees that we didn't just get '10' back, we got '1e1'.
+assert d.compare_total(decimal.Decimal('1e1')) == 0
 `

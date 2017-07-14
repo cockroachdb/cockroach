@@ -117,7 +117,7 @@
   branch = "master"
   name = "github.com/cockroachdb/apd"
   packages = ["."]
-  revision = "e8e4547368eb5ba69f7edec271c8174d6d619e54"
+  revision = "f03b0011b0efc3437be20fa3979ae89082de8861"
 
 [[projects]]
   name = "github.com/cockroachdb/cmux"
