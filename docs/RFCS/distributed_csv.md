@@ -44,10 +44,11 @@ machine, for example:
 
 The coordinator then performs or initiates the following steps, detailed below:
 
-1. Read CSV files and convert to sorted KVs.  2. Send key sample to
-coordinator.  3. Coordinator determines split points and initiates global
-sorting.  4. Distribute KVs according to global sorting.  5. Create SST
-files and the BACKUP descriptor.
+1. Read CSV files and convert to sorted KVs.
+2. Send key sample to coordinator.
+3. Coordinator determines split points and initiates global sorting.
+4. Distribute KVs according to global sorting.
+5. Create SST files and the BACKUP descriptor.
 
 The coordinator instructs (with some new RPCs) all nodes to read all CSV
 files from the `/data/csv` directory local to each of them. The nodes read
