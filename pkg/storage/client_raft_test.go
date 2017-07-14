@@ -1078,6 +1078,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 // under-replicated ranges and replicate them.
 func TestStoreRangeUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer storage.SetMockAddSSTable()()
 	sc := storage.TestStoreConfig(nil)
 	// Prevent the split queue from creating additional ranges while we're
 	// waiting for replication.
@@ -1087,6 +1088,13 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
+	mtc.stopStore(2)
+	if err := storage.ProposeAddSSTable(
+		context.Background(), "k", "v", mtc.clocks[0].Now(), mtc.stores[0],
+	); err != nil {
+		t.Fatal(err)
+	}
+	mtc.restartStore(2)
 
 	mtc.initGossipNetwork()
 

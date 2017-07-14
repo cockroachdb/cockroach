@@ -650,6 +650,7 @@ func (r *Replica) applySnapshot(
 
 	r.mu.RLock()
 	raftLogSize := r.mu.raftLogSize
+	replicaID := r.mu.replicaID
 	r.mu.RUnlock()
 
 	snapType := inSnap.snapType
@@ -730,10 +731,18 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
-	thinEntries, err := r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
-	if err != nil {
-		return err
+	// If this replica doesn't know its ReplicaID yet, we're applying a
+	// preemptive snapshot. In this case, we're going to have to write the
+	// sideloaded proposals into the Raft log. Otherwise, sideload.
+	thinEntries := logEntries
+	if replicaID != 0 {
+		var err error
+		thinEntries, err = r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
+		if err != nil {
+			return err
+		}
 	}
+
 	// Write the snapshot's Raft log into the range.
 	_, _, raftLogSize, err = r.append(
 		ctx, distinctBatch, 0, 0, raftLogSize, thinEntries,
