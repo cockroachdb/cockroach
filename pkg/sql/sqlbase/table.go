@@ -1350,7 +1350,7 @@ func EncodeSecondaryIndex(
 
 	// Index keys are considered "sentinel" keys in that they do not have a
 	// column ID suffix.
-	entry.Key = keys.MakeRowSentinelKey(entry.Key)
+	entry.Key = keys.MakeFamilyKey(entry.Key, 0)
 
 	var entryValue []byte
 	if secondaryIndex.Unique {

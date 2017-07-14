@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -73,7 +72,7 @@ func TestKeyRewriter(t *testing.T) {
 	}
 
 	t.Run("normal", func(t *testing.T) {
-		key := keys.MakeRowSentinelKey(sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID))
+		key := sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
 		newKey, ok, err := kr.RewriteKey(key)
 		if err != nil {
 			t.Fatal(err)
@@ -126,7 +125,7 @@ func TestKeyRewriter(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		key := keys.MakeRowSentinelKey(sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID))
+		key := sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
 		newKey, ok, err := kr.RewriteKey(key)
 		if err != nil {
 			t.Fatal(err)
