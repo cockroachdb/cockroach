@@ -466,15 +466,42 @@ func (d Direction) String() string {
 	return directionName[d]
 }
 
+// OrderType indicates which type of expression is used in ORDER BY.
+type OrderType int
+
+const (
+	// OrderByColumn is the regular "by expression/column" ORDER BY specification.
+	OrderByColumn OrderType = iota
+	// OrderByIndex enables the user to specify a given index' columns implicitly.
+	OrderByIndex
+)
+
 // Order represents an ordering expression.
 type Order struct {
+	OrderType OrderType
 	Expr      Expr
 	Direction Direction
+	// Table/Index replaces Expr when OrderType = OrderByIndex.
+	Table NormalizableTableName
+	// If Index is empty, then the order should use the primary key.
+	Index Name
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Order) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Expr)
+	if node.OrderType == OrderByColumn {
+		FormatNode(buf, f, node.Expr)
+	} else {
+		if node.Index == "" {
+			buf.WriteString("PRIMARY KEY ")
+			FormatNode(buf, f, node.Table)
+		} else {
+			buf.WriteString("INDEX ")
+			FormatNode(buf, f, node.Table)
+			buf.WriteByte('@')
+			FormatNode(buf, f, node.Index)
+		}
+	}
 	if node.Direction != DefaultDirection {
 		buf.WriteByte(' ')
 		buf.WriteString(node.Direction.String())
