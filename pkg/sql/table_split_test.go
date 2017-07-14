@@ -55,7 +55,7 @@ SELECT tables.id FROM system.namespace tables
 
 	// Wait for new table to split.
 	testutils.SucceedsSoon(t, func() error {
-		desc, err := tc.LookupRange(keys.MakeRowSentinelKey(tableStartKey))
+		desc, err := tc.LookupRange(tableStartKey)
 		if err != nil {
 			t.Fatal(err)
 		}
