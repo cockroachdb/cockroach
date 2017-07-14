@@ -17,11 +17,10 @@
 package sql
 
 import (
-	"math"
-
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -41,8 +40,10 @@ const TableTruncateChunkSize = indexTruncateChunkSize
 func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, error) {
 	// Since truncation may cascade to a given table any number of times, start by
 	// building the unique set (by ID) of tables to truncate.
-	toTruncate := make(map[sqlbase.ID]*sqlbase.TableDescriptor, len(n.Tables))
-
+	toTruncate := make(map[sqlbase.ID]struct{}, len(n.Tables))
+	// toTraverse is the list of tables whose references need to be traversed
+	// while constructing the list of tables that should be truncated.
+	toTraverse := make([]sqlbase.TableDescriptor, 0, len(n.Tables))
 	for _, name := range n.Tables {
 		tn, err := name.NormalizeTableName()
 		if err != nil {
@@ -52,7 +53,7 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 			return nil, err
 		}
 
-		tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
+		tableDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn)
 		if err != nil {
 			return nil, err
 		}
@@ -64,20 +65,25 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 		if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
 			return nil, err
 		}
-		toTruncate[tableDesc.ID] = tableDesc
+
+		toTruncate[tableDesc.ID] = struct{}{}
+		toTraverse = append(toTraverse, *tableDesc)
 	}
 
 	// Check that any referencing tables are contained in the set, or, if CASCADE
 	// requested, add them all to the set.
-	for _, tableDesc := range toTruncate {
+	for len(toTraverse) > 0 {
+		// Pick last element.
+		idx := len(toTraverse) - 1
+		tableDesc := toTraverse[idx]
+		toTraverse = toTraverse[:idx]
 		for _, idx := range tableDesc.AllNonDropIndexes() {
 			for _, ref := range idx.ReferencedBy {
 				// Check if we're already truncating the referencing table.
 				if _, ok := toTruncate[ref.Table]; ok {
 					continue
 				}
-
-				other, err := p.session.tables.getTableVersionByID(ctx, p.txn, ref.Table)
+				other, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
 				if err != nil {
 					return nil, err
 				}
@@ -88,15 +94,16 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 				if err := p.CheckPrivilege(other, privilege.DROP); err != nil {
 					return nil, err
 				}
-				toTruncate[other.ID] = other
+				toTruncate[other.ID] = struct{}{}
+				toTraverse = append(toTraverse, *other)
 			}
 		}
 	}
 
 	// TODO(knz): move truncate logic to Start/Next so it can be used with SHOW TRACE FOR.
 	traceKV := p.session.Tracing.KVTracingEnabled()
-	for _, tableDesc := range toTruncate {
-		if err := truncateTable(p.session.Ctx(), tableDesc, p.txn, traceKV); err != nil {
+	for id, _ := range toTruncate {
+		if err := p.truncateTable(p.session.Ctx(), id, traceKV); err != nil {
 			return nil, err
 		}
 	}
@@ -105,21 +112,198 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 }
 
 // truncateTable truncates the data of a table in a single transaction. It
-// deletes a range of data for the table, which includes the PK and all
-// indexes.
-func truncateTable(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, txn *client.Txn, traceKV bool,
+// drops the table and recreates it with a new ID. The dropped table is
+// GC-ed later through an asynchrnous schema change.
+func (p *planner) truncateTable(
+	ctx context.Context, id sqlbase.ID, traceKV bool,
 ) error {
-	rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false)
+	// Read the table descriptor because it might have changed
+	// while another table in the truncation list was truncated.
+	tableDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
 	if err != nil {
 		return err
 	}
-	td := tableDeleter{rd: rd}
-	if err := td.init(txn); err != nil {
+	newTableDesc := *tableDesc
+	newTableDesc.SetID(0)
+
+	// Remove old name -> id map.
+	zoneKey, nameKey, _ := GetKeysForTableDescriptor(tableDesc)
+
+	b := &client.Batch{}
+	// Use CPut because we want to remove a specific name -> id map.
+	if traceKV {
+		log.VEventf(ctx, 2, "CPut %s -> nil", nameKey)
+	}
+	b.CPut(nameKey, nil, tableDesc.ID)
+	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
-	_, err = td.deleteAllRows(ctx, roachpb.Span{}, math.MaxInt64, traceKV)
-	return err
+
+	// Drop table.
+	if err := p.initiateDropTable(ctx, tableDesc); err != nil {
+		return err
+	}
+
+	newID, err := GenerateUniqueDescID(ctx, p.session.execCfg.DB)
+	if err != nil {
+		return err
+	}
+
+	// update all the references to this table.
+	tables, err := p.findAllReferences(ctx, *tableDesc)
+	if err != nil {
+		return err
+	}
+	assignment := make(map[sqlbase.ID]sqlbase.ID)
+	assignment[tableDesc.ID] = newID
+	if err := reassignReferencedTables(tables, assignment); err != nil {
+		return err
+	}
+
+	for _, table := range tables {
+		if err := table.SetUpVersion(); err != nil {
+			return err
+		}
+		if err := p.writeTableDesc(ctx, table); err != nil {
+			return err
+		}
+		p.notifySchemaChange(table, sqlbase.InvalidMutationID)
+	}
+
+	// Add new descriptor.
+	tKey := tableKey{parentID: newTableDesc.ParentID, name: newTableDesc.Name}
+	key := tKey.Key()
+	if err := p.createDescriptorWithID(ctx, key, newID, &newTableDesc); err != nil {
+		return err
+	}
+
+	// Copy the zone config.
+	newZoneKey := sqlbase.MakeZoneKey(newID)
+	b = &client.Batch{}
+	b.Get(zoneKey)
+	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+	val := b.Results[0].Rows[0].Value
+	if val == nil {
+		return nil
+	}
+	zoneCfg, err := config.MigrateZoneConfig(val)
+	if err != nil {
+		return err
+	}
+	b = &client.Batch{}
+	b.CPut(newZoneKey, zoneCfg, nil)
+	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// For all the references from a table
+func (p *planner) findAllReferences(
+	ctx context.Context, table sqlbase.TableDescriptor,
+) ([]*sqlbase.TableDescriptor, error) {
+	refs := make(map[sqlbase.ID]struct{})
+	if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+		for _, a := range index.Interleave.Ancestors {
+			refs[a.TableID] = struct{}{}
+		}
+		for _, c := range index.InterleavedBy {
+			refs[c.Table] = struct{}{}
+		}
+
+		if index.ForeignKey.IsSet() {
+			to := index.ForeignKey.Table
+			refs[to] = struct{}{}
+		}
+
+		for _, c := range index.ReferencedBy {
+			refs[c.Table] = struct{}{}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	for _, dest := range table.DependsOn {
+		refs[dest] = struct{}{}
+	}
+
+	for _, c := range table.DependedOnBy {
+		refs[c.ID] = struct{}{}
+	}
+
+	tables := make([]*sqlbase.TableDescriptor, 0, len(refs))
+	for id, _ := range refs {
+		if id == table.ID {
+			continue
+		}
+		t, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
+		if err != nil {
+			return nil, err
+		}
+		tables = append(tables, t)
+	}
+
+	return tables, nil
+}
+
+// reassign all the references from all the tables that match those in newTableIDs.
+func reassignReferencedTables(
+	tables []*sqlbase.TableDescriptor, newTableIDs map[sqlbase.ID]sqlbase.ID,
+) error {
+	for _, table := range tables {
+		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+			for j, a := range index.Interleave.Ancestors {
+				ancestorID, ok := newTableIDs[a.TableID]
+				if ok {
+					index.Interleave.Ancestors[j].TableID = ancestorID
+				}
+			}
+			for j, c := range index.InterleavedBy {
+				childID, ok := newTableIDs[c.Table]
+				if ok {
+					index.InterleavedBy[j].Table = childID
+				}
+			}
+
+			if index.ForeignKey.IsSet() {
+				to := index.ForeignKey.Table
+				if newID, ok := newTableIDs[to]; ok {
+					index.ForeignKey.Table = newID
+				}
+			}
+
+			origRefs := index.ReferencedBy
+			index.ReferencedBy = nil
+			for _, ref := range origRefs {
+				if newID, ok := newTableIDs[ref.Table]; ok {
+					ref.Table = newID
+				}
+				index.ReferencedBy = append(index.ReferencedBy, ref)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		for i, dest := range table.DependsOn {
+			if newID, ok := newTableIDs[dest]; ok {
+				table.DependsOn[i] = newID
+			}
+		}
+		origRefs := table.DependedOnBy
+		table.DependedOnBy = nil
+		for _, ref := range origRefs {
+			if newID, ok := newTableIDs[ref.ID]; ok {
+				ref.ID = newID
+			}
+			table.DependedOnBy = append(table.DependedOnBy, ref)
+		}
+	}
+	return nil
 }
 
 // truncateTableInChunks truncates the data of a table in chunks. It deletes a
