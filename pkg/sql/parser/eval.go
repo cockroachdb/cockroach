@@ -2133,7 +2133,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			res = NewDInt(DInt(f))
 		case *DDecimal:
 			d := ctx.getTmpDec()
-			_, err := DecimalCtx.ToIntegral(d, &v.Decimal)
+			_, err := DecimalCtx.RoundToIntegralValue(d, &v.Decimal)
 			if err != nil {
 				return nil, err
 			}

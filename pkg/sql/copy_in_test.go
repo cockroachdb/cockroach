@@ -22,7 +22,6 @@ import (
 	"math/rand"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -191,11 +190,6 @@ func TestCopyRandom(t *testing.T) {
 		for j, t := range types {
 			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: t}, false)
 			ds := parser.AsStringWithFlags(d, parser.FmtBareStrings)
-			switch t {
-			case sqlbase.ColumnType_DECIMAL:
-				// Trailing 0s aren't represented below, so truncate here.
-				ds = strings.TrimRight(ds, "0")
-			}
 			row[j+2] = ds
 		}
 		_, err = stmt.Exec(row...)
