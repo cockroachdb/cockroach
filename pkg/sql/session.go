@@ -121,14 +121,14 @@ func DistSQLExecModeFromInt(val int64) DistSQLExecMode {
 
 // DistSQLExecModeFromString converts a string into a DistSQLExecMode
 func DistSQLExecModeFromString(val string) DistSQLExecMode {
-	switch strings.ToUpper(val) {
-	case "OFF":
+	switch strings.ToLower(val) {
+	case "off":
 		return DistSQLOff
-	case "AUTO":
+	case "auto":
 		return DistSQLAuto
-	case "ON":
+	case "on":
 		return DistSQLOn
-	case "ALWAYS":
+	case "always":
 		return DistSQLAlways
 	default:
 		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
@@ -139,11 +139,11 @@ func DistSQLExecModeFromString(val string) DistSQLExecMode {
 var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"sql.defaults.distsql",
 	"Default distributed SQL execution mode",
-	"Auto",
+	"auto",
 	map[int64]string{
-		int64(DistSQLOff):  "Off",
-		int64(DistSQLAuto): "Auto",
-		int64(DistSQLOn):   "On",
+		int64(DistSQLOff):  "off",
+		int64(DistSQLAuto): "auto",
+		int64(DistSQLOn):   "on",
 	},
 )
 
