@@ -563,6 +563,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> transaction_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
+%type <Statement> upsert_stmt
 %type <Statement> use_stmt
 
 %type <[]string> opt_incremental
@@ -892,6 +893,7 @@ stmt:
 | transaction_stmt
 | truncate_stmt
 | update_stmt
+| upsert_stmt
 | /* EMPTY */
   {
     $$.val = Statement(nil)
@@ -1355,6 +1357,7 @@ preparable_stmt:
 | delete_stmt
 | insert_stmt
 | update_stmt
+| upsert_stmt
 
 explainable_stmt:
   preparable_stmt
@@ -2753,7 +2756,9 @@ insert_stmt:
     $$.val.(*Insert).OnConflict = $6.onConflict()
     $$.val.(*Insert).Returning = $7.retClause()
   }
-| opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
+
+upsert_stmt:
+  opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
