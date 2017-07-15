@@ -500,7 +500,11 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> alter_rename_view_stmt
 
 %type <Statement> backup_stmt
+
 %type <Statement> cancel_stmt
+%type <Statement> cancel_job_stmt
+%type <Statement> cancel_query_stmt
+
 %type <Statement> copy_from_stmt
 %type <Statement> create_stmt
 %type <Statement> create_database_stmt
@@ -1219,12 +1223,18 @@ copy_from_stmt:
 
 // CANCEL [JOB|QUERY] id
 cancel_stmt:
+  cancel_job_stmt
+| cancel_query_stmt
+
+cancel_job_stmt:
   CANCEL JOB a_expr
   {
     /* SKIP DOC */
     $$.val = &CancelJob{ID: $3.expr()}
   }
-| CANCEL QUERY a_expr
+
+cancel_query_stmt:
+  CANCEL QUERY a_expr
   {
     /* SKIP DOC */
     $$.val = &CancelQuery{ID: $3.expr()}
