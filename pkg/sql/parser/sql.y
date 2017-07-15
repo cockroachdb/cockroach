@@ -505,7 +505,16 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> revoke_stmt
 %type <*Select> select_stmt
 %type <Statement> savepoint_stmt
+
 %type <Statement> set_stmt
+%type <Statement> set_session_stmt
+%type <Statement> set_csetting_stmt
+%type <Statement> set_transaction_stmt
+%type <Statement> set_exprs_internal
+%type <Statement> generic_set
+%type <Statement> set_rest_more
+%type <Statement> set_names
+
 %type <Statement> show_stmt
 %type <Statement> split_stmt
 %type <Statement> testing_relocate_stmt
@@ -622,8 +631,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <NameList> opt_conf_expr
 %type <*OnConflict> on_conflict
 
-%type <Statement>  generic_set set_rest set_rest_more
-%type <Statement>  begin_transaction set_exprs_internal set_name
+%type <Statement>  begin_transaction
 %type <TransactionModes> transaction_mode_list transaction_mode
 
 %type <NameList> opt_storing
@@ -847,7 +855,6 @@ stmt:
 | reset_stmt
 | truncate_stmt
 | update_stmt
-| use_stmt
 | /* EMPTY */
   {
     $$.val = Statement(nil)
@@ -1453,25 +1460,19 @@ use_stmt:
 // SET name TO 'var_value'
 // SET TIME ZONE 'var_value'
 set_stmt:
-  SET set_rest
-  {
-    $$.val = $2.stmt()
-  }
-| SET LOCAL set_rest { return unimplemented(sqllex, "set local") }
-| SET SESSION CHARACTERISTICS AS TRANSACTION transaction_iso_level
-  {
-    $$.val = &SetDefaultIsolation{Isolation: $6.isoLevel()}
-  }
-| SET SESSION set_rest
-  {
-    $$.val = $3.stmt()
-  }
-| SET CLUSTER SETTING generic_set
+  set_session_stmt
+| set_csetting_stmt
+| set_transaction_stmt
+| set_exprs_internal { /* SKIP DOC */ }
+| use_stmt { /* SKIP DOC */ }
+| SET LOCAL error { return unimplemented(sqllex, "set local") }
+
+set_csetting_stmt:
+  SET CLUSTER SETTING generic_set
   {
     $$.val = $4.stmt()
     $$.val.(*Set).SetMode = SetModeClusterSetting
   }
-| set_exprs_internal { /* SKIP DOC */ }
 
 set_exprs_internal:
   /* SET ROW serves to accelerate parser.parseExprs().
@@ -1481,12 +1482,30 @@ set_exprs_internal:
     $$.val = &Set{Values: $4.exprs()}
   }
 
-set_rest:
-  TRANSACTION transaction_mode_list
+set_session_stmt:
+  SET SESSION set_rest_more
   {
-    $$.val = &SetTransaction{Modes: $2.transactionModes()}
+    $$.val = $3.stmt()
   }
-| set_rest_more
+| SET set_rest_more
+  {
+    $$.val = $2.stmt()
+  }
+// Special form for pg compatibility:
+| SET SESSION CHARACTERISTICS AS TRANSACTION transaction_iso_level
+  {
+    $$.val = &SetDefaultIsolation{Isolation: $6.isoLevel()}
+  }
+
+set_transaction_stmt:
+  SET TRANSACTION transaction_mode_list
+  {
+    $$.val = &SetTransaction{Modes: $3.transactionModes()}
+  }
+| SET SESSION TRANSACTION transaction_mode_list
+  {
+    $$.val = &SetTransaction{Modes: $4.transactionModes()}
+  }
 
 generic_set:
   var_name TO var_list
@@ -1507,20 +1526,20 @@ generic_set:
   }
 
 set_rest_more:
-  // Generic SET syntaxes:
-  generic_set
-| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
-  // Special syntaxes mandated by SQL standard:
+// Generic SET syntaxes:
+   generic_set
+// Special syntaxes mandated by SQL standard:
 | TIME ZONE zone_value
   {
     /* SKIP DOC */
     $$.val = &Set{Name: UnresolvedName{Name("time zone")}, Values: Exprs{$3.expr()}}
   }
-| set_name
+| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
+| set_names
 
 // SET NAMES is the SQL standard syntax for SET client_encoding.
 // See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
-set_name:
+set_names:
   NAMES var_value
   {
     /* SKIP DOC */
@@ -1532,7 +1551,11 @@ set_name:
     $$.val = &Set{Name: UnresolvedName{Name("client_encoding")}, SetMode: SetModeReset}
   }
 
-opt_default: DEFAULT {} | /* EMPTY */ {}
+opt_default:
+  DEFAULT
+  { }
+| /* EMPTY */
+  { }
 
 var_name:
   any_name
