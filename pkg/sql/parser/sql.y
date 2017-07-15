@@ -2390,15 +2390,15 @@ truncate_stmt:
 
 // CREATE USER
 create_user_stmt:
-  CREATE USER name opt_with opt_password
+  CREATE USER name opt_password
   {
-    $$.val = &CreateUser{Name: Name($3), Password: $5.strPtr()}
+    $$.val = &CreateUser{Name: Name($3), Password: $4.strPtr()}
   }
 
 opt_password:
-  PASSWORD SCONST
+  opt_with PASSWORD SCONST
   {
-    pwd := $2
+    pwd := $3
     $$.val = &pwd
   }
 | /* EMPTY */ {
