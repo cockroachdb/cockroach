@@ -539,6 +539,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> release_stmt
 %type <Statement> reset_stmt
 %type <Statement> resume_stmt
+%type <Statement> restore_stmt
 %type <Statement> revoke_stmt
 %type <*Select> select_stmt
 %type <Statement> rollback_stmt
@@ -894,6 +895,7 @@ stmt:
 | insert_stmt
 | pause_stmt
 | prepare_stmt
+| restore_stmt
 | resume_stmt
 | revoke_stmt
 | savepoint_stmt
@@ -1150,7 +1152,9 @@ backup_stmt:
   {
     $$.val = &Backup{Targets: $2.targetList(), To: $4.expr(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
   }
-| RESTORE targets FROM string_or_placeholder_list opt_as_of_clause opt_with_options
+
+restore_stmt:
+  RESTORE targets FROM string_or_placeholder_list opt_as_of_clause opt_with_options
   {
     $$.val = &Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }
