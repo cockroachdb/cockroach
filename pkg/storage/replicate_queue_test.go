@@ -60,7 +60,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	const newRanges = 5
 	for i := 0; i < newRanges; i++ {
 		tableID := keys.MaxReservedDescID + i + 1
-		splitKey := keys.MakeRowSentinelKey(keys.MakeTablePrefix(uint32(tableID)))
+		splitKey := keys.MakeTablePrefix(uint32(tableID))
 		if _, _, err := tc.SplitRange(splitKey); err != nil {
 			t.Fatal(err)
 		}

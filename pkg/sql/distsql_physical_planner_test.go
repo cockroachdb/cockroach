@@ -33,7 +33,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -73,8 +72,7 @@ func SplitTable(
 		t.Fatal(err)
 	}
 
-	splitKey := keys.MakeRowSentinelKey(pik)
-	_, rightRange, err := tc.Server(0).SplitRange(splitKey)
+	_, rightRange, err := tc.Server(0).SplitRange(pik)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,8 +128,7 @@ func TestPlanningDuringSplits(t *testing.T) {
 					panic(err)
 				}
 
-				splitKey := keys.MakeRowSentinelKey(pik)
-				if _, _, err := tc.Server(0).SplitRange(splitKey); err != nil {
+				if _, _, err := tc.Server(0).SplitRange(pik); err != nil {
 					panic(err)
 				}
 			}

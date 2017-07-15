@@ -2592,26 +2592,12 @@ func (r *Replica) adminSplitWithDescriptor(
 			foundSplitKey = args.SplitKey
 		}
 
-		// Ensure the key falls between rows, not within one.
-		foundSplitKey, err := keys.EnsureSafeSplitKey(foundSplitKey)
-		if err != nil {
-			return reply, false, roachpb.NewErrorf("cannot split range at key %s: %v",
-				args.SplitKey, err)
-		}
-
-		// EnsureSafeSplitKey could have changed the key, so we must
-		// revalidate. But this time we must not return a
-		// RangeKeyMismatchError, because that would result in infinite
-		// retries (the client would retry with the original key, which
-		// would be sent back to this range again). Treat these keys as
-		// invalid split points.
 		if !containsKey(*desc, foundSplitKey) {
 			return reply, false,
-				roachpb.NewErrorf(
-					"requested split key %s changed to %s by EnsureSafeSplitKey, out of bounds of %s",
-					args.SplitKey, foundSplitKey, r)
+				roachpb.NewErrorf("requested split key %s out of bounds of %s", args.SplitKey, r)
 		}
 
+		var err error
 		splitKey, err = keys.Addr(foundSplitKey)
 		if err != nil {
 			return reply, false, roachpb.NewError(err)

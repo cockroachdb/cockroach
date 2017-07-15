@@ -109,7 +109,7 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 			}
 
 			// Lookup the lease.
-			tableRangeDesc, err := tc.LookupRange(keys.MakeRowSentinelKey(tableStartKey.Load().([]byte)))
+			tableRangeDesc, err := tc.LookupRange(tableStartKey.Load().([]byte))
 			if err != nil {
 				t.Fatal(err)
 			}
