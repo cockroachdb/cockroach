@@ -583,7 +583,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <str> opt_equal_value
 
 %type <*Select> select_no_parens
-%type <SelectStatement> select_clause select_with_parens simple_select values_clause
+%type <SelectStatement> select_clause select_with_parens simple_select values_clause table_clause
 
 %type <empty> alter_using
 %type <Expr> alter_column_default
@@ -3042,14 +3042,7 @@ simple_select:
     }
   }
 | values_clause
-| TABLE relation_expr
-  {
-    $$.val = &SelectClause{
-      Exprs:       SelectExprs{starSelectExpr()},
-      From:        &From{Tables: TableExprs{$2.newNormalizableTableName()}},
-      tableSelect: true,
-    }
-  }
+| table_clause
 | select_clause UNION all_or_distinct select_clause
   {
     $$.val = &UnionClause{
@@ -3075,6 +3068,16 @@ simple_select:
       Left:  &Select{Select: $1.selectStmt()},
       Right: &Select{Select: $4.selectStmt()},
       All:   $3.bool(),
+    }
+  }
+
+table_clause:
+  TABLE relation_expr
+  {
+    $$.val = &SelectClause{
+      Exprs:       SelectExprs{starSelectExpr()},
+      From:        &From{Tables: TableExprs{$2.newNormalizableTableName()}},
+      tableSelect: true,
     }
   }
 
