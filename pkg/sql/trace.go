@@ -59,7 +59,9 @@ func (p *planner) makeTraceNode(plan planNode) (planNode, error) {
 	}, nil
 }
 
-var errTracingAlreadyEnabled = errors.New("cannot run SHOW TRACE FOR while session tracing is enabled - did you mean SHOW SESSION TRACE?")
+var errTracingAlreadyEnabled = errors.New(
+	"cannot run SHOW TRACE FOR on statement while session tracing is enabled" +
+		" - did you mean SHOW TRACE FOR SESSION?")
 
 func (n *traceNode) Start(ctx context.Context) error {
 	if n.p.session.Tracing.Enabled() {

@@ -50,7 +50,7 @@ func TestTrace(t *testing.T) {
 					t.Fatal(err)
 				}
 				// Start session tracing.
-				if _, err := sqlDB.Exec("SET TRACE = ON"); err != nil {
+				if _, err := sqlDB.Exec("SET TRACING = ON"); err != nil {
 					t.Fatal(err)
 				}
 
@@ -64,7 +64,7 @@ func TestTrace(t *testing.T) {
 				}
 
 				// Stop tracing and extract the trace
-				if _, err := sqlDB.Exec("SET TRACE = OFF"); err != nil {
+				if _, err := sqlDB.Exec("SET TRACING = OFF"); err != nil {
 					t.Fatal(err)
 				}
 
@@ -86,7 +86,7 @@ func TestTrace(t *testing.T) {
 				}
 
 				// Start session tracing.
-				if _, err := sqlDB.Exec("SET TRACE = ON"); err != nil {
+				if _, err := sqlDB.Exec("SET TRACING = ON"); err != nil {
 					t.Fatal(err)
 				}
 
@@ -100,7 +100,7 @@ func TestTrace(t *testing.T) {
 				}
 
 				// Stop tracing and extract the trace
-				if _, err := sqlDB.Exec("SET TRACE = OFF"); err != nil {
+				if _, err := sqlDB.Exec("SET TRACING = OFF"); err != nil {
 					t.Fatal(err)
 				}
 

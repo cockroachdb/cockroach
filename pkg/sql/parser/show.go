@@ -73,7 +73,7 @@ func (node *ShowDatabases) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW DATABASES")
 }
 
-// ShowTrace represents a SHOW SESSION TRACE statement.
+// ShowTrace represents a SHOW TRACE FOR SESSION statement.
 type ShowTrace struct {
 	Statement   Statement
 	OnlyKVTrace bool
@@ -85,10 +85,10 @@ func (node *ShowTrace) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.OnlyKVTrace {
 		onlyKV = " KV"
 	}
+	fmt.Fprintf(buf, "SHOW%s TRACE FOR ", onlyKV)
 	if node.Statement == nil {
-		fmt.Fprintf(buf, "SHOW SESSION%s TRACE", onlyKV)
+		buf.WriteString("SESSION")
 	} else {
-		fmt.Fprintf(buf, "SHOW%s TRACE FOR ", onlyKV)
 		FormatNode(buf, f, node.Statement)
 	}
 }

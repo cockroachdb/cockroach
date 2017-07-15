@@ -470,7 +470,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 }
 
 // crdbInternalSessionTraceTable exposes the latest trace collected on this
-// session (via SET TRACE={ON/OFF})
+// session (via SET TRACING={ON/OFF})
 var crdbInternalSessionTraceTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.session_trace(
