@@ -3103,7 +3103,7 @@ table_clause:
 //
 // Recognizing WITH_LA here allows a CTE to be named TIME or ORDINALITY.
 with_clause:
-WITH cte_list { return unimplemented(sqllex, "with cte_list") }
+  WITH cte_list { return unimplemented(sqllex, "with cte_list") }
 | WITH_LA cte_list { return unimplemented(sqllex, "with cte_list") }
 | WITH RECURSIVE cte_list { return unimplemented(sqllex, "with cte_list") }
 
