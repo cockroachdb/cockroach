@@ -515,7 +515,14 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> create_view_stmt
 %type <Statement> delete_stmt
 %type <Statement> discard_stmt
+
 %type <Statement> drop_stmt
+%type <Statement> drop_database_stmt
+%type <Statement> drop_index_stmt
+%type <Statement> drop_table_stmt
+%type <Statement> drop_user_stmt
+%type <Statement> drop_view_stmt
+
 %type <Statement> explain_stmt
 %type <Statement> help_stmt
 %type <Statement> prepare_stmt
@@ -1269,15 +1276,34 @@ discard_stmt:
 
 // DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
 drop_stmt:
-  DROP DATABASE name
+  drop_database_stmt
+| drop_index_stmt
+| drop_table_stmt
+| drop_view_stmt
+| drop_user_stmt
+
+drop_view_stmt:
+  DROP VIEW table_name_list opt_drop_behavior
   {
-    $$.val = &DropDatabase{Name: Name($3), IfExists: false}
+    $$.val = &DropView{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
-| DROP DATABASE IF EXISTS name
+| DROP VIEW IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &DropDatabase{Name: Name($5), IfExists: true}
+    $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
-| DROP INDEX table_name_with_index_list opt_drop_behavior
+
+drop_table_stmt:
+  DROP TABLE table_name_list opt_drop_behavior
+  {
+    $$.val = &DropTable{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+  }
+| DROP TABLE IF EXISTS table_name_list opt_drop_behavior
+  {
+    $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+  }
+
+drop_index_stmt:
+  DROP INDEX table_name_with_index_list opt_drop_behavior
   {
     $$.val = &DropIndex{
       IndexList: $3.tableWithIdxList(),
@@ -1293,23 +1319,19 @@ drop_stmt:
       DropBehavior: $6.dropBehavior(),
     }
   }
-| DROP TABLE table_name_list opt_drop_behavior
+
+drop_database_stmt:
+  DROP DATABASE name
   {
-    $$.val = &DropTable{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &DropDatabase{Name: Name($3), IfExists: false}
   }
-| DROP TABLE IF EXISTS table_name_list opt_drop_behavior
+| DROP DATABASE IF EXISTS name
   {
-    $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &DropDatabase{Name: Name($5), IfExists: true}
   }
-| DROP VIEW table_name_list opt_drop_behavior
-  {
-    $$.val = &DropView{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
-  }
-| DROP VIEW IF EXISTS table_name_list opt_drop_behavior
-  {
-    $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
-  }
-| DROP USER name_list
+
+drop_user_stmt:
+  DROP USER name_list
   {
     $$.val = &DropUser{Names: $3.nameList(), IfExists: false}
   }
