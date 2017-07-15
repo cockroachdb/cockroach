@@ -533,15 +533,7 @@ func PresplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 
 		// Pick the index such that it's 0 if len(splitPoints) == 1.
 		splitIdx := len(splitPoints) / 2
-		// AdminSplit requires that the key be a valid table key, which means
-		// the last byte is a uvarint indicating how much of the end of the key
-		// needs to be stripped off to get the key's row prefix. The start keys
-		// input to restore don't have this suffix, so make them row sentinels,
-		// which means nothing should be stripped (aka appends 0). See
-		// EnsureSafeSplitKey for more context.
-		splitKey := append([]byte(nil), splitPoints[splitIdx]...)
-		splitKey = keys.MakeRowSentinelKey(splitKey)
-		if err := db.AdminSplit(ctx, splitPoints[splitIdx], splitKey); err != nil {
+		if err := db.AdminSplit(ctx, splitPoints[splitIdx], splitPoints[splitIdx]); err != nil {
 			return err
 		}
 

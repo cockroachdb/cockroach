@@ -27,7 +27,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -183,8 +182,7 @@ func splitRangeAtVal(
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}
 
-	startKey := keys.MakeRowSentinelKey(pik)
-	leftRange, rightRange, err := ts.SplitRange(startKey)
+	leftRange, rightRange, err := ts.SplitRange(pik)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.Wrapf(err, "failed to split at row: %d", pk)

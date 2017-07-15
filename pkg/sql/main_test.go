@@ -155,12 +155,8 @@ func checkEndTransactionTrigger(args storagebase.FilterArgs) *roachpb.Error {
 
 	var hasSystemKey bool
 	for _, span := range req.IntentSpans {
-		keyAddr, err := keys.Addr(span.Key)
-		if err != nil {
-			return roachpb.NewError(err)
-		}
-		if bytes.Compare(keyAddr, keys.SystemConfigSpan.Key) >= 0 &&
-			bytes.Compare(keyAddr, keys.SystemConfigSpan.EndKey) < 0 {
+		if bytes.Compare(span.Key, keys.SystemConfigSpan.Key) >= 0 &&
+			bytes.Compare(span.Key, keys.SystemConfigSpan.EndKey) < 0 {
 			hasSystemKey = true
 			break
 		}

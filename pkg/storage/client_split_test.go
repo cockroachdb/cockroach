@@ -101,7 +101,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
-	key := keys.MakeRowSentinelKey(append([]byte(nil), keys.UserTableDataMin...))
+	key := keys.UserTableDataMin
 	args := adminSplitArgs(key, key)
 	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)
@@ -162,8 +162,14 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	tableKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
 	rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
 	rowKey = encoding.EncodeStringAscending(encoding.EncodeVarintAscending(rowKey, 1), "a")
-	col1Key := keys.MakeFamilyKey(append([]byte(nil), rowKey...), 1)
-	col2Key := keys.MakeFamilyKey(append([]byte(nil), rowKey...), 2)
+	col1Key, err := keys.EnsureSafeSplitKey(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	col2Key, err := keys.EnsureSafeSplitKey(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 2))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// We don't care about the value, so just store any old thing.
 	if err := store.DB().Put(context.TODO(), col1Key, "column 1"); err != nil {
@@ -175,13 +181,14 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 
 	// Split between col1Key and col2Key by splitting before col2Key.
 	args := adminSplitArgs(col2Key, col2Key)
-	_, err := client.SendWrapped(context.Background(), rg1(store), args)
-	if err != nil {
-		t.Fatalf("%s: split unexpected error: %s", col1Key, err)
+	_, pErr := client.SendWrapped(context.Background(), rg1(store), args)
+	if pErr != nil {
+		t.Fatalf("%s: split unexpected error: %s", col1Key, pErr)
 	}
 
-	repl1 := store.LookupReplica(col1Key, nil)
-	repl2 := store.LookupReplica(col2Key, nil)
+	repl1 := store.LookupReplica(roachpb.RKey(col1Key), nil)
+	repl2 := store.LookupReplica(roachpb.RKey(col2Key), nil)
+
 	// Verify the two columns are still on the same range.
 	if !reflect.DeepEqual(repl1, repl2) {
 		t.Fatalf("%s: ranges differ: %+v vs %+v", roachpb.Key(col1Key), repl1, repl2)
@@ -290,59 +297,6 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	args = adminSplitArgs(roachpb.KeyMin, []byte("a"))
 	if _, err := client.SendWrapped(context.Background(), rg1(store), args); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
-	}
-}
-
-// TestEnsureSafeSplitKeyOutOfBounds is a regression test for an issue
-// fixed in #16291. A key that was initially within the bounds of a
-// range becomes out of bounds when passed through EnsureSafeSplitKey.
-// This was eventually detected, but it happened so late in the split
-// processes that we had no choice but to panic. Since #16291, this
-// condition is properly validated at the start of the split process
-// and returns an error cleanly.
-func TestEnsureSafeSplitKeyOutOfBounds(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	mtc := &multiTestContext{storeConfig: &storeCfg}
-	mtc.Start(t, 1)
-	defer mtc.Stop()
-
-	// Carefully construct keys with the desired properties: key2 is
-	// greater than key1, but the order reverses when EnsureSafeSplitKey
-	// is called.
-	var key1, key2 roachpb.Key
-	key1 = encoding.EncodeUvarintAscending(key1, keys.MaxReservedDescID+1)
-	key1 = encoding.EncodeUvarintAscending(key1, 1)
-	key1 = keys.MakeRowSentinelKey(key1)
-	key2 = encoding.EncodeUvarintAscending(key2, keys.MaxReservedDescID+1)
-	key2 = encoding.EncodeUvarintAscending(key2, 2)
-	key2 = encoding.EncodeUvarintAscending(key2, 1)
-
-	// Make sure the keys sort in the expected ways.
-	if key1.Compare(key2) >= 0 {
-		t.Fatalf("expected %s < %s", key1, key2)
-	}
-	var eKey1, eKey2 roachpb.Key
-	var err error
-	if eKey1, err = keys.EnsureSafeSplitKey(key1); err != nil {
-		t.Fatal(err)
-	}
-	if eKey2, err = keys.EnsureSafeSplitKey(key2); err != nil {
-		t.Fatal(err)
-	}
-	if eKey1.Compare(eKey2) <= 0 {
-		t.Fatalf("expected %s > %s", eKey1, eKey2)
-	}
-
-	args := adminSplitArgs(key1, key1)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], args); pErr != nil {
-		t.Fatal(pErr)
-	}
-	args = adminSplitArgs(key2, key2)
-	_, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], args)
-	if !testutils.IsPError(pErr, "requested split key.*changed to.*by EnsureSafeSplitKey") {
-		t.Fatalf("unexpected error: %s", pErr)
 	}
 }
 
@@ -563,7 +517,6 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	// Split the range after the last table data key.
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
-	keyPrefix = keys.MakeRowSentinelKey(keyPrefix)
 	args := adminSplitArgs(roachpb.KeyMin, keyPrefix)
 	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 		t.Fatal(pErr)
@@ -696,7 +649,6 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 	// Split the range after the last table data key to get a range that contains
 	// no user data.
 	splitKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
-	splitKey = keys.MakeRowSentinelKey(splitKey)
 	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
 	if _, err := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); err != nil {
 		t.Fatal(err)
@@ -763,7 +715,6 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 
 	// Split the range after the last table data key.
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
-	keyPrefix = keys.MakeRowSentinelKey(keyPrefix)
 	args := adminSplitArgs(roachpb.KeyMin, keyPrefix)
 	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 		t.Fatal(pErr)
@@ -835,7 +786,7 @@ func fillRange(
 			return
 		}
 		key := append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
-		key = keys.MakeRowSentinelKey(key)
+		key = keys.MakeFamilyKey(key, 0)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
 		_, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
@@ -1695,7 +1646,6 @@ func writeRandomDataToRange(
 	for i := 0; i < 100; i++ {
 		key := append([]byte(nil), keyPrefix...)
 		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
-		key = keys.MakeRowSentinelKey(key)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
 		if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
@@ -1707,7 +1657,7 @@ func writeRandomDataToRange(
 	// Return approximate midway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
 	midKey := append([]byte(nil), keyPrefix...)
 	midKey = append(midKey, []byte("Z")...)
-	return keys.MakeRowSentinelKey(midKey)
+	return midKey
 }
 
 func writeRandomTimeSeriesDataToRange(
@@ -1757,7 +1707,7 @@ func writeRandomTimeSeriesDataToRange(
 	// Return approximate midway point (100 is midway between random timestamps in range [0,200)).
 	midKey := append([]byte(nil), keyPrefix...)
 	midKey = encoding.EncodeVarintAscending(midKey, 100*r.SlabDuration())
-	return keys.MakeRowSentinelKey(midKey)
+	return midKey
 }
 
 // TestStoreSplitBeginTxnPushMetaIntentRace prevents regression of
@@ -1973,7 +1923,7 @@ func TestStorePushTxnQueueEnabledOnSplit(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
-	key := keys.MakeRowSentinelKey(append([]byte(nil), keys.UserTableDataMin...))
+	key := keys.UserTableDataMin
 	args := adminSplitArgs(key, key)
 	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)

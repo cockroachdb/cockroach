@@ -1322,7 +1322,7 @@ func TestRangeInfo(t *testing.T) {
 func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skip("this test is flaky on the 5m initial stress due to errant Raft messages initializing the Raft group")
-	splitKey := keys.MakeRowSentinelKey(keys.UserTableDataMin)
+	splitKey := keys.UserTableDataMin
 	testState := struct {
 		syncutil.Mutex
 		blockingCh chan struct{}
@@ -1528,8 +1528,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 		keys.MakeTablePrefix(keys.SystemRangesID),
 	}
 	for _, key := range splitKeys {
-		splitKey := keys.MakeRowSentinelKey(key)
-		if _, _, err := tc.SplitRange(splitKey); err != nil {
+		if _, _, err := tc.SplitRange(key); err != nil {
 			t.Fatalf("failed to split at key %s: %s", key, err)
 		}
 	}

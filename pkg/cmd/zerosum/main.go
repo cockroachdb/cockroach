@@ -221,7 +221,6 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 
 		key := keys.MakeTablePrefix(tableID)
 		key = encoding.EncodeVarintAscending(key, int64(zipf.Uint64()))
-		key = keys.MakeRowSentinelKey(key)
 
 		switch r.Intn(2) {
 		case 0:

@@ -47,7 +47,7 @@ func getRowKey(
 	if err != nil {
 		return nil, err
 	}
-	return keys.MakeRowSentinelKey(key), nil
+	return key, nil
 }
 
 // Split executes a KV split.
@@ -305,7 +305,7 @@ func (n *testingRelocateNode) Next(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	rowKey = keys.MakeRowSentinelKey(rowKey)
+	rowKey = keys.MakeFamilyKey(rowKey, 0)
 
 	rangeDesc, err := lookupRangeDescriptor(ctx, n.p.session.execCfg.DB, rowKey)
 	if err != nil {
