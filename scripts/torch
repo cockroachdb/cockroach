@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+server=${1-localhost}
+
+if [[ ! $(go version) =~ go1\.9 ]]; then
+  echo "This script will only work well with local+remote binaries built with go >= 1.9."
+  exit 1
+fi
+
+FLAMEDIR="$GOPATH/src/github.com/brendangregg/FlameGraph"
+
+function install() {
+  cat <<EOF
+go get -u github.com/brendangregg/FlameGraph/...
+go get -u github.com/uber/go-torch
+go get -u github.com/google/pprof
+EOF
+}
+
+if [ ! -d "${FLAMEDIR}" ]; then
+  echo "FlameGraph not found. Run:"
+  install
+  exit 1
+fi
+if [[ ! $(type -P "go-torch") ]]; then
+  echo "go-torch not found. Run:"
+  install
+  exit 1
+fi
+if [[ ! $(type -P "pprof") ]]; then
+  echo "pprof not found. Run:"
+  install
+  exit 1
+fi
+
+tmpfile="$(mktemp -d)/torch.svg"
+
+export PATH="${PATH}:${FLAMEDIR}"
+go-torch -t 30 -f "${tmpfile}" -u "https+insecure://${server}:8080/debug/pprof/profile"
+open ${tmpfile}
