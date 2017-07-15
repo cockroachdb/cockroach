@@ -216,8 +216,9 @@ JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
 PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
 SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy
+LIBROACH_SRC_DIR := $(C_DEPS_DIR)/libroach
 
-C_LIBS_SRCS := $(JEMALLOC_SRC_DIR) $(PROTOBUF_SRC_DIR) $(ROCKSDB_SRC_DIR) $(SNAPPY_SRC_DIR)
+C_LIBS_SRCS := $(JEMALLOC_SRC_DIR) $(PROTOBUF_SRC_DIR) $(ROCKSDB_SRC_DIR) $(SNAPPY_SRC_DIR) $(LIBROACH_SRC_DIR)
 
 HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
 
@@ -282,11 +283,13 @@ JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
 PROTOBUF_DIR := $(BUILD_DIR)/protobuf
 ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(STDMALLOC_SUFFIX)$(if $(ENABLE_ROCKSDB_ASSERTIONS),_assert)
 SNAPPY_DIR   := $(BUILD_DIR)/snappy
+LIBROACH_DIR := $(BUILD_DIR)/libroach
 # Can't share with protobuf because protoc is always built for the host.
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 PROTOC 		 := $(PROTOC_DIR)/protoc
 
-C_LIBS := $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb
+C_LIBS_OSS = $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb libroach
+C_LIBS_CCL = $(C_LIBS_OSS) libroachccl
 
 # Go does not permit dashes in build tags. This is undocumented. Fun!
 NATIVE_SPECIFIER_TAG := $(subst -,_,$(NATIVE_SPECIFIER))$(STDMALLOC_SUFFIX)
@@ -327,7 +330,7 @@ $(CGO_FLAGS_FILES): $(REPO_ROOT)/build/common.mk
 	@echo 'package $(notdir $(@D))' >> $@
 	@echo >> $@
 	@echo '// #cgo CPPFLAGS: -I$(JEMALLOC_DIR)/include' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(ROCKSDB_DIR))' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(ROCKSDB_DIR) $(LIBROACH_DIR))' >> $@
 	@echo 'import "C"' >> $@
 
 # BUILD ARTIFACT CACHING
@@ -402,6 +405,13 @@ $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild $(BOOTSTRAP_TARGET)
 	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
 	cd $(SNAPPY_DIR) && cmake $(CMAKE_FLAGS) $(SNAPPY_SRC_DIR)
 
+$(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(BOOTSTRAP_TARGET)
+	rm -rf $(LIBROACH_DIR)
+	mkdir -p $(LIBROACH_DIR)
+	@# NOTE: If you change the CMake flags below, bump the version in
+	@# $(C_DEPS_DIR)/libroach-rebuild. See above for rationale.
+	cd $(LIBROACH_DIR) && cmake $(CMAKE_FLAGS) $(LIBROACH_SRC_DIR)
+
 # We mark C and C++ dependencies as .PHONY (or .ALWAYS_REBUILD) to avoid
 # having to name the artifact (for .PHONY), which can vary by platform, and so
 # the child Makefile can determine whether the target is up to date (for both
@@ -426,6 +436,14 @@ libsnappy: $(SNAPPY_DIR)/Makefile
 .PHONY: librocksdb
 librocksdb: $(ROCKSDB_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) -j$(NCPUS) rocksdb
+
+.PHONY: libroach
+libroach: $(LIBROACH_DIR)/Makefile
+	$(MAKE) --no-print-directory -C $(LIBROACH_DIR) -j$(NCPUS) roach
+
+.PHONY: libroachccl
+libroachccl: $(LIBROACH_DIR)/Makefile
+	$(MAKE) --no-print-directory -C $(LIBROACH_DIR) -j$(NCPUS) roachccl
 
 .PHONY: clean-c-deps
 clean-c-deps:

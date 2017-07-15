@@ -19,7 +19,7 @@
 REPO_ROOT := ./cockroach
 include $(REPO_ROOT)/build/common.mk
 
-NATIVE_ROOT := $(PKG_ROOT)/storage/engine
+NATIVE_ROOT := $(REPO_ROOT)/c-deps/roachlib/protos
 GITHUB_ROOT := $(REPO_ROOT)/vendor/github.com
 
 GOGO_PROTOBUF_PACKAGE := github.com/gogo/protobuf
@@ -94,18 +94,9 @@ $(GW_SOURCES_TARGET): $(PROTOC) $(GRPC_GATEWAY_PLUGIN) $(GW_SERVER_PROTOS) $(GW_
 
 CPP_SOURCES_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
 $(CPP_SOURCES_TARGET): $(PROTOC) $(CPP_PROTOS)
-	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
+	mkdir -p $(NATIVE_ROOT)
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(CPP_PROTOS)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
-	@# For c++, protoc generates a directory structure mirroring the package
-	@# structure (and these directories must be in the include path), but cgo
-	@# only compiles a single directory so we "symlink" the generated pb.cc files
-	@# into the storage/engine directory, taking care to avoid collisions between
-	@# files with identical names.
-	@# We use `find` and not `git ls-files` here because `git ls-files` will
-	@# include deleted files (i.e. these very "symlinks") in its output,
-	@# resulting in recursive "symlinks", which is Bad™.
-	(cd $(NATIVE_ROOT) && find . -name *.pb.cc | sed 's!./!!' | xargs -I % sh -c 'echo "#include \"%\"" > $$(echo % | tr / _)')
 	touch $@
 
 $(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(YARN_INSTALLED_TARGET)
