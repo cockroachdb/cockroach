@@ -35,7 +35,7 @@ server_version                 9.5.0
 session_user                   root
 standard_conforming_strings    on
 time zone                      UTC
-trace                          off
+tracing                        off
 transaction isolation level    SERIALIZABLE
 transaction priority           NORMAL
 transaction status             NoTxn
@@ -229,7 +229,7 @@ Start Key  End Key  Replicas  Lease Holder
 NULL       NULL     {1}       1
 
 query TTTTTT colnames
-SELECT * FROM [SHOW SESSION TRACE]
+SELECT * FROM [SHOW TRACE FOR SESSION]
 ----
 timestamp age message context operation span
 

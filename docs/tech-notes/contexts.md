@@ -203,7 +203,7 @@ allows embedding a `trace.EventLog` in a `Context` ; events go to that
 `EventLog` automatically unless a span is also embedded in the
 context.
 
-There’s also `SET TRACE = on` that uses “snowball tracing” for
+There’s also `SET TRACING = on` that uses “snowball tracing” for
 collecting the distributed trace of one query and displaying it as SQL
 result rows. Snowball tracing is trace mode where trace information is
 stored in-memory, instead of being sent to a trace collector, so that

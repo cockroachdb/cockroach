@@ -1,14 +1,14 @@
 # Prepare a trace to be inspected below.
 
 statement ok
-SET trace = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET trace = off;
+SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off;
 
 # Inspect the trace: we exclude messages containing newlines as these
 # may contain non-deterministic txn object descriptions.
 # This also checks that the span column properly reports separate
 # SQL transactions.
 query TTT
-SELECT span, message, operation FROM [SHOW SESSION TRACE] WHERE message NOT LIKE e'%\n%'
+SELECT span, message, operation FROM [SHOW TRACE FOR SESSION] WHERE message NOT LIKE e'%\n%'
 ----
 (0,0)  === SPAN START: sql txn implicit ===  sql txn implicit
 (1,0)  === SPAN START: sql txn ===           sql txn implicit
@@ -18,7 +18,7 @@ SELECT span, message, operation FROM [SHOW SESSION TRACE] WHERE message NOT LIKE
 (2,0)  === SPAN START: sql txn implicit ===  sql txn implicit
 (2,0)  executing 1/1: SELECT 2               sql txn implicit
 (3,0)  === SPAN START: sql txn implicit ===  sql txn implicit
-(3,0)  executing 1/1: SET trace = 'off'      sql txn implicit
+(3,0)  executing 1/1: SET tracing = 'off'    sql txn implicit
 
 # Same, with SHOW TRACE FOR.
 # This also tests that sub-spans are reported properly.
@@ -46,15 +46,15 @@ SELECT span, message, operation FROM [SHOW TRACE FOR EXECUTE x]
 (0,2)  plan completed execution              consuming rows
 (0,2)  resources released, stopping trace    consuming rows
 
-# Check SHOW SESSION KV TRACE.
+# Check SHOW KV TRACE FOR SESSION.
 
 statement ok
-SET trace = on,kv; CREATE DATABASE t; SET trace = off
+SET tracing = on,kv; CREATE DATABASE t; SET tracing = off
 
 # Check the KV trace; we need to remove the eventlog entry since the
 # timestamp is non-deterministic.
 query TTT
-SELECT span, operation, message FROM [SHOW SESSION KV TRACE] WHERE message NOT LIKE '%Z/%'
+SELECT span, operation, message FROM [SHOW KV TRACE FOR SESSION] WHERE message NOT LIKE '%Z/%'
 ----
 (1,0)  sql txn implicit  querying next range at /Table/2/1/0/"t"/3/1
 (1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1

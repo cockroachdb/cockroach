@@ -330,7 +330,7 @@ var varGen = map[string]sessionVar{
 		Get: func(session *Session) string { return getTransactionState(&session.TxnState) },
 	},
 
-	`trace`: {
+	`tracing`: {
 		Get: func(session *Session) string {
 			if session.Tracing.Enabled() {
 				val := "on"
@@ -380,7 +380,7 @@ func enableTracing(session *Session, values []parser.TypedExpr) error {
 		case "cluster":
 			recordingType = tracing.SnowballRecording
 		default:
-			return errors.Errorf("set trace: unknown mode %q", s)
+			return errors.Errorf("set tracing: unknown mode %q", s)
 		}
 	}
 	if !enableMode {

@@ -1666,11 +1666,6 @@ show_stmt:
     /* SKIP DOC */
     $$.val = &Show{Name: $2}
   }
-| SHOW TRACE
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: $2}
-  }
 | SHOW ALL
   {
     $$.val = &Show{Name: $2}
@@ -1739,11 +1734,11 @@ show_stmt:
   {
     $$.val = &ShowJobs{}
   }
-| SHOW SESSION TRACE
+| SHOW TRACE FOR SESSION
   {
     $$.val = &ShowTrace{Statement: nil}
   }
-| SHOW SESSION KV TRACE
+| SHOW KV TRACE FOR SESSION
   {
     $$.val = &ShowTrace{Statement: nil, OnlyKVTrace: true}
   }
