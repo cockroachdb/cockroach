@@ -6,10 +6,10 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
 
-#ifndef ROACHLIBCCL_DB_H
-#define ROACHLIBCCL_DB_H
+#ifndef LIBROACHCCL_DB_H
+#define LIBROACHCCL_DB_H
 
-#include "../../../storage/engine/db.h"
+#include <libroach/db.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,8 +24,4 @@ DBStatus DBBatchReprVerify(
 }  // extern "C"
 #endif
 
-#endif // ROACHLIBCCL_DB_H
-
-// local variables:
-// mode: c++
-// end:
+#endif // LIBROACHCCL_DB_H

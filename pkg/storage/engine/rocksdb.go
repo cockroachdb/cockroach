@@ -52,17 +52,16 @@ import (
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
 
-// #cgo CPPFLAGS: -I../../../c-deps/rocksdb/include
-// #cgo CPPFLAGS: -I../../../c-deps/protobuf/src
+// #cgo CPPFLAGS: -I../../../c-deps/libroach/include
+// #cgo LDFLAGS: -lroach
 // #cgo LDFLAGS: -lprotobuf
 // #cgo LDFLAGS: -lrocksdb
 // #cgo LDFLAGS: -lsnappy
-// #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
 // #cgo linux LDFLAGS: -lrt -lpthread
 // #cgo windows LDFLAGS: -lrpcrt4
 //
 // #include <stdlib.h>
-// #include "db.h"
+// #include <libroach/db.h>
 import "C"
 
 var minWALSyncInterval = settings.RegisterDurationSetting(
