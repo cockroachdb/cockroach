@@ -7,16 +7,12 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
 
 #include <memory>
-#include "rocksdb/iterator.h"
-#include "rocksdb/comparator.h"
-#include "rocksdb/write_batch.h"
-#include "rocksdb/utilities/write_batch_with_index.h"
-#include "../../../storage/engine/db_internal.h"
-#include "db.h"
-
-extern "C" {
-#include "_cgo_export.h"
-}  // extern "C"
+#include <rocksdb/iterator.h>
+#include <rocksdb/comparator.h>
+#include <rocksdb/write_batch.h>
+#include <rocksdb/utilities/write_batch_with_index.h>
+#include <libroach/ccl/db.h>
+#include "../db.h"
 
 const DBStatus kSuccess = { NULL, 0 };
 

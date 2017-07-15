@@ -14,8 +14,8 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-#ifndef ROACHLIB_DB_H
-#define ROACHLIB_DB_H
+#ifndef LIBROACH_DB_H
+#define LIBROACH_DB_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -295,7 +295,7 @@ DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
 }  // extern "C"
 #endif
 
-#endif // ROACHLIB_DB_H
+#endif // LIBROACH_DB_H
 
 // local variables:
 // mode: c++
