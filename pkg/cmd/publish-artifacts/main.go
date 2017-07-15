@@ -214,10 +214,6 @@ func main() {
 
 			{
 				recipe := "build"
-				// TODO(tamird, #14673): make CCL compile on Windows.
-				if strings.HasSuffix(target.buildType, "windows") {
-					recipe = "buildoss"
-				}
 				args := []string{recipe}
 				args = append(args, fmt.Sprintf("%s=%s", "TYPE", target.buildType))
 				args = append(args, fmt.Sprintf("%s=%s", "GOFLAGS", extraArgs.goflags))

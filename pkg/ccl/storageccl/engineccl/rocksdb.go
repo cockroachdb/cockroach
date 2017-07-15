@@ -19,26 +19,17 @@ import (
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
 
-// #cgo CPPFLAGS: -I../../../../c-deps/rocksdb/include
+// #cgo CPPFLAGS: -I../../../../c-deps/libroach/include
+// #cgo LDFLAGS: -lroachccl
+// #cgo LDFLAGS: -lroach
 // #cgo LDFLAGS: -lprotobuf
 // #cgo LDFLAGS: -lrocksdb
 // #cgo LDFLAGS: -lsnappy
-// #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
 // #cgo linux LDFLAGS: -lrt -lpthread
 // #cgo windows LDFLAGS: -lrpcrt4
 //
-// // Building this package will trigger "unresolved symbol" errors
-// // because it depends on C symbols defined in pkg/storage/engine,
-// // which aren't linked until the final binary is built. This is the
-// // platform voodoo to make the linker ignore these errors.
-// //
-// // TODO(tamird, #14673): make this package compile on Windows
-// // (and without these flags elsewhere).
-// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
-//
 // #include <stdlib.h>
-// #include "db.h"
+// #include <libroachccl.h>
 import "C"
 
 // VerifyBatchRepr asserts that all keys in a BatchRepr are between the specified

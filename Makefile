@@ -139,6 +139,9 @@ COCKROACH := ./cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
 all: $(COCKROACH)
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
+buildoss: $(C_LIBS_OSS)
+
+$(COCKROACH) build go-install: $(C_LIBS_CCL)
 
 $(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 
@@ -153,7 +156,7 @@ $(COCKROACH) build buildoss go-install: override LINKFLAGS += \
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
 .PHONY: build buildoss install
-$(COCKROACH) build buildoss go-install: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
+$(COCKROACH) build buildoss go-install: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: install
@@ -175,7 +178,7 @@ testbuild: gotestdashi
 	$(SHELL)
 
 .PHONY: gotestdashi
-gotestdashi: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
+gotestdashi: $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
 	$(XGO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
 
 testshort: override TESTFLAGS += -short
@@ -230,7 +233,7 @@ stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 # - PKG may not contain any tests! This is handled with an `if` statement that
 # checks for the presence of a test binary before running `stress` on it.
 .PHONY: stress stressrace
-stress stressrace: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
+stress stressrace: $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
 	$(GO) list -tags '$(TAGS)' -f '$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 
 .PHONY: upload-coverage
