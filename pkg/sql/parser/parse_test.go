@@ -269,6 +269,7 @@ func TestParse(t *testing.T) {
 		{`PREPARE a AS SELECT 1`},
 		{`PREPARE a AS INSERT INTO a VALUES (1)`},
 		{`PREPARE a AS UPDATE a SET b = 3`},
+		{`PREPARE a AS UPSERT INTO a VALUES (1)`},
 		{`PREPARE a AS DELETE FROM a`},
 		{`PREPARE a (INT) AS SELECT 1`},
 		{`PREPARE a (STRING, STRING) AS SELECT 1`},
