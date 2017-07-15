@@ -500,12 +500,15 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> alter_rename_view_stmt
 
 %type <Statement> backup_stmt
+%type <Statement> begin_stmt
 
 %type <Statement> cancel_stmt
 %type <Statement> cancel_job_stmt
 %type <Statement> cancel_query_stmt
 
+%type <Statement> commit_stmt
 %type <Statement> copy_from_stmt
+
 %type <Statement> create_stmt
 %type <Statement> create_database_stmt
 %type <Statement> create_index_stmt
@@ -538,6 +541,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> resume_stmt
 %type <Statement> revoke_stmt
 %type <*Select> select_stmt
+%type <Statement> rollback_stmt
 %type <Statement> savepoint_stmt
 
 %type <Statement> set_stmt
@@ -2577,6 +2581,11 @@ savepoint_stmt:
 
 // BEGIN / START / COMMIT / END / ROLLBACK / ...
 transaction_stmt:
+  begin_stmt
+| commit_stmt
+| rollback_stmt
+
+begin_stmt:
   BEGIN opt_transaction begin_transaction
   {
     $$.val = $3.stmt()
@@ -2585,7 +2594,9 @@ transaction_stmt:
   {
     $$.val = $3.stmt()
   }
-| COMMIT opt_transaction
+
+commit_stmt:
+  COMMIT opt_transaction
   {
     $$.val = &CommitTransaction{}
   }
@@ -2593,7 +2604,9 @@ transaction_stmt:
   {
     $$.val = &CommitTransaction{}
   }
-| ROLLBACK opt_to_savepoint
+
+rollback_stmt:
+  ROLLBACK opt_to_savepoint
   {
     if $2 != "" {
       $$.val = &RollbackToSavepoint{Savepoint: $2}
