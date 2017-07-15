@@ -867,17 +867,17 @@ stmt:
 | cancel_stmt
 | copy_from_stmt
 | create_stmt
+| deallocate_stmt
 | delete_stmt
 | discard_stmt
 | drop_stmt
-| explain_stmt
-| help_stmt
-| prepare_stmt
 | execute_stmt
-| deallocate_stmt
+| explain_stmt
 | grant_stmt
+| help_stmt
 | insert_stmt
 | pause_stmt
+| prepare_stmt
 | resume_stmt
 | revoke_stmt
 | savepoint_stmt
@@ -885,11 +885,11 @@ stmt:
   {
     $$.val = $1.slct()
   }
+| release_stmt
+| reset_stmt
 | set_stmt
 | show_stmt
 | transaction_stmt
-| release_stmt
-| reset_stmt
 | truncate_stmt
 | update_stmt
 | /* EMPTY */
@@ -1352,19 +1352,19 @@ preparable_stmt:
   {
     $$.val = $1.slct()
   }
+| delete_stmt
 | insert_stmt
 | update_stmt
-| delete_stmt
 
 explainable_stmt:
   preparable_stmt
+| alter_stmt
 | create_stmt
 | drop_stmt
-| alter_stmt
-| show_stmt
-| help_stmt
 | execute_stmt
 | explain_stmt { /* SKIP DOC */ }
+| help_stmt
+| show_stmt
 
 explain_option_list:
   explain_option_name
