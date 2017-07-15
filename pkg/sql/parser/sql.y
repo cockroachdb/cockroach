@@ -1550,26 +1550,13 @@ grantee_list:
 
 // RESET name
 reset_stmt:
-  RESET IDENT
+  RESET session_var
   {
     $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
   }
-| RESET DATABASE
+| RESET SESSION session_var
   {
-    /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
-  }
-| RESET SESSION_USER
-  {
-    /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
-  }
-// SET NAMES is the SQL standard syntax for SET client_encoding.
-// See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
-| RESET NAMES
-  {
-    /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name("client_encoding")}, SetMode: SetModeReset}
+    $$.val = &Set{Name: UnresolvedName{Name($3)}, SetMode: SetModeReset}
   }
 
 // USE is the MSSQL/MySQL equivalent of SET DATABASE. Alias it for convenience.
