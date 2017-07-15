@@ -516,6 +516,27 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> set_names
 
 %type <Statement> show_stmt
+%type <Statement> show_backup_stmt
+%type <Statement> show_columns_stmt
+%type <Statement> show_constraints_stmt
+%type <Statement> show_create_table_stmt
+%type <Statement> show_create_view_stmt
+%type <Statement> show_csettings_stmt
+%type <Statement> show_databases_stmt
+%type <Statement> show_grants_stmt
+%type <Statement> show_indexes_stmt
+%type <Statement> show_jobs_stmt
+%type <Statement> show_queries_stmt
+%type <Statement> show_session_stmt
+%type <Statement> show_sessions_stmt
+%type <Statement> show_tables_stmt
+%type <Statement> show_testing_stmt
+%type <Statement> show_trace_stmt
+%type <Statement> show_transaction_stmt
+%type <Statement> show_users_stmt
+
+%type <str> session_var
+
 %type <Statement> split_stmt
 %type <Statement> testing_relocate_stmt
 %type <Statement> scatter_stmt
@@ -1668,36 +1689,51 @@ non_reserved_word_or_sconst:
 | SCONST
 
 show_stmt:
-  SHOW IDENT
-  {
-    $$.val = &Show{Name: $2}
-  }
-// SET NAMES is the SQL standard syntax for SET client_encoding.
+  show_backup_stmt
+| show_columns_stmt
+| show_constraints_stmt
+| show_create_table_stmt
+| show_create_view_stmt
+| show_csettings_stmt
+| show_databases_stmt
+| show_grants_stmt
+| show_indexes_stmt
+| show_jobs_stmt
+| show_queries_stmt
+| show_session_stmt
+| show_sessions_stmt
+| show_tables_stmt
+| show_testing_stmt
+| show_trace_stmt
+| show_transaction_stmt
+| show_users_stmt
+
+show_session_stmt:
+  SHOW session_var         { $$.val = &Show{Name: $2} }
+| SHOW SESSION session_var { $$.val = &Show{Name: $3} }
+
+session_var:
+  IDENT
+// Although ALL, SESSION_USER and DATABASE are identifiers for the
+// purpose of SHOW, they lex as separate token types, so they need
+// separate rules.
+| ALL
+| DATABASE
+// SET NAMES is standard SQL for SET client_encoding.
 // See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
-| SHOW NAMES
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: "client_encoding"}
-  }
-| SHOW SESSION_USER
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: $2}
-  }
-| SHOW DATABASE
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: $2}
-  }
-| SHOW ALL
-  {
-    $$.val = &Show{Name: $2}
-  }
-| SHOW BACKUP string_or_placeholder
+| NAMES { $$ = "client_encoding" }
+| SESSION_USER
+// TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
+| TIME ZONE { $$ = "TIME ZONE" }
+
+show_backup_stmt:
+  SHOW BACKUP string_or_placeholder
   {
     $$.val = &ShowBackup{Path: $3.expr()}
   }
-| SHOW CLUSTER SETTING any_name
+
+show_csettings_stmt:
+  SHOW CLUSTER SETTING any_name
   {
     $$.val = &Show{Name: AsStringWithFlags($4.unresolvedName(), FmtBareIdentifiers), ClusterSetting: true}
   }
@@ -1709,19 +1745,27 @@ show_stmt:
   {
     $$.val = &Show{Name: "all", ClusterSetting: true}
   }
-| SHOW COLUMNS FROM var_name
+
+show_columns_stmt:
+  SHOW COLUMNS FROM var_name
   {
     $$.val = &ShowColumns{Table: $4.normalizableTableName()}
   }
-| SHOW DATABASES
+
+show_databases_stmt:
+  SHOW DATABASES
   {
     $$.val = &ShowDatabases{}
   }
-| SHOW GRANTS on_privilege_target_clause for_grantee_clause
+
+show_grants_stmt:
+  SHOW GRANTS on_privilege_target_clause for_grantee_clause
   {
     $$.val = &ShowGrants{Targets: $3.targetListPtr(), Grantees: $4.nameList()}
   }
-| SHOW INDEX FROM var_name
+
+show_indexes_stmt:
+  SHOW INDEX FROM var_name
   {
     $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
@@ -1729,7 +1773,13 @@ show_stmt:
   {
     $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
-| SHOW CONSTRAINT FROM var_name
+| SHOW KEYS FROM var_name
+  {
+    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
+  }
+
+show_constraints_stmt:
+  SHOW CONSTRAINT FROM var_name
   {
     $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
@@ -1737,11 +1787,9 @@ show_stmt:
   {
     $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
-| SHOW KEYS FROM var_name
-  {
-    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
-  }
-| SHOW QUERIES
+
+show_queries_stmt:
+  SHOW QUERIES
   {
     $$.val = &ShowQueries{Cluster: true}
   }
@@ -1753,11 +1801,15 @@ show_stmt:
   {
     $$.val = &ShowQueries{Cluster: false}
   }
-| SHOW JOBS
+
+show_jobs_stmt:
+  SHOW JOBS
   {
     $$.val = &ShowJobs{}
   }
-| SHOW TRACE FOR SESSION
+
+show_trace_stmt:
+  SHOW TRACE FOR SESSION
   {
     $$.val = &ShowTrace{Statement: nil}
   }
@@ -1773,7 +1825,9 @@ show_stmt:
   {
     $$.val = &ShowTrace{Statement: $5.stmt(), OnlyKVTrace: true }
   }
-| SHOW SESSIONS
+
+show_sessions_stmt:
+  SHOW SESSIONS
   {
     $$.val = &ShowSessions{Cluster: true}
   }
@@ -1785,7 +1839,9 @@ show_stmt:
   {
     $$.val = &ShowSessions{Cluster: false}
   }
-| SHOW TABLES FROM name
+
+show_tables_stmt:
+  SHOW TABLES FROM name
   {
     $$.val = &ShowTables{Database: Name($4)}
   }
@@ -1793,12 +1849,9 @@ show_stmt:
   {
     $$.val = &ShowTables{}
   }
-| SHOW TIME ZONE
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: "TIME ZONE"}
-  }
-| SHOW TRANSACTION ISOLATION LEVEL
+
+show_transaction_stmt:
+  SHOW TRANSACTION ISOLATION LEVEL
   {
     /* SKIP DOC */
     $$.val = &Show{Name: "TRANSACTION ISOLATION LEVEL"}
@@ -1813,19 +1866,27 @@ show_stmt:
     /* SKIP DOC */
     $$.val = &ShowTransactionStatus{}
   }
-| SHOW CREATE TABLE var_name
+
+show_create_table_stmt:
+  SHOW CREATE TABLE var_name
   {
     $$.val = &ShowCreateTable{Table: $4.normalizableTableName()}
   }
-| SHOW CREATE VIEW var_name
+
+show_create_view_stmt:
+  SHOW CREATE VIEW var_name
   {
     $$.val = &ShowCreateView{View: $4.normalizableTableName()}
   }
-| SHOW USERS
+
+show_users_stmt:
+  SHOW USERS
   {
     $$.val = &ShowUsers{}
   }
-| SHOW TESTING_RANGES FROM TABLE qualified_name
+
+show_testing_stmt:
+  SHOW TESTING_RANGES FROM TABLE qualified_name
   {
     /* SKIP DOC */
     $$.val = &ShowRanges{Table: $5.newNormalizableTableName()}
