@@ -474,7 +474,31 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <[]Statement> stmt_list
 %type <Statement> stmt
 
+%type <Statement> alter_stmt
 %type <Statement> alter_table_stmt
+%type <Statement> alter_index_stmt
+%type <Statement> alter_view_stmt
+%type <Statement> alter_database_stmt
+
+// ALTER TABLE
+%type <Statement> alter_onetable_stmt
+%type <Statement> alter_split_stmt
+%type <Statement> alter_rename_table_stmt
+%type <Statement> alter_scatter_stmt
+%type <Statement> alter_testing_relocate_stmt
+
+// ALTER DATABASE
+%type <Statement> alter_rename_database_stmt
+
+// ALTER INDEX
+%type <Statement> alter_scatter_index_stmt
+%type <Statement> alter_split_index_stmt
+%type <Statement> alter_rename_index_stmt
+%type <Statement> alter_testing_relocate_index_stmt
+
+// ALTER VIEW
+%type <Statement> alter_rename_view_stmt
+
 %type <Statement> backup_stmt
 %type <Statement> cancel_stmt
 %type <Statement> copy_from_stmt
@@ -499,7 +523,6 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> insert_stmt
 %type <Statement> pause_stmt
 %type <Statement> release_stmt
-%type <Statement> rename_stmt
 %type <Statement> reset_stmt
 %type <Statement> resume_stmt
 %type <Statement> revoke_stmt
@@ -537,9 +560,6 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %type <str> session_var
 
-%type <Statement> split_stmt
-%type <Statement> testing_relocate_stmt
-%type <Statement> scatter_stmt
 %type <Statement> transaction_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
@@ -842,7 +862,7 @@ stmt_list:
   }
 
 stmt:
-  alter_table_stmt
+  alter_stmt
 | backup_stmt
 | cancel_stmt
 | copy_from_stmt
@@ -858,7 +878,6 @@ stmt:
 | grant_stmt
 | insert_stmt
 | pause_stmt
-| rename_stmt
 | resume_stmt
 | revoke_stmt
 | savepoint_stmt
@@ -868,9 +887,6 @@ stmt:
   }
 | set_stmt
 | show_stmt
-| split_stmt
-| testing_relocate_stmt
-| scatter_stmt
 | transaction_stmt
 | release_stmt
 | reset_stmt
@@ -881,7 +897,32 @@ stmt:
     $$.val = Statement(nil)
   }
 
+alter_stmt:
+  alter_table_stmt
+| alter_index_stmt
+| alter_view_stmt
+| alter_database_stmt
+
 alter_table_stmt:
+  alter_onetable_stmt
+| alter_split_stmt
+| alter_testing_relocate_stmt
+| alter_scatter_stmt
+| alter_rename_table_stmt
+
+alter_view_stmt:
+  alter_rename_view_stmt
+
+alter_database_stmt:
+  alter_rename_database_stmt
+
+alter_index_stmt:
+  alter_split_index_stmt
+| alter_testing_relocate_index_stmt
+| alter_scatter_index_stmt
+| alter_rename_index_stmt
+
+alter_onetable_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
     $$.val = &AlterTable{Table: $3.normalizableTableName(), IfExists: false, Cmds: $4.alterTableCmds()}
@@ -889,6 +930,58 @@ alter_table_stmt:
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
     $$.val = &AlterTable{Table: $5.normalizableTableName(), IfExists: true, Cmds: $6.alterTableCmds()}
+  }
+
+alter_split_stmt:
+  ALTER TABLE qualified_name SPLIT AT select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &Split{Table: $3.newNormalizableTableName(), Rows: $6.slct()}
+  }
+
+alter_split_index_stmt:
+  ALTER INDEX table_name_with_index SPLIT AT select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &Split{Index: $3.tableWithIdx(), Rows: $6.slct()}
+  }
+
+alter_testing_relocate_stmt:
+  ALTER TABLE qualified_name TESTING_RELOCATE select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &TestingRelocate{Table: $3.newNormalizableTableName(), Rows: $5.slct()}
+  }
+
+alter_testing_relocate_index_stmt:
+  ALTER INDEX table_name_with_index TESTING_RELOCATE select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &TestingRelocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
+  }
+
+alter_scatter_stmt:
+  ALTER TABLE qualified_name SCATTER
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Table: $3.newNormalizableTableName()}
+  }
+| ALTER TABLE qualified_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Table: $3.newNormalizableTableName(), From: $7.exprs(), To: $11.exprs()}
+  }
+
+alter_scatter_index_stmt:
+  ALTER INDEX table_name_with_index SCATTER
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Index: $3.tableWithIdx()}
+  }
+| ALTER INDEX table_name_with_index SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Index: $3.tableWithIdx(), From: $7.exprs(), To: $11.exprs()}
   }
 
 alter_table_cmds:
@@ -1267,12 +1360,9 @@ explainable_stmt:
   preparable_stmt
 | create_stmt
 | drop_stmt
-| alter_table_stmt
+| alter_stmt
 | show_stmt
 | help_stmt
-| split_stmt
-| testing_relocate_stmt
-| scatter_stmt
 | execute_stmt
 | explain_stmt { /* SKIP DOC */ }
 
@@ -1937,50 +2027,6 @@ pause_stmt:
     $$.val = &PauseJob{ID: $3.expr()}
   }
 
-split_stmt:
-  ALTER TABLE qualified_name SPLIT AT select_stmt
-  {
-    $$.val = &Split{Table: $3.newNormalizableTableName(), Rows: $6.slct()}
-  }
-| ALTER INDEX table_name_with_index SPLIT AT select_stmt
-  {
-    $$.val = &Split{Index: $3.tableWithIdx(), Rows: $6.slct()}
-  }
-
-testing_relocate_stmt:
-  ALTER TABLE qualified_name TESTING_RELOCATE select_stmt
-  {
-    /* SKIP DOC */
-    $$.val = &TestingRelocate{Table: $3.newNormalizableTableName(), Rows: $5.slct()}
-  }
-| ALTER INDEX table_name_with_index TESTING_RELOCATE select_stmt
-  {
-    /* SKIP DOC */
-    $$.val = &TestingRelocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
-  }
-
-scatter_stmt:
-  ALTER TABLE qualified_name SCATTER
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Table: $3.newNormalizableTableName()}
-  }
-| ALTER TABLE qualified_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Table: $3.newNormalizableTableName(), From: $7.exprs(), To: $11.exprs()}
-  }
-| ALTER INDEX table_name_with_index SCATTER
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Index: $3.tableWithIdx()}
-  }
-| ALTER INDEX table_name_with_index SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Index: $3.tableWithIdx(), From: $7.exprs(), To: $11.exprs()}
-  }
-
 // CREATE TABLE relname
 create_table_stmt:
   CREATE TABLE any_name '(' opt_table_elem_list ')' opt_interleave
@@ -2425,35 +2471,20 @@ opt_asc_desc:
     $$.val = DefaultDirection
   }
 
-// ALTER THING name RENAME TO newname
-rename_stmt:
+alter_rename_database_stmt:
   ALTER DATABASE name RENAME TO name
   {
     $$.val = &RenameDatabase{Name: Name($3), NewName: Name($6)}
   }
-| ALTER TABLE relation_expr RENAME TO qualified_name
+
+alter_rename_table_stmt:
+  ALTER TABLE relation_expr RENAME TO qualified_name
   {
     $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO qualified_name
   {
     $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: false}
-  }
-| ALTER VIEW relation_expr RENAME TO qualified_name
-  {
-    $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: true}
-  }
-| ALTER VIEW IF EXISTS relation_expr RENAME TO qualified_name
-  {
-    $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: true}
-  }
-| ALTER INDEX table_name_with_index RENAME TO name
-  {
-    $$.val = &RenameIndex{Index: $3.tableWithIdx(), NewName: Name($6), IfExists: false}
-  }
-| ALTER INDEX IF EXISTS table_name_with_index RENAME TO name
-  {
-    $$.val = &RenameIndex{Index: $5.tableWithIdx(), NewName: Name($8), IfExists: true}
   }
 | ALTER TABLE relation_expr RENAME opt_column name TO name
   {
@@ -2463,8 +2494,30 @@ rename_stmt:
   {
     $$.val = &RenameColumn{Table: $5.normalizableTableName(), Name: Name($8), NewName: Name($10), IfExists: true}
   }
-| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name { return unimplemented(sqllex, "alter table rename constraint") }
-| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name { return unimplemented(sqllex, "alter table rename constraint") }
+| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name
+  { return unimplemented(sqllex, "alter table rename constraint") }
+| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name
+  { return unimplemented(sqllex, "alter table rename constraint") }
+
+alter_rename_view_stmt:
+  ALTER VIEW relation_expr RENAME TO qualified_name
+  {
+    $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: true}
+  }
+| ALTER VIEW IF EXISTS relation_expr RENAME TO qualified_name
+  {
+    $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: true}
+  }
+
+alter_rename_index_stmt:
+  ALTER INDEX table_name_with_index RENAME TO name
+  {
+    $$.val = &RenameIndex{Index: $3.tableWithIdx(), NewName: Name($6), IfExists: false}
+  }
+| ALTER INDEX IF EXISTS table_name_with_index RENAME TO name
+  {
+    $$.val = &RenameIndex{Index: $5.tableWithIdx(), NewName: Name($8), IfExists: true}
+  }
 
 opt_column:
   COLUMN
