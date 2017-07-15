@@ -179,11 +179,13 @@ func TestTrimOrdering(t *testing.T) {
 	asc := encoding.Ascending
 	desc := encoding.Descending
 	testCases := []struct {
+		name     string
 		ord      orderingInfo
 		desired  sqlbase.ColumnOrdering
 		expected orderingInfo
 	}{
 		{
+			name: "basic-prefix-1",
 			ord: orderingInfo{
 				exactMatchCols: nil,
 				ordering:       sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
@@ -197,6 +199,7 @@ func TestTrimOrdering(t *testing.T) {
 			},
 		},
 		{
+			name: "direction-mismatch",
 			ord: orderingInfo{
 				exactMatchCols: nil,
 				ordering:       sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
@@ -210,6 +213,7 @@ func TestTrimOrdering(t *testing.T) {
 			},
 		},
 		{
+			name: "exact-match-columns-1",
 			ord: orderingInfo{
 				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
 				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc)},
@@ -223,6 +227,7 @@ func TestTrimOrdering(t *testing.T) {
 			},
 		},
 		{
+			name: "exact-match-columns-2",
 			ord: orderingInfo{
 				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
 				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc), o(3, asc)},
@@ -236,6 +241,7 @@ func TestTrimOrdering(t *testing.T) {
 			},
 		},
 		{
+			name: "no-match",
 			ord: orderingInfo{
 				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
 				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc), o(3, asc)},
@@ -250,10 +256,142 @@ func TestTrimOrdering(t *testing.T) {
 		},
 	}
 
-	for i, tc := range testCases {
-		tc.ord.trim(tc.desired)
-		if !reflect.DeepEqual(tc.ord, tc.expected) {
-			t.Errorf("%d: expected %v, got %v", i, tc.expected, tc.ord)
-		}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.ord.trim(tc.desired)
+			if !reflect.DeepEqual(tc.ord, tc.expected) {
+				t.Errorf("expected %v, got %v", tc.expected, tc.ord)
+			}
+		})
+	}
+}
+
+func TestComputeMergeJoinOrdering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Helper function to create a ColumnOrderInfo. The "simple" composite
+	// literal syntax causes vet to warn about unkeyed literals and the explicit
+	// syntax is too verbose.
+	o := func(colIdx int, direction encoding.Direction) sqlbase.ColumnOrderInfo {
+		return sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: direction}
+	}
+
+	e := struct{}{}
+	asc := encoding.Ascending
+	desc := encoding.Descending
+	testCases := []struct {
+		name       string
+		a, b       orderingInfo
+		colA, colB []int
+		expected   sqlbase.ColumnOrdering
+	}{
+		{
+			name: "basic",
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc), o(3, asc)},
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+		},
+		{
+			name: "exact-match-a",
+			a: orderingInfo{
+				exactMatchCols: map[int]struct{}{1: e, 2: e},
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+		},
+		{
+			name: "exact-match-b",
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc), o(3, asc)},
+			},
+			b: orderingInfo{
+				exactMatchCols: map[int]struct{}{3: e, 4: e},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+		},
+		{
+			name: "exact-match-both",
+			a: orderingInfo{
+				ordering:       sqlbase.ColumnOrdering{o(2, desc)},
+				exactMatchCols: map[int]struct{}{1: e},
+			},
+			b: orderingInfo{
+				ordering:       sqlbase.ColumnOrdering{o(3, asc)},
+				exactMatchCols: map[int]struct{}{4: e},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(1, desc), o(0, asc)},
+		},
+		{
+			name: "unique-a",
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc)},
+				unique:   true,
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+		},
+		{
+			name: "unique-b",
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc)},
+				unique:   true,
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+		},
+		{
+			name: "partial-ordering-1",
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(3, asc), o(2, desc)},
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc)},
+		},
+		{
+			name: "partial-ordering-2",
+			a: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc), o(3, asc)},
+			},
+			b: orderingInfo{
+				ordering: sqlbase.ColumnOrdering{o(3, asc), o(5, desc), o(4, desc)},
+			},
+			colA:     []int{1, 2},
+			colB:     []int{3, 4},
+			expected: sqlbase.ColumnOrdering{o(0, asc)},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := computeMergeJoinOrdering(tc.a, tc.b, tc.colA, tc.colB)
+			if !reflect.DeepEqual(tc.expected, result) {
+				t.Errorf("expected %v, got %v", tc.expected, result)
+			}
+		})
 	}
 }
