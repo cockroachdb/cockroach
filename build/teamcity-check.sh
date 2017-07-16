@@ -31,7 +31,8 @@ if [[ "$(git status --porcelain 2>&1)" != "" ]]; then
   exit 1
 fi
 
-# Run the UI tests. This logically belongs in teamcity-test.sh, but we do it
-# here to minimize total build time since the rest of this script completes
-# faster than the non-UI tests.
+# Run the UI tests and libroach tests. These logically belong in
+# teamcity-test.sh, but we do it here to minimize total build time since the
+# rest of this script completes much faster than teamcity-test.sh.
 build/builder.sh make -C pkg/ui
+build/builder.sh make check-libroach
