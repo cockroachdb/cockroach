@@ -18,7 +18,8 @@ build/builder.sh make lint 2>&1 | tee artifacts/lint.log | go-test-teamcity
 build/builder.sh make generate
 build/builder.sh /bin/bash -c '! git status --porcelain | read || (git status; git diff -a 1>&2; exit 1)'
 
-# Run the UI tests. This logically belongs in teamcity-test.sh, but we do it
-# here to minimize total build time since the rest of this script completes
-# faster than the non-UI tests.
+# Run the UI tests and libroach tests. These logically belong in
+# teamcity-test.sh, but we do it here to minimize total build time since the
+# rest of this script completes much faster than teamcity-test.sh.
 build/builder.sh make -C pkg/ui
+build/builder.sh make check-libroach
