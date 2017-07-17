@@ -265,12 +265,14 @@ message RaftDebugResponse {
 
 // ActiveQuery represents a query in flight on some Session.
 message ActiveQuery {
+  // ID of the query (uint128 presented as a hexadecimal string).
+  string id = 1 [(gogoproto.customname) = "ID"];
   // SQL query string specified by the user.
-  string sql = 1;
+  string sql = 2;
   // Start timestamp of this query.
-  google.protobuf.Timestamp start = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  google.protobuf.Timestamp start = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   // True if this query is distributed.
-  bool is_distributed = 3;
+  bool is_distributed = 4;
 
   // Enum for phase of execution.
   enum Phase {
@@ -278,7 +280,7 @@ message ActiveQuery {
     EXECUTING = 1;
   }
   // phase stores the current phase of execution for this query.
-  Phase phase = 4;
+  Phase phase = 5;
 }
 
 // Request object for ListSessions and ListLocalSessions.
