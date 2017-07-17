@@ -4468,10 +4468,9 @@ func (r *Replica) evaluateProposalInner(
 	result.WriteBatch = &storagebase.WriteBatch{
 		Data: batch.Repr(),
 	}
-	// TODO(tschottdorf): could keep this open and commit as the proposal
-	// applies, saving work on the proposer. Take care to discard batches
-	// properly whenever the command leaves `r.mu.proposals` without coming
-	// back.
+	// Note: reusing the proposer's batch when applying the command on the
+	// proposer was explored as an optimization but resulted in no performance
+	// benefit.
 	batch.Close()
 	return result
 }
