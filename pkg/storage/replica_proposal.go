@@ -139,11 +139,6 @@ func (proposal *ProposalData) finishRaftApplication(pr proposalResult) {
 // only used on the node on which the command was proposed. Note that
 // the proposing node may die before the local results are processed,
 // so any side effects here are only best-effort.
-//
-// TODO(tschottdorf): once the WriteBatch is available in the replicated
-// proposal data (i.e. once we really do proposer-evaluted KV), experiment with
-// holding on to the proposer's constructed engine.Batch in this struct, which
-// could give a performance gain.
 type LocalEvalResult struct {
 	// The error resulting from the proposal. Most failing proposals will
 	// fail-fast, i.e. will return an error to the client above Raft. However,
