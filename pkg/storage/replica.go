@@ -3961,7 +3961,7 @@ func (r *Replica) checkForcedErrLocked(
 	raftCmd storagebase.RaftCommand,
 	proposal *ProposalData,
 	proposedLocally bool,
-) (uint64, *roachpb.Error) {
+) (uint64, proposalRetryReason, *roachpb.Error) {
 	leaseIndex := r.mu.state.LeaseAppliedIndex
 
 	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
@@ -4049,24 +4049,10 @@ func (r *Replica) checkForcedErrLocked(
 				"retry proposal %x: applied at lease index %d, required <= %d",
 				proposal.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
 			)
-			// Send to the client only at the end of this invocation. We can't
-			// use the context any more once we signal the client, so we make
-			// sure we signal it at the end of this method, when the context
-			// has been fully used.
-			copyProposal := *proposal
-			// Clear the endCmds and doneCh so that ProposalData.finish()
-			// is a noop when invoked below.
-			proposal.endCmds = nil
-			proposal.doneCh = make(chan proposalResult, 1)
-			defer func() {
-				// Assert against another defer trying to use the context after
-				// the client has been signaled.
-				ctx = nil
-				copyProposal.finishRaftApplication(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
-			}()
+			return leaseIndex, proposalIllegalLeaseIndex, forcedErr
 		}
 	}
-	return leaseIndex, forcedErr
+	return leaseIndex, proposalNoRetry, forcedErr
 }
 
 // processRaftCommand processes a raft command by unpacking the
@@ -4117,7 +4103,7 @@ func (r *Replica) processRaftCommand(
 		delete(r.mu.proposals, idKey)
 	}
 
-	leaseIndex, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)
+	leaseIndex, proposalRetry, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)
 
 	r.mu.Unlock()
 
@@ -4213,6 +4199,12 @@ func (r *Replica) processRaftCommand(
 
 		var lResult *LocalEvalResult
 		if proposedLocally {
+			if proposalRetry != proposalNoRetry {
+				response.ProposalRetry = proposalRetry
+				if pErr == nil {
+					log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", proposal)
+				}
+			}
 			if pErr != nil {
 				// A forced error was set (i.e. we did not apply the proposal,
 				// for instance due to its log position) or the Replica is now
