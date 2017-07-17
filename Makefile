@@ -21,16 +21,21 @@
 #   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
 #
 # Note that environment variable overrides are intentionally ignored.
-PKG          := ./pkg/...                           ## Which package to run tests against, e.g. "./pkg/storage".
+
+# Comments starting with a double-hash (##) are for self-documentation, see the
+# `help` target. They look a bit awkward in the variable declarations below
+# since any whitespace added would become part of the variable's default value.
+
+PKG          := ./pkg/...## Which package to run tests against, e.g. "./pkg/storage".
 TAGS         :=
-TESTS        := .                                   ## Regexp to pass to the -run argument of the go test runner. See go help testflag.
-BENCHES      :=                                     ## Regexp to pass to the -run argument of the go benchmark runner.
-FILES        :=                                     ## Space delimited list of logic test files to run, for make testlogic.
+TESTS        :=.## Tests to run for use with `make test`.
+BENCHES      :=## Benchmarks to run for use with `make bench`.
+FILES        :=## Space delimited list of logic test files to run, for make testlogic.
 TESTTIMEOUT  := 4m
 RACETIMEOUT  := 15m
 BENCHTIMEOUT := 5m
-TESTFLAGS    :=                                     ## Extra flags to pass to the go test runner, e.g. "-v --vmodule=raft=1"
-STRESSFLAGS  :=
+TESTFLAGS    :=## Extra flags to pass to the go test runner, e.g. "-v --vmodule=raft=1"
+STRESSFLAGS  :=## Extra flags to pass to `stress` during `make stress`.
 DUPLFLAGS    := -t 100
 GOFLAGS      :=
 ARCHIVE      := cockroach.src.tgz
