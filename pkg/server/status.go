@@ -901,6 +901,37 @@ func (s *statusServer) ListSessions(
 	return &resp, nil
 }
 
+// CancelQuery responds to a query cancellation request, and cancels
+// the target query's associated context and sets a cancellation flag.
+func (s *statusServer) CancelQuery(
+	ctx context.Context, req *serverpb.CancelQueryRequest,
+) (*serverpb.CancelQueryResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.CancelQuery(ctx, req)
+	}
+
+	output := &serverpb.CancelQueryResponse{}
+	cancelled, err := s.queryRegistry.Cancel(req.QueryID, req.Username)
+
+	if err != nil {
+		output.Error = err.Error()
+	}
+
+	output.Cancelled = cancelled
+	return output, nil
+}
+
 // SpanStats requests the total statistics stored on a node for a given key
 // span, which may include multiple ranges.
 func (s *statusServer) SpanStats(

@@ -17,10 +17,15 @@
 package sql
 
 import (
+	"fmt"
+
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 func (p *planner) PauseJob(ctx context.Context, n *parser.PauseJob) (planNode, error) {
@@ -35,6 +40,71 @@ func (p *planner) CancelJob(ctx context.Context, n *parser.CancelJob) (planNode,
 	return nil, pgerror.Unimplemented("cancel-job", "unimplemented")
 }
 
+type cancelQueryNode struct {
+	p       *planner
+	queryID parser.TypedExpr
+}
+
+func (*cancelQueryNode) Values() parser.Datums { return nil }
+
+func (n *cancelQueryNode) Start(ctx context.Context) error {
+	statusServer := n.p.session.execCfg.StatusServer
+
+	queryIDDatum, err := n.queryID.Eval(&n.p.evalCtx)
+	if err != nil {
+		return err
+	}
+
+	queryIDString := parser.AsStringWithFlags(queryIDDatum, parser.FmtBareStrings)
+	queryID, err := uint128.FromString(queryIDString)
+	if err != nil {
+		return errors.Wrapf(err, "Invalid query ID '%s'", queryIDString)
+	}
+
+	// Get the lowest 32 bits of the query ID.
+	nodeID := 0xFFFFFFFF & queryID.Lo
+
+	request := &serverpb.CancelQueryRequest{
+		NodeId:   fmt.Sprintf("%d", nodeID),
+		QueryID:  queryID.GetString(),
+		Username: n.p.session.User,
+	}
+
+	response, err := statusServer.CancelQuery(ctx, request)
+	if err != nil {
+		return err
+	}
+
+	if !response.Cancelled {
+		return fmt.Errorf("Could not cancel query %s: %s", queryID.GetString(), response.Error)
+	}
+
+	return nil
+}
+
+func (*cancelQueryNode) Close(context.Context) {}
+
+func (n *cancelQueryNode) Next(context.Context) (bool, error) {
+	return false, nil
+}
+
 func (p *planner) CancelQuery(ctx context.Context, n *parser.CancelQuery) (planNode, error) {
-	return nil, pgerror.Unimplemented("cancel-query", "unimplemented")
+
+	typedQueryID, err := p.analyzeExpr(
+		ctx,
+		n.ID,
+		nil,
+		parser.IndexedVarHelper{},
+		parser.TypeString,
+		true, /* requireType */
+		"CANCEL QUERY",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cancelQueryNode{
+		p:       p,
+		queryID: typedQueryID,
+	}, nil
 }
