@@ -44,6 +44,9 @@ type planner struct {
 	// As the planner executes statements, it may change the current user session.
 	session *Session
 
+	// Reference to the corresponding sql Statement for this query.
+	stmt *Statement
+
 	// Contexts for different stages of planning and execution.
 	semaCtx parser.SemaContext
 	evalCtx parser.EvalContext

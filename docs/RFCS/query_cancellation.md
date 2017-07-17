@@ -138,6 +138,10 @@ When this statement is executed, the query ID will be parsed to determine the no
 will be made to that node if it is not the current node. That node would look up and cancel the
 context related to that query.
 
+The `CANCEL QUERY` would return an error if no query was found for that ID. However, if the
+`CANCEL QUERY` statement succeeds, there is no guarantee that the query in question was actually
+cancelled - and did not commit any changes (if applicable).
+
 Example use case: Assume there are two concurrently running sessions, session 1 and 2.
 
 Session 1 (long running query):
@@ -178,20 +182,6 @@ pq: query cancelled by user 'root'
 
 root%:26257/>
 ```
-
-## Uncancellable / commit phase
-
-There would be an uncancellable phase of queries starting from the point when the `EndTransactionRequest`
-for the associated transaction (either an explicit or implicit one) is sent. At this point, a flag in
-`queryMeta` will be set to indicate that the query can no longer be cancelled; any new `CANCEL QUERY`
-statements directed at it will error out. To reduce race conditions around cancelling queries
-that have just entered their non-cancellable stage, this cancellable flag will be behind a mutex.
-This mutex would be held by the `CANCEL` code while it checks for the cancellation flag and not released
-until the context has been cancelled; this way, any query that's trying to set it to true will have
-to wait until the context has been cancelled.
-
-For instance, for an `insertNode`, the `EndTransactionRequest` is sent when `tableWriter.finalize()`
-is called after all rows to write have been staged. At that point, the `INSERT` is uncancellable.
 
 ## DistSQL cancellation
 
