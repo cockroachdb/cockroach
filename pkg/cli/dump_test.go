@@ -385,7 +385,7 @@ func TestDumpRandom(t *testing.T) {
 			}
 			n := dur.String()
 			o := rnd.Intn(2) == 1
-			e := strings.TrimRight(apd.New(rnd.Int63(), int32(rnd.Int31n(20)-10)).ToStandard(), ".0")
+			e := apd.New(rnd.Int63(), int32(rnd.Int31n(20)-10)).String()
 			sr := make([]byte, rnd.Intn(500))
 			if _, err := rnd.Read(sr); err != nil {
 				t.Fatal(err)

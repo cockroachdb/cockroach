@@ -1949,7 +1949,7 @@ func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 	// Format the decimal into a string and split on `.` to extract the nanosecond
 	// walltime and logical tick parts.
 	// TODO(mjibson): use d.Modf() instead of converting to a string.
-	s := d.ToStandard()
+	s := d.Text('f')
 	parts := strings.SplitN(s, ".", 2)
 	nanos, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {

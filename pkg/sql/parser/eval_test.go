@@ -573,7 +573,7 @@ func TestEval(t *testing.T) {
 		{`-9.99999e+05`, `-999999`},
 		{`999999.0`, `999999.0`},
 		{`1000000.0`, `1000000.0`},
-		{`-1e+06`, `-1000000`},
+		{`-1e+06`, `-1E+6`},
 		{`-9.99999e+05::decimal`, `-999999`},
 		{`999999.0::decimal`, `999999.0`},
 		{`1000000.0::decimal`, `1000000.0`},
@@ -1198,7 +1198,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}
 		ctx.SetClusterTimestamp(ts)
 		dec := ctx.GetClusterTimestamp()
-		final := dec.ToStandard()
+		final := dec.Text('f')
 		if final != d.expected {
 			t.Errorf("expected %s, but found %s", d.expected, final)
 		}

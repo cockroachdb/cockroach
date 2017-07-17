@@ -640,7 +640,7 @@ func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
 	if quote {
 		buf.WriteByte('\'')
 	}
-	buf.WriteString(d.Decimal.ToStandard())
+	buf.WriteString(d.Decimal.String())
 	if quote {
 		buf.WriteString(`'::DECIMAL`)
 	}

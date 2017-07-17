@@ -39,6 +39,7 @@ set -e
 cat > main.java << 'EOF'
 import java.sql.*;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 public class main {
 	public static void main(String[] args) throws Exception {
@@ -156,6 +157,14 @@ public class main {
 		Object dec = rs.getObject(1);
 		if (!dec.toString().equals("1.0")) {
 			throw new Exception("unexpected: expected 1.0 to be \"1.0\", got \"" + dec.toString() + "\"");
+		}
+
+		stmt = conn.prepareStatement("SELECT 1e1::decimal");
+		rs = stmt.executeQuery();
+		rs.next();
+		BigDecimal bigdec = rs.getBigDecimal(1);
+		if (!bigdec.toString().equals("1E+1")) {
+			throw new Exception("unexpected: expected 1e1 to be \"1E+1\", got \"" + bigdec.toString() + "\"");
 		}
 
 		stmt = conn.prepareStatement("CREATE TABLE str (s STRING)");
