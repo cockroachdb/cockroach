@@ -1398,7 +1398,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 			// TODO(radu): for full outer joins, this will be more tricky: we would
 			// need an output column that outputs either the left or the right
 			// equality column, whichever is not NULL.
-			joinToStreamColMap[joinCol] = addOutCol(joinerSpec.LeftEqColumns[i])
+			joinToStreamColMap[joinCol] = addOutCol(uint32(i))
 		}
 		joinCol++
 	}
