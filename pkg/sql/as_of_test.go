@@ -231,7 +231,7 @@ func TestAsOfRetry(t *testing.T) {
 	if _, err := parser.ExactCtx.Sub(walltime, walltime, oneTick); err != nil {
 		t.Fatal(err)
 	}
-	tsVal1 := walltime.ToStandard()
+	tsVal1 := walltime.Text('f')
 
 	// Set up error injection that causes retries.
 	magicVals := createFilterVals(nil, nil)

@@ -1478,10 +1478,8 @@ var Builtins = map[string][]Builtin{
 			return NewDFloat(DFloat(math.Trunc(x))), nil
 		}, "Truncates the decimal values of `val`."),
 		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
-			// TODO(mjibson): see cockroachdb/apd#24
 			dd := &DDecimal{}
-			frac := new(apd.Decimal)
-			x.Modf(&dd.Decimal, frac)
+			x.Modf(&dd.Decimal, nil)
 			return dd, nil
 		}, "Truncates the decimal values of `val`."),
 	},
