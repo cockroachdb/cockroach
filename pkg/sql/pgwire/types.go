@@ -192,14 +192,25 @@ func (b *writeBuffer) writeTextDatum(
 		}
 
 		b.variablePutbuf.WriteString(begin)
-		for i, d := range v.Array {
-			if i > 0 {
-				b.variablePutbuf.WriteString(sep)
+		// Postgres has special rules for formatting strings within arrays,
+		// so we special case that situation.
+		if parser.UnwrapType(v.ParamTyp) == parser.TypeString {
+			for i, d := range v.Array {
+				if i > 0 {
+					b.variablePutbuf.WriteString(sep)
+				}
+				parser.EncodeSQLStringInsideArray(&b.variablePutbuf, d)
 			}
-			// TODO(radu): we are relying on Format but this doesn't work correctly
-			// if we have an array inside this array. To support nested arrays, we
-			// would need to recurse or add a special FmtFlag.
-			parser.FormatNode(&b.variablePutbuf, parser.FmtBareStrings, d)
+		} else {
+			for i, d := range v.Array {
+				if i > 0 {
+					b.variablePutbuf.WriteString(sep)
+				}
+				// TODO(radu): we are relying on Format but this doesn't work correctly
+				// if we have an array inside this array. To support nested arrays, we
+				// would need to recurse or add a special FmtFlag.
+				parser.FormatNode(&b.variablePutbuf, parser.FmtBareStrings, d)
+			}
 		}
 		b.variablePutbuf.WriteString(end)
 		b.writeLengthPrefixedVariablePutbuf()
