@@ -16,8 +16,6 @@ package util
 
 import "github.com/cockroachdb/cockroach/pkg/util/envutil"
 
-var _ = IsMigrated()
-
 // IsMigrated gives a crude way of landing changes that need a migration until
 // #16977 is implemented. When IsMigrated() returns false (the default),
 // mixed-cluster compatibility with 1.0 is required.
