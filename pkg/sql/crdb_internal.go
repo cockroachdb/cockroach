@@ -556,6 +556,7 @@ CREATE TABLE crdb_internal.session_variables (
 
 const queriesSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
+  query_id         STRING,         -- the cluster-unique ID of the query
   node_id          INT NOT NULL,   -- the node on which the query is running
   username         STRING,         -- the user running the query
   start            TIMESTAMP,      -- the start time of the query
@@ -609,6 +610,7 @@ func populateQueriesTable(
 				}
 			}
 			if err := addRow(
+				parser.NewDString(query.ID),
 				parser.NewDInt(parser.DInt(session.NodeID)),
 				parser.NewDString(session.Username),
 				parser.MakeDTimestamp(query.Start, time.Microsecond),
@@ -628,6 +630,7 @@ func populateQueriesTable(
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, and nulls for all other columns
 			if err := addRow(
+				parser.DNull,
 				parser.NewDInt(parser.DInt(rpcErr.NodeID)),
 				parser.DNull,
 				parser.DNull,
