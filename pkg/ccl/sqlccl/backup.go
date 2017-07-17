@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -42,8 +43,14 @@ const (
 	// BackupDescriptorName is the file name used for serialized
 	// BackupDescriptor protos.
 	BackupDescriptorName = "BACKUP"
+	// BackupDescriptorCheckpointName is the file name used to store the
+	// serialized BackupDescriptor proto while the backup is in progress.
+	BackupDescriptorCheckpointName = "BACKUP-CHECKPOINT"
 	// BackupFormatInitialVersion is the first version of backup and its files.
 	BackupFormatInitialVersion uint32 = 0
+	// backupCheckpointInterval is the interval at which backup progress is saved
+	// to durable storage.
+	backupCheckpointInterval = time.Minute
 )
 
 // exportStorageFromURI returns an ExportStorage for the given URI.
@@ -251,6 +258,26 @@ func (r backupFileDescriptors) Less(i, j int) bool {
 	return bytes.Compare(r[i].Span.EndKey, r[j].Span.EndKey) < 0
 }
 
+func writeBackupDescriptor(
+	ctx context.Context,
+	exportStore storageccl.ExportStorage,
+	filename string,
+	desc *BackupDescriptor,
+) error {
+	sort.Sort(backupFileDescriptors(desc.Files))
+
+	descBuf, err := desc.Marshal()
+	if err != nil {
+		return err
+	}
+
+	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
@@ -352,9 +379,27 @@ func Backup(
 
 	mu := struct {
 		syncutil.Mutex
-		files    []BackupDescriptor_File
-		exported roachpb.BulkOpSummary
+		files          []BackupDescriptor_File
+		exported       roachpb.BulkOpSummary
+		lastCheckpoint time.Time
 	}{}
+
+	desc := struct {
+		syncutil.Mutex
+		BackupDescriptor
+		checkpointed bool
+	}{
+		BackupDescriptor: BackupDescriptor{
+			StartTime:     startTime,
+			EndTime:       endTime,
+			Descriptors:   sqlDescs,
+			Spans:         spans,
+			FormatVersion: BackupFormatInitialVersion,
+			BuildInfo:     build.GetInfo(),
+			NodeID:        p.ExecCfg().NodeID.Get(),
+			ClusterID:     p.ExecCfg().ClusterID(),
+		},
+	}
 
 	progressLogger := jobProgressLogger{
 		jobLogger:   jobLogger,
@@ -412,6 +457,7 @@ func Backup(
 			if pErr != nil {
 				return pErr.GoError()
 			}
+
 			mu.Lock()
 			for _, file := range res.(*roachpb.ExportResponse).Files {
 				mu.files = append(mu.files, BackupDescriptor_File{
@@ -421,12 +467,32 @@ func Backup(
 				})
 				mu.exported.Add(file.Exported)
 			}
+			doCheckpoint := timeutil.Since(mu.lastCheckpoint) > backupCheckpointInterval
+			if doCheckpoint {
+				// We optimistically assume the checkpoint will succeed to prevent
+				// multiple threads from attempting to checkpoint.
+				mu.lastCheckpoint = timeutil.Now()
+			}
 			mu.Unlock()
+
 			if err := progressLogger.chunkFinished(ctx); err != nil {
 				// Errors while updating progress are not important enough to merit
 				// failing the entire backup.
 				log.Errorf(ctx, "BACKUP ignoring error while updating progress on job %d (%s): %+v",
 					jobLogger.JobID(), jobLogger.Job.Description, err)
+			}
+
+			if doCheckpoint {
+				desc.Lock()
+				desc.Files = append(backupFileDescriptors(nil), mu.files...)
+				if err := writeBackupDescriptor(
+					ctx, exportStore, BackupDescriptorCheckpointName, &desc.BackupDescriptor,
+				); err != nil {
+					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
+				} else {
+					desc.checkpointed = true
+				}
+				desc.Unlock()
 			}
 			return nil
 		})
@@ -435,31 +501,25 @@ func Backup(
 	if err = g.Wait(); err != nil {
 		return BackupDescriptor{}, errors.Wrapf(err, "exporting %d ranges", len(spans))
 	}
-	files, summary := mu.files, mu.exported // No more concurrency, so this is safe.
 
-	desc := BackupDescriptor{
-		StartTime:     startTime,
-		EndTime:       endTime,
-		Descriptors:   sqlDescs,
-		Spans:         spans,
-		Files:         files,
-		EntryCounts:   summary,
-		FormatVersion: BackupFormatInitialVersion,
-		BuildInfo:     build.GetInfo(),
-		NodeID:        p.ExecCfg().NodeID.Get(),
-		ClusterID:     p.ExecCfg().ClusterID(),
-	}
-	sort.Sort(backupFileDescriptors(desc.Files))
+	// No more concurrency, so no need to acquire locks below.
 
-	descBuf, err := desc.Marshal()
-	if err != nil {
+	desc.Files = mu.files
+	desc.EntryCounts = mu.exported
+
+	if err := writeBackupDescriptor(
+		ctx, exportStore, BackupDescriptorName, &desc.BackupDescriptor,
+	); err != nil {
 		return BackupDescriptor{}, err
 	}
 
-	if err := exportStore.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf)); err != nil {
-		return BackupDescriptor{}, err
+	if desc.checkpointed {
+		if err := exportStore.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
+			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
+		}
 	}
-	return desc, nil
+
+	return desc.BackupDescriptor, nil
 }
 
 func backupPlanHook(
