@@ -349,6 +349,36 @@ func (r *QueryRegistry) deregister(queryID string) {
 	delete(r.store, queryID)
 }
 
+// Cancel looks up the associated query in the registry and cancels it (if it is cancellable).
+func (r *QueryRegistry) Cancel(queryID string, username string) (bool, error) {
+	r.Lock()
+	defer r.Unlock()
+
+	if queryMeta, exists := r.store[queryID]; exists {
+		if !(username == security.RootUser || username == queryMeta.session.User) {
+			// This user does not have cancel privileges over this query.
+			return false, fmt.Errorf("query ID %s not found", queryID)
+		}
+
+		queryMeta.mu.Lock()
+		defer queryMeta.mu.Unlock()
+
+		if !queryMeta.mu.isCancellable {
+			return false, fmt.Errorf("query with ID %s in non-cancellable phase", queryID)
+		}
+
+		// Close the context
+		queryMeta.cancel()
+
+		// Atomically set isCancelled to 1
+		atomic.StoreInt32(&queryMeta.isCancelled, 1)
+
+		return true, nil
+	}
+
+	return false, fmt.Errorf("query ID %s not found", queryID)
+}
+
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
 func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
@@ -1065,8 +1095,14 @@ func (e *Executor) execStmtsInCurrentTxn(
 			phase: preparing,
 		}
 
+		// Set to true for cancellable statements in execStmtInOpenTxn.
+		queryMeta.mu.isCancellable = false
+
 		stmt.queryID = queryID
 		stmt.queryMeta = queryMeta
+
+		// Fork context for this statement
+		queryMeta.ctx, queryMeta.cancel = context.WithCancel(session.Ctx())
 
 		session.addActiveQuery(queryID, queryMeta)
 		defer session.removeActiveQuery(stmt.queryID)
@@ -1112,7 +1148,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
-			filter(session.Ctx(), stmt.String(), &res)
+			filter(queryMeta.ctx, stmt.String(), &res)
 		}
 		results = append(results, res)
 		if err != nil {
@@ -1454,6 +1490,12 @@ func (e *Executor) execStmtInOpenTxn(
 	p.semaCtx.Placeholders.Assign(pinfo)
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	p.stmt = &stmt
+
+	// Mark statement as cancellable.
+	stmt.queryMeta.mu.Lock()
+	stmt.queryMeta.mu.isCancellable = true
+	stmt.queryMeta.mu.Unlock()
 
 	// constantMemAcc accounts for all constant folded values that are computed
 	// prior to any rows being computed.
