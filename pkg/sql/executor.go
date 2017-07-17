@@ -349,6 +349,29 @@ func (r *QueryRegistry) deregister(queryID string) {
 	delete(r.store, queryID)
 }
 
+// Cancel looks up the associated query in the registry and cancels it (if it is cancellable).
+func (r *QueryRegistry) Cancel(queryID string, username string) (bool, error) {
+	r.Lock()
+	defer r.Unlock()
+
+	if queryMeta, exists := r.store[queryID]; exists {
+		if !(username == security.RootUser || username == queryMeta.session.User) {
+			// This user does not have cancel privileges over this query.
+			return false, fmt.Errorf("query ID %s not found", queryID)
+		}
+
+		// Close the context
+		queryMeta.cancel()
+
+		// Atomically set isCancelled to 1
+		atomic.StoreInt32(&queryMeta.isCancelled, 1)
+
+		return true, nil
+	}
+
+	return false, fmt.Errorf("query ID %s not found", queryID)
+}
+
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
 func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
@@ -1068,6 +1091,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 		stmt.queryID = queryID
 		stmt.queryMeta = queryMeta
 
+		// Fork context for this statement.
+		queryMeta.ctx, queryMeta.cancel = context.WithCancel(session.Ctx())
+
 		session.addActiveQuery(queryID, queryMeta)
 		defer session.removeActiveQuery(stmt.queryID)
 		e.cfg.QueryRegistry.register(queryID, queryMeta)
@@ -1112,7 +1138,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
-			filter(session.Ctx(), stmt.String(), &res)
+			filter(queryMeta.ctx, stmt.String(), &res)
 		}
 		results = append(results, res)
 		if err != nil {
@@ -1454,6 +1480,7 @@ func (e *Executor) execStmtInOpenTxn(
 	p.semaCtx.Placeholders.Assign(pinfo)
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	p.stmt = &stmt
 
 	// constantMemAcc accounts for all constant folded values that are computed
 	// prior to any rows being computed.
@@ -1570,7 +1597,7 @@ func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, er
 // runs it.
 func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
-	ctx := planner.session.Ctx()
+	ctx := planner.stmt.queryMeta.ctx
 	recv, err := makeDistSQLReceiver(
 		ctx, result.Rows,
 		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
@@ -1598,7 +1625,7 @@ func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) 
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) error {
-	ctx := planner.session.Ctx()
+	ctx := planner.stmt.queryMeta.ctx
 	rowAcc := planner.evalCtx.Mon.MakeBoundAccount()
 	planner.evalCtx.ActiveMemAcc = &rowAcc
 	// We enclose this in a func because in the parser.Rows case we swap out the
@@ -1725,15 +1752,16 @@ func (e *Executor) execStmt(
 	stmt Statement, planner *planner, automaticRetryCount int, mockResults bool,
 ) (Result, error) {
 	session := planner.session
+	ctx := planner.stmt.queryMeta.ctx
 
 	planner.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
-	plan, err := planner.makePlan(session.Ctx(), stmt)
+	plan, err := planner.makePlan(ctx, stmt)
 	planner.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
 	if err != nil {
 		return Result{}, err
 	}
 
-	defer plan.Close(session.Ctx())
+	defer plan.Close(ctx)
 
 	result, err := makeRes(stmt, planner, plan)
 	if err != nil {
@@ -1742,7 +1770,7 @@ func (e *Executor) execStmt(
 
 	useDistSQL, err := e.shouldUseDistSQL(planner, plan)
 	if err != nil {
-		result.Close(session.Ctx())
+		result.Close(ctx)
 		return Result{}, err
 	}
 
@@ -1758,12 +1786,12 @@ func (e *Executor) execStmt(
 		planner, stmt, useDistSQL, automaticRetryCount, result, err,
 	)
 	if err != nil {
-		result.Close(session.Ctx())
+		result.Close(ctx)
 		return Result{}, err
 	}
 
 	if mockResults {
-		result.Close(session.Ctx())
+		result.Close(ctx)
 		return makeRes(stmt, planner, plan)
 	}
 	return result, nil

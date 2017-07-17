@@ -74,6 +74,8 @@
 		Session
 		ListSessionsError
 		ListSessionsResponse
+		CancelQueryRequest
+		CancelQueryResponse
 		SpanStatsRequest
 		SpanStatsResponse
 		ProblemRangesRequest
