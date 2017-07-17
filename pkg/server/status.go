@@ -107,6 +107,7 @@ type statusServer struct {
 	stores          *storage.Stores
 	stopper         *stop.Stopper
 	sessionRegistry *sql.SessionRegistry
+	queryRegistry   *sql.QueryRegistry
 }
 
 // newStatusServer allocates and returns a statusServer.
@@ -122,6 +123,7 @@ func newStatusServer(
 	stores *storage.Stores,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
+	queryRegistry *sql.QueryRegistry,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
@@ -136,6 +138,7 @@ func newStatusServer(
 		stores:          stores,
 		stopper:         stopper,
 		sessionRegistry: sessionRegistry,
+		queryRegistry:   queryRegistry,
 	}
 
 	return server
