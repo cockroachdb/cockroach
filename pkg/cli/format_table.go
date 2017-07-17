@@ -75,11 +75,11 @@ type rowIter struct {
 
 func (iter *rowIter) Next() (row []string, err error) {
 	nextRowString, err := getNextRowStrings(iter.rows, iter.showMoreChars)
-	if nextRowString == nil {
-		return nil, io.EOF
-	}
 	if err != nil {
 		return nil, err
+	}
+	if nextRowString == nil {
+		return nil, io.EOF
 	}
 	return nextRowString, nil
 }
