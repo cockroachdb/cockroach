@@ -33,5 +33,8 @@ CANCEL QUERY 1
 query error odd length hex string
 CANCEL QUERY 'f54'
 
+query error not found
+CANCEL QUERY '14d2355b9cccbca50000000000000001'
+
 query error unimplemented
 CANCEL JOB (SELECT * FROM VALUES ((1),(2)))
