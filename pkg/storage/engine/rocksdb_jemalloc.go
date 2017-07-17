@@ -20,5 +20,5 @@ package engine
 
 // #cgo LDFLAGS: -ljemalloc
 // #cgo dragonfly freebsd LDFLAGS: -lm
-// #cgo linux LDFLAGS: -lrt -lm -lpthread -ldl
+// #cgo linux LDFLAGS: -lrt -lm -lpthread
 import "C"
