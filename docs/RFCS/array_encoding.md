@@ -120,7 +120,6 @@ Postgres. The format is:
 
 * Byte type tag
 * Length in bytes
-* Length of the array, in bytes
 * Value type tag
 * A byte, encoding:
     * The number of dimensions in the array as the high 4 bits

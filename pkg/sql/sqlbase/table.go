@@ -1212,37 +1212,73 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 	return decodeUntaggedDatum(a, valType, b[dataOffset:])
 }
 
+type arrayHeader struct {
+	hasNulls      bool
+	numDimensions int
+	elementType   encoding.Type
+	length        uint64
+	nullBitmap    []byte
+}
+
+func (h arrayHeader) isNull(i uint64) bool {
+	return ((h.nullBitmap[i/8] >> (i % 8)) & 1) == 1
+}
+
+func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
+	if len(b) < 2 {
+		return arrayHeader{}, b, errors.Errorf("buffer too small")
+	}
+	hasNulls := b[0]&1 == 1
+	b = b[1:]
+	_, dataOffset, _, encType, err := encoding.DecodeValueTag(b)
+	if err != nil {
+		return arrayHeader{}, b, err
+	}
+	b = b[dataOffset:]
+	b, _, length, err := encoding.DecodeNonsortingUvarint(b)
+	if err != nil {
+		return arrayHeader{}, b, err
+	}
+	nullBitmap := []byte(nil)
+	if hasNulls {
+		nullBitmapNumBytes := length/8 + 1
+		nullBitmap = b[:nullBitmapNumBytes]
+		b = b[nullBitmapNumBytes:]
+	}
+	return arrayHeader{
+		hasNulls: hasNulls,
+		// TODO(justin): support multiple dimensions.
+		numDimensions: 1,
+		elementType:   encType,
+		length:        length,
+		nullBitmap:    nullBitmap,
+	}, b, nil
+}
+
 func decodeArray(a *DatumAlloc, elementType parser.Type, b []byte) (parser.Datum, []byte, error) {
 	b, _, _, err := encoding.DecodeNonsortingUvarint(b)
 	if err != nil {
 		return nil, b, err
 	}
-	_, dataOffset, _, _, err := encoding.DecodeValueTag(b)
-	if err != nil {
-		return nil, b, err
-	}
-	b = b[dataOffset:]
-	if len(b) < 2 {
-		return nil, b, errors.Errorf("buffer too small")
-	}
-	// flags/dims
-	_ = b[0]
-	b = b[1:]
-	b, _, n, err := encoding.DecodeNonsortingUvarint(b)
+	header, b, err := decodeArrayHeader(b)
 	if err != nil {
 		return nil, b, err
 	}
 	result := parser.DArray{
-		Array:    make(parser.Datums, n),
+		Array:    make(parser.Datums, header.length),
 		ParamTyp: elementType,
 	}
 	var val parser.Datum
-	for i := uint64(0); i < n; i++ {
-		val, b, err = decodeUntaggedDatum(a, elementType, b)
-		if err != nil {
-			return nil, b, err
+	for i := uint64(0); i < header.length; i++ {
+		if header.hasNulls && header.isNull(i) {
+			result.Array[i] = parser.DNull
+		} else {
+			val, b, err = decodeUntaggedDatum(a, elementType, b)
+			if err != nil {
+				return nil, b, err
+			}
+			result.Array[i] = val
 		}
-		result.Array[i] = val
 	}
 	return &result, b, nil
 }
@@ -1579,27 +1615,59 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 		val.ResolvedType(), col.Type.SemanticType, col.Name)
 }
 
+func encodeArrayHeader(h arrayHeader, buf []byte) ([]byte, error) {
+	// The byte we append here is formatted as follows:
+	// * The high 4 bits encode the number of dimensions in the array.
+	// * The lowest bit records whether the array contains NULLs.
+	// * The remaining bits are reserved.
+	headerByte := h.numDimensions << 4
+	if h.hasNulls {
+		headerByte = headerByte | 1
+	}
+	buf = append(buf, byte(headerByte))
+	buf = encoding.EncodeValueTag(buf, encoding.NoColumnID, h.elementType)
+	buf = encoding.EncodeNonsortingUvarint(buf, h.length)
+	return buf, nil
+}
+
 func encodeArray(d *parser.DArray, scratch []byte) ([]byte, error) {
 	if err := d.Validate(); err != nil {
 		return scratch, err
 	}
 	scratch = scratch[0:0]
-	// The byte we append here is formatted as follows:
-	// * The high 4 bits encode the number of dimensions in the array.
-	// * The lowest bit records whether the array contains NULLs.
-	// * The remaining bits are reserved.
-	scratch = append(scratch, 1<<4)
-	encType, err := parserTypeToEncodingType(d.ParamTyp)
+	elementType, err := parserTypeToEncodingType(d.ParamTyp)
 	if err != nil {
 		return nil, err
 	}
-	scratch = encoding.EncodeValueTag(scratch, encoding.NoColumnID, encType)
-	scratch = encoding.EncodeNonsortingUvarint(scratch, uint64(d.Len()))
-	for _, e := range d.Array {
+	header := arrayHeader{
+		hasNulls: d.HasNulls,
+		// TODO(justin): support multiple dimensions.
+		numDimensions: 1,
+		elementType:   elementType,
+		length:        uint64(d.Len()),
+		// We don't encode the NULL bitmap this way because we do it in lockstep with the
+		// main data.
+		nullBitmap: nil,
+	}
+	scratch, err = encodeArrayHeader(header, scratch)
+	if err != nil {
+		return nil, err
+	}
+	nullBitmapStart := len(scratch)
+	if d.HasNulls {
+		for i := 0; i < len(d.Array)/8+1; i++ {
+			scratch = append(scratch, 0)
+		}
+	}
+	for i, e := range d.Array {
 		var err error
-		scratch, err = encodeArrayElement(scratch, e)
-		if err != nil {
-			return nil, err
+		if d.HasNulls && e == parser.DNull {
+			scratch[nullBitmapStart+i/8] = scratch[nullBitmapStart+i/8] | (1 << uint(i%8))
+		} else {
+			scratch, err = encodeArrayElement(scratch, e)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return scratch, nil
@@ -1635,10 +1703,6 @@ func parserTypeToEncodingType(t parser.Type) (encoding.Type, error) {
 }
 
 func encodeArrayElement(b []byte, d parser.Datum) ([]byte, error) {
-	if d == parser.DNull {
-		// TODO(justin)
-		return nil, errors.Errorf("NULL values disallowed in ARRAYs")
-	}
 	switch t := d.(type) {
 	case *parser.DInt:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
@@ -1668,6 +1732,10 @@ func encodeArrayElement(b []byte, d parser.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedUUIDValue(b, t.UUID), nil
 	case *parser.DOid:
 		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
+	}
+	if d == parser.DNull {
+		// We shouldn't ever encode NULLs.
+		return nil, errors.Errorf("shouldn't be encoding NULL in an array")
 	}
 	return nil, errors.Errorf("don't know how to encode %s", d)
 }
