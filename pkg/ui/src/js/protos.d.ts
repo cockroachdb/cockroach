@@ -8411,6 +8411,7 @@ export namespace cockroach {
             }
 
             type ActiveQuery$Properties = {
+                id?: string;
                 sql?: string;
                 start?: google.protobuf.Timestamp$Properties;
                 is_distributed?: boolean;
@@ -8432,6 +8433,12 @@ export namespace cockroach {
                  * @param {cockroach.server.serverpb.ActiveQuery$Properties=} [properties] Properties to set
                  */
                 constructor(properties?: cockroach.server.serverpb.ActiveQuery$Properties);
+
+                /**
+                 * ActiveQuery id.
+                 * @type {string}
+                 */
+                public id: string;
 
                 /**
                  * ActiveQuery sql.
@@ -9063,6 +9070,253 @@ export namespace cockroach {
 
                 /**
                  * Converts this ListSessionsResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type CancelQueryRequest$Properties = {
+                node_id?: string;
+                query_id?: string;
+                username?: string;
+            };
+
+            /**
+             * Constructs a new CancelQueryRequest.
+             * @exports cockroach.server.serverpb.CancelQueryRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.CancelQueryRequest$Properties=} [properties] Properties to set
+             */
+            class CancelQueryRequest {
+
+                /**
+                 * Constructs a new CancelQueryRequest.
+                 * @exports cockroach.server.serverpb.CancelQueryRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CancelQueryRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.CancelQueryRequest$Properties);
+
+                /**
+                 * CancelQueryRequest node_id.
+                 * @type {string}
+                 */
+                public node_id: string;
+
+                /**
+                 * CancelQueryRequest query_id.
+                 * @type {string}
+                 */
+                public query_id: string;
+
+                /**
+                 * CancelQueryRequest username.
+                 * @type {string}
+                 */
+                public username: string;
+
+                /**
+                 * Creates a new CancelQueryRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CancelQueryRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CancelQueryRequest} CancelQueryRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.CancelQueryRequest$Properties): cockroach.server.serverpb.CancelQueryRequest;
+
+                /**
+                 * Encodes the specified CancelQueryRequest message. Does not implicitly {@link cockroach.server.serverpb.CancelQueryRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelQueryRequest$Properties} message CancelQueryRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.CancelQueryRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified CancelQueryRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CancelQueryRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelQueryRequest$Properties} message CancelQueryRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.CancelQueryRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a CancelQueryRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CancelQueryRequest} CancelQueryRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.CancelQueryRequest;
+
+                /**
+                 * Decodes a CancelQueryRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CancelQueryRequest} CancelQueryRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.CancelQueryRequest;
+
+                /**
+                 * Verifies a CancelQueryRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a CancelQueryRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelQueryRequest} CancelQueryRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.CancelQueryRequest;
+
+                /**
+                 * Creates a CancelQueryRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CancelQueryRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelQueryRequest} CancelQueryRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.CancelQueryRequest;
+
+                /**
+                 * Creates a plain object from a CancelQueryRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CancelQueryRequest} message CancelQueryRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.CancelQueryRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this CancelQueryRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this CancelQueryRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type CancelQueryResponse$Properties = {
+                cancelled?: boolean;
+                error?: string;
+            };
+
+            /**
+             * Constructs a new CancelQueryResponse.
+             * @exports cockroach.server.serverpb.CancelQueryResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.CancelQueryResponse$Properties=} [properties] Properties to set
+             */
+            class CancelQueryResponse {
+
+                /**
+                 * Constructs a new CancelQueryResponse.
+                 * @exports cockroach.server.serverpb.CancelQueryResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CancelQueryResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.CancelQueryResponse$Properties);
+
+                /**
+                 * CancelQueryResponse cancelled.
+                 * @type {boolean}
+                 */
+                public cancelled: boolean;
+
+                /**
+                 * CancelQueryResponse error.
+                 * @type {string}
+                 */
+                public error: string;
+
+                /**
+                 * Creates a new CancelQueryResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CancelQueryResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CancelQueryResponse} CancelQueryResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.CancelQueryResponse$Properties): cockroach.server.serverpb.CancelQueryResponse;
+
+                /**
+                 * Encodes the specified CancelQueryResponse message. Does not implicitly {@link cockroach.server.serverpb.CancelQueryResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelQueryResponse$Properties} message CancelQueryResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.CancelQueryResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified CancelQueryResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CancelQueryResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelQueryResponse$Properties} message CancelQueryResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.CancelQueryResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a CancelQueryResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CancelQueryResponse} CancelQueryResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.CancelQueryResponse;
+
+                /**
+                 * Decodes a CancelQueryResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CancelQueryResponse} CancelQueryResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.CancelQueryResponse;
+
+                /**
+                 * Verifies a CancelQueryResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a CancelQueryResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelQueryResponse} CancelQueryResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.CancelQueryResponse;
+
+                /**
+                 * Creates a CancelQueryResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CancelQueryResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelQueryResponse} CancelQueryResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.CancelQueryResponse;
+
+                /**
+                 * Creates a plain object from a CancelQueryResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CancelQueryResponse} message CancelQueryResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.CancelQueryResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this CancelQueryResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this CancelQueryResponse to JSON.
                  * @returns {Object.<string,*>} JSON object
                  */
                 public toJSON(): { [k: string]: any };
@@ -9805,6 +10059,14 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public listLocalSessions(request: (cockroach.server.serverpb.ListSessionsRequest|{ [k: string]: any }), callback: Status_listLocalSessions_Callback): void;
+
+                /**
+                 * Calls CancelQuery.
+                 * @param {cockroach.server.serverpb.CancelQueryRequest|Object.<string,*>} request CancelQueryRequest message or plain object
+                 * @param {Status_cancelQuery_Callback} callback Node-style callback called with the error, if any, and CancelQueryResponse
+                 * @returns {undefined}
+                 */
+                public cancelQuery(request: (cockroach.server.serverpb.CancelQueryRequest|{ [k: string]: any }), callback: Status_cancelQuery_Callback): void;
 
                 /**
                  * Calls SpanStats.
@@ -18387,6 +18649,8 @@ type Status_gossip_Callback = (error: Error, response?: cockroach.gossip.InfoSta
 type Status_listSessions_Callback = (error: Error, response?: cockroach.server.serverpb.ListSessionsResponse) => void;
 
 type Status_listLocalSessions_Callback = (error: Error, response?: cockroach.server.serverpb.ListSessionsResponse) => void;
+
+type Status_cancelQuery_Callback = (error: Error, response?: cockroach.server.serverpb.CancelQueryResponse) => void;
 
 type Status_spanStats_Callback = (error: Error, response?: cockroach.server.serverpb.SpanStatsResponse) => void;
 
