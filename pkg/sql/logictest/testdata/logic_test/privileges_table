@@ -104,7 +104,7 @@ user testuser
 query TTBTT
 SHOW COLUMNS FROM t
 ----
-k INT false NULL {primary}
+k INT false NULL {"primary"}
 v INT true  NULL {}
 
 statement error user testuser does not have GRANT privilege on relation t
