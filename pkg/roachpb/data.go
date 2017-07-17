@@ -273,6 +273,11 @@ func (v *Value) ShallowClone() *Value {
 	return &t
 }
 
+// IsPresent returns true if the value is present (existent and not a tombstone).
+func (v *Value) IsPresent() bool {
+	return v != nil && len(v.RawBytes) != 0
+}
+
 // MakeValueFromString returns a value with bytes and tag set.
 func MakeValueFromString(s string) Value {
 	v := Value{}
