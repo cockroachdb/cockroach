@@ -14,11 +14,11 @@
 //
 // Author: Daniel Harrison (dan@cockroachlabs.com)
 
-#include "db.h"
-#include "rocksdb/iterator.h"
-#include "rocksdb/comparator.h"
-#include "rocksdb/write_batch.h"
-#include "rocksdb/write_batch_base.h"
+#include <rocksdb/iterator.h>
+#include <rocksdb/comparator.h>
+#include <rocksdb/write_batch.h>
+#include <rocksdb/write_batch_base.h>
+#include <libroach.h>
 
 // ToString returns a c++ string with the contents of a DBSlice.
 std::string ToString(DBSlice s);
