@@ -347,12 +347,11 @@ $(CGO_FLAGS_FILES): $(REPO_ROOT)/build/common.mk
 # marker file when switching between revisions that span the change. For
 # simplicity, just sequentially bump the version number within.
 #
-# NB: the recipes below nuke *all* build artifacts when a dependency's source
-# tarball changes. Normally, we could rely on the dependency's build system to
-# detect modified files and only rebuild the necessary objects, but tar assigns
-# extracted files their original modification time (i.e., a time well in the
-# past, when the tarballs were packaged), and so the build artifacts always look
-# up-to-date.
+# NB: the recipes below nuke *all* build artifacts when a dependency's configure
+# flags change. In theory, we could rely on the dependency's build system to
+# only rebuild the affected objects, but in practice dependencies on configure
+# flags are not tracked correctly, and these stale artifacts can cause
+# particularly hard-to-debug errors.
 
 $(JEMALLOC_SRC_DIR)/configure.ac: $(BOOTSTRAP_TARGET)
 
