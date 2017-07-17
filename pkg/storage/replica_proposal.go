@@ -78,6 +78,7 @@ type ProposalData struct {
 
 	// doneCh is used to signal the waiting RPC handler (the contents of
 	// proposalResult come from LocalEvalResult).
+	//
 	// Attention: this channel is not to be signaled directly downstream of Raft.
 	// Always use ProposalData.finishRaftApplication().
 	doneCh chan proposalResult
@@ -115,18 +116,6 @@ type ProposalData struct {
 // upstream of Raft, pr.intents represent intents encountered by a request, not
 // the current txn's intents.
 func (proposal *ProposalData) finishRaftApplication(pr proposalResult) {
-	if pr.Err != nil {
-		// Clear the intents so that the intent resolution process does not take
-		// place: if an EndTransaction fails, we don't want to commit the txn's
-		// writes. In principle we'd still want to resolve any intents ancountered
-		// by the EndTransaction's batch of requests, other than the current txn's
-		// intents, but we don't make an attempt to separate the two categories of
-		// intents.
-		// TODO(tschottdorf,bdarnell): refactor this so there are two Intents
-		// fields, one for intents to be resolved if the command applies
-		// successfully, and one for intents to be resolved no matter what.
-		pr.Intents = nil
-	}
 	if proposal.endCmds != nil {
 		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
 		proposal.endCmds = nil
@@ -149,14 +138,19 @@ type LocalEvalResult struct {
 	Err   *roachpb.Error
 	Reply *roachpb.BatchResponse
 
-	// intents stores any intents encountered but not conflicted with. They
-	// should be handed off to asynchronous intent processing on the proposer,
-	// so that an attempt to resolve them is made.
-	// In particular, this is the pathway used by EndTransaction to communicate
-	// its non-local intents up the stack.
+	// intentsAlways stores any intentsAlways encountered but not conflicted
+	// with. They should be handed off to asynchronous intent processing on the
+	// proposer, so that an attempt to resolve them is made. In particular, this
+	// is the pathway used by EndTransaction to communicate its non-local
+	// intentsAlways up the stack.
 	//
 	// This is a pointer to allow the zero (and as an unwelcome side effect,
 	// all) values to be compared.
+	intentsAlways *[]intentsWithArg
+	// Like intentsAlways, but specifies intents that must be left alone if the
+	// corresponding command/proposal didn't succeed. For example, resolving
+	// intents of a committing txn should not happen if the commit fails, or
+	// we may accidentally make uncommitted values live.
 	intents *[]intentsWithArg
 	// Whether we successfully or non-successfully requested a lease.
 	//
@@ -182,13 +176,28 @@ type LocalEvalResult struct {
 	updatedTxn *roachpb.Transaction
 }
 
-func (lResult *LocalEvalResult) detachIntents() []intentsWithArg {
-	if lResult == nil || lResult.intents == nil {
+// detachIntents returns (and removes) those intents from the LocalEvalResult
+// which are supposed to be handled. When hasError is false, returns all
+// intents. When it is true, returns only a subset of intents for which it is
+// known that it is safe to handle them even if the command that discovered them
+// has failed (e.g. omitting intents associated to a committing EndTransaction).
+func (lResult *LocalEvalResult) detachIntents(hasError bool) []intentsWithArg {
+	if lResult == nil {
 		return nil
 	}
-	intents := *lResult.intents
-	lResult.intents = nil
-	return intents
+	var r []intentsWithArg
+	if !hasError && lResult.intents != nil {
+		r = *lResult.intents
+	}
+	if lResult.intentsAlways != nil {
+		if r == nil {
+			r = *lResult.intentsAlways
+		} else {
+			r = append(r, *lResult.intentsAlways...)
+		}
+	}
+	lResult.intents, lResult.intentsAlways = nil, nil
+	return r
 }
 
 // EvalResult is the result of evaluating a KV request. That is, the
@@ -312,6 +321,15 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 		return errors.New("conflicting AddSSTable")
 	}
 	q.Replicated.AddSSTable = nil
+
+	if q.Local.intentsAlways != nil {
+		if p.Local.intentsAlways == nil {
+			p.Local.intentsAlways = q.Local.intentsAlways
+		} else {
+			*p.Local.intentsAlways = append(*p.Local.intentsAlways, *q.Local.intentsAlways...)
+		}
+	}
+	q.Local.intentsAlways = nil
 
 	if q.Local.intents != nil {
 		if p.Local.intents == nil {
@@ -804,9 +822,7 @@ func (r *Replica) handleReplicatedEvalResult(
 	return shouldAssert
 }
 
-func (r *Replica) handleLocalEvalResult(
-	ctx context.Context, lResult LocalEvalResult,
-) (shouldAssert bool) {
+func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult LocalEvalResult) {
 	// Enqueue failed push transactions on the pushTxnQueue.
 	if !r.store.cfg.DontRetryPushTxnFailures {
 		if tpErr, ok := lResult.Err.GetDetail().(*roachpb.TransactionPushError); ok {
@@ -827,13 +843,12 @@ func (r *Replica) handleLocalEvalResult(
 	// ======================
 
 	// The caller is required to detach and handle intents.
+	if lResult.intentsAlways != nil {
+		log.Fatalf(ctx, "LocalEvalResult.intentsAlways should be nil: %+v", lResult.intentsAlways)
+	}
 	if lResult.intents != nil {
 		log.Fatalf(ctx, "LocalEvalResult.intents should be nil: %+v", lResult.intents)
 	}
-
-	// The above are present too often, so we assert only if there are
-	// "nontrivial" actions below.
-	shouldAssert = (lResult != LocalEvalResult{})
 
 	if lResult.gossipFirstRange {
 		// We need to run the gossip in an async task because gossiping requires
@@ -895,8 +910,6 @@ func (r *Replica) handleLocalEvalResult(
 	if (lResult != LocalEvalResult{}) {
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, LocalEvalResult{}))
 	}
-
-	return shouldAssert
 }
 
 func (r *Replica) handleEvalResultRaftMuLocked(
@@ -904,8 +917,7 @@ func (r *Replica) handleEvalResultRaftMuLocked(
 ) {
 	shouldAssert := r.handleReplicatedEvalResult(ctx, rResult)
 	if lResult != nil {
-		// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
-		shouldAssert = r.handleLocalEvalResult(ctx, *lResult) || shouldAssert
+		r.handleLocalEvalResult(ctx, *lResult)
 	}
 	if shouldAssert {
 		// Assert that the on-disk state doesn't diverge from the in-memory

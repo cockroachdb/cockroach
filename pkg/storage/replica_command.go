@@ -256,9 +256,16 @@ func evaluateCommand(
 	return pd, pErr
 }
 
-func intentsToEvalResult(intents []roachpb.Intent, args roachpb.Request) EvalResult {
+func intentsToEvalResult(
+	intents []roachpb.Intent, args roachpb.Request, alwaysReturn bool,
+) EvalResult {
 	var pd EvalResult
-	if len(intents) > 0 {
+	if len(intents) == 0 {
+		return pd
+	}
+	if alwaysReturn {
+		pd.Local.intentsAlways = &[]intentsWithArg{{args: args, intents: intents}}
+	} else {
 		pd.Local.intents = &[]intentsWithArg{{args: args, intents: intents}}
 	}
 	return pd
@@ -274,7 +281,7 @@ func evalGet(
 
 	val, intents, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	reply.Value = val
-	return intentsToEvalResult(intents, args), err
+	return intentsToEvalResult(intents, args, true /* alwaysReturn */), err
 }
 
 // evalPut sets the value for a specified key.
@@ -424,7 +431,7 @@ func evalScan(
 	reply.NumKeys = int64(len(rows))
 	reply.ResumeSpan = resumeSpan
 	reply.Rows = rows
-	return intentsToEvalResult(intents, args), err
+	return intentsToEvalResult(intents, args, true /* alwaysReturn */), err
 }
 
 // evalReverseScan scans the key range specified by start key through
@@ -444,7 +451,7 @@ func evalReverseScan(
 	reply.NumKeys = int64(len(rows))
 	reply.ResumeSpan = resumeSpan
 	reply.Rows = rows
-	return intentsToEvalResult(intents, args), err
+	return intentsToEvalResult(intents, args, true /* alwaysReturn */), err
 }
 
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
@@ -706,15 +713,21 @@ func evalEndTransaction(
 			); err != nil {
 				return EvalResult{}, err
 			}
-			return intentsToEvalResult(externalIntents, args), nil
+			// Use alwaysReturn==true because the transaction is definitely
+			// aborted, no matter what happens to this command.
+			return intentsToEvalResult(externalIntents, args, true /* alwaysReturn */), nil
 		}
-		// If the transaction was previously aborted by a concurrent
-		// writer's push, any intents written are still open. It's only now
-		// that we know them, so we return them all for asynchronous
-		// resolution (we're currently not able to write on error, but
-		// see #1989).
-		return intentsToEvalResult(roachpb.AsIntents(args.IntentSpans, reply.Txn), args),
-			roachpb.NewTransactionAbortedError()
+		// If the transaction was previously aborted by a concurrent writer's
+		// push, any intents written are still open. It's only now that we know
+		// them, so we return them all for asynchronous resolution (we're
+		// currently not able to write on error, but see #1989).
+		//
+		// Similarly to above, use alwaysReturn==true. The caller isn't trying
+		// to abort, but the transaction is definitely aborted and its intents
+		// can go.
+		return intentsToEvalResult(roachpb.AsIntents(
+			args.IntentSpans, reply.Txn), args, true, /* alwaysReturn */
+		), roachpb.NewTransactionAbortedError()
 
 	case roachpb.PENDING:
 		if h.Txn.Epoch < reply.Txn.Epoch {
@@ -801,24 +814,26 @@ func evalEndTransaction(
 	}
 
 	// Note: there's no need to clear the abort cache state if we've
-	// successfully finalized a transaction, as there's no way in
-	// which an abort cache entry could have been written (the txn would
-	// already have been in state=ABORTED).
+	// successfully finalized a transaction, as there's no way in which an abort
+	// cache entry could have been written (the txn would already have been in
+	// state=ABORTED).
 	//
-	// Summary of transaction replay protection after EndTransaction:
-	// When a transactional write gets replayed over its own resolved
-	// intents, the write will succeed but only as an intent with a
-	// newer timestamp (with a WriteTooOldError). However, the replayed
-	// intent cannot be resolved by a subsequent replay of this
-	// EndTransaction call because the txn timestamp will be too
-	// old. Replays which include a BeginTransaction never succeed
-	// because EndTransaction inserts in the write timestamp cache,
-	// forcing the BeginTransaction to fail with a transaction retry
-	// error. If the replay didn't include a BeginTransaction, any push
-	// will immediately succeed as a missing txn record on push sets the
-	// transaction to aborted. In both cases, the txn will be GC'd on
-	// the slow path.
-	intentsResult := intentsToEvalResult(externalIntents, args)
+	// Summary of transaction replay protection after EndTransaction: When a
+	// transactional write gets replayed over its own resolved intents, the
+	// write will succeed but only as an intent with a newer timestamp (with a
+	// WriteTooOldError). However, the replayed intent cannot be resolved by a
+	// subsequent replay of this EndTransaction call because the txn timestamp
+	// will be too old. Replays which include a BeginTransaction never succeed
+	// because EndTransaction inserts in the write timestamp cache, forcing the
+	// BeginTransaction to fail with a transaction retry error. If the replay
+	// didn't include a BeginTransaction, any push will immediately succeed as a
+	// missing txn record on push sets the transaction to aborted. In both
+	// cases, the txn will be GC'd on the slow path.
+	//
+	// We specify alwaysReturn==false because if the commit fails below Raft, we
+	// don't want the intents to be up for resolution. That should happen only
+	// if the commit actually happens; otherwise, we risk losing writes.
+	intentsResult := intentsToEvalResult(externalIntents, args, false /* !alwaysReturn */)
 	intentsResult.Local.updatedTxn = reply.Txn
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return EvalResult{}, err
@@ -1328,7 +1343,7 @@ func evalRangeLookup(
 		reply.PrefetchedRanges = reply.PrefetchedRanges[:rangeCount-1]
 	}
 
-	return intentsToEvalResult(intents, args), nil
+	return intentsToEvalResult(intents, args, true /* alwaysReturn */), nil
 }
 
 func declareKeysHeartbeatTransaction(
