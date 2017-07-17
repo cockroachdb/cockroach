@@ -18,8 +18,7 @@
 #include "rocksdb/slice.h"
 #include "encoding.h"
 
-// TODO(pmattis): These functions are not tested. Doing so is made
-// difficult by "go test" because _test.go files cannot 'import "C"'.
+// TODO(benesch): Set up a CI pipeline to test these functions.
 
 void EncodeUint32(std::string* buf, uint32_t v) {
   const uint8_t tmp[sizeof(v)] = {
