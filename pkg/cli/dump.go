@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -92,7 +93,6 @@ func runDump(cmd *cobra.Command, args []string) error {
 // tableMetadata describes one table to dump.
 type tableMetadata struct {
 	name         *parser.TableName
-	primaryIndex string
 	numIndexCols int
 	idxColNames  string
 	columnNames  string
@@ -215,28 +215,6 @@ func getMetadataForTable(
 		return tableMetadata{}, err
 	}
 
-	// Fetch the primary index name.
-	vals, err = conn.QueryRow(fmt.Sprintf(`
-		SELECT CONSTRAINT_NAME
-		FROM "".information_schema.table_constraints
-		AS OF SYSTEM TIME '%s'
-		WHERE TABLE_SCHEMA = $1
-			AND TABLE_NAME = $2
-			AND CONSTRAINT_TYPE='PRIMARY KEY'
-		`, ts), []driver.Value{dbName, tableName})
-
-	var primaryIndex string
-
-	if err != nil {
-		// If the above query returns no rows, err will be set to io.EOF.
-		// This indicates that there is no visible primary index in the table.
-		if err != io.EOF {
-			return tableMetadata{}, err
-		}
-	} else {
-		primaryIndex = vals[0].(string)
-	}
-
 	rows, err = conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME
 		FROM "".information_schema.key_column_usage
@@ -245,7 +223,7 @@ func getMetadataForTable(
 			AND TABLE_NAME = $2
 			AND CONSTRAINT_NAME = $3
 		ORDER BY ORDINAL_POSITION
-		`, ts), []driver.Value{dbName, tableName, primaryIndex})
+		`, ts), []driver.Value{dbName, tableName, sqlbase.PrimaryKeyIndexName})
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -290,7 +268,6 @@ func getMetadataForTable(
 
 	return tableMetadata{
 		name:         name,
-		primaryIndex: primaryIndex,
 		numIndexCols: numIndexCols,
 		idxColNames:  idxColNames.String(),
 		columnNames:  colnames.String(),
@@ -328,9 +305,6 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 		md.numIndexCols = 1
 	}
 	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s", md.idxColNames, md.columnNames, md.name)
-	if md.primaryIndex != "" {
-		fmt.Fprintf(&sbuf, "@%s", parser.Name(md.primaryIndex))
-	}
 	fmt.Fprintf(&sbuf, " AS OF SYSTEM TIME '%s'", clusterTS)
 
 	var wbuf bytes.Buffer
@@ -343,7 +317,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 	}
 	wbuf.WriteString(")")
 	// No WHERE clause first time, so add a place to inject it.
-	fmt.Fprintf(&sbuf, "%%s ORDER BY %s LIMIT %d", md.idxColNames, limit)
+	fmt.Fprintf(&sbuf, "%%s ORDER BY PRIMARY KEY %s LIMIT %d", md.name, limit)
 	bs := sbuf.String()
 
 	// pk holds the last values of the fetched primary keys
