@@ -462,20 +462,40 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sanitizedFullDir := dir + "/full"
 	fullDir := sanitizedFullDir + "?moarSecretsHere"
 
+	sqlDB.Exec(`SET CLUSTER SETTING enterprise.backup.checkpoint_interval = '1s'`)
+
 	// First, create a full backup so that, below, we can test that incremental
-	// backups sanitize credentials in "INCREMENTAL FROM" URLs.
+	// backups sanitize credentials in "INCREMENTAL FROM" URLs. We use the
+	// timestamp from the moment the table was created but before any data was
+	// loaded so that the full backup is empty and the incremental backup actually
+	// has work to do.
 	//
 	// NB: We don't bother making assertions about this full backup since there
 	// are no meaningful differences in how full and incremental backups report
 	// status to the system.jobs table. Since the incremental BACKUP syntax is a
 	// superset of the full BACKUP syntax, we'll cover everything by verifying the
 	// incremental backup below.
+
+	var fullTs string
+	sqlDB.QueryRow(
+		`SELECT timestamp FROM system.eventlog WHERE eventType = 'create_table'
+		ORDER BY timestamp DESC LIMIT 1`,
+	).Scan(&fullTs)
+
 	allowResponse = make(chan struct{})
 	// Closing the channel allows export responses to proceed immediately.
 	close(allowResponse)
-	sqlDB.Exec(`BACKUP DATABASE data TO $1`, fullDir)
 
-	var backupTableID uint32
+	sqlDB.Exec(
+		fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, fullTs),
+		fullDir,
+	)
+
+	backupTableID, err := sqlutils.QueryTableID(sqlDB.DB, "data", "bank")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	jobDone := make(chan error)
 
 	{
@@ -485,7 +505,25 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			jobDone <- err
 		}()
 		if err := verifySystemJobProgress(
-			sqlDB, allowResponse, expectedProgressUpdateCount, func(int64) error { return nil },
+			sqlDB, allowResponse, expectedProgressUpdateCount, func(id int64) error {
+				var checkpointDesc sqlccl.BackupDescriptor
+				{
+					rawIncDir := strings.TrimPrefix(sanitizedIncDir, "nodelocal://")
+					checkpointDescBytes, err := ioutil.ReadFile(
+						filepath.Join(rawIncDir, sqlccl.BackupDescriptorCheckpointName),
+					)
+					if err != nil {
+						return errors.Errorf("%+v", err)
+					}
+					if err := checkpointDesc.Unmarshal(checkpointDescBytes); err != nil {
+						return errors.Errorf("%+v", err)
+					}
+				}
+				if len(checkpointDesc.Files) == 0 {
+					return errors.Errorf("empty backup checkpoint descriptor")
+				}
+				return nil
+			},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -494,10 +532,6 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		var err error
-		if backupTableID, err = sqlutils.QueryTableID(sqlDB.DB, "data", "bank"); err != nil {
-			t.Fatal(err)
-		}
 		if err := verifySystemJob(sqlDB, 1, jobs.JobTypeBackup, jobs.JobRecord{
 			Username: security.RootUser,
 			Description: fmt.Sprintf(

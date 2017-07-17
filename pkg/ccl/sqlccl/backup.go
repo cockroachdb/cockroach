@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -42,8 +43,18 @@ const (
 	// BackupDescriptorName is the file name used for serialized
 	// BackupDescriptor protos.
 	BackupDescriptorName = "BACKUP"
+	// BackupDescriptorCheckpointName is the file name used to store the
+	// serialized BackupDescriptor proto while the backup is in progress.
+	BackupDescriptorCheckpointName = "BACKUP-CHECKPOINT"
 	// BackupFormatInitialVersion is the first version of backup and its files.
 	BackupFormatInitialVersion uint32 = 0
+)
+
+// backupCheckpointInterval is how long.
+var backupCheckpointInterval = settings.RegisterDurationSetting(
+	"enterprise.backup.checkpoint_interval",
+	"the interval at which backup progress is saved to durable storage",
+	time.Minute,
 )
 
 // exportStorageFromURI returns an ExportStorage for the given URI.
@@ -251,6 +262,23 @@ func (r backupFileDescriptors) Less(i, j int) bool {
 	return bytes.Compare(r[i].Span.EndKey, r[j].Span.EndKey) < 0
 }
 
+func writeBackupDescriptor(
+	ctx context.Context, exportStore storageccl.ExportStorage, filename string, desc *BackupDescriptor,
+) error {
+	sort.Sort(backupFileDescriptors(desc.Files))
+
+	descBuf, err := desc.Marshal()
+	if err != nil {
+		return err
+	}
+
+	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
@@ -371,6 +399,41 @@ func Backup(
 		return BackupDescriptor{}, err
 	}
 
+	desc := BackupDescriptor{
+		StartTime:     startTime,
+		EndTime:       endTime,
+		Descriptors:   sqlDescs,
+		Spans:         spans,
+		FormatVersion: BackupFormatInitialVersion,
+		BuildInfo:     build.GetInfo(),
+		NodeID:        p.ExecCfg().NodeID.Get(),
+		ClusterID:     p.ExecCfg().ClusterID(),
+	}
+
+	stopCheckpointing := make(chan struct{})
+	wroteCheckpoint := false
+	go func() {
+		for {
+			select {
+			case <-stopCheckpointing:
+				return
+			case <-time.After(backupCheckpointInterval.Get()):
+				mu.Lock()
+				desc.Files = make(backupFileDescriptors, len(mu.files))
+				copy(desc.Files, mu.files)
+				mu.Unlock()
+
+				if err := writeBackupDescriptor(
+					ctx, exportStore, BackupDescriptorCheckpointName, &desc,
+				); err != nil {
+					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
+				} else {
+					wroteCheckpoint = true
+				}
+			}
+		}
+	}()
+
 	// We're already limiting these on the server-side, but sending all the
 	// Export requests at once would fill up distsender/grpc/something and cause
 	// all sorts of badness (node liveness timeouts leading to mass leaseholder
@@ -433,32 +496,25 @@ func Backup(
 	}
 
 	if err = g.Wait(); err != nil {
+		stopCheckpointing <- struct{}{}
 		return BackupDescriptor{}, errors.Wrapf(err, "exporting %d ranges", len(spans))
 	}
-	files, summary := mu.files, mu.exported // No more concurrency, so this is safe.
+	stopCheckpointing <- struct{}{}
 
-	desc := BackupDescriptor{
-		StartTime:     startTime,
-		EndTime:       endTime,
-		Descriptors:   sqlDescs,
-		Spans:         spans,
-		Files:         files,
-		EntryCounts:   summary,
-		FormatVersion: BackupFormatInitialVersion,
-		BuildInfo:     build.GetInfo(),
-		NodeID:        p.ExecCfg().NodeID.Get(),
-		ClusterID:     p.ExecCfg().ClusterID(),
-	}
-	sort.Sort(backupFileDescriptors(desc.Files))
+	// No more concurrency, so this is safe.
+	desc.Files = mu.files
+	desc.EntryCounts = mu.exported
 
-	descBuf, err := desc.Marshal()
-	if err != nil {
+	if err := writeBackupDescriptor(ctx, exportStore, BackupDescriptorName, &desc); err != nil {
 		return BackupDescriptor{}, err
 	}
 
-	if err := exportStore.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf)); err != nil {
-		return BackupDescriptor{}, err
+	if wroteCheckpoint {
+		if err := exportStore.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
+			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
+		}
 	}
+
 	return desc, nil
 }
 
