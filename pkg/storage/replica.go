@@ -4400,10 +4400,33 @@ func (r *Replica) applyRaftCommand(
 	writer.Close()
 
 	start := timeutil.Now()
+
+	var assertHS *raftpb.HardState
+	if util.RaceEnabled {
+		oldHS, err := loadHardState(ctx, r.store.Engine(), roachpb.RangeID(2))
+		if err != nil {
+			log.Fatalf(ctx, "unable to load HardState: %s", err)
+		}
+		assertHS = &oldHS
+	}
 	if err := batch.Commit(false); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "could not commit batch")))
 	}
+
+	if assertHS != nil {
+		// Load the HardState that was just committed (if any).
+		newHS, err := loadHardState(ctx, r.store.Engine(), roachpb.RangeID(2))
+		if err != nil {
+			panic(err)
+		}
+		// Assert that nothing moved "backwards".
+		if newHS.Term < assertHS.Term || (newHS.Term == assertHS.Term && newHS.Commit < assertHS.Commit) {
+			log.Fatalf(ctx, "clobbered hard state: %s\n\npreviously: %s\noverwritten with: %s",
+				pretty.Diff(newHS, *assertHS), pretty.Sprint(*assertHS), pretty.Sprint(newHS))
+		}
+	}
+
 	elapsed := timeutil.Since(start)
 	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
 	return rResult.Delta, nil
