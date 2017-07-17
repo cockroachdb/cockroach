@@ -320,6 +320,7 @@ func (p *planner) propagateFilters(
 		}
 
 	case *alterTableNode:
+	case *cancelQueryNode:
 	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
@@ -379,7 +380,6 @@ func (p *planner) propagateOrWrapFilters(
 		info = newSourceInfoForSingleTable(anonymousTable, planColumns(newPlan))
 	}
 	f := &filterNode{
-		p:      p,
 		source: planDataSource{plan: newPlan, info: info},
 	}
 	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(info.sourceColumns))

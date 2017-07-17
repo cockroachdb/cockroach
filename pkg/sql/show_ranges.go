@@ -45,7 +45,6 @@ func (p *planner) ShowRanges(ctx context.Context, n *parser.ShowRanges) (planNod
 	// Note: for interleaved tables, the ranges we report will include rows from
 	// interleaving.
 	return &showRangesNode{
-		p:      p,
 		span:   tableDesc.IndexSpan(index.ID),
 		values: make([]parser.Datum, len(showRangesColumns)),
 	}, nil
@@ -54,7 +53,6 @@ func (p *planner) ShowRanges(ctx context.Context, n *parser.ShowRanges) (planNod
 type showRangesNode struct {
 	optColumnsSlot
 
-	p    *planner
 	span roachpb.Span
 
 	// descriptorKVs are KeyValues returned from scanning the
@@ -87,13 +85,13 @@ var showRangesColumns = sqlbase.ResultColumns{
 	},
 }
 
-func (n *showRangesNode) Start(ctx context.Context) error {
+func (n *showRangesNode) Start(params runParams) error {
 	var err error
-	n.descriptorKVs, err = scanMetaKVs(ctx, n.p.txn, n.span)
+	n.descriptorKVs, err = scanMetaKVs(params.ctx, params.p.txn, n.span)
 	return err
 }
 
-func (n *showRangesNode) Next(ctx context.Context) (bool, error) {
+func (n *showRangesNode) Next(params runParams) (bool, error) {
 	if n.rowIdx >= len(n.descriptorKVs) {
 		return false, nil
 	}
@@ -136,7 +134,7 @@ func (n *showRangesNode) Next(ctx context.Context) (bool, error) {
 			Key: desc.StartKey.AsRawKey(),
 		},
 	})
-	if err := n.p.txn.Run(ctx, b); err != nil {
+	if err := params.p.txn.Run(params.ctx, b); err != nil {
 		return false, errors.Wrap(err, "error getting lease info")
 	}
 	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)

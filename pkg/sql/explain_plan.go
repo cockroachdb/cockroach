@@ -91,7 +91,6 @@ func (p *planner) makeExplainPlanNode(
 	)
 
 	node := &explainPlanNode{
-		p:         p,
 		explainer: explainer,
 		expanded:  expanded,
 		optimized: optimized,
@@ -258,7 +257,6 @@ func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 
 // explainPlanNode wraps the logic for EXPLAIN as a planNode.
 type explainPlanNode struct {
-	p         *planner
 	explainer explainer
 
 	// plan is the sub-node being explained.
@@ -274,14 +272,14 @@ type explainPlanNode struct {
 	optimized bool
 }
 
-func (e *explainPlanNode) Next(ctx context.Context) (bool, error) { return e.results.Next(ctx) }
-func (e *explainPlanNode) Values() parser.Datums                  { return e.results.Values() }
+func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.results.Next(params) }
+func (e *explainPlanNode) Values() parser.Datums               { return e.results.Values() }
 
-func (e *explainPlanNode) Start(ctx context.Context) error {
+func (e *explainPlanNode) Start(params runParams) error {
 	// Note that we don't call start on e.plan. That's on purpose, Start() can
 	// have side effects. And it's supposed to not be needed for the way in which
 	// we're going to use e.plan.
-	return e.p.populateExplain(ctx, &e.explainer, e.results, e.plan)
+	return params.p.populateExplain(params.ctx, &e.explainer, e.results, e.plan)
 }
 
 func (e *explainPlanNode) Close(ctx context.Context) {
