@@ -259,35 +259,73 @@ func TestArrayEncoding(t *testing.T) {
 				ParamTyp: parser.TypeInt,
 				Array:    parser.Datums{},
 			},
-			[]byte{16, 3, 0},
+			[]byte{1, 3, 0},
 		}, {
 			"single int array",
 			parser.DArray{
 				ParamTyp: parser.TypeInt,
 				Array:    parser.Datums{parser.NewDInt(1)},
 			},
-			[]byte{16, 3, 1, 2},
+			[]byte{1, 3, 1, 2},
 		}, {
 			"multiple int array",
 			parser.DArray{
 				ParamTyp: parser.TypeInt,
 				Array:    parser.Datums{parser.NewDInt(1), parser.NewDInt(2), parser.NewDInt(3)},
 			},
-			[]byte{16, 3, 3, 2, 4, 6},
+			[]byte{1, 3, 3, 2, 4, 6},
 		}, {
 			"string array",
 			parser.DArray{
 				ParamTyp: parser.TypeString,
 				Array:    parser.Datums{parser.NewDString("foo"), parser.NewDString("bar"), parser.NewDString("baz")},
 			},
-			[]byte{16, 6, 3, 3, 102, 111, 111, 3, 98, 97, 114, 3, 98, 97, 122},
+			[]byte{1, 6, 3, 3, 102, 111, 111, 3, 98, 97, 114, 3, 98, 97, 122},
 		}, {
 			"bool array",
 			parser.DArray{
 				ParamTyp: parser.TypeBool,
 				Array:    parser.Datums{parser.MakeDBool(true), parser.MakeDBool(false)},
 			},
-			[]byte{16, 10, 2, 10, 11},
+			[]byte{1, 10, 2, 10, 11},
+		}, {
+			"array containing a single null",
+			parser.DArray{
+				ParamTyp: parser.TypeInt,
+				Array:    parser.Datums{parser.DNull},
+				HasNulls: true,
+			},
+			[]byte{17, 3, 1, 1},
+		}, {
+			"array containing multiple nulls",
+			parser.DArray{
+				ParamTyp: parser.TypeInt,
+				Array:    parser.Datums{parser.NewDInt(1), parser.DNull, parser.DNull},
+				HasNulls: true,
+			},
+			[]byte{17, 3, 3, 6, 2},
+		}, {
+			"array whose NULL bitmap spans exactly one byte",
+			parser.DArray{
+				ParamTyp: parser.TypeInt,
+				Array: parser.Datums{
+					parser.NewDInt(1), parser.DNull, parser.DNull, parser.NewDInt(2), parser.NewDInt(3),
+					parser.NewDInt(4), parser.NewDInt(5), parser.NewDInt(6),
+				},
+				HasNulls: true,
+			},
+			[]byte{17, 3, 8, 6, 2, 4, 6, 8, 10, 12},
+		}, {
+			"array whose NULL bitmap spans more than one byte",
+			parser.DArray{
+				ParamTyp: parser.TypeInt,
+				Array: parser.Datums{
+					parser.NewDInt(1), parser.DNull, parser.DNull, parser.NewDInt(2), parser.NewDInt(3),
+					parser.NewDInt(4), parser.NewDInt(5), parser.NewDInt(6), parser.DNull,
+				},
+				HasNulls: true,
+			},
+			[]byte{17, 3, 9, 6, 1, 2, 4, 6, 8, 10, 12},
 		},
 	}
 
@@ -295,10 +333,10 @@ func TestArrayEncoding(t *testing.T) {
 		t.Run("encode "+test.name, func(t *testing.T) {
 			enc, err := encodeArray(&test.datum, nil)
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 			if !bytes.Equal(enc, test.encoding) {
-				t.Fatalf("expected %s to encode to %v, got %v", test.datum.String(), test.encoding, enc)
+				t.Errorf("expected %s to encode to %v, got %v", test.datum.String(), test.encoding, enc)
 			}
 		})
 
@@ -308,10 +346,10 @@ func TestArrayEncoding(t *testing.T) {
 			enc = append(enc, test.encoding...)
 			d, _, err := decodeArray(&DatumAlloc{}, test.datum.ParamTyp, enc)
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 			if d.Compare(parser.NewTestingEvalContext(), &test.datum) != 0 {
-				t.Fatalf("expected %v to decode to %s, got %s", enc, test.datum.String(), d.String())
+				t.Errorf("expected %v to decode to %s, got %s", enc, test.datum.String(), d.String())
 			}
 		})
 	}

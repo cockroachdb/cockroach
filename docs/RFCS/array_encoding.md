@@ -120,11 +120,11 @@ Postgres. The format is:
 
 * Byte type tag
 * Length in bytes
-* Length of the array, in bytes
 * Value type tag
 * A byte, encoding:
-    * The number of dimensions in the array as the high 4 bits
-    * A 4-bit flag bitmap, having all but the lowest bit reserved, with the lowest bit representing whether we have a NULL bitmap.
+    * The number of dimensions in the array as the low 4 bits
+    * A 4-bit flag bitmap in the high 4 bits, having all but the lowest bit
+      reserved, with the lowest bit representing whether we have a NULL bitmap
 * Length of each dimension, as varints
 * Optional NULL bitmap showing the location of NULLs in the array, laid out
 in row-major order (with length padded to be a multiple of 8)
