@@ -53,7 +53,9 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 			return nil, err
 		}
 
-		tableDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+		tableDesc, err := mustGetTableOrViewDesc(
+			ctx, p.txn, p.getVirtualTabler(), tn, true, /* allowAdding */
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +104,7 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 
 	// TODO(knz): move truncate logic to Start/Next so it can be used with SHOW TRACE FOR.
 	traceKV := p.session.Tracing.KVTracingEnabled()
-	for id, _ := range toTruncate {
+	for id := range toTruncate {
 		if err := p.truncateTable(p.session.Ctx(), id, traceKV); err != nil {
 			return nil, err
 		}
@@ -114,9 +116,7 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 // truncateTable truncates the data of a table in a single transaction. It
 // drops the table and recreates it with a new ID. The dropped table is
 // GC-ed later through an asynchrnous schema change.
-func (p *planner) truncateTable(
-	ctx context.Context, id sqlbase.ID, traceKV bool,
-) error {
+func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
 	tableDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
@@ -125,6 +125,7 @@ func (p *planner) truncateTable(
 	}
 	newTableDesc := *tableDesc
 	newTableDesc.SetID(0)
+	newTableDesc.Version = 1
 
 	// Remove old name -> id map.
 	zoneKey, nameKey, _ := GetKeysForTableDescriptor(tableDesc)
@@ -154,9 +155,7 @@ func (p *planner) truncateTable(
 	if err != nil {
 		return err
 	}
-	assignment := make(map[sqlbase.ID]sqlbase.ID)
-	assignment[tableDesc.ID] = newID
-	if err := reassignReferencedTables(tables, assignment); err != nil {
+	if err := reassignReferencedTables(tables, tableDesc.ID, newID); err != nil {
 		return err
 	}
 
@@ -171,11 +170,16 @@ func (p *planner) truncateTable(
 	}
 
 	// Add new descriptor.
+	newTableDesc.State = sqlbase.TableDescriptor_ADD
+	if err := newTableDesc.SetUpVersion(); err != nil {
+		return err
+	}
 	tKey := tableKey{parentID: newTableDesc.ParentID, name: newTableDesc.Name}
 	key := tKey.Key()
 	if err := p.createDescriptorWithID(ctx, key, newID, &newTableDesc); err != nil {
 		return err
 	}
+	p.notifySchemaChange(&newTableDesc, sqlbase.InvalidMutationID)
 
 	// Copy the zone config.
 	newZoneKey := sqlbase.MakeZoneKey(newID)
@@ -194,18 +198,14 @@ func (p *planner) truncateTable(
 	}
 	b = &client.Batch{}
 	b.CPut(newZoneKey, zoneCfg, nil)
-	if err := p.txn.Run(ctx, b); err != nil {
-		return err
-	}
-
-	return nil
+	return p.txn.Run(ctx, b)
 }
 
 // For all the references from a table
 func (p *planner) findAllReferences(
 	ctx context.Context, table sqlbase.TableDescriptor,
 ) ([]*sqlbase.TableDescriptor, error) {
-	refs := make(map[sqlbase.ID]struct{})
+	refs := map[sqlbase.ID]struct{}{}
 	if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 		for _, a := range index.Interleave.Ancestors {
 			refs[a.TableID] = struct{}{}
@@ -236,7 +236,7 @@ func (p *planner) findAllReferences(
 	}
 
 	tables := make([]*sqlbase.TableDescriptor, 0, len(refs))
-	for id, _ := range refs {
+	for id := range refs {
 		if id == table.ID {
 			continue
 		}
@@ -250,28 +250,23 @@ func (p *planner) findAllReferences(
 	return tables, nil
 }
 
-// reassign all the references from all the tables that match those in newTableIDs.
-func reassignReferencedTables(
-	tables []*sqlbase.TableDescriptor, newTableIDs map[sqlbase.ID]sqlbase.ID,
-) error {
+// reassign all the references from oldID to newID.
+func reassignReferencedTables(tables []*sqlbase.TableDescriptor, oldID, newID sqlbase.ID) error {
 	for _, table := range tables {
 		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 			for j, a := range index.Interleave.Ancestors {
-				ancestorID, ok := newTableIDs[a.TableID]
-				if ok {
-					index.Interleave.Ancestors[j].TableID = ancestorID
+				if a.TableID == oldID {
+					index.Interleave.Ancestors[j].TableID = newID
 				}
 			}
 			for j, c := range index.InterleavedBy {
-				childID, ok := newTableIDs[c.Table]
-				if ok {
-					index.InterleavedBy[j].Table = childID
+				if c.Table == oldID {
+					index.InterleavedBy[j].Table = newID
 				}
 			}
 
 			if index.ForeignKey.IsSet() {
-				to := index.ForeignKey.Table
-				if newID, ok := newTableIDs[to]; ok {
+				if to := index.ForeignKey.Table; to == oldID {
 					index.ForeignKey.Table = newID
 				}
 			}
@@ -279,7 +274,7 @@ func reassignReferencedTables(
 			origRefs := index.ReferencedBy
 			index.ReferencedBy = nil
 			for _, ref := range origRefs {
-				if newID, ok := newTableIDs[ref.Table]; ok {
+				if ref.Table == oldID {
 					ref.Table = newID
 				}
 				index.ReferencedBy = append(index.ReferencedBy, ref)
@@ -290,14 +285,14 @@ func reassignReferencedTables(
 		}
 
 		for i, dest := range table.DependsOn {
-			if newID, ok := newTableIDs[dest]; ok {
+			if dest == oldID {
 				table.DependsOn[i] = newID
 			}
 		}
 		origRefs := table.DependedOnBy
 		table.DependedOnBy = nil
 		for _, ref := range origRefs {
-			if newID, ok := newTableIDs[ref.ID]; ok {
+			if ref.ID == oldID {
 				ref.ID = newID
 			}
 			table.DependedOnBy = append(table.DependedOnBy, ref)

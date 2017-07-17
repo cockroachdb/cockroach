@@ -2301,3 +2301,183 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 }
+
+// Test that a table TRUNCATE leaves the database in the correct state
+// for the asynchronous schema changer to eventually execute it.
+func TestTruncateInternals(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const maxValue = 2000
+	params, _ := createTestServerParams()
+	// Disable schema changes.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+		},
+	}
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
+		t.Error(err)
+	}
+
+	// Check that SQL thinks the table is empty.
+	if err := checkTableKeyCount(ctx, kvDB, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	newTableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if !newTableDesc.Adding() {
+		t.Fatalf("bad state = %s", newTableDesc.State)
+	}
+
+	// Ensure that the table data hasn't been deleted.
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := maxValue + 1; len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+	// Check that the table descriptor exists so we know the data will
+	// eventually be deleted.
+	var droppedDesc *sqlbase.TableDescriptor
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		droppedDesc, err = sqlbase.GetTableDescFromID(ctx, txn, tableDesc.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if droppedDesc == nil {
+		t.Fatalf("table descriptor doesn't exist after table is truncated: %d", tableDesc.ID)
+	}
+	if !droppedDesc.Dropped() {
+		t.Fatalf("bad state = %s", droppedDesc.State)
+	}
+}
+
+// Test that a table truncation completes properly.
+func TestTruncateCompletion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const maxValue = 2000
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly: true,
+		},
+	}
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.pi (d DECIMAL PRIMARY KEY);
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DEFAULT (DECIMAL '3.14'));
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`INSERT INTO t.pi VALUES (3.14)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
+		t.Error(err)
+	}
+
+	// Check that SQL thinks the table is empty.
+	if err := checkTableKeyCount(ctx, kvDB, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure that the FK property still holds.
+	if _, err := sqlDB.Exec(
+		`INSERT INTO t.test VALUES ($1 , $2, $3)`, maxValue+2, maxValue+2, 3.15,
+	); !testutils.IsError(err, "foreign key violation") {
+		t.Fatalf("err = %v", err)
+	}
+
+	newTableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if newTableDesc.Adding() {
+		t.Fatalf("bad state = %s", newTableDesc.State)
+	}
+
+	// Wait until the older descriptor has been deleted.
+	testutils.SucceedsSoon(t, func() error {
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			_, err = sqlbase.GetTableDescFromID(ctx, txn, tableDesc.ID)
+			return err
+		}); err != nil {
+			if err == sqlbase.ErrDescriptorNotFound {
+				return nil
+			}
+			return err
+		}
+		return errors.Errorf("table descriptor exists after table is truncated: %d", tableDesc.ID)
+	})
+
+	// Ensure that the table data has been deleted.
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := 0; len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+
+	fkTableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "pi")
+	tablePrefix = roachpb.Key(keys.MakeTablePrefix(uint32(fkTableDesc.ID)))
+	tableEnd = tablePrefix.PrefixEnd()
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := 1; len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+}
