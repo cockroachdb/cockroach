@@ -29,7 +29,6 @@ import (
 // during plan optimizations in order to avoid instantiating a fully
 // blown selectTopNode/renderNode pair.
 type filterNode struct {
-	p          *planner
 	source     planDataSource
 	filter     parser.TypedExpr
 	ivarHelper parser.IndexedVarHelper
@@ -51,18 +50,18 @@ func (f *filterNode) IndexedVarFormat(buf *bytes.Buffer, fl parser.FmtFlags, idx
 }
 
 // Start implements the planNode interface.
-func (f *filterNode) Start(ctx context.Context) error {
-	return f.source.plan.Start(ctx)
+func (f *filterNode) Start(params runParams) error {
+	return f.source.plan.Start(params)
 }
 
 // Next implements the planNode interface.
-func (f *filterNode) Next(ctx context.Context) (bool, error) {
+func (f *filterNode) Next(params runParams) (bool, error) {
 	for {
-		if next, err := f.source.plan.Next(ctx); !next {
+		if next, err := f.source.plan.Next(params); !next {
 			return false, err
 		}
 
-		passesFilter, err := sqlbase.RunFilter(f.filter, &f.p.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(f.filter, &params.p.evalCtx)
 		if err != nil {
 			return false, err
 		}

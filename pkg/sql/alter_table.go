@@ -30,7 +30,6 @@ import (
 )
 
 type alterTableNode struct {
-	p         *planner
 	n         *parser.AlterTable
 	tableDesc *sqlbase.TableDescriptor
 }
@@ -59,10 +58,10 @@ func (p *planner) AlterTable(ctx context.Context, n *parser.AlterTable) (planNod
 	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
-	return &alterTableNode{n: n, p: p, tableDesc: tableDesc}, nil
+	return &alterTableNode{n: n, tableDesc: tableDesc}, nil
 }
 
-func (n *alterTableNode) Start(ctx context.Context) error {
+func (n *alterTableNode) Start(params runParams) error {
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
 	// the list.
@@ -82,7 +81,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				return pgerror.Unimplemented(
 					"alter add fk", "adding a REFERENCES constraint via ALTER not supported")
 			}
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, n.p.session.SearchPath, &n.p.evalCtx)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, params.p.session.SearchPath, &params.p.evalCtx)
 			if err != nil {
 				return err
 			}
@@ -110,7 +109,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			}
 
 		case *parser.AlterTableAddConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -140,7 +139,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD)
 
 			case *parser.CheckConstraintTableDef:
-				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, n.p.session.SearchPath)
+				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, params.p.session.SearchPath)
 				if err != nil {
 					return err
 				}
@@ -149,17 +148,17 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				descriptorChanged = true
 
 			case *parser.ForeignKeyConstraintTableDef:
-				if _, err := d.Table.NormalizeWithDatabaseName(n.p.session.Database); err != nil {
+				if _, err := d.Table.NormalizeWithDatabaseName(params.p.session.Database); err != nil {
 					return err
 				}
 				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-				err := n.p.resolveFK(ctx, n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
+				err := params.p.resolveFK(params.ctx, n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
 				if err != nil {
 					return err
 				}
 				descriptorChanged = true
 				for _, updated := range affected {
-					if err := n.p.saveNonmutationAndNotify(ctx, updated); err != nil {
+					if err := params.p.saveNonmutationAndNotify(params.ctx, updated); err != nil {
 						return err
 					}
 				}
@@ -193,19 +192,19 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				if !found {
 					continue
 				}
-				err := n.p.canRemoveDependentViewGeneric(
-					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior,
+				err := params.p.canRemoveDependentViewGeneric(
+					params.ctx, "column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior,
 				)
 				if err != nil {
 					return err
 				}
-				viewDesc, err := n.p.getViewDescForCascade(
-					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior,
+				viewDesc, err := params.p.getViewDescForCascade(
+					params.ctx, "column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior,
 				)
 				if err != nil {
 					return err
 				}
-				droppedViews, err = n.p.removeDependentView(ctx, n.tableDesc, viewDesc)
+				droppedViews, err = params.p.removeDependentView(params.ctx, n.tableDesc, viewDesc)
 				if err != nil {
 					return err
 				}
@@ -269,8 +268,8 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				// Perform the DROP.
 				if containsThisColumn {
 					if containsOnlyThisColumn || t.DropBehavior == parser.DropCascade {
-						if err := n.p.dropIndexByName(
-							ctx, parser.Name(idx.Name), n.tableDesc, false, t.DropBehavior, n.n.String(),
+						if err := params.p.dropIndexByName(
+							params.ctx, parser.Name(idx.Name), n.tableDesc, false, t.DropBehavior, n.n.String(),
 						); err != nil {
 							return err
 						}
@@ -293,7 +292,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			}
 
 		case *parser.AlterTableDropConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -321,7 +320,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			case sqlbase.ConstraintTypeFK:
 				for i, idx := range n.tableDesc.Indexes {
 					if idx.ForeignKey.Name == name {
-						if err := n.p.removeFKBackReference(ctx, n.tableDesc, idx); err != nil {
+						if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, idx); err != nil {
 							return err
 						}
 						n.tableDesc.Indexes[i].ForeignKey = sqlbase.ForeignKeyReference{}
@@ -334,7 +333,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			}
 
 		case *parser.AlterTableValidateConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -360,8 +359,8 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 					panic("constraint returned by GetConstraintInfo not found")
 				}
 				ck := n.tableDesc.Checks[idx]
-				if err := n.p.validateCheckExpr(
-					ctx, ck.Expr, &n.n.Table, n.tableDesc,
+				if err := params.p.validateCheckExpr(
+					params.ctx, ck.Expr, &n.n.Table, n.tableDesc,
 				); err != nil {
 					return err
 				}
@@ -385,7 +384,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				if err != nil {
 					panic(err)
 				}
-				if err := n.p.validateForeignKey(ctx, n.tableDesc, idx); err != nil {
+				if err := params.p.validateForeignKey(params.ctx, n.tableDesc, idx); err != nil {
 					return err
 				}
 				idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
@@ -405,7 +404,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				return fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
 			}
 			if err := applyColumnMutation(
-				&col, t, n.p.session.SearchPath,
+				&col, t, params.p.session.SearchPath,
 			); err != nil {
 				return err
 			}
@@ -435,7 +434,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 	mutationID := sqlbase.InvalidMutationID
 	var err error
 	if addedMutations {
-		mutationID, err = n.p.createSchemaChangeJob(ctx, n.tableDesc, parser.AsString(n.n))
+		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc, parser.AsString(n.n))
 	} else {
 		err = n.tableDesc.SetUpVersion()
 	}
@@ -443,38 +442,38 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	if err := n.p.writeTableDesc(ctx, n.tableDesc); err != nil {
+	if err := params.p.writeTableDesc(params.ctx, n.tableDesc); err != nil {
 		return err
 	}
 
 	// Record this table alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
-		ctx,
-		n.p.txn,
+	if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
 		EventLogAlterTable,
 		int32(n.tableDesc.ID),
-		int32(n.p.evalCtx.NodeID),
+		int32(params.p.evalCtx.NodeID),
 		struct {
 			TableName           string
 			Statement           string
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{n.tableDesc.Name, n.n.String(), n.p.session.User, uint32(mutationID), droppedViews},
+		}{n.tableDesc.Name, n.n.String(), params.p.session.User, uint32(mutationID), droppedViews},
 	); err != nil {
 		return err
 	}
 
-	n.p.notifySchemaChange(n.tableDesc, mutationID)
+	params.p.notifySchemaChange(n.tableDesc, mutationID)
 
 	return nil
 }
 
-func (n *alterTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *alterTableNode) Close(context.Context)              {}
-func (n *alterTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (n *alterTableNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterTableNode) Close(context.Context)        {}
+func (n *alterTableNode) Values() parser.Datums        { return parser.Datums{} }
 
 func applyColumnMutation(
 	col *sqlbase.ColumnDescriptor, mut parser.ColumnMutationCmd, searchPath parser.SearchPath,

@@ -98,7 +98,7 @@ func (r *editNodeRun) initEditNode(
 	return nil
 }
 
-func (r *editNodeRun) startEditNode(ctx context.Context, en *editNodeBase) error {
+func (r *editNodeRun) startEditNode(params runParams, en *editNodeBase) error {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		if err := en.p.txn.SetSystemConfigTrigger(); err != nil {
@@ -106,7 +106,7 @@ func (r *editNodeRun) startEditNode(ctx context.Context, en *editNodeBase) error
 		}
 	}
 
-	return r.rows.Start(ctx)
+	return r.rows.Start(params)
 }
 
 func (r *editNodeRun) collectSpans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
@@ -399,11 +399,11 @@ func (p *planner) Update(
 	return un, nil
 }
 
-func (u *updateNode) Start(ctx context.Context) error {
-	if err := u.run.startEditNode(ctx, &u.editNodeBase); err != nil {
+func (u *updateNode) Start(params runParams) error {
+	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
-	return u.run.tw.init(u.p.txn)
+	return u.run.tw.init(params.p.txn)
 }
 
 func (u *updateNode) Close(ctx context.Context) {
@@ -412,12 +412,15 @@ func (u *updateNode) Close(ctx context.Context) {
 	updateNodePool.Put(u)
 }
 
-func (u *updateNode) Next(ctx context.Context) (bool, error) {
-	next, err := u.run.rows.Next(ctx)
+func (u *updateNode) Next(params runParams) (bool, error) {
+	next, err := u.run.rows.Next(params)
 	if !next {
 		if err == nil {
+			if err := params.p.cancelChecker.Check(); err != nil {
+				return false, err
+			}
 			// We're done. Finish the batch.
-			err = u.tw.finalize(ctx, u.p.session.Tracing.KVTracingEnabled())
+			err = u.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -446,7 +449,7 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 	if err := u.checkHelper.loadRow(u.updateColsIdx, updateValues, true); err != nil {
 		return false, err
 	}
-	if err := u.checkHelper.check(&u.p.evalCtx); err != nil {
+	if err := u.checkHelper.check(&params.p.evalCtx); err != nil {
 		return false, err
 	}
 
@@ -466,7 +469,7 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 
 	// Update the row values.
 	newValues, err := u.tw.row(
-		ctx, append(oldValues, updateValues...), u.p.session.Tracing.KVTracingEnabled(),
+		params.ctx, append(oldValues, updateValues...), params.p.session.Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
 		return false, err

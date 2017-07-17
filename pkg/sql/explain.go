@@ -178,7 +178,7 @@ var explainDistSQLColumns = sqlbase.ResultColumns{
 	{Name: "JSON", Typ: parser.TypeString},
 }
 
-func (n *explainDistSQLNode) Start(ctx context.Context) error {
+func (n *explainDistSQLNode) Start(params runParams) error {
 	// Trigger limit propagation.
 	setUnlimited(n.plan)
 
@@ -187,7 +187,7 @@ func (n *explainDistSQLNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	planCtx := n.distSQLPlanner.NewPlanningCtx(ctx, n.txn)
+	planCtx := n.distSQLPlanner.NewPlanningCtx(params.ctx, n.txn)
 	plan, err := n.distSQLPlanner.createPlanForNode(&planCtx, n.plan)
 	if err != nil {
 		return err
@@ -207,7 +207,7 @@ func (n *explainDistSQLNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *explainDistSQLNode) Next(context.Context) (bool, error) {
+func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 	if n.done {
 		return false, nil
 	}

@@ -93,6 +93,11 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 		}
 	}
 
+	// Mark this query as non-cancellable if autocommitting.
+	if err := p.cancelChecker.Check(); err != nil {
+		return nil, err
+	}
+
 	// TODO(knz): move truncate logic to Start/Next so it can be used with SHOW TRACE FOR.
 	traceKV := p.session.Tracing.KVTracingEnabled()
 	for _, tableDesc := range toTruncate {

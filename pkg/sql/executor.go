@@ -976,15 +976,15 @@ func (e *Executor) execParsed(
 
 // If the plan has a fast path we attempt to query that,
 // otherwise we fall back to counting via plan.Next().
-func countRowsAffected(ctx context.Context, p planNode) (int, error) {
+func countRowsAffected(runParams runParams, p planNode) (int, error) {
 	if a, ok := p.(planNodeFastPath); ok {
 		if count, res := a.FastPathResults(); res {
 			return count, nil
 		}
 	}
 	count := 0
-	next, err := p.Next(ctx)
-	for ; next; next, err = p.Next(ctx) {
+	next, err := p.Next(runParams)
+	for ; next; next, err = p.Next(runParams) {
 		count++
 	}
 	return count, err
@@ -1489,6 +1489,7 @@ func (e *Executor) execStmtInOpenTxn(
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
+	p.cancelChecker = makeCancelChecker(p.stmt)
 
 	// constantMemAcc accounts for all constant folded values that are computed
 	// prior to any rows being computed.
@@ -1647,17 +1648,22 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 		return err
 	}
 
+	params := runParams{
+		ctx: ctx,
+		p:   planner,
+	}
+
 	switch result.Type {
 	case parser.RowsAffected:
-		count, err := countRowsAffected(ctx, plan)
+		count, err := countRowsAffected(params, plan)
 		if err != nil {
 			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		next, err := plan.Next(ctx)
-		for ; next; next, err = plan.Next(ctx) {
+		next, err := plan.Next(params)
+		for ; next; next, err = plan.Next(params) {
 			planner.evalCtx.ActiveMemAcc.Close(ctx)
 			rowAcc = planner.evalCtx.Mon.MakeBoundAccount()
 			planner.evalCtx.ActiveMemAcc = &rowAcc

@@ -70,6 +70,16 @@ type planMaker interface {
 
 var _ planMaker = &planner{}
 
+// runParams is a struct containing all parameters passed to planNode.Next() and
+// planNode.Start().
+type runParams struct {
+	// context.Context for this method call.
+	ctx context.Context
+
+	// planner associated with this planNode.
+	p *planner
+}
+
 // planNode defines the interface for executing a query or portion of a query.
 //
 // The following methods apply to planNodes and contain special cases
@@ -95,7 +105,7 @@ type planNode interface {
 	// Note: Don't use directly. Use startPlan() instead.
 	//
 	// Available after optimizePlan() (or makePlan).
-	Start(ctx context.Context) error
+	Start(params runParams) error
 
 	// Next performs one unit of work, returning false if an error is
 	// encountered or if there is no more work to do. For statements
@@ -105,7 +115,7 @@ type planNode interface {
 	//
 	// Available after Start(). It is illegal to call Next() after it returns
 	// false.
-	Next(ctx context.Context) (bool, error)
+	Next(params runParams) (bool, error)
 
 	// Values returns the values at the current row. The result is only valid
 	// until the next call to Next().
@@ -206,7 +216,11 @@ func (p *planner) startPlan(ctx context.Context, plan planNode) error {
 	if err := p.startSubqueryPlans(ctx, plan); err != nil {
 		return err
 	}
-	if err := plan.Start(ctx); err != nil {
+	params := runParams{
+		ctx: ctx,
+		p:   p,
+	}
+	if err := plan.Start(params); err != nil {
 		return err
 	}
 	// Trigger limit propagation through the plan and sub-queries.
