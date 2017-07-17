@@ -15,6 +15,8 @@
 
 package parser
 
+import "strconv"
+
 // Def represents either an enumeration, a primitive type, a struct, or a sum.
 type Def struct {
 	Kind  DefKind
@@ -70,11 +72,17 @@ type TagOccur struct {
 // TypeName represents the name of a type (primitive or not).
 type TypeName string
 
+func (tn TypeName) String() string { return string(tn) }
+
 // ItemName represents the name of an enumeration constant or a struct field.
 type ItemName string
 
+func (in ItemName) String() string { return string(in) }
+
 // Tag represents a protobuf tag number.
 type Tag int32
+
+func (t Tag) String() string { return strconv.FormatInt(int64(t), 10) }
 
 type strOccur struct {
 	Str string
