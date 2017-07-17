@@ -278,6 +278,8 @@ dupl: $(BOOTSTRAP_TARGET)
 	       -not -name 'embedded.go' \
 	       -not -name '*_string.go' \
 	       -not -name 'sql.go'      \
+	       -not -name 'irgen.go'    \
+	       -not -name '*.ir.go'     \
 	| dupl -files $(DUPLFLAGS)
 
 # All packages need to be installed before we can run (some) of the checks and
