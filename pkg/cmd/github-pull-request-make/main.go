@@ -237,6 +237,7 @@ func main() {
 					fmt.Sprintf("TESTS=%s", tests),
 					fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
 				)
+				cmd.Env = append(os.Environ(), "COCKROACH_NIGHTLY_STRESS=true")
 				cmd.Dir = crdb.Dir
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr

@@ -176,7 +176,7 @@ func TestClientConnSettings(t *testing.T) {
 
 	// For some reason, when run under stress all these test cases fail due to the
 	// `--host` flag being unknown to quitCmd. Just skip this under stress.
-	if testutils.Stress() {
+	if testutils.NightlyStress() {
 		t.Skip()
 	}
 

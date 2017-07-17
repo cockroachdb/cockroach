@@ -59,7 +59,7 @@ func connectionsRefused(network *simulation.Network) int64 {
 // As of Jan 2017, this normally takes ~12 cycles and 8-12 refused connections.
 func TestConvergence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if testutils.Stress() {
+	if testutils.NightlyStress() {
 		t.Skip()
 	}
 
@@ -92,7 +92,7 @@ func TestConvergence(t *testing.T) {
 // As of Jan 2017, this normally takes 8-9 cycles and 50-60 refused connections.
 func TestNetworkReachesEquilibrium(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if testutils.Stress() {
+	if testutils.NightlyStress() {
 		t.Skip()
 	}
 
