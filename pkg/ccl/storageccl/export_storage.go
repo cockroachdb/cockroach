@@ -177,6 +177,7 @@ func (l *localFileStorage) WriteFile(
 		return errors.Wrap(err, "creating local export storage path")
 	}
 	path := filepath.Join(l.base, basename)
+	fmt.Printf("NIKHIL writing path %s\n", path)
 	f, err := os.Create(path)
 	if err != nil {
 		return errors.Wrapf(err, "creating local export file %q", path)
