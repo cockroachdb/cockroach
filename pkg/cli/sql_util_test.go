@@ -129,8 +129,8 @@ SET
 	}
 
 	expectedRows := [][]string{
-		{`parentID`, `INT`, `false`, `NULL`, `{primary}`},
-		{`name`, `STRING`, `false`, `NULL`, `{primary}`},
+		{`parentID`, `INT`, `false`, `NULL`, `"{\"primary\"}"`},
+		{`name`, `STRING`, `false`, `NULL`, `"{\"primary\"}"`},
 		{`id`, `INT`, `true`, `NULL`, `{}`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
@@ -143,13 +143,13 @@ SET
 	}
 
 	expected = `
-+----------+--------+-------+---------+-----------+
-|  Field   |  Type  | Null  | Default |  Indices  |
-+----------+--------+-------+---------+-----------+
-| parentID | INT    | false | NULL    | {primary} |
-| name     | STRING | false | NULL    | {primary} |
-| id       | INT    | true  | NULL    | {}        |
-+----------+--------+-------+---------+-----------+
++----------+--------+-------+---------+-------------+
+|  Field   |  Type  | Null  | Default |   Indices   |
++----------+--------+-------+---------+-------------+
+| parentID | INT    | false | NULL    | {"primary"} |
+| name     | STRING | false | NULL    | {"primary"} |
+| id       | INT    | true  | NULL    | {}          |
++----------+--------+-------+---------+-------------+
 (3 rows)
 `
 

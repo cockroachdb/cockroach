@@ -63,4 +63,11 @@ d = v[0][0]
 assert type(d) is decimal.Decimal
 # Use of compare_total here guarantees that we didn't just get '10' back, we got '1e1'.
 assert d.compare_total(decimal.Decimal('1e1')) == 0
+
+# Verify arrays with strings can be parsed.
+cur = conn.cursor()
+cur.execute("SELECT ARRAY['foo','bar','baz']")
+v = cur.fetchall()
+d = v[0][0]
+assert d == ["foo","bar","baz"]
 `

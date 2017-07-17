@@ -652,7 +652,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		"SHOW COLUMNS FROM system.users": {
 			baseTest.
-				Results("username", "STRING", false, gosql.NullBool{}, "{primary}").
+				Results("username", "STRING", false, gosql.NullBool{}, "{\"primary\"}").
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "{}"),
 		},
 		"SHOW DATABASES": {
