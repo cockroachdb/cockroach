@@ -2212,3 +2212,131 @@ func TestPushTxnQueueDependencyCycleWithRangeSplit(t *testing.T) {
 		})
 	}
 }
+
+func TestMinimal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	storeCfg := storage.TestStoreConfig(nil)
+	// An aggressive tick interval lets groups communicate more and thus
+	// triggers test failures much more reliably. We can't go too aggressive
+	// or race tests never make any progress.
+	storeCfg.RaftTickInterval = 50 * time.Millisecond
+	storeCfg.RaftElectionTimeoutTicks = 2
+	currentTrigger := make(chan *roachpb.SplitTrigger, 1)
+	var seen struct {
+		syncutil.Mutex
+		sids map[storagebase.CmdIDKey][2]bool
+	}
+	seen.sids = make(map[storagebase.CmdIDKey][2]bool)
+
+	storeCfg.TestingKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
+		et, ok := args.Req.(*roachpb.EndTransactionRequest)
+		if !ok || et.InternalCommitTrigger == nil {
+			return nil
+		}
+		trigger := protoutil.Clone(et.InternalCommitTrigger.GetSplitTrigger()).(*roachpb.SplitTrigger)
+		// The first time the trigger arrives (on each of the two stores),
+		// return a transaction retry. This allows us to pass the trigger to
+		// the goroutine creating faux incoming messages for the yet
+		// nonexistent right-hand-side, giving it a head start. This code looks
+		// fairly complicated since it wants to ensure that the two replicas
+		// don't diverge.
+		if trigger != nil && len(trigger.RightDesc.Replicas) == 2 && args.Hdr.Txn.Epoch == 0 {
+			seen.Lock()
+			defer seen.Unlock()
+			sid, sl := int(args.Sid)-1, seen.sids[args.CmdID]
+			if !sl[sid] {
+				sl[sid] = true
+				seen.sids[args.CmdID] = sl
+			} else {
+				return nil
+			}
+			select {
+			case currentTrigger <- trigger:
+			default:
+			}
+			return roachpb.NewError(
+				roachpb.NewReadWithinUncertaintyIntervalError(
+					args.Hdr.Timestamp, args.Hdr.Timestamp,
+				))
+		}
+		return nil
+	}
+
+	mtc.storeConfig = &storeCfg
+	defer mtc.Stop()
+	mtc.Start(t, 2)
+
+	leftRange := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
+
+	// Replicate the left range onto the second node. We don't wait since we
+	// don't actually care what the second node does. All we want is that the
+	// first node isn't surprised by messages from that node.
+	mtc.replicateRange(leftRange.RangeID, 1)
+
+	errChan := make(chan *roachpb.Error)
+
+	// Closed when the split goroutine is done.
+	splitDone := make(chan struct{})
+
+	go func() {
+		defer close(splitDone)
+
+		// Split the data range. The split keys are chosen so that they move
+		// towards "a" (so that the range being split is always the first
+		// range).
+		splitKey := roachpb.Key(encoding.EncodeVarintDescending([]byte("a"), int64(0)))
+		splitArgs := adminSplitArgs(keys.SystemMax, splitKey)
+		_, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs)
+		errChan <- pErr
+	}()
+	go func() {
+		defer func() { errChan <- nil }()
+
+		trigger := <-currentTrigger // our own copy
+		// Make sure the first node is first for convenience.
+		replicas := trigger.RightDesc.Replicas
+		if replicas[0].NodeID > replicas[1].NodeID {
+			tmp := replicas[1]
+			replicas[1] = replicas[0]
+			replicas[0] = tmp
+		}
+
+		// Send a few vote requests which look like they're from the other
+		// node's right hand side of the split. This triggers a race which
+		// is discussed in #7600 (briefly, the creation of the right hand
+		// side in the split trigger was racing with the uninitialized
+		// version for the same group, resulting in clobbered HardState).
+		for term := uint64(1); ; term++ {
+			if err := mtc.stores[0].HandleRaftRequest(context.Background(),
+				&storage.RaftMessageRequest{
+					RangeID:     trigger.RightDesc.RangeID,
+					ToReplica:   replicas[0],
+					FromReplica: replicas[1],
+					Message: raftpb.Message{
+						Type: raftpb.MsgVote,
+						To:   uint64(replicas[0].ReplicaID),
+						From: uint64(replicas[1].ReplicaID),
+						Term: term,
+					},
+				}, nil); err != nil {
+				t.Error(err)
+			}
+			select {
+			case <-splitDone:
+				return
+			case <-time.After(time.Microsecond):
+				// If we busy-loop here, we monopolize processRaftMu and the
+				// split takes a long time to complete. Sleeping reduces the
+				// chance that we hit the race, but it still shows up under
+				// stress.
+			}
+		}
+	}()
+
+	for i := 0; i < 2; i++ {
+		if pErr := <-errChan; pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+}
