@@ -109,7 +109,7 @@ func getTableID(ctx context.Context, p *planner, tn *parser.TableName) (sqlbase.
 		return 0, err
 	}
 	if !gr.Exists() {
-		return 0, sqlbase.NewUndefinedTableError(parser.AsString(tn))
+		return 0, sqlbase.NewUndefinedRelationError(tn)
 	}
 	return sqlbase.ID(gr.ValueInt()), nil
 }

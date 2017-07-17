@@ -76,7 +76,7 @@ func (t *leaseTest) cleanup() {
 
 func (t *leaseTest) getLeases(descID sqlbase.ID) string {
 	sql := `
-SELECT version, nodeID FROM system.lease WHERE descID = $1 ORDER BY version, nodeID
+SELECT version, "nodeID" FROM system.lease WHERE "descID" = $1 ORDER BY version, "nodeID"
 `
 	rows, err := t.db.Query(sql, descID)
 	if err != nil {

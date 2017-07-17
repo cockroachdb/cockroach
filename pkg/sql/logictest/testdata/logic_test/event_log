@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 ##################
 
 query II rowsort
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'create_table'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'create_table'
 ----
 51 1
 52 1
@@ -33,17 +33,17 @@ WHERE eventType = 'create_table'
 ##################
 
 query II
-SELECT targetID, reportingID
+SELECT "targetID", "reportingID"
 FROM system.eventlog
-WHERE eventType = 'create_table'
+WHERE "eventType" = 'create_table'
   AND info LIKE '%CREATE TABLE test.a%'
 ----
 51 1
 
 query II
-SELECT targetID, reportingID
+SELECT "targetID", "reportingID"
 FROM system.eventlog
-WHERE eventType = 'create_table'
+WHERE "eventType" = 'create_table'
   AND info LIKE '%CREATE TABLE IF NOT EXISTS test.b%'
 ----
 52 1
@@ -54,7 +54,7 @@ WHERE eventType = 'create_table'
 query I
 SELECT COUNT(*)
 FROM system.eventlog
-WHERE eventType = 'create_table'
+WHERE "eventType" = 'create_table'
   AND info LIKE '%CREATE TABLE badtable%'
 ----
 0
@@ -63,8 +63,8 @@ WHERE eventType = 'create_table'
 ##################
 
 query II
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'alter_table'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'alter_table'
 ----
 12 1
 
@@ -72,29 +72,29 @@ statement ok
 ALTER TABLE test.a ADD val INT
 
 query II rowsort
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'alter_table'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'alter_table'
 ----
 12 1
 51 1
 
 query II
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'finish_schema_change'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
 ----
 51 1
 
 query II
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'reverse_schema_change'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'reverse_schema_change'
 ----
 
 # Verify the contents of the 'Info' field of each log message using a LIKE
 # statement.
 ##################
 query II
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'alter_table'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'alter_table'
   AND info LIKE '%ALTER TABLE test.a%'
 ----
 51 1
@@ -110,23 +110,23 @@ statement error pq: duplicate key value \(val\)=\(1\) violates unique constraint
 ALTER TABLE test.a ADD CONSTRAINT foo UNIQUE(val)
 
 query II rowsort
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'alter_table'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'alter_table'
 ----
 12 1
 51 1
 51 1
 
 query II rowsort
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'finish_schema_change'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
 ----
 51 1
 51 1
 
 query II rowsort
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'reverse_schema_change'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'reverse_schema_change'
 ----
 51 1
 
@@ -137,15 +137,15 @@ statement ok
 CREATE INDEX a_foo ON test.a (val)
 
 query II
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'create_index'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'create_index'
   AND info LIKE '%a_foo%'
 ----
 51 1
 
 query II rowsort
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'finish_schema_change'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
 ----
 51 1
 51 1
@@ -158,15 +158,15 @@ statement ok
 DROP INDEX test.a@a_foo
 
 query II
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'drop_index'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'drop_index'
   AND info LIKE '%a_foo%'
 ----
 51 1
 
 query II rowsort
-SELECT targetID, reportingID FROM system.eventlog
-WHERE eventType = 'finish_schema_change'
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
 ----
 51 1
 51 1
@@ -191,9 +191,9 @@ DROP TABLE IF EXISTS test.b
 ##################
 
 query II rowsort
-SELECT targetID, reportingID
+SELECT "targetID", "reportingID"
 FROM system.eventlog
-WHERE eventType = 'drop_table'
+WHERE "eventType" = 'drop_table'
 ----
 51 1
 52 1
@@ -202,17 +202,17 @@ WHERE eventType = 'drop_table'
 ##################
 
 query II
-SELECT targetID, reportingID
+SELECT "targetID", "reportingID"
 FROM system.eventlog
-WHERE eventType = 'drop_table'
+WHERE "eventType" = 'drop_table'
   AND info LIKE '%DROP TABLE test.a%'
 ----
 51 1
 
 query II
-SELECT targetID, reportingID
+SELECT "targetID", "reportingID"
 FROM system.eventlog
-WHERE eventType = 'drop_table'
+WHERE "eventType" = 'drop_table'
   AND info LIKE '%DROP TABLE IF EXISTS test.b%'
 ----
 52 1
@@ -239,17 +239,17 @@ CREATE DATABASE IF NOT EXISTS othereventlogtest
 ##################
 
 query II
-SELECT targetID, reportingID
+SELECT "targetID", "reportingID"
 FROM system.eventlog
-WHERE eventType = 'create_database'
+WHERE "eventType" = 'create_database'
   AND info LIKE '%CREATE DATABASE eventlogtest%'
 ----
 53 1
 
 query II
-SELECT targetID, reportingID
+SELECT "targetID", "reportingID"
 FROM system.eventlog
-WHERE eventType = 'create_database'
+WHERE "eventType" = 'create_database'
   AND info LIKE '%CREATE DATABASE IF NOT EXISTS othereventlogtest%'
 ----
 54 1
@@ -282,17 +282,17 @@ DROP DATABASE IF EXISTS othereventlogtest
 ##################
 
 query II
-SELECT targetID, reportingID
+SELECT "targetID", "reportingID"
 FROM system.eventlog
-WHERE eventType = 'drop_database'
+WHERE "eventType" = 'drop_database'
   AND info LIKE '%DROP DATABASE eventlogtest%'
 ----
 53 1
 
 query II
-SELECT targetID, reportingID
+SELECT "targetID", "reportingID"
 FROM system.eventlog
-WHERE eventType = 'drop_database'
+WHERE "eventType" = 'drop_database'
   AND info LIKE '%DROP DATABASE IF EXISTS othereventlogtest%'
 ----
 54 1
@@ -300,9 +300,9 @@ WHERE eventType = 'drop_database'
 # verify cascading table drops are logged.
 ##################
 query II
-SELECT targetID, reportingID
+SELECT "targetID", "reportingID"
 FROM system.eventlog
-WHERE eventType = 'drop_database'
+WHERE "eventType" = 'drop_database'
   AND info LIKE '%testtable%'
   AND info LIKE '%anothertesttable%'
 ----

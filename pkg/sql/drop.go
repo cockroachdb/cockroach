@@ -69,7 +69,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		return nil, err
 	}
 
-	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc)
+	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, false)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +281,7 @@ func (p *planner) dropIndexByName(
 	behavior parser.DropBehavior,
 	stmt string,
 ) error {
-	idx, dropped, err := tableDesc.FindIndexByName(idxName)
+	idx, dropped, err := tableDesc.FindIndexByName(string(idxName))
 	if err != nil {
 		if ifExists {
 			// Noop.
@@ -430,10 +430,10 @@ func (p *planner) DropView(ctx context.Context, n *parser.DropView) (planNode, e
 				continue
 			}
 			// View does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedViewError(name.String())
+			return nil, sqlbase.NewUndefinedRelationError(tn)
 		}
 		if !droppedDesc.IsView() {
-			return nil, sqlbase.NewWrongObjectTypeError(name.String(), "view")
+			return nil, sqlbase.NewWrongObjectTypeError(tn, "view")
 		}
 
 		td = append(td, droppedDesc)
@@ -535,10 +535,10 @@ func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode,
 				continue
 			}
 			// Table does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedTableError(name.String())
+			return nil, sqlbase.NewUndefinedRelationError(tn)
 		}
 		if !droppedDesc.IsTable() {
-			return nil, sqlbase.NewWrongObjectTypeError(name.String(), "table")
+			return nil, sqlbase.NewWrongObjectTypeError(tn, "table")
 		}
 		td = append(td, droppedDesc)
 	}

@@ -90,7 +90,7 @@ ALTER TABLE test.t DROP COLUMN xx;
 		{fmt.Sprintf("[%d(%d, %d, %d)] as t", tID, cID, bID, aID), `(c, d, p)`, ``},
 		{fmt.Sprintf("[%d(%d, %d, %d)] as t(c, b, a)", tID, cID, bID, aID), `(c, b, a)`, ``},
 		{fmt.Sprintf("[%d()] as t", tID), `()`, ``},
-		{`[666()] as t`, ``, `pq: table "<id=666>" does not exist`},
+		{`[666()] as t`, ``, `pq: relation "[666]" does not exist`},
 		{fmt.Sprintf("[%d(666)] as t", tID), ``, `pq: column 666 does not exist`},
 		{fmt.Sprintf("test.t@[%d]", pkID), `(p, d, c)`, ``},
 		{fmt.Sprintf("test.t@[%d]", secID), `(p, d, c)`, ``},
@@ -105,7 +105,7 @@ ALTER TABLE test.t DROP COLUMN xx;
 	}
 
 	for i, d := range testData {
-		sql := "SELECT Columns FROM [EXPLAIN(METADATA) SELECT * FROM " + d.tableExpr + "]"
+		sql := `SELECT "Columns" FROM [EXPLAIN(METADATA) SELECT * FROM ` + d.tableExpr + "]"
 		var columns string
 		if err := db.QueryRow(sql).Scan(&columns); err != nil {
 			if d.expectedError != "" {

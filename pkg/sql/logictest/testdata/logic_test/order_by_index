@@ -132,14 +132,14 @@ EXPLAIN(METADATA) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@f
 3          spans     ALL
 
 # Check the extended syntax cannot be used in case of renames.
-statement error table "test.kv" not selected in FROM clause
+statement error source name "kv" not found in FROM clause
 SELECT * FROM kv AS a, kv AS b ORDER BY PRIMARY KEY kv
 
 # The INDEX/PRIMARY syntax can only be used when the data source
 # is a real table, not an alias.
 #
-statement error table "test.kv" not selected in FROM clause
+statement error source name "kv" not found in FROM clause
 SELECT k FROM (SELECT @1, @1 FROM generate_series(1,10)) AS kv(k,v) ORDER BY PRIMARY KEY kv
 
-statement error table "test.kv" not selected in FROM clause
+statement error source name "kv" not found in FROM clause
 CREATE TABLE unrelated(x INT); SELECT * FROM unrelated ORDER BY PRIMARY KEY kv
