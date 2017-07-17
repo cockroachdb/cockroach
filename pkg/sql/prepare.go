@@ -61,7 +61,8 @@ func (p *PreparedStatement) close(ctx context.Context, s *Session) {
 type Statement struct {
 	AST           parser.Statement
 	ExpectedTypes sqlbase.ResultColumns
-	queryHandle   queryHandle
+	queryID       string
+	queryMeta     *queryMeta
 }
 
 func (s Statement) String() string {
