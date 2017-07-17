@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -257,6 +259,7 @@ type ExecutorConfig struct {
 	DistSQLSrv      *distsqlrun.ServerImpl
 	StatusServer    serverpb.StatusServer
 	SessionRegistry *SessionRegistry
+	QueryRegistry   *QueryRegistry
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
@@ -321,6 +324,29 @@ type DistSQLPlannerTestingKnobs struct {
 	// If OverrideSQLHealthCheck is set, we use this callback to get the health of
 	// a node.
 	OverrideHealthCheck func(node roachpb.NodeID, addrString string) error
+}
+
+// QueryRegistry holds a map of all queries executing with this node as its gateway.
+type QueryRegistry struct {
+	syncutil.Mutex
+	store map[string]*queryMeta
+}
+
+// MakeQueryRegistry instantiates a new, empty query registry.
+func MakeQueryRegistry() *QueryRegistry {
+	return &QueryRegistry{store: make(map[string]*queryMeta)}
+}
+
+func (r *QueryRegistry) register(queryID string, query *queryMeta) {
+	r.Lock()
+	defer r.Unlock()
+	r.store[queryID] = query
+}
+
+func (r *QueryRegistry) deregister(queryID string) {
+	r.Lock()
+	defer r.Unlock()
+	delete(r.store, queryID)
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -1031,8 +1057,21 @@ func (e *Executor) execStmtsInCurrentTxn(
 
 		txnState.schemaChangers.curStatementIdx = i
 
-		stmt.queryHandle = session.addActiveQuery(stmt)
-		defer session.removeActiveQuery(stmt.queryHandle)
+		queryID := e.generateQueryID().GetString()
+
+		queryMeta := &queryMeta{
+			start: session.phaseTimes[sessionEndParse],
+			stmt:  stmt.AST,
+			phase: preparing,
+		}
+
+		stmt.queryID = queryID
+		stmt.queryMeta = queryMeta
+
+		session.addActiveQuery(queryID, queryMeta)
+		defer session.removeActiveQuery(stmt.queryID)
+		e.cfg.QueryRegistry.register(queryID, queryMeta)
+		defer e.cfg.QueryRegistry.deregister(queryID)
 
 		var stmtStrBefore string
 		// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
@@ -1708,7 +1747,7 @@ func (e *Executor) execStmt(
 	}
 
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
-	session.setQueryExecutionMode(stmt.queryHandle, useDistSQL)
+	session.setQueryExecutionMode(stmt.queryID, useDistSQL)
 	if useDistSQL {
 		err = e.execDistSQL(planner, plan, &result)
 	} else {
@@ -1794,6 +1833,17 @@ func (e *Executor) updateStmtCounts(stmt Statement) {
 			e.MiscCount.Inc(1)
 		}
 	}
+}
+
+// generateQueryID generates a unique ID for a query based on the node's
+// ID and its current HLC timestamp.
+func (e *Executor) generateQueryID() uint128.Uint128 {
+	timestamp := e.cfg.Clock.Now()
+
+	loInt := (uint64)(e.cfg.NodeID.Get())
+	loInt = loInt | ((uint64)(timestamp.Logical) << 32)
+
+	return uint128.FromInts((uint64)(timestamp.WallTime), loInt)
 }
 
 // golangFillQueryArguments populates the placeholder map with
