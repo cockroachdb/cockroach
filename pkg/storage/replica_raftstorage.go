@@ -771,6 +771,10 @@ func (r *Replica) applySnapshot(
 	// increases the committed index as a result of the snapshot, but who is to
 	// say it isn't going to accept a snapshot which is identical to the current
 	// state?
+	//
+	// Note that since this snapshot comes from Raft, we don't have to synthesize
+	// the HardState -- Raft wouldn't ask us to update the HardState in incorrect
+	// ways.
 	if !raft.IsEmptyHardState(hs) {
 		if err := r.raftMu.stateLoader.setHardState(ctx, distinctBatch, hs); err != nil {
 			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)

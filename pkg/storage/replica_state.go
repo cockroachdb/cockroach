@@ -459,21 +459,50 @@ func (rsl replicaStateLoader) setHardState(
 		rsl.RaftHardStateKey(), hlc.Timestamp{}, nil, &st)
 }
 
+// synthesizeRaftState creates a Raft state which synthesizes both a HardState
+// and a lastIndex from pre-seeded data in the engine (typically created via
+// writeInitialReplicaState and, on a split, perhaps the activity of an
+// uninitialized Raft group)
+func (rsl replicaStateLoader) synthesizeRaftState(
+	ctx context.Context, eng engine.ReadWriter,
+) error {
+	hs, err := rsl.loadHardState(ctx, eng)
+	if err != nil {
+		return err
+	}
+	truncState, err := rsl.loadTruncatedState(ctx, eng)
+	if err != nil {
+		return err
+	}
+	raftAppliedIndex, _, err := rsl.loadAppliedIndex(ctx, eng)
+	if err != nil {
+		return err
+	}
+	if err := rsl.synthesizeHardState(ctx, eng, hs, truncState, raftAppliedIndex); err != nil {
+		return err
+	}
+	return rsl.setLastIndex(ctx, eng, truncState.Index)
+}
+
 // synthesizeHardState synthesizes a HardState from the given ReplicaState and
-// any existing on-disk HardState in the context of a snapshot, while verifying
+// any existing on-disk HardState in the context of a split, while verifying
 // that the application of the snapshot does not violate Raft invariants. It
-// must be called after the supplied state and ReadWriter have been updated
-// with the result of the snapshot.
-// If there is an existing HardState, we must respect it and we must not apply
-// a snapshot that would move the state backwards.
+// must be called after the supplied state and ReadWriter have been updated with
+// the result of the snapshot. If there is an existing HardState, we must
+// respect it and we must not apply a snapshot that would move the state
+// backwards.
 func (rsl replicaStateLoader) synthesizeHardState(
-	ctx context.Context, eng engine.ReadWriter, s storagebase.ReplicaState, oldHS raftpb.HardState,
+	ctx context.Context,
+	eng engine.ReadWriter,
+	oldHS raftpb.HardState,
+	truncState roachpb.RaftTruncatedState,
+	raftAppliedIndex uint64,
 ) error {
 	newHS := raftpb.HardState{
-		Term: s.TruncatedState.Term,
+		Term: truncState.Term,
 		// Note that when applying a Raft snapshot, the applied index is
 		// equal to the Commit index represented by the snapshot.
-		Commit: s.RaftAppliedIndex,
+		Commit: raftAppliedIndex,
 	}
 
 	if oldHS.Commit > newHS.Commit {
@@ -495,19 +524,18 @@ func (rsl replicaStateLoader) synthesizeHardState(
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
 }
 
-// writeInitialState bootstraps a new Raft group (i.e. it is called when we
-// bootstrap a Range, or when setting up the right hand side of a split).
-// Its main task is to persist a consistent Raft (and associated Replica) state
-// which does not start from zero but presupposes a few entries already having
-// applied.
-// The supplied MVCCStats are used for the Stats field after adjusting for
-// persisting the state itself, and the updated stats are returned.
-func writeInitialState(
+// writeInitialReplicaState sets up a new Range, but without writing an
+// associated Raft state (which must be written separately via
+// synthesizeRaftState before instantiating a Replica). The main task is to
+// persist a ReplicaState which does not start from zero but presupposes a few
+// entries already having applied. The supplied MVCCStats are used for the Stats
+// field after adjusting for persisting the state itself, and the updated stats
+// are returned.
+func writeInitialReplicaState(
 	ctx context.Context,
 	eng engine.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
-	oldHS raftpb.HardState,
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
 	txnSpanGCThreshold hlc.Timestamp,
@@ -551,14 +579,29 @@ func writeInitialState(
 		return enginepb.MVCCStats{}, err
 	}
 
-	if err := rsl.synthesizeHardState(ctx, eng, s, oldHS); err != nil {
+	return newMS, nil
+}
+
+// writeInitialState calls writeInitialReplicaState followed by
+// synthesizeRaftState. It is typically called during bootstrap. The supplied
+// MVCCStats are used for the Stats field after adjusting for persisting the
+// state itself, and the updated stats are returned.
+func writeInitialState(
+	ctx context.Context,
+	eng engine.ReadWriter,
+	ms enginepb.MVCCStats,
+	desc roachpb.RangeDescriptor,
+	lease roachpb.Lease,
+	gcThreshold hlc.Timestamp,
+	txnSpanGCThreshold hlc.Timestamp,
+) (enginepb.MVCCStats, error) {
+	newMS, err := writeInitialReplicaState(ctx, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold)
+	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-
-	if err := rsl.setLastIndex(ctx, eng, s.TruncatedState.Index); err != nil {
+	if err := makeReplicaStateLoader(desc.RangeID).synthesizeRaftState(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-
 	return newMS, nil
 }
 
