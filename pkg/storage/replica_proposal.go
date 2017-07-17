@@ -154,6 +154,7 @@ type LocalEvalResult struct {
 	Err   *roachpb.Error
 	Reply *roachpb.BatchResponse
 
+	batch engine.Batch
 	// intents stores any intents encountered but not conflicted with. They
 	// should be handed off to asynchronous intent processing on the proposer,
 	// so that an attempt to resolve them is made.
@@ -825,6 +826,7 @@ func (r *Replica) handleLocalEvalResult(
 	{
 		lResult.Err = nil
 		lResult.Reply = nil
+		lResult.batch = nil
 	}
 
 	// ======================
