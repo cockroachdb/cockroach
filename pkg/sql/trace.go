@@ -63,7 +63,7 @@ var errTracingAlreadyEnabled = errors.New(
 	"cannot run SHOW TRACE FOR on statement while session tracing is enabled" +
 		" - did you mean SHOW TRACE FOR SESSION?")
 
-func (n *traceNode) Start(ctx context.Context) error {
+func (n *traceNode) Start(params nextParams) error {
 	if n.p.session.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
 	}
@@ -71,9 +71,10 @@ func (n *traceNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	startCtx, sp := tracing.ChildSpan(ctx, "starting plan")
+	startCtx, sp := tracing.ChildSpan(params.ctx, "starting plan")
 	defer sp.Finish()
-	return n.plan.Start(startCtx)
+	params.ctx = startCtx
+	return n.plan.Start(params)
 }
 
 func (n *traceNode) Close(ctx context.Context) {
@@ -89,13 +90,13 @@ func (n *traceNode) Close(ctx context.Context) {
 	}
 }
 
-func (n *traceNode) Next(ctx context.Context) (bool, error) {
+func (n *traceNode) Next(params nextParams) (bool, error) {
 	if !n.execDone {
 		// We need to run the entire statement upfront. Subsequent
 		// invocations of Next() will merely return the trace.
 
 		func() {
-			consumeCtx, sp := tracing.ChildSpan(ctx, "consuming rows")
+			consumeCtx, sp := tracing.ChildSpan(params.ctx, "consuming rows")
 			defer sp.Finish()
 
 			slowPath := true
@@ -107,7 +108,7 @@ func (n *traceNode) Next(ctx context.Context) (bool, error) {
 			}
 			if slowPath {
 				for {
-					hasNext, err := n.plan.Next(ctx)
+					hasNext, err := n.plan.Next(params)
 					if err != nil {
 						log.VEventf(consumeCtx, 2, "execution failed: %v", err)
 						break

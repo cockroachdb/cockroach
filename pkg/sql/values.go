@@ -19,7 +19,6 @@ package sql
 import (
 	"container/heap"
 	"fmt"
-	"sort"
 	"strconv"
 
 	"golang.org/x/net/context"
@@ -118,7 +117,7 @@ func (p *planner) ValuesClause(
 	return v, nil
 }
 
-func (n *valuesNode) Start(ctx context.Context) error {
+func (n *valuesNode) Start(params nextParams) error {
 	if n.n == nil {
 		return nil
 	}
@@ -146,7 +145,7 @@ func (n *valuesNode) Start(ctx context.Context) error {
 				}
 			}
 		}
-		if _, err := n.rows.AddRow(ctx, row); err != nil {
+		if _, err := n.rows.AddRow(params.ctx, row); err != nil {
 			return err
 		}
 	}
@@ -158,7 +157,7 @@ func (n *valuesNode) Values() parser.Datums {
 	return n.rows.At(n.nextRow - 1)
 }
 
-func (n *valuesNode) Next(context.Context) (bool, error) {
+func (n *valuesNode) Next(nextParams) (bool, error) {
 	if n.nextRow >= n.rows.Len() {
 		return false, nil
 	}
@@ -236,9 +235,9 @@ func (n *valuesNode) ResetLen() {
 }
 
 // SortAll sorts all values in the valuesNode.rows slice.
-func (n *valuesNode) SortAll() {
+func (n *valuesNode) SortAll(cancelChecker CancelChecker) {
 	n.invertSorting = false
-	sort.Sort(n)
+	doSort(n, cancelChecker)
 }
 
 // InitMaxHeap initializes the valuesNode.rows slice as a max-heap.

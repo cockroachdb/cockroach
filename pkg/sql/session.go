@@ -213,6 +213,15 @@ func (q *queryMeta) setNonCancellable() error {
 	return nil
 }
 
+// setNonCancellableOnCommit is called by planNodes before an autoCommit
+// is made. If this query is expected to send an autoCommit, mark it as uncancellable.
+func (p *planner) setNonCancellableOnCommit() error {
+	if p.autoCommit && p.stmt != nil {
+		return p.stmt.queryMeta.setNonCancellable()
+	}
+	return nil
+}
+
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
 type Session struct {
@@ -608,6 +617,8 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.session = s
 	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
 	p.phaseTimes = s.phaseTimes
+	p.stmt = nil
+	p.cancelChecker = &nullCancelChecker{}
 
 	p.semaCtx = parser.MakeSemaContext(s.User == security.RootUser)
 	p.semaCtx.Location = &s.Location

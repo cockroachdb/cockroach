@@ -464,32 +464,36 @@ func (n *windowNode) Values() parser.Datums {
 	return n.values.Values()
 }
 
-func (n *windowNode) Start(ctx context.Context) error { return n.plan.Start(ctx) }
+func (n *windowNode) Start(params nextParams) error { return n.plan.Start(params) }
 
-func (n *windowNode) Next(ctx context.Context) (bool, error) {
+func (n *windowNode) Next(params nextParams) (bool, error) {
 	for !n.populated {
-		next, err := n.plan.Next(ctx)
+		if err := params.cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
+		next, err := n.plan.Next(params)
 		if err != nil {
 			return false, err
 		}
 		if !next {
 			n.populated = true
-			if err := n.computeWindows(ctx); err != nil {
+			if err := n.computeWindows(params.ctx); err != nil {
 				return false, err
 			}
-			if err := n.populateValues(ctx); err != nil {
+			if err := n.populateValues(params.ctx); err != nil {
 				return false, err
 			}
 			break
 		}
 
 		values := n.plan.Values()
-		if _, err := n.wrappedRenderVals.AddRow(ctx, values); err != nil {
+		if _, err := n.wrappedRenderVals.AddRow(params.ctx, values); err != nil {
 			return false, err
 		}
 	}
 
-	return n.values.Next(ctx)
+	return n.values.Next(params)
 }
 
 type partitionSorter struct {

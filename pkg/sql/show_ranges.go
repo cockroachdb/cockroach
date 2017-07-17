@@ -87,13 +87,13 @@ var showRangesColumns = sqlbase.ResultColumns{
 	},
 }
 
-func (n *showRangesNode) Start(ctx context.Context) error {
+func (n *showRangesNode) Start(params nextParams) error {
 	var err error
-	n.descriptorKVs, err = scanMetaKVs(ctx, n.p.txn, n.span)
+	n.descriptorKVs, err = scanMetaKVs(params.ctx, n.p.txn, n.span)
 	return err
 }
 
-func (n *showRangesNode) Next(ctx context.Context) (bool, error) {
+func (n *showRangesNode) Next(params nextParams) (bool, error) {
 	if n.rowIdx >= len(n.descriptorKVs) {
 		return false, nil
 	}
@@ -136,7 +136,7 @@ func (n *showRangesNode) Next(ctx context.Context) (bool, error) {
 			Key: desc.StartKey.AsRawKey(),
 		},
 	})
-	if err := n.p.txn.Run(ctx, b); err != nil {
+	if err := n.p.txn.Run(params.ctx, b); err != nil {
 		return false, errors.Wrap(err, "error getting lease info")
 	}
 	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)

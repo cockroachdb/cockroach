@@ -143,8 +143,9 @@ func (p *planner) accumulateDependentTables(
 	return nil
 }
 
-func (n *dropDatabaseNode) Start(ctx context.Context) error {
+func (n *dropDatabaseNode) Start(params nextParams) error {
 	tbNameStrings := make([]string, 0, len(n.td))
+	ctx := params.ctx
 	for _, tbDesc := range n.td {
 		if tbDesc.IsView() {
 			cascadedViews, err := n.p.dropViewImpl(ctx, tbDesc, parser.DropCascade)
@@ -208,9 +209,9 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropDatabaseNode) Close(context.Context)              {}
-func (*dropDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropDatabaseNode) Next(nextParams) (bool, error) { return false, nil }
+func (*dropDatabaseNode) Close(context.Context)         {}
+func (*dropDatabaseNode) Values() parser.Datums         { return parser.Datums{} }
 
 type dropIndexNode struct {
 	p        *planner
@@ -250,7 +251,8 @@ func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode,
 	return &dropIndexNode{n: n, p: p, idxNames: idxNames}, nil
 }
 
-func (n *dropIndexNode) Start(ctx context.Context) error {
+func (n *dropIndexNode) Start(params nextParams) error {
+	ctx := params.ctx
 	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in
 		// the list: when two or more index names refer to the same table,
@@ -396,9 +398,9 @@ func (p *planner) dropIndexByName(
 	return nil
 }
 
-func (*dropIndexNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropIndexNode) Close(context.Context)              {}
-func (*dropIndexNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropIndexNode) Next(nextParams) (bool, error) { return false, nil }
+func (*dropIndexNode) Close(context.Context)         {}
+func (*dropIndexNode) Values() parser.Datums         { return parser.Datums{} }
 
 type dropViewNode struct {
 	p  *planner
@@ -470,7 +472,8 @@ func descInSlice(descID sqlbase.ID, td []*sqlbase.TableDescriptor) bool {
 	return false
 }
 
-func (n *dropViewNode) Start(ctx context.Context) error {
+func (n *dropViewNode) Start(params nextParams) error {
+	ctx := params.ctx
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
 			continue
@@ -501,9 +504,9 @@ func (n *dropViewNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropViewNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropViewNode) Close(context.Context)              {}
-func (*dropViewNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropViewNode) Next(nextParams) (bool, error) { return false, nil }
+func (*dropViewNode) Close(context.Context)         {}
+func (*dropViewNode) Values() parser.Datums         { return parser.Datums{} }
 
 type dropTableNode struct {
 	p  *planner
@@ -704,7 +707,8 @@ func (p *planner) removeDependentView(
 	return p.dropViewImpl(ctx, viewDesc, parser.DropCascade)
 }
 
-func (n *dropTableNode) Start(ctx context.Context) error {
+func (n *dropTableNode) Start(params nextParams) error {
+	ctx := params.ctx
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
 			continue
@@ -735,9 +739,9 @@ func (n *dropTableNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropTableNode) Close(context.Context)              {}
-func (*dropTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropTableNode) Next(nextParams) (bool, error) { return false, nil }
+func (*dropTableNode) Close(context.Context)         {}
+func (*dropTableNode) Values() parser.Datums         { return parser.Datums{} }
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE
@@ -1023,7 +1027,7 @@ type dropUserNode struct {
 	numDeleted int
 }
 
-func (n *dropUserNode) Start(ctx context.Context) error {
+func (n *dropUserNode) Start(params nextParams) error {
 	numDeleted := 0
 	for _, name := range n.n.Names {
 		normalizedUsername, err := NormalizeAndValidateUsername(string(name))
@@ -1039,7 +1043,7 @@ func (n *dropUserNode) Start(ctx context.Context) error {
 		// keeping the functionality same for now.
 		internalExecutor := InternalExecutor{LeaseManager: n.p.LeaseMgr()}
 		rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
-			ctx,
+			params.ctx,
 			"drop-user",
 			n.p.txn,
 			"DELETE FROM system.users WHERE username=$1",
@@ -1061,10 +1065,10 @@ func (n *dropUserNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropUserNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropUserNode) Close(context.Context)              {}
-func (*dropUserNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *dropUserNode) FastPathResults() (int, bool)     { return n.numDeleted, true }
+func (*dropUserNode) Next(nextParams) (bool, error)  { return false, nil }
+func (*dropUserNode) Close(context.Context)          {}
+func (*dropUserNode) Values() parser.Datums          { return parser.Datums{} }
+func (n *dropUserNode) FastPathResults() (int, bool) { return n.numDeleted, true }
 
 // DropUser drops a list of users.
 // Privileges: DELETE on system.users.

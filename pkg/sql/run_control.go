@@ -47,7 +47,7 @@ type cancelQueryNode struct {
 
 func (*cancelQueryNode) Values() parser.Datums { return nil }
 
-func (n *cancelQueryNode) Start(ctx context.Context) error {
+func (n *cancelQueryNode) Start(params nextParams) error {
 	statusServer := n.p.session.execCfg.StatusServer
 
 	queryIDDatum, err := n.queryID.Eval(&n.p.evalCtx)
@@ -70,7 +70,7 @@ func (n *cancelQueryNode) Start(ctx context.Context) error {
 		Username: n.p.session.User,
 	}
 
-	response, err := statusServer.CancelQuery(ctx, request)
+	response, err := statusServer.CancelQuery(params.ctx, request)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (n *cancelQueryNode) Start(ctx context.Context) error {
 
 func (*cancelQueryNode) Close(context.Context) {}
 
-func (n *cancelQueryNode) Next(context.Context) (bool, error) {
+func (n *cancelQueryNode) Next(nextParams) (bool, error) {
 	return false, nil
 }
 

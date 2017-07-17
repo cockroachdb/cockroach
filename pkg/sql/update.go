@@ -91,7 +91,7 @@ func (r *editNodeRun) initEditNode(
 	return nil
 }
 
-func (r *editNodeRun) startEditNode(ctx context.Context, en *editNodeBase) error {
+func (r *editNodeRun) startEditNode(params nextParams, en *editNodeBase) error {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		if err := en.p.txn.SetSystemConfigTrigger(); err != nil {
@@ -99,7 +99,7 @@ func (r *editNodeRun) startEditNode(ctx context.Context, en *editNodeBase) error
 		}
 	}
 
-	return r.rows.Start(ctx)
+	return r.rows.Start(params)
 }
 
 func (r *editNodeRun) collectSpans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
@@ -127,6 +127,7 @@ type updateNode struct {
 	// The following fields are populated during makePlan.
 	editNodeBase
 	n             *parser.Update
+	p             *planner
 	updateCols    []sqlbase.ColumnDescriptor
 	updateColsIdx map[sqlbase.ColumnID]int // index in updateCols slice
 	tw            tableUpdater
@@ -374,6 +375,7 @@ func (p *planner) Update(
 
 	un := &updateNode{
 		n:             n,
+		p:             p,
 		editNodeBase:  en,
 		updateCols:    ru.UpdateCols,
 		updateColsIdx: updateColsIdx,
@@ -390,8 +392,8 @@ func (p *planner) Update(
 	return un, nil
 }
 
-func (u *updateNode) Start(ctx context.Context) error {
-	if err := u.run.startEditNode(ctx, &u.editNodeBase); err != nil {
+func (u *updateNode) Start(params nextParams) error {
+	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
 	return u.run.tw.init(u.p.txn)
@@ -401,12 +403,16 @@ func (u *updateNode) Close(ctx context.Context) {
 	u.run.rows.Close(ctx)
 }
 
-func (u *updateNode) Next(ctx context.Context) (bool, error) {
-	next, err := u.run.rows.Next(ctx)
+func (u *updateNode) Next(params nextParams) (bool, error) {
+	next, err := u.run.rows.Next(params)
 	if !next {
 		if err == nil {
+			// Mark this query as non-cancellable if autocommitting.
+			if err := u.p.setNonCancellableOnCommit(); err != nil {
+				return false, err
+			}
 			// We're done. Finish the batch.
-			err = u.tw.finalize(ctx, u.p.session.Tracing.KVTracingEnabled())
+			err = u.tw.finalize(params.ctx, u.p.session.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -455,7 +461,7 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 
 	// Update the row values.
 	newValues, err := u.tw.row(
-		ctx, append(oldValues, updateValues...), u.p.session.Tracing.KVTracingEnabled(),
+		params.ctx, append(oldValues, updateValues...), u.p.session.Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
 		return false, err

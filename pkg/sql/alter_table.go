@@ -62,7 +62,7 @@ func (p *planner) AlterTable(ctx context.Context, n *parser.AlterTable) (planNod
 	return &alterTableNode{n: n, p: p, tableDesc: tableDesc}, nil
 }
 
-func (n *alterTableNode) Start(ctx context.Context) error {
+func (n *alterTableNode) Start(params nextParams) error {
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
 	// the list.
@@ -110,7 +110,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			}
 
 		case *parser.AlterTableAddConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -153,13 +153,13 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 					return err
 				}
 				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-				err := n.p.resolveFK(ctx, n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
+				err := n.p.resolveFK(params.ctx, n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
 				if err != nil {
 					return err
 				}
 				descriptorChanged = true
 				for _, updated := range affected {
-					if err := n.p.saveNonmutationAndNotify(ctx, updated); err != nil {
+					if err := n.p.saveNonmutationAndNotify(params.ctx, updated); err != nil {
 						return err
 					}
 				}
@@ -194,18 +194,18 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 					continue
 				}
 				err := n.p.canRemoveDependentViewGeneric(
-					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior,
+					params.ctx, "column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior,
 				)
 				if err != nil {
 					return err
 				}
 				viewDesc, err := n.p.getViewDescForCascade(
-					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior,
+					params.ctx, "column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior,
 				)
 				if err != nil {
 					return err
 				}
-				droppedViews, err = n.p.removeDependentView(ctx, n.tableDesc, viewDesc)
+				droppedViews, err = n.p.removeDependentView(params.ctx, n.tableDesc, viewDesc)
 				if err != nil {
 					return err
 				}
@@ -270,7 +270,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				if containsThisColumn {
 					if containsOnlyThisColumn || t.DropBehavior == parser.DropCascade {
 						if err := n.p.dropIndexByName(
-							ctx, parser.Name(idx.Name), n.tableDesc, false, t.DropBehavior, n.n.String(),
+							params.ctx, parser.Name(idx.Name), n.tableDesc, false, t.DropBehavior, n.n.String(),
 						); err != nil {
 							return err
 						}
@@ -293,7 +293,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			}
 
 		case *parser.AlterTableDropConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -321,7 +321,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			case sqlbase.ConstraintTypeFK:
 				for i, idx := range n.tableDesc.Indexes {
 					if idx.ForeignKey.Name == name {
-						if err := n.p.removeFKBackReference(ctx, n.tableDesc, idx); err != nil {
+						if err := n.p.removeFKBackReference(params.ctx, n.tableDesc, idx); err != nil {
 							return err
 						}
 						n.tableDesc.Indexes[i].ForeignKey = sqlbase.ForeignKeyReference{}
@@ -334,7 +334,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			}
 
 		case *parser.AlterTableValidateConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -361,7 +361,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				}
 				ck := n.tableDesc.Checks[idx]
 				if err := n.p.validateCheckExpr(
-					ctx, ck.Expr, &n.n.Table, n.tableDesc,
+					params.ctx, ck.Expr, &n.n.Table, n.tableDesc,
 				); err != nil {
 					return err
 				}
@@ -385,7 +385,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				if err != nil {
 					panic(err)
 				}
-				if err := n.p.validateForeignKey(ctx, n.tableDesc, idx); err != nil {
+				if err := n.p.validateForeignKey(params.ctx, n.tableDesc, idx); err != nil {
 					return err
 				}
 				idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
@@ -435,7 +435,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 	mutationID := sqlbase.InvalidMutationID
 	var err error
 	if addedMutations {
-		mutationID, err = n.p.createSchemaChangeJob(ctx, n.tableDesc, parser.AsString(n.n))
+		mutationID, err = n.p.createSchemaChangeJob(params.ctx, n.tableDesc, parser.AsString(n.n))
 	} else {
 		err = n.tableDesc.SetUpVersion()
 	}
@@ -443,7 +443,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	if err := n.p.writeTableDesc(ctx, n.tableDesc); err != nil {
+	if err := n.p.writeTableDesc(params.ctx, n.tableDesc); err != nil {
 		return err
 	}
 
@@ -451,7 +451,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
 	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
-		ctx,
+		params.ctx,
 		n.p.txn,
 		EventLogAlterTable,
 		int32(n.tableDesc.ID),
@@ -472,9 +472,9 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *alterTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *alterTableNode) Close(context.Context)              {}
-func (n *alterTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (n *alterTableNode) Next(nextParams) (bool, error) { return false, nil }
+func (n *alterTableNode) Close(context.Context)         {}
+func (n *alterTableNode) Values() parser.Datums         { return parser.Datums{} }
 
 func applyColumnMutation(
 	col *sqlbase.ColumnDescriptor, mut parser.ColumnMutationCmd, searchPath parser.SearchPath,

@@ -305,20 +305,23 @@ func (n *groupNode) Values() parser.Datums {
 	return n.values
 }
 
-func (n *groupNode) Start(ctx context.Context) error {
-	return n.plan.Start(ctx)
+func (n *groupNode) Start(params nextParams) error {
+	return n.plan.Start(params)
 }
 
-func (n *groupNode) Next(ctx context.Context) (bool, error) {
+func (n *groupNode) Next(params nextParams) (bool, error) {
 	var scratch []byte
 	// We're going to consume n.plan until it's exhausted (feeding all the rows to
 	// n.funcs), and then call n.setupOutput.
 	// Subsequent calls to next will skip the first part and just return a result.
 	for !n.populated {
 		next := false
+		if err := params.cancelChecker.Check(); err != nil {
+			return false, err
+		}
 		if !(n.needOnlyOneRow && n.gotOneRow) {
 			var err error
-			next, err = n.plan.Next(ctx)
+			next, err = n.plan.Next(params)
 			if err != nil {
 				return false, err
 			}
@@ -357,7 +360,7 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 				value = values[f.argRenderIdx]
 			}
 
-			if err := f.add(ctx, n.planner.session, bucket, value); err != nil {
+			if err := f.add(params.ctx, n.planner.session, bucket, value); err != nil {
 				return false, err
 			}
 		}

@@ -52,8 +52,8 @@ type copyNode struct {
 	rowsMemAcc    WrappableMemoryAccount
 }
 
-func (*copyNode) Values() parser.Datums              { return nil }
-func (*copyNode) Next(context.Context) (bool, error) { return false, nil }
+func (*copyNode) Values() parser.Datums         { return nil }
+func (*copyNode) Next(nextParams) (bool, error) { return false, nil }
 
 func (n *copyNode) Close(ctx context.Context) {
 	n.rowsMemAcc.Wsession(n.p.session).Close(ctx)
@@ -89,7 +89,7 @@ func (p *planner) CopyFrom(ctx context.Context, n *parser.CopyFrom) (planNode, e
 }
 
 // Start implements the planNode interface.
-func (n *copyNode) Start(context.Context) error {
+func (n *copyNode) Start(nextParams) error {
 	// Should never happen because the executor prevents non-COPY messages during
 	// a COPY.
 	if n.p.session.copyFrom != nil {

@@ -28,6 +28,7 @@ import (
 type deleteNode struct {
 	editNodeBase
 	n *parser.Delete
+	p *planner
 
 	tw tableDeleter
 
@@ -89,6 +90,7 @@ func (p *planner) Delete(
 
 	dn := &deleteNode{
 		n:            n,
+		p:            p,
 		editNodeBase: en,
 		tw:           tw,
 	}
@@ -101,8 +103,8 @@ func (p *planner) Delete(
 	return dn, nil
 }
 
-func (d *deleteNode) Start(ctx context.Context) error {
-	if err := d.run.startEditNode(ctx, &d.editNodeBase); err != nil {
+func (d *deleteNode) Start(params nextParams) error {
+	if err := d.run.startEditNode(params, &d.editNodeBase); err != nil {
 		return err
 	}
 
@@ -114,9 +116,9 @@ func (d *deleteNode) Start(ctx context.Context) error {
 	if sel, ok := maybeScan.(*renderNode); ok {
 		maybeScan = sel.source.plan
 	}
-	if scan, ok := maybeScan.(*scanNode); ok && canDeleteWithoutScan(ctx, d.n, scan, &d.tw) {
+	if scan, ok := maybeScan.(*scanNode); ok && canDeleteWithoutScan(params.ctx, d.n, scan, &d.tw) {
 		d.run.fastPath = true
-		err := d.fastDelete(ctx, scan)
+		err := d.fastDelete(params.ctx, scan)
 		return err
 	}
 
@@ -134,21 +136,25 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 	return 0, false
 }
 
-func (d *deleteNode) Next(ctx context.Context) (bool, error) {
+func (d *deleteNode) Next(params nextParams) (bool, error) {
 	traceKV := d.p.session.Tracing.KVTracingEnabled()
 
-	next, err := d.run.rows.Next(ctx)
+	next, err := d.run.rows.Next(params)
 	if !next {
 		if err == nil {
+			// Mark this query as non-cancellable if autocommitting.
+			if err := d.p.setNonCancellableOnCommit(); err != nil {
+				return false, err
+			}
 			// We're done. Finish the batch.
-			err = d.tw.finalize(ctx, traceKV)
+			err = d.tw.finalize(params.ctx, traceKV)
 		}
 		return false, err
 	}
 
 	rowVals := d.run.rows.Values()
 
-	_, err = d.tw.row(ctx, rowVals, traceKV)
+	_, err = d.tw.row(params.ctx, rowVals, traceKV)
 	if err != nil {
 		return false, err
 	}
@@ -195,6 +201,9 @@ func (d *deleteNode) fastDelete(ctx context.Context, scan *scanNode) error {
 	}
 
 	if err := d.tw.init(d.p.txn); err != nil {
+		return err
+	}
+	if err := d.p.setNonCancellableOnCommit(); err != nil {
 		return err
 	}
 	rowCount, err := d.tw.fastDelete(ctx, scan, d.p.session.Tracing.KVTracingEnabled())

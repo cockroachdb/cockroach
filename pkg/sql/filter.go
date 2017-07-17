@@ -51,14 +51,14 @@ func (f *filterNode) IndexedVarFormat(buf *bytes.Buffer, fl parser.FmtFlags, idx
 }
 
 // Start implements the planNode interface.
-func (f *filterNode) Start(ctx context.Context) error {
-	return f.source.plan.Start(ctx)
+func (f *filterNode) Start(params nextParams) error {
+	return f.source.plan.Start(params)
 }
 
 // Next implements the planNode interface.
-func (f *filterNode) Next(ctx context.Context) (bool, error) {
+func (f *filterNode) Next(params nextParams) (bool, error) {
 	for {
-		if next, err := f.source.plan.Next(ctx); !next {
+		if next, err := f.source.plan.Next(params); !next {
 			return false, err
 		}
 

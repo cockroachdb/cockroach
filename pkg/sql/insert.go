@@ -32,6 +32,7 @@ type insertNode struct {
 	editNodeBase
 	defaultExprs []parser.TypedExpr
 	n            *parser.Insert
+	p            *planner
 	checkHelper  checkHelper
 
 	insertCols            []sqlbase.ColumnDescriptor
@@ -200,6 +201,7 @@ func (p *planner) Insert(
 
 	in := &insertNode{
 		n:                     n,
+		p:                     p,
 		editNodeBase:          en,
 		defaultExprs:          defaultExprs,
 		insertCols:            ri.InsertCols,
@@ -219,7 +221,7 @@ func (p *planner) Insert(
 	return in, nil
 }
 
-func (n *insertNode) Start(ctx context.Context) error {
+func (n *insertNode) Start(params nextParams) error {
 	// Prepare structures for building values to pass to rh.
 	if n.rh.exprs != nil {
 		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain all the table
@@ -243,7 +245,7 @@ func (n *insertNode) Start(ctx context.Context) error {
 		}
 	}
 
-	if err := n.run.startEditNode(ctx, &n.editNodeBase); err != nil {
+	if err := n.run.startEditNode(params, &n.editNodeBase); err != nil {
 		return err
 	}
 
@@ -254,11 +256,15 @@ func (n *insertNode) Close(ctx context.Context) {
 	n.run.rows.Close(ctx)
 }
 
-func (n *insertNode) Next(ctx context.Context) (bool, error) {
-	if next, err := n.run.rows.Next(ctx); !next {
+func (n *insertNode) Next(params nextParams) (bool, error) {
+	if next, err := n.run.rows.Next(params); !next {
 		if err == nil {
+			// Mark this query as non-cancellable if autocommitting.
+			if err := n.p.setNonCancellableOnCommit(); err != nil {
+				return false, err
+			}
 			// We're done. Finish the batch.
-			err = n.tw.finalize(ctx, n.p.session.Tracing.KVTracingEnabled())
+			err = n.tw.finalize(params.ctx, n.p.session.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -275,7 +281,7 @@ func (n *insertNode) Next(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	_, err = n.tw.row(ctx, rowVals, n.p.session.Tracing.KVTracingEnabled())
+	_, err = n.tw.row(params.ctx, rowVals, n.p.session.Tracing.KVTracingEnabled())
 	if err != nil {
 		return false, err
 	}

@@ -1603,13 +1603,17 @@ func (dsp *distSQLPlanner) createPlanForValues(
 	}
 
 	var a sqlbase.DatumAlloc
-	if err := n.Start(planCtx.ctx); err != nil {
+	params := nextParams{
+		ctx:           planCtx.ctx,
+		cancelChecker: &nullCancelChecker{},
+	}
+	if err := n.Start(params); err != nil {
 		return physicalPlan{}, err
 	}
 	defer n.Close(planCtx.ctx)
 
 	for i := 0; i < n.Len(); i++ {
-		if next, err := n.Next(planCtx.ctx); !next {
+		if next, err := n.Next(nextParams{ctx: planCtx.ctx}); !next {
 			return physicalPlan{}, err
 		}
 

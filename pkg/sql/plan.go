@@ -70,6 +70,15 @@ type planMaker interface {
 
 var _ planMaker = &planner{}
 
+// nextParams is a struct containing all parameters passed to planNode.Next().
+type nextParams struct {
+	// context.Context for this method call.
+	ctx context.Context
+
+	// Cancellation checker helper object.
+	cancelChecker CancelChecker
+}
+
 // planNode defines the interface for executing a query or portion of a query.
 //
 // The following methods apply to planNodes and contain special cases
@@ -95,7 +104,7 @@ type planNode interface {
 	// Note: Don't use directly. Use startPlan() instead.
 	//
 	// Available after optimizePlan() (or makePlan).
-	Start(ctx context.Context) error
+	Start(params nextParams) error
 
 	// Next performs one unit of work, returning false if an error is
 	// encountered or if there is no more work to do. For statements
@@ -105,7 +114,7 @@ type planNode interface {
 	//
 	// Available after Start(). It is illegal to call Next() after it returns
 	// false.
-	Next(ctx context.Context) (bool, error)
+	Next(params nextParams) (bool, error)
 
 	// Values returns the values at the current row. The result is only valid
 	// until the next call to Next().
@@ -206,7 +215,11 @@ func (p *planner) startPlan(ctx context.Context, plan planNode) error {
 	if err := p.startSubqueryPlans(ctx, plan); err != nil {
 		return err
 	}
-	if err := plan.Start(ctx); err != nil {
+	params := nextParams{
+		ctx:           ctx,
+		cancelChecker: p.cancelChecker,
+	}
+	if err := plan.Start(params); err != nil {
 		return err
 	}
 	// Trigger limit propagation through the plan and sub-queries.

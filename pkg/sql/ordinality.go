@@ -85,8 +85,8 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	return ds
 }
 
-func (o *ordinalityNode) Next(ctx context.Context) (bool, error) {
-	hasNext, err := o.source.Next(ctx)
+func (o *ordinalityNode) Next(params nextParams) (bool, error) {
+	hasNext, err := o.source.Next(params)
 	if !hasNext || err != nil {
 		return hasNext, err
 	}
@@ -98,9 +98,9 @@ func (o *ordinalityNode) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (o *ordinalityNode) Values() parser.Datums           { return o.row }
-func (o *ordinalityNode) Start(ctx context.Context) error { return o.source.Start(ctx) }
-func (o *ordinalityNode) Close(ctx context.Context)       { o.source.Close(ctx) }
+func (o *ordinalityNode) Values() parser.Datums         { return o.row }
+func (o *ordinalityNode) Start(params nextParams) error { return o.source.Start(params) }
+func (o *ordinalityNode) Close(ctx context.Context)     { o.source.Close(ctx) }
 
 // restrictOrdering transforms an ordering requirement on the output
 // of an ordinalityNode into an ordering requirement on its input.
