@@ -2981,34 +2981,6 @@ func splitTrigger(
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
 		}
 
-		// Writing the initial state is subtle since this also seeds the Raft
-		// group. We are writing to the right hand side's Raft group state in this
-		// batch so we need to synchronize with anything else that could be
-		// touching that replica's Raft state. Specifically, we want to prohibit an
-		// uninitialized Replica from receiving a message for the right hand side
-		// range and performing raft processing. This is achieved by serializing
-		// execution of uninitialized Replicas in Store.processRaft and ensuring
-		// that no uninitialized Replica is being processed while an initialized
-		// one (like the one currently being split) is being processed.
-		//
-		// Note also that it is crucial that writeInitialState *absorbs* an
-		// existing HardState (which might contain a cast vote). We load the
-		// existing HardState from the underlying engine instead of the batch
-		// because batch reads are from a snapshot taken at the point in time when
-		// the first read was performed on the batch. This last requirement is not
-		// currently needed due to the uninitialized Replica synchronization
-		// mentioned above, but future work will relax that synchronization, moving
-		// it from before the point that batch was created to this method. We want
-		// to see any writes to the hard state that were performed between the
-		// creation of the batch and that synchronization point. The only drawback
-		// to not reading from the batch is that we won't see any writes to the
-		// right hand side's hard state that were previously made in the batch
-		// (which should be impossible).
-		oldHS, err := loadHardState(ctx, rec.Engine(), split.RightDesc.RangeID)
-		if err != nil {
-			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load hard state")
-		}
-		// Initialize the right-hand lease to be the same as the left-hand lease.
 		// Various pieces of code rely on a replica's lease never being unitialized,
 		// but it's more than that - it ensures that we properly initialize the
 		// timestamp cache, which is only populated on the lease holder, from that
@@ -3061,8 +3033,37 @@ func splitTrigger(
 			log.VEventf(ctx, 1, "LHS's TxnSpanGCThreshold of split is not set")
 		}
 
-		rightMS, err = writeInitialState(
-			ctx, batch, rightMS, split.RightDesc, oldHS, rightLease, gcThreshold, txnSpanGCThreshold,
+		// Writing the initial state is subtle since this also seeds the Raft
+		// group. It becomes more subtle due to proposer-evaluated Raft.
+		//
+		// We are writing to the right hand side's Raft group state in this
+		// batch so we need to synchronize with anything else that could be
+		// touching that replica's Raft state. Specifically, we want to prohibit
+		// an uninitialized Replica from receiving a message for the right hand
+		// side range and performing raft processing. This is achieved by
+		// serializing execution of uninitialized Replicas in Store.processRaft
+		// and ensuring that no uninitialized Replica is being processed while
+		// an initialized one (like the one currently being split) is being
+		// processed.
+		//
+		// Since the right hand side of the split's Raft group may already
+		// exist, we must be prepared to absorb an existing HardState. The Raft
+		// group may already exist because other nodes could already have
+		// processed the split and started talking to our node, prompting the
+		// creation of a Raft group that can vote and bump its term, but not
+		// much else: it can't receive snapshots because those intersect the
+		// pre-split range; it can't apply log commands because it needs a
+		// snapshot first.
+		//
+		// However, we can't absorb the right-hand side's HardState here because
+		// we only *evaluate* the proposal here, but by the time it is
+		// *applied*, the HardState could have changed. We do this downstream of
+		// Raft, in splitPostApply, where we write the last index and the
+		// HardState via a call to synthesizeRaftState. Here, we only call
+		// writeInitialReplicaState which essentially writes a ReplicaState
+		// only.
+		rightMS, err = writeInitialReplicaState(
+			ctx, batch, rightMS, split.RightDesc, rightLease, gcThreshold, txnSpanGCThreshold,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial state")
