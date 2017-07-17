@@ -447,7 +447,7 @@ libroachccl: $(LIBROACH_DIR)/Makefile
 
 .PHONY: check-libroach
 check-libroach: libroach
-	@(cd $(LIBROACH_DIR) && make && ctest -V)
+	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) check
 
 .PHONY: clean-c-deps
 clean-c-deps:
