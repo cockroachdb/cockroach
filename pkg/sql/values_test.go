@@ -137,8 +137,8 @@ func TestValues(t *testing.T) {
 				continue
 			}
 			var rows []parser.Datums
-			next, err := plan.Next(ctx)
-			for ; next; next, err = plan.Next(ctx) {
+			next, err := plan.Next(nextParams{ctx: ctx})
+			for ; next; next, err = plan.Next(nextParams{ctx: ctx}) {
 				rows = append(rows, plan.Values())
 			}
 			if err != nil {

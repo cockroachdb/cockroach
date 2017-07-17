@@ -52,8 +52,8 @@ type copyNode struct {
 	rowsMemAcc    WrappableMemoryAccount
 }
 
-func (*copyNode) Values() parser.Datums              { return nil }
-func (*copyNode) Next(context.Context) (bool, error) { return false, nil }
+func (*copyNode) Values() parser.Datums         { return nil }
+func (*copyNode) Next(nextParams) (bool, error) { return false, nil }
 
 func (n *copyNode) Close(ctx context.Context) {
 	n.rowsMemAcc.Wsession(n.p.session).Close(ctx)

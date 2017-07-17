@@ -145,9 +145,9 @@ func (n *unionNode) Values() parser.Datums {
 	return nil
 }
 
-func (n *unionNode) readRight(ctx context.Context) (bool, error) {
-	next, err := n.right.Next(ctx)
-	for ; next; next, err = n.right.Next(ctx) {
+func (n *unionNode) readRight(params nextParams) (bool, error) {
+	next, err := n.right.Next(params)
+	for ; next; next, err = n.right.Next(params) {
 		if n.emitAll {
 			return true, nil
 		}
@@ -166,14 +166,14 @@ func (n *unionNode) readRight(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	n.right.Close(ctx)
+	n.right.Close(params.ctx)
 	n.right = nil
-	return n.readLeft(ctx)
+	return n.readLeft(params)
 }
 
-func (n *unionNode) readLeft(ctx context.Context) (bool, error) {
-	next, err := n.left.Next(ctx)
-	for ; next; next, err = n.left.Next(ctx) {
+func (n *unionNode) readLeft(params nextParams) (bool, error) {
+	next, err := n.left.Next(params)
+	for ; next; next, err = n.left.Next(params) {
 		if n.emitAll {
 			return true, nil
 		}
@@ -188,7 +188,7 @@ func (n *unionNode) readLeft(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	n.left.Close(ctx)
+	n.left.Close(params.ctx)
 	n.left = nil
 	return false, nil
 }
@@ -200,12 +200,15 @@ func (n *unionNode) Start(ctx context.Context) error {
 	return n.left.Start(ctx)
 }
 
-func (n *unionNode) Next(ctx context.Context) (bool, error) {
+func (n *unionNode) Next(params nextParams) (bool, error) {
+	if err := params.cancelChecker.Check(); err != nil {
+		return false, err
+	}
 	if n.right != nil {
-		return n.readRight(ctx)
+		return n.readRight(params)
 	}
 	if n.left != nil {
-		return n.readLeft(ctx)
+		return n.readLeft(params)
 	}
 	return false, nil
 }

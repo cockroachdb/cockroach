@@ -218,7 +218,7 @@ func (n *indexJoinNode) Start(ctx context.Context) error {
 	return n.index.Start(ctx)
 }
 
-func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
+func (n *indexJoinNode) Next(params nextParams) (bool, error) {
 	// Loop looking up the next row. We either are going to pull a row from the
 	// table or a batch of rows from the index. If we pull a batch of rows from
 	// the index we perform another iteration of the loop looking for rows in the
@@ -227,7 +227,7 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 	for tableLookup := (len(n.table.spans) > 0); true; tableLookup = true {
 		// First, try to pull a row from the table.
 		if tableLookup {
-			next, err := n.table.Next(ctx)
+			next, err := n.table.Next(params)
 			if err != nil {
 				return false, err
 			}
@@ -241,7 +241,7 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 		n.table.spans = n.table.spans[:0]
 
 		for len(n.table.spans) < indexJoinBatchSize {
-			if next, err := n.index.Next(ctx); !next {
+			if next, err := n.index.Next(params); !next {
 				// The index is out of rows or an error occurred.
 				if err != nil {
 					return false, err
@@ -267,7 +267,7 @@ func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 		}
 
 		if log.V(3) {
-			log.Infof(ctx, "table scan: %s", sqlbase.PrettySpans(n.table.spans, 0))
+			log.Infof(params.ctx, "table scan: %s", sqlbase.PrettySpans(n.table.spans, 0))
 		}
 	}
 	return false, nil

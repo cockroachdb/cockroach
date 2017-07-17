@@ -28,6 +28,7 @@ import (
 type deleteNode struct {
 	editNodeBase
 	n *parser.Delete
+	p *planner
 
 	tw tableDeleter
 
@@ -89,6 +90,7 @@ func (p *planner) Delete(
 
 	dn := &deleteNode{
 		n:            n,
+		p:            p,
 		editNodeBase: en,
 		tw:           tw,
 	}
@@ -134,21 +136,36 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 	return 0, false
 }
 
-func (d *deleteNode) Next(ctx context.Context) (bool, error) {
+// preFinalize is called before the tableWriter's finalize() is called.
+func (d *deleteNode) preFinalize() error {
+	// Mark this query as non-cancellable.
+	if d.p.autoCommit && d.p.stmt != nil {
+		queryMeta := d.p.stmt.queryMeta
+		if err := queryMeta.setNonCancellable(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *deleteNode) Next(params nextParams) (bool, error) {
 	traceKV := d.p.session.Tracing.KVTracingEnabled()
 
-	next, err := d.run.rows.Next(ctx)
+	next, err := d.run.rows.Next(params)
 	if !next {
 		if err == nil {
-			// We're done. Finish the batch.
-			err = d.tw.finalize(ctx, traceKV)
+			err = d.preFinalize()
+			if err == nil {
+				// We're done. Finish the batch.
+				err = d.tw.finalize(params.ctx, traceKV)
+			}
 		}
 		return false, err
 	}
 
 	rowVals := d.run.rows.Values()
 
-	_, err = d.tw.row(ctx, rowVals, traceKV)
+	_, err = d.tw.row(params.ctx, rowVals, traceKV)
 	if err != nil {
 		return false, err
 	}
@@ -195,6 +212,9 @@ func (d *deleteNode) fastDelete(ctx context.Context, scan *scanNode) error {
 	}
 
 	if err := d.tw.init(d.p.txn); err != nil {
+		return err
+	}
+	if err := d.preFinalize(); err != nil {
 		return err
 	}
 	rowCount, err := d.tw.fastDelete(ctx, scan, d.p.session.Tracing.KVTracingEnabled())

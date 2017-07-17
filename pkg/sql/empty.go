@@ -35,7 +35,7 @@ func (*emptyNode) Values() parser.Datums       { return nil }
 func (*emptyNode) Start(context.Context) error { return nil }
 func (*emptyNode) Close(context.Context)       {}
 
-func (e *emptyNode) Next(context.Context) (bool, error) {
+func (e *emptyNode) Next(nextParams) (bool, error) {
 	r := e.results
 	e.results = false
 	return r, nil

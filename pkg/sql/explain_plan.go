@@ -274,8 +274,8 @@ type explainPlanNode struct {
 	optimized bool
 }
 
-func (e *explainPlanNode) Next(ctx context.Context) (bool, error) { return e.results.Next(ctx) }
-func (e *explainPlanNode) Values() parser.Datums                  { return e.results.Values() }
+func (e *explainPlanNode) Next(params nextParams) (bool, error) { return e.results.Next(params) }
+func (e *explainPlanNode) Values() parser.Datums                { return e.results.Values() }
 
 func (e *explainPlanNode) Start(ctx context.Context) error {
 	// Note that we don't call start on e.plan. That's on purpose, Start() can

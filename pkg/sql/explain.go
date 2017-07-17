@@ -207,7 +207,7 @@ func (n *explainDistSQLNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *explainDistSQLNode) Next(context.Context) (bool, error) {
+func (n *explainDistSQLNode) Next(nextParams) (bool, error) {
 	if n.done {
 		return false, nil
 	}

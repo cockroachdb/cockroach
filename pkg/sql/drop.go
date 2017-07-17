@@ -208,9 +208,9 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropDatabaseNode) Close(context.Context)              {}
-func (*dropDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropDatabaseNode) Next(nextParams) (bool, error) { return false, nil }
+func (*dropDatabaseNode) Close(context.Context)         {}
+func (*dropDatabaseNode) Values() parser.Datums         { return parser.Datums{} }
 
 type dropIndexNode struct {
 	p        *planner
@@ -396,9 +396,9 @@ func (p *planner) dropIndexByName(
 	return nil
 }
 
-func (*dropIndexNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropIndexNode) Close(context.Context)              {}
-func (*dropIndexNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropIndexNode) Next(nextParams) (bool, error) { return false, nil }
+func (*dropIndexNode) Close(context.Context)         {}
+func (*dropIndexNode) Values() parser.Datums         { return parser.Datums{} }
 
 type dropViewNode struct {
 	p  *planner
@@ -501,9 +501,9 @@ func (n *dropViewNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropViewNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropViewNode) Close(context.Context)              {}
-func (*dropViewNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropViewNode) Next(nextParams) (bool, error) { return false, nil }
+func (*dropViewNode) Close(context.Context)         {}
+func (*dropViewNode) Values() parser.Datums         { return parser.Datums{} }
 
 type dropTableNode struct {
 	p  *planner
@@ -735,9 +735,9 @@ func (n *dropTableNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropTableNode) Close(context.Context)              {}
-func (*dropTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropTableNode) Next(nextParams) (bool, error) { return false, nil }
+func (*dropTableNode) Close(context.Context)         {}
+func (*dropTableNode) Values() parser.Datums         { return parser.Datums{} }
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE
@@ -1061,10 +1061,10 @@ func (n *dropUserNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropUserNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropUserNode) Close(context.Context)              {}
-func (*dropUserNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *dropUserNode) FastPathResults() (int, bool)     { return n.numDeleted, true }
+func (*dropUserNode) Next(nextParams) (bool, error)  { return false, nil }
+func (*dropUserNode) Close(context.Context)          {}
+func (*dropUserNode) Values() parser.Datums          { return parser.Datums{} }
+func (n *dropUserNode) FastPathResults() (int, bool) { return n.numDeleted, true }
 
 // DropUser drops a list of users.
 // Privileges: DELETE on system.users.

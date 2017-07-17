@@ -117,7 +117,7 @@ var showFingerprintsColumns = sqlbase.ResultColumns{
 func (n *showFingerprintsNode) Start(ctx context.Context) error { return nil }
 func (n *showFingerprintsNode) Values() parser.Datums           { return n.values }
 func (n *showFingerprintsNode) Close(_ context.Context)         {}
-func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
+func (n *showFingerprintsNode) Next(params nextParams) (bool, error) {
 	if n.rowIdx >= len(n.indexes) {
 		return false, nil
 	}
@@ -171,7 +171,7 @@ func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
 	`, strings.Join(cols, `,`), n.tn.DatabaseName, n.tn.TableName, parser.Name(index.Name))
 
 	var fingerprintCols parser.Datums
-	if err := n.p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := n.p.ExecCfg().DB.Txn(params.ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(n.ts)
 
 		// Use internal planner directly instead of InternalExecutor because we

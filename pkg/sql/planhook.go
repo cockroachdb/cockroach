@@ -77,7 +77,7 @@ func (f *hookFnNode) Start(ctx context.Context) error {
 	return err
 }
 
-func (f *hookFnNode) Next(context.Context) (bool, error) {
+func (f *hookFnNode) Next(nextParams) (bool, error) {
 	if f.res == nil {
 		return false, nil
 	}

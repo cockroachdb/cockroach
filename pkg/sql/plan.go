@@ -70,6 +70,15 @@ type planMaker interface {
 
 var _ planMaker = &planner{}
 
+// nextParams is a struct containing all parameters passed to planNode.Next().
+type nextParams struct {
+	// context.Context for this method call.
+	ctx context.Context
+
+	// Cancellation checker helper object.
+	cancelChecker CancelChecker
+}
+
 // planNode defines the interface for executing a query or portion of a query.
 //
 // The following methods apply to planNodes and contain special cases
@@ -105,7 +114,7 @@ type planNode interface {
 	//
 	// Available after Start(). It is illegal to call Next() after it returns
 	// false.
-	Next(ctx context.Context) (bool, error)
+	Next(params nextParams) (bool, error)
 
 	// Values returns the values at the current row. The result is only valid
 	// until the next call to Next().

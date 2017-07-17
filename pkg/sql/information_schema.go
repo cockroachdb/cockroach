@@ -807,9 +807,13 @@ func forEachUser(ctx context.Context, p *planner, fn func(username string) error
 	if err := fn(security.RootUser); err != nil {
 		return err
 	}
+	nextParams := nextParams{
+		ctx:           ctx,
+		cancelChecker: makeCancelChecker(p),
+	}
 
 	for {
-		next, err := plan.Next(ctx)
+		next, err := plan.Next(nextParams)
 		if err != nil {
 			return err
 		}

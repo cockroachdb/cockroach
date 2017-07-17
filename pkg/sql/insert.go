@@ -32,6 +32,7 @@ type insertNode struct {
 	editNodeBase
 	defaultExprs []parser.TypedExpr
 	n            *parser.Insert
+	p            *planner
 	checkHelper  checkHelper
 
 	insertCols            []sqlbase.ColumnDescriptor
@@ -200,6 +201,7 @@ func (p *planner) Insert(
 
 	in := &insertNode{
 		n:                     n,
+		p:                     p,
 		editNodeBase:          en,
 		defaultExprs:          defaultExprs,
 		insertCols:            ri.InsertCols,
@@ -254,11 +256,18 @@ func (n *insertNode) Close(ctx context.Context) {
 	n.run.rows.Close(ctx)
 }
 
-func (n *insertNode) Next(ctx context.Context) (bool, error) {
-	if next, err := n.run.rows.Next(ctx); !next {
+func (n *insertNode) Next(params nextParams) (bool, error) {
+	if next, err := n.run.rows.Next(params); !next {
 		if err == nil {
+			// Mark this query as non-cancellable
+			if n.p.autoCommit && n.p.stmt != nil {
+				queryMeta := n.p.stmt.queryMeta
+				if err := queryMeta.setNonCancellable(); err != nil {
+					return false, err
+				}
+			}
 			// We're done. Finish the batch.
-			err = n.tw.finalize(ctx, n.p.session.Tracing.KVTracingEnabled())
+			err = n.tw.finalize(params.ctx, n.p.session.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -275,7 +284,7 @@ func (n *insertNode) Next(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	_, err = n.tw.row(ctx, rowVals, n.p.session.Tracing.KVTracingEnabled())
+	_, err = n.tw.row(params.ctx, rowVals, n.p.session.Tracing.KVTracingEnabled())
 	if err != nil {
 		return false, err
 	}

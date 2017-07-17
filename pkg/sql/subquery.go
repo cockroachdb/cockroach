@@ -115,11 +115,15 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 	// After evaluation, there is no plan remaining.
 	defer func() { s.plan.Close(ctx); s.plan = nil }()
 
+	nextParams := nextParams{
+		ctx:           ctx,
+		cancelChecker: makeCancelChecker(s.planner),
+	}
 	switch s.execMode {
 	case execModeExists:
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// result.
-		next, err := s.plan.Next(ctx)
+		next, err := s.plan.Next(nextParams)
 		if err != nil {
 			return result, err
 		}
@@ -132,8 +136,8 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 
 	case execModeAllRows, execModeAllRowsNormalized:
 		var rows parser.DTuple
-		next, err := s.plan.Next(ctx)
-		for ; next; next, err = s.plan.Next(ctx) {
+		next, err := s.plan.Next(nextParams)
+		for ; next; next, err = s.plan.Next(nextParams) {
 			values := s.plan.Values()
 			switch len(values) {
 			case 1:
@@ -167,7 +171,7 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 
 	case execModeOneRow:
 		result = parser.DNull
-		hasRow, err := s.plan.Next(ctx)
+		hasRow, err := s.plan.Next(nextParams)
 		if err != nil {
 			return result, err
 		}
@@ -181,7 +185,7 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 				copy(valuesCopy.D, values)
 				result = valuesCopy
 			}
-			another, err := s.plan.Next(ctx)
+			another, err := s.plan.Next(nextParams)
 			if err != nil {
 				return result, err
 			}

@@ -84,7 +84,7 @@ func (n *cancelQueryNode) Start(ctx context.Context) error {
 
 func (*cancelQueryNode) Close(context.Context) {}
 
-func (n *cancelQueryNode) Next(context.Context) (bool, error) {
+func (n *cancelQueryNode) Next(nextParams) (bool, error) {
 	return false, nil
 }
 

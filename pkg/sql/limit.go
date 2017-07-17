@@ -147,7 +147,7 @@ func (n *limitNode) evalLimit() error {
 
 func (n *limitNode) Values() parser.Datums { return n.plan.Values() }
 
-func (n *limitNode) Next(ctx context.Context) (bool, error) {
+func (n *limitNode) Next(params nextParams) (bool, error) {
 	// n.rowIndex is the 0-based index of the next row.
 	// We don't do (n.rowIndex >= n.offset + n.count) to avoid overflow (count can be MaxInt64).
 	if n.rowIndex-n.offset >= n.count {
@@ -155,7 +155,7 @@ func (n *limitNode) Next(ctx context.Context) (bool, error) {
 	}
 
 	for {
-		if next, err := n.plan.Next(ctx); !next {
+		if next, err := n.plan.Next(params); !next {
 			return false, err
 		}
 

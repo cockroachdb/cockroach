@@ -71,13 +71,18 @@ func (n *distinctNode) addSuffixSeen(
 	return nil
 }
 
-func (n *distinctNode) Next(ctx context.Context) (bool, error) {
+func (n *distinctNode) Next(params nextParams) (bool, error) {
+	ctx := params.ctx
 
 	prefixMemAcc := n.prefixMemAcc.Wtxn(n.p.session)
 	suffixMemAcc := n.suffixMemAcc.Wtxn(n.p.session)
 
 	for {
-		next, err := n.plan.Next(ctx)
+		if err := params.cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
+		next, err := n.plan.Next(params)
 		if !next {
 			return false, err
 		}

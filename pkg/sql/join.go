@@ -316,8 +316,12 @@ func (n *joinNode) hashJoinStart(ctx context.Context) error {
 	var scratch []byte
 	// Load all the rows from the right side and build our hashmap.
 	acc := n.bucketsMemAcc.Wtxn(n.planner.session)
+	nextParams := nextParams{
+		ctx:           ctx,
+		cancelChecker: makeCancelChecker(n.planner),
+	}
 	for {
-		hasRow, err := n.right.plan.Next(ctx)
+		hasRow, err := n.right.plan.Next(nextParams)
 		if err != nil {
 			return err
 		}
@@ -343,7 +347,7 @@ func (n *joinNode) hashJoinStart(ctx context.Context) error {
 }
 
 // Next implements the planNode interface.
-func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
+func (n *joinNode) Next(params nextParams) (res bool, err error) {
 	// If results available from from previously computed results, we just
 	// return true.
 	if n.buffer.Next() {
@@ -368,7 +372,11 @@ func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
 	// Compute next batch of matching rows.
 	var scratch []byte
 	for {
-		leftHasRow, err := n.left.plan.Next(ctx)
+		if err := params.cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
+		leftHasRow, err := n.left.plan.Next(params)
 		if err != nil {
 			return false, nil
 		}
@@ -434,7 +442,7 @@ func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
 			// We append an empty right row to the left row, adding the result
 			// to our buffer for the subsequent call to Next().
 			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if _, err := n.buffer.AddRow(ctx, n.output); err != nil {
+			if _, err := n.buffer.AddRow(params.ctx, n.output); err != nil {
 				return false, err
 			}
 			return n.buffer.Next(), nil
@@ -451,7 +459,7 @@ func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
 			// empty right row to the left row, adding the result to our buffer
 			// for the subsequent call to Next().
 			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if _, err := n.buffer.AddRow(ctx, n.output); err != nil {
+			if _, err := n.buffer.AddRow(params.ctx, n.output); err != nil {
 				return false, err
 			}
 			return n.buffer.Next(), nil
@@ -477,7 +485,7 @@ func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
 				// without matches for right or full joins later.
 				b.MarkSeen(idx)
 			}
-			if _, err := n.buffer.AddRow(ctx, n.output); err != nil {
+			if _, err := n.buffer.AddRow(params.ctx, n.output); err != nil {
 				return false, err
 			}
 		}
@@ -486,7 +494,7 @@ func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
 			// left or full outer join, we need to add a row with an empty
 			// right side.
 			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if _, err := n.buffer.AddRow(ctx, n.output); err != nil {
+			if _, err := n.buffer.AddRow(params.ctx, n.output); err != nil {
 				return false, err
 			}
 		}
@@ -503,9 +511,12 @@ func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
 
 	for _, b := range n.buckets.Buckets() {
 		for idx, rrow := range b.Rows() {
+			if err := params.cancelChecker.Check(); err != nil {
+				return false, err
+			}
 			if !b.Seen(idx) {
 				n.pred.prepareRow(n.output, n.emptyLeft, rrow)
-				if _, err := n.buffer.AddRow(ctx, n.output); err != nil {
+				if _, err := n.buffer.AddRow(params.ctx, n.output); err != nil {
 					return false, err
 				}
 			}

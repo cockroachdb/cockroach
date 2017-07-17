@@ -115,9 +115,9 @@ func (n *createDatabaseNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*createDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createDatabaseNode) Close(context.Context)              {}
-func (*createDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createDatabaseNode) Next(nextParams) (bool, error) { return false, nil }
+func (*createDatabaseNode) Close(context.Context)         {}
+func (*createDatabaseNode) Values() parser.Datums         { return parser.Datums{} }
 
 type createIndexNode struct {
 	p         *planner
@@ -215,9 +215,9 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*createIndexNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createIndexNode) Close(context.Context)              {}
-func (*createIndexNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createIndexNode) Next(nextParams) (bool, error) { return false, nil }
+func (*createIndexNode) Close(context.Context)         {}
+func (*createIndexNode) Values() parser.Datums         { return parser.Datums{} }
 
 type createUserNode struct {
 	p        *planner
@@ -314,9 +314,9 @@ func (n *createUserNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*createUserNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createUserNode) Close(context.Context)              {}
-func (*createUserNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createUserNode) Next(nextParams) (bool, error) { return false, nil }
+func (*createUserNode) Close(context.Context)         {}
+func (*createUserNode) Values() parser.Datums         { return parser.Datums{} }
 
 type createViewNode struct {
 	p           *planner
@@ -488,8 +488,8 @@ func (n *createViewNode) Close(ctx context.Context) {
 	n.p.avoidCachedDescriptors = false
 }
 
-func (*createViewNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createViewNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createViewNode) Next(nextParams) (bool, error) { return false, nil }
+func (*createViewNode) Values() parser.Datums         { return parser.Datums{} }
 
 type createTableNode struct {
 	p          *planner
@@ -698,7 +698,11 @@ func (n *createTableNode) Start(ctx context.Context) error {
 		// This driver function call is done here instead of in the Next
 		// method since CREATE TABLE is a DDL statement and Executor only
 		// runs Next() for statements with type "Rows".
-		count, err := countRowsAffected(ctx, insertPlan)
+		nextParams := nextParams{
+			ctx:           ctx,
+			cancelChecker: makeCancelChecker(n.p),
+		}
+		count, err := countRowsAffected(nextParams, insertPlan)
 		if err != nil {
 			return err
 		}
@@ -715,8 +719,8 @@ func (n *createTableNode) Close(ctx context.Context) {
 	}
 }
 
-func (*createTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createTableNode) Next(nextParams) (bool, error) { return false, nil }
+func (*createTableNode) Values() parser.Datums         { return parser.Datums{} }
 
 type indexMatch bool
 

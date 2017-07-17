@@ -978,15 +978,15 @@ func (e *Executor) execParsed(
 
 // If the plan has a fast path we attempt to query that,
 // otherwise we fall back to counting via plan.Next().
-func countRowsAffected(ctx context.Context, p planNode) (int, error) {
+func countRowsAffected(nextParams nextParams, p planNode) (int, error) {
 	if a, ok := p.(planNodeFastPath); ok {
 		if count, res := a.FastPathResults(); res {
 			return count, nil
 		}
 	}
 	count := 0
-	next, err := p.Next(ctx)
-	for ; next; next, err = p.Next(ctx) {
+	next, err := p.Next(nextParams)
+	for ; next; next, err = p.Next(nextParams) {
 		count++
 	}
 	return count, err
@@ -1654,17 +1654,23 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 		return err
 	}
 
+	cancelChecker := makeCancelChecker(planner)
+	nextParams := nextParams{
+		ctx:           ctx,
+		cancelChecker: cancelChecker,
+	}
+
 	switch result.Type {
 	case parser.RowsAffected:
-		count, err := countRowsAffected(ctx, plan)
+		count, err := countRowsAffected(nextParams, plan)
 		if err != nil {
 			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		next, err := plan.Next(ctx)
-		for ; next; next, err = plan.Next(ctx) {
+		next, err := plan.Next(nextParams)
+		for ; next; next, err = plan.Next(nextParams) {
 			planner.evalCtx.ActiveMemAcc.Close(ctx)
 			rowAcc = planner.evalCtx.Mon.MakeBoundAccount()
 			planner.evalCtx.ActiveMemAcc = &rowAcc

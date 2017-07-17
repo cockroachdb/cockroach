@@ -107,8 +107,13 @@ func (n *valueGenerator) Start(context.Context) error {
 	return nil
 }
 
-func (n *valueGenerator) Next(context.Context) (bool, error) { return n.gen.Next() }
-func (n *valueGenerator) Values() parser.Datums              { return n.gen.Values() }
+func (n *valueGenerator) Next(params nextParams) (bool, error) {
+	if err := params.cancelChecker.Check(); err != nil {
+		return false, err
+	}
+	return n.gen.Next()
+}
+func (n *valueGenerator) Values() parser.Datums { return n.gen.Values() }
 
 func (n *valueGenerator) Close(context.Context) {
 	if n.gen != nil {

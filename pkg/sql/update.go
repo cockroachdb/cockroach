@@ -127,6 +127,7 @@ type updateNode struct {
 	// The following fields are populated during makePlan.
 	editNodeBase
 	n             *parser.Update
+	p             *planner
 	updateCols    []sqlbase.ColumnDescriptor
 	updateColsIdx map[sqlbase.ColumnID]int // index in updateCols slice
 	tw            tableUpdater
@@ -374,6 +375,7 @@ func (p *planner) Update(
 
 	un := &updateNode{
 		n:             n,
+		p:             p,
 		editNodeBase:  en,
 		updateCols:    ru.UpdateCols,
 		updateColsIdx: updateColsIdx,
@@ -401,12 +403,19 @@ func (u *updateNode) Close(ctx context.Context) {
 	u.run.rows.Close(ctx)
 }
 
-func (u *updateNode) Next(ctx context.Context) (bool, error) {
-	next, err := u.run.rows.Next(ctx)
+func (u *updateNode) Next(params nextParams) (bool, error) {
+	next, err := u.run.rows.Next(params)
 	if !next {
 		if err == nil {
+			// Mark this query as non-cancellable
+			if u.p.autoCommit && u.p.stmt != nil {
+				queryMeta := u.p.stmt.queryMeta
+				if err := queryMeta.setNonCancellable(); err != nil {
+					return false, err
+				}
+			}
 			// We're done. Finish the batch.
-			err = u.tw.finalize(ctx, u.p.session.Tracing.KVTracingEnabled())
+			err = u.tw.finalize(params.ctx, u.p.session.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -455,7 +464,7 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 
 	// Update the row values.
 	newValues, err := u.tw.row(
-		ctx, append(oldValues, updateValues...), u.p.session.Tracing.KVTracingEnabled(),
+		params.ctx, append(oldValues, updateValues...), u.p.session.Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
 		return false, err

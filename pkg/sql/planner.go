@@ -218,7 +218,11 @@ func (p *planner) queryRows(
 	if err := p.startPlan(ctx, plan); err != nil {
 		return nil, err
 	}
-	if next, err := plan.Next(ctx); err != nil || !next {
+	nextParams := nextParams{
+		ctx:           ctx,
+		cancelChecker: makeCancelChecker(p),
+	}
+	if next, err := plan.Next(nextParams); err != nil || !next {
 		return nil, err
 	}
 
@@ -229,7 +233,7 @@ func (p *planner) queryRows(
 			rows = append(rows, valCopy)
 		}
 
-		next, err := plan.Next(ctx)
+		next, err := plan.Next(nextParams)
 		if err != nil {
 			return nil, err
 		}
@@ -262,7 +266,11 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 	if err := p.startPlan(ctx, plan); err != nil {
 		return 0, err
 	}
-	return countRowsAffected(ctx, plan)
+	nextParams := nextParams{
+		ctx:           ctx,
+		cancelChecker: makeCancelChecker(p),
+	}
+	return countRowsAffected(nextParams, plan)
 }
 
 func (p *planner) fillFKTableMap(ctx context.Context, m sqlbase.TableLookupsByID) error {

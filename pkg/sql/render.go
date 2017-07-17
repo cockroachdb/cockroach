@@ -101,8 +101,8 @@ func (r *renderNode) Start(ctx context.Context) error {
 	return r.source.plan.Start(ctx)
 }
 
-func (r *renderNode) Next(ctx context.Context) (bool, error) {
-	if next, err := r.source.plan.Next(ctx); !next {
+func (r *renderNode) Next(params nextParams) (bool, error) {
+	if next, err := r.source.plan.Next(params); !next {
 		return false, err
 	}
 

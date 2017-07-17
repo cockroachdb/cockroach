@@ -162,7 +162,10 @@ func (p *planner) validateCheckExpr(
 	if err := p.startPlan(ctx, rows); err != nil {
 		return err
 	}
-	next, err := rows.Next(ctx)
+	next, err := rows.Next(nextParams{
+		ctx:           ctx,
+		cancelChecker: makeCancelChecker(p),
+	})
 	if err != nil {
 		return err
 	}

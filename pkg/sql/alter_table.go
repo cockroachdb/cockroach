@@ -472,9 +472,9 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *alterTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *alterTableNode) Close(context.Context)              {}
-func (n *alterTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (n *alterTableNode) Next(nextParams) (bool, error) { return false, nil }
+func (n *alterTableNode) Close(context.Context)         {}
+func (n *alterTableNode) Values() parser.Datums         { return parser.Datums{} }
 
 func applyColumnMutation(
 	col *sqlbase.ColumnDescriptor, mut parser.ColumnMutationCmd, searchPath parser.SearchPath,

@@ -1609,7 +1609,7 @@ func (dsp *distSQLPlanner) createPlanForValues(
 	defer n.Close(planCtx.ctx)
 
 	for i := 0; i < n.Len(); i++ {
-		if next, err := n.Next(planCtx.ctx); !next {
+		if next, err := n.Next(nextParams{ctx: planCtx.ctx}); !next {
 			return physicalPlan{}, err
 		}
 

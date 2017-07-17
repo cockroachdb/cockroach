@@ -56,9 +56,9 @@ func (f *filterNode) Start(ctx context.Context) error {
 }
 
 // Next implements the planNode interface.
-func (f *filterNode) Next(ctx context.Context) (bool, error) {
+func (f *filterNode) Next(params nextParams) (bool, error) {
 	for {
-		if next, err := f.source.plan.Next(ctx); !next {
+		if next, err := f.source.plan.Next(params); !next {
 			return false, err
 		}
 

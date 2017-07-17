@@ -85,8 +85,8 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	return ds
 }
 
-func (o *ordinalityNode) Next(ctx context.Context) (bool, error) {
-	hasNext, err := o.source.Next(ctx)
+func (o *ordinalityNode) Next(params nextParams) (bool, error) {
+	hasNext, err := o.source.Next(params)
 	if !hasNext || err != nil {
 		return hasNext, err
 	}
