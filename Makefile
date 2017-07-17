@@ -42,6 +42,9 @@ INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
 
+help: ## Prints help for targets with comments.
+	@grep -Eh '^[a-zA-Z._-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
 # Possible values:
 # <empty>: use the default toolchain
 # release-linux-gnu:  target Linux 2.6.32, dynamically link GLIBC 2.12.2
@@ -157,7 +160,7 @@ $(COCKROACH) build buildoss go-install: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: install
-install: $(COCKROACH)
+install: $(COCKROACH) ## Install CockroachDB binary.
 	$(INSTALL) -d -m 755 $(DESTDIR)$(bindir)
 	$(INSTALL) -m 755 $(COCKROACH) $(DESTDIR)$(bindir)/cockroach
 
@@ -180,7 +183,7 @@ gotestdashi: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
 
 testshort: override TESTFLAGS += -short
 
-testrace: override GOFLAGS += -race
+testrace: override GOFLAGS += -race ## Run tests with the Go race detector enabled.
 testrace: export GORACE := halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 
@@ -194,7 +197,7 @@ bin/logictest.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -na
 	$(MAKE) gotestdashi GOFLAGS='$(GOFLAGS)' TAGS='$(TAGS)' LINKFLAGS='$(LINKFLAGS)' PKG='$(PKG)'
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/logictest.test $(PKG)
 
-bench: BENCHES := .
+bench: BENCHES := . ## Run benchmarks.
 bench: TESTS := -
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
@@ -204,7 +207,7 @@ check test testshort testrace bench: gotestdashi
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
 # with make testlogic FILES="foo bar".
-testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$,TestLogic)
+testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$,TestLogic) ## Run SQL Logic Tests.
 testlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
 testlogic: bin/logictest.test
 	cd pkg/sql/logictest && logictest.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
@@ -240,7 +243,7 @@ upload-coverage: $(BOOTSTRAP_TARGET)
 	@build/upload-coverage.sh
 
 .PHONY: acceptance
-acceptance:
+acceptance: ## Run acceptance tests.
 	@pkg/acceptance/run.sh
 
 .PHONY: dupl
@@ -262,35 +265,35 @@ dupl: $(BOOTSTRAP_TARGET)
 # `go generate` uses stringer and so must depend on gotestdashi per the above
 # comment. See https://github.com/golang/go/issues/10249 for details.
 .PHONY: generate
-generate: gotestdashi
+generate: gotestdashi ## Regenerate generated code.
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 # The style checks depend on `go vet` and so must depend on gotestdashi per the
 # above comment. See https://github.com/golang/go/issues/16086 for details.
 .PHONY: lint
-lint: override TAGS += lint
+lint: override TAGS += lint ## Run all style checkers and linters.
 lint: gotestdashi
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: lintshort
-lintshort: override TAGS += lint
+lintshort: override TAGS += lint ## Run a fast subset of the style checkers and linters.
 lintshort: gotestdashi
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
-clean: clean-c-deps
+clean: clean-c-deps ## Clean all build artifacts.
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	rm -f $(BOOTSTRAP_TARGET) $(ARCHIVE)
 
 .PHONY: protobuf
-protobuf:
+protobuf: ## Regenerate generated code for protobuf definitions.
 	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
 
 # pre-push locally runs most of the checks CI will run. Notably, it doesn't run
 # the acceptance tests.
 .PHONY: pre-push
-pre-push: generate lint test
+pre-push: generate lint test ## Run generate, lint, and test.
 	$(MAKE) -C $(REPO_ROOT)/pkg/ui lint test
 	! git status --porcelain | read || (git status; git --no-pager diff -a 1>&2; exit 1)
 
@@ -300,7 +303,7 @@ pre-push: generate lint test
 # $(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach to allow the extracted
 # archive to serve directly as a GOPATH root.
 .PHONY: archive
-archive: $(ARCHIVE)
+archive: $(ARCHIVE) ## Build a source tarball from this repository.
 
 $(ARCHIVE): $(ARCHIVE).tmp
 	gzip -c $< > $@
