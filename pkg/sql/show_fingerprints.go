@@ -78,7 +78,6 @@ func (p *planner) ShowFingerprints(
 		return nil, err
 	}
 	return &showFingerprintsNode{
-		p:         p,
 		n:         n,
 		tn:        tn,
 		ts:        ts,
@@ -90,7 +89,6 @@ func (p *planner) ShowFingerprints(
 type showFingerprintsNode struct {
 	optColumnsSlot
 
-	p *planner
 	n *parser.ShowFingerprints
 
 	ts        hlc.Timestamp
@@ -114,10 +112,10 @@ var showFingerprintsColumns = sqlbase.ResultColumns{
 	},
 }
 
-func (n *showFingerprintsNode) Start(ctx context.Context) error { return nil }
-func (n *showFingerprintsNode) Values() parser.Datums           { return n.values }
-func (n *showFingerprintsNode) Close(_ context.Context)         {}
-func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
+func (n *showFingerprintsNode) Start(params runParams) error { return nil }
+func (n *showFingerprintsNode) Values() parser.Datums        { return n.values }
+func (n *showFingerprintsNode) Close(_ context.Context)      {}
+func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	if n.rowIdx >= len(n.indexes) {
 		return false, nil
 	}
@@ -171,14 +169,14 @@ func (n *showFingerprintsNode) Next(ctx context.Context) (bool, error) {
 	`, strings.Join(cols, `,`), n.tn.DatabaseName, n.tn.TableName, parser.Name(index.Name))
 
 	var fingerprintCols parser.Datums
-	if err := n.p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := params.p.ExecCfg().DB.Txn(params.ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(n.ts)
 
 		// Use internal planner directly instead of InternalExecutor because we
 		// need to set `avoidCachedDescriptors`.
-		p := makeInternalPlanner("SELECT", txn, security.RootUser, n.p.LeaseMgr().memMetrics)
+		p := makeInternalPlanner("SELECT", txn, security.RootUser, params.p.LeaseMgr().memMetrics)
 		defer finishInternalPlanner(p)
-		p.session.tables.leaseMgr = n.p.LeaseMgr()
+		p.session.tables.leaseMgr = params.p.LeaseMgr()
 		p.avoidCachedDescriptors = true
 
 		var err error

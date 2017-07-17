@@ -37,7 +37,6 @@ import (
 )
 
 type createDatabaseNode struct {
-	p *planner
 	n *parser.CreateDatabase
 }
 
@@ -84,30 +83,30 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		return nil, err
 	}
 
-	return &createDatabaseNode{p: p, n: n}, nil
+	return &createDatabaseNode{n: n}, nil
 }
 
-func (n *createDatabaseNode) Start(ctx context.Context) error {
+func (n *createDatabaseNode) Start(params runParams) error {
 	desc := makeDatabaseDesc(n.n)
 
-	created, err := n.p.createDatabase(ctx, &desc, n.n.IfNotExists)
+	created, err := params.p.createDatabase(params.ctx, &desc, n.n.IfNotExists)
 	if err != nil {
 		return err
 	}
 	if created {
 		// Log Create Database event. This is an auditable log event and is
 		// recorded in the same transaction as the table descriptor update.
-		if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
-			ctx,
-			n.p.txn,
+		if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+			params.ctx,
+			params.p.txn,
 			EventLogCreateDatabase,
 			int32(desc.ID),
-			int32(n.p.evalCtx.NodeID),
+			int32(params.p.evalCtx.NodeID),
 			struct {
 				DatabaseName string
 				Statement    string
 				User         string
-			}{n.n.Name.String(), n.n.String(), n.p.session.User},
+			}{n.n.Name.String(), n.n.String(), params.p.session.User},
 		); err != nil {
 			return err
 		}
@@ -115,12 +114,11 @@ func (n *createDatabaseNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*createDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createDatabaseNode) Close(context.Context)              {}
-func (*createDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createDatabaseNode) Next(runParams) (bool, error) { return false, nil }
+func (*createDatabaseNode) Close(context.Context)        {}
+func (*createDatabaseNode) Values() parser.Datums        { return parser.Datums{} }
 
 type createIndexNode struct {
-	p         *planner
 	n         *parser.CreateIndex
 	tableDesc *sqlbase.TableDescriptor
 }
@@ -144,10 +142,10 @@ func (p *planner) CreateIndex(ctx context.Context, n *parser.CreateIndex) (planN
 		return nil, err
 	}
 
-	return &createIndexNode{p: p, tableDesc: tableDesc, n: n}, nil
+	return &createIndexNode{tableDesc: tableDesc, n: n}, nil
 }
 
-func (n *createIndexNode) Start(ctx context.Context) error {
+func (n *createIndexNode) Start(params runParams) error {
 	_, dropped, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
 		if dropped {
@@ -175,52 +173,51 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 
 	if n.n.Interleave != nil {
 		index := n.tableDesc.Mutations[mutationIdx].GetIndex()
-		if err := n.p.addInterleave(ctx, n.tableDesc, index, n.n.Interleave); err != nil {
+		if err := params.p.addInterleave(params.ctx, n.tableDesc, index, n.n.Interleave); err != nil {
 			return err
 		}
-		if err := n.p.finalizeInterleave(ctx, n.tableDesc, *index); err != nil {
+		if err := params.p.finalizeInterleave(params.ctx, n.tableDesc, *index); err != nil {
 			return err
 		}
 	}
 
-	mutationID, err := n.p.createSchemaChangeJob(ctx, n.tableDesc, parser.AsString(n.n))
+	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc, parser.AsString(n.n))
 	if err != nil {
 		return err
 	}
-	if err := n.p.writeTableDesc(ctx, n.tableDesc); err != nil {
+	if err := params.p.writeTableDesc(params.ctx, n.tableDesc); err != nil {
 		return err
 	}
 
 	// Record index creation in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
-		ctx,
-		n.p.txn,
+	if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
 		EventLogCreateIndex,
 		int32(n.tableDesc.ID),
-		int32(n.p.evalCtx.NodeID),
+		int32(params.p.evalCtx.NodeID),
 		struct {
 			TableName  string
 			IndexName  string
 			Statement  string
 			User       string
 			MutationID uint32
-		}{n.tableDesc.Name, n.n.Name.String(), n.n.String(), n.p.session.User, uint32(mutationID)},
+		}{n.tableDesc.Name, n.n.Name.String(), n.n.String(), params.p.session.User, uint32(mutationID)},
 	); err != nil {
 		return err
 	}
-	n.p.notifySchemaChange(n.tableDesc, mutationID)
+	params.p.notifySchemaChange(n.tableDesc, mutationID)
 
 	return nil
 }
 
-func (*createIndexNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createIndexNode) Close(context.Context)              {}
-func (*createIndexNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createIndexNode) Next(runParams) (bool, error) { return false, nil }
+func (*createIndexNode) Close(context.Context)        {}
+func (*createIndexNode) Values() parser.Datums        { return parser.Datums{} }
 
 type createUserNode struct {
-	p        *planner
 	n        *parser.CreateUser
 	password string
 }
@@ -251,7 +248,7 @@ func (p *planner) CreateUser(ctx context.Context, n *parser.CreateUser) (planNod
 		}
 	}
 
-	return &createUserNode{p: p, n: n, password: resolvedPassword}, nil
+	return &createUserNode{n: n, password: resolvedPassword}, nil
 }
 
 const usernameHelp = "usernames are case insensitive, must start with a letter " +
@@ -276,7 +273,7 @@ func NormalizeAndValidateUsername(username string) (string, error) {
 	return username, nil
 }
 
-func (n *createUserNode) Start(ctx context.Context) error {
+func (n *createUserNode) Start(params runParams) error {
 	var hashedPassword []byte
 	if n.password != "" {
 		var err error
@@ -291,11 +288,11 @@ func (n *createUserNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	internalExecutor := InternalExecutor{LeaseManager: n.p.LeaseMgr()}
+	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
 	rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
-		ctx,
+		params.ctx,
 		"create-user",
-		n.p.txn,
+		params.p.txn,
 		"INSERT INTO system.users VALUES ($1, $2);",
 		normalizedUsername,
 		hashedPassword,
@@ -314,9 +311,9 @@ func (n *createUserNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*createUserNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createUserNode) Close(context.Context)              {}
-func (*createUserNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createUserNode) Next(runParams) (bool, error) { return false, nil }
+func (*createUserNode) Close(context.Context)        {}
+func (*createUserNode) Values() parser.Datums        { return parser.Datums{} }
 
 type createViewNode struct {
 	p           *planner
@@ -414,17 +411,17 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 	return result, nil
 }
 
-func (n *createViewNode) Start(ctx context.Context) error {
+func (n *createViewNode) Start(params runParams) error {
 	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Name.TableName().Table()}
 	key := tKey.Key()
-	if exists, err := descExists(ctx, n.p.txn, key); err == nil && exists {
+	if exists, err := descExists(params.ctx, n.p.txn, key); err == nil && exists {
 		// TODO(a-robinson): Support CREATE OR REPLACE commands.
 		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
 	} else if err != nil {
 		return err
 	}
 
-	id, err := GenerateUniqueDescID(ctx, n.p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(params.ctx, n.p.session.execCfg.DB)
 	if err != nil {
 		return nil
 	}
@@ -434,7 +431,7 @@ func (n *createViewNode) Start(ctx context.Context) error {
 
 	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	desc, err := n.makeViewTableDesc(
-		ctx, n.n, n.dbDesc.ID, id, planColumns(n.sourcePlan), privs, affected, &n.p.evalCtx)
+		params.ctx, n.n, n.dbDesc.ID, id, planColumns(n.sourcePlan), privs, affected, &n.p.evalCtx)
 	if err != nil {
 		return err
 	}
@@ -444,28 +441,28 @@ func (n *createViewNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	err = n.p.createDescriptorWithID(ctx, key, id, &desc)
+	err = n.p.createDescriptorWithID(params.ctx, key, id, &desc)
 	if err != nil {
 		return err
 	}
 
 	// Persist the back-references in all referenced table descriptors.
 	for _, updated := range affected {
-		if err := n.p.saveNonmutationAndNotify(ctx, updated); err != nil {
+		if err := n.p.saveNonmutationAndNotify(params.ctx, updated); err != nil {
 			return err
 		}
 	}
 	if desc.Adding() {
 		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
-	if err := desc.Validate(ctx, n.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, n.p.txn); err != nil {
 		return err
 	}
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
 	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
-		ctx,
+		params.ctx,
 		n.p.txn,
 		EventLogCreateView,
 		int32(desc.ID),
@@ -488,11 +485,10 @@ func (n *createViewNode) Close(ctx context.Context) {
 	n.p.avoidCachedDescriptors = false
 }
 
-func (*createViewNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createViewNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createViewNode) Next(runParams) (bool, error) { return false, nil }
+func (*createViewNode) Values() parser.Datums        { return parser.Datums{} }
 
 type createTableNode struct {
-	p          *planner
 	n          *parser.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
 	sourcePlan planNode
@@ -548,7 +544,7 @@ func (p *planner) CreateTable(ctx context.Context, n *parser.CreateTable) (planN
 		}
 	}
 
-	return &createTableNode{p: p, n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
+	return &createTableNode{n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
 }
 
 func hoistConstraints(n *parser.CreateTable) {
@@ -580,10 +576,10 @@ func hoistConstraints(n *parser.CreateTable) {
 	}
 }
 
-func (n *createTableNode) Start(ctx context.Context) error {
+func (n *createTableNode) Start(params runParams) error {
 	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
 	key := tKey.Key()
-	if exists, err := descExists(ctx, n.p.txn, key); err == nil && exists {
+	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		if n.n.IfNotExists {
 			return nil
 		}
@@ -592,7 +588,7 @@ func (n *createTableNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	id, err := GenerateUniqueDescID(ctx, n.p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(params.ctx, params.p.session.execCfg.DB)
 	if err != nil {
 		return err
 	}
@@ -607,10 +603,10 @@ func (n *createTableNode) Start(ctx context.Context) error {
 	var desc sqlbase.TableDescriptor
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
 	if n.n.As() {
-		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, planColumns(n.sourcePlan), privs, &n.p.evalCtx)
+		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, planColumns(n.sourcePlan), privs, &params.p.evalCtx)
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-		desc, err = n.p.makeTableDesc(ctx, n.n, n.dbDesc.ID, id, privs, affected)
+		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, privs, affected)
 	}
 	if err != nil {
 		return err
@@ -624,44 +620,44 @@ func (n *createTableNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	if err := n.p.createDescriptorWithID(ctx, key, id, &desc); err != nil {
+	if err := params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
 		return err
 	}
 
 	for _, updated := range affected {
-		if err := n.p.saveNonmutationAndNotify(ctx, updated); err != nil {
+		if err := params.p.saveNonmutationAndNotify(params.ctx, updated); err != nil {
 			return err
 		}
 	}
 	if desc.Adding() {
-		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
+		params.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
 
 	for _, index := range desc.AllNonDropIndexes() {
 		if len(index.Interleave.Ancestors) > 0 {
-			if err := n.p.finalizeInterleave(ctx, &desc, index); err != nil {
+			if err := params.p.finalizeInterleave(params.ctx, &desc, index); err != nil {
 				return err
 			}
 		}
 	}
 
-	if err := desc.Validate(ctx, n.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
 		return err
 	}
 
 	// Log Create Table event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
-		ctx,
-		n.p.txn,
+	if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
 		EventLogCreateTable,
 		int32(desc.ID),
-		int32(n.p.evalCtx.NodeID),
+		int32(params.p.evalCtx.NodeID),
 		struct {
 			TableName string
 			Statement string
 			User      string
-		}{n.n.Table.String(), n.n.String(), n.p.session.User},
+		}{n.n.Table.String(), n.n.String(), params.p.session.User},
 	); err != nil {
 		return err
 	}
@@ -675,7 +671,7 @@ func (n *createTableNode) Start(ctx context.Context) error {
 		// below would cause a 2nd invocation and cause a panic. So
 		// instead we close this sourcePlan and let the insertNode create
 		// it anew from the AsSource syntax node.
-		n.sourcePlan.Close(ctx)
+		n.sourcePlan.Close(params.ctx)
 		n.sourcePlan = nil
 
 		insert := &parser.Insert{
@@ -683,22 +679,22 @@ func (n *createTableNode) Start(ctx context.Context) error {
 			Rows:      n.n.AsSource,
 			Returning: parser.AbsentReturningClause,
 		}
-		insertPlan, err := n.p.Insert(ctx, insert, nil /* desiredTypes */)
+		insertPlan, err := params.p.Insert(params.ctx, insert, nil /* desiredTypes */)
 		if err != nil {
 			return err
 		}
-		defer insertPlan.Close(ctx)
-		insertPlan, err = n.p.optimizePlan(ctx, insertPlan, allColumns(insertPlan))
+		defer insertPlan.Close(params.ctx)
+		insertPlan, err = params.p.optimizePlan(params.ctx, insertPlan, allColumns(insertPlan))
 		if err != nil {
 			return err
 		}
-		if err = n.p.startPlan(ctx, insertPlan); err != nil {
+		if err = params.p.startPlan(params.ctx, insertPlan); err != nil {
 			return err
 		}
 		// This driver function call is done here instead of in the Next
 		// method since CREATE TABLE is a DDL statement and Executor only
 		// runs Next() for statements with type "Rows".
-		count, err := countRowsAffected(ctx, insertPlan)
+		count, err := countRowsAffected(params, insertPlan)
 		if err != nil {
 			return err
 		}
@@ -715,8 +711,8 @@ func (n *createTableNode) Close(ctx context.Context) {
 	}
 }
 
-func (*createTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (*createTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createTableNode) Next(runParams) (bool, error) { return false, nil }
+func (*createTableNode) Values() parser.Datums        { return parser.Datums{} }
 
 type indexMatch bool
 
