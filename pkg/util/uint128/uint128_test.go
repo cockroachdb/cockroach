@@ -31,6 +31,16 @@ func TestBytes(t *testing.T) {
 	}
 }
 
+func TestString(t *testing.T) {
+	s := "a95e31998f38490651c02b97c7f2acca"
+
+	i, _ := FromString(s)
+
+	if s != i.GetString() {
+		t.Errorf("incorrect string representation for num: %v", i)
+	}
+}
+
 func TestSub(t *testing.T) {
 	testData := []struct {
 		num      Uint128
