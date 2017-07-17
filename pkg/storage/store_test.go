@@ -2607,8 +2607,10 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := s.ReservationCount(); n != 2 {
-		t.Fatalf("expected 2 reservations, but found %d", n)
+	// Empty snapshots are not throttled and so do not increase the reservation
+	// count.
+	if n := s.ReservationCount(); n != 1 {
+		t.Fatalf("expected 1 reservations, but found %d", n)
 	}
 	cleanupEmpty()
 

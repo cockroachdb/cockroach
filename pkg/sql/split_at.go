@@ -465,23 +465,13 @@ var scatterNodeColumns = sqlbase.ResultColumns{
 		Name: "pretty",
 		Typ:  parser.TypeString,
 	},
-	{
-		Name: "error",
-		Typ:  parser.TypeString,
-	},
 }
 
 func (n *scatterNode) Values() parser.Datums {
 	r := n.ranges[n.rangeIdx]
-	dErr := parser.DNull
-	if r.Error != nil {
-		dErr = parser.NewDString(r.Error.String())
-	}
-
 	return parser.Datums{
 		parser.NewDBytes(parser.DBytes(r.Span.Key)),
 		parser.NewDString(keys.PrettyPrint(r.Span.Key)),
-		dErr,
 	}
 }
 

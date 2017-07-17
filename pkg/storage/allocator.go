@@ -374,8 +374,9 @@ func (a Allocator) RebalanceTarget(
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	rangeID roachpb.RangeID,
+	filter storeFilter,
 ) *roachpb.StoreDescriptor {
-	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterThrottled)
+	sl, _, _ := a.storePool.getStoreList(rangeID, filter)
 
 	existingCandidates, candidates := rebalanceCandidates(
 		ctx,
@@ -432,6 +433,7 @@ func (a *Allocator) TransferLeaseTarget(
 	stats *replicaStats,
 	checkTransferLeaseSource bool,
 	checkCandidateFullness bool,
+	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
 	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
 	sl = sl.filter(constraints)
@@ -467,16 +469,21 @@ func (a *Allocator) TransferLeaseTarget(
 	// Try to pick a replica to transfer the lease to while also determining
 	// whether we actually should be transferring the lease. The transfer
 	// decision is only needed if we've been asked to check the source.
-	transferDec, repl := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
+	transferDec, repl := a.shouldTransferLeaseUsingStats(
+		ctx, sl, source, existing, stats,
+	)
 	if checkTransferLeaseSource {
 		switch transferDec {
 		case shouldNotTransfer:
-			return roachpb.ReplicaDescriptor{}
-		case shouldTransfer:
+			if !alwaysAllowDecisionWithoutStats {
+				return roachpb.ReplicaDescriptor{}
+			}
+			fallthrough
 		case decideWithoutStats:
 			if !a.shouldTransferLeaseWithoutStats(ctx, sl, source, existing) {
 				return roachpb.ReplicaDescriptor{}
 			}
+		case shouldTransfer:
 		default:
 			log.Fatalf(ctx, "unexpected transfer decision %d with replica %+v", transferDec, repl)
 		}
@@ -570,11 +577,12 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 
 	qpsStats, qpsStatsDur := stats.perLocalityDecayingQPS()
 
-	// If we haven't yet accumulated enough data, avoid transferring for now. Do
-	// not fall back to the algorithm that doesn't use stats, since it can easily
-	// start fighting with the stats-based algorithm. This provides some amount of
-	// safety from lease thrashing, since leases cannot transfer more frequently
-	// than this threshold (because replica stats get reset upon lease transfer).
+	// If we haven't yet accumulated enough data, avoid transferring for now,
+	// unless we've been explicitly asked otherwise. Do not fall back to the
+	// algorithm that doesn't use stats, since it can easily start fighting with
+	// the stats-based algorithm. This provides some amount of safety from lease
+	// thrashing, since leases cannot transfer more frequently than this threshold
+	// (because replica stats get reset upon lease transfer).
 	if qpsStatsDur < MinLeaseTransferStatsDuration {
 		return shouldNotTransfer, roachpb.ReplicaDescriptor{}
 	}

@@ -212,7 +212,7 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 }
 
 func (s *Store) ReservationCount() int {
-	return len(s.emptySnapshotApplySem) + len(s.nonEmptySnapshotApplySem)
+	return len(s.snapshotApplySem)
 }
 
 func NewTestStorePool(cfg StoreConfig) *StorePool {
