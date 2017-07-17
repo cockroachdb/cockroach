@@ -737,17 +737,54 @@ func (r *Replica) handleReplicatedEvalResult(
 
 	if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
 		rResult.State.TruncatedState = nil // for assertion
+
 		r.mu.Lock()
 		r.mu.state.TruncatedState = newTruncState
 		r.mu.Unlock()
+
+		// TODO(tschottdorf): everything below doesn't need to be on this
+		// goroutine. Worth moving out -- truncations are frequent and missing
+		// one of the side effects below doesn't matter. Need to be careful
+		// about the interaction with `evalTruncateLog` though, which computes
+		// some stats based on the log entries it sees. Also, sideloaded storage
+		// needs to hold the raft mu. Perhaps it should just get its own mutex
+		// (which is usually held together with raftMu, except when accessing
+		// the storage for a truncation). Or, even better, make use of the fact
+		// that all we need to synchronize is disk i/o, and there is no overlap
+		// between files *removed* during truncation and those active in Raft.
+
+		if util.IsMigrated() {
+			// Truncate the Raft log.
+			start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 0))
+			end := engine.MakeMVCCMetadataKey(
+				keys.RaftLogKey(r.RangeID, newTruncState.Index).PrefixEnd(),
+			)
+			iter := r.store.engine.NewIterator(false /* !prefix */)
+			// Clear the log entries. Intentionally don't use range deletion
+			// tombstones (ClearRange()) due to performance concerns connected
+			// to having many range deletion tombstones. There is a chance that
+			// ClearRange will perform well here because the tombstones could be
+			// "collapsed", but it is hardly worth the risk at this point.
+			err := r.store.engine.ClearIterRange(iter, start, end)
+			iter.Close()
+
+			if err != nil {
+				log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", newTruncState, err)
+			}
+		}
+
 		// Clear any entries in the Raft log entry cache for this range up
 		// to and including the most recently truncated index.
 		r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)
-		log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", newTruncState.Index)
-		if err := r.raftMu.sideloaded.TruncateTo(ctx, newTruncState.Index+1); err != nil {
-			// We don't *have* to remove these entries for correctness. Log a
-			// loud error, but keep humming along.
-			log.Errorf(ctx, "while removing sideloaded files during log truncation: %s", err)
+
+		// Truncate the sideloaded storage.
+		{
+			log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", newTruncState.Index)
+			if err := r.raftMu.sideloaded.TruncateTo(ctx, newTruncState.Index+1); err != nil {
+				// We don't *have* to remove these entries for correctness. Log a
+				// loud error, but keep humming along.
+				log.Errorf(ctx, "while removing sideloaded files during log truncation: %s", err)
+			}
 		}
 	}
 
