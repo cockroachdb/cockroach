@@ -572,6 +572,9 @@ func mvccGetUsingIter(
 
 	value, intents, _, err := mvccGetInternal(ctx, iter, metaKey,
 		timestamp, consistent, safeValue, txn, buf)
+	if !value.IsPresent() {
+		value = nil
+	}
 	if value == &buf.value {
 		value = &roachpb.Value{}
 		*value = buf.value
@@ -795,11 +798,6 @@ func mvccGetInternal(
 		// Fifth case: There's no value in our future up to MaxTimestamp, and those
 		// are the only ones that we're not certain about. The correct key has
 		// already been read above, so there's nothing left to do.
-	}
-
-	if len(iter.UnsafeValue()) == 0 {
-		// Value is deleted.
-		return nil, ignoredIntents, safeValue, nil
 	}
 
 	value := &buf.value
@@ -1206,7 +1204,7 @@ func MVCCIncrement(
 
 	var int64Val int64
 	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn, func(value *roachpb.Value) ([]byte, error) {
-		if value != nil {
+		if value.IsPresent() {
 			var err error
 			if int64Val, err = value.GetInt(); err != nil {
 				return nil, errors.Errorf("key %q does not contain an integer value", key)
@@ -1282,7 +1280,7 @@ func mvccConditionalPutUsingIter(
 	return mvccPutUsingIter(
 		ctx, engine, iter, ms, key, timestamp, noValue, txn,
 		func(existVal *roachpb.Value) ([]byte, error) {
-			if expValPresent, existValPresent := expVal != nil, existVal != nil; expValPresent && existValPresent {
+			if expValPresent, existValPresent := expVal != nil, existVal.IsPresent(); expValPresent && existValPresent {
 				// Every type flows through here, so we can't use the typed getters.
 				if !bytes.Equal(expVal.RawBytes, existVal.RawBytes) {
 					return nil, &roachpb.ConditionFailedError{
@@ -1345,7 +1343,7 @@ func mvccInitPutUsingIter(
 ) error {
 	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn,
 		func(existVal *roachpb.Value) ([]byte, error) {
-			if existVal != nil {
+			if existVal.IsPresent() {
 				if !bytes.Equal(value.RawBytes, existVal.RawBytes) {
 					return nil, &roachpb.ConditionFailedError{
 						ActualValue: existVal.ShallowClone(),
@@ -1694,7 +1692,7 @@ func MVCCIterate(
 		value, newIntents, valueSafety, err := mvccGetInternal(
 			ctx, iter, metaKey, timestamp, consistent, unsafeValue, txn, buf)
 		intents = append(intents, newIntents...)
-		if value != nil {
+		if value.IsPresent() {
 			if valueSafety == unsafeValue {
 				// Copy the unsafe value into our allocation buffer.
 				alloc, value.RawBytes = alloc.Copy(value.RawBytes, 0)
