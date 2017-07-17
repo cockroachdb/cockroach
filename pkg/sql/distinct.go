@@ -40,6 +40,10 @@ type distinctNode struct {
 	// prefixSeen value.
 	suffixSeen   map[string]struct{}
 	suffixMemAcc WrappableMemoryAccount
+
+	// cancelChecker is used to check if the related query has been
+	// cancelled, at which point all processing can be stopped.
+	cancelChecker *cancelChecker
 }
 
 // distinct constructs a distinctNode.
@@ -50,6 +54,7 @@ func (p *planner) Distinct(n *parser.SelectClause) *distinctNode {
 	d := &distinctNode{p: p}
 	d.prefixMemAcc = p.session.TxnState.OpenAccount()
 	d.suffixMemAcc = p.session.TxnState.OpenAccount()
+	d.cancelChecker = makeCancelChecker(p)
 	return d
 }
 
@@ -77,6 +82,10 @@ func (n *distinctNode) Next(ctx context.Context) (bool, error) {
 	suffixMemAcc := n.suffixMemAcc.Wtxn(n.p.session)
 
 	for {
+		if err := n.cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
 		next, err := n.plan.Next(ctx)
 		if !next {
 			return false, err

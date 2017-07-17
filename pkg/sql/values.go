@@ -19,7 +19,6 @@ package sql
 import (
 	"container/heap"
 	"fmt"
-	"sort"
 	"strconv"
 
 	"golang.org/x/net/context"
@@ -236,9 +235,9 @@ func (n *valuesNode) ResetLen() {
 }
 
 // SortAll sorts all values in the valuesNode.rows slice.
-func (n *valuesNode) SortAll() {
+func (n *valuesNode) SortAll(cancelChecker *cancelChecker) {
 	n.invertSorting = false
-	sort.Sort(n)
+	doSort(n, cancelChecker)
 }
 
 // InitMaxHeap initializes the valuesNode.rows slice as a max-heap.
