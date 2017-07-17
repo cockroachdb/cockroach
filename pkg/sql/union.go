@@ -85,11 +85,12 @@ func (p *planner) UnionClause(
 	}
 
 	node := &unionNode{
-		right:   right,
-		left:    left,
-		emitAll: emitAll,
-		emit:    emit,
-		scratch: make([]byte, 0),
+		right:         right,
+		left:          left,
+		emitAll:       emitAll,
+		emit:          emit,
+		scratch:       make([]byte, 0),
+		cancelChecker: makeCancelChecker(p),
 	}
 	return node, nil
 }
@@ -133,6 +134,10 @@ type unionNode struct {
 	emitAll     bool // emitAll is a performance optimization for UNION ALL.
 	emit        unionNodeEmit
 	scratch     []byte
+
+	// cancelChecker is used to check if the related query has been
+	// cancelled, at which point all processing can be stopped.
+	cancelChecker sqlbase.CancelChecker
 }
 
 func (n *unionNode) Values() parser.Datums {
@@ -201,6 +206,9 @@ func (n *unionNode) Start(ctx context.Context) error {
 }
 
 func (n *unionNode) Next(ctx context.Context) (bool, error) {
+	if err := n.cancelChecker.Check(); err != nil {
+		return false, err
+	}
 	if n.right != nil {
 		return n.readRight(ctx)
 	}

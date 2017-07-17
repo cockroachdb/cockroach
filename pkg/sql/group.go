@@ -141,8 +141,9 @@ func (p *planner) groupBy(
 	}
 
 	group := &groupNode{
-		planner: p,
-		plan:    r,
+		planner:       p,
+		plan:          r,
+		cancelChecker: makeCancelChecker(p),
 	}
 
 	// We replace the columns in the underlying renderNode with what the
@@ -299,6 +300,10 @@ type groupNode struct {
 	desiredOrdering sqlbase.ColumnOrdering
 	needOnlyOneRow  bool
 	gotOneRow       bool
+
+	// cancelChecker is used to check if the related query has been
+	// cancelled, at which point all processing can be stopped.
+	cancelChecker sqlbase.CancelChecker
 }
 
 func (n *groupNode) Values() parser.Datums {
@@ -316,6 +321,9 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 	// Subsequent calls to next will skip the first part and just return a result.
 	for !n.populated {
 		next := false
+		if err := n.cancelChecker.Check(); err != nil {
+			return false, err
+		}
 		if !(n.needOnlyOneRow && n.gotOneRow) {
 			var err error
 			next, err = n.plan.Next(ctx)

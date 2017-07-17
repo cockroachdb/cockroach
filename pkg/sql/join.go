@@ -159,6 +159,10 @@ type joinNode struct {
 	// finishedOutput indicates that we've finished writing all of the rows for
 	// this join and that we can quit as soon as our buffer is empty.
 	finishedOutput bool
+
+	// cancelChecker short-circuits this join if the associated query has been
+	// cancelled.
+	cancelChecker sqlbase.CancelChecker
 }
 
 // commonColumns returns the names of columns common on the
@@ -248,12 +252,13 @@ func (p *planner) makeJoin(
 	}
 
 	n := &joinNode{
-		planner:  p,
-		left:     left,
-		right:    right,
-		joinType: typ,
-		pred:     pred,
-		columns:  info.sourceColumns,
+		planner:       p,
+		left:          left,
+		right:         right,
+		joinType:      typ,
+		pred:          pred,
+		columns:       info.sourceColumns,
+		cancelChecker: makeCancelChecker(p),
 	}
 
 	n.buffer = &RowBuffer{
@@ -368,6 +373,10 @@ func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
 	// Compute next batch of matching rows.
 	var scratch []byte
 	for {
+		if err := n.cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
 		leftHasRow, err := n.left.plan.Next(ctx)
 		if err != nil {
 			return false, nil
@@ -503,6 +512,9 @@ func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
 
 	for _, b := range n.buckets.Buckets() {
 		for idx, rrow := range b.Rows() {
+			if err := n.cancelChecker.Check(); err != nil {
+				return false, err
+			}
 			if !b.Seen(idx) {
 				n.pred.prepareRow(n.output, n.emptyLeft, rrow)
 				if _, err := n.buffer.AddRow(ctx, n.output); err != nil {

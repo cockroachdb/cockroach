@@ -32,6 +32,7 @@ type insertNode struct {
 	editNodeBase
 	defaultExprs []parser.TypedExpr
 	n            *parser.Insert
+	p            *planner
 	checkHelper  checkHelper
 
 	insertCols            []sqlbase.ColumnDescriptor
@@ -200,6 +201,7 @@ func (p *planner) Insert(
 
 	in := &insertNode{
 		n:                     n,
+		p:                     p,
 		editNodeBase:          en,
 		defaultExprs:          defaultExprs,
 		insertCols:            ri.InsertCols,
@@ -257,6 +259,13 @@ func (n *insertNode) Close(ctx context.Context) {
 func (n *insertNode) Next(ctx context.Context) (bool, error) {
 	if next, err := n.run.rows.Next(ctx); !next {
 		if err == nil {
+			// Mark this query as non-cancellable
+			if n.p.autoCommit && n.p.stmt != nil {
+				queryMeta := n.p.stmt.queryMeta
+				if err := queryMeta.setNonCancellable(); err != nil {
+					return false, err
+				}
+			}
 			// We're done. Finish the batch.
 			err = n.tw.finalize(ctx, n.p.session.Tracing.KVTracingEnabled())
 		}

@@ -278,18 +278,24 @@ func (n *sortNode) Start(ctx context.Context) error {
 }
 
 func (n *sortNode) Next(ctx context.Context) (bool, error) {
+	cancelChecker := makeCancelChecker(n.p)
+
 	for n.needSort {
 		if v, ok := n.plan.(*valuesNode); ok {
 			// The plan we wrap is already a values node. Just sort it.
 			v.ordering = n.ordering
 			n.sortStrategy = newSortAllStrategy(v)
-			n.sortStrategy.Finish(ctx)
+			n.sortStrategy.Finish(ctx, cancelChecker)
 			n.needSort = false
 			break
 		} else if n.sortStrategy == nil {
 			v := n.p.newContainerValuesNode(planColumns(n.plan), 0)
 			v.ordering = n.ordering
 			n.sortStrategy = newSortAllStrategy(v)
+		}
+
+		if err := cancelChecker.Check(); err != nil {
+			return false, err
 		}
 
 		// TODO(andrei): If we're scanning an index with a prefix matching an
@@ -302,7 +308,7 @@ func (n *sortNode) Next(ctx context.Context) (bool, error) {
 			return false, err
 		}
 		if !next {
-			n.sortStrategy.Finish(ctx)
+			n.sortStrategy.Finish(ctx, cancelChecker)
 			n.valueIter = n.sortStrategy
 			n.needSort = false
 			break
@@ -312,6 +318,11 @@ func (n *sortNode) Next(ctx context.Context) (bool, error) {
 		if err := n.sortStrategy.Add(ctx, values); err != nil {
 			return false, err
 		}
+	}
+
+	// Check again, in case sort returned early due to a cancellation.
+	if err := cancelChecker.Check(); err != nil {
+		return false, err
 	}
 
 	if n.valueIter == nil {
@@ -349,7 +360,7 @@ type sortingStrategy interface {
 	// after all values have been provided to the strategy. The method should
 	// not be called more than once, and should only be called after all Add
 	// calls have occurred.
-	Finish(context.Context)
+	Finish(context.Context, sqlbase.CancelChecker)
 }
 
 // sortAllStrategy reads in all values into the wrapped valuesNode and
@@ -372,8 +383,8 @@ func (ss *sortAllStrategy) Add(ctx context.Context, values parser.Datums) error 
 	return err
 }
 
-func (ss *sortAllStrategy) Finish(context.Context) {
-	ss.vNode.SortAll()
+func (ss *sortAllStrategy) Finish(ctx context.Context, cancelChecker sqlbase.CancelChecker) {
+	ss.vNode.SortAll(cancelChecker)
 }
 
 func (ss *sortAllStrategy) Next(ctx context.Context) (bool, error) {
@@ -415,7 +426,7 @@ func (ss *iterativeSortStrategy) Add(ctx context.Context, values parser.Datums) 
 	return err
 }
 
-func (ss *iterativeSortStrategy) Finish(context.Context) {
+func (ss *iterativeSortStrategy) Finish(context.Context, sqlbase.CancelChecker) {
 	ss.vNode.InitMinHeap()
 }
 
@@ -485,11 +496,14 @@ func (ss *sortTopKStrategy) Add(ctx context.Context, values parser.Datums) error
 	return nil
 }
 
-func (ss *sortTopKStrategy) Finish(context.Context) {
+func (ss *sortTopKStrategy) Finish(ctx context.Context, cancelChecker sqlbase.CancelChecker) {
 	// Pop all values in the heap, resulting in the inverted ordering
 	// being sorted in reverse. Therefore, the slice is ordered correctly
 	// in-place.
 	for ss.vNode.Len() > 0 {
+		if cancelChecker.Check() != nil {
+			return
+		}
 		heap.Pop(ss.vNode)
 	}
 	ss.vNode.ResetLen()

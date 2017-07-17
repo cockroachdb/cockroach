@@ -76,9 +76,10 @@ func (p *planner) window(
 	}
 
 	window := &windowNode{
-		planner:      p,
-		values:       valuesNode{columns: s.columns},
-		windowRender: make([]parser.TypedExpr, len(s.render)),
+		planner:       p,
+		values:        valuesNode{columns: s.columns},
+		windowRender:  make([]parser.TypedExpr, len(s.render)),
+		cancelChecker: makeCancelChecker(p),
 	}
 
 	if err := window.extractWindowFunctions(s); err != nil {
@@ -458,6 +459,10 @@ type windowNode struct {
 	aggContainer windowNodeAggContainer
 
 	windowsAcc WrappableMemoryAccount
+
+	// cancelChecker is used to check if the related query has been
+	// cancelled, at which point all processing can be stopped.
+	cancelChecker sqlbase.CancelChecker
 }
 
 func (n *windowNode) Values() parser.Datums {
@@ -468,6 +473,10 @@ func (n *windowNode) Start(ctx context.Context) error { return n.plan.Start(ctx)
 
 func (n *windowNode) Next(ctx context.Context) (bool, error) {
 	for !n.populated {
+		if err := n.cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
 		next, err := n.plan.Next(ctx)
 		if err != nil {
 			return false, err

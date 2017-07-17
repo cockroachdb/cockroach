@@ -43,6 +43,10 @@ type valueGenerator struct {
 
 	// columns is the signature of this generator.
 	columns sqlbase.ResultColumns
+
+	// cancelChecker is used to short-circuit generation if the related query
+	// is cancelled.
+	cancelChecker sqlbase.CancelChecker
 }
 
 // makeGenerator creates a valueGenerator instance that wraps a call to a
@@ -79,10 +83,13 @@ func (p *planner) makeGenerator(ctx context.Context, t *parser.FuncExpr) (planNo
 		}
 	}
 
+	cancelChecker := makeCancelChecker(p)
+
 	return &valueGenerator{
-		p:       p,
-		expr:    normalized,
-		columns: columns,
+		p:             p,
+		expr:          normalized,
+		columns:       columns,
+		cancelChecker: cancelChecker,
 	}, nil
 }
 
@@ -107,8 +114,13 @@ func (n *valueGenerator) Start(context.Context) error {
 	return nil
 }
 
-func (n *valueGenerator) Next(context.Context) (bool, error) { return n.gen.Next() }
-func (n *valueGenerator) Values() parser.Datums              { return n.gen.Values() }
+func (n *valueGenerator) Next(context.Context) (bool, error) {
+	if err := n.cancelChecker.Check(); err != nil {
+		return false, err
+	}
+	return n.gen.Next()
+}
+func (n *valueGenerator) Values() parser.Datums { return n.gen.Values() }
 
 func (n *valueGenerator) Close(context.Context) {
 	if n.gen != nil {
