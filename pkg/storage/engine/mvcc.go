@@ -648,8 +648,9 @@ func mvccGetMetadata(
 	// mvccVersionTimestampSize. The size of the metadata key is
 	// accounted for separately.
 	meta.KeyBytes = mvccVersionTimestampSize
-	meta.ValBytes = int64(len(iter.UnsafeValue()))
-	meta.Deleted = len(iter.UnsafeValue()) == 0
+	valueLen := len(iter.UnsafeValue())
+	meta.ValBytes = int64(valueLen)
+	meta.Deleted = valueLen == 0
 	meta.Timestamp = unsafeKey.Timestamp
 	return true, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
 }
@@ -1468,8 +1469,9 @@ func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) 
 		// mvccVersionTimestampSize. The size of the metadata key is accounted for
 		// separately.
 		meta.KeyBytes = mvccVersionTimestampSize
-		meta.ValBytes = int64(len(iter.UnsafeValue()))
-		meta.Deleted = len(iter.UnsafeValue()) == 0
+		valueLen := len(iter.UnsafeValue())
+		meta.ValBytes = int64(valueLen)
+		meta.Deleted = valueLen == 0
 		return metaKey, nil
 	}
 	if err := iter.ValueProto(meta); err != nil {
@@ -1513,8 +1515,9 @@ func getReverseScanMeta(
 			// mvccVersionTimestampSize. The size of the metadata key is accounted
 			// for separately.
 			meta.KeyBytes = mvccVersionTimestampSize
-			meta.ValBytes = int64(len(iter.UnsafeValue()))
-			meta.Deleted = len(iter.UnsafeValue()) == 0
+			valueLen := len(iter.UnsafeValue())
+			meta.ValBytes = int64(valueLen)
+			meta.Deleted = valueLen == 0
 			return metaKey, nil
 		}
 	}
