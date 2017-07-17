@@ -84,6 +84,7 @@ func VerifyBatchRepr(
 //
 // `cannot use engine.GoToCSlice(repr) (type engine.C.struct___0) as type C.struct___0 in argument to _Cfunc_DBBatchReprVerify`
 //
+// The issue is tracked upstream at https://github.com/golang/go/issues/13467.
 // At worst, we could split these out into a separate file in storage/engine and
 // use `go generate` to copy it here so they stay in sync.
 
