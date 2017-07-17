@@ -1398,10 +1398,22 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 			// TODO(radu): for full outer joins, this will be more tricky: we would
 			// need an output column that outputs either the left or the right
 			// equality column, whichever is not NULL.
-			joinToStreamColMap[joinCol] = addOutCol(uint32(i))
+			if n.joinType != joinTypeInner {
+				joinToStreamColMap[joinCol] = addOutCol(uint32(i))
+			} else {
+				joinToStreamColMap[joinCol] = addOutCol(uint32(joinerSpec.LeftEqColumns[i]))
+			}
 		}
 		joinCol++
 	}
+
+	if n.joinType == joinTypeInner {
+		// In case of INNER join there is no need in extra columns
+		mergedColNum = 0
+	} else {
+		joinerSpec.MergedColumns = uint32(mergedColNum)
+	}
+
 	for i := 0; i < n.pred.numLeftCols; i++ {
 		if !n.columns[joinCol].Omitted {
 			joinToStreamColMap[joinCol] = addOutCol(
@@ -1417,7 +1429,6 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		}
 		joinCol++
 	}
-	joinerSpec.MergedColumns = uint32(mergedColNum)
 
 	if n.pred.onCond != nil {
 		// We have to remap ordinal references in the on condition (which refer to
