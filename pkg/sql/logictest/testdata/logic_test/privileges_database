@@ -129,7 +129,7 @@ GRANT ALL ON DATABASE a TO bar
 statement ok
 REVOKE ALL ON DATABASE a FROM bar
 
-statement error user testuser does not have DROP privilege on table t
+statement error user testuser does not have DROP privilege on relation t
 DROP DATABASE a
 
 user root

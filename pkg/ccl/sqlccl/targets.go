@@ -32,7 +32,7 @@ func descriptorsMatchingTargets(
 
 	starByDatabase := make(map[string]validity, len(targets.Databases))
 	for _, d := range targets.Databases {
-		starByDatabase[d.Normalize()] = maybeValid
+		starByDatabase[string(d)] = maybeValid
 	}
 
 	type table struct {
@@ -55,9 +55,9 @@ func descriptorsMatchingTargets(
 					return nil, err
 				}
 			}
-			db := p.DatabaseName.Normalize()
+			db := string(p.DatabaseName)
 			tablesByDatabase[db] = append(tablesByDatabase[db], table{
-				name:     p.TableName.Normalize(),
+				name:     string(p.TableName),
 				validity: maybeValid,
 			})
 		case *parser.AllTablesSelector:
@@ -66,7 +66,7 @@ func descriptorsMatchingTargets(
 					return nil, err
 				}
 			}
-			starByDatabase[p.Database.Normalize()] = maybeValid
+			starByDatabase[string(p.Database)] = maybeValid
 		default:
 			return nil, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
 		}
@@ -78,7 +78,7 @@ func descriptorsMatchingTargets(
 	for _, desc := range descriptors {
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
 			databasesByID[dbDesc.ID] = dbDesc
-			normalizedDBName := parser.ReNormalizeName(dbDesc.Name)
+			normalizedDBName := dbDesc.Name
 			if _, ok := starByDatabase[normalizedDBName]; ok {
 				starByDatabase[normalizedDBName] = valid
 				ret = append(ret, desc)
@@ -94,10 +94,10 @@ func descriptorsMatchingTargets(
 			if !ok {
 				return nil, errors.Errorf("unknown ParentID: %d", tableDesc.ParentID)
 			}
-			normalizedDBName := parser.ReNormalizeName(dbDesc.Name)
+			normalizedDBName := dbDesc.Name
 			if tables, ok := tablesByDatabase[normalizedDBName]; ok {
 				for i := range tables {
-					if parser.ReNormalizeName(tables[i].name) == parser.ReNormalizeName(tableDesc.Name) {
+					if tables[i].name == tableDesc.Name {
 						tables[i].validity = valid
 						ret = append(ret, desc)
 						break

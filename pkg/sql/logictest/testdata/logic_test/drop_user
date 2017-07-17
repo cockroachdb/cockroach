@@ -109,5 +109,5 @@ user4
 
 user testuser
 
-statement error pq: user testuser does not have DELETE privilege on table users
+statement error pq: user testuser does not have DELETE privilege on relation users
 DROP USER user2

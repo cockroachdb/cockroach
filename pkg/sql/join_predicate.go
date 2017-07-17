@@ -168,8 +168,8 @@ func makeUsingPredicate(
 ) (*joinPredicate, *dataSourceInfo, error) {
 	seenNames := make(map[string]struct{})
 
-	for _, unnormalizedColName := range colNames {
-		colName := unnormalizedColName.Normalize()
+	for _, syntaxColName := range colNames {
+		colName := string(syntaxColName)
 		// Check for USING(x,x)
 		if _, ok := seenNames[colName]; ok {
 			return nil, nil, fmt.Errorf("column %q appears more than once in USING clause", colName)
@@ -223,8 +223,8 @@ func makeEqualityPredicate(
 
 	// Find out which columns are involved in EqualityPredicate.
 	for i := range leftColNames {
-		leftColName := leftColNames[i].Normalize()
-		rightColName := rightColNames[i].Normalize()
+		leftColName := string(leftColNames[i])
+		rightColName := string(rightColNames[i])
 
 		// Find the column name on the left.
 		leftIdx, leftType, err := pickUsingColumn(left.sourceColumns, leftColName, "left")
@@ -311,8 +311,8 @@ func makeEqualityPredicate(
 	// anonymous data source.
 	for i := 0; i < numMergedEqualityColumns; i++ {
 		anonymousAlias.columnRange = append(anonymousAlias.columnRange, i)
-		hiddenLeftNames = append(hiddenLeftNames, parser.ReNormalizeName(left.sourceColumns[i].Name))
-		hiddenRightNames = append(hiddenRightNames, parser.ReNormalizeName(right.sourceColumns[i].Name))
+		hiddenLeftNames = append(hiddenLeftNames, left.sourceColumns[i].Name)
+		hiddenRightNames = append(hiddenRightNames, right.sourceColumns[i].Name)
 	}
 
 	// Now collect the other table-less columns into the anonymous data
@@ -327,7 +327,7 @@ func makeEqualityPredicate(
 			for _, colIdx := range alias.columnRange {
 				isHidden := false
 				for _, hiddenName := range hiddenNames {
-					if parser.ReNormalizeName(cols[colIdx].Name) == hiddenName {
+					if cols[colIdx].Name == hiddenName {
 						isHidden = true
 						break
 					}
@@ -473,7 +473,7 @@ func pickUsingColumn(
 		if col.Hidden {
 			continue
 		}
-		if parser.ReNormalizeName(col.Name) == colName {
+		if col.Name == colName {
 			idx = j
 		}
 	}

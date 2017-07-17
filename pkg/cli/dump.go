@@ -282,7 +282,7 @@ func getMetadataForTable(
 		`, ts), []driver.Value{tableName, dbName})
 	if err != nil {
 		if err == io.EOF {
-			return tableMetadata{}, errors.Errorf("table %s.%s does not exist", dbName, tableName)
+			return tableMetadata{}, errors.Errorf("relation %s does not exist", name)
 		}
 		return tableMetadata{}, err
 	}

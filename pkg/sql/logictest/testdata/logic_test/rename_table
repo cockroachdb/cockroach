@@ -1,6 +1,6 @@
 # LogicTest: default parallel-stmts distsql
 
-statement error pgcode 42P01 table "foo" does not exist
+statement error pgcode 42P01 relation "foo" does not exist
 ALTER TABLE foo RENAME TO bar
 
 statement ok
@@ -29,7 +29,7 @@ kv
 statement ok
 ALTER TABLE kv RENAME TO new_kv
 
-statement error pgcode 42P01 table "kv" does not exist
+statement error pgcode 42P01 relation "kv" does not exist
 SELECT * FROM kv
 
 query II rowsort
@@ -72,7 +72,7 @@ ALTER TABLE t RENAME TO new_kv
 
 user testuser
 
-statement error user testuser does not have DROP privilege on table t
+statement error user testuser does not have DROP privilege on relation t
 ALTER TABLE test.t RENAME TO t2
 
 user root
@@ -156,5 +156,5 @@ ALTER TABLE test2.v1 RENAME TO test2.v2
 statement error pgcode 42809 "test2.v1" is not a table
 ALTER TABLE test2.v1 RENAME TO test2.v1
 
-statement error cannot rename table "test2.t2" because view "v1" depends on it
+statement error cannot rename relation "test2.t2" because view "v1" depends on it
 ALTER TABLE test2.t2 RENAME TO test2.t3

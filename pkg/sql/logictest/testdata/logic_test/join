@@ -761,7 +761,7 @@ SELECT * FROM [EXPLAIN SELECT
 	   pkc.relname,
 	   con.conname,
 	   pos.n
-  ] WHERE type <> 'values' AND field <> 'size'
+  ] WHERE "Type" <> 'values' AND "Field" <> 'size'
 ----
 0   sort
 0              order     +pktable_schem,+pktable_name,+fk_name,+key_seq

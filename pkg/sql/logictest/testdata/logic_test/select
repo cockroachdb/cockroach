@@ -156,7 +156,7 @@ SELECT 1, * FROM nocols
 query error "kv.*" cannot be aliased
 SELECT kv.* AS foo FROM kv
 
-query error table "bar.kv" not selected in FROM clause
+query error source name "bar.kv" not found in FROM clause
 SELECT bar.kv.* FROM kv
 
 # Don't panic with invalid names (#8024)
@@ -170,7 +170,7 @@ k
 a
 
 query T
-SELECT "Foo"."V" FROM kv AS foo WHERE foo.k = 'a'
+SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
 ----
 NULL
 
@@ -281,7 +281,7 @@ SELECT xyzw.y FROM test.xyzw@foo WHERE z = 3
 ----
 2
 
-query error table "test.unknown" does not exist
+query error relation "test.unknown" does not exist
 SELECT z FROM test.unknown@foo WHERE y = 5
 
 query error index "unknown" not found

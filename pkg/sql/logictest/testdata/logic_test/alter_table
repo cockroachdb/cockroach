@@ -565,10 +565,10 @@ INSERT INTO privs VALUES (1)
 
 user testuser
 
-statement error user testuser does not have CREATE privilege on table privs
+statement error user testuser does not have CREATE privilege on relation privs
 ALTER TABLE privs ADD c INT
 
-statement error user testuser does not have CREATE privilege on table privs
+statement error user testuser does not have CREATE privilege on relation privs
 ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
 user root
@@ -599,10 +599,10 @@ a     INT  false NULL    {primary,foo}
 b     INT  true  NULL    {foo}
 c     INT  true  NULL    {}
 
-statement error table "nonexistent" does not exist
+statement error relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
 
-statement error table "nonexistent" does not exist
+statement error relation "nonexistent" does not exist
 ALTER INDEX nonexistent@noindex SPLIT AT VALUES (42)
 
 user root

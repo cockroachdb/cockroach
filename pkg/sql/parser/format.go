@@ -197,6 +197,11 @@ func AsString(n NodeFormatter) string {
 	return AsStringWithFlags(n, FmtSimple)
 }
 
+// ErrString pretty prints a node to a string. Identifiers are not quoted.
+func ErrString(n NodeFormatter) string {
+	return AsStringWithFlags(n, FmtBareIdentifiers)
+}
+
 // Serialize pretty prints a node to a string using FmtParsable; it is
 // appropriate when we store expressions into strings that are later parsed back
 // into expressions.

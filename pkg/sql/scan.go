@@ -205,12 +205,12 @@ func (n *scanNode) initTable(
 func (n *scanNode) lookupSpecifiedIndex(indexHints *parser.IndexHints) error {
 	if indexHints.Index != "" {
 		// Search index by name.
-		indexName := indexHints.Index.Normalize()
-		if indexName == parser.ReNormalizeName(n.desc.PrimaryIndex.Name) {
+		indexName := string(indexHints.Index)
+		if indexName == n.desc.PrimaryIndex.Name {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
 			for i := range n.desc.Indexes {
-				if indexName == parser.ReNormalizeName(n.desc.Indexes[i].Name) {
+				if indexName == n.desc.Indexes[i].Name {
 					n.specifiedIndex = &n.desc.Indexes[i]
 					break
 				}

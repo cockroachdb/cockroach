@@ -145,9 +145,9 @@ func (p *planner) orderBy(
 				// handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY b
-				target := c.ColumnName.Normalize()
+				target := string(c.ColumnName)
 				for j, col := range columns {
-					if parser.ReNormalizeName(col.Name) == target {
+					if col.Name == target {
 						if index != -1 {
 							// There is more than one render alias that matches the ORDER BY
 							// clause. Here, SQL92 is specific as to what should be done:
@@ -273,16 +273,15 @@ func (p *planner) rewriteIndexOrderings(
 			if err != nil {
 				return nil, err
 			}
-			normIdxName := o.Index.Normalize()
 			var idxDesc *sqlbase.IndexDescriptor
-			if normIdxName == "" || normIdxName == parser.ReNormalizeName(desc.PrimaryIndex.Name) {
+			if o.Index == "" || string(o.Index) == desc.PrimaryIndex.Name {
 				// ORDER BY PRIMARY KEY / ORDER BY INDEX t@primary
 				idxDesc = &desc.PrimaryIndex
 			} else {
 				// ORDER BY INDEX t@somename
 				// We need to search for the index with that name.
 				for i := range desc.Indexes {
-					if normIdxName == parser.ReNormalizeName(desc.Indexes[i].Name) {
+					if string(o.Index) == desc.Indexes[i].Name {
 						idxDesc = &desc.Indexes[i]
 						break
 					}

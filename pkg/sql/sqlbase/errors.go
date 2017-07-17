@@ -126,18 +126,14 @@ func IsUndefinedDatabaseError(err error) bool {
 	return errHasCode(err, pgerror.CodeInvalidCatalogNameError)
 }
 
-// NewUndefinedTableError creates an error that represents a missing database table.
-func NewUndefinedTableError(name string) error {
-	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError, "table %q does not exist", name)
+// NewUndefinedRelationError creates an error that represents a missing database table or view.
+func NewUndefinedRelationError(name parser.NodeFormatter) error {
+	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
+		"relation %q does not exist", parser.ErrString(name))
 }
 
-// NewUndefinedViewError creates an error that represents a missing database view.
-func NewUndefinedViewError(name string) error {
-	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError, "view %q does not exist", name)
-}
-
-// IsUndefinedTableError returns true if the error is for an undefined table.
-func IsUndefinedTableError(err error) bool {
+// IsUndefinedRelationError returns true if the error is for an undefined table.
+func IsUndefinedRelationError(err error) bool {
 	return errHasCode(err, pgerror.CodeUndefinedTableError)
 }
 
@@ -152,8 +148,9 @@ func NewRelationAlreadyExistsError(name string) error {
 }
 
 // NewWrongObjectTypeError creates a wrong object type error.
-func NewWrongObjectTypeError(name, desiredObjType string) error {
-	return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "%q is not a %s", name, desiredObjType)
+func NewWrongObjectTypeError(name *parser.TableName, desiredObjType string) error {
+	return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "%q is not a %s",
+		parser.ErrString(name), desiredObjType)
 }
 
 // NewSyntaxError creates a syntax error.

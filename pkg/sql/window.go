@@ -157,7 +157,7 @@ func (n *windowNode) constructWindowDefinitions(
 	// Process each named window specification on the select clause.
 	namedWindowSpecs := make(map[string]*parser.WindowDef, len(sc.Window))
 	for _, windowDef := range sc.Window {
-		name := windowDef.Name.Normalize()
+		name := string(windowDef.Name)
 		if _, ok := namedWindowSpecs[name]; ok {
 			return errors.Errorf("window %q is already defined", name)
 		}
@@ -229,12 +229,12 @@ func constructWindowDef(
 	case def.RefName != "":
 		// SELECT rank() OVER (w) FROM t WINDOW w as (...)
 		// We copy the referenced window specification, and modify it if necessary.
-		refName = def.RefName.Normalize()
+		refName = string(def.RefName)
 		modifyRef = true
 	case def.Name != "":
 		// SELECT rank() OVER w FROM t WINDOW w as (...)
 		// We use the referenced window specification directly, without modification.
-		refName = def.Name.Normalize()
+		refName = string(def.Name)
 	}
 	if refName == "" {
 		return def, nil
