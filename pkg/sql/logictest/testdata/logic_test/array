@@ -16,13 +16,18 @@ SELECT ARRAY['a', true, 1]
 query T
 SELECT ARRAY['a,', 'b{', 'c}', 'd', 'e f']
 ----
-{'a,','b{','c}',d,'e f'}
+{"a,","b{","c}",d,"e f"}
 
 # TODO(jordan): #16487
 # query T
 # SELECT ARRAY[e'g\x10h']
 # ----
 # {g\x10h}
+
+query T
+SELECT ARRAY['', 'NULL', 'Null', 'null', NULL, '"']
+----
+{"","NULL","Null","null",NULL,"\""}
 
 # array construction from subqueries
 

@@ -41,6 +41,10 @@ type fmtFlags struct {
 	// If true, strings will be rendered without wrapping quotes if they
 	// contain no special characters.
 	bareStrings bool
+	// If true, strings will be wrapped with double quotes rather than single quotes.
+	doubleQuoteStrings bool
+	// If true, strings with an escaped character will not be prefixed with an `e`.
+	omitEscapeSigil bool
 	// If true, identifiers will be rendered without wrapping quotes.
 	bareIdentifiers bool
 	// If true, datums and placeholders will have type annotations (like
@@ -69,6 +73,14 @@ var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
 // FmtBareStrings instructs the pretty-printer to print strings without
 // wrapping quotes, if the string contains no special characters.
 var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
+
+// FmtArrays instructs the pretty-printer to print strings as if they
+// are inside of arrays (which is a special case for Postgres compatibility).
+var FmtArrays FmtFlags = &fmtFlags{
+	bareStrings:        true,
+	doubleQuoteStrings: true,
+	omitEscapeSigil:    true,
+}
 
 // FmtBareIdentifiers instructs the pretty-printer to print
 // identifiers without wrapping quotes in any case.

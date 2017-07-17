@@ -25,6 +25,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -42,6 +43,12 @@ var (
 		',': true,
 		'{': true,
 		'}': true,
+	}
+	// mustQuoteStringsMap contains strings which must always be quoted, for the
+	// same reasons as mustQuoteMap.
+	mustQuoteStringsMap = map[string]bool{
+		"NULL": true,
+		"":     true,
 	}
 	hexMap [256][]byte
 )
@@ -70,21 +77,34 @@ func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 	start := 0
 	escapedString := false
 	bareStrings := f.bareStrings
+	var quoteChar byte = '\''
+	if f.doubleQuoteStrings {
+		quoteChar = '"'
+	}
+	if mustQuoteStringsMap[strings.ToUpper(in)] {
+		buf.WriteByte(quoteChar)
+		buf.WriteString(in)
+		buf.WriteByte(quoteChar)
+		return
+	}
 	// Loop through each unicode code point.
 	for i, r := range in {
 		ch := byte(r)
 		if r >= 0x20 && r < 0x7F {
-			if mustQuoteMap[ch] {
+			if mustQuoteMap[ch] || ch == quoteChar {
 				// We have to quote this string - ignore bareStrings setting
 				bareStrings = false
 			}
-			if encodeMap[ch] == dontEscape {
+			if encodeMap[ch] == dontEscape && ch != quoteChar {
 				continue
 			}
 		}
 
 		if !escapedString {
-			buf.WriteString("e'") // begin e'xxx' string
+			if !f.omitEscapeSigil {
+				buf.WriteByte('e') // begin e'xxx' string
+			}
+			buf.WriteByte(quoteChar)
 			escapedString = true
 		}
 		buf.WriteString(in[start:i])
@@ -106,6 +126,9 @@ func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 			if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
 				buf.WriteByte('\\')
 				buf.WriteByte(encodedChar)
+			} else if ch == quoteChar {
+				buf.WriteByte('\\')
+				buf.WriteByte(quoteChar)
 			} else {
 				// Escape non-printable characters.
 				buf.Write(hexMap[ch])
@@ -120,11 +143,11 @@ func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 
 	quote := !escapedString && !bareStrings
 	if quote {
-		buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
+		buf.WriteByte(quoteChar) // begin 'xxx' string if nothing was escaped
 	}
 	buf.WriteString(in[start:])
 	if escapedString || quote {
-		buf.WriteByte('\'')
+		buf.WriteByte(quoteChar)
 	}
 }
 
@@ -170,6 +193,11 @@ func encodeSQLBytes(buf *bytes.Buffer, in string) {
 			buf.WriteByte('\\')
 			buf.WriteByte(encodedChar)
 			start = i + 1
+		} else if ch == '\'' {
+			buf.WriteString(in[start:i])
+			buf.WriteByte('\\')
+			buf.WriteByte('\'')
+			start = i + 1
 		} else if ch < 0x20 || ch >= 0x7F {
 			buf.WriteString(in[start:i])
 			// Escape non-printable characters.
@@ -189,7 +217,6 @@ func init() {
 		'\r': 'r',
 		'\t': 't',
 		'\\': '\\',
-		'\'': '\'',
 	}
 
 	for i := range encodeMap {

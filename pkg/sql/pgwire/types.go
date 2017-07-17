@@ -199,7 +199,7 @@ func (b *writeBuffer) writeTextDatum(
 			// TODO(radu): we are relying on Format but this doesn't work correctly
 			// if we have an array inside this array. To support nested arrays, we
 			// would need to recurse or add a special FmtFlag.
-			parser.FormatNode(&b.variablePutbuf, parser.FmtBareStrings, d)
+			parser.FormatNode(&b.variablePutbuf, parser.FmtArrays, d)
 		}
 		b.variablePutbuf.WriteString(end)
 		b.writeLengthPrefixedVariablePutbuf()
