@@ -421,6 +421,9 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 
 // InitPut sets the first value for a key to value. An error is reported if a
 // value already exists for the key and it's not equal to the value passed in.
+// If the value passed in is a roachpb.Value with a non-zero MVCC timestamp,
+// an error will also be reported if the MVCC timestamp of the existing value
+// for the key is not exactly equal to the roachpb.Value's MVCC timestamp.
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc). It is illegal to

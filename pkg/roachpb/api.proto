@@ -132,7 +132,9 @@ message ConditionalPutResponse {
 // An InitPutRequest is the argument to the InitPut() method.
 //
 // - If key doesn't exist, sets value.
-// - If key exists, returns an error if value != existing value.
+// - If key exists, returns an error if value != existing value or if
+//   value.Timestamp is non-zero and not exactly equal to the existing value's
+//   timestamp.
 message InitPutRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2 [(gogoproto.nullable) = false];

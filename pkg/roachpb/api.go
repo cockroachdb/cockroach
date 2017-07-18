@@ -801,7 +801,9 @@ func NewConditionalPut(key Key, value, expValue Value) Request {
 
 // NewInitPut returns a Request initialized to put the value at key,
 // as long as the key doesn't exist, returning an error if the key
-// exists and the existing value is different from value.
+// exists and the existing value is different from value, or if the input
+// value has a non-zero MVCC timestamp which is not exactly equal to the
+// existing value's MVCC timestamp.
 func NewInitPut(key Key, value Value) Request {
 	value.InitChecksum(key)
 	return &InitPutRequest{
