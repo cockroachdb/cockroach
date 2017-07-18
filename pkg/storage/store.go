@@ -411,6 +411,10 @@ type Store struct {
 	// gossip interval. Updated atomically.
 	gossipRangeCountdown int32
 	gossipLeaseCountdown int32
+	// gossipWritesPerSecondVal serves a similar purpose, but simply records
+	// the most recently gossiped value so that we can tell if a newly measured
+	// value differs by enough to justify re-gossiping the store.
+	gossipWritesPerSecondVal syncutil.AtomicFloat64
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -1391,6 +1395,10 @@ func (s *Store) GossipStore(ctx context.Context) error {
 		log.Fatalf(ctx, "not connected to gossip")
 	}
 
+	// Temporarily indicate that we're gossiping the store capacity to avoid
+	// recursively triggering a gossip of the store capacity.
+	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, -1)
+
 	storeDesc, err := s.Descriptor()
 	if err != nil {
 		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
@@ -1402,6 +1410,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Max(rangeCountdown, 1))))
 	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 1))))
+	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
 
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
@@ -1467,6 +1476,29 @@ func (s *Store) maybeGossipOnCapacityChange(ctx context.Context, cce capacityCha
 				}
 			}); err != nil {
 			log.Warningf(ctx, "unable to gossip on capacity change: %s", err)
+		}
+	}
+}
+
+// recordNewWritesPerSecond takes a recently calculated value for the number
+// of key writes the store is handling and decides whether it has changed enough
+// to justify re-gossiping the store's capacity.
+func (s *Store) recordNewWritesPerSecond(newVal float64) {
+	oldVal := syncutil.LoadFloat64(&s.gossipWritesPerSecondVal)
+	if oldVal == -1 {
+		// Gossiping of store capacity is already ongoing.
+		return
+	}
+	if newVal < oldVal*.5 || newVal > oldVal*1.5 {
+		ctx := s.AnnotateCtx(context.TODO())
+		if err := s.stopper.RunAsyncTask(
+			ctx, "storage.Store: gossip on writes-per-second change",
+			func(ctx context.Context) {
+				if err := s.GossipStore(ctx); err != nil {
+					log.Warningf(ctx, "error gossiping on writes-per-second change: %s", err)
+				}
+			}); err != nil {
+			log.Warningf(ctx, "unable to gossip on writes-per-second change: %s", err)
 		}
 	}
 }
@@ -2317,6 +2349,7 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	capacity.WritesPerSecond = totalWritesPerSecond
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
+	s.recordNewWritesPerSecond(totalWritesPerSecond)
 
 	return capacity, nil
 }
@@ -3955,7 +3988,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseEpochCount               int64
 		raftLeaderNotLeaseHolderCount int64
 		quiescentCount                int64
-		AveragewritesPerSecond        float64
+		averageWritesPerSecond        float64
 
 		rangeCount                int64
 		unavailableRangeCount     int64
@@ -4003,7 +4036,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		behindCount += metrics.BehindCount
 		selfBehindCount += metrics.SelfBehindCount
 		qps, _ := rep.writeStats.avgQPS()
-		AveragewritesPerSecond += qps
+		averageWritesPerSecond += qps
 		return true // more
 	})
 
@@ -4013,7 +4046,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
-	s.metrics.AverageWritesPerSecond.Update(AveragewritesPerSecond)
+	s.metrics.AverageWritesPerSecond.Update(averageWritesPerSecond)
+	s.recordNewWritesPerSecond(averageWritesPerSecond)
 
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
