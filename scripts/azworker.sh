@@ -41,7 +41,7 @@ case ${1-} in
         --name "${NAME}" \
         --location "${LOCATION}" \
         --os-type linux \
-        --image-urn canonical:UbuntuServer:16.04.0-LTS:latest \
+        --image-urn canonical:UbuntuServer:16.04-LTS:latest \
         --ssh-publickey-file ~/.ssh/id_rsa.pub \
         --admin-username "${USER}" \
         --vm-size "${MACHINE_SIZE}" \
