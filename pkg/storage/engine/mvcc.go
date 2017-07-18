@@ -114,7 +114,9 @@ func (k MVCCKey) Less(l MVCCKey) bool {
 	if c := k.Key.Compare(l.Key); c != 0 {
 		return c < 0
 	}
-	if !l.IsValue() {
+	if !k.IsValue() {
+		return l.IsValue()
+	} else if !l.IsValue() {
 		return false
 	}
 	return l.Timestamp.Less(k.Timestamp)
