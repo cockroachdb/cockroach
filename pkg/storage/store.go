@@ -1983,6 +1983,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	// Clear the original range's request stats, since they include requests for
 	// spans that are now owned by the new range.
 	origRng.leaseholderStats.resetRequestCounts()
+	origRng.writeStats.splitRequestCounts(newRng.writeStats)
 
 	if kr := s.mu.replicasByKey.ReplaceOrInsert(origRng); kr != nil {
 		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, origRng)
@@ -2039,6 +2040,9 @@ func (s *Store) MergeRange(
 		subsumingRng.leaseholderStats.resetRequestCounts()
 	}
 	if subsumingRng.writeStats != nil {
+		// Note: this could be drastically improved by adding a replicaStats method
+		// that merges stats. Resetting stats is typically bad for the rebalancing
+		// logic that depends on them.
 		subsumingRng.writeStats.resetRequestCounts()
 	}
 
