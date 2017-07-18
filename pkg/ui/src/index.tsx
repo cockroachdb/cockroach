@@ -39,6 +39,7 @@ import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
 import ClusterViz from "src/views/devtools/containers/clusterViz";
 import ProblemRanges from "src/views/reports/containers/problemRanges";
+import Network from "src/views/reports/containers/network";
 
 import { alertDataSync } from "src/redux/alerts";
 
@@ -74,6 +75,7 @@ ReactDOM.render(
         <Route path="clusterviz" component={ ClusterViz } />
         <Route path="reports">
           <Route path="problemranges" component={ ProblemRanges } />
+          <Route path="network" component={ Network } />
         </Route>
       </Route>
     </Router>

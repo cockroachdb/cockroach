@@ -73,7 +73,6 @@ func TestDebugRemote(t *testing.T) {
 				"/debug/requests",
 				"/debug/range?id=1",
 				"/debug/certificates",
-				"/debug/network",
 				"/debug/nodes",
 			} {
 				t.Run(url, func(t *testing.T) {
