@@ -18,6 +18,7 @@ package sql
 
 import (
 	"fmt"
+	"sync"
 
 	"golang.org/x/net/context"
 
@@ -26,6 +27,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
+
+var insertNodePool = sync.Pool{
+	New: func() interface{} {
+		return &insertNode{}
+	},
+}
+
+var tableInserterPool = sync.Pool{
+	New: func() interface{} {
+		return &tableInserter{}
+	},
+}
+
+var tableUpserterPool = sync.Pool{
+	New: func() interface{} {
+		return &tableUpserter{}
+	},
+}
 
 type insertNode struct {
 	// The following fields are populated during makePlan.
@@ -140,7 +159,9 @@ func (p *planner) Insert(
 
 	var tw tableWriter
 	if n.OnConflict == nil {
-		tw = &tableInserter{ri: ri, autoCommit: p.autoCommit}
+		ti := tableInserterPool.Get().(*tableInserter)
+		*ti = tableInserter{ri: ri, autoCommit: p.autoCommit}
+		tw = ti
 	} else {
 		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.InsertCols)
 		if err != nil {
@@ -151,12 +172,14 @@ func (p *planner) Insert(
 			// TODO(dan): Postgres allows ON CONFLICT DO NOTHING without specifying a
 			// conflict index, which means do nothing on any conflict. Support this if
 			// someone needs it.
-			tw = &tableUpserter{
+			tu := tableUpserterPool.Get().(*tableUpserter)
+			*tu = tableUpserter{
 				ri:            ri,
 				autoCommit:    p.autoCommit,
 				conflictIndex: *conflictIndex,
 				alloc:         &p.alloc,
 			}
+			tw = tu
 		} else {
 			names, err := p.namesForExprs(updateExprs)
 			if err != nil {
@@ -188,7 +211,8 @@ func (p *planner) Insert(
 			if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 				return nil, err
 			}
-			tw = &tableUpserter{
+			tu := tableUpserterPool.Get().(*tableUpserter)
+			*tu = tableUpserter{
 				ri:            ri,
 				autoCommit:    p.autoCommit,
 				alloc:         &p.alloc,
@@ -198,10 +222,12 @@ func (p *planner) Insert(
 				evaler:        helper,
 				isUpsertAlias: n.OnConflict.IsUpsertAlias(),
 			}
+			tw = tu
 		}
 	}
 
-	in := &insertNode{
+	in := insertNodePool.Get().(*insertNode)
+	*in = insertNode{
 		n:                     n,
 		editNodeBase:          en,
 		defaultExprs:          defaultExprs,
@@ -255,6 +281,16 @@ func (n *insertNode) Start(ctx context.Context) error {
 
 func (n *insertNode) Close(ctx context.Context) {
 	n.run.rows.Close(ctx)
+	switch t := n.tw.(type) {
+	case *tableInserter:
+		*t = tableInserter{}
+		tableInserterPool.Put(t)
+	case *tableUpserter:
+		*t = tableUpserter{}
+		tableUpserterPool.Put(t)
+	}
+	*n = insertNode{}
+	insertNodePool.Put(n)
 }
 
 func (n *insertNode) Next(ctx context.Context) (bool, error) {

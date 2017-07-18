@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"sync"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -24,6 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+var deleteNodePool = sync.Pool{
+	New: func() interface{} {
+		return &deleteNode{}
+	},
+}
 
 type deleteNode struct {
 	editNodeBase
@@ -88,7 +96,8 @@ func (p *planner) Delete(
 		return nil, err
 	}
 
-	dn := &deleteNode{
+	dn := deleteNodePool.Get().(*deleteNode)
+	*dn = deleteNode{
 		n:            n,
 		editNodeBase: en,
 		tw:           tw,
@@ -126,6 +135,8 @@ func (d *deleteNode) Start(ctx context.Context) error {
 
 func (d *deleteNode) Close(ctx context.Context) {
 	d.run.rows.Close(ctx)
+	*d = deleteNode{}
+	deleteNodePool.Put(d)
 }
 
 func (d *deleteNode) FastPathResults() (int, bool) {
