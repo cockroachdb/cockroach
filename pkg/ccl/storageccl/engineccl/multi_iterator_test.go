@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -30,39 +29,48 @@ func TestMultiIterator(t *testing.T) {
 	// Each `input` is turned into an iterator and these are passed to a new
 	// MultiIterator, which is fully iterated (using either NextKey or Next) and
 	// turned back into a string in the same format as `input`. This is compared
-	// to expectedNextKey or expectedNext (or if len(errRE) > 0, the expected
-	// string is ignored and an error matching the regex is required.)
+	// to expectedNextKey or expectedNext.
 	//
 	// Input is a string containing key, timestamp, value tuples: first a single
 	// character key, then a single character timestamp walltime. If the
+	// character after the timestamp is an M, this entry is a "metadata" key
+	// (timestamp=0, sorts before any non-0 timestamp, and no value). If the
 	// character after the timestamp is an X, this entry is a deletion
-	// tombstone, otherwise the value is the same as the timestamp.
+	// tombstone. Otherwise the value is the same as the timestamp.
 	tests := []struct {
 		inputs          []string
 		expectedNextKey string
 		expectedNext    string
-		errRE           string
 	}{
-		{[]string{}, "", "", ""},
+		{[]string{}, "", ""},
 
-		{[]string{"a1"}, "a1", "a1", ""},
-		{[]string{"a1b1"}, "a1b1", "a1b1", ""},
-		{[]string{"a2a1"}, "a2", "a2a1", ""},
-		{[]string{"a2a1b1"}, "a2b1", "a2a1b1", ""},
+		{[]string{"a1"}, "a1", "a1"},
+		{[]string{"a1b1"}, "a1b1", "a1b1"},
+		{[]string{"a2a1"}, "a2", "a2a1"},
+		{[]string{"a2a1b1"}, "a2b1", "a2a1b1"},
 
-		{[]string{"a1", "a2"}, "a2", "a2a1", ""},
-		{[]string{"a2", "a1"}, "a2", "a2a1", ""},
-		{[]string{"a1", "b2"}, "a1b2", "a1b2", ""},
-		{[]string{"b2", "a1"}, "a1b2", "a1b2", ""},
-		{[]string{"a1b2", "b3"}, "a1b3", "a1b3b2", ""},
-		{[]string{"a1c2", "b3"}, "a1b3c2", "a1b3c2", ""},
+		{[]string{"a1", "a2"}, "a2", "a2a1"},
+		{[]string{"a2", "a1"}, "a2", "a2a1"},
+		{[]string{"a1", "b2"}, "a1b2", "a1b2"},
+		{[]string{"b2", "a1"}, "a1b2", "a1b2"},
+		{[]string{"a1b2", "b3"}, "a1b3", "a1b3b2"},
+		{[]string{"a1c2", "b3"}, "a1b3c2", "a1b3c2"},
 
-		{[]string{"a1", "a2X"}, "a2X", "a2Xa1", ""},
-		{[]string{"a1", "a2X", "a3"}, "a3", "a3a2Xa1", ""},
-		{[]string{"a1", "a2Xb2"}, "a2Xb2", "a2Xa1b2", ""},
-		{[]string{"a1b2", "a2X"}, "a2Xb2", "a2Xa1b2", ""},
+		{[]string{"aM", "a1"}, "aM", "aMa1"},
+		{[]string{"a1", "aM"}, "aM", "aMa1"},
+		{[]string{"aMa2", "a1"}, "aM", "aMa2a1"},
+		{[]string{"aMa1", "a2"}, "aM", "aMa2a1"},
 
-		{[]string{"a1", "a1"}, "", "", "two entries for the same key and timestamp"},
+		{[]string{"a1", "a2X"}, "a2X", "a2Xa1"},
+		{[]string{"a1", "a2X", "a3"}, "a3", "a3a2Xa1"},
+		{[]string{"a1", "a2Xb2"}, "a2Xb2", "a2Xa1b2"},
+		{[]string{"a1b2", "a2X"}, "a2Xb2", "a2Xa1b2"},
+
+		{[]string{"a1", "a1"}, "a1", "a1"},
+		{[]string{"a4a2a1", "a4a3a1"}, "a4", "a4a3a2a1"},
+		{[]string{"a1b1", "a1b2"}, "a1b2", "a1b2b1"},
+		{[]string{"a1b2", "a1b1"}, "a1b2", "a1b2b1"},
+		{[]string{"a1b1", "a1b1"}, "a1b1", "a1b1"},
 	}
 	for _, test := range tests {
 		name := fmt.Sprintf("%q", test.inputs)
@@ -78,7 +86,10 @@ func TestMultiIterator(t *testing.T) {
 					k := []byte{input[i]}
 					ts := hlc.Timestamp{WallTime: int64(input[i+1])}
 					var v []byte
-					if i+2 < len(input) && input[i+2] == 'X' {
+					if i+1 < len(input) && input[i+1] == 'M' {
+						ts = hlc.Timestamp{}
+						v = nil
+					} else if i+2 < len(input) && input[i+2] == 'X' {
 						v = nil
 						i++
 					} else {
@@ -108,16 +119,20 @@ func TestMultiIterator(t *testing.T) {
 					it := MakeMultiIterator(iters)
 					for it.Seek(engine.MVCCKey{Key: keys.MinKey}); ; subtest.fn(it) {
 						ok, err := it.Valid()
-						if !testutils.IsError(err, test.errRE) {
-							t.Fatalf("expected '%s' error got: %+v", test.errRE, err)
+						if err != nil {
+							t.Fatalf("unexpected error: %+v", err)
 						}
 						if !ok {
 							break
 						}
 						output.Write(it.UnsafeKey().Key)
-						output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
-						if len(it.UnsafeValue()) == 0 {
-							output.WriteRune('X')
+						if it.UnsafeKey().Timestamp == (hlc.Timestamp{}) {
+							output.WriteRune('M')
+						} else {
+							output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
+							if len(it.UnsafeValue()) == 0 {
+								output.WriteRune('X')
+							}
 						}
 					}
 					if actual := output.String(); actual != subtest.expected {
