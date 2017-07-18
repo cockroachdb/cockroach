@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -70,6 +71,12 @@ const Version = 4
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
 const MinAcceptedVersion = 4
+
+var distSQLUseTempStorage = settings.RegisterBoolSetting(
+	"sql.defaults.distsql.tempstorage",
+	"set to true to enable use of disk for larger distributed sql queries",
+	false,
+)
 
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 10*1024)
 
@@ -127,7 +134,7 @@ type ServerImpl struct {
 	// gracefully OOM if the working set gets too large.
 	tempStorage engine.Engine
 	// tempStorageIDGenerator is used to generate unique prefixes per processor so that
-	// each processor uses a nonoverlapping part of the localStorage keyspace.
+	// each processor uses a nonoverlapping part of the temp keyspace.
 	tempStorageIDGenerator TempStorageIDGenerator
 }
 

@@ -299,5 +299,17 @@ func TestMemoryMonitor(t *testing.T) {
 		t.Fatalf("incorrect current allocation: got %d, expected %d", m.mu.curAllocated, 0)
 	}
 
+	limitedMonitor := MakeMonitorWithLimit("testlimit", 10, nil, nil, 1, 1000)
+	limitedMonitor.Start(ctx, &m, BoundAccount{})
+
+	if err := limitedMonitor.reserveMemory(ctx, 10); err != nil {
+		t.Fatalf("limited monitor refused small allocation: %v", err)
+	}
+	if err := limitedMonitor.reserveMemory(ctx, 1); err == nil {
+		t.Fatal("limited monitor allowed allocation over limit")
+	}
+	limitedMonitor.releaseMemory(ctx, 10)
+
+	limitedMonitor.Stop(ctx)
 	m.Stop(ctx)
 }
