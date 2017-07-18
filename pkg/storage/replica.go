@@ -2990,6 +2990,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 				return false, errors.New("cannot sideload empty SSTable")
 			}
 			encode = encodeRaftCommandV2
+			r.store.metrics.AddSSTableProposals.Inc(1)
 			log.Event(p.ctx, "sideloadable proposal detected")
 		}
 
@@ -4174,6 +4175,7 @@ func (r *Replica) processRaftCommand(
 				raftCmd.ReplicatedEvalResult.EndKey,
 				*raftCmd.ReplicatedEvalResult.AddSSTable,
 			)
+			r.store.metrics.AddSSTableApplications.Inc(1)
 			raftCmd.ReplicatedEvalResult.AddSSTable = nil
 		}
 
