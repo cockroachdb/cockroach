@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -494,7 +495,7 @@ func (sc *SchemaChanger) distBackfill(
 			}
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, txn)
 			plan, err := sc.distSQLPlanner.CreateBackfiller(
-				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs,
+				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,
 			)
 			if err != nil {
 				return err
@@ -517,6 +518,23 @@ func (sc *SchemaChanger) backfillIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
+	// Pick a read timestamp for our index backfill, or reuse the previously
+	// stored one.
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		details := *sc.job.WithTxn(txn).Payload().Details.(*jobs.Payload_SchemaChange).SchemaChange
+		if details.ReadAsOf == (hlc.Timestamp{}) {
+			details.ReadAsOf = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			if err := sc.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+				log.Warningf(ctx, "failed to store readAsOf on job %v after completing state machine: %v",
+					sc.job.ID(), err)
+			}
+		}
+		sc.readAsOf = details.ReadAsOf
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	return sc.distBackfill(
 		ctx, evalCtx, lease, version, indexBackfill, indexBackfillChunkSize,
 		distsqlrun.IndexMutationFilter)
