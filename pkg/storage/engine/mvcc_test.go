@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -250,6 +251,7 @@ func TestMVCCKeys(t *testing.T) {
 	}
 	sortKeys := make(mvccKeys, len(keys))
 	copy(sortKeys, keys)
+	shuffle.Shuffle(sortKeys)
 	sort.Sort(sortKeys)
 	if !reflect.DeepEqual(sortKeys, keys) {
 		t.Errorf("expected keys to sort in order %s, but got %s", keys, sortKeys)
