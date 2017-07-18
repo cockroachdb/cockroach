@@ -68,6 +68,38 @@ func newReplicaStats(clock *hlc.Clock, getNodeLocality localityOracle) *replicaS
 	return rs
 }
 
+// splitRequestCounts divides the current replicaStats object in two for the
+// purposes of splitting a range. It modifies itself to have half its requests
+// and returns a second replicaStats with half its requests.
+//
+// Note that assuming a 50/50 split is optimistic, but it's much better than
+// resetting both sides upon a split.
+// TODO(a-robinson): Write test for this.
+func (rs *replicaStats) splitRequestCounts() *replicaStats {
+	newRS := newReplicaStats(rs.clock, rs.getNodeLocality)
+	newRS.mu.Lock()
+	defer newRS.mu.Unlock()
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+
+	newRS.mu.idx = rs.mu.idx
+	newRS.mu.lastRotate = rs.mu.lastRotate
+	newRS.mu.lastReset = rs.mu.lastReset
+
+	for i := range rs.mu.requests {
+		if rs.mu.requests[i] == nil {
+			continue
+		}
+		newRS.mu.requests[i] = make(perLocalityCounts)
+		for k := range rs.mu.requests[i] {
+			newVal := rs.mu.requests[i][k] / 2.0
+			rs.mu.requests[i][k] = newVal
+			newRS.mu.requests[i][k] = newVal
+		}
+	}
+	return newRS
+}
+
 func (rs *replicaStats) record(nodeID roachpb.NodeID) {
 	rs.recordCount(1, nodeID)
 }
