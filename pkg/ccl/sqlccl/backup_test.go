@@ -387,73 +387,11 @@ func verifySystemJob(
 	return nil
 }
 
-// verifySystemJobProgress asserts that the fractionCompleted of the latest job
-// in the system.jobs table is approximately 0.5 when half of the expected
-// responses have completed. If verifier is provided, it will be invoked with
-// the job's ID after the fraction is checked to allow for additional
-// assertions.
-func verifySystemJobProgress(
-	sqlDB *sqlutils.SQLRunner,
-	allowResponse chan struct{},
-	totalExpectedResponses int,
-	verifier func(id int64) error,
-) error {
-	// Allow half the total expected responses to proceed.
-	for i := 0; i < totalExpectedResponses/2; i++ {
-		allowResponse <- struct{}{}
-	}
-
-	// Ensure the fractionCompleted of the latest job is in the range [0.25, 0.75].
-	err := util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
-		var id int64
-		var fractionCompleted float32
-		sqlDB.QueryRow(
-			`SELECT id, fraction_completed FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
-		).Scan(&id, &fractionCompleted)
-		if fractionCompleted < 0.25 || fractionCompleted > 0.75 {
-			return errors.Errorf("expected progress to be in range [0.25, 0.75] after 1s but got %f",
-				fractionCompleted)
-		}
-		return verifier(id)
-	})
-
-	// Close the channel to allow future responses to proceed without us
-	// explicitly writing messages to the channel.
-	close(allowResponse)
-	return err
-}
-
 func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const expectedProgressUpdateCount = backupRestoreDefaultRanges
-
-	// To test incremental progress updates, we install a store response filter,
-	// which runs immediately before a KV command returns its response, in our
-	// test cluster. Whenever we see an Export or Import responses, we do a
-	// blocking read on the allowResponse channel to give the test a chance to
-	// assert the progress of the job.
-	var allowResponse chan struct{}
-	params := base.TestClusterArgs{}
-	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
-		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
-			hasExportOrImport := false
-			for _, res := range br.Responses {
-				if hasExportOrImport = res.Export != nil || res.Import != nil; hasExportOrImport {
-					break
-				}
-			}
-			if !hasExportOrImport {
-				return nil
-			}
-			<-allowResponse
-			return nil
-		},
-	}
-
-	const numAccounts = 1000
-
-	ctx, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
+	const numAccounts = 0
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
 
 	sanitizedIncDir := dir + "/inc"
@@ -462,7 +400,18 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sanitizedFullDir := dir + "/full"
 	fullDir := sanitizedFullDir + "?moarSecretsHere"
 
-	// First, create a full backup so that, below, we can test that incremental
+	backupTableID, err := sqlutils.QueryTableID(sqlDB.DB, "data", "bank")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sqlDB.Exec(`CREATE DATABASE restoredb`)
+	restoreDatabaseID, err := sqlutils.QueryDatabaseID(sqlDB.DB, "restoredb")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We create a full backup so that, below, we can test that incremental
 	// backups sanitize credentials in "INCREMENTAL FROM" URLs.
 	//
 	// NB: We don't bother making assertions about this full backup since there
@@ -470,106 +419,204 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	// status to the system.jobs table. Since the incremental BACKUP syntax is a
 	// superset of the full BACKUP syntax, we'll cover everything by verifying the
 	// incremental backup below.
-	allowResponse = make(chan struct{})
-	// Closing the channel allows export responses to proceed immediately.
-	close(allowResponse)
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`, fullDir)
 
-	var backupTableID uint32
-	jobDone := make(chan error)
-
-	{
-		allowResponse = make(chan struct{})
-		go func() {
-			_, err := sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
-			jobDone <- err
-		}()
-		if err := verifySystemJobProgress(
-			sqlDB, allowResponse, expectedProgressUpdateCount, func(int64) error { return nil },
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := <-jobDone; err != nil {
-			t.Fatal(err)
-		}
-
-		var err error
-		if backupTableID, err = sqlutils.QueryTableID(sqlDB.DB, "data", "bank"); err != nil {
-			t.Fatal(err)
-		}
-		if err := verifySystemJob(sqlDB, 1, jobs.JobTypeBackup, jobs.JobRecord{
-			Username: security.RootUser,
-			Description: fmt.Sprintf(
-				`BACKUP DATABASE data TO '%s' INCREMENTAL FROM '%s'`,
-				sanitizedIncDir, sanitizedFullDir,
-			),
-			DescriptorIDs: sqlbase.IDs{
-				keys.DescriptorTableID,
-				keys.UsersTableID,
-				sqlbase.ID(backupTableID),
-			},
-		}); err != nil {
-			t.Fatal(err)
-		}
+	sqlDB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
+	if err := verifySystemJob(sqlDB, 1, jobs.JobTypeBackup, jobs.JobRecord{
+		Username: security.RootUser,
+		Description: fmt.Sprintf(
+			`BACKUP DATABASE data TO '%s' INCREMENTAL FROM '%s'`,
+			sanitizedIncDir, sanitizedFullDir,
+		),
+		DescriptorIDs: sqlbase.IDs{
+			keys.DescriptorTableID,
+			keys.UsersTableID,
+			sqlbase.ID(backupTableID),
+		},
+	}); err != nil {
+		t.Fatal(err)
 	}
 
-	{
-		sqlDB.Exec(`CREATE DATABASE data2`)
+	sqlDB.Exec(`RESTORE data.* FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
+	if err := verifySystemJob(sqlDB, 2, jobs.JobTypeRestore, jobs.JobRecord{
+		Username: security.RootUser,
+		Description: fmt.Sprintf(
+			`RESTORE data.* FROM '%s', '%s' WITH OPTIONS ('into_db'='restoredb')`,
+			sanitizedFullDir, sanitizedIncDir,
+		),
+		DescriptorIDs: sqlbase.IDs{
+			sqlbase.ID(restoreDatabaseID + 1),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
 
-		allowResponse = make(chan struct{})
+type inProgressChecker func(context context.Context, ip inProgressState) error
+
+// inProgressState holds state about an in-progress backup or restore
+// for use in inProgressCheckers.
+type inProgressState struct {
+	testCluster   *testcluster.TestCluster
+	sqlDB         *sqlutils.SQLRunner
+	backupTableID uint32
+}
+
+func (ip inProgressState) latestJobID() (int64, error) {
+	var id int64
+	if err := ip.sqlDB.DB.QueryRow(
+		`SELECT id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
+	).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (ip inProgressState) internalExecutor() sql.InternalExecutor {
+	return sql.InternalExecutor{
+		LeaseManager: ip.testCluster.Servers[0].LeaseManager().(*sql.LeaseManager),
+	}
+}
+
+func (ip inProgressState) kvDB() *client.DB {
+	return ip.testCluster.Servers[0].DB()
+}
+
+// checkInProgressBackupRestore will run a backup and restore, pausing each
+// approximately halfway through to run either `checkBackup` or `checkRestore`.
+func checkInProgressBackupRestore(
+	t testing.TB, checkBackup inProgressChecker, checkRestore inProgressChecker,
+) {
+	// To test incremental progress updates, we install a store response filter,
+	// which runs immediately before a KV command returns its response, in our
+	// test cluster. Whenever we see an Export or Import response, we do a
+	// blocking read on the allowResponse channel to give the test a chance to
+	// assert the progress of the job.
+	var allowResponse chan struct{}
+	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			for _, res := range br.Responses {
+				if res.Export != nil || res.Import != nil {
+					<-allowResponse
+				}
+			}
+			return nil
+		},
+	}
+
+	const numAccounts = 1000
+	const totalExpectedResponses = backupRestoreDefaultRanges
+
+	ctx, dir, tc, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
+	defer cleanup()
+
+	sqlDB.Exec(`CREATE DATABASE restoredb`)
+
+	backupTableID, err := sqlutils.QueryTableID(sqlDB.DB, "data", "bank")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	do := func(query string, check inProgressChecker) {
+		jobDone := make(chan error)
+		allowResponse = make(chan struct{}, totalExpectedResponses)
+
 		go func() {
-			_, err := sqlDB.DB.Exec(`RESTORE data.* FROM $1, $2 WITH OPTIONS ('into_db'='data2')`, fullDir, incDir)
+			_, err := sqlDB.DB.Exec(query, dir)
 			jobDone <- err
 		}()
 
-		if err := verifySystemJobProgress(
-			sqlDB, allowResponse, expectedProgressUpdateCount, func(id int64) error {
-				iex := sql.InternalExecutor{
-					LeaseManager: tc.Servers[0].LeaseManager().(*sql.LeaseManager),
-				}
-				jobLogger, err := jobs.GetJobLogger(ctx, tc.Servers[0].DB(), iex, id)
-				if err != nil {
-					return err
-				}
-				switch d := jobLogger.Job.Details.(type) {
-				case jobs.RestoreJobDetails:
-					low := keys.MakeTablePrefix(backupTableID)
-					high := keys.MakeTablePrefix(backupTableID + 1)
-					if bytes.Compare(d.LowWaterMark, low) <= 0 || bytes.Compare(d.LowWaterMark, high) >= 0 {
-						return errors.Errorf("expected low water mark %v to be between %v and %v",
-							roachpb.Key(d.LowWaterMark), roachpb.Key(low), roachpb.Key(high))
-					}
-				default:
-					return errors.Errorf("unexpected job details type %T", d)
-				}
-				return nil
-			},
-		); err != nil {
-			t.Fatal(err)
+		// Allow half the total expected responses to proceed.
+		for i := 0; i < totalExpectedResponses/2; i++ {
+			allowResponse <- struct{}{}
 		}
 
-		if err := <-jobDone; err != nil {
-			t.Fatal(err)
-		}
+		err := util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+			return check(ctx, inProgressState{
+				testCluster:   tc,
+				sqlDB:         sqlDB,
+				backupTableID: backupTableID,
+			})
+		})
 
-		databaseID, err := sqlutils.QueryDatabaseID(sqlDB.DB, "data2")
+		// Close the channel to allow all remaining responses to proceed. We do this
+		// even if the above RetryForDuration failed, otherwise the test will hang
+		// forever.
+		close(allowResponse)
+
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := verifySystemJob(sqlDB, 2, jobs.JobTypeRestore, jobs.JobRecord{
-			Username: security.RootUser,
-			Description: fmt.Sprintf(
-				`RESTORE data.* FROM '%s', '%s' WITH OPTIONS ('into_db'='data2')`,
-				sanitizedFullDir, sanitizedIncDir,
-			),
-			DescriptorIDs: sqlbase.IDs{
-				sqlbase.ID(databaseID + 1),
-			},
-		}); err != nil {
+
+		if err := <-jobDone; err != nil {
 			t.Fatal(err)
 		}
 	}
+
+	do(`BACKUP DATABASE data TO $1`, checkBackup)
+	do(`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='restoredb')`, checkRestore)
+}
+
+func TestBackupRestoreSystemJobsProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	checkFraction := func(ctx context.Context, ip inProgressState) error {
+		jobID, err := ip.latestJobID()
+		if err != nil {
+			return err
+		}
+		var fractionCompleted float32
+		if err := ip.sqlDB.DB.QueryRow(
+			`SELECT fraction_completed FROM crdb_internal.jobs WHERE id = $1`,
+			jobID,
+		).Scan(&fractionCompleted); err != nil {
+			return err
+		}
+		if fractionCompleted < 0.25 || fractionCompleted > 0.75 {
+			return errors.Errorf(
+				"expected progress to be in range [0.25, 0.75] but got %f",
+				fractionCompleted,
+			)
+		}
+		return nil
+	}
+
+	checkInProgressBackupRestore(t, checkFraction, checkFraction)
+}
+
+func TestBackupRestoreCheckpointing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	checkBackup := func(ctx context.Context, ip inProgressState) error {
+		// Backups do not yet checkpoint.
+		return nil
+	}
+
+	checkRestore := func(ctx context.Context, ip inProgressState) error {
+		jobID, err := ip.latestJobID()
+		if err != nil {
+			return err
+		}
+		jobLogger, err := jobs.GetJobLogger(ctx, ip.kvDB(), ip.internalExecutor(), jobID)
+		if err != nil {
+			return err
+		}
+		switch d := jobLogger.Job.Details.(type) {
+		case jobs.RestoreJobDetails:
+			low := keys.MakeTablePrefix(ip.backupTableID)
+			high := keys.MakeTablePrefix(ip.backupTableID + 1)
+			if bytes.Compare(d.LowWaterMark, low) <= 0 || bytes.Compare(d.LowWaterMark, high) >= 0 {
+				return errors.Errorf("expected low water mark %v to be between %v and %v",
+					roachpb.Key(d.LowWaterMark), roachpb.Key(low), roachpb.Key(high))
+			}
+		default:
+			return errors.Errorf("unexpected job details type %T", d)
+		}
+		return nil
+	}
+
+	checkInProgressBackupRestore(t, checkBackup, checkRestore)
 }
 
 func TestBackupRestoreInterleaved(t *testing.T) {
