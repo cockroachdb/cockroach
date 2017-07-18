@@ -98,3 +98,17 @@ CREATE TABLE foo3 (x) AS VALUES (1), (NULL); SELECT * FROM foo3 ORDER BY x
 ----
 NULL
 1
+
+statement ok
+CREATE TABLE bool1 (a boolean not null)
+
+statement ok
+INSERT INTO bool1 VALUES (true)
+
+statement ok
+CREATE TABLE bool2 AS SELECT * FROM bool1
+
+query B
+SELECT * FROM bool2
+----
+true
