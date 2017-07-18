@@ -17,8 +17,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -28,9 +26,19 @@ import (
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "TODO",
-	Long:  "TODO",
-	RunE:  MaybeShoutError(MaybeDecorateGRPCError(runInit)),
+	Short: "initialize a cluster",
+	Long: `
+Perform one-time-only initialization of a CockroachDB cluster.
+
+After starting one or more nodes with --join flags, run the init
+command on one node (passing the same --host and certificate flags
+you would use for the sql command). The target of the init command
+must appear in the --join flags of other nodes.
+
+A node started without the --join flag initializes itself as a
+single-node cluster, so the init command is not used in that case.
+`,
+	RunE: MaybeShoutError(MaybeDecorateGRPCError(runInit)),
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -41,16 +49,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	ctx := stopperContext(stopper)
 	defer stopper.Stop(ctx)
 
-	request := &serverpb.BootstrapRequest{}
-	fmt.Println("Request:", request)
-	log.Info(ctx, "Request: ", request)
-	response, err := c.Bootstrap(ctx, request)
-	if err != nil {
+	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
 		log.Error(ctx, err)
 		return err
 	}
-	fmt.Println("Response: ", response)
-	log.Info(ctx, "Response: ", response)
 
 	return nil
 }

@@ -274,8 +274,6 @@ func init() {
 		varFlag(f, sqlSize, cliflags.SQLMem)
 	}
 
-	varFlag(initCmd.Flags(), &serverCfg.JoinList, cliflags.Join)
-
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// All certs commands need the certificate directory.
