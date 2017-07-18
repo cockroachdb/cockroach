@@ -585,9 +585,10 @@
   revision = "728b753d0135da6801d45a38e6f43ff55779c5c2"
 
 [[projects]]
+  branch = "master"
   name = "golang.org/x/net"
   packages = ["context","context/ctxhttp","http2","http2/hpack","idna","internal/timeseries","lex/httplex","proxy","trace"]
-  revision = "a6577fac2d73be281a500b310739095313165611"
+  revision = "b3756b4b77d7b13260a0a2ec658753cf48922eac"
 
 [[projects]]
   name = "golang.org/x/oauth2"
@@ -611,7 +612,7 @@
 
 [[projects]]
   name = "golang.org/x/text"
-  packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","transform","unicode/cldr","unicode/norm","width"]
+  packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable","width"]
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
 
 [[projects]]
