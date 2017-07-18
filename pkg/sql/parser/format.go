@@ -108,6 +108,14 @@ func FmtReformatTableNames(
 	return &f
 }
 
+// StripTypeFormatting removes the flag that extracts types from the format flags,
+// so as to enable rendering expressions for which types have not been computed yet.
+func StripTypeFormatting(f FmtFlags) FmtFlags {
+	nf := *f
+	nf.showTypes = false
+	return &nf
+}
+
 // FmtExpr returns FmtFlags that indicate how the pretty-printer
 // should format expressions.
 func FmtExpr(base FmtFlags, showTypes bool, symbolicVars bool, showTableAliases bool) FmtFlags {
