@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/pkg/errors"
 )
 
 const invalidIdxSentinel = -1
@@ -25,6 +24,9 @@ type multiIterator struct {
 	currentIdx int
 	// The indexes of every iterator with the same key as the one in currentIdx.
 	itersWithCurrentKey []int
+	// The indexes of every iterator with the same key and timestamp as the one
+	// in currentIdx.
+	itersWithCurrentKeyTimestamp []int
 
 	// err, if non-nil, is an error encountered by one of the underlying
 	// Iterators or in some incompatibility between them. If err is non-nil,
@@ -37,11 +39,16 @@ var _ engine.SimpleIterator = &multiIterator{}
 // MakeMultiIterator creates an iterator that multiplexes
 // engine.SimpleIterators. The caller is responsible for closing the passed
 // iterators after closing the returned multiIterator.
+//
+// If two iterators have an entry with exactly the same key and timestamp, the
+// one with a higher index in this constructor arg is preferred. The other is
+// skipped.
 func MakeMultiIterator(iters []engine.SimpleIterator) engine.SimpleIterator {
 	return &multiIterator{
-		iters:               iters,
-		currentIdx:          invalidIdxSentinel,
-		itersWithCurrentKey: make([]int, 0, len(iters)),
+		iters:                        iters,
+		currentIdx:                   invalidIdxSentinel,
+		itersWithCurrentKey:          make([]int, 0, len(iters)),
+		itersWithCurrentKeyTimestamp: make([]int, 0, len(iters)),
 	}
 }
 
@@ -88,8 +95,11 @@ func (f *multiIterator) UnsafeValue() []byte {
 // call, Valid() will be true if the iterator was not positioned at the last
 // key.
 func (f *multiIterator) Next() {
-	// Advance the current iterator one and recompute currentIdx.
-	f.iters[f.currentIdx].Next()
+	// Advance each iterator at the current key and timestamp to its next key,
+	// then recompute currentIdx.
+	for _, iterIdx := range f.itersWithCurrentKeyTimestamp {
+		f.iters[iterIdx].Next()
+	}
 	f.advance()
 }
 
@@ -137,23 +147,26 @@ func (f *multiIterator) advance() {
 			// (because everything seen so for must have had a higher key).
 			f.itersWithCurrentKey = f.itersWithCurrentKey[:0]
 			f.itersWithCurrentKey = append(f.itersWithCurrentKey, iterIdx)
+			f.itersWithCurrentKeyTimestamp = f.itersWithCurrentKeyTimestamp[:0]
+			f.itersWithCurrentKeyTimestamp = append(f.itersWithCurrentKeyTimestamp, iterIdx)
 			proposedNextIdx = iterIdx
 		} else if cmp == 0 {
 			// The iterator at iterIdx has the same key as the current best, add
 			// it to itersWithCurrentKey and check how the timestamps compare.
 			f.itersWithCurrentKey = append(f.itersWithCurrentKey, iterIdx)
-			if proposedMVCCKey.Timestamp.Less(iterMVCCKey.Timestamp) {
-				// This iterator has a greater timestamp and so should sort
-				// first, update the current best.
-				proposedNextIdx = iterIdx
-			} else if proposedMVCCKey.Timestamp == iterMVCCKey.Timestamp {
+			if proposedMVCCKey.Timestamp == iterMVCCKey.Timestamp {
 				// We have two exactly equal mvcc keys (both key and timestamps
-				// match). It's ambiguous which should sort first, so error.
-				f.err = errors.Errorf(
-					"got two entries for the same key and timestamp %s: %x vs %x",
-					iterMVCCKey, f.iters[proposedNextIdx].UnsafeValue(), f.iters[proposedNextIdx].UnsafeValue(),
-				)
-				return
+				// match). The one in the later iterator takes precedence and
+				// the one in the earlier iterator should be omitted from
+				// iteration.
+				f.itersWithCurrentKeyTimestamp = append(f.itersWithCurrentKeyTimestamp, iterIdx)
+				proposedNextIdx = iterIdx
+			} else if iterMVCCKey.Less(proposedMVCCKey) {
+				// This iterator sorts before the current best in mvcc sort
+				// order, so update the current best.
+				f.itersWithCurrentKeyTimestamp = f.itersWithCurrentKeyTimestamp[:0]
+				f.itersWithCurrentKeyTimestamp = append(f.itersWithCurrentKeyTimestamp, iterIdx)
+				proposedNextIdx = iterIdx
 			}
 		}
 	}
