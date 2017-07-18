@@ -761,7 +761,7 @@ func mvccGetInternal(
 		seekKey.Timestamp = txn.MaxTimestamp
 		checkValueTimestamp = true
 	} else {
-		// Third case: We're reading a historic value either outside of a
+		// Third case: We're reading a historical value either outside of a
 		// transaction, or in the absence of future versions that clock uncertainty
 		// would apply to.
 		seekKey.Timestamp = timestamp
@@ -1344,8 +1344,8 @@ func mvccInitPutUsingIter(
 ) error {
 	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn,
 		func(existVal *roachpb.Value) ([]byte, error) {
-			if existVal.IsPresent() {
-				if !bytes.Equal(value.RawBytes, existVal.RawBytes) {
+			if existVal != nil {
+				if !bytes.Equal(value.RawBytes, existVal.RawBytes) || (value.Timestamp != hlc.Timestamp{} && value.Timestamp != existVal.Timestamp) {
 					return nil, &roachpb.ConditionFailedError{
 						ActualValue: existVal.ShallowClone(),
 					}
