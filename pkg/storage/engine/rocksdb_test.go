@@ -369,7 +369,7 @@ func TestReadAmplification(t *testing.T) {
 func TestConcurrentBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if testutils.Stress() {
+	if testutils.NightlyStress() {
 		t.Skip()
 	}
 
