@@ -419,6 +419,20 @@ func (l *LocalCluster) initCluster(ctx context.Context) {
 	maybePanic(c.Wait(ctx))
 }
 
+// cockroachEntryPoint returns the value to be used as
+// container.Config.Entrypoint for a container running the cockroach
+// binary under test.
+// TODO(bdarnell): refactor this to minimize globals
+func cockroachEntrypoint() []string {
+	var entrypoint []string
+	if *cockroachImage == defaultImage {
+		entrypoint = append(entrypoint, CockroachBinaryInContainer)
+	} else if *cockroachEntry != "" {
+		entrypoint = append(entrypoint, *cockroachEntry)
+	}
+	return entrypoint
+}
+
 // createRoach creates the docker container for a testNode. It may be called in
 // parallel to start many nodes at once, and thus should remain threadsafe.
 func (l *LocalCluster) createRoach(
@@ -441,12 +455,6 @@ func (l *LocalCluster) createRoach(
 		hostname = fmt.Sprintf("roach-%s-%d", l.clusterID, node.index)
 	}
 	log.Infof(ctx, "creating docker container with name: %s", hostname)
-	var entrypoint []string
-	if *cockroachImage == defaultImage {
-		entrypoint = append(entrypoint, CockroachBinaryInContainer)
-	} else if *cockroachEntry != "" {
-		entrypoint = append(entrypoint, *cockroachEntry)
-	}
 	var err error
 	node.Container, err = createContainer(
 		ctx,
@@ -458,7 +466,7 @@ func (l *LocalCluster) createRoach(
 				DefaultTCP:  {},
 				defaultHTTP: {},
 			},
-			Entrypoint: entrypoint,
+			Entrypoint: cockroachEntrypoint(),
 			Env:        env,
 			Cmd:        cmd,
 			Labels: map[string]string{
@@ -514,8 +522,8 @@ func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
 		}
 		cmd = append(cmd, fmt.Sprintf("--store=%s", storeSpec))
 	}
-	// Append --join flag for all nodes except first.
-	if node.index > 0 {
+	// Append --join flag (for all nodes except first in bootstrap-node-zero mode)
+	if node.index > 0 || l.config.InitMode != INIT_BOOTSTRAP_NODE_ZERO {
 		cmd = append(cmd, "--join="+net.JoinHostPort(l.Nodes[0].nodeStr, base.DefaultPort))
 	}
 
@@ -550,6 +558,24 @@ func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
   cli-env:   COCKROACH_INSECURE=false COCKROACH_CERTS_DIR=%[7]s COCKROACH_HOST=%s COCKROACH_PORT=%d`,
 		node.Name(), "https://"+httpAddr.String(), localLogDir, node.Container.id[:5],
 		base.DefaultHTTPPort, cmd, l.CertsDir, httpAddr.IP, httpAddr.Port)
+}
+
+// RunInitCommand runs the `cockroach init` command. Normally called
+// automatically, but exposed for tests that use INIT_NONE. nodeIdx
+// may designate any node in the cluster as the target of the command.
+func (l *LocalCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
+	containerConfig := container.Config{
+		Image:      *cockroachImage,
+		Entrypoint: cockroachEntrypoint(),
+		Cmd: []string{
+			"init",
+			"--certs-dir=/certs/",
+			"--host=" + l.Nodes[nodeIdx].nodeStr,
+			"--logtostderr",
+		},
+	}
+	maybePanic(l.OneShot(ctx, defaultImage, types.ImagePullOptions{},
+		containerConfig, container.HostConfig{}, "init-command"))
 }
 
 // returns false is the event
@@ -671,6 +697,10 @@ func (l *LocalCluster) Start(ctx context.Context) {
 		}(node)
 	}
 	wg.Wait()
+
+	if l.config.InitMode == INIT_COMMAND {
+		l.RunInitCommand(ctx, 0)
+	}
 }
 
 // Assert drains the Events channel and compares the actual events with those

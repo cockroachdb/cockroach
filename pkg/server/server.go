@@ -111,7 +111,6 @@ type Server struct {
 	registry           *metric.Registry
 	recorder           *status.MetricsRecorder
 	runtime            status.RuntimeStatSampler
-	init               *initServer
 	admin              *adminServer
 	status             *statusServer
 	tsDB               *ts.DB
@@ -383,7 +382,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 
-	s.init = newInitServer(s)
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
@@ -579,23 +577,15 @@ func (s *Server) Start(ctx context.Context) error {
 	var serveOnMux sync.Once
 	m := cmux.New(ln)
 
-	// Direct all requests to the Init listener until we're ready to accept connections.
-	readyToServe := int32(0)
+	// Inject an initialization listener that can optionally intercept
+	// all connections.
+	initLActive := int32(0)
 	initL := m.Match(func(_ io.Reader) bool {
-		return atomic.LoadInt32(&readyToServe) == 0
+		return atomic.LoadInt32(&initLActive) != 0
 	})
-	s.init.serve(ctx, initL)
 
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
-
-	workersCtx := s.AnnotateCtx(context.Background())
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		// TODO(adamgee): Can I nuke serveOnMux now?
-		serveOnMux.Do(func() {
-			netutil.FatalIfUnexpected(m.Serve())
-		})
-	})
 
 	httpLn, err := net.Listen("tcp", s.cfg.HTTPAddr)
 	if err != nil {
@@ -609,6 +599,8 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	s.cfg.HTTPAddr = unresolvedHTTPAddr.String()
+
+	workersCtx := s.AnnotateCtx(context.Background())
 
 	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 		<-s.stopper.ShouldQuiesce()
@@ -647,7 +639,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
-		netutil.FatalIfUnexpected(anyL.Close()) // TODO: Do we need to also close the other listeners?
+		// TODO(bdarnell): Do we need to also close the other listeners?
+		netutil.FatalIfUnexpected(anyL.Close())
 		<-s.stopper.ShouldStop()
 		s.grpc.Stop()
 		serveOnMux.Do(func() {
@@ -780,11 +773,22 @@ func (s *Server) Start(ctx context.Context) error {
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
 		log.Info(ctx, "No stores bootstrapped and --join flag specified, starting Init Server.")
-		if err = s.init.awaitBootstrap(); err != nil {
+
+		initServer := newInitServer(s)
+		initServer.serve(ctx, initL)
+		atomic.StoreInt32(&initLActive, 1)
+
+		s.stopper.RunWorker(workersCtx, func(context.Context) {
+			serveOnMux.Do(func() {
+				netutil.FatalIfUnexpected(m.Serve())
+			})
+		})
+
+		if err = initServer.awaitBootstrap(); err != nil {
 			return nil
 		}
 
-		log.Info(ctx, "Init Server returned, the cluster has been bootstrapped")
+		atomic.StoreInt32(&initLActive, 0)
 	}
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
@@ -847,8 +851,11 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
 
-	// Set the readyToServe bit which removes the initL from cmux.
-	atomic.StoreInt32(&readyToServe, 1)
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		serveOnMux.Do(func() {
+			netutil.FatalIfUnexpected(m.Serve())
+		})
+	})
 
 	if len(s.cfg.SocketFile) != 0 {
 		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)

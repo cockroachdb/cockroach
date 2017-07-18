@@ -20,6 +20,9 @@ import (
 	"errors"
 	"net"
 
+	"google.golang.org/grpc"
+
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -27,8 +30,23 @@ import (
 	"golang.org/x/net/context"
 )
 
+// initListener wraps a net.Listener and turns its Close() method into
+// a no-op. This is used so that the initServer's grpc.Server can be
+// stopped without closing the listener (which it shares with the main
+// grpc.Server).
+type initListener struct {
+	net.Listener
+}
+
+func (initListener) Close() error {
+	return nil
+}
+
+// initServer manages the temporary init server used during
+// bootstrapping.
 type initServer struct {
 	server       *Server
+	grpc         *grpc.Server
 	bootstrapped chan struct{}
 	mu           syncutil.Mutex
 	waiting      bool
@@ -39,11 +57,11 @@ func newInitServer(s *Server) *initServer {
 }
 
 func (s *initServer) serve(ctx context.Context, ln net.Listener) {
-	grpcServer := s.server.grpc
-	serverpb.RegisterInitServer(grpcServer, s)
+	s.grpc = rpc.NewServer(s.server.rpcContext)
+	serverpb.RegisterInitServer(s.grpc, s)
 
 	s.server.stopper.RunWorker(ctx, func(context.Context) {
-		netutil.FatalIfUnexpected(grpcServer.Serve(ln))
+		netutil.FatalIfUnexpected(s.grpc.Serve(initListener{ln}))
 	})
 }
 
@@ -63,6 +81,7 @@ func (s *initServer) awaitBootstrap() error {
 	case <-s.server.stopper.ShouldStop():
 		return errors.New("Stop called while waiting to bootstrap")
 	}
+	s.grpc.GracefulStop()
 
 	return nil
 }

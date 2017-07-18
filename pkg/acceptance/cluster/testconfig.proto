@@ -20,6 +20,23 @@ option go_package = "cluster";
 
 import "gogoproto/gogo.proto";
 
+// InitMode specifies different ways to initalize the cluster.
+enum InitMode {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // INIT_COMMAND starts every node with a join flag and issues the
+  // init command.
+  INIT_COMMAND = 0;
+
+  // INIT_BOOTSTRAP_NODE_ZERO uses the legacy protocol of omitting the
+  // join flag from node zero.
+  INIT_BOOTSTRAP_NODE_ZERO = 1;
+
+  // INIT_NONE starts every node with a join flag and leaves the
+  // cluster uninitialized.
+  INIT_NONE = 2;
+}
+
 // StoreConfig holds the configuration of a collection of similar stores.
 message StoreConfig {
   optional int32 count = 1 [(gogoproto.nullable) = false];
@@ -38,5 +55,7 @@ message TestConfig {
   // Duration is the total time that the test should run for. Important for
   // tests such as TestPut that will run indefinitely.
   optional int64 duration = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
-// TODO(bram): #4559 once defined, add in a collection of chaos agents here.
+  optional InitMode init_mode = 4 [(gogoproto.nullable) = false];
+
+  // TODO(bram): #4559 once defined, add in a collection of chaos agents here.
 }

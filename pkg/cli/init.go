@@ -17,8 +17,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -42,15 +40,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop(ctx)
 
 	request := &serverpb.BootstrapRequest{}
-	fmt.Println("Request:", request)
-	log.Info(ctx, "Request: ", request)
-	response, err := c.Bootstrap(ctx, request)
+	_, err = c.Bootstrap(ctx, request)
 	if err != nil {
 		log.Error(ctx, err)
 		return err
 	}
-	fmt.Println("Response: ", response)
-	log.Info(ctx, "Response: ", response)
 
 	return nil
 }
