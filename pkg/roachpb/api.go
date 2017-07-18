@@ -799,17 +799,23 @@ func NewConditionalPut(key Key, value, expValue Value) Request {
 	}
 }
 
-// NewInitPut returns a Request initialized to put the value at key,
-// as long as the key doesn't exist, returning an error if the key
-// exists and the existing value is different from value.
-func NewInitPut(key Key, value Value) Request {
+// NewInitPut returns a Request initialized to put the value at key, as long as
+// the key doesn't exist, returning a ConditionFailedError if the key exists and
+// the existing value is different from value. If failOnTombstones is set to
+// true, tombstones count as mismatched values and will cause a
+// ConditionFailedError.
+func NewInitPut(key Key, value Value, failOnTombstones bool) Request {
 	value.InitChecksum(key)
-	return &InitPutRequest{
+	ret := InitPutRequest{
 		Span: Span{
 			Key: key,
 		},
 		Value: value,
 	}
+	if failOnTombstones {
+		ret.FailOnTombstones = true
+	}
+	return &ret
 }
 
 // NewDelete returns a Request initialized to delete the value at key.

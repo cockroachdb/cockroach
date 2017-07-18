@@ -355,13 +355,15 @@ func (txn *Txn) CPut(ctx context.Context, key, value, expValue interface{}) erro
 
 // InitPut sets the first value for a key to value. An error is reported if a
 // value already exists for the key and it's not equal to the value passed in.
+// If failOnTombstones is set to true, tombstones count as mismatched values
+// and will cause a ConditionFailedError.
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc). It is illegal to
 // set value to nil.
-func (txn *Txn) InitPut(ctx context.Context, key, value interface{}) error {
+func (txn *Txn) InitPut(ctx context.Context, key, value interface{}, failOnTombstones bool) error {
 	b := txn.NewBatch()
-	b.InitPut(key, value)
+	b.InitPut(key, value, failOnTombstones)
 	return getOneErr(txn.Run(ctx, b), b)
 }
 

@@ -762,7 +762,7 @@ func mvccGetInternal(
 		seekKey.Timestamp = txn.MaxTimestamp
 		checkValueTimestamp = true
 	} else {
-		// Third case: We're reading a historic value either outside of a
+		// Third case: We're reading a historical value either outside of a
 		// transaction, or in the absence of future versions that clock uncertainty
 		// would apply to.
 		seekKey.Timestamp = timestamp
@@ -1301,8 +1301,10 @@ func mvccConditionalPutUsingIter(
 var errInitPutValueMatchesExisting = errors.New("the value matched the existing value")
 
 // MVCCInitPut sets the value for a specified key if the key doesn't exist. It
-// returns an error when the write fails or if the key exists with an
-// existing value that is different from the supplied value.
+// returns a ConditionFailedError when the write fails or if the key exists with
+// an existing value that is different from the supplied value. If
+// failOnTombstones is set to true, tombstones count as mismatched values and
+// will cause a ConditionFailedError.
 func MVCCInitPut(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1310,17 +1312,18 @@ func MVCCInitPut(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
+	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
 	iter := engine.NewIterator(true)
 	defer iter.Close()
-	return mvccInitPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, txn)
+	return mvccInitPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, failOnTombstones, txn)
 }
 
 // MVCCBlindInitPut is a fast-path of MVCCInitPut. See the MVCCInitPut
 // comments for details of the semantics. MVCCBlindInitPut skips
 // retrieving the existing metadata for the key requiring the caller
-// to gauarntee no version for the key currently exist.
+// to guarantee no version for the key currently exist.
 func MVCCBlindInitPut(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1328,9 +1331,10 @@ func MVCCBlindInitPut(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
+	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccInitPutUsingIter(ctx, engine, nil, ms, key, timestamp, value, txn)
+	return mvccInitPutUsingIter(ctx, engine, nil, ms, key, timestamp, value, failOnTombstones, txn)
 }
 
 func mvccInitPutUsingIter(
@@ -1341,11 +1345,18 @@ func mvccInitPutUsingIter(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
+	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
 	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn,
 		func(existVal *roachpb.Value) ([]byte, error) {
-			if existVal.IsPresent() {
+			var foundVal bool
+			if failOnTombstones {
+				foundVal = existVal != nil
+			} else {
+				foundVal = existVal.IsPresent()
+			}
+			if foundVal {
 				if !bytes.Equal(value.RawBytes, existVal.RawBytes) {
 					return nil, &roachpb.ConditionFailedError{
 						ActualValue: existVal.ShallowClone(),
