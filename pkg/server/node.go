@@ -328,8 +328,6 @@ func (n *Node) initNodeID(ctx context.Context, id roachpb.NodeID) {
 
 func (n *Node) bootstrap(ctx context.Context, engines []engine.Engine) error {
 	n.initialBoot = true
-	// This node has no initialized stores and no way to connect to
-	// an existing cluster, so we bootstrap it.
 	clusterID, err := bootstrapCluster(ctx, n.storeCfg, engines, n.txnMetrics)
 	if err != nil {
 		return err

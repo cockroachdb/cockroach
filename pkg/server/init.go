@@ -20,6 +20,9 @@ import (
 	"errors"
 	"net"
 
+	"google.golang.org/grpc"
+
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -27,42 +30,54 @@ import (
 	"golang.org/x/net/context"
 )
 
+// initListener wraps a net.Listener and turns its Close() method into
+// a no-op. This is used so that the initServer's grpc.Server can be
+// stopped without closing the listener (which it shares with the main
+// grpc.Server).
+type initListener struct {
+	net.Listener
+}
+
+func (initListener) Close() error {
+	return nil
+}
+
+// initServer manages the temporary init server used during
+// bootstrapping.
 type initServer struct {
 	server       *Server
+	grpc         *grpc.Server
 	bootstrapped chan struct{}
-	mu           syncutil.Mutex
-	waiting      bool
+	mu           struct {
+		syncutil.Mutex
+		awaitDone bool
+	}
 }
 
 func newInitServer(s *Server) *initServer {
-	return &initServer{server: s, bootstrapped: make(chan struct{}), waiting: false}
+	return &initServer{server: s, bootstrapped: make(chan struct{})}
 }
 
 func (s *initServer) serve(ctx context.Context, ln net.Listener) {
-	grpcServer := s.server.grpc
-	serverpb.RegisterInitServer(grpcServer, s)
+	s.grpc = rpc.NewServer(s.server.rpcContext)
+	serverpb.RegisterInitServer(s.grpc, s)
 
 	s.server.stopper.RunWorker(ctx, func(context.Context) {
-		netutil.FatalIfUnexpected(grpcServer.Serve(ln))
+		netutil.FatalIfUnexpected(s.grpc.Serve(initListener{ln}))
 	})
 }
 
 func (s *initServer) awaitBootstrap() error {
-	s.mu.Lock()
-	s.waiting = true
-	s.mu.Unlock()
-	defer func() {
-		s.mu.Lock()
-		s.waiting = false
-		s.mu.Unlock()
-	}()
-
 	select {
 	case <-s.server.node.storeCfg.Gossip.Connected:
 	case <-s.bootstrapped:
 	case <-s.server.stopper.ShouldStop():
-		return errors.New("Stop called while waiting to bootstrap")
+		return errors.New("stop called while waiting to bootstrap")
 	}
+	s.mu.Lock()
+	s.mu.awaitDone = true
+	s.mu.Unlock()
+	s.grpc.GracefulStop()
 
 	return nil
 }
@@ -72,12 +87,12 @@ func (s *initServer) Bootstrap(
 ) (response *serverpb.BootstrapResponse, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.waiting {
-		return nil, errors.New("Init not expecting Bootstrap")
+	if s.mu.awaitDone {
+		return nil, errors.New("bootstrap called after cluster already initialized")
 	}
 
 	if err := s.server.node.bootstrap(ctx, s.server.engines); err != nil {
-		log.Error(ctx, "Node bootstrap failed: ", err)
+		log.Error(ctx, "node bootstrap failed: ", err)
 		return nil, err
 	}
 
