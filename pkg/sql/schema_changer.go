@@ -61,6 +61,7 @@ type SchemaChanger struct {
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
 	execAfter      time.Time
+	readAsOf       int64
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *distSQLPlanner
 	jobLogger      *jobs.JobLogger
@@ -645,9 +646,26 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	if err := sc.RunStateMachineBeforeBackfill(ctx); err != nil {
 		return err
 	}
-	if err := sc.jobLogger.Progressed(ctx, .1, jobs.Noop); err != nil {
-		log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
-			sc.jobLogger.JobID(), err)
+
+	// Update job progress and pick a read timestamp, or reuse the previously
+	// stored one.
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := sc.jobLogger.WithTxn(txn).Progressed(ctx, .1, jobs.Noop); err != nil {
+			log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
+				sc.jobLogger.JobID(), err)
+		}
+		details := *sc.jobLogger.WithTxn(txn).Payload().Details.(*jobs.JobPayload_SchemaChange).SchemaChange
+		if details.ReadAsOf == 0 {
+			details.ReadAsOf = timeutil.Now().UnixNano()
+			if err := sc.jobLogger.WithTxn(txn).SetDetails(ctx, details); err != nil {
+				log.Warningf(ctx, "failed to store readAsOf on job %v after completing state machine: %v",
+					sc.jobLogger.JobID(), err)
+			}
+		}
+		sc.readAsOf = details.ReadAsOf
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	// Run backfill(s).
