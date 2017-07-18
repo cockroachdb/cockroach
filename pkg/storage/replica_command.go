@@ -2607,7 +2607,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		var foundSplitKey roachpb.Key
 		if len(args.SplitKey) == 0 {
 			// Find a key to split by size.
-			snap := r.store.NewSnapshot()
+			snap := r.store.engine.NewSnapshot()
 			defer snap.Close()
 			var err error
 			targetSize := r.GetMaxBytes() / 2
