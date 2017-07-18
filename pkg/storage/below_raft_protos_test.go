@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -72,6 +73,20 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCStats(r, false) },
 		emptySum:             18064891702890239528,
 		populatedSum:         4287370248246326846,
+	},
+	reflect.TypeOf(&raftpb.HardState{}): {
+		populatedConstructor: func(r *rand.Rand) proto.Message {
+			n := r.Uint64()
+			// NB: this would rot if HardState ever picked up more (relevant)
+			// fields, but that's unlikely.
+			return &raftpb.HardState{
+				Term:   n % 3,
+				Vote:   n % 7,
+				Commit: n % 11,
+			}
+		},
+		emptySum:     13621293256077144893,
+		populatedSum: 13375098491754757572,
 	},
 }
 

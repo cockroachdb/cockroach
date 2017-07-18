@@ -1743,7 +1743,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 
-	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc, raftpb.HardState{}, roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{})
+	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc, roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{})
 	if err != nil {
 		return err
 	}
@@ -1830,6 +1830,16 @@ func splitPostApply(
 		if err != nil {
 			log.Fatal(ctx, err)
 		}
+	}
+
+	// Finish up the initialization of the RHS' RaftState now that we have
+	// committed the split Batch (which included the initialization of the
+	// ReplicaState). This will synthesize and persist the correct lastIndex and
+	// HardState.
+	if err := makeReplicaStateLoader(split.RightDesc.RangeID).synthesizeRaftState(
+		ctx, r.store.Engine(),
+	); err != nil {
+		log.Fatal(ctx, err)
 	}
 
 	// Finish initialization of the RHS.
