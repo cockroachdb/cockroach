@@ -478,14 +478,23 @@ func (r *Replica) leasePostApply(
 		if r.leaseholderStats != nil {
 			r.leaseholderStats.resetRequestCounts()
 		}
-
-		// Gossip the first range whenever its lease is acquired. We check to
-		// make sure the lease is active so that a trailing replica won't process
-		// an old lease request and attempt to gossip the first range.
-		if r.IsFirstRange() && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
-			r.gossipFirstRange(ctx)
-		}
 	}
+
+	// We're setting the new lease after we've updated the timestamp cache in
+	// order to avoid race conditions where a replica starts serving requests
+	// for a lease without first having taken into account requests served
+	// by the previous lease holder.
+	r.mu.Lock()
+	r.mu.state.Lease = &newLease
+	r.mu.Unlock()
+
+	// Gossip the first range whenever its lease is acquired. We check to
+	// make sure the lease is active so that a trailing replica won't process
+	// an old lease request and attempt to gossip the first range.
+	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
+		r.gossipFirstRange(ctx)
+	}
+
 	if leaseChangingHands && !iAmTheLeaseHolder {
 		// Also clear and disable the push transaction queue. Any waiters
 		// must be redirected to the new lease holder.
@@ -742,7 +751,6 @@ func (r *Replica) handleReplicatedEvalResult(
 		r.mu.Lock()
 		replicaID := r.mu.replicaID
 		prevLease := *r.mu.state.Lease
-		r.mu.state.Lease = newLease
 		r.mu.Unlock()
 
 		r.leasePostApply(ctx, *newLease, replicaID, prevLease)
