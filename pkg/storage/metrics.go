@@ -458,6 +458,14 @@ var (
 	metaSlowRaftRequests = metric.Metadata{
 		Name: "requests.slow.raft",
 		Help: "Number of requests that have been stuck for a long time in raft"}
+
+	// AddSSTable metrics.
+	metaAddSSTableProposals = metric.Metadata{
+		Name: "addsstable.proposals",
+		Help: "Number of SSTable ingestions proposed (i.e. sent to Raft by lease holders)"}
+	metaAddSSTableApplications = metric.Metadata{
+		Name: "addsstable.applications",
+		Help: "Number of SSTable ingestions applied (i.e. applied by Replicas)"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -640,6 +648,11 @@ type StoreMetrics struct {
 	SlowLeaseRequests        *metric.Gauge
 	SlowRaftRequests         *metric.Gauge
 
+	// AddSSTable stats: how many AddSSTable commands were proposed and how many
+	// were applied?
+	AddSSTableProposals    *metric.Counter
+	AddSSTableApplications *metric.Counter
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -818,6 +831,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SlowCommandQueueRequests: metric.NewGauge(metaSlowCommandQueueRequests),
 		SlowLeaseRequests:        metric.NewGauge(metaSlowLeaseRequests),
 		SlowRaftRequests:         metric.NewGauge(metaSlowRaftRequests),
+
+		// AddSSTable proposal + applications counters.
+		AddSSTableProposals:    metric.NewCounter(metaAddSSTableProposals),
+		AddSSTableApplications: metric.NewCounter(metaAddSSTableApplications),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp

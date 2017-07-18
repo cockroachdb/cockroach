@@ -530,6 +530,14 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	if err := testutils.MatchInOrder(collect(), "sideloadable proposal detected", "ingested SSTable"); err != nil {
 		t.Fatal(err)
 	}
+
+	if n := tc.store.metrics.AddSSTableProposals.Count(); n == 0 {
+		t.Fatalf("expected metric to show at least one AddSSTable proposal, but got %d", n)
+	}
+
+	if n := tc.store.metrics.AddSSTableApplications.Count(); n == 0 {
+		t.Fatalf("expected metric to show at least one AddSSTable application, but got %d", n)
+	}
 }
 
 type mockSender struct {
