@@ -268,9 +268,16 @@ func TestReportUsage(t *testing.T) {
 				keys[k] = struct{}{}
 			}
 			for _, expected := range expectedStatements {
-				if _, ok := app[expected]; !ok {
-					t.Fatalf("expected %q in app %s: %+v", expected, appName, keys)
+				if _, ok := app[expected]; ok {
+					continue
 				}
+				if _, ok := app[expected]; ok {
+					continue
+				}
+				if _, ok := app["+"+expected]; ok {
+					continue
+				}
+				t.Fatalf("expected %q in app %s: %+v", expected, appName, keys)
 			}
 		}
 	}

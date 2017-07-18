@@ -288,7 +288,7 @@ func (e *Executor) GetScrubbedStmtStats() AppStatementStatistics {
 			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
 			if ok {
 				stats.Lock()
-				m[scrubbed] = stats.data
+				m[q.flags()+scrubbed] = stats.data
 				stats.Unlock()
 			}
 		}
