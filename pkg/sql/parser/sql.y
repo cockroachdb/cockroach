@@ -474,10 +474,41 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <[]Statement> stmt_list
 %type <Statement> stmt
 
+%type <Statement> alter_stmt
 %type <Statement> alter_table_stmt
+%type <Statement> alter_index_stmt
+%type <Statement> alter_view_stmt
+%type <Statement> alter_database_stmt
+
+// ALTER TABLE
+%type <Statement> alter_onetable_stmt
+%type <Statement> alter_split_stmt
+%type <Statement> alter_rename_table_stmt
+%type <Statement> alter_scatter_stmt
+%type <Statement> alter_testing_relocate_stmt
+
+// ALTER DATABASE
+%type <Statement> alter_rename_database_stmt
+
+// ALTER INDEX
+%type <Statement> alter_scatter_index_stmt
+%type <Statement> alter_split_index_stmt
+%type <Statement> alter_rename_index_stmt
+%type <Statement> alter_testing_relocate_index_stmt
+
+// ALTER VIEW
+%type <Statement> alter_rename_view_stmt
+
 %type <Statement> backup_stmt
+%type <Statement> begin_stmt
+
 %type <Statement> cancel_stmt
+%type <Statement> cancel_job_stmt
+%type <Statement> cancel_query_stmt
+
+%type <Statement> commit_stmt
 %type <Statement> copy_from_stmt
+
 %type <Statement> create_stmt
 %type <Statement> create_database_stmt
 %type <Statement> create_index_stmt
@@ -487,7 +518,14 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> create_view_stmt
 %type <Statement> delete_stmt
 %type <Statement> discard_stmt
+
 %type <Statement> drop_stmt
+%type <Statement> drop_database_stmt
+%type <Statement> drop_index_stmt
+%type <Statement> drop_table_stmt
+%type <Statement> drop_user_stmt
+%type <Statement> drop_view_stmt
+
 %type <Statement> explain_stmt
 %type <Statement> help_stmt
 %type <Statement> prepare_stmt
@@ -499,20 +537,49 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> insert_stmt
 %type <Statement> pause_stmt
 %type <Statement> release_stmt
-%type <Statement> rename_stmt
 %type <Statement> reset_stmt
 %type <Statement> resume_stmt
+%type <Statement> restore_stmt
 %type <Statement> revoke_stmt
 %type <*Select> select_stmt
+%type <Statement> rollback_stmt
 %type <Statement> savepoint_stmt
+
 %type <Statement> set_stmt
+%type <Statement> set_session_stmt
+%type <Statement> set_csetting_stmt
+%type <Statement> set_transaction_stmt
+%type <Statement> set_exprs_internal
+%type <Statement> generic_set
+%type <Statement> set_rest_more
+%type <Statement> set_names
+
 %type <Statement> show_stmt
-%type <Statement> split_stmt
-%type <Statement> testing_relocate_stmt
-%type <Statement> scatter_stmt
+%type <Statement> show_backup_stmt
+%type <Statement> show_columns_stmt
+%type <Statement> show_constraints_stmt
+%type <Statement> show_create_table_stmt
+%type <Statement> show_create_view_stmt
+%type <Statement> show_csettings_stmt
+%type <Statement> show_databases_stmt
+%type <Statement> show_grants_stmt
+%type <Statement> show_indexes_stmt
+%type <Statement> show_jobs_stmt
+%type <Statement> show_queries_stmt
+%type <Statement> show_session_stmt
+%type <Statement> show_sessions_stmt
+%type <Statement> show_tables_stmt
+%type <Statement> show_testing_stmt
+%type <Statement> show_trace_stmt
+%type <Statement> show_transaction_stmt
+%type <Statement> show_users_stmt
+
+%type <str> session_var
+
 %type <Statement> transaction_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
+%type <Statement> upsert_stmt
 %type <Statement> use_stmt
 
 %type <[]string> opt_incremental
@@ -521,7 +588,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <str> opt_equal_value
 
 %type <*Select> select_no_parens
-%type <SelectStatement> select_clause select_with_parens simple_select values_clause
+%type <SelectStatement> select_clause select_with_parens simple_select values_clause table_clause
 
 %type <empty> alter_using
 %type <Expr> alter_column_default
@@ -622,8 +689,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <NameList> opt_conf_expr
 %type <*OnConflict> on_conflict
 
-%type <Statement>  generic_set set_rest set_rest_more
-%type <Statement>  begin_transaction set_exprs_internal set_name
+%type <Statement>  begin_transaction
 %type <TransactionModes> transaction_mode_list transaction_mode
 
 %type <NameList> opt_storing
@@ -813,23 +879,23 @@ stmt_list:
   }
 
 stmt:
-  alter_table_stmt
+  alter_stmt
 | backup_stmt
 | cancel_stmt
 | copy_from_stmt
 | create_stmt
+| deallocate_stmt
 | delete_stmt
 | discard_stmt
 | drop_stmt
-| explain_stmt
-| help_stmt
-| prepare_stmt
 | execute_stmt
-| deallocate_stmt
+| explain_stmt
 | grant_stmt
+| help_stmt
 | insert_stmt
 | pause_stmt
-| rename_stmt
+| prepare_stmt
+| restore_stmt
 | resume_stmt
 | revoke_stmt
 | savepoint_stmt
@@ -837,23 +903,45 @@ stmt:
   {
     $$.val = $1.slct()
   }
-| set_stmt
-| show_stmt
-| split_stmt
-| testing_relocate_stmt
-| scatter_stmt
-| transaction_stmt
 | release_stmt
 | reset_stmt
+| set_stmt
+| show_stmt
+| transaction_stmt
 | truncate_stmt
 | update_stmt
-| use_stmt
+| upsert_stmt
 | /* EMPTY */
   {
     $$.val = Statement(nil)
   }
 
+alter_stmt:
+  alter_table_stmt
+| alter_index_stmt
+| alter_view_stmt
+| alter_database_stmt
+
 alter_table_stmt:
+  alter_onetable_stmt
+| alter_split_stmt
+| alter_testing_relocate_stmt
+| alter_scatter_stmt
+| alter_rename_table_stmt
+
+alter_view_stmt:
+  alter_rename_view_stmt
+
+alter_database_stmt:
+  alter_rename_database_stmt
+
+alter_index_stmt:
+  alter_split_index_stmt
+| alter_testing_relocate_index_stmt
+| alter_scatter_index_stmt
+| alter_rename_index_stmt
+
+alter_onetable_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
     $$.val = &AlterTable{Table: $3.normalizableTableName(), IfExists: false, Cmds: $4.alterTableCmds()}
@@ -861,6 +949,58 @@ alter_table_stmt:
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
     $$.val = &AlterTable{Table: $5.normalizableTableName(), IfExists: true, Cmds: $6.alterTableCmds()}
+  }
+
+alter_split_stmt:
+  ALTER TABLE qualified_name SPLIT AT select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &Split{Table: $3.newNormalizableTableName(), Rows: $6.slct()}
+  }
+
+alter_split_index_stmt:
+  ALTER INDEX table_name_with_index SPLIT AT select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &Split{Index: $3.tableWithIdx(), Rows: $6.slct()}
+  }
+
+alter_testing_relocate_stmt:
+  ALTER TABLE qualified_name TESTING_RELOCATE select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &TestingRelocate{Table: $3.newNormalizableTableName(), Rows: $5.slct()}
+  }
+
+alter_testing_relocate_index_stmt:
+  ALTER INDEX table_name_with_index TESTING_RELOCATE select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &TestingRelocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
+  }
+
+alter_scatter_stmt:
+  ALTER TABLE qualified_name SCATTER
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Table: $3.newNormalizableTableName()}
+  }
+| ALTER TABLE qualified_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Table: $3.newNormalizableTableName(), From: $7.exprs(), To: $11.exprs()}
+  }
+
+alter_scatter_index_stmt:
+  ALTER INDEX table_name_with_index SCATTER
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Index: $3.tableWithIdx()}
+  }
+| ALTER INDEX table_name_with_index SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Index: $3.tableWithIdx(), From: $7.exprs(), To: $11.exprs()}
   }
 
 alter_table_cmds:
@@ -1012,7 +1152,9 @@ backup_stmt:
   {
     $$.val = &Backup{Targets: $2.targetList(), To: $4.expr(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
   }
-| RESTORE targets FROM string_or_placeholder_list opt_as_of_clause opt_with_options
+
+restore_stmt:
+  RESTORE targets FROM string_or_placeholder_list opt_as_of_clause opt_with_options
   {
     $$.val = &Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }
@@ -1096,12 +1238,18 @@ copy_from_stmt:
 
 // CANCEL [JOB|QUERY] id
 cancel_stmt:
+  cancel_job_stmt
+| cancel_query_stmt
+
+cancel_job_stmt:
   CANCEL JOB a_expr
   {
     /* SKIP DOC */
     $$.val = &CancelJob{ID: $3.expr()}
   }
-| CANCEL QUERY a_expr
+
+cancel_query_stmt:
+  CANCEL QUERY a_expr
   {
     /* SKIP DOC */
     $$.val = &CancelQuery{ID: $3.expr()}
@@ -1136,15 +1284,34 @@ discard_stmt:
 
 // DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
 drop_stmt:
-  DROP DATABASE name
+  drop_database_stmt
+| drop_index_stmt
+| drop_table_stmt
+| drop_view_stmt
+| drop_user_stmt
+
+drop_view_stmt:
+  DROP VIEW table_name_list opt_drop_behavior
   {
-    $$.val = &DropDatabase{Name: Name($3), IfExists: false}
+    $$.val = &DropView{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
-| DROP DATABASE IF EXISTS name
+| DROP VIEW IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &DropDatabase{Name: Name($5), IfExists: true}
+    $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
-| DROP INDEX table_name_with_index_list opt_drop_behavior
+
+drop_table_stmt:
+  DROP TABLE table_name_list opt_drop_behavior
+  {
+    $$.val = &DropTable{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+  }
+| DROP TABLE IF EXISTS table_name_list opt_drop_behavior
+  {
+    $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+  }
+
+drop_index_stmt:
+  DROP INDEX table_name_with_index_list opt_drop_behavior
   {
     $$.val = &DropIndex{
       IndexList: $3.tableWithIdxList(),
@@ -1160,23 +1327,19 @@ drop_stmt:
       DropBehavior: $6.dropBehavior(),
     }
   }
-| DROP TABLE table_name_list opt_drop_behavior
+
+drop_database_stmt:
+  DROP DATABASE name
   {
-    $$.val = &DropTable{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &DropDatabase{Name: Name($3), IfExists: false}
   }
-| DROP TABLE IF EXISTS table_name_list opt_drop_behavior
+| DROP DATABASE IF EXISTS name
   {
-    $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &DropDatabase{Name: Name($5), IfExists: true}
   }
-| DROP VIEW table_name_list opt_drop_behavior
-  {
-    $$.val = &DropView{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
-  }
-| DROP VIEW IF EXISTS table_name_list opt_drop_behavior
-  {
-    $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
-  }
-| DROP USER name_list
+
+drop_user_stmt:
+  DROP USER name_list
   {
     $$.val = &DropUser{Names: $3.nameList(), IfExists: false}
   }
@@ -1231,22 +1394,20 @@ preparable_stmt:
   {
     $$.val = $1.slct()
   }
+| delete_stmt
 | insert_stmt
 | update_stmt
-| delete_stmt
+| upsert_stmt
 
 explainable_stmt:
   preparable_stmt
+| alter_stmt
 | create_stmt
 | drop_stmt
-| alter_table_stmt
-| show_stmt
-| help_stmt
-| split_stmt
-| testing_relocate_stmt
-| scatter_stmt
 | execute_stmt
 | explain_stmt { /* SKIP DOC */ }
+| help_stmt
+| show_stmt
 
 explain_option_list:
   explain_option_name
@@ -1419,26 +1580,13 @@ grantee_list:
 
 // RESET name
 reset_stmt:
-  RESET IDENT
+  RESET session_var
   {
     $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
   }
-| RESET DATABASE
+| RESET SESSION session_var
   {
-    /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
-  }
-| RESET SESSION_USER
-  {
-    /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
-  }
-// SET NAMES is the SQL standard syntax for SET client_encoding.
-// See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
-| RESET NAMES
-  {
-    /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name("client_encoding")}, SetMode: SetModeReset}
+    $$.val = &Set{Name: UnresolvedName{Name($3)}, SetMode: SetModeReset}
   }
 
 // USE is the MSSQL/MySQL equivalent of SET DATABASE. Alias it for convenience.
@@ -1453,25 +1601,19 @@ use_stmt:
 // SET name TO 'var_value'
 // SET TIME ZONE 'var_value'
 set_stmt:
-  SET set_rest
-  {
-    $$.val = $2.stmt()
-  }
-| SET LOCAL set_rest { return unimplemented(sqllex, "set local") }
-| SET SESSION CHARACTERISTICS AS TRANSACTION transaction_iso_level
-  {
-    $$.val = &SetDefaultIsolation{Isolation: $6.isoLevel()}
-  }
-| SET SESSION set_rest
-  {
-    $$.val = $3.stmt()
-  }
-| SET CLUSTER SETTING generic_set
+  set_session_stmt
+| set_csetting_stmt
+| set_transaction_stmt
+| set_exprs_internal { /* SKIP DOC */ }
+| use_stmt { /* SKIP DOC */ }
+| SET LOCAL error { return unimplemented(sqllex, "set local") }
+
+set_csetting_stmt:
+  SET CLUSTER SETTING generic_set
   {
     $$.val = $4.stmt()
     $$.val.(*Set).SetMode = SetModeClusterSetting
   }
-| set_exprs_internal { /* SKIP DOC */ }
 
 set_exprs_internal:
   /* SET ROW serves to accelerate parser.parseExprs().
@@ -1481,12 +1623,30 @@ set_exprs_internal:
     $$.val = &Set{Values: $4.exprs()}
   }
 
-set_rest:
-  TRANSACTION transaction_mode_list
+set_session_stmt:
+  SET SESSION set_rest_more
   {
-    $$.val = &SetTransaction{Modes: $2.transactionModes()}
+    $$.val = $3.stmt()
   }
-| set_rest_more
+| SET set_rest_more
+  {
+    $$.val = $2.stmt()
+  }
+// Special form for pg compatibility:
+| SET SESSION CHARACTERISTICS AS TRANSACTION transaction_iso_level
+  {
+    $$.val = &SetDefaultIsolation{Isolation: $6.isoLevel()}
+  }
+
+set_transaction_stmt:
+  SET TRANSACTION transaction_mode_list
+  {
+    $$.val = &SetTransaction{Modes: $3.transactionModes()}
+  }
+| SET SESSION TRANSACTION transaction_mode_list
+  {
+    $$.val = &SetTransaction{Modes: $4.transactionModes()}
+  }
 
 generic_set:
   var_name TO var_list
@@ -1507,20 +1667,20 @@ generic_set:
   }
 
 set_rest_more:
-  // Generic SET syntaxes:
-  generic_set
-| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
-  // Special syntaxes mandated by SQL standard:
+// Generic SET syntaxes:
+   generic_set
+// Special syntaxes mandated by SQL standard:
 | TIME ZONE zone_value
   {
     /* SKIP DOC */
     $$.val = &Set{Name: UnresolvedName{Name("time zone")}, Values: Exprs{$3.expr()}}
   }
-| set_name
+| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
+| set_names
 
 // SET NAMES is the SQL standard syntax for SET client_encoding.
 // See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
-set_name:
+set_names:
   NAMES var_value
   {
     /* SKIP DOC */
@@ -1532,7 +1692,11 @@ set_name:
     $$.val = &Set{Name: UnresolvedName{Name("client_encoding")}, SetMode: SetModeReset}
   }
 
-opt_default: DEFAULT {} | /* EMPTY */ {}
+opt_default:
+  DEFAULT
+  { }
+| /* EMPTY */
+  { }
 
 var_name:
   any_name
@@ -1645,41 +1809,51 @@ non_reserved_word_or_sconst:
 | SCONST
 
 show_stmt:
-  SHOW IDENT
-  {
-    $$.val = &Show{Name: $2}
-  }
-// SET NAMES is the SQL standard syntax for SET client_encoding.
+  show_backup_stmt
+| show_columns_stmt
+| show_constraints_stmt
+| show_create_table_stmt
+| show_create_view_stmt
+| show_csettings_stmt
+| show_databases_stmt
+| show_grants_stmt
+| show_indexes_stmt
+| show_jobs_stmt
+| show_queries_stmt
+| show_session_stmt
+| show_sessions_stmt
+| show_tables_stmt
+| show_testing_stmt
+| show_trace_stmt
+| show_transaction_stmt
+| show_users_stmt
+
+show_session_stmt:
+  SHOW session_var         { $$.val = &Show{Name: $2} }
+| SHOW SESSION session_var { $$.val = &Show{Name: $3} }
+
+session_var:
+  IDENT
+// Although ALL, SESSION_USER and DATABASE are identifiers for the
+// purpose of SHOW, they lex as separate token types, so they need
+// separate rules.
+| ALL
+| DATABASE
+// SET NAMES is standard SQL for SET client_encoding.
 // See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
-| SHOW NAMES
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: "client_encoding"}
-  }
-| SHOW SESSION_USER
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: $2}
-  }
-| SHOW DATABASE
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: $2}
-  }
-| SHOW TRACE
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: $2}
-  }
-| SHOW ALL
-  {
-    $$.val = &Show{Name: $2}
-  }
-| SHOW BACKUP string_or_placeholder
+| NAMES { $$ = "client_encoding" }
+| SESSION_USER
+// TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
+| TIME ZONE { $$ = "TIME ZONE" }
+
+show_backup_stmt:
+  SHOW BACKUP string_or_placeholder
   {
     $$.val = &ShowBackup{Path: $3.expr()}
   }
-| SHOW CLUSTER SETTING any_name
+
+show_csettings_stmt:
+  SHOW CLUSTER SETTING any_name
   {
     $$.val = &Show{Name: AsStringWithFlags($4.unresolvedName(), FmtBareIdentifiers), ClusterSetting: true}
   }
@@ -1691,19 +1865,27 @@ show_stmt:
   {
     $$.val = &Show{Name: "all", ClusterSetting: true}
   }
-| SHOW COLUMNS FROM var_name
+
+show_columns_stmt:
+  SHOW COLUMNS FROM var_name
   {
     $$.val = &ShowColumns{Table: $4.normalizableTableName()}
   }
-| SHOW DATABASES
+
+show_databases_stmt:
+  SHOW DATABASES
   {
     $$.val = &ShowDatabases{}
   }
-| SHOW GRANTS on_privilege_target_clause for_grantee_clause
+
+show_grants_stmt:
+  SHOW GRANTS on_privilege_target_clause for_grantee_clause
   {
     $$.val = &ShowGrants{Targets: $3.targetListPtr(), Grantees: $4.nameList()}
   }
-| SHOW INDEX FROM var_name
+
+show_indexes_stmt:
+  SHOW INDEX FROM var_name
   {
     $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
@@ -1711,7 +1893,13 @@ show_stmt:
   {
     $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
-| SHOW CONSTRAINT FROM var_name
+| SHOW KEYS FROM var_name
+  {
+    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
+  }
+
+show_constraints_stmt:
+  SHOW CONSTRAINT FROM var_name
   {
     $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
@@ -1719,11 +1907,9 @@ show_stmt:
   {
     $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
-| SHOW KEYS FROM var_name
-  {
-    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
-  }
-| SHOW QUERIES
+
+show_queries_stmt:
+  SHOW QUERIES
   {
     $$.val = &ShowQueries{Cluster: true}
   }
@@ -1735,15 +1921,19 @@ show_stmt:
   {
     $$.val = &ShowQueries{Cluster: false}
   }
-| SHOW JOBS
+
+show_jobs_stmt:
+  SHOW JOBS
   {
     $$.val = &ShowJobs{}
   }
-| SHOW SESSION TRACE
+
+show_trace_stmt:
+  SHOW TRACE FOR SESSION
   {
     $$.val = &ShowTrace{Statement: nil}
   }
-| SHOW SESSION KV TRACE
+| SHOW KV TRACE FOR SESSION
   {
     $$.val = &ShowTrace{Statement: nil, OnlyKVTrace: true}
   }
@@ -1755,7 +1945,9 @@ show_stmt:
   {
     $$.val = &ShowTrace{Statement: $5.stmt(), OnlyKVTrace: true }
   }
-| SHOW SESSIONS
+
+show_sessions_stmt:
+  SHOW SESSIONS
   {
     $$.val = &ShowSessions{Cluster: true}
   }
@@ -1767,7 +1959,9 @@ show_stmt:
   {
     $$.val = &ShowSessions{Cluster: false}
   }
-| SHOW TABLES FROM name
+
+show_tables_stmt:
+  SHOW TABLES FROM name
   {
     $$.val = &ShowTables{Database: Name($4)}
   }
@@ -1775,12 +1969,9 @@ show_stmt:
   {
     $$.val = &ShowTables{}
   }
-| SHOW TIME ZONE
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: "TIME ZONE"}
-  }
-| SHOW TRANSACTION ISOLATION LEVEL
+
+show_transaction_stmt:
+  SHOW TRANSACTION ISOLATION LEVEL
   {
     /* SKIP DOC */
     $$.val = &Show{Name: "TRANSACTION ISOLATION LEVEL"}
@@ -1795,19 +1986,27 @@ show_stmt:
     /* SKIP DOC */
     $$.val = &ShowTransactionStatus{}
   }
-| SHOW CREATE TABLE var_name
+
+show_create_table_stmt:
+  SHOW CREATE TABLE var_name
   {
     $$.val = &ShowCreateTable{Table: $4.normalizableTableName()}
   }
-| SHOW CREATE VIEW var_name
+
+show_create_view_stmt:
+  SHOW CREATE VIEW var_name
   {
     $$.val = &ShowCreateView{View: $4.normalizableTableName()}
   }
-| SHOW USERS
+
+show_users_stmt:
+  SHOW USERS
   {
     $$.val = &ShowUsers{}
   }
-| SHOW TESTING_RANGES FROM TABLE qualified_name
+
+show_testing_stmt:
+  SHOW TESTING_RANGES FROM TABLE qualified_name
   {
     /* SKIP DOC */
     $$.val = &ShowRanges{Table: $5.newNormalizableTableName()}
@@ -1856,50 +2055,6 @@ pause_stmt:
   {
     /* SKIP DOC */
     $$.val = &PauseJob{ID: $3.expr()}
-  }
-
-split_stmt:
-  ALTER TABLE qualified_name SPLIT AT select_stmt
-  {
-    $$.val = &Split{Table: $3.newNormalizableTableName(), Rows: $6.slct()}
-  }
-| ALTER INDEX table_name_with_index SPLIT AT select_stmt
-  {
-    $$.val = &Split{Index: $3.tableWithIdx(), Rows: $6.slct()}
-  }
-
-testing_relocate_stmt:
-  ALTER TABLE qualified_name TESTING_RELOCATE select_stmt
-  {
-    /* SKIP DOC */
-    $$.val = &TestingRelocate{Table: $3.newNormalizableTableName(), Rows: $5.slct()}
-  }
-| ALTER INDEX table_name_with_index TESTING_RELOCATE select_stmt
-  {
-    /* SKIP DOC */
-    $$.val = &TestingRelocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
-  }
-
-scatter_stmt:
-  ALTER TABLE qualified_name SCATTER
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Table: $3.newNormalizableTableName()}
-  }
-| ALTER TABLE qualified_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Table: $3.newNormalizableTableName(), From: $7.exprs(), To: $11.exprs()}
-  }
-| ALTER INDEX table_name_with_index SCATTER
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Index: $3.tableWithIdx()}
-  }
-| ALTER INDEX table_name_with_index SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Index: $3.tableWithIdx(), From: $7.exprs(), To: $11.exprs()}
   }
 
 // CREATE TABLE relname
@@ -2243,15 +2398,15 @@ truncate_stmt:
 
 // CREATE USER
 create_user_stmt:
-  CREATE USER name opt_with opt_password
+  CREATE USER name opt_password
   {
-    $$.val = &CreateUser{Name: Name($3), Password: $5.strPtr()}
+    $$.val = &CreateUser{Name: Name($3), Password: $4.strPtr()}
   }
 
 opt_password:
-  PASSWORD SCONST
+  opt_with PASSWORD SCONST
   {
-    pwd := $2
+    pwd := $3
     $$.val = &pwd
   }
 | /* EMPTY */ {
@@ -2346,35 +2501,20 @@ opt_asc_desc:
     $$.val = DefaultDirection
   }
 
-// ALTER THING name RENAME TO newname
-rename_stmt:
+alter_rename_database_stmt:
   ALTER DATABASE name RENAME TO name
   {
     $$.val = &RenameDatabase{Name: Name($3), NewName: Name($6)}
   }
-| ALTER TABLE relation_expr RENAME TO qualified_name
+
+alter_rename_table_stmt:
+  ALTER TABLE relation_expr RENAME TO qualified_name
   {
     $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO qualified_name
   {
     $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: false}
-  }
-| ALTER VIEW relation_expr RENAME TO qualified_name
-  {
-    $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: true}
-  }
-| ALTER VIEW IF EXISTS relation_expr RENAME TO qualified_name
-  {
-    $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: true}
-  }
-| ALTER INDEX table_name_with_index RENAME TO name
-  {
-    $$.val = &RenameIndex{Index: $3.tableWithIdx(), NewName: Name($6), IfExists: false}
-  }
-| ALTER INDEX IF EXISTS table_name_with_index RENAME TO name
-  {
-    $$.val = &RenameIndex{Index: $5.tableWithIdx(), NewName: Name($8), IfExists: true}
   }
 | ALTER TABLE relation_expr RENAME opt_column name TO name
   {
@@ -2384,8 +2524,30 @@ rename_stmt:
   {
     $$.val = &RenameColumn{Table: $5.normalizableTableName(), Name: Name($8), NewName: Name($10), IfExists: true}
   }
-| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name { return unimplemented(sqllex, "alter table rename constraint") }
-| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name { return unimplemented(sqllex, "alter table rename constraint") }
+| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name
+  { return unimplemented(sqllex, "alter table rename constraint") }
+| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name
+  { return unimplemented(sqllex, "alter table rename constraint") }
+
+alter_rename_view_stmt:
+  ALTER VIEW relation_expr RENAME TO qualified_name
+  {
+    $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: true}
+  }
+| ALTER VIEW IF EXISTS relation_expr RENAME TO qualified_name
+  {
+    $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: true}
+  }
+
+alter_rename_index_stmt:
+  ALTER INDEX table_name_with_index RENAME TO name
+  {
+    $$.val = &RenameIndex{Index: $3.tableWithIdx(), NewName: Name($6), IfExists: false}
+  }
+| ALTER INDEX IF EXISTS table_name_with_index RENAME TO name
+  {
+    $$.val = &RenameIndex{Index: $5.tableWithIdx(), NewName: Name($8), IfExists: true}
+  }
 
 opt_column:
   COLUMN
@@ -2423,6 +2585,11 @@ savepoint_stmt:
 
 // BEGIN / START / COMMIT / END / ROLLBACK / ...
 transaction_stmt:
+  begin_stmt
+| commit_stmt
+| rollback_stmt
+
+begin_stmt:
   BEGIN opt_transaction begin_transaction
   {
     $$.val = $3.stmt()
@@ -2431,7 +2598,9 @@ transaction_stmt:
   {
     $$.val = $3.stmt()
   }
-| COMMIT opt_transaction
+
+commit_stmt:
+  COMMIT opt_transaction
   {
     $$.val = &CommitTransaction{}
   }
@@ -2439,7 +2608,9 @@ transaction_stmt:
   {
     $$.val = &CommitTransaction{}
   }
-| ROLLBACK opt_to_savepoint
+
+rollback_stmt:
+  ROLLBACK opt_to_savepoint
   {
     if $2 != "" {
       $$.val = &RollbackToSavepoint{Savepoint: $2}
@@ -2621,7 +2792,9 @@ insert_stmt:
     $$.val.(*Insert).OnConflict = $6.onConflict()
     $$.val.(*Insert).Returning = $7.retClause()
   }
-| opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
+
+upsert_stmt:
+  opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
@@ -2886,14 +3059,7 @@ simple_select:
     }
   }
 | values_clause
-| TABLE relation_expr
-  {
-    $$.val = &SelectClause{
-      Exprs:       SelectExprs{starSelectExpr()},
-      From:        &From{Tables: TableExprs{$2.newNormalizableTableName()}},
-      tableSelect: true,
-    }
-  }
+| table_clause
 | select_clause UNION all_or_distinct select_clause
   {
     $$.val = &UnionClause{
@@ -2922,6 +3088,16 @@ simple_select:
     }
   }
 
+table_clause:
+  TABLE relation_expr
+  {
+    $$.val = &SelectClause{
+      Exprs:       SelectExprs{starSelectExpr()},
+      From:        &From{Tables: TableExprs{$2.newNormalizableTableName()}},
+      tableSelect: true,
+    }
+  }
+
 // SQL standard WITH clause looks like:
 //
 // WITH [ RECURSIVE ] <query name> [ (<column>,...) ]
@@ -2931,7 +3107,7 @@ simple_select:
 //
 // Recognizing WITH_LA here allows a CTE to be named TIME or ORDINALITY.
 with_clause:
-WITH cte_list { return unimplemented(sqllex, "with cte_list") }
+  WITH cte_list { return unimplemented(sqllex, "with cte_list") }
 | WITH_LA cte_list { return unimplemented(sqllex, "with cte_list") }
 | WITH RECURSIVE cte_list { return unimplemented(sqllex, "with cte_list") }
 

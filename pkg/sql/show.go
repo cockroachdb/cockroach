@@ -529,7 +529,7 @@ WHERE message LIKE 'fetched: %'
 	}
 
 	if n.Statement == nil {
-		// SHOW SESSION TRACE ...
+		// SHOW TRACE FOR SESSION ...
 		return plan, nil
 	}
 

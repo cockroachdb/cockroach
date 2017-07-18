@@ -1166,7 +1166,7 @@ func (s *Session) maybeRecover(action, stmt string) {
 	}
 }
 
-// SessionTracing holds the state used by SET TRACE {ON,OFF,LOCAL} statements in
+// SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
 // the context of one SQL session.
 // It holds the current trace being collected (or the last trace collected, if
 // tracing is not currently ongoing).
@@ -1190,7 +1190,7 @@ type SessionTracing struct {
 
 	// txnRecording accumulates the recorded spans. Each []RawSpan represents the
 	// trace of a SQL transaction. The first element corresponds to the
-	// partially-recorded transaction in which SET TRACE ON was run (or its
+	// partially-recorded transaction in which SET TRACING ON was run (or its
 	// implicit txn, if there wasn't a SQL transaction already running). The last
 	// one will contain the partial-recording of the transaction in which SET
 	// TRACE OFF has been run.
