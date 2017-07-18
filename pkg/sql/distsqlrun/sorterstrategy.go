@@ -19,6 +19,7 @@ package distsqlrun
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -43,46 +44,102 @@ type sorterStrategy interface {
 //
 // The strategy is intended to be used when all values need to be sorted.
 type sortAllStrategy struct {
-	rows rowContainer
+	rows           memRowContainer
+	useTempStorage bool
 }
 
 var _ sorterStrategy = &sortAllStrategy{}
 
-func newSortAllStrategy(rows rowContainer) sorterStrategy {
+func newSortAllStrategy(rows memRowContainer, useTempStorage bool) sorterStrategy {
 	return &sortAllStrategy{
-		rows: rows,
+		rows:           rows,
+		useTempStorage: useTempStorage,
 	}
 }
 
-// The execution loop for the SortAll strategy:
-//  - loads all rows into memory;
-//  - runs sort.Sort to sort rows in place;
-//  - sends each row out to the output stream.
+// Execute runs an in memory implementation of a sort. If this run fails with a
+// memory error, the strategy will fall back to use disk.
 func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 	defer ss.rows.Close(ctx)
+	row, err := ss.executeImpl(ctx, s, &ss.rows)
+	// TODO(asubiotto): A memory error could also be returned if a limit other
+	// than the COCKROACH_WORK_MEM was reached. We should distinguish between
+	// these cases and log the event to facilitate debugging of queries that
+	// may be slow for this reason.
+	if pgErr, ok := err.(*pgerror.Error); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+		return err
+	}
+	if !ss.useTempStorage {
+		return errors.Wrap(err, "external storage for large queries disabled")
+	}
+	if s.tempStorage == nil {
+		return errors.Wrap(err, "external storage not provided on this cockroach node")
+	}
+	log.VEventf(ctx, 2, "falling back to disk")
+	// The diskContainer will free the memory taken up by ss.rows as it is
+	// created from them.
+	diskContainer, err := makeDiskRowContainer(
+		ctx, s.tempStorageID, ss.rows.types, ss.rows.ordering, ss.rows, s.tempStorage,
+	)
+	if err != nil {
+		return err
+	}
+	defer diskContainer.Close(ctx)
+	// Add the row that caused the memory container to run out of memory.
+	if err := diskContainer.AddRow(ctx, row); err != nil {
+		return err
+	}
+	if _, err := ss.executeImpl(ctx, s, &diskContainer); err != nil {
+		return err
+	}
+	return nil
+}
+
+// The execution loop for the SortAll strategy:
+//  - loads all rows into memory. If the memory budget is not high enough, all
+//    rows are stored on disk.
+//  - runs sort.Sort to sort rows in place. In the disk-backed case, the rows
+//    are already kept in sorted order.
+//  - sends each row out to the output stream.
+//
+// If an error occurs while adding a row to the given container, the row is
+// returned in order to not lose it.
+func (ss *sortAllStrategy) executeImpl(
+	ctx context.Context, s *sorter, r sortableRowContainer,
+) (sqlbase.EncDatumRow, error) {
 	for {
 		row, err := s.input.NextRow()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if row == nil {
 			break
 		}
-		if err := ss.rows.AddRow(ctx, row); err != nil {
-			return err
+		if err := r.AddRow(ctx, row); err != nil {
+			return row, err
 		}
 	}
-	ss.rows.Sort()
+	r.Sort()
 
-	for ss.rows.Len() > 0 {
-		// Push the row to the output; stop if they don't need more rows.
-		consumerStatus, err := s.out.emitRow(ctx, ss.rows.EncRow(0))
-		if err != nil || consumerStatus != NeedMoreRows {
-			return err
+	i := r.NewIterator(ctx)
+	defer i.Close()
+
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
 		}
-		ss.rows.PopFirst()
+		row, err := i.Row()
+		if err != nil {
+			return nil, err
+		}
+		consumerStatus, err := s.out.emitRow(ctx, row)
+		if err != nil || consumerStatus != NeedMoreRows {
+			return nil, err
+		}
 	}
-	return nil
+	return nil, nil
 }
 
 // sortTopKStrategy creates a max-heap in its wrapped rows and keeps
@@ -102,14 +159,16 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 // of O(n + k*log(k)) while maintaining a worst-case space complexity of O(k).
 // For instance, the top k can be found in linear time, and then this can be
 // sorted in linearithmic time.
+//
+// TODO(asubiotto): Use diskRowContainer for these other strategies.
 type sortTopKStrategy struct {
-	rows rowContainer
+	rows memRowContainer
 	k    int64
 }
 
 var _ sorterStrategy = &sortTopKStrategy{}
 
-func newSortTopKStrategy(rows rowContainer, k int64) sorterStrategy {
+func newSortTopKStrategy(rows memRowContainer, k int64) sorterStrategy {
 	ss := &sortTopKStrategy{
 		rows: rows,
 		k:    k,
@@ -168,13 +227,13 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 // If we're scanning an index with a prefix matching an ordering prefix, we only accumulate values
 // for equal fields in this prefix, sort the accumulated chunk and then output.
 type sortChunksStrategy struct {
-	rows  rowContainer
+	rows  memRowContainer
 	alloc sqlbase.DatumAlloc
 }
 
 var _ sorterStrategy = &sortChunksStrategy{}
 
-func newSortChunksStrategy(rows rowContainer) sorterStrategy {
+func newSortChunksStrategy(rows memRowContainer) sorterStrategy {
 	return &sortChunksStrategy{
 		rows: rows,
 	}
