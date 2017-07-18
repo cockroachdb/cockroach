@@ -366,6 +366,7 @@ func TestCommonMethods(t *testing.T) {
 		{batchType, "PutInline"}:                     {},
 		{batchType, "RawResponse"}:                   {},
 		{batchType, "MustPErr"}:                      {},
+		{batchType, "SetTxn"}:                        {},
 		{dbType, "AdminMerge"}:                       {},
 		{dbType, "AdminSplit"}:                       {},
 		{dbType, "AdminTransferLease"}:               {},

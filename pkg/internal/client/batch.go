@@ -679,3 +679,8 @@ func (b *Batch) addSSTable(s, e interface{}, data []byte) {
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
 }
+
+// SetTxn sets the transaction for a batch.
+func (b *Batch) SetTxn(txn *Txn) {
+	b.txn = txn
+}
