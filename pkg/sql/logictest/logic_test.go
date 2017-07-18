@@ -1431,7 +1431,8 @@ func (t *logicTest) runFile(path string, config testClusterConfig) {
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if testutils.Stress() {
+	if testutils.NightlyStress() {
+		// See https://github.com/cockroachdb/cockroach/pull/10966.
 		t.Skip()
 	}
 

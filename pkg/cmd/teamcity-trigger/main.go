@@ -21,6 +21,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/abourget/teamcity"
 	"github.com/kisielk/gotool"
@@ -71,6 +72,7 @@ func runTC(queueBuildFn func(map[string]string)) {
 		{"env.GOFLAGS": "-race"},
 		{"env.TAGS": "deadlock"},
 	} {
+		properties["COCKROACH_NIGHTLY_STRESS"] = strconv.FormatBool(true)
 		for _, importPath := range importPaths {
 			properties["env.PKG"] = importPath
 

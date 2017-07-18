@@ -9,7 +9,7 @@ exit_status=0
 
 build/builder.sh go install ./pkg/cmd/github-post
 
-build/builder.sh env \
+build/builder.sh env COCKROACH_NIGHTLY_STRESS=true \
 		 make stress \
 		 PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
 		 TESTTIMEOUT=30m TESTFLAGS='-test.v' \
