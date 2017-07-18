@@ -277,10 +277,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(s.cfg.SQLMemoryPoolSize))
 
-	distSQLMemMetrics := sql.MakeMemMetrics("distsql", cfg.HistogramWindowInterval())
-	s.registry.AddMetric(distSQLMemMetrics.CurBytesCount)
-	s.registry.AddMetric(distSQLMemMetrics.MaxBytesHist)
-
 	// Set up the DistSQL temp engine.
 
 	// Check if all our configured stores are in-memory. if this is the case, we
@@ -309,7 +305,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
-	distSQLMetrics := distsqlrun.MakeDistSQLMetrics()
+	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
 
 	// Set up the DistSQL server.
@@ -325,8 +321,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TempStorage: tempEngine,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
-		Counter:             distSQLMemMetrics.CurBytesCount,
-		Hist:                distSQLMemMetrics.MaxBytesHist,
 
 		Metrics: &distSQLMetrics,
 	}

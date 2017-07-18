@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -91,10 +90,6 @@ type ServerConfig struct {
 
 	ParentMemoryMonitor *mon.MemoryMonitor
 
-	// TODO(couchand): move these into the DistSQLMetrics struct
-	Counter *metric.Counter
-	Hist    *metric.Histogram
-
 	// TempStorage is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory. It can be nil, if this
 	// cockroach node does not have an engine for temporary storage.
@@ -145,7 +140,7 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		flowRegistry:  makeFlowRegistry(),
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Metrics),
 		memMonitor: mon.MakeMonitor("distsql",
-			cfg.Counter, cfg.Hist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
+			cfg.Metrics.CurBytesCount, cfg.Metrics.MaxBytesHist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
 		tempStorage:            cfg.TempStorage,
 		tempStorageIDGenerator: TempStorageIDGenerator{},
 	}
@@ -192,7 +187,7 @@ func (ds *ServerImpl) setupFlow(
 
 	// The monitor and account opened here are closed in Flow.Cleanup().
 	monitor := mon.MakeMonitor("flow",
-		ds.Counter, ds.Hist, -1 /* use default block size */, noteworthyMemoryUsageBytes)
+		ds.Metrics.CurBytesCount, ds.Metrics.MaxBytesHist, -1 /* use default block size */, noteworthyMemoryUsageBytes)
 	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
 	acc := monitor.MakeBoundAccount()
 
