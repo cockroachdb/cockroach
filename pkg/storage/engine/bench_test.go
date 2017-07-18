@@ -325,7 +325,7 @@ func runMVCCInitPut(emk engineMaker, valueSize int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCInitPut(context.Background(), eng, nil, key, ts, value, nil); err != nil {
+		if err := MVCCInitPut(context.Background(), eng, nil, key, ts, value, false, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
 		}
 	}
@@ -347,7 +347,7 @@ func runMVCCBlindInitPut(emk engineMaker, valueSize int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindInitPut(context.Background(), eng, nil, key, ts, value, nil); err != nil {
+		if err := MVCCBlindInitPut(context.Background(), eng, nil, key, ts, value, false, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
 		}
 	}
