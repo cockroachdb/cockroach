@@ -41,6 +41,7 @@ type chunkBackfiller interface {
 		mutations []sqlbase.DescriptorMutation,
 		span roachpb.Span,
 		chunkSize int64,
+		readAsOf int64,
 	) (roachpb.Key, error)
 }
 
@@ -126,7 +127,7 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 				b.name, desc.ID, mutationID, row, sp)
 		}
 		var err error
-		sp.Key, err = b.runChunk(ctx, mutations, sp, chunkSize)
+		sp.Key, err = b.runChunk(ctx, mutations, sp, chunkSize, b.spec.ReadAsOf)
 		if err != nil {
 			return err
 		}
