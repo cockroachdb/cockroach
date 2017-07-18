@@ -386,6 +386,8 @@ message BackfillerSpec {
   // backfiller to do its job, such as the descriptors for tables with fk
   // relationships to the table being modified.
   repeated sqlbase.TableDescriptor other_tables = 6 [(gogoproto.nullable) = false];
+
+  optional int64 readAsOf = 7 [(gogoproto.nullable) = false];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL

@@ -61,6 +61,7 @@ type SchemaChanger struct {
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
 	execAfter      time.Time
+	readAsOf       int64
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *distSQLPlanner
 	job            *jobs.Job
@@ -645,6 +646,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	if err := sc.RunStateMachineBeforeBackfill(ctx); err != nil {
 		return err
 	}
+
 	if err := sc.job.Progressed(ctx, .1, jobs.Noop); err != nil {
 		log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
 			sc.job.ID(), err)
