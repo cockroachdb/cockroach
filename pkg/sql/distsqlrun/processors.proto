@@ -28,6 +28,7 @@ import "cockroach/pkg/roachpb/errors.proto";
 import "cockroach/pkg/sql/sqlbase/structured.proto";
 import "cockroach/pkg/sql/sqlbase/encoded_datum.proto";
 import "cockroach/pkg/sql/distsqlrun/data.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 
@@ -400,6 +401,9 @@ message BackfillerSpec {
   // backfiller to do its job, such as the descriptors for tables with fk
   // relationships to the table being modified.
   repeated sqlbase.TableDescriptor other_tables = 6 [(gogoproto.nullable) = false];
+
+  // The timestamp to perform index backfill historical scans at.
+  optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
