@@ -133,7 +133,11 @@ func (cb *columnBackfiller) init() error {
 
 // runChunk implements the chunkBackfiller interface.
 func (cb *columnBackfiller) runChunk(
-	ctx context.Context, mutations []sqlbase.DescriptorMutation, sp roachpb.Span, chunkSize int64,
+	ctx context.Context,
+	mutations []sqlbase.DescriptorMutation,
+	sp roachpb.Span,
+	chunkSize int64,
+	readAsOf int64,
 ) (roachpb.Key, error) {
 	tableDesc := cb.backfiller.spec.Table
 	err := cb.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
