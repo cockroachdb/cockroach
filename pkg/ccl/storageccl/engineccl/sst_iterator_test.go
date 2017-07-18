@@ -24,33 +24,35 @@ func runTestSSTIterator(t *testing.T, iter engine.SimpleIterator, allKVs []engin
 	// Drop the first kv so we can test Seek.
 	expected := allKVs[1:]
 
-	var kvs []engine.MVCCKeyValue
-	for iter.Seek(expected[0].Key); ; iter.Next() {
-		ok, err := iter.Valid()
-		if err != nil {
+	// Run the test multiple times to check re-Seeking.
+	for i := 0; i < 3; i++ {
+		var kvs []engine.MVCCKeyValue
+		for iter.Seek(expected[0].Key); ; iter.Next() {
+			ok, err := iter.Valid()
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
+			if !ok {
+				break
+			}
+			kv := engine.MVCCKeyValue{
+				Key: engine.MVCCKey{
+					Key:       append([]byte(nil), iter.UnsafeKey().Key...),
+					Timestamp: iter.UnsafeKey().Timestamp,
+				},
+				Value: append([]byte(nil), iter.UnsafeValue()...),
+			}
+			kvs = append(kvs, kv)
+		}
+		if ok, err := iter.Valid(); err != nil {
 			t.Fatalf("%+v", err)
+		} else if ok {
+			t.Fatalf("expected !ok")
 		}
-		if !ok {
-			break
-		}
-		kv := engine.MVCCKeyValue{
-			Key: engine.MVCCKey{
-				Key:       append([]byte(nil), iter.UnsafeKey().Key...),
-				Timestamp: iter.UnsafeKey().Timestamp,
-			},
-			Value: append([]byte(nil), iter.UnsafeValue()...),
-		}
-		kvs = append(kvs, kv)
-	}
-	iter.Close()
-	if ok, err := iter.Valid(); err != nil {
-		t.Fatalf("%+v", err)
-	} else if ok {
-		t.Fatalf("expected !ok")
-	}
 
-	if !reflect.DeepEqual(kvs, expected) {
-		t.Fatalf("got %+v but expected %+v", kvs, expected)
+		if !reflect.DeepEqual(kvs, expected) {
+			t.Fatalf("got %+v but expected %+v", kvs, expected)
+		}
 	}
 }
 
@@ -94,6 +96,7 @@ func TestSSTIterator(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
+		defer iter.Close()
 		runTestSSTIterator(t, iter, allKVs)
 	})
 	t.Run("Mem", func(t *testing.T) {
@@ -101,6 +104,7 @@ func TestSSTIterator(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
+		defer iter.Close()
 		runTestSSTIterator(t, iter, allKVs)
 	})
 }
