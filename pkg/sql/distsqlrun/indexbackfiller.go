@@ -162,7 +162,7 @@ func (ib *indexBackfiller) runChunk(
 			for _, secondaryIndexEntry := range secondaryIndexEntries {
 				log.VEventf(ctx, 3, "InitPut %s -> %v", secondaryIndexEntry.Key,
 					secondaryIndexEntry.Value)
-				b.InitPut(secondaryIndexEntry.Key, &secondaryIndexEntry.Value)
+				b.InitPut(secondaryIndexEntry.Key, &secondaryIndexEntry.Value, false)
 			}
 		}
 		// Write the new index values.

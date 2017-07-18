@@ -336,8 +336,9 @@ func evalConditionalPut(
 }
 
 // evalInitPut sets the value for a specified key only if it doesn't exist. It
-// returns an error if the key exists with an existing value that is different
-// from the value provided.
+// returns a ConditionFailedError if the key exists with an existing value that
+// is different from the value provided. If FailOnTombstone is set to true,
+// tombstones count as mismatched values and will cause a ConditionFailedError.
 func evalInitPut(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
@@ -354,9 +355,9 @@ func evalInitPut(
 		}
 	}
 	if args.Blind {
-		return EvalResult{}, engine.MVCCBlindInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, h.Txn)
+		return EvalResult{}, engine.MVCCBlindInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
 	}
-	return EvalResult{}, engine.MVCCInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, h.Txn)
+	return EvalResult{}, engine.MVCCInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
 }
 
 // evalIncrement increments the value (interpreted as varint64 encoded) and
