@@ -4394,7 +4394,7 @@ func (r *Replica) applyRaftCommand(
 	start := timeutil.Now()
 
 	var assertHS *raftpb.HardState
-	if util.RaceEnabled && rResult.Split != nil {
+	if util.RaceEnabled && rResult.Split != nil && util.IsMigrated() {
 		oldHS, err := loadHardState(ctx, r.store.Engine(), rResult.Split.RightDesc.RangeID)
 		if err != nil {
 			log.Fatalf(ctx, "unable to load HardState: %s", err)
@@ -4410,11 +4410,11 @@ func (r *Replica) applyRaftCommand(
 		// Load the HardState that was just committed (if any).
 		newHS, err := loadHardState(ctx, r.store.Engine(), rResult.Split.RightDesc.RangeID)
 		if err != nil {
-			panic(err)
+			log.Fatalf(ctx, "unable to load HardState: %s", err)
 		}
 		// Assert that nothing moved "backwards".
 		if newHS.Term < assertHS.Term || (newHS.Term == assertHS.Term && newHS.Commit < assertHS.Commit) {
-			log.Fatalf(ctx, "clobbered hard state: %s\n\npreviously: %s\noverwritten with: %s",
+			log.Fatalf(ctx, "clobbered HardState: %s\n\npreviously: %s\noverwritten with: %s",
 				pretty.Diff(newHS, *assertHS), pretty.Sprint(*assertHS), pretty.Sprint(newHS))
 		}
 	}

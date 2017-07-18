@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -60,12 +59,7 @@ func TestSynthesizeHardState(t *testing.T) {
 		func() {
 			batch := eng.NewBatch()
 			defer batch.Close()
-			testState := storagebase.ReplicaState{
-				Desc:             testRangeDescriptor(),
-				TruncatedState:   &roachpb.RaftTruncatedState{Term: test.TruncTerm},
-				RaftAppliedIndex: test.RaftAppliedIndex,
-			}
-			rsl := makeReplicaStateLoader(testState.Desc.RangeID)
+			rsl := makeReplicaStateLoader(1)
 
 			if test.OldHS != nil {
 				if err := rsl.setHardState(context.Background(), batch, *test.OldHS); err != nil {
@@ -78,7 +72,9 @@ func TestSynthesizeHardState(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			err = rsl.synthesizeHardState(context.Background(), batch, testState, oldHS)
+			err = rsl.synthesizeHardState(
+				context.Background(), batch, oldHS, roachpb.RaftTruncatedState{Term: test.TruncTerm}, test.RaftAppliedIndex,
+			)
 			if !testutils.IsError(err, test.Err) {
 				t.Fatalf("%d: expected %q got %v", i, test.Err, err)
 			} else if err != nil {
