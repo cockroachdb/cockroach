@@ -411,7 +411,9 @@ func (r *Replica) computeChecksumPostApply(
 	r.mu.checksums[id] = replicaChecksum{started: true, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
-	snap := r.store.NewSnapshot()
+	// Caller is holding raftMu, so an engine snapshot is automatically
+	// Raft-consistent (i.e. not in the middle of an AddSSTable).
+	snap := r.store.engine.NewSnapshot()
 
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if err := stopper.RunAsyncTask(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {
