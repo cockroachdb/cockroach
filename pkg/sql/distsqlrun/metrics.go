@@ -17,6 +17,8 @@
 package distsqlrun
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -27,6 +29,8 @@ type DistSQLMetrics struct {
 	QueriesTotal  *metric.Counter
 	FlowsActive   *metric.Gauge
 	FlowsTotal    *metric.Counter
+	MaxBytesHist  *metric.Histogram
+	CurBytesCount *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -47,15 +51,27 @@ var (
 	metaFlowsTotal = metric.Metadata{
 		Name: "sql.distsql.flows.total",
 		Help: "Number of distributed SQL flows executed"}
+	metaMemMaxBytes = metric.Metadata{
+		Name: "sql.mem.distsql.max",
+		Help: "Memory usage per sql statement for distsql"}
+	metaMemCurBytes = metric.Metadata{
+		Name: "sql.mem.distsql.current",
+		Help: "Current sql statement memory usage for distsql"}
 )
 
+// See pkg/sql/mem_metrics.go
+// log10int64times1000 = log10(math.MaxInt64) * 1000, rounded up somewhat
+const log10int64times1000 = 19 * 1000
+
 // MakeDistSQLMetrics instantiates the metrics holder for DistSQL monitoring.
-func MakeDistSQLMetrics() DistSQLMetrics {
+func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 	return DistSQLMetrics{
 		QueriesActive: metric.NewGauge(metaQueriesActive),
 		QueriesTotal:  metric.NewCounter(metaQueriesTotal),
 		FlowsActive:   metric.NewGauge(metaFlowsActive),
 		FlowsTotal:    metric.NewCounter(metaFlowsTotal),
+		MaxBytesHist:  metric.NewHistogram(metaMemMaxBytes, histogramWindow, log10int64times1000, 3),
+		CurBytesCount: metric.NewCounter(metaMemCurBytes),
 	}
 }
 
