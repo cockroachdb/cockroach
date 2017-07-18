@@ -690,12 +690,14 @@ func initBackfillerSpec(
 	duration time.Duration,
 	chunkSize int64,
 	otherTables []sqlbase.TableDescriptor,
+	readAsOf int64,
 ) (distsqlrun.BackfillerSpec, error) {
 	ret := distsqlrun.BackfillerSpec{
 		Table:       desc,
 		Duration:    duration,
 		ChunkSize:   chunkSize,
 		OtherTables: otherTables,
+		ReadAsOf:    readAsOf,
 	}
 	switch backfillType {
 	case indexBackfill:
@@ -719,8 +721,9 @@ func (dsp *distSQLPlanner) CreateBackfiller(
 	chunkSize int64,
 	spans []roachpb.Span,
 	otherTables []sqlbase.TableDescriptor,
+	readAsOf int64,
 ) (physicalPlan, error) {
-	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables)
+	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables, readAsOf)
 	if err != nil {
 		return physicalPlan{}, err
 	}
