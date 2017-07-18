@@ -444,6 +444,10 @@ libroach: $(LIBROACH_DIR)/Makefile
 libroachccl: $(LIBROACH_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) -j$(NCPUS) roachccl
 
+.PHONY: check-libroach
+check-libroach:
+	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) check
+
 .PHONY: clean-c-deps
 clean-c-deps:
 	rm -rf $(JEMALLOC_DIR) && git -C $(JEMALLOC_SRC_DIR) clean -dxf
