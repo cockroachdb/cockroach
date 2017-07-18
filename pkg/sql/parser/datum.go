@@ -786,7 +786,7 @@ type DCollatedString struct {
 // construct collation keys efficiently.
 type CollationEnvironment struct {
 	cache  map[string]collationEnvironmentCacheEntry
-	buffer collate.Buffer
+	buffer *collate.Buffer
 }
 
 type collationEnvironmentCacheEntry struct {
@@ -814,7 +814,10 @@ func NewDCollatedString(
 	contents string, locale string, env *CollationEnvironment,
 ) *DCollatedString {
 	entry := env.getCacheEntry(locale)
-	key := entry.collator.KeyFromString(&env.buffer, contents)
+	if env.buffer == nil {
+		env.buffer = &collate.Buffer{}
+	}
+	key := entry.collator.KeyFromString(env.buffer, contents)
 	d := DCollatedString{contents, entry.locale, make([]byte, len(key))}
 	copy(d.Key, key)
 	env.buffer.Reset()
