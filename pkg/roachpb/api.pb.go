@@ -452,7 +452,8 @@ func (*ConditionalPutResponse) Descriptor() ([]byte, []int) { return fileDescrip
 // An InitPutRequest is the argument to the InitPut() method.
 //
 // - If key doesn't exist, sets value.
-// - If key exists, returns an error if value != existing value.
+// - If key exists, returns a ConditionFailedError if value != existing value
+//   including tombstone values.
 type InitPutRequest struct {
 	Span  `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`

@@ -762,7 +762,7 @@ func mvccGetInternal(
 		seekKey.Timestamp = txn.MaxTimestamp
 		checkValueTimestamp = true
 	} else {
-		// Third case: We're reading a historic value either outside of a
+		// Third case: We're reading a historical value either outside of a
 		// transaction, or in the absence of future versions that clock uncertainty
 		// would apply to.
 		seekKey.Timestamp = timestamp
@@ -1301,8 +1301,10 @@ func mvccConditionalPutUsingIter(
 var errInitPutValueMatchesExisting = errors.New("the value matched the existing value")
 
 // MVCCInitPut sets the value for a specified key if the key doesn't exist. It
-// returns an error when the write fails or if the key exists with an
-// existing value that is different from the supplied value.
+// returns a ConditionFailedError when the write fails or if the key exists with
+// an existing value that is different from the supplied value, or if the
+// supplied value has a non-zero MVCC timestamp that is not exactly equal to
+// that of the existing value.
 func MVCCInitPut(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1320,7 +1322,7 @@ func MVCCInitPut(
 // MVCCBlindInitPut is a fast-path of MVCCInitPut. See the MVCCInitPut
 // comments for details of the semantics. MVCCBlindInitPut skips
 // retrieving the existing metadata for the key requiring the caller
-// to gauarntee no version for the key currently exist.
+// to guarantee no version for the key currently exist.
 func MVCCBlindInitPut(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1345,7 +1347,7 @@ func mvccInitPutUsingIter(
 ) error {
 	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn,
 		func(existVal *roachpb.Value) ([]byte, error) {
-			if existVal.IsPresent() {
+			if existVal != nil {
 				if !bytes.Equal(value.RawBytes, existVal.RawBytes) {
 					return nil, &roachpb.ConditionFailedError{
 						ActualValue: existVal.ShallowClone(),
