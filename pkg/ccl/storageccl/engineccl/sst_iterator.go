@@ -93,7 +93,7 @@ func (r *sstIterator) Close() {
 // Seek implements the engine.SimpleIterator interface.
 func (r *sstIterator) Seek(key engine.MVCCKey) {
 	if r.iter != nil {
-		if r.err = errors.Wrap(r.sst.Close(), "resetting sstable iterator"); r.err != nil {
+		if r.err = errors.Wrap(r.iter.Close(), "resetting sstable iterator"); r.err != nil {
 			return
 		}
 	}
