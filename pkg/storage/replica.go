@@ -2352,7 +2352,7 @@ func (r *Replica) executeReadOnlyBatch(
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
 
-	if intents := result.Local.detachIntents(); len(intents) > 0 {
+	if intents := result.Local.detachIntents(pErr != nil); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		r.store.intentResolver.processIntentsAsync(r, intents)
 	}
@@ -2670,7 +2670,7 @@ func (r *Replica) evaluateProposal(
 		// Failed proposals (whether they're failfast or not) can't have any
 		// EvalResult except what's whitelisted here.
 		result.Local = LocalEvalResult{
-			intents:            result.Local.intents,
+			intentsAlways:      result.Local.intentsAlways,
 			Err:                r.maybeSetCorrupt(ctx, result.Local.Err),
 			leaseMetricsResult: result.Local.leaseMetricsResult,
 		}
@@ -2789,14 +2789,10 @@ func (r *Replica) propose(
 			return nil, nil, noop, errors.Errorf(
 				"requestToProposal returned error %s without eval results", pErr)
 		}
-		intents := proposal.Local.detachIntents()
-		r.raftMu.Lock()
-		// TODO(tschottdorf): refactor how we deal with fields that are set on
-		// error. Each field should know under which circumstances it takes
-		// effect.
-		proposal.command.ReplicatedEvalResult.AddSSTable = nil
-		r.handleEvalResultRaftMuLocked(ctx, proposal.Local, proposal.command.ReplicatedEvalResult)
-		r.raftMu.Unlock()
+		intents := proposal.Local.detachIntents(true /* hasError */)
+		if proposal.Local != nil {
+			r.handleLocalEvalResult(ctx, *proposal.Local)
+		}
 		if endCmds != nil {
 			endCmds.done(nil, pErr, proposalNoRetry)
 		}
@@ -4219,7 +4215,7 @@ func (r *Replica) processRaftCommand(
 			} else {
 				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", proposal)
 			}
-			response.Intents = proposal.Local.detachIntents()
+			response.Intents = proposal.Local.detachIntents(response.Err != nil)
 			lResult = proposal.Local
 		}
 
@@ -5116,7 +5112,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 	if pErr != nil {
 		return config.SystemConfig{}, pErr.GoError()
 	}
-	if intents := result.Local.detachIntents(); len(intents) > 0 {
+	if intents := result.Local.detachIntents(false /* !hasError */); len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
