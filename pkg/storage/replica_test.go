@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -200,7 +199,6 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 				tc.store.Engine(),
 				enginepb.MVCCStats{},
 				*testDesc,
-				raftpb.HardState{},
 				roachpb.Lease{},
 				hlc.Timestamp{},
 				hlc.Timestamp{},
