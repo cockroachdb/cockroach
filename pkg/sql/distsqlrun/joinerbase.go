@@ -61,12 +61,12 @@ func (jb *joinerBase) init(
 	leftTypes := leftSource.Types()
 	jb.emptyLeft = make(sqlbase.EncDatumRow, len(leftTypes))
 	for i := range jb.emptyLeft {
-		jb.emptyLeft[i].Datum = parser.DNull
+		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(leftTypes[i], parser.DNull)
 	}
 	rightTypes := rightSource.Types()
 	jb.emptyRight = make(sqlbase.EncDatumRow, len(rightTypes))
 	for i := range jb.emptyRight {
-		jb.emptyRight[i].Datum = parser.DNull
+		jb.emptyRight[i] = sqlbase.DatumToEncDatum(rightTypes[i], parser.DNull)
 	}
 
 	jb.combinedRow = make(sqlbase.EncDatumRow, 0, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
