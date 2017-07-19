@@ -6243,6 +6243,126 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type RangeStatistics$Properties = {
+                queries_per_second?: number;
+                writes_per_second?: number;
+            };
+
+            /**
+             * Constructs a new RangeStatistics.
+             * @exports cockroach.server.serverpb.RangeStatistics
+             * @constructor
+             * @param {cockroach.server.serverpb.RangeStatistics$Properties=} [properties] Properties to set
+             */
+            class RangeStatistics {
+
+                /**
+                 * Constructs a new RangeStatistics.
+                 * @exports cockroach.server.serverpb.RangeStatistics
+                 * @constructor
+                 * @param {cockroach.server.serverpb.RangeStatistics$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.RangeStatistics$Properties);
+
+                /**
+                 * RangeStatistics queries_per_second.
+                 * @type {number}
+                 */
+                public queries_per_second: number;
+
+                /**
+                 * RangeStatistics writes_per_second.
+                 * @type {number}
+                 */
+                public writes_per_second: number;
+
+                /**
+                 * Creates a new RangeStatistics instance using the specified properties.
+                 * @param {cockroach.server.serverpb.RangeStatistics$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.RangeStatistics} RangeStatistics instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.RangeStatistics$Properties): cockroach.server.serverpb.RangeStatistics;
+
+                /**
+                 * Encodes the specified RangeStatistics message. Does not implicitly {@link cockroach.server.serverpb.RangeStatistics.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.RangeStatistics$Properties} message RangeStatistics message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.RangeStatistics$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified RangeStatistics message, length delimited. Does not implicitly {@link cockroach.server.serverpb.RangeStatistics.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.RangeStatistics$Properties} message RangeStatistics message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.RangeStatistics$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a RangeStatistics message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.RangeStatistics} RangeStatistics
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.RangeStatistics;
+
+                /**
+                 * Decodes a RangeStatistics message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.RangeStatistics} RangeStatistics
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.RangeStatistics;
+
+                /**
+                 * Verifies a RangeStatistics message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a RangeStatistics message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.RangeStatistics} RangeStatistics
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.RangeStatistics;
+
+                /**
+                 * Creates a RangeStatistics message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.RangeStatistics.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.RangeStatistics} RangeStatistics
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.RangeStatistics;
+
+                /**
+                 * Creates a plain object from a RangeStatistics message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.RangeStatistics} message RangeStatistics
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.RangeStatistics, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this RangeStatistics message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this RangeStatistics to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type PrettySpan$Properties = {
                 start_key?: string;
                 end_key?: string;
@@ -6372,6 +6492,7 @@ export namespace cockroach {
                 error_message?: string;
                 lease_history?: cockroach.roachpb.Lease$Properties[];
                 problems?: cockroach.server.serverpb.RangeProblems$Properties;
+                stats?: cockroach.server.serverpb.RangeStatistics$Properties;
             };
 
             /**
@@ -6437,6 +6558,12 @@ export namespace cockroach {
                  * @type {(cockroach.server.serverpb.RangeProblems$Properties|null)}
                  */
                 public problems: (cockroach.server.serverpb.RangeProblems$Properties|null);
+
+                /**
+                 * RangeInfo stats.
+                 * @type {(cockroach.server.serverpb.RangeStatistics$Properties|null)}
+                 */
+                public stats: (cockroach.server.serverpb.RangeStatistics$Properties|null);
 
                 /**
                  * Creates a new RangeInfo instance using the specified properties.

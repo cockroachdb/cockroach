@@ -124,6 +124,13 @@ message RangeProblems {
     bool no_lease = 5;
 }
 
+message RangeStatistics {
+  // Note that queries per second will only be known by the leaseholder.
+  // All other replicas will report it as 0.
+  double queries_per_second = 1;
+  double writes_per_second = 2;
+}
+
 message PrettySpan {
   option (gogoproto.equal) = true;
 
@@ -146,6 +153,7 @@ message RangeInfo {
   string error_message = 7;
   repeated roachpb.Lease lease_history = 8 [(gogoproto.nullable) = false];
   RangeProblems problems = 9 [(gogoproto.nullable) = false];
+  RangeStatistics stats = 10 [(gogoproto.nullable) = false];
 }
 
 message RangesRequest {

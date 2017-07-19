@@ -510,6 +510,9 @@ func (r *Replica) leasePostApply(
 	if leaseChangingHands && (prevLease.OwnedBy(r.store.StoreID()) ||
 		newLease.OwnedBy(r.store.StoreID())) {
 		r.store.maybeGossipOnCapacityChange(ctx, leaseChangeEvent)
+		if r.leaseholderStats != nil {
+			r.leaseholderStats.resetRequestCounts()
+		}
 	}
 
 	// Potentially re-gossip if the range contains system data (e.g. system
