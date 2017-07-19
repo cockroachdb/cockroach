@@ -116,7 +116,7 @@ func (jb *joinerBase) renderUnmatchedRow(
 	}
 
 	// We assume first indices are for merged columns (see distsql_physical_planner.go)
-	jb.combinedRow = append(jb.combinedRow[:0])
+	jb.combinedRow = jb.combinedRow[:0]
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
 		lvalue := lrow[jb.leftEqualityIndices[idx]]
 		rvalue := rrow[jb.rightEqualityIndices[idx]]
@@ -177,7 +177,7 @@ func (jb *joinerBase) maybeEmitUnmatchedRow(
 // render constructs a row with columns from both sides. The ON condition is
 // evaluated; if it fails, returns nil.
 func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
-	jb.combinedRow = append(jb.combinedRow[:0])
+	jb.combinedRow = jb.combinedRow[:0]
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
 		value := lrow[jb.leftEqualityIndices[idx]]
 		jb.combinedRow = append(jb.combinedRow, value)
