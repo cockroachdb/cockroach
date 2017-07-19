@@ -433,6 +433,8 @@ func (node *OidColType) String() string            { return AsString(node) }
 // normalization.
 func DatumTypeToColumnType(t Type) (ColumnType, error) {
 	switch t {
+	case TypeBool:
+		return boolColTypeBool, nil
 	case TypeInt:
 		return intColTypeInt, nil
 	case TypeFloat:
