@@ -2279,11 +2279,6 @@ func (s *Store) processRangeDescriptorUpdateLocked(ctx context.Context, repl *Re
 	return nil
 }
 
-// NewSnapshot creates a new snapshot engine.
-func (s *Store) NewSnapshot() engine.Reader {
-	return s.engine.NewSnapshot()
-}
-
 // Attrs returns the attributes of the underlying store.
 func (s *Store) Attrs() roachpb.Attributes {
 	return s.engine.Attrs()
