@@ -109,15 +109,16 @@ func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(pl
 		err := exec(plan)
 
 		pq.mu.Lock()
-		defer pq.mu.Unlock()
-
 		if pq.err == nil {
 			// If we have not already seen an error since the last Wait, set the
 			// error state.
 			pq.err = err
 		}
-
 		finishLocked()
+		pq.mu.Unlock()
+
+		// Close the plan after removing it from the plans map and analyzer.
+		plan.Close(ctx)
 	}()
 }
 
