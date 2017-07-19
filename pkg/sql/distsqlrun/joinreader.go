@@ -40,6 +40,7 @@ type joinReader struct {
 	index *sqlbase.IndexDescriptor
 
 	fetcher sqlbase.RowFetcher
+	alloc   sqlbase.DatumAlloc
 
 	input RowSource
 	out   procOutputHelper
@@ -76,7 +77,8 @@ func newJoinReader(
 
 	var err error
 	jr.index, _, err = initRowFetcher(
-		&jr.fetcher, &jr.desc, int(spec.IndexIdx), false /* reverse */, jr.out.neededColumns(),
+		&jr.fetcher, &jr.desc, int(spec.IndexIdx), false, /* reverse */
+		jr.out.neededColumns(), &jr.alloc,
 	)
 	if err != nil {
 		return nil, err

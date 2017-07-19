@@ -101,7 +101,8 @@ func (ib *indexBackfiller) init() error {
 	}
 
 	return ib.fetcher.Init(
-		&desc, ib.colIdxMap, &desc.PrimaryIndex, false, false, cols, valNeededForCol, false,
+		&desc, ib.colIdxMap, &desc.PrimaryIndex, false, false, cols,
+		valNeededForCol, false, &ib.alloc,
 	)
 }
 
