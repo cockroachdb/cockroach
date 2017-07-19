@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -457,30 +456,19 @@ type inProgressChecker func(context context.Context, ip inProgressState) error
 // inProgressState holds state about an in-progress backup or restore
 // for use in inProgressCheckers.
 type inProgressState struct {
-	testCluster   *testcluster.TestCluster
-	sqlDB         *sqlutils.SQLRunner
+	*gosql.DB
 	backupTableID uint32
 	backupDir     string
 }
 
 func (ip inProgressState) latestJobID() (int64, error) {
 	var id int64
-	if err := ip.sqlDB.DB.QueryRow(
+	if err := ip.QueryRow(
 		`SELECT id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
 	).Scan(&id); err != nil {
 		return 0, err
 	}
 	return id, nil
-}
-
-func (ip inProgressState) internalExecutor() sql.InternalExecutor {
-	return sql.InternalExecutor{
-		LeaseManager: ip.testCluster.Servers[0].LeaseManager().(*sql.LeaseManager),
-	}
-}
-
-func (ip inProgressState) kvDB() *client.DB {
-	return ip.testCluster.Servers[0].DB()
 }
 
 // checkInProgressBackupRestore will run a backup and restore, pausing each
@@ -509,7 +497,7 @@ func checkInProgressBackupRestore(
 	const numAccounts = 1000
 	const totalExpectedResponses = backupRestoreDefaultRanges
 
-	ctx, dir, tc, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
+	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
 	defer cleanup()
 
 	sqlDB.Exec(`CREATE DATABASE restoredb`)
@@ -535,8 +523,7 @@ func checkInProgressBackupRestore(
 
 		err := util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 			return check(ctx, inProgressState{
-				testCluster:   tc,
-				sqlDB:         sqlDB,
+				DB:            sqlDB.DB,
 				backupTableID: backupTableID,
 				backupDir:     strings.TrimPrefix(dir, "nodelocal:"),
 			})
@@ -569,7 +556,7 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 			return err
 		}
 		var fractionCompleted float32
-		if err := ip.sqlDB.DB.QueryRow(
+		if err := ip.QueryRow(
 			`SELECT fraction_completed FROM crdb_internal.jobs WHERE id = $1`,
 			jobID,
 		).Scan(&fractionCompleted); err != nil {
@@ -613,17 +600,24 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		jobLogger, err := jobs.GetJobLogger(ctx, ip.kvDB(), ip.internalExecutor(), jobID)
-		if err != nil {
+		var payloadBytes []byte
+		if err := ip.QueryRow(
+			`SELECT payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&payloadBytes); err != nil {
 			return err
 		}
-		switch d := jobLogger.Job.Details.(type) {
-		case jobs.RestoreJobDetails:
+		var payload jobs.JobPayload
+		if err := payload.Unmarshal(payloadBytes); err != nil {
+			return err
+		}
+		switch d := payload.Details.(type) {
+		case *jobs.JobPayload_Restore:
+			lowWaterMark := d.Restore.LowWaterMark
 			low := keys.MakeTablePrefix(ip.backupTableID)
 			high := keys.MakeTablePrefix(ip.backupTableID + 1)
-			if bytes.Compare(d.LowWaterMark, low) <= 0 || bytes.Compare(d.LowWaterMark, high) >= 0 {
+			if bytes.Compare(lowWaterMark, low) <= 0 || bytes.Compare(lowWaterMark, high) >= 0 {
 				return errors.Errorf("expected low water mark %v to be between %v and %v",
-					roachpb.Key(d.LowWaterMark), roachpb.Key(low), roachpb.Key(high))
+					roachpb.Key(lowWaterMark), roachpb.Key(low), roachpb.Key(high))
 			}
 		default:
 			return errors.Errorf("unexpected job details type %T", d)
