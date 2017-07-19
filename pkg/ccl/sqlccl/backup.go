@@ -484,7 +484,9 @@ func Backup(
 
 			if doCheckpoint {
 				desc.Lock()
+				mu.Lock()
 				desc.Files = append(backupFileDescriptors(nil), mu.files...)
+				mu.Unlock()
 				if err := writeBackupDescriptor(
 					ctx, exportStore, BackupDescriptorCheckpointName, &desc.BackupDescriptor,
 				); err != nil {
