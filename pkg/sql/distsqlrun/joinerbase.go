@@ -32,10 +32,10 @@ type joinerBase struct {
 	emptyRight  sqlbase.EncDatumRow
 	combinedRow sqlbase.EncDatumRow
 
-	// left/rightEqualityIndices give the position of USING columns
-	// on the left and right input row arrays, respectively.
-	leftEqualityIndices  []uint32
-	rightEqualityIndices []uint32
+	// eqCols contains the indices of the columns that are constrained to be
+	// equal. Specifically column eqCols[0][i] on the left side must match the
+	// column eqCols[1][i] on the right side.
+	eqCols [2]columns
 
 	// numMergedEqualityColumns specifies how many of the equality
 	// columns must be merged at the beginning of each result row. This
@@ -51,6 +51,9 @@ func (jb *joinerBase) init(
 	rightSource RowSource,
 	jType JoinType,
 	onExpr Expression,
+	leftEqColumns []uint32,
+	rightEqColumns []uint32,
+	numMergedColumns uint32,
 	post *PostProcessSpec,
 	output RowReceiver,
 ) error {
@@ -69,12 +72,16 @@ func (jb *joinerBase) init(
 		jb.emptyRight[i] = sqlbase.DatumToEncDatum(rightTypes[i], parser.DNull)
 	}
 
+	jb.eqCols[leftSide] = columns(leftEqColumns)
+	jb.eqCols[rightSide] = columns(rightEqColumns)
+	jb.numMergedEqualityColumns = int(numMergedColumns)
+
 	jb.combinedRow = make(sqlbase.EncDatumRow, 0, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
 
 	types := make([]sqlbase.ColumnType, 0, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
-		ltype := leftTypes[jb.leftEqualityIndices[idx]]
-		rtype := rightTypes[jb.rightEqualityIndices[idx]]
+		ltype := leftTypes[jb.eqCols[leftSide][idx]]
+		rtype := rightTypes[jb.eqCols[rightSide][idx]]
 		var ctype sqlbase.ColumnType
 		if ltype.SemanticType != sqlbase.ColumnType_NULL {
 			ctype = ltype
@@ -118,8 +125,8 @@ func (jb *joinerBase) renderUnmatchedRow(
 	// We assume first indices are for merged columns (see distsql_physical_planner.go)
 	jb.combinedRow = jb.combinedRow[:0]
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
-		lvalue := lrow[jb.leftEqualityIndices[idx]]
-		rvalue := rrow[jb.rightEqualityIndices[idx]]
+		lvalue := lrow[jb.eqCols[leftSide][idx]]
+		rvalue := rrow[jb.eqCols[rightSide][idx]]
 		var value sqlbase.EncDatum
 		if lvalue.Datum != parser.DNull {
 			value = lvalue
@@ -182,7 +189,7 @@ func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRo
 		// this function is called only when lrow and rrow match on the equality
 		// columns which can never happen if there are any NULLs in these
 		// columns. So we know for sure the lrow value is not null
-		value := lrow[jb.leftEqualityIndices[idx]]
+		value := lrow[jb.eqCols[leftSide][idx]]
 		jb.combinedRow = append(jb.combinedRow, value)
 	}
 	jb.combinedRow = append(jb.combinedRow, lrow...)

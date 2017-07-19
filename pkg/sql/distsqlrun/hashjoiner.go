@@ -71,11 +71,6 @@ type hashJoiner struct {
 	// hashJoinerInitialBufferSize, can be tweaked for tests.
 	initialBufferSize int64
 
-	// eqCols contains the indices of the columns that are constrained to be
-	// equal. Specifically column eqCols[0][i] on the left side must match the
-	// column eqCols[1][i] on the right side.
-	eqCols [2]columns
-
 	// We read a portion of both streams, in the hope that one is small. One of
 	// the containers will contain the entire "stored" stream, the other just the
 	// start of the other stream.
@@ -110,19 +105,11 @@ func newHashJoiner(
 		buckets:           make(map[string]bucket),
 		bucketsAcc:        flowCtx.evalCtx.Mon.MakeBoundAccount(),
 	}
-	h.eqCols[leftSide] = columns(spec.LeftEqColumns)
-	h.eqCols[rightSide] = columns(spec.RightEqColumns)
 	h.rows[leftSide] = makeRowContainer(nil /* ordering */, leftSource.Types(), &flowCtx.evalCtx)
 	h.rows[rightSide] = makeRowContainer(nil /* ordering */, rightSource.Types(), &flowCtx.evalCtx)
 
-	// `USING` or `NATURAL` join, should output merged columns
-	// TODO: move into joinerBase ctor
-	h.numMergedEqualityColumns = int(spec.NumMergedColumns)
-	h.leftEqualityIndices = h.eqCols[leftSide]
-	h.rightEqualityIndices = h.eqCols[rightSide]
-
 	if err := h.joinerBase.init(
-		flowCtx, leftSource, rightSource, spec.Type, spec.OnExpr, post, output,
+		flowCtx, leftSource, rightSource, spec.Type, spec.OnExpr, spec.LeftEqColumns, spec.RightEqColumns, spec.NumMergedColumns, post, output,
 	); err != nil {
 		return nil, err
 	}
