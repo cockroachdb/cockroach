@@ -73,13 +73,11 @@ func (s *subquery) Format(buf *bytes.Buffer, f parser.FmtFlags) {
 	if s.execMode == execModeExists {
 		buf.WriteString("EXISTS ")
 	}
-	if f == parser.FmtShowTypes {
-		// TODO(knz/nvanbenschoten): It is not possible to extract types
-		// from the subquery using Format, because type checking does not
-		// replace the sub-expressions of a SelectClause node in-place.
-		f = parser.FmtSimple
-	}
-	s.subquery.Format(buf, f)
+	// Note: we remove the flag to print types, because subqueries can
+	// be printed in a context where type resolution has not occurred
+	// yet. We do not use FmtSimple directly however, in case the
+	// caller wants to use other flags (e.g. to anonymize identifiers).
+	parser.FormatNode(buf, parser.StripTypeFormatting(f), s.subquery)
 }
 
 func (s *subquery) String() string { return parser.AsString(s) }
