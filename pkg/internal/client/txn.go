@@ -572,9 +572,38 @@ func (txn *Txn) AddCommitTrigger(trigger func()) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
+// maybeFinishReadonly provides a fast-path for finishing a read-only
+// transaction without going through the overhead of creating an
+// EndTransactionRequest only to not send it.
+//
+// NB: The logic here must be kept in sync with the logic in txn.Send.
+func (txn *Txn) maybeFinishReadonly(commit bool, deadline *hlc.Timestamp) (bool, *roachpb.Error) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	if txn.mu.Proto.Writing || txn.mu.writingTxnRecord {
+		return false, nil
+	}
+	txn.mu.finalized = true
+	// Check that read only transactions do not violate their deadline. This can NOT
+	// happen since the txn deadline is normally updated when it is about to expire
+	// or expired. We will just keep the code for safety (see TestReacquireLeaseOnRestart).
+	if deadline != nil && deadline.Less(txn.mu.Proto.Timestamp) {
+		return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txn.mu.Proto)
+	}
+	if commit {
+		txn.mu.Proto.Status = roachpb.COMMITTED
+	} else {
+		txn.mu.Proto.Status = roachpb.ABORTED
+	}
+	return true, nil
+}
+
 func (txn *Txn) sendEndTxnReq(
 	ctx context.Context, commit bool, deadline *hlc.Timestamp,
 ) *roachpb.Error {
+	if ok, err := txn.maybeFinishReadonly(commit, deadline); ok || err != nil {
+		return err
+	}
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(commit, deadline, txn.systemConfigTrigger))
 	_, pErr := txn.Send(ctx, ba)
