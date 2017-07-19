@@ -43,7 +43,8 @@ subset of databases and tables.
 
 The design has the following components:
 
-+ A "sessions" table which holds information about currently valid user sessions.
++ A "web_sessions" table which holds information about currently valid user
+sessions.
 + A "login" RPC accessible from the Admin UI over HTTP.  This RPC is called with
 a username/password pair, which are validated by the server; if valid, a new
 session is created and a cookie with a session ID is returned with the response.
@@ -54,7 +55,7 @@ username will be added to the method context if the session is valid.
 + The Admin UI will be modified to require a logged-in session before allowing
 users to navigate to the current pages. If the user is not logged in, a dialog
 will be displayed for the user to input a username and password.
-+ A CSRF mitigation method will be added to both the client and the server. 
++ A CSRF mitigation method will be added to both the client and the server.
     + The server gives the client a cookie containing a cryptographically random
       value. This is done when static assets are loaded.
     + HTTP Requests from the Admin UI will be augmented to read this cookie and
@@ -68,7 +69,7 @@ will be displayed for the user to input a username and password.
 A new metadata table will be created to hold system sessions:
 
 ```sql
-CREATE TABLE system.sessions {
+CREATE TABLE system.web_sessions {
     id              SERIAL      PRIMARY KEY,
     "hashedSecret"  BYTES       NOT NULL,
     username        STRING      NOT NULL,
@@ -126,8 +127,8 @@ be useful for auditing purposes.
 #### Creation of new table.
 
 The new table will be added using a backwards-compatible migration; the same
-fashion used for the jobs and settings tables. This is trivially possible because
-no existing code is interacting with these tables. 
+fashion used for the jobs and settings tables. This is trivially possible
+because no existing code is interacting with these tables.
 
 The migration system, along with instructions for adding a new table, have an
 entry point in `pkg/migrations/migrations.go`.
@@ -172,7 +173,7 @@ the `system.users` table, which stores usernames along with hashed versions of
 passwords.
 
 If the username/password is valid, a new entry is inserted into the
-Sessions table and a 200 "OK" response is returned to the client. If the
+`web_sessions` table and a 200 "OK" response is returned to the client. If the
 username or password is invalid, a 401 Unauthorized response is returned.
 
 For successful login responses a new cookie "session" is created containing the
@@ -190,7 +191,7 @@ from being sent over an unsecured http conection.
 
 The UserLogin method, when called successfully, will revoke the current session
 by setting its `revokedAt` field to the current time. It will then return the
-appropriate headers to delete the "session" 
+appropriate headers to delete the "session"
 
 ### Session Enforcement
 
@@ -355,7 +356,7 @@ significantly mitigated by adding a short-term cache for sessions on each node.
 ### Stateless Sessions
 
 One alternatives considered was a "Stateless Session", where there would be
-no sessions table, but instead session information would be encoded using a 
+no sessions table, but instead session information would be encoded using a
 "Javascript Web Token" (JWT). This is a signed object returned to the user
 instead of a session token; the object contains the username, csrf token,
 and session id. Using JWT, servers would not need to consult a sessions table

@@ -69,6 +69,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "establish conservative dependencies for views #17280 #17269",
 		workFn: repopulateViewDeps,
 	},
+	{
+		name:           "create system.sessions table",
+		workFn:         createWebSessionsTable,
+		newDescriptors: 1,
+		// The table ID for the sessions table is greater than the previous
+		// table ID by 4 (3 IDs were reserved for non-table entities).
+		newRanges: 4,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -351,6 +359,10 @@ func createJobsTable(ctx context.Context, r runner) error {
 
 func createSettingsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.SettingsTable)
+}
+
+func createWebSessionsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.WebSessionsTable)
 }
 
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
