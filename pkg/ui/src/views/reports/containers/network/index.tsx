@@ -7,7 +7,7 @@ import { RouterState } from "react-router";
 
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LongToMoment, NanoToMilli } from "src/util/convert";
-import { NodeFilterList } from "src/views/reports/components/nodeFilterList";
+import { getFilters, NodeFilterList } from "src/views/reports/components/nodeFilterList";
 import { LivenessStatus, NodesSummary, nodesSummarySelector } from "src/redux/nodes";
 import * as protos from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
@@ -31,19 +31,6 @@ interface NoConnection {
 }
 
 type NetworkProps = NetworkOwnProps & RouterState;
-
-function getNodeIDs(input: string) {
-  const ids: Set<number> = new Set();
-  if (!_.isEmpty(input)) {
-    _.forEach(_.split(input, ","), nodeIDString => {
-      const nodeID = parseInt(nodeIDString, 10);
-      if (nodeID) {
-        ids.add(nodeID);
-      }
-    });
-  }
-  return ids;
-}
 
 function localityToString(locality: protos.cockroach.roachpb.Locality$Properties) {
   return _.join(_.map(locality.tiers, (tier) => tier.key + "=" + tier.value), ",");
@@ -210,16 +197,7 @@ class Network extends React.Component<NetworkProps, {}> {
       return loading;
     }
 
-    const requestedIDs = getNodeIDs(this.props.location.query.node_ids);
-    let locality: RegExp = null;
-    if (!_.isEmpty(this.props.location.query.locality)) {
-      try {
-        locality = new RegExp(this.props.location.query.locality);
-      } catch (e) {
-        // Ignore the error, the filter not appearing is feedback enough.
-        locality = null;
-      }
-    }
+    const filters = getFilters(this.props.location);
 
     // List of node identities.
     const identityByID: Map<number, Identity> = new Map();
@@ -239,16 +217,16 @@ class Network extends React.Component<NetworkProps, {}> {
     let staleIDsContext = _.chain(nodesSummary.nodeIDs)
       .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.SUSPECT)
       .map(nodeID => Number.parseInt(nodeID, 0));
-    if (requestedIDs.size > 0) {
-      healthyIDsContext = healthyIDsContext.filter(nodeID => requestedIDs.has(nodeID));
-      staleIDsContext = staleIDsContext.filter(nodeID => requestedIDs.has(nodeID));
+    if (!_.isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
+      healthyIDsContext = healthyIDsContext.filter(nodeID => filters.nodeIDs.has(nodeID));
+      staleIDsContext = staleIDsContext.filter(nodeID => filters.nodeIDs.has(nodeID));
     }
-    if (!_.isNil(locality)) {
+    if (!_.isNil(filters.localityRegex)) {
       healthyIDsContext = healthyIDsContext.filter(nodeID => (
-        !locality.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
+        !filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
       ));
       staleIDsContext = staleIDsContext.filter(nodeID => (
-        !locality.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
+        !filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
       ));
     }
     const healthyIDs = healthyIDsContext.value();
@@ -425,7 +403,7 @@ class Network extends React.Component<NetworkProps, {}> {
     return (
       <div>
         <h1>Network Diagnostics</h1>
-        <NodeFilterList nodeIDs={requestedIDs} localityRegex={locality} />
+        <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
         {displayResults()}
         {staleTable(staleIdentities)}
         {noConnectionTable(noConnections)}

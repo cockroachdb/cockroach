@@ -104,3 +104,23 @@ $reports-table
 
     &&--no-connection
         color $alert-color
+
+.nodes-table
+  @extend $reports-table
+  font-size 12px
+
+  &__cell
+    background-color white
+    padding 6px 12px
+
+    &--header
+      background-color $link-color
+      text-align right
+
+    &--header-warning
+      color $alert-color
+
+.nodes-entries-list
+  list-style-type none
+  margin 0
+  padding 0

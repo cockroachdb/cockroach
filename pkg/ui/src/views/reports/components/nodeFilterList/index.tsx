@@ -1,9 +1,39 @@
-import React from "react";
 import _ from "lodash";
+import { Location } from "history";
+import React from "react";
 
 interface NodeFilterListProps {
   nodeIDs?: Set<number>;
   localityRegex?: RegExp;
+}
+
+export function getFilters(location: Location) {
+  const filters: NodeFilterListProps = {};
+
+  // Node id list.
+  if (!_.isEmpty(location.query.node_ids)) {
+    const nodeIDs: Set<number> = new Set();
+    _.forEach(_.split(location.query.node_ids, ","), nodeIDString => {
+      const nodeID = parseInt(nodeIDString, 10);
+      if (nodeID) {
+        nodeIDs.add(nodeID);
+      }
+    });
+    if (nodeIDs.size > 0) {
+      filters.nodeIDs = nodeIDs;
+    }
+  }
+
+  // Locality regex filter.
+  if (!_.isEmpty(location.query.locality)) {
+    try {
+      filters.localityRegex = new RegExp(location.query.locality);
+    } catch (e) {
+      // Ignore the error, the filter not appearing is feedback enough.
+    }
+  }
+
+  return filters;
 }
 
 export function NodeFilterList(props: NodeFilterListProps) {
