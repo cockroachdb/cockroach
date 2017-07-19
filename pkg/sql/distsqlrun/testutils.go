@@ -32,11 +32,19 @@ type RepeatableRowSource struct {
 var _ RowSource = &RepeatableRowSource{}
 
 // NewRepeatableRowSource creates a RepeatableRowSource with the given schema
-// and rows.
+// and rows. types is optional if at least one row is provided.
 func NewRepeatableRowSource(
 	types []sqlbase.ColumnType, rows sqlbase.EncDatumRows,
 ) *RepeatableRowSource {
-	return &RepeatableRowSource{rows: rows, types: types}
+	r := &RepeatableRowSource{rows: rows, types: types}
+	if len(r.rows) > 0 && r.types == nil {
+		inferredTypes := make([]sqlbase.ColumnType, len(r.rows[0]))
+		for i, d := range r.rows[0] {
+			inferredTypes[i] = d.Type
+		}
+		r.types = inferredTypes
+	}
+	return r
 }
 
 // Types is part of the RowSource interface.

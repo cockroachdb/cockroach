@@ -773,3 +773,59 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		t.Fatalf("expected %q, got: %v", "Test error", out.mu.records[0].Meta.Err)
 	}
 }
+
+// BenchmarkHashJoiner times how long it takes to join two tables of the same
+// variable size. There is a 1:1 relationship between the rows of each table.
+// TODO(asubiotto): More complex benchmarks.
+func BenchmarkHashJoiner(b *testing.B) {
+	ctx := context.Background()
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+	flowCtx := FlowCtx{
+		evalCtx: evalCtx,
+	}
+
+	spec := HashJoinerSpec{
+		LeftEqColumns:  []uint32{0},
+		RightEqColumns: []uint32{0},
+		Type:           JoinType_INNER,
+	}
+	post := PostProcessSpec{Projection: true, OutputColumns: []uint32{0}}
+
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	numCols := 4
+	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
+			types := make([]sqlbase.ColumnType, numCols)
+			for i := 0; i < numCols; i++ {
+				types[i] = columnTypeInt
+			}
+			// makeInputTable constructs an inputSize x numCols table where
+			// input[i][j] = i + j.
+			makeInputTable := func() sqlbase.EncDatumRows {
+				input := make(sqlbase.EncDatumRows, inputSize)
+				for i := range input {
+					input[i] = make(sqlbase.EncDatumRow, numCols)
+					for j := 0; j < numCols; j++ {
+						input[i][j] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i+j)))
+					}
+				}
+				return input
+			}
+			leftInput := NewRepeatableRowSource(types, makeInputTable())
+			rightInput := NewRepeatableRowSource(types, makeInputTable())
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				// TODO(asubiotto): Get rid of uncleared state between
+				// hashJoiner Run()s to omit instantiation time from benchmarks.
+				h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, &RowDisposer{})
+				if err != nil {
+					b.Fatal(err)
+				}
+				h.Run(ctx, nil)
+				leftInput.Reset()
+				rightInput.Reset()
+			}
+		})
+	}
+}
