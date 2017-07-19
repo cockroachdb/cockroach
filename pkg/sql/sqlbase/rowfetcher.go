@@ -87,7 +87,7 @@ type RowFetcher struct {
 	indexKey       []byte      // the index key of the current row
 	row            EncDatumRow
 	decodedRow     parser.Datums
-	prettyValueBuf bytes.Buffer
+	prettyValueBuf *bytes.Buffer
 
 	// The current key/value, unless kvEnd is true.
 	kv                client.KeyValue
@@ -444,17 +444,24 @@ func (rf *RowFetcher) processValueSingle(
 }
 
 func (rf *RowFetcher) processValueBytes(
-	ctx context.Context, kv client.KeyValue, bytes []byte, debugStrings bool, prettyKeyPrefix string,
+	ctx context.Context,
+	kv client.KeyValue,
+	valueBytes []byte,
+	debugStrings bool,
+	prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 	if debugStrings {
+		if rf.prettyValueBuf == nil {
+			rf.prettyValueBuf = &bytes.Buffer{}
+		}
 		rf.prettyValueBuf.Reset()
 	}
 
 	var colIDDiff uint32
 	var lastColID ColumnID
-	for len(bytes) > 0 {
-		_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
+	for len(valueBytes) > 0 {
+		_, _, colIDDiff, _, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -462,11 +469,11 @@ func (rf *RowFetcher) processValueBytes(
 		lastColID = colID
 		if !rf.neededCols.Contains(uint32(colID)) {
 			// This column wasn't requested, so read its length and skip it.
-			_, len, err := encoding.PeekValueLength(bytes)
+			_, len, err := encoding.PeekValueLength(valueBytes)
 			if err != nil {
 				return "", "", err
 			}
-			bytes = bytes[len:]
+			valueBytes = valueBytes[len:]
 			if debugRowFetch {
 				log.Infof(ctx, "Scan %s -> [%d] (skipped)", kv.Key, colID)
 			}
@@ -479,8 +486,8 @@ func (rf *RowFetcher) processValueBytes(
 		}
 
 		var encValue EncDatum
-		encValue, bytes, err =
-			EncDatumFromBuffer(rf.cols[idx].Type, DatumEncoding_VALUE, bytes)
+		encValue, valueBytes, err =
+			EncDatumFromBuffer(rf.cols[idx].Type, DatumEncoding_VALUE, valueBytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -489,7 +496,7 @@ func (rf *RowFetcher) processValueBytes(
 			if err != nil {
 				return "", "", err
 			}
-			fmt.Fprintf(&rf.prettyValueBuf, "/%v", encValue.Datum)
+			fmt.Fprintf(rf.prettyValueBuf, "/%v", encValue.Datum)
 		}
 		rf.row[idx] = encValue
 		if debugRowFetch {
