@@ -1518,26 +1518,11 @@ func TestSystemZoneConfigs(t *testing.T) {
 	ctx := context.TODO()
 	defer tc.Stopper().Stop(ctx)
 
-	// Before moving forward, pre-split the keys for the system zone configs.
-	// If we don't do this, the test can flake on the splits happening at an
-	// inopportune time (or on the replicate queue blocking on a needed split
-	// if we disable the split queue).
-	splitKeys := []roachpb.Key{
-		keys.MakeTablePrefix(keys.MetaRangesID),
-		keys.MakeTablePrefix(keys.TimeseriesRangesID),
-		keys.MakeTablePrefix(keys.SystemRangesID),
-	}
-	for _, key := range splitKeys {
-		if _, _, err := tc.SplitRange(key); err != nil {
-			t.Fatalf("failed to split at key %s: %s", key, err)
-		}
-	}
-
 	expectedRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedReplicas := (expectedRanges + len(splitKeys)) * int(config.DefaultZoneConfig().NumReplicas)
+	expectedReplicas := expectedRanges * int(config.DefaultZoneConfig().NumReplicas)
 
 	waitForReplicas := func() error {
 		var conflictingID roachpb.RangeID

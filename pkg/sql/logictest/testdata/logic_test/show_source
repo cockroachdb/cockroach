@@ -138,6 +138,7 @@ jobs
 lease
 namespace
 rangelog
+sessions
 settings
 ui
 users
