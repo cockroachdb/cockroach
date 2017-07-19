@@ -179,6 +179,9 @@ func (jb *joinerBase) maybeEmitUnmatchedRow(
 func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
 	jb.combinedRow = jb.combinedRow[:0]
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
+		// this function is called only when lrow and rrow match on the equality
+		// columns which can never happen if there are any NULLs in these
+		// columns. So we know for sure the lrow value is not null
 		value := lrow[jb.leftEqualityIndices[idx]]
 		jb.combinedRow = append(jb.combinedRow, value)
 	}
