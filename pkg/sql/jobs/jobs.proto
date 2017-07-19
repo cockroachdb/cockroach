@@ -33,25 +33,25 @@ message SchemaChangeJobDetails {
 }
 
 message JobPayload {
-    string description = 1;
-    string username = 2;
-    // For consistency with the SQL timestamp type, which has microsecond
-    // precision, we avoid the timestamp.Timestamp WKT, which has nanosecond
-    // precision, and use microsecond integers directly.
-    int64 started_micros = 3;
-    int64 finished_micros = 4;
-    int64 modified_micros = 5;
-    repeated uint32 descriptor_ids = 6 [
-      (gogoproto.customname) = "DescriptorIDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
-    ];
-    float fraction_completed = 7;
-    string error = 8;
-    // ID 9 is intentionally reserved for lease information.
-    reserved 9;
-    oneof details {
-        BackupJobDetails backup = 10;
-        RestoreJobDetails restore = 11;
-        SchemaChangeJobDetails schemaChange = 12;
-    }
+  string description = 1;
+  string username = 2;
+  // For consistency with the SQL timestamp type, which has microsecond
+  // precision, we avoid the timestamp.Timestamp WKT, which has nanosecond
+  // precision, and use microsecond integers directly.
+  int64 started_micros = 3;
+  int64 finished_micros = 4;
+  int64 modified_micros = 5;
+  repeated uint32 descriptor_ids = 6 [
+    (gogoproto.customname) = "DescriptorIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
+  float fraction_completed = 7;
+  string error = 8;
+  // ID 9 is intentionally reserved for lease information.
+  reserved 9;
+  oneof details {
+    BackupJobDetails backup = 10;
+    RestoreJobDetails restore = 11;
+    SchemaChangeJobDetails schemaChange = 12;
+  }
 }
