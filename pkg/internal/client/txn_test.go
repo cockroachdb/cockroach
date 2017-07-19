@@ -197,7 +197,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := NewTxn(db)
 
 	for testIdx = range testCases {
-		if _, pErr := txn.send(context.Background(), ba); pErr != nil {
+		if _, pErr := txn.Send(context.Background(), ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -729,7 +729,7 @@ func TestSetPriority(t *testing.T) {
 	if err := txn.SetUserPriority(expected); err != nil {
 		t.Fatal(err)
 	}
-	if _, pErr := txn.send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -737,7 +737,7 @@ func TestSetPriority(t *testing.T) {
 	expected = roachpb.UserPriority(-13)
 	txn = NewTxn(db)
 	txn.InternalSetPriority(13)
-	if _, pErr := txn.send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
