@@ -117,7 +117,7 @@ func (n *scanNode) disableBatchLimit() {
 
 func (n *scanNode) Start(context.Context) error {
 	return n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
-		n.valNeededForCol, false /* returnRangeInfo */)
+		n.valNeededForCol, false /* returnRangeInfo */, &n.p.alloc)
 }
 
 func (n *scanNode) Close(context.Context) {}

@@ -258,6 +258,7 @@ func (sc *SchemaChanger) truncateIndexes(
 	if sc.testingKnobs.BackfillChunkSize > 0 {
 		chunkSize = sc.testingKnobs.BackfillChunkSize
 	}
+	alloc := &sqlbase.DatumAlloc{}
 	for _, desc := range dropped {
 		var resume roachpb.Span
 		lastCheckpoint := timeutil.Now()
@@ -294,11 +295,11 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 
-				rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false)
+				rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false, alloc)
 				if err != nil {
 					return err
 				}
-				td := tableDeleter{rd: rd}
+				td := tableDeleter{rd: rd, alloc: alloc}
 				if err := td.init(txn); err != nil {
 					return err
 				}

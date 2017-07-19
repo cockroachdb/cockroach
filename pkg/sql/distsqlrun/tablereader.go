@@ -41,6 +41,7 @@ type tableReader struct {
 	limitHint int64
 
 	fetcher sqlbase.RowFetcher
+	alloc   sqlbase.DatumAlloc
 
 	out procOutputHelper
 }
@@ -102,7 +103,7 @@ func newTableReader(
 
 	desc := spec.Table
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &desc, int(spec.IndexIdx), spec.Reverse, tr.out.neededColumns(),
+		&tr.fetcher, &desc, int(spec.IndexIdx), spec.Reverse, tr.out.neededColumns(), &tr.alloc,
 	); err != nil {
 		return nil, err
 	}
@@ -121,6 +122,7 @@ func initRowFetcher(
 	indexIdx int,
 	reverseScan bool,
 	valNeededForCol []bool,
+	alloc *sqlbase.DatumAlloc,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	// indexIdx is 0 for the primary index, or 1 to <num-indexes> for a
 	// secondary index.
@@ -141,7 +143,7 @@ func initRowFetcher(
 	}
 	if err := fetcher.Init(
 		desc, colIdxMap, index, reverseScan, isSecondaryIndex,
-		desc.Columns, valNeededForCol, true, /* returnRangeInfo */
+		desc.Columns, valNeededForCol, true /* returnRangeInfo */, alloc,
 	); err != nil {
 		return nil, false, err
 	}

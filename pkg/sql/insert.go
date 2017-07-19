@@ -132,7 +132,8 @@ func (p *planner) Insert(
 	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
-	ri, err := sqlbase.MakeRowInserter(p.txn, en.tableDesc, fkTables, cols, sqlbase.CheckFKs)
+	ri, err := sqlbase.MakeRowInserter(p.txn, en.tableDesc, fkTables, cols,
+		sqlbase.CheckFKs, &p.alloc)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +155,7 @@ func (p *planner) Insert(
 				ri:            ri,
 				autoCommit:    p.autoCommit,
 				conflictIndex: *conflictIndex,
+				alloc:         &p.alloc,
 			}
 		} else {
 			names, err := p.namesForExprs(updateExprs)
@@ -189,6 +191,7 @@ func (p *planner) Insert(
 			tw = &tableUpserter{
 				ri:            ri,
 				autoCommit:    p.autoCommit,
+				alloc:         &p.alloc,
 				fkTables:      fkTables,
 				updateCols:    updateCols,
 				conflictIndex: *conflictIndex,

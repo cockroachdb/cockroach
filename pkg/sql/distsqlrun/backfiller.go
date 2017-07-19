@@ -61,6 +61,7 @@ type backfiller struct {
 	output  RowReceiver
 	flowCtx *FlowCtx
 	fetcher sqlbase.RowFetcher
+	alloc   sqlbase.DatumAlloc
 }
 
 // Run is part of the processor interface.

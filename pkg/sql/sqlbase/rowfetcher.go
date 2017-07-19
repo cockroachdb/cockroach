@@ -95,7 +95,7 @@ type RowFetcher struct {
 	kvEnd             bool
 
 	// Buffered allocation of decoded datums.
-	alloc DatumAlloc
+	alloc *DatumAlloc
 }
 
 // debugRowFetch can be used to turn on some low-level debugging logs. We use
@@ -113,6 +113,7 @@ func (rf *RowFetcher) Init(
 	cols []ColumnDescriptor,
 	valNeededForCol []bool,
 	returnRangeInfo bool,
+	alloc *DatumAlloc,
 ) error {
 	rf.desc = desc
 	rf.colIdxMap = colIdxMap
@@ -123,6 +124,7 @@ func (rf *RowFetcher) Init(
 	rf.returnRangeInfo = returnRangeInfo
 	rf.row = make([]EncDatum, len(rf.cols))
 	rf.decodedRow = make([]parser.Datum, len(rf.cols))
+	rf.alloc = alloc
 
 	for i, v := range valNeededForCol {
 		if !v {
@@ -270,7 +272,7 @@ func prettyEncDatums(vals []EncDatum) string {
 
 // ReadIndexKey decodes an index key for the fetcher's table.
 func (rf *RowFetcher) ReadIndexKey(k roachpb.Key) (remaining []byte, ok bool, err error) {
-	return DecodeIndexKey(&rf.alloc, rf.desc, rf.index.ID, rf.keyVals,
+	return DecodeIndexKey(rf.alloc, rf.desc, rf.index.ID, rf.keyVals,
 		rf.indexColumnDirs, k)
 }
 
@@ -418,7 +420,7 @@ func (rf *RowFetcher) processValueSingle(
 			// although that would require changing UnmarshalColumnValue to operate
 			// on bytes, and for Encode/DecodeTableValue to operate on marshaled
 			// single values.
-			value, err := UnmarshalColumnValue(&rf.alloc, typ, kv.Value)
+			value, err := UnmarshalColumnValue(rf.alloc, typ, kv.Value)
 			if err != nil {
 				return "", "", err
 			}
@@ -483,7 +485,7 @@ func (rf *RowFetcher) processValueBytes(
 			return "", "", err
 		}
 		if debugStrings {
-			err := encValue.EnsureDecoded(&rf.alloc)
+			err := encValue.EnsureDecoded(rf.alloc)
 			if err != nil {
 				return "", "", err
 			}
@@ -558,7 +560,7 @@ func (rf *RowFetcher) NextRowDecoded(ctx context.Context, traceKV bool) (parser.
 	if encRow == nil {
 		return nil, nil
 	}
-	err = EncDatumRowToDatums(rf.decodedRow, encRow, &rf.alloc)
+	err = EncDatumRowToDatums(rf.decodedRow, encRow, rf.alloc)
 	if err != nil {
 		return nil, err
 	}
