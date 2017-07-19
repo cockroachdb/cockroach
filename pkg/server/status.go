@@ -723,6 +723,10 @@ func (s *statusServer) Ranges(
 			SourceNodeID:  nodeID,
 			SourceStoreID: storeID,
 			LeaseHistory:  leaseHistory,
+			Stats: serverpb.RangeStatistics{
+				QueriesPerSecond: rep.QueriesPerSecond(),
+				WritesPerSecond:  rep.WritesPerSecond(),
+			},
 			Problems: serverpb.RangeProblems{
 				Unavailable:          metrics.RangeCounter && metrics.Unavailable,
 				LeaderNotLeaseHolder: metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,

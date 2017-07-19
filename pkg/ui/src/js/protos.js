@@ -11083,6 +11083,201 @@ export const cockroach = $root.cockroach = (() => {
                 return RangeProblems;
             })();
 
+            serverpb.RangeStatistics = (function() {
+
+                /**
+                 * Properties of a RangeStatistics.
+                 * @typedef cockroach.server.serverpb.RangeStatistics$Properties
+                 * @type {Object}
+                 * @property {number} [queries_per_second] RangeStatistics queries_per_second.
+                 * @property {number} [writes_per_second] RangeStatistics writes_per_second.
+                 */
+
+                /**
+                 * Constructs a new RangeStatistics.
+                 * @exports cockroach.server.serverpb.RangeStatistics
+                 * @constructor
+                 * @param {cockroach.server.serverpb.RangeStatistics$Properties=} [properties] Properties to set
+                 */
+                function RangeStatistics(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * RangeStatistics queries_per_second.
+                 * @type {number}
+                 */
+                RangeStatistics.prototype.queries_per_second = 0;
+
+                /**
+                 * RangeStatistics writes_per_second.
+                 * @type {number}
+                 */
+                RangeStatistics.prototype.writes_per_second = 0;
+
+                /**
+                 * Creates a new RangeStatistics instance using the specified properties.
+                 * @param {cockroach.server.serverpb.RangeStatistics$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.RangeStatistics} RangeStatistics instance
+                 */
+                RangeStatistics.create = function create(properties) {
+                    return new RangeStatistics(properties);
+                };
+
+                /**
+                 * Encodes the specified RangeStatistics message. Does not implicitly {@link cockroach.server.serverpb.RangeStatistics.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.RangeStatistics$Properties} message RangeStatistics message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                RangeStatistics.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.queries_per_second != null && message.hasOwnProperty("queries_per_second"))
+                        writer.uint32(/* id 1, wireType 1 =*/9).double(message.queries_per_second);
+                    if (message.writes_per_second != null && message.hasOwnProperty("writes_per_second"))
+                        writer.uint32(/* id 2, wireType 1 =*/17).double(message.writes_per_second);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified RangeStatistics message, length delimited. Does not implicitly {@link cockroach.server.serverpb.RangeStatistics.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.RangeStatistics$Properties} message RangeStatistics message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                RangeStatistics.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a RangeStatistics message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.RangeStatistics} RangeStatistics
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                RangeStatistics.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.RangeStatistics();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.queries_per_second = reader.double();
+                            break;
+                        case 2:
+                            message.writes_per_second = reader.double();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a RangeStatistics message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.RangeStatistics} RangeStatistics
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                RangeStatistics.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a RangeStatistics message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                RangeStatistics.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.queries_per_second != null && message.hasOwnProperty("queries_per_second"))
+                        if (typeof message.queries_per_second !== "number")
+                            return "queries_per_second: number expected";
+                    if (message.writes_per_second != null && message.hasOwnProperty("writes_per_second"))
+                        if (typeof message.writes_per_second !== "number")
+                            return "writes_per_second: number expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a RangeStatistics message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.RangeStatistics} RangeStatistics
+                 */
+                RangeStatistics.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.RangeStatistics)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.RangeStatistics();
+                    if (object.queries_per_second != null)
+                        message.queries_per_second = Number(object.queries_per_second);
+                    if (object.writes_per_second != null)
+                        message.writes_per_second = Number(object.writes_per_second);
+                    return message;
+                };
+
+                /**
+                 * Creates a RangeStatistics message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.RangeStatistics.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.RangeStatistics} RangeStatistics
+                 */
+                RangeStatistics.from = RangeStatistics.fromObject;
+
+                /**
+                 * Creates a plain object from a RangeStatistics message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.RangeStatistics} message RangeStatistics
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                RangeStatistics.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.queries_per_second = 0;
+                        object.writes_per_second = 0;
+                    }
+                    if (message.queries_per_second != null && message.hasOwnProperty("queries_per_second"))
+                        object.queries_per_second = message.queries_per_second;
+                    if (message.writes_per_second != null && message.hasOwnProperty("writes_per_second"))
+                        object.writes_per_second = message.writes_per_second;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this RangeStatistics message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                RangeStatistics.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this RangeStatistics to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                RangeStatistics.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return RangeStatistics;
+            })();
+
             serverpb.PrettySpan = (function() {
 
                 /**
@@ -11292,6 +11487,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {string} [error_message] RangeInfo error_message.
                  * @property {Array.<cockroach.roachpb.Lease$Properties>} [lease_history] RangeInfo lease_history.
                  * @property {cockroach.server.serverpb.RangeProblems$Properties} [problems] RangeInfo problems.
+                 * @property {cockroach.server.serverpb.RangeStatistics$Properties} [stats] RangeInfo stats.
                  */
 
                 /**
@@ -11357,6 +11553,12 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.problems = null;
 
                 /**
+                 * RangeInfo stats.
+                 * @type {(cockroach.server.serverpb.RangeStatistics$Properties|null)}
+                 */
+                RangeInfo.prototype.stats = null;
+
+                /**
                  * Creates a new RangeInfo instance using the specified properties.
                  * @param {cockroach.server.serverpb.RangeInfo$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.RangeInfo} RangeInfo instance
@@ -11391,6 +11593,8 @@ export const cockroach = $root.cockroach = (() => {
                             $root.cockroach.roachpb.Lease.encode(message.lease_history[i], writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
                     if (message.problems != null && message.hasOwnProperty("problems"))
                         $root.cockroach.server.serverpb.RangeProblems.encode(message.problems, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
+                    if (message.stats != null && message.hasOwnProperty("stats"))
+                        $root.cockroach.server.serverpb.RangeStatistics.encode(message.stats, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
                     return writer;
                 };
 
@@ -11444,6 +11648,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 9:
                             message.problems = $root.cockroach.server.serverpb.RangeProblems.decode(reader, reader.uint32());
+                            break;
+                        case 10:
+                            message.stats = $root.cockroach.server.serverpb.RangeStatistics.decode(reader, reader.uint32());
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -11512,6 +11719,11 @@ export const cockroach = $root.cockroach = (() => {
                         if (error)
                             return "problems." + error;
                     }
+                    if (message.stats != null && message.hasOwnProperty("stats")) {
+                        let error = $root.cockroach.server.serverpb.RangeStatistics.verify(message.stats);
+                        if (error)
+                            return "stats." + error;
+                    }
                     return null;
                 };
 
@@ -11560,6 +11772,11 @@ export const cockroach = $root.cockroach = (() => {
                             throw TypeError(".cockroach.server.serverpb.RangeInfo.problems: object expected");
                         message.problems = $root.cockroach.server.serverpb.RangeProblems.fromObject(object.problems);
                     }
+                    if (object.stats != null) {
+                        if (typeof object.stats !== "object")
+                            throw TypeError(".cockroach.server.serverpb.RangeInfo.stats: object expected");
+                        message.stats = $root.cockroach.server.serverpb.RangeStatistics.fromObject(object.stats);
+                    }
                     return message;
                 };
 
@@ -11592,6 +11809,7 @@ export const cockroach = $root.cockroach = (() => {
                         object.source_store_id = 0;
                         object.error_message = "";
                         object.problems = null;
+                        object.stats = null;
                     }
                     if (message.span != null && message.hasOwnProperty("span"))
                         object.span = $root.cockroach.server.serverpb.PrettySpan.toObject(message.span, options);
@@ -11612,6 +11830,8 @@ export const cockroach = $root.cockroach = (() => {
                     }
                     if (message.problems != null && message.hasOwnProperty("problems"))
                         object.problems = $root.cockroach.server.serverpb.RangeProblems.toObject(message.problems, options);
+                    if (message.stats != null && message.hasOwnProperty("stats"))
+                        object.stats = $root.cockroach.server.serverpb.RangeStatistics.toObject(message.stats, options);
                     return object;
                 };
 
