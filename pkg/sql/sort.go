@@ -423,9 +423,8 @@ func (n *sortNode) Close(ctx context.Context) {
 	if n.sortStrategy != nil {
 		n.sortStrategy.Close(ctx)
 	}
-	if n.valueIter != nil {
-		n.valueIter.Close(ctx)
-	}
+	// n.valueIter points to either n.plan or n.sortStrategy and thus has already
+	// been closed.
 }
 
 // valueIterator provides iterative access to a value source's values and
