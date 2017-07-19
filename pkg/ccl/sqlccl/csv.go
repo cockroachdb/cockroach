@@ -259,7 +259,8 @@ func convertRecord(
 		}
 	}
 
-	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil /* fkTables */, tableDesc.Columns, false /* checkFKs */)
+	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
+		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
 	if err != nil {
 		return errors.Wrap(err, "make row inserter")
 	}

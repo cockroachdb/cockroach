@@ -85,12 +85,16 @@ type fkInsertHelper map[IndexID][]baseFKHelper
 var errSkipUnusedFK = errors.New("no columns involved in FK included in writer")
 
 func makeFKInsertHelper(
-	txn *client.Txn, table TableDescriptor, otherTables TableLookupsByID, colMap map[ColumnID]int,
+	txn *client.Txn,
+	table TableDescriptor,
+	otherTables TableLookupsByID,
+	colMap map[ColumnID]int,
+	alloc *DatumAlloc,
 ) (fkInsertHelper, error) {
 	var fks fkInsertHelper
 	for _, idx := range table.AllNonDropIndexes() {
 		if idx.ForeignKey.IsSet() {
-			fk, err := makeBaseFKHelper(txn, otherTables, idx, idx.ForeignKey, colMap)
+			fk, err := makeBaseFKHelper(txn, otherTables, idx, idx.ForeignKey, colMap, alloc)
 			if err == errSkipUnusedFK {
 				continue
 			}
@@ -154,7 +158,11 @@ func (fks fkInsertHelper) CollectSpans() (reads roachpb.Spans, writes roachpb.Sp
 type fkDeleteHelper map[IndexID][]baseFKHelper
 
 func makeFKDeleteHelper(
-	txn *client.Txn, table TableDescriptor, otherTables TableLookupsByID, colMap map[ColumnID]int,
+	txn *client.Txn,
+	table TableDescriptor,
+	otherTables TableLookupsByID,
+	colMap map[ColumnID]int,
+	alloc *DatumAlloc,
 ) (fkDeleteHelper, error) {
 	var fks fkDeleteHelper
 	for _, idx := range table.AllNonDropIndexes() {
@@ -164,7 +172,7 @@ func makeFKDeleteHelper(
 				// and thus does not need to be checked for FK violations.
 				continue
 			}
-			fk, err := makeBaseFKHelper(txn, otherTables, idx, ref, colMap)
+			fk, err := makeBaseFKHelper(txn, otherTables, idx, ref, colMap, alloc)
 			if err == errSkipUnusedFK {
 				continue
 			}
@@ -225,14 +233,18 @@ type fkUpdateHelper struct {
 }
 
 func makeFKUpdateHelper(
-	txn *client.Txn, table TableDescriptor, otherTables TableLookupsByID, colMap map[ColumnID]int,
+	txn *client.Txn,
+	table TableDescriptor,
+	otherTables TableLookupsByID,
+	colMap map[ColumnID]int,
+	alloc *DatumAlloc,
 ) (fkUpdateHelper, error) {
 	ret := fkUpdateHelper{}
 	var err error
-	if ret.inbound, err = makeFKDeleteHelper(txn, table, otherTables, colMap); err != nil {
+	if ret.inbound, err = makeFKDeleteHelper(txn, table, otherTables, colMap, alloc); err != nil {
 		return ret, err
 	}
-	ret.outbound, err = makeFKInsertHelper(txn, table, otherTables, colMap)
+	ret.outbound, err = makeFKInsertHelper(txn, table, otherTables, colMap, alloc)
 	return ret, err
 }
 
@@ -269,6 +281,7 @@ func makeBaseFKHelper(
 	writeIdx IndexDescriptor,
 	ref ForeignKeyReference,
 	colMap map[ColumnID]int,
+	alloc *DatumAlloc,
 ) (baseFKHelper, error) {
 	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchTable: otherTables[ref.Table].Table}
 	if b.searchTable == nil {
@@ -292,7 +305,7 @@ func makeBaseFKHelper(
 	isSecondary := b.searchTable.PrimaryIndex.ID != searchIdx.ID
 	err = b.rf.Init(b.searchTable, ids, searchIdx, false, /* reverse */
 		isSecondary, b.searchTable.Columns, needed,
-		false /* returnRangeInfo */)
+		false /* returnRangeInfo */, alloc)
 	if err != nil {
 		return b, err
 	}

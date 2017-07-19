@@ -163,6 +163,7 @@ func MakeRowInserter(
 	fkTables TableLookupsByID,
 	insertCols []ColumnDescriptor,
 	checkFKs bool,
+	alloc *DatumAlloc,
 ) (RowInserter, error) {
 	indexes := tableDesc.Indexes
 	// Also include the secondary indexes in mutation state
@@ -190,7 +191,8 @@ func MakeRowInserter(
 
 	if checkFKs {
 		var err error
-		if ri.Fks, err = makeFKInsertHelper(txn, *tableDesc, fkTables, ri.InsertColIDtoRowIndex); err != nil {
+		if ri.Fks, err = makeFKInsertHelper(txn, *tableDesc, fkTables,
+			ri.InsertColIDtoRowIndex, alloc); err != nil {
 			return ri, err
 		}
 	}
@@ -396,6 +398,7 @@ func MakeRowUpdater(
 	updateCols []ColumnDescriptor,
 	requestedCols []ColumnDescriptor,
 	updateType rowUpdaterType,
+	alloc *DatumAlloc,
 ) (RowUpdater, error) {
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
@@ -481,12 +484,14 @@ func MakeRowUpdater(
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
 		var err error
-		if ru.rd, err = MakeRowDeleter(txn, tableDesc, fkTables, tableCols, SkipFKs); err != nil {
+		if ru.rd, err = MakeRowDeleter(txn, tableDesc, fkTables,
+			tableCols, SkipFKs, alloc); err != nil {
 			return RowUpdater{}, err
 		}
 		ru.FetchCols = ru.rd.FetchCols
 		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
-		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables, tableCols, SkipFKs); err != nil {
+		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables,
+			tableCols, SkipFKs, alloc); err != nil {
 			return RowUpdater{}, err
 		}
 	} else {
@@ -533,7 +538,8 @@ func MakeRowUpdater(
 	}
 
 	var err error
-	if ru.Fks, err = makeFKUpdateHelper(txn, *tableDesc, fkTables, ru.FetchColIDtoRowIndex); err != nil {
+	if ru.Fks, err = makeFKUpdateHelper(txn, *tableDesc, fkTables,
+		ru.FetchColIDtoRowIndex, alloc); err != nil {
 		return RowUpdater{}, err
 	}
 	return ru, nil
@@ -786,6 +792,7 @@ func MakeRowDeleter(
 	fkTables TableLookupsByID,
 	requestedCols []ColumnDescriptor,
 	checkFKs bool,
+	alloc *DatumAlloc,
 ) (RowDeleter, error) {
 	indexes := tableDesc.Indexes
 	for _, m := range tableDesc.Mutations {
@@ -834,7 +841,8 @@ func MakeRowDeleter(
 	}
 	if checkFKs {
 		var err error
-		if rd.Fks, err = makeFKDeleteHelper(txn, *tableDesc, fkTables, fetchColIDtoRowIndex); err != nil {
+		if rd.Fks, err = makeFKDeleteHelper(txn, *tableDesc, fkTables,
+			fetchColIDtoRowIndex, alloc); err != nil {
 			return RowDeleter{}, err
 		}
 	}

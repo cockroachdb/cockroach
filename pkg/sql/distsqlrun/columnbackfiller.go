@@ -127,7 +127,8 @@ func (cb *columnBackfiller) init() error {
 		colIdxMap[c.ID] = i
 	}
 	return cb.fetcher.Init(
-		&desc, colIdxMap, &desc.PrimaryIndex, false, false, desc.Columns, valNeededForCol, false,
+		&desc, colIdxMap, &desc.PrimaryIndex, false, false, desc.Columns,
+		valNeededForCol, false, &cb.alloc,
 	)
 }
 
@@ -168,7 +169,8 @@ func (cb *columnBackfiller) runChunk(
 		requestedCols = append(requestedCols, tableDesc.Columns...)
 		requestedCols = append(requestedCols, cb.added...)
 		ru, err := sqlbase.MakeRowUpdater(
-			txn, &tableDesc, fkTables, cb.updateCols, requestedCols, sqlbase.RowUpdaterOnlyColumns,
+			txn, &tableDesc, fkTables, cb.updateCols, requestedCols,
+			sqlbase.RowUpdaterOnlyColumns, &cb.alloc,
 		)
 		if err != nil {
 			return err

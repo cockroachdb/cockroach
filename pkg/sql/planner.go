@@ -76,6 +76,11 @@ type planner struct {
 	subqueryPlanVisitor   subqueryPlanVisitor
 	nameResolutionVisitor nameResolutionVisitor
 	srfExtractionVisitor  srfExtractionVisitor
+
+	// Use a common datum allocator across all the plan nodes. This separates the
+	// plan lifetime from the lifetime of returned results allowing plan nodes to
+	// be pool allocated.
+	alloc sqlbase.DatumAlloc
 }
 
 var emptyPlanner planner

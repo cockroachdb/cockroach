@@ -270,7 +270,8 @@ func (p *planner) Update(
 	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
-	ru, err := sqlbase.MakeRowUpdater(p.txn, en.tableDesc, fkTables, updateCols, requestedCols, sqlbase.RowUpdaterDefault)
+	ru, err := sqlbase.MakeRowUpdater(p.txn, en.tableDesc, fkTables, updateCols,
+		requestedCols, sqlbase.RowUpdaterDefault, &p.alloc)
 	if err != nil {
 		return nil, err
 	}
