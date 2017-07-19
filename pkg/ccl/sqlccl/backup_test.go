@@ -1244,6 +1244,40 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	}
 }
 
+func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, 0)
+	defer cleanupFn()
+	sqlDB.Exec(`DROP TABLE data.bank`)
+
+	const numAccounts = 10
+	bankData := sampledataccl.BankRows(numAccounts)
+	backup, err := sampledataccl.ToBackup(t, bankData, filepath.Join(dir, "backup"))
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	var beforeTs string
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
+	sqlDB.Exec(`RESTORE data.* FROM $1`, backup.BaseDir)
+	var afterTs string
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&afterTs)
+
+	var rowCount int
+	const q = `SELECT COUNT(*) FROM data.bank AS OF SYSTEM TIME '%s'`
+	// Before the RESTORE, the table doesn't exist, so an AS OF query should fail.
+	err = sqlDB.DB.QueryRow(fmt.Sprintf(q, beforeTs)).Scan(&rowCount)
+	if !testutils.IsError(err, `relation "data.bank" does not exist`) {
+		t.Fatalf("expected 'foo' error got: %+v", err)
+	}
+	// After the RESTORE, an AS OF query should work.
+	sqlDB.QueryRow(fmt.Sprintf(q, afterTs)).Scan(&rowCount)
+	if expected := numAccounts; rowCount != expected {
+		t.Fatalf("expected %d rows but found %d", expected, rowCount)
+	}
+}
+
 func TestBackupRestoreChecksum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
