@@ -73,7 +73,6 @@ func TestDebugRemote(t *testing.T) {
 				"/debug/requests",
 				"/debug/range?id=1",
 				"/debug/certificates",
-				"/debug/nodes",
 			} {
 				t.Run(url, func(t *testing.T) {
 					resp, err := cluster.HTTPClient.Get(l.URL(ctx, 0) + url)
