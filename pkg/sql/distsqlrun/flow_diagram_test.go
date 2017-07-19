@@ -143,23 +143,23 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 	}
 
 	expected := `
-		{
-		  "nodeNames":["1","2","3"],
-		  "processors":[
-			  {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
-				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader","details":["primary@Table","Filter: @1+@2\u003c@3","Out: @3"]},"outputs":[],"stage":2},
-		    {"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
-		  ],
-		  "edges":[
-		    {"sourceProc":0,"sourceOutput":0,"destProc":3,"destInput":1},
-		    {"sourceProc":1,"sourceOutput":0,"destProc":3,"destInput":1},
-		    {"sourceProc":2,"sourceOutput":0,"destProc":3,"destInput":1},
-		    {"sourceProc":3,"sourceOutput":0,"destProc":4,"destInput":0}
-		  ]
-	  }
-	`
+        {
+          "nodeNames":["1","2","3"],
+          "processors":[
+              {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
+                {"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
+                {"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
+                {"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader","details":["primary@Table","Filter: @1+@2\u003c@3","Out: @3"]},"outputs":[],"stage":2},
+            {"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
+          ],
+          "edges":[
+            {"sourceProc":0,"sourceOutput":0,"destProc":3,"destInput":1},
+            {"sourceProc":1,"sourceOutput":0,"destProc":3,"destInput":1},
+            {"sourceProc":2,"sourceOutput":0,"destProc":3,"destInput":1},
+            {"sourceProc":3,"sourceOutput":0,"destProc":4,"destInput":0}
+          ]
+      }
+    `
 
 	compareDiagrams(t, json, expected)
 
@@ -182,9 +182,10 @@ func TestPlanDiagramJoin(t *testing.T) {
 	trB := TableReaderSpec{Table: *descB}
 
 	hj := HashJoinerSpec{
-		LeftEqColumns:  []uint32{0, 2},
-		RightEqColumns: []uint32{2, 1},
-		OnExpr:         Expression{Expr: "@1+@2<@6"},
+		LeftEqColumns:    []uint32{0, 2},
+		RightEqColumns:   []uint32{2, 1},
+		OnExpr:           Expression{Expr: "@1+@2<@6"},
+		NumMergedColumns: 2,
 	}
 
 	flows[1] = FlowSpec{
@@ -355,36 +356,36 @@ func TestPlanDiagramJoin(t *testing.T) {
 	}
 
 	expected := `
-		{
-			"nodeNames":["1","2","3","4"],
-			"processors":[
-				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[]},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op","details":[]},"outputs":[]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
-				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6"]},"outputs":[]},
-				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
-			],
-			"edges":[
-			  {"sourceProc":0,"sourceOutput":1,"destProc":2,"destInput":1},
-				{"sourceProc":0,"sourceOutput":1,"destProc":6,"destInput":1},
-				{"sourceProc":1,"sourceOutput":1,"destProc":2,"destInput":1},
-				{"sourceProc":1,"sourceOutput":1,"destProc":6,"destInput":1},
-				{"sourceProc":2,"sourceOutput":0,"destProc":3,"destInput":1},
-				{"sourceProc":3,"sourceOutput":0,"destProc":8,"destInput":0},
-				{"sourceProc":4,"sourceOutput":1,"destProc":2,"destInput":1},
-				{"sourceProc":4,"sourceOutput":1,"destProc":6,"destInput":1},
-				{"sourceProc":5,"sourceOutput":1,"destProc":2,"destInput":2},
-				{"sourceProc":5,"sourceOutput":1,"destProc":6,"destInput":2},
-				{"sourceProc":6,"sourceOutput":0,"destProc":3,"destInput":1},
-				{"sourceProc":7,"sourceOutput":1,"destProc":2,"destInput":2},
-				{"sourceProc":7,"sourceOutput":1,"destProc":6,"destInput":2}
-			]
-	  }
-	`
+        {
+            "nodeNames":["1","2","3","4"],
+            "processors":[
+                {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+                {"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+                {"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Merged columns: 2","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[]},
+                {"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op","details":[]},"outputs":[]},
+                {"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+                {"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
+                {"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6", "Merged columns: 2"]},"outputs":[]},
+                {"nodeIdx":3,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
+                {"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
+            ],
+            "edges":[
+              {"sourceProc":0,"sourceOutput":1,"destProc":2,"destInput":1},
+                {"sourceProc":0,"sourceOutput":1,"destProc":6,"destInput":1},
+                {"sourceProc":1,"sourceOutput":1,"destProc":2,"destInput":1},
+                {"sourceProc":1,"sourceOutput":1,"destProc":6,"destInput":1},
+                {"sourceProc":2,"sourceOutput":0,"destProc":3,"destInput":1},
+                {"sourceProc":3,"sourceOutput":0,"destProc":8,"destInput":0},
+                {"sourceProc":4,"sourceOutput":1,"destProc":2,"destInput":1},
+                {"sourceProc":4,"sourceOutput":1,"destProc":6,"destInput":1},
+                {"sourceProc":5,"sourceOutput":1,"destProc":2,"destInput":2},
+                {"sourceProc":5,"sourceOutput":1,"destProc":6,"destInput":2},
+                {"sourceProc":6,"sourceOutput":0,"destProc":3,"destInput":1},
+                {"sourceProc":7,"sourceOutput":1,"destProc":2,"destInput":2},
+                {"sourceProc":7,"sourceOutput":1,"destProc":6,"destInput":2}
+            ]
+      }
+    `
 
 	compareDiagrams(t, buf.String(), expected)
 }
