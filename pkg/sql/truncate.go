@@ -110,11 +110,12 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 func truncateTable(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, txn *client.Txn, traceKV bool,
 ) error {
-	rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false)
+	alloc := &sqlbase.DatumAlloc{}
+	rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false, alloc)
 	if err != nil {
 		return err
 	}
-	td := tableDeleter{rd: rd}
+	td := tableDeleter{rd: rd, alloc: alloc}
 	if err := td.init(txn); err != nil {
 		return err
 	}
@@ -136,17 +137,18 @@ func truncateTableInChunks(
 ) error {
 	const chunkSize = TableTruncateChunkSize
 	var resume roachpb.Span
+	alloc := &sqlbase.DatumAlloc{}
 	for row, done := 0, false; !done; row += chunkSize {
 		resumeAt := resume
 		if traceKV {
 			log.VEventf(ctx, 2, "table %s truncate at row: %d, span: %s", tableDesc.Name, row, resume)
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false)
+			rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false, alloc)
 			if err != nil {
 				return err
 			}
-			td := tableDeleter{rd: rd}
+			td := tableDeleter{rd: rd, alloc: alloc}
 			if err := td.init(txn); err != nil {
 				return err
 			}

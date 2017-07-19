@@ -218,6 +218,7 @@ type tableUpserter struct {
 	autoCommit    bool
 	conflictIndex sqlbase.IndexDescriptor
 	isUpsertAlias bool
+	alloc         *sqlbase.DatumAlloc
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
 	updateCols []sqlbase.ColumnDescriptor
@@ -229,7 +230,6 @@ type tableUpserter struct {
 	fkTables              sqlbase.TableLookupsByID // for fk checks in update case
 	ru                    sqlbase.RowUpdater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
-	a                     sqlbase.DatumAlloc
 	fetchCols             []sqlbase.ColumnDescriptor
 	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
 	fetcher               sqlbase.RowFetcher
@@ -290,7 +290,8 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	} else {
 		var err error
 		tu.ru, err = sqlbase.MakeRowUpdater(
-			txn, tu.tableDesc, tu.fkTables, tu.updateCols, requestedCols, sqlbase.RowUpdaterDefault,
+			txn, tu.tableDesc, tu.fkTables, tu.updateCols, requestedCols,
+			sqlbase.RowUpdaterDefault, tu.alloc,
 		)
 		if err != nil {
 			return err
@@ -315,7 +316,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	return tu.fetcher.Init(
 		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex,
 		false /* reverse */, false, /* isSecondaryIndex */
-		tu.fetchCols, valNeededForCol, false /*returnRangeInfo*/)
+		tu.fetchCols, valNeededForCol, false /*returnRangeInfo*/, tu.alloc)
 }
 
 func (tu *tableUpserter) row(
@@ -439,7 +440,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context, traceKV bool) ([]roac
 			if result.Rows[0].Value == nil {
 				upsertRowPKs[i] = nil
 			} else {
-				upsertRowPK, err := sqlbase.ExtractIndexKey(&tu.a, tu.tableDesc, result.Rows[0])
+				upsertRowPK, err := sqlbase.ExtractIndexKey(tu.alloc, tu.tableDesc, result.Rows[0])
 				if err != nil {
 					return nil, err
 				}
@@ -530,6 +531,7 @@ func (tu *tableUpserter) spans() (reads, writes roachpb.Spans, err error) {
 type tableDeleter struct {
 	rd         sqlbase.RowDeleter
 	autoCommit bool
+	alloc      *sqlbase.DatumAlloc
 
 	// Set by init.
 	txn *client.Txn
@@ -693,7 +695,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	err := rf.Init(
 		td.rd.Helper.TableDesc, td.rd.FetchColIDtoRowIndex, &td.rd.Helper.TableDesc.PrimaryIndex,
 		false /*reverse*/, false, /*isSecondaryIndex*/
-		td.rd.FetchCols, valNeededForCol, false /* returnRangeInfo */)
+		td.rd.FetchCols, valNeededForCol, false /* returnRangeInfo */, td.alloc)
 	if err != nil {
 		return resume, err
 	}
@@ -780,7 +782,7 @@ func (td *tableDeleter) deleteIndexScan(
 	err := rf.Init(
 		td.rd.Helper.TableDesc, td.rd.FetchColIDtoRowIndex, &td.rd.Helper.TableDesc.PrimaryIndex,
 		false /* reverse */, false, /*isSecondaryIndex */
-		td.rd.FetchCols, valNeededForCol, false /* returnRangeInfo */)
+		td.rd.FetchCols, valNeededForCol, false /* returnRangeInfo */, td.alloc)
 	if err != nil {
 		return resume, err
 	}
