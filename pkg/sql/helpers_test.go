@@ -57,7 +57,7 @@ func NewLeaseRemovalTracker() *LeaseRemovalTracker {
 // TrackRemoval starts monitoring lease removals for a particular lease.
 // This should be called before triggering the operation that (asynchronously)
 // removes the lease.
-func (w *LeaseRemovalTracker) TrackRemoval(table sqlbase.TableDescriptor) RemovalTracker {
+func (w *LeaseRemovalTracker) TrackRemoval(table *sqlbase.TableDescriptor) RemovalTracker {
 	id := tableVersionID{
 		id:      table.ID,
 		version: table.Version,
