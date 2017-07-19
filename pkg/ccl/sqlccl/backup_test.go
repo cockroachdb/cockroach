@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
@@ -589,6 +590,11 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 
 func TestBackupRestoreCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	defer func(oldInterval time.Duration) {
+		sqlccl.BackupCheckpointInterval = oldInterval
+	}(sqlccl.BackupCheckpointInterval)
+	sqlccl.BackupCheckpointInterval = time.Millisecond
 
 	var checkpointPath string
 
