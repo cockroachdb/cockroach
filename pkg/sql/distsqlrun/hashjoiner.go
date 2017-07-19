@@ -117,7 +117,7 @@ func newHashJoiner(
 
 	// `USING` or `NATURAL` join, should output merged columns
 	// TODO: move into joinerBase ctor
-	h.numMergedEqualityColumns = int(spec.MergedColumns)
+	h.numMergedEqualityColumns = int(spec.NumMergedColumns)
 	h.leftEqualityIndices = h.eqCols[leftSide]
 	h.rightEqualityIndices = h.eqCols[rightSide]
 
