@@ -46,6 +46,9 @@ SUFFIX       :=
 INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
+NCPUS        = $(shell $(LOCAL_BIN)/ncpus)
+
+MAKEFLAGS += --jobs=$(NCPUS)
 
 help: ## Print help for targets with comments.
 	@echo "Usage:"
