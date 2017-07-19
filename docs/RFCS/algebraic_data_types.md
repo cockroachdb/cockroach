@@ -151,14 +151,14 @@ binary expressions. In production code, we would use an automatically
 generated walker instead (details to be decided later).
 
 ``` {.go}
-func Reverse(ref ExprRef, a *Allocator) ExprRef {
+func Reverse(ref Expr, a Allocator) Expr {
     if ref.Tag() != ExprBinExpr {
         return ref
     }
-    b := ref.AsBinExprRef()
+    b := ref.MustBeBinExpr()
     rl := Reverse(b.Left(), a)
     rr := Reverse(b.Right(), a)
-    return b.V().WithLeft(rr).WithRight(rl).R(a).AsExprRef()
+    return b.V().WithLeft(rr).WithRight(rl).R(a).Expr()
 }
 ```
 
@@ -166,13 +166,13 @@ Here are more examples. `Format` and `DeepEqual` would be automatically
 generated too (details to decided later).
 
 ``` {.go}
-func Format(ref ExprRef) string {
+func Format(ref Expr) string {
     switch ref.Tag() {
     case ExprConstExpr:
-        c := ref.AsConstExprRef()
+        c := ref.MustBeConstExpr()
         return strconv.FormatInt(c.Datum(), 10)
     case ExprBinExpr:
-        b := ref.AsBinExprRef()
+        b := ref.MustBeBinExpr()
         var op string
         switch b.Op() {
         case BinOpAdd:
@@ -188,16 +188,16 @@ func Format(ref ExprRef) string {
     }
 }
 
-func DeepEqual(ref1 ExprRef, ref2 ExprRef) bool {
+func DeepEqual(ref1 Expr, ref2 Expr) bool {
     if ref1.Tag() != ref2.Tag() {
         return false
     }
     switch ref1.Tag() {
     case ExprConstExpr:
-        return ref1.AsConstExprRef().Datum() == ref2.AsConstExprRef().Datum()
+        return ref1.MustBeConstExpr().Datum() == ref2.MustBeConstExpr().Datum()
     case ExprBinExpr:
-        b1 := ref1.AsBinExprRef()
-        b2 := ref2.AsBinExprRef()
+        b1 := ref1.MustBeBinExpr()
+        b2 := ref2.MustBeBinExpr()
         return b1.Op() == b2.Op() &&
             DeepEqual(b1.Left(), b2.Left()) && DeepEqual(b1.Right(), b2.Right())
     default:
@@ -206,17 +206,17 @@ func DeepEqual(ref1 ExprRef, ref2 ExprRef) bool {
 }
 
 func main() {
-    var a Allocator
-    c1 := ConstExpr{1}.R(&a).AsExprRef()
-    c2 := ConstExpr{2}.R(&a).AsExprRef()
-    c3 := ConstExpr{3}.R(&a).AsExprRef()
-    b4 := BinExpr{c1, BinOpAdd, c2}.R(&a).AsExprRef()
-    b5 := BinExpr{c3, BinOpMul, b4}.R(&a).AsExprRef()
+    a := NewAllocator()
+    c1 := ConstExprValue{1}.R(a).Expr()
+    c2 := ConstExprValue{2}.R(a).Expr()
+    c3 := ConstExprValue{3}.R(a).Expr()
+    b4 := BinExprValue{c1, BinOpAdd, c2}.R(a).Expr()
+    b5 := BinExprValue{c3, BinOpMul, b4}.R(a).Expr()
     println(Format(b5))
-    e6 := Reverse(b5, &a)
+    e6 := Reverse(b5, a)
     println(Format(e6))
     println(DeepEqual(e6, b5))
-    e7 := Reverse(e6, &a)
+    e7 := Reverse(e6, a)
     println(Format(e7))
     println(DeepEqual(e7, b5))
 }
@@ -405,6 +405,14 @@ The output will be something like (hand translation):
 
 ``` {.go}
 type Allocator struct {
+    a *allocatorValue
+}
+
+func NewAllocator() Allocator {
+    return Allocator{&allocatorValue{}}
+}
+
+type allocatorValue struct {
     ptrs []unsafe.Pointer
     vals []uint64
 }
@@ -416,7 +424,8 @@ type arbitraryRef struct {
 
 const bulkAllocationLen = 256
 
-func (a *Allocator) Alloc(numPtrs, numVals int) arbitraryRef {
+func (aptr Allocator) new(numPtrs, numVals int) arbitraryRef {
+    a := aptr.a
     if numPtrs > cap(a.ptrs)-len(a.ptrs) {
         a.ptrs = make([]unsafe.Pointer, 0, bulkAllocationLen)
     }
@@ -462,115 +471,115 @@ const (
     ExprBinExpr           = 2
 )
 
-type ExprRef struct {
+type Expr struct {
     arbitraryRef
     tag ExprTag
 }
 
-func (ref ExprRef) Tag() ExprTag {
+func (ref Expr) Tag() ExprTag {
     return ref.tag
 }
 
-func (ref ExprRef) AsConstExprRef() ConstExprRef {
+func (ref Expr) MustBeConstExpr() ConstExpr {
     if ref.tag != ExprConstExpr {
         panic("receiver is not a ConstExpr")
     }
-    return ConstExprRef{ref.arbitraryRef}
+    return ConstExpr{ref.arbitraryRef}
 }
 
-func (ref ExprRef) AsBinExprRef() BinExprRef {
+func (ref Expr) MustBeBinExpr() BinExpr {
     if ref.tag != ExprBinExpr {
         panic("receiver is not a BinExpr")
     }
-    return BinExprRef{ref.arbitraryRef}
+    return BinExpr{ref.arbitraryRef}
 }
 
-func (ref ConstExprRef) AsExprRef() ExprRef {
-    return ExprRef{ref.arbitraryRef, ExprConstExpr}
+func (ref ConstExpr) Expr() Expr {
+    return Expr{ref.arbitraryRef, ExprConstExpr}
 }
 
-func (ref BinExprRef) AsExprRef() ExprRef {
-    return ExprRef{ref.arbitraryRef, ExprBinExpr}
+func (ref BinExpr) Expr() Expr {
+    return Expr{ref.arbitraryRef, ExprBinExpr}
 }
 
 // ---- ConstExpr ---- //
 
-type ConstExprRef struct {
+type ConstExpr struct {
     arbitraryRef
 }
 
-func (ref ConstExprRef) Datum() int64 {
+func (ref ConstExpr) Datum() int64 {
     return *(*int64)(unsafe.Pointer(ref.val(0)))
 }
 
-// ConstExpr is used for mutations.
-type ConstExpr struct {
+// ConstExprValue is used for mutations.
+type ConstExprValue struct {
     Datum int64
 }
 
-func (ref ConstExprRef) V() ConstExpr {
-    return ConstExpr{ref.Datum()}
+func (ref ConstExpr) V() ConstExprValue {
+    return ConstExprValue{ref.Datum()}
 }
 
-func (x ConstExpr) WithDatum(datum int64) ConstExpr {
+func (x ConstExprValue) WithDatum(datum int64) ConstExprValue {
     x.Datum = datum
     return x
 }
 
-func (x ConstExpr) R(a *Allocator) ConstExprRef {
-    ref := a.Alloc(0, 1)
+func (x ConstExprValue) R(a Allocator) ConstExpr {
+    ref := a.new(0, 1)
     *(*int64)(unsafe.Pointer(ref.val(0))) = x.Datum
-    return ConstExprRef{ref}
+    return ConstExpr{ref}
 }
 
 // ---- BinExpr ---- //
 
-type BinExprRef struct {
+type BinExpr struct {
     arbitraryRef
 }
 
-func (ref BinExprRef) Left() ExprRef {
-    return ExprRef{arbitraryRef{(*unsafe.Pointer)(*ref.ptr(0)), (*uint64)(*ref.ptr(1))},
+func (ref BinExpr) Left() Expr {
+    return Expr{arbitraryRef{(*unsafe.Pointer)(*ref.ptr(0)), (*uint64)(*ref.ptr(1))},
         ExprTag(*ref.val(0))}
 }
 
-func (ref BinExprRef) Op() BinOp {
+func (ref BinExpr) Op() BinOp {
     return BinOp(*ref.val(1))
 }
 
-func (ref BinExprRef) Right() ExprRef {
-    return ExprRef{arbitraryRef{(*unsafe.Pointer)(*ref.ptr(2)), (*uint64)(*ref.ptr(3))},
+func (ref BinExpr) Right() Expr {
+    return Expr{arbitraryRef{(*unsafe.Pointer)(*ref.ptr(2)), (*uint64)(*ref.ptr(3))},
         ExprTag(*ref.val(2))}
 }
 
-// BinExpr is used for mutations.
-type BinExpr struct {
-    Left  ExprRef
+// BinExprValue is used for mutations.
+type BinExprValue struct {
+    Left  Expr
     Op    BinOp
-    Right ExprRef
+    Right Expr
 }
 
-func (ref BinExprRef) V() BinExpr {
-    return BinExpr{ref.Left(), ref.Op(), ref.Right()}
+func (ref BinExpr) V() BinExprValue {
+    return BinExprValue{ref.Left(), ref.Op(), ref.Right()}
 }
 
-func (x BinExpr) WithLeft(left ExprRef) BinExpr {
+func (x BinExprValue) WithLeft(left Expr) BinExprValue {
     x.Left = left
     return x
 }
 
-func (x BinExpr) WithOp(op BinOp) BinExpr {
+func (x BinExprValue) WithOp(op BinOp) BinExprValue {
     x.Op = op
     return x
 }
 
-func (x BinExpr) WithRight(right ExprRef) BinExpr {
+func (x BinExprValue) WithRight(right Expr) BinExprValue {
     x.Right = right
     return x
 }
 
-func (x BinExpr) R(a *Allocator) BinExprRef {
-    ref := a.Alloc(4, 3)
+func (x BinExprValue) R(a Allocator) BinExpr {
+    ref := a.new(4, 3)
     ptrs4 := ref.ptrs4()
     ptrs4[0] = unsafe.Pointer(x.Left.arbitraryRef.ptrBase)
     ptrs4[1] = unsafe.Pointer(x.Left.arbitraryRef.valBase)
@@ -580,7 +589,7 @@ func (x BinExpr) R(a *Allocator) BinExprRef {
     *(*ExprTag)(unsafe.Pointer(&vals3[0])) = x.Left.tag
     *(*BinOp)(unsafe.Pointer(&vals3[1])) = x.Op
     *(*ExprTag)(unsafe.Pointer(&vals3[2])) = x.Right.tag
-    return BinExprRef{ref}
+    return BinExpr{ref}
 }
 
 // ---- BinOp ---- //
