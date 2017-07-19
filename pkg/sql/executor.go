@@ -1753,8 +1753,6 @@ func (e *Executor) execStmtInParallel(stmt Statement, planner *planner) (Result,
 	}
 
 	session.parallelizeQueue.Add(ctx, plan, func(plan planNode) error {
-		defer plan.Close(ctx)
-
 		result, err := makeRes(stmt, planner, plan)
 		if err != nil {
 			return err
