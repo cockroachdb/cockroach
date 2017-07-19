@@ -441,7 +441,7 @@ libroach: $(LIBROACH_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
-libroachccl: $(LIBROACH_DIR)/Makefile
+libroachccl: $(LIBROACH_DIR)/Makefile libroach
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 .PHONY: clean-c-deps
