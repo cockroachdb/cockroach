@@ -259,6 +259,7 @@ system              jobs
 system              lease
 system              namespace
 system              rangelog
+system              sessions
 system              settings
 system              ui
 system              users
@@ -401,6 +402,7 @@ def            system              jobs                       BASE TABLE   1
 def            system              lease                      BASE TABLE   1
 def            system              namespace                  BASE TABLE   1
 def            system              rangelog                   BASE TABLE   1
+def            system              sessions                   BASE TABLE   1
 def            system              settings                   BASE TABLE   1
 def            system              ui                         BASE TABLE   1
 def            system              users                      BASE TABLE   1
@@ -463,6 +465,7 @@ def                 system             primary          system        jobs      
 def                 system             primary          system        lease       PRIMARY KEY
 def                 system             primary          system        namespace   PRIMARY KEY
 def                 system             primary          system        rangelog    PRIMARY KEY
+def                 system             primary          system        sessions    PRIMARY KEY
 def                 system             primary          system        settings    PRIMARY KEY
 def                 system             primary          system        ui          PRIMARY KEY
 def                 system             primary          system        users       PRIMARY KEY
@@ -538,6 +541,14 @@ def            system        rangelog    eventType       4
 def            system        rangelog    otherRangeID    5
 def            system        rangelog    info            6
 def            system        rangelog    uniqueID        7
+def            system        sessions    id              1
+def            system        sessions    hashedSecret    2
+def            system        sessions    username        3
+def            system        sessions    createdAt       4
+def            system        sessions    expiresAt       5
+def            system        sessions    revokedAt       6
+def            system        sessions    lastUsedAt      7
+def            system        sessions    auditInfo       8
 def            system        settings    name            1
 def            system        settings    value           2
 def            system        settings    lastUpdated     3
@@ -751,6 +762,11 @@ NULL     root     def            system        rangelog    GRANT           NULL 
 NULL     root     def            system        rangelog    INSERT          NULL          NULL
 NULL     root     def            system        rangelog    SELECT          NULL          NULL
 NULL     root     def            system        rangelog    UPDATE          NULL          NULL
+NULL     root     def            system        sessions    DELETE          NULL          NULL
+NULL     root     def            system        sessions    GRANT           NULL          NULL
+NULL     root     def            system        sessions    INSERT          NULL          NULL
+NULL     root     def            system        sessions    SELECT          NULL          NULL
+NULL     root     def            system        sessions    UPDATE          NULL          NULL
 NULL     root     def            system        settings    DELETE          NULL          NULL
 NULL     root     def            system        settings    GRANT           NULL          NULL
 NULL     root     def            system        settings    INSERT          NULL          NULL

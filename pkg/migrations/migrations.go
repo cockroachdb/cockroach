@@ -65,6 +65,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "enable diagnostics reporting",
 		workFn: optInToDiagnosticsStatReporting,
 	},
+	{
+		name:           "create system.sessions table",
+		workFn:         createSessionsTable,
+		newDescriptors: 1,
+		newRanges:      4,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -347,6 +353,10 @@ func createJobsTable(ctx context.Context, r runner) error {
 
 func createSettingsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.SettingsTable)
+}
+
+func createSessionsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.SessionsTable)
 }
 
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {

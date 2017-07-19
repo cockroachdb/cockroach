@@ -119,6 +119,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
 		{keys.JobsTableID, sqlbase.JobsTableSchema, sqlbase.JobsTable},
 		{keys.SettingsTableID, sqlbase.SettingsTableSchema, sqlbase.SettingsTable},
+		{keys.SessionsTableID, sqlbase.SessionsTableSchema, sqlbase.SessionsTable},
 	} {
 		gen, err := sql.CreateTestTableDescriptor(
 			context.TODO(),
