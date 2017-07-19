@@ -440,7 +440,7 @@ func (txn *Txn) Run(ctx context.Context, b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	return sendAndFill(ctx, txn.send, b)
+	return sendAndFill(ctx, txn.Send, b)
 }
 
 func (txn *Txn) commit(ctx context.Context) error {
@@ -577,7 +577,7 @@ func (txn *Txn) sendEndTxnReq(
 ) *roachpb.Error {
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(commit, deadline, txn.systemConfigTrigger))
-	_, pErr := txn.send(ctx, ba)
+	_, pErr := txn.Send(ctx, ba)
 	return pErr
 }
 
@@ -793,13 +793,13 @@ func (txn *Txn) ensureProtoLocked() {
 	txn.mu.Proto = *newTxn
 }
 
-// send runs the specified calls synchronously in a single batch and
+// Send runs the specified calls synchronously in a single batch and
 // returns any errors. If the transaction is read-only or has already
 // been successfully committed or aborted, a potential trailing
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous). Returns (nil, nil) for an empty batch.
-func (txn *Txn) send(
+func (txn *Txn) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
