@@ -110,8 +110,8 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 
 func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
-) (sqlbase.TableDescriptor, hlc.Timestamp, error) {
-	var table sqlbase.TableDescriptor
+) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+	var table *sqlbase.TableDescriptor
 	var expiration hlc.Timestamp
 	err := t.kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		var err error
@@ -123,7 +123,7 @@ func (t *leaseTest) acquire(
 
 func (t *leaseTest) mustAcquire(
 	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
-) (sqlbase.TableDescriptor, hlc.Timestamp) {
+) (*sqlbase.TableDescriptor, hlc.Timestamp) {
 	table, expiration, err := t.acquire(nodeID, descID, version)
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func (t *leaseTest) mustAcquire(
 	return table, expiration
 }
 
-func (t *leaseTest) release(nodeID uint32, table sqlbase.TableDescriptor) error {
+func (t *leaseTest) release(nodeID uint32, table *sqlbase.TableDescriptor) error {
 	return t.node(nodeID).Release(table)
 }
 
@@ -140,7 +140,7 @@ func (t *leaseTest) release(nodeID uint32, table sqlbase.TableDescriptor) error 
 // store (i.e. it's not expired and it's not for an old descriptor version),
 // this shouldn't be set.
 func (t *leaseTest) mustRelease(
-	nodeID uint32, table sqlbase.TableDescriptor, leaseRemovalTracker *sql.LeaseRemovalTracker,
+	nodeID uint32, table *sqlbase.TableDescriptor, leaseRemovalTracker *sql.LeaseRemovalTracker,
 ) {
 	var tracker sql.RemovalTracker
 	if leaseRemovalTracker != nil {
@@ -560,8 +560,8 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 
 func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion,
-) (sqlbase.TableDescriptor, hlc.Timestamp, error) {
-	var table sqlbase.TableDescriptor
+) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+	var table *sqlbase.TableDescriptor
 	var expiration hlc.Timestamp
 	err := s.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		var err error
