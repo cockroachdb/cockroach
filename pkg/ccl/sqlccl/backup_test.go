@@ -460,6 +460,7 @@ type inProgressState struct {
 	testCluster   *testcluster.TestCluster
 	sqlDB         *sqlutils.SQLRunner
 	backupTableID uint32
+	backupDir     string
 }
 
 func (ip inProgressState) latestJobID() (int64, error) {
@@ -537,6 +538,7 @@ func checkInProgressBackupRestore(
 				testCluster:   tc,
 				sqlDB:         sqlDB,
 				backupTableID: backupTableID,
+				backupDir:     strings.TrimPrefix(dir, "nodelocal:"),
 			})
 		})
 
@@ -588,8 +590,21 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 func TestBackupRestoreCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	var checkpointPath string
+
 	checkBackup := func(ctx context.Context, ip inProgressState) error {
-		// Backups do not yet checkpoint.
+		checkpointPath = filepath.Join(ip.backupDir, sqlccl.BackupDescriptorCheckpointName)
+		checkpointDescBytes, err := ioutil.ReadFile(checkpointPath)
+		if err != nil {
+			return errors.Errorf("%+v", err)
+		}
+		var checkpointDesc sqlccl.BackupDescriptor
+		if err := checkpointDesc.Unmarshal(checkpointDescBytes); err != nil {
+			return errors.Errorf("%+v", err)
+		}
+		if len(checkpointDesc.Files) == 0 {
+			return errors.Errorf("empty backup checkpoint descriptor")
+		}
 		return nil
 	}
 
@@ -617,6 +632,12 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	}
 
 	checkInProgressBackupRestore(t, checkBackup, checkRestore)
+
+	if _, err := os.Stat(checkpointPath); err == nil {
+		t.Fatalf("backup checkpoint descriptor at %s not cleaned up", checkpointPath)
+	} else if !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
 }
 
 func TestBackupRestoreInterleaved(t *testing.T) {
