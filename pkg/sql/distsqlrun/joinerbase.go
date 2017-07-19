@@ -122,18 +122,11 @@ func (jb *joinerBase) renderUnmatchedRow(
 		rrow = row
 	}
 
-	// We assume first indices are for merged columns (see distsql_physical_planner.go)
+	// If there are merged columns, they take first positions in a row
+	// Values are taken from non-empty row
 	jb.combinedRow = jb.combinedRow[:0]
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
-		lvalue := lrow[jb.eqCols[leftSide][idx]]
-		rvalue := rrow[jb.eqCols[rightSide][idx]]
-		var value sqlbase.EncDatum
-		if lvalue.Datum != parser.DNull {
-			value = lvalue
-		} else {
-			value = rvalue
-		}
-		jb.combinedRow = append(jb.combinedRow, value)
+		jb.combinedRow = append(jb.combinedRow, row[jb.eqCols[side][idx]])
 	}
 	jb.combinedRow = append(jb.combinedRow, lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
