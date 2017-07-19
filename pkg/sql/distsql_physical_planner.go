@@ -1392,26 +1392,29 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	//  - the columns on the left side (numLeftCols)
 	//  - the columns on the right side (numRightCols)
 	joinCol := 0
-	mergedColNum := n.pred.numMergedEqualityColumns
-	for i := 0; i < mergedColNum; i++ {
+
+	// In case of INNER joins there is no need in extra _physical_ columns,
+	// left equiality columns are used instead
+	// In case of OUTER joins we add extra `mergedColNum` columns and they
+	// occupy first positions in a row. Remaining left and right columns will
+	// have a corresponding "offset"
+	var mergedColNum int
+	if n.joinType == joinTypeInner {
+		mergedColNum = 0
+	} else {
+		mergedColNum = n.pred.numMergedEqualityColumns
+	}
+	for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
 		if !n.columns[joinCol].Omitted {
-			// TODO(radu): for full outer joins, this will be more tricky: we would
-			// need an output column that outputs either the left or the right
-			// equality column, whichever is not NULL.
-			if n.joinType != joinTypeInner {
+			if mergedColNum != 0 {
+				// Reserve place for new merged columns
 				joinToStreamColMap[joinCol] = addOutCol(uint32(i))
 			} else {
+				// For inner joins, merged columns are always equivalent to the left columns)
 				joinToStreamColMap[joinCol] = addOutCol(uint32(joinerSpec.LeftEqColumns[i]))
 			}
 		}
 		joinCol++
-	}
-
-	if n.joinType == joinTypeInner {
-		// In case of INNER join there is no need in extra columns
-		mergedColNum = 0
-	} else {
-		joinerSpec.MergedColumns = uint32(mergedColNum)
 	}
 
 	for i := 0; i < n.pred.numLeftCols; i++ {
@@ -1429,6 +1432,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		}
 		joinCol++
 	}
+	joinerSpec.NumMergedColumns = uint32(mergedColNum)
 
 	if n.pred.onCond != nil {
 		// We have to remap ordinal references in the on condition (which refer to
@@ -1436,8 +1440,9 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		// joiner (0 to N-1 for the left input columns, N to N+M-1 for the right
 		// input columns).
 		joinColMap := make([]int, 0, len(n.columns))
-		for i := 0; i < mergedColNum; i++ {
-			// Merged column. See TODO above.
+		// TODO: check if this loop is needed as `numMergedEqualityColumns`
+		// is zero when `ON` clause is present (same for mergedColNum)
+		for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
 			joinColMap = append(joinColMap, int(joinerSpec.LeftEqColumns[i]))
 		}
 		for i := 0; i < n.pred.numLeftCols; i++ {
