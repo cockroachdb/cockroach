@@ -47,6 +47,9 @@ INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
 
+REPO_ROOT := .
+MAKEFLAGS += $(shell $(REPO_ROOT)/build/jflag.sh)
+
 help: ## Print help for targets with comments.
 	@echo "Usage:"
 	@echo "  make [target...] [VAR=foo VAR2=bar...]"
@@ -134,7 +137,6 @@ endif
 
 override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILD_TYPE)
 
-REPO_ROOT := .
 include $(REPO_ROOT)/build/common.mk
 override TAGS += make $(NATIVE_SPECIFIER_TAG)
 

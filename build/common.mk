@@ -82,9 +82,6 @@ UNAME := $(shell uname)
 MACOS := $(findstring Darwin,$(UNAME))
 MINGW := $(findstring MINGW,$(UNAME))
 
-NCPUS = $(shell $(LOCAL_BIN)/ncpus)
-$(call make-lazy,NCPUS)
-
 # GNU tar and BSD tar both support transforming filenames according to a regular
 # expression, but have different flags to do so.
 TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform='flags=r;s'" || echo "-s")
@@ -171,7 +168,7 @@ $(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
-	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/{metacheck,ncpus,returncheck} \
+	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/{metacheck,returncheck} \
 		$(REPO_ROOT)/vendor/github.com/golang/dep/cmd/dep \
 		$(REPO_ROOT)/vendor/github.com/client9/misspell/cmd/misspell \
 		$(REPO_ROOT)/vendor/github.com/cockroachdb/crlfmt \
@@ -418,31 +415,31 @@ $(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(BOOTSTRAP_TARGET)
 # and we certainly don't want to duplicate them.
 
 $(PROTOC): $(PROTOC_DIR)/Makefile .ALWAYS_REBUILD
-	@$(MAKE) --no-print-directory -C $(PROTOC_DIR) -j$(NCPUS) protoc
+	@$(MAKE) --no-print-directory -C $(PROTOC_DIR) protoc
 
 .PHONY: libjemalloc
 libjemalloc: $(JEMALLOC_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(JEMALLOC_DIR) -j$(NCPUS) build_lib_static
+	@$(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static
 
 .PHONY: libprotobuf
 libprotobuf: $(PROTOBUF_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(PROTOBUF_DIR) -j$(NCPUS) libprotobuf
+	@$(MAKE) --no-print-directory -C $(PROTOBUF_DIR) libprotobuf
 
 .PHONY: libsnappy
 libsnappy: $(SNAPPY_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(SNAPPY_DIR) -j$(NCPUS)
+	@$(MAKE) --no-print-directory -C $(SNAPPY_DIR)
 
 .PHONY: librocksdb
 librocksdb: $(ROCKSDB_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) -j$(NCPUS) rocksdb
+	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
 
 .PHONY: libroach
 libroach: $(LIBROACH_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) -j$(NCPUS) roach
+	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
 libroachccl: $(LIBROACH_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) -j$(NCPUS) roachccl
+	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 .PHONY: clean-c-deps
 clean-c-deps:
