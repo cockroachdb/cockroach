@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"sync"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -30,6 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
+
+var rowFetcherPool = sync.Pool{
+	New: func() interface{} {
+		return &sqlbase.RowFetcher{}
+	},
+}
 
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
@@ -77,7 +84,7 @@ type scanNode struct {
 	filterVars parser.IndexedVarHelper
 
 	scanInitialized bool
-	fetcher         sqlbase.RowFetcher
+	fetcher         *sqlbase.RowFetcher
 
 	// if non-zero, hardLimit indicates that the scanNode only needs to provide
 	// this many rows (after applying any filter). It is a "hard" guarantee that
@@ -116,11 +123,17 @@ func (n *scanNode) disableBatchLimit() {
 }
 
 func (n *scanNode) Start(context.Context) error {
+	n.fetcher = rowFetcherPool.Get().(*sqlbase.RowFetcher)
 	return n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
 		n.valNeededForCol, false /* returnRangeInfo */)
 }
 
-func (n *scanNode) Close(context.Context) {}
+func (n *scanNode) Close(context.Context) {
+	if f := n.fetcher; f != nil {
+		*f = sqlbase.RowFetcher{}
+		rowFetcherPool.Put(f)
+	}
+}
 
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan(ctx context.Context) error {
