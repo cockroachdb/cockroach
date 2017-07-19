@@ -358,7 +358,22 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 // GetSnapshot returns a snapshot of the replica appropriate for sending to a
 // replica. If this method returns without error, callers must eventually call
 // OutgoingSnapshot.Close.
-func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSnapshot, error) {
+func (r *Replica) GetSnapshot(
+	ctx context.Context, snapType string,
+) (_ *OutgoingSnapshot, err error) {
+	// Get a snapshot while holding raftMu to make sure we're not seeing "half
+	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
+	// the corresponding Raft command not applied yet).
+	r.raftMu.Lock()
+	snap := r.store.engine.NewSnapshot()
+	r.raftMu.Unlock()
+
+	defer func() {
+		if err != nil {
+			snap.Close()
+		}
+	}()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	rangeID := r.RangeID
@@ -369,13 +384,13 @@ func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSn
 		err := errors.Errorf(
 			"%s: not generating %s snapshot because replica is too large: %d > 2 * %d",
 			r, snapType, size, maxBytes)
-		return &OutgoingSnapshot{}, err
+		return nil, err
 	}
 
 	startKey := r.mu.state.Desc.StartKey
 	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
 	defer sp.Finish()
-	snap := r.store.NewSnapshot()
+
 	log.Eventf(ctx, "new engine snapshot for replica %s", r)
 
 	// Delegate to a static function to make sure that we do not depend
