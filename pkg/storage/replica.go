@@ -4563,7 +4563,22 @@ func (r *Replica) evaluateTxnWriteBatch(
 		}
 		rec := ReplicaEvalContext{r, spans}
 		br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, strippedBa)
-		if pErr == nil && ba.Timestamp == br.Timestamp {
+		if pErr != nil {
+			log.Event(ctx, pErr.String())
+			if wtoErr, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok {
+				rTxn := ba.Txn.Clone()
+				rTxn.Timestamp.Forward(wtoErr.ActualTimestamp)
+				log.Eventf(ctx, "eager WriteTooOld restart from %s to %s", ba.Txn.Timestamp, rTxn.Timestamp)
+
+				rErr := roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
+				rErr.SetTxn(&rTxn)
+
+				// Don't actually lay down intents.
+				batch.Close()
+				batch = r.store.Engine().NewBatch()
+				return batch, enginepb.MVCCStats{}, nil, EvalResult{}, rErr
+			}
+		} else if ba.Timestamp == br.Timestamp {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Writing = true
 			clonedTxn.Status = roachpb.COMMITTED
@@ -4607,6 +4622,10 @@ func (r *Replica) evaluateTxnWriteBatch(
 		}
 
 		log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
+	}
+
+	if ba.Summary() == "1 Put, 1 BeginTxn, 1 EndTxn" {
+		log.Fatalf(ctx, "Not using 1PC path: %t %s", isOnePhaseCommit(ba), ba.Txn)
 	}
 
 	batch := r.store.Engine().NewBatch()
