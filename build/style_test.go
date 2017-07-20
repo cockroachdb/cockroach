@@ -640,7 +640,7 @@ func TestStyle(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`((\.pb|\.pb\.gw|embedded|_string)\.go|sql/ir/irgen/parser/(yaccpar|irgen\.y):|sql/parser/(yaccpar|sql\.y):)`),
+			stream.GrepNot(`((\.pb|\.pb\.gw|embedded|_string|\.ir)\.go|sql/ir/irgen/parser/(yaccpar|irgen\.y):|sql/parser/(yaccpar|sql\.y):)`),
 		), func(s string) {
 			t.Error(s)
 		}); err != nil {
@@ -780,6 +780,9 @@ func TestStyle(t *testing.T) {
 				// Deprecated database/sql/driver interfaces not compatible with 1.7.
 				"github.com/cockroachdb/cockroach/pkg/sql/*.go:SA1019",
 				"github.com/cockroachdb/cockroach/pkg/cli/sql_util.go:SA1019",
+
+				// IR templates.
+				"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/d/*.go:U1000",
 			}, " "),
 			// NB: this doesn't use `pkgScope` because `honnef.co/go/unused`
 			// produces many false positives unless it inspects all our packages.

@@ -27,7 +27,7 @@ type NamedType struct {
 }
 
 func (t *NamedType) String() string {
-	return string(t.Name)
+	return t.Name.String()
 }
 
 // Type represents an anonymous type of any kind.
