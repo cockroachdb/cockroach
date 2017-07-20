@@ -620,7 +620,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 }
 
 func addrWithDefaultHost(addr string) (string, error) {
-	host, port, err := net.SplitHostPort(baseCfg.Addr)
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return "", err
 	}
