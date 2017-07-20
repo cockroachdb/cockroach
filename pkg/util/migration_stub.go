@@ -14,11 +14,26 @@
 
 package util
 
-import "github.com/cockroachdb/cockroach/pkg/util/envutil"
+import (
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+)
+
+var isMigratedSetting *settings.BoolSetting
+var isMigratedEnv = envutil.EnvOrDefaultBool("COCKROACH_MIGRATED", false)
+
+func init() {
+	isMigratedSetting = settings.RegisterBoolSetting(
+		"experimental.migrated",
+		"set to true to pretend the cluster migrated its minimum version to 1.1 (overridden by COCKROACH_MIGRATED env var).",
+		true,
+	)
+	isMigratedSetting.Hide()
+}
 
 // IsMigrated gives a crude way of landing changes that need a migration until
 // #16977 is implemented. When IsMigrated() returns false (the default),
 // mixed-cluster compatibility with 1.0 is required.
 func IsMigrated() bool {
-	return envutil.EnvOrDefaultBool("COCKROACH_MIGRATED", false)
+	return isMigratedSetting.Get() || isMigratedEnv
 }
