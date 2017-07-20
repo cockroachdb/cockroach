@@ -68,6 +68,11 @@ const Version = 4
 // compatible with; see above.
 const MinAcceptedVersion = 4
 
+// workMemBytes specifies the maximum amount of memory in bytes a processor can
+// use. This limit is only observed if the use of temporary storage is enabled
+// (see sql.defaults.distsql.tempstorage).
+var workMemBytes = envutil.EnvOrDefaultInt64("COCKROACH_WORK_MEM", 64*1024*1024 /* 64MB */)
+
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 10*1024)
 
 // All queries that spill over to disk will be limited to use
@@ -163,7 +168,7 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		mon.DiskResource,
 		nil,                 /* curCount */
 		nil,                 /* maxHist */
-		workMem,             /* increment: same size as processor's memory budget */
+		workMemBytes,        /* increment: same size as processor's memory budget */
 		diskMonitorBudget/2, /* noteworthy */
 	)
 	ds.diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(diskMonitorBudget))

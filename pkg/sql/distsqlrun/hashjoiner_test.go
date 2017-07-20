@@ -16,15 +16,19 @@ package distsqlrun
 
 import (
 	"fmt"
+	math "math"
 	"sort"
 	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
@@ -502,39 +506,91 @@ func TestHashJoiner(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
+	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+	)
+	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
+
 	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
-			// Run tests with a variety of initial buffer sizes.
-			for _, initialBuffer := range []int64{0, 32, 64, 128, 1024 * 1024} {
-				t.Run(fmt.Sprintf("InitialBuffer=%d", initialBuffer), func(t *testing.T) {
-					hs := c.spec
-					leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
-					rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
-					out := &RowBuffer{}
-					evalCtx := parser.MakeTestingEvalContext()
-					defer evalCtx.Stop(context.Background())
-					flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), EvalCtx: evalCtx}
-
-					post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-					h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
-					if err != nil {
-						t.Fatal(err)
-					}
-					h.initialBufferSize = initialBuffer
-
-					h.Run(context.Background(), nil)
-
-					if !out.ProducerClosed {
-						t.Fatalf("output RowReceiver not closed")
-					}
-
-					if err := checkExpectedRows(c.expected, out); err != nil {
-						fmt.Println(err)
-						t.Fatal(err)
-					}
-				})
+		// testFunc is a helper function that runs a hashJoin with the current
+		// test case after running the provided setup function.
+		testFunc := func(t *testing.T, setup func(h *hashJoiner)) error {
+			leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
+			rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
+			out := &RowBuffer{}
+			flowCtx := FlowCtx{
+				Settings:    cluster.MakeClusterSettings(),
+				EvalCtx:     evalCtx,
+				tempStorage: tempEngine,
+				diskMonitor: &diskMonitor,
 			}
-		})
+
+			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+			h, err := newHashJoiner(&flowCtx, &c.spec, leftInput, rightInput, &post, out)
+			if err != nil {
+				return err
+			}
+			setup(h)
+			h.Run(ctx, nil)
+
+			if !out.ProducerClosed {
+				return errors.New("output RowReceiver not closed")
+			}
+
+			return checkExpectedRows(c.expected, out)
+		}
+
+		// Run test with a variety of initial buffer sizes.
+		for _, initialBuffer := range []int64{0, 32, 64, 128, 1024 * 1024} {
+			t.Run(fmt.Sprintf("InitialBuffer=%d", initialBuffer), func(t *testing.T) {
+				if err := testFunc(t, func(h *hashJoiner) {
+					h.initialBufferSize = initialBuffer
+				}); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+
+		// Run tests with a probability of the run failing with a memory error.
+		// These verify that the hashJoiner falls back to disk correctly in all
+		// cases.
+		for i := 0; i < 5; i++ {
+			memFailPoint := buffer
+			t.Run(fmt.Sprintf("MemFailPoint=%s", memFailPoint), func(t *testing.T) {
+				if err := testFunc(t, func(h *hashJoiner) {
+					h.testingKnobMemFailPoint = memFailPoint
+					h.testingKnobFailProbability = 0.5
+				}); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+
+		// Run test with a variety of memory limits.
+		for _, memLimit := range []int64{1, 256, 512, 1024, 2048} {
+			t.Run(fmt.Sprintf("MemLimit=%d", memLimit), func(t *testing.T) {
+				if err := testFunc(t, func(h *hashJoiner) {
+					h.testingKnobMemLimit = memLimit
+				}); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
 	}
 }
 
