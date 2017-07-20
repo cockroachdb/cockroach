@@ -406,6 +406,22 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
+// CancelTransaction looks up and cancells the matching txn in the session registry.
+func (r *SessionRegistry) CancelTransaction(txnID string, username string) (bool, error) {
+	r.Lock()
+	defer r.Unlock()
+
+	var found bool
+	var err error
+	for s := range r.store {
+		found, err = s.CancelTransaction(txnID, username)
+		if found {
+			break
+		}
+	}
+	return found, err
+}
+
 // NewSession creates and initializes a new Session object.
 // remote can be nil.
 func NewSession(

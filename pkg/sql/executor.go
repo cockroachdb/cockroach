@@ -364,18 +364,93 @@ func (r *QueryRegistry) Cancel(queryIDStr string, username string) (bool, error)
 	defer r.Unlock()
 
 	if queryMeta, exists := r.store[queryID]; exists {
-		if !(username == security.RootUser || username == queryMeta.session.User) {
-			// This user does not have cancel privileges over this query.
-			return false, fmt.Errorf("query ID %s not found", queryID)
-		}
-
-		// Atomically set isCancelled to 1
-		atomic.StoreInt32(&queryMeta.isCancelled, 1)
-
-		return true, nil
+		return queryMeta.Cancel(queryID, username)
 	}
 
 	return false, fmt.Errorf("query ID %s not found", queryID)
+}
+
+// Cancel flags the query to be cancelled.
+func (queryMeta *queryMeta) Cancel(queryID uint128.Uint128, username string) (bool, error) {
+	if !(username == security.RootUser || username == queryMeta.session.User) {
+		// This user does not have cancel privileges over this query.
+		return false, fmt.Errorf("query ID %s not found", queryID)
+	}
+
+	// Atomically set isCancelled to 1
+	atomic.StoreInt32(&queryMeta.isCancelled, 1)
+
+	return true, nil
+}
+
+// CancelTransaction cancells all active queries under the txn in addition to rolling it back.
+func (s *Session) CancelTransaction(txnID string, username string) (bool, error) {
+	if s.TxnState.mu.txn == nil {
+		return false, errors.Errorf("the session has no txn")
+	}
+
+	txnUUID := s.TxnState.mu.txn.ID()
+	if txnUUID == nil {
+		return false, errors.Errorf("the session has no txn id %s", txnID)
+	}
+	sTxnID := txnUUID.Short()
+
+	if sTxnID != txnID {
+		return false, errors.Errorf("a txn with ID %s was not found in this session", txnID)
+	}
+
+	if username != security.RootUser && username != s.User {
+		return true, errors.Errorf("a matching txn was found but the user is not authorized")
+	}
+
+	err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		// Cancel all running queries under the txn.
+		// Query cancellation is not guaranteed.
+		// Queries may finish executing regardless.
+		for _, query := range s.mu.ActiveQueries {
+			// We don't have queryID but apparently it is only needed for logging.
+			cancelled, err := query.Cancel(uint128.FromInts(0, 0), username)
+			// Abort if the query wasn't cancelled or errored out.
+			// We cannot handle these errors(and should not get them) e.g "query not found".
+			if !cancelled || err != nil {
+				return err
+			}
+		}
+		return nil
+	}()
+	if err != nil {
+		return true, err
+	}
+
+	// Wait for the queries to either finish cancelling or executing.
+	// This will also handle the case when there's an active txn without running queries.
+	hasQueries := func() bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return len(s.mu.ActiveQueries) != 0
+	}
+	timeout := time.After(time.Second * 10)
+	for {
+		select {
+		case <-timeout:
+			return true, errors.Errorf("timed out while waiting for queries to cancel")
+		default:
+			if hasQueries() {
+				continue
+			}
+			// If the queries were successfully cancelled, then the txn should
+			// already transition to an aborted state, rollback and get cleaned-up.
+			if s.TxnState.State() == NoTxn || s.TxnState.State() == Aborted {
+				return true, nil
+			}
+			// If the queries finished executing(weren't cancelled)
+			// then rollback the txn.
+			res := rollbackSQLTransaction(&s.TxnState)
+			return true, res.Err
+		}
+	}
 }
 
 // NewExecutor creates an Executor and registers a callback on the

@@ -116,13 +116,41 @@ type cancelTransactionNode struct {
 
 func (*cancelTransactionNode) Values() parser.Datums { return nil }
 
-func (n *cancelTransactionNode) Start(ctx context.Context) error {
-	return fmt.Errorf("transaction cancellation is not implemented")
+func (n *cancelTransactionNode) Start(params runParams) error {
+	statusServer := n.p.session.execCfg.StatusServer
+
+	txnIDDatum, err := n.txnID.Eval(&n.p.evalCtx)
+	if err != nil {
+		return err
+	}
+	txnID := parser.AsStringWithFlags(txnIDDatum, parser.FmtBareStrings)
+	// The check is not required, but if the len is invalid better abort now.
+	idLen := len(txnID)
+	if idLen != 8 {
+		return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			"invalid txn id length, expected 8 but got %d", idLen)
+	}
+
+	request := &serverpb.CancelTransactionRequest{
+		TransactionId: txnID,
+		Username:      n.p.session.User,
+	}
+
+	response, err := statusServer.CancelTransaction(params.ctx, request)
+	if err != nil {
+		return err
+	}
+
+	if !response.Cancelled {
+		return fmt.Errorf("could not cancel transaction %s: %s", txnID, response.Error)
+	}
+
+	return nil
 }
 
 func (*cancelTransactionNode) Close(context.Context) {}
 
-func (n *cancelTransactionNode) Next(nextParams) (bool, error) {
+func (n *cancelTransactionNode) Next(runParams) (bool, error) {
 	return false, nil
 }
 

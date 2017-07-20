@@ -1256,7 +1256,6 @@ cancel_query_stmt:
   }
 | CANCEL TRANSACTION a_expr
   {
-    /* SKIP DOC */
     $$.val = &CancelTransaction{ID: $3.expr()}
   }
 
