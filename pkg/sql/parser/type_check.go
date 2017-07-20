@@ -1001,11 +1001,6 @@ func typeCheckComparisonOp(
 	return leftExpr, rightExpr, fn.(CmpOp), nil
 }
 
-type indexedExpr struct {
-	e Expr
-	i int
-}
-
 // typeCheckSameTypedExprs type checks a list of expressions, asserting that all
 // resolved TypeExprs have the same type. An optional desired type can be provided,
 // which will hint that type which the expressions should resolve to, if possible.
@@ -1032,32 +1027,17 @@ func typeCheckSameTypedExprs(
 	// TODO(nvanbenschoten): Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))
 
-	// Split the expressions into three groups of indexed expressions:
-	// - Placeholders
-	// - Constants
-	// - All other Exprs
-	var resolvableExprs, constExprs, placeholderExprs []indexedExpr
-	for i, expr := range exprs {
-		idxExpr := indexedExpr{e: expr, i: i}
-		switch {
-		case isConstant(expr):
-			constExprs = append(constExprs, idxExpr)
-		case ctx.isUnresolvedPlaceholder(expr):
-			placeholderExprs = append(placeholderExprs, idxExpr)
-		default:
-			resolvableExprs = append(resolvableExprs, idxExpr)
-		}
-	}
+	constExprs, placeholderExprs, resolvableExprs := typeCheckSplitExprs(ctx, exprs)
 
 	// Used to set placeholders to the desired typ. If the typ is not provided or is
 	// nil, an error will be thrown.
 	typeCheckSameTypedPlaceholders := func(typ Type) error {
-		for _, placeholderExpr := range placeholderExprs {
-			typedExpr, err := typeCheckAndRequire(ctx, placeholderExpr.e, typ, "placeholder")
+		for _, i := range placeholderExprs {
+			typedExpr, err := typeCheckAndRequire(ctx, exprs[i], typ, "placeholder")
 			if err != nil {
 				return err
 			}
-			typedExprs[placeholderExpr.i] = typedExpr
+			typedExprs[i] = typedExpr
 		}
 		return nil
 	}
@@ -1067,15 +1047,15 @@ func typeCheckSameTypedExprs(
 	// required shared type using the second parameter.
 	typeCheckSameTypedConsts := func(typ Type, required bool) (Type, error) {
 		setTypeForConsts := func(typ Type) (Type, error) {
-			for _, constExpr := range constExprs {
-				typedExpr, err := typeCheckAndRequire(ctx, constExpr.e, typ, "constant")
+			for _, i := range constExprs {
+				typedExpr, err := typeCheckAndRequire(ctx, exprs[i], typ, "constant")
 				if err != nil {
 					// In this case, even though the constExpr has been shown to be
 					// upcastable to typ based on canConstantBecome, it can't actually be
 					// parsed as typ.
 					return nil, err
 				}
-				typedExprs[constExpr.i] = typedExpr
+				typedExprs[i] = typedExpr
 			}
 			return typ, nil
 		}
@@ -1083,14 +1063,14 @@ func typeCheckSameTypedExprs(
 		// If typ is not a wildcard, all consts try to become typ.
 		if typ != TypeAny {
 			all := true
-			for _, constExpr := range constExprs {
-				if !canConstantBecome(constExpr.e.(Constant), typ) {
+			for _, i := range constExprs {
+				if !canConstantBecome(exprs[i].(Constant), typ) {
 					if required {
-						typedExpr, err := constExpr.e.TypeCheck(ctx, TypeAny)
+						typedExpr, err := exprs[i].TypeCheck(ctx, TypeAny)
 						if err != nil {
 							return nil, err
 						}
-						return nil, unexpectedTypeError{constExpr.e, typ, typedExpr.ResolvedType()}
+						return nil, unexpectedTypeError{exprs[i], typ, typedExpr.ResolvedType()}
 					}
 					all = false
 					break
@@ -1103,20 +1083,20 @@ func typeCheckSameTypedExprs(
 
 		// If not all constExprs could become typ but they have a mutual
 		// resolvable type, use this common type.
-		if bestType, ok := commonConstantType(constExprs); ok {
+		if bestType, ok := commonConstantType(exprs, constExprs); ok {
 			return setTypeForConsts(bestType)
 		}
 
 		// If not, we want to force an error because the constants cannot all
 		// become the same type.
 		reqTyp := typ
-		for _, constExpr := range constExprs {
-			typedExpr, err := constExpr.e.TypeCheck(ctx, reqTyp)
+		for _, i := range constExprs {
+			typedExpr, err := exprs[i].TypeCheck(ctx, reqTyp)
 			if err != nil {
 				return nil, err
 			}
 			if typ := typedExpr.ResolvedType(); !typ.Equivalent(reqTyp) {
-				return nil, unexpectedTypeError{constExpr.e, reqTyp, typ}
+				return nil, unexpectedTypeError{exprs[i], reqTyp, typ}
 			}
 			if reqTyp == TypeAny {
 				reqTyp = typedExpr.ResolvedType()
@@ -1151,12 +1131,12 @@ func typeCheckSameTypedExprs(
 	default:
 		firstValidIdx := -1
 		firstValidType := TypeNull
-		for i, resExpr := range resolvableExprs {
-			typedExpr, err := resExpr.e.TypeCheck(ctx, desired)
+		for i, j := range resolvableExprs {
+			typedExpr, err := exprs[j].TypeCheck(ctx, desired)
 			if err != nil {
 				return nil, nil, err
 			}
-			typedExprs[resExpr.i] = typedExpr
+			typedExprs[j] = typedExpr
 			if returnType := typedExpr.ResolvedType(); returnType != TypeNull {
 				firstValidType = returnType
 				firstValidIdx = i
@@ -1179,15 +1159,15 @@ func typeCheckSameTypedExprs(
 			}
 		}
 
-		for _, resExpr := range resolvableExprs[firstValidIdx+1:] {
-			typedExpr, err := resExpr.e.TypeCheck(ctx, firstValidType)
+		for _, i := range resolvableExprs[firstValidIdx+1:] {
+			typedExpr, err := exprs[i].TypeCheck(ctx, firstValidType)
 			if err != nil {
 				return nil, nil, err
 			}
 			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ == TypeNull) {
-				return nil, nil, unexpectedTypeError{resExpr.e, firstValidType, typ}
+				return nil, nil, unexpectedTypeError{exprs[i], firstValidType, typ}
 			}
-			typedExprs[resExpr.i] = typedExpr
+			typedExprs[i] = typedExpr
 		}
 		if len(constExprs) > 0 {
 			if _, err := typeCheckSameTypedConsts(firstValidType, true); err != nil {
@@ -1201,6 +1181,26 @@ func typeCheckSameTypedExprs(
 		}
 		return typedExprs, firstValidType, nil
 	}
+}
+
+// typeCheckSplitExprs splits the expressions into three groups of indexes:
+// - Constants
+// - Placeholders
+// - All other Exprs
+func typeCheckSplitExprs(
+	ctx *SemaContext, exprs []Expr,
+) (constExprs []int, placeholderExprs []int, resolvableExprs []int) {
+	for i, expr := range exprs {
+		switch {
+		case isConstant(expr):
+			constExprs = append(constExprs, i)
+		case ctx.isUnresolvedPlaceholder(expr):
+			placeholderExprs = append(placeholderExprs, i)
+		default:
+			resolvableExprs = append(resolvableExprs, i)
+		}
+	}
+	return constExprs, placeholderExprs, resolvableExprs
 }
 
 // typeCheckTupleComparison type checks a comparison between two tuples,
