@@ -78,10 +78,12 @@ func TestParse(t *testing.T) {
 		{`CREATE INDEX ON a (b)`},
 		{`CREATE INDEX ON a (b) STORING (c)`},
 		{`CREATE INDEX ON a (b) INTERLEAVE IN PARENT c (d)`},
+		{`CREATE INDEX ON a (b) INTERLEAVE IN PARENT c.d (e)`},
 		{`CREATE INDEX ON a (b ASC, c DESC)`},
 		{`CREATE UNIQUE INDEX a ON b (c)`},
 		{`CREATE UNIQUE INDEX a ON b (c) STORING (d)`},
 		{`CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d (e, f)`},
+		{`CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d.e (f, g)`},
 		{`CREATE UNIQUE INDEX a ON b.c (d)`},
 
 		{`CREATE TABLE a ()`},

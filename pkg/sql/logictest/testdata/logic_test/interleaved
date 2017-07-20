@@ -291,3 +291,17 @@ EXPLAIN SELECT * FROM orders WHERE customer = 1 AND id = 1000
 0  scan
 0        table  orders@primary
 0        spans  /1/#/64/1/1000-/1/#/64/1/1001
+
+# Check that interleaving can occur across databases
+statement ok
+CREATE DATABASE other; CREATE TABLE other.foo(x INT PRIMARY KEY);
+  CREATE TABLE interdb (x INT PRIMARY KEY) INTERLEAVE IN PARENT other.foo (x)
+
+query TT
+SHOW CREATE TABLE interdb
+----
+interdb                               CREATE TABLE interdb (
+                                      x INT NOT NULL,
+                                      CONSTRAINT "primary" PRIMARY KEY (x ASC),
+                                      FAMILY "primary" (x)
+) INTERLEAVE IN PARENT other.foo (x)
