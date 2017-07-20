@@ -247,7 +247,8 @@ type TableCollection struct {
 	// They are released once the transaction using them is complete.
 	// If the transaction gets pushed and the timestamp changes,
 	// the tables are released.
-	tables []sqlbase.TableDescriptor
+	tables []*sqlbase.TableDescriptor
+
 	// leaseMgr manages acquiring and releasing per-table leases.
 	leaseMgr *LeaseManager
 	// databaseCache is used as a cache for database names.
@@ -314,8 +315,7 @@ func (tc *TableCollection) getTableVersion(
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
-	for i := range tc.tables {
-		table := &tc.tables[i]
+	for _, table := range tc.tables {
 		if table.Name == string(tn.TableName) &&
 			table.ParentID == dbID {
 			if log.V(2) {
@@ -335,14 +335,14 @@ func (tc *TableCollection) getTableVersion(
 		return nil, err
 	}
 	tc.timestamp = txn.OrigTimestamp()
-	tc.tables = append(tc.tables, *table)
+	tc.tables = append(tc.tables, table)
 	if log.V(2) {
 		log.Infof(ctx, "added table '%s' to table collection", tn)
 	}
 	// If the table we just acquired expires before the txn's deadline, reduce
 	// the deadline.
 	txn.UpdateDeadlineMaybe(expiration)
-	return &tc.tables[len(tc.tables)-1], nil
+	return table, nil
 }
 
 // getTableVersionByID is a by-ID variant of getTableVersion (i.e. uses same cache).
@@ -370,8 +370,7 @@ func (tc *TableCollection) getTableVersionByID(
 
 	// First, look to see if we already have the table -- including those
 	// via `getTableVersion`.
-	for i := range tc.tables {
-		table := &tc.tables[i]
+	for _, table := range tc.tables {
 		if table.ID == tableID {
 			if log.V(2) {
 				log.Infof(ctx, "found table %d in table cache", tableID)
@@ -391,22 +390,22 @@ func (tc *TableCollection) getTableVersionByID(
 		return nil, err
 	}
 	tc.timestamp = txn.OrigTimestamp()
-	tc.tables = append(tc.tables, *table)
+	tc.tables = append(tc.tables, table)
 	if log.V(2) {
 		log.Infof(ctx, "added table '%s' to table collection", table.Name)
 	}
 	// If the table we just acquired expires before the txn's deadline, reduce
 	// the deadline.
 	txn.UpdateDeadlineMaybe(expiration)
-	return &tc.tables[len(tc.tables)-1], nil
+	return table, nil
 }
 
 // releaseTables releases all tables currently held by the Session.
 func (tc *TableCollection) releaseTables(ctx context.Context) {
 	if len(tc.tables) > 0 {
 		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
-		for i := range tc.tables {
-			if err := tc.leaseMgr.Release(&tc.tables[i]); err != nil {
+		for _, table := range tc.tables {
+			if err := tc.leaseMgr.Release(table); err != nil {
 				log.Warning(ctx, err)
 			}
 		}
