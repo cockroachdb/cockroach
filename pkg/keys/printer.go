@@ -181,6 +181,7 @@ var constSubKeyDict = []struct {
 }{
 	{"/storeIdent", localStoreIdentSuffix},
 	{"/gossipBootstrap", localStoreGossipSuffix},
+	{"/clusterVersion", localStoreClusterVersionSuffix},
 }
 
 func localStoreKeyPrint(key roachpb.Key) string {
