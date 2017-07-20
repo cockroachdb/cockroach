@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -40,11 +39,10 @@ import (
 // the Job field after the job has been created will not be written to the
 // database, however, even when calling e.g. Started or Succeeded.
 type Job struct {
-	db     *client.DB
-	ex     sqlutil.InternalExecutor
-	id     *int64
-	Record Record
-	txn    *client.Txn
+	registry *Registry
+	id       *int64
+	Record   Record
+	txn      *client.Txn
 
 	mu struct {
 		syncutil.Mutex
@@ -79,26 +77,8 @@ const (
 	StatusSucceeded Status = "succeeded"
 )
 
-// NewJob creates a new Job.
-func NewJob(db *client.DB, ex sqlutil.InternalExecutor, record Record) *Job {
-	return &Job{
-		db:     db,
-		ex:     ex,
-		Record: record,
-	}
-}
-
-// GetJob creates a new Job initialized from a previously created
-// job id.
-func GetJob(
-	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor, id int64,
-) (*Job, error) {
-	j := &Job{
-		db: db,
-		ex: ex,
-		id: &id,
-	}
-	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+func (j *Job) load(ctx context.Context) error {
+	return j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		payload, err := j.retrievePayload(ctx, txn)
 		if err != nil {
 			return err
@@ -120,10 +100,7 @@ func GetJob(
 		// Job so far.
 		j.mu.payload = *payload
 		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return j, nil
+	})
 }
 
 func (j *Job) runInTxn(
@@ -136,7 +113,7 @@ func (j *Job) runInTxn(
 				return retryable(ctx, txn)
 			})
 	}
-	return j.db.Txn(ctx, retryable)
+	return j.registry.db.Txn(ctx, retryable)
 }
 
 // WithTxn sets the transaction that this Job will use for its next operation.
@@ -288,7 +265,7 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 		}
 
 		const stmt = "INSERT INTO system.jobs (status, payload) VALUES ($1, $2) RETURNING id"
-		row, err = j.ex.QueryRowInTransaction(ctx, "job-insert", txn, stmt, StatusPending, payloadBytes)
+		row, err = j.registry.ex.QueryRowInTransaction(ctx, "job-insert", txn, stmt, StatusPending, payloadBytes)
 		return err
 	}); err != nil {
 		return err
@@ -301,7 +278,7 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 
 func (j *Job) retrievePayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
 	const selectStmt = "SELECT payload FROM system.jobs WHERE id = $1"
-	row, err := j.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
+	row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +314,7 @@ func (j *Job) update(
 		}
 
 		const updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
-		n, err := j.ex.ExecuteStatementInTransaction(
+		n, err := j.registry.ex.ExecuteStatementInTransaction(
 			ctx, "job-update", txn, updateStmt, newStatus, payloadBytes, *j.id)
 		if err != nil {
 			return err

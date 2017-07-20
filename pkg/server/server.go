@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -120,6 +121,7 @@ type Server struct {
 	sqlExecutor        *sql.Executor
 	leaseMgr           *sql.LeaseManager
 	sessionRegistry    *sql.SessionRegistry
+	jobRegistry        *jobs.Registry
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
@@ -339,6 +341,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, s.cfg.TimeSeriesServerConfig, s.stopper)
 
+	sqlExecutor := sql.InternalExecutor{LeaseManager: s.leaseMgr}
+
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
 		AmbientCtx:                     s.cfg.AmbientCtx,
@@ -356,13 +360,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		MetricsSampleInterval:          s.cfg.MetricsSampleInterval,
 		HistogramWindowInterval:        s.cfg.HistogramWindowInterval(),
 		StorePool:                      s.storePool,
-		SQLExecutor: sql.InternalExecutor{
-			LeaseManager: s.leaseMgr,
-		},
-		LogRangeEvents:            s.cfg.EventLogEnabled,
-		RangeLeaseActiveDuration:  active,
-		RangeLeaseRenewalDuration: renewal,
-		TimeSeriesDataStore:       s.tsDB,
+		SQLExecutor:                    sqlExecutor,
+		LogRangeEvents:                 s.cfg.EventLogEnabled,
+		RangeLeaseActiveDuration:       active,
+		RangeLeaseRenewalDuration:      renewal,
+		TimeSeriesDataStore:            s.tsDB,
 
 		EnableEpochRangeLeases: true,
 	}
@@ -381,6 +383,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
+	s.jobRegistry = jobs.MakeRegistry(s.db, sqlExecutor)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
@@ -419,6 +422,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		DistSQLSrv:              s.distSQLServer,
 		StatusServer:            s.status,
 		SessionRegistry:         s.sessionRegistry,
+		JobRegistry:             s.jobRegistry,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
 		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
@@ -807,6 +811,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.gossip,
 		s.leaseMgr,
 		s.clock,
+		s.jobRegistry,
 	).Start(s.stopper)
 
 	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.node.Descriptor)
