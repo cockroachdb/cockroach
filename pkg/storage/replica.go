@@ -5353,6 +5353,20 @@ func calcGoodReplicas(
 	return goodReplicas, behindCount
 }
 
+// QueriesPerSecond returns the range's average QPS if it is the current
+// leaseholder. If it isn't, this will return 0 because the replica does not
+// know about the reads that the leaseholder is serving.
+func (r *Replica) QueriesPerSecond() float64 {
+	qps, _ := r.leaseholderStats.avgQPS()
+	return qps
+}
+
+// WritesPerSecond returns the range's average keys written per second.
+func (r *Replica) WritesPerSecond() float64 {
+	wps, _ := r.writeStats.avgQPS()
+	return wps
+}
+
 // GetLeaseHistory returns the lease history stored on this replica.
 func (r *Replica) GetLeaseHistory() []roachpb.Lease {
 	if r.leaseHistory == nil {

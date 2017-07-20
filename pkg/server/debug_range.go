@@ -34,36 +34,38 @@ import (
 )
 
 const (
-	debugRangeHeaderStore               = "Store"
-	debugRangeHeaderNode                = "Node"
-	debugRangeHeaderKeyRange            = "Key Range"
-	debugRangeHeaderRaftState           = "Raft State"
-	debugRangeHeaderLeaseHolder         = "Lease Holder"
-	debugRangeHeaderLeaseType           = "Lease Type"
-	debugRangeHeaderLeaseEpoch          = "Lease Epoch"
-	debugRangeHeaderLeaseStart          = "Lease Start"
-	debugRangeHeaderLeaseExpiration     = "Lease Expiration"
-	debugRangeHeaderLeaseAppliedIndex   = "Lease Applied Index"
-	debugRangeHeaderRaftLeader          = "Raft Leader"
-	debugRangeHeaderVote                = "Vote"
-	debugRangeHeaderTerm                = "Term"
-	debugRangeHeaderApplied             = "Applied"
-	debugRangeHeaderCommit              = "Commit"
-	debugRangeHeaderLastIndex           = "Last Index"
-	debugRangeHeaderLogSize             = "Log Size"
-	debugRangeHeaderApproxProposalQuota = "Approx Proposal Quota"
-	debugRangeHeaderPendingCommands     = "Pending Commands"
-	debugRangeHeaderDroppedCommands     = "Dropped Commands"
-	debugRangeHeaderTruncatedIndex      = "Truncated Index"
-	debugRangeHeaderTruncatedTerm       = "Truncated Term"
-	debugRangeHeaderMVCCLastUpdate      = "MVCC Last Update"
-	debugRangeHeaderMVCCIntentAge       = "MVCC Intent Age"
-	debugRangeHeaderMVCCGCBytesAge      = "MVCC GC Bytes Age"
-	debugRangeHeaderMVCCLive            = "MVCC Live Bytes/Count"
-	debugRangeHeaderMVCCKey             = "MVCC Key Bytes/Count"
-	debugRangeHeaderMVCCVal             = "MVCC Value Bytes/Count"
-	debugRangeHeaderMVCCIntent          = "MVCC Intent Bytes/Count"
-	debugRangeHeaderMVCCSys             = "MVCC System Bytes/Count"
+	debugRangeHeaderStore                = "Store"
+	debugRangeHeaderNode                 = "Node"
+	debugRangeHeaderKeyRange             = "Key Range"
+	debugRangeHeaderRaftState            = "Raft State"
+	debugRangeHeaderLeaseHolder          = "Lease Holder"
+	debugRangeHeaderLeaseType            = "Lease Type"
+	debugRangeHeaderLeaseEpoch           = "Lease Epoch"
+	debugRangeHeaderLeaseStart           = "Lease Start"
+	debugRangeHeaderLeaseExpiration      = "Lease Expiration"
+	debugRangeHeaderLeaseAppliedIndex    = "Lease Applied Index"
+	debugRangeHeaderRaftLeader           = "Raft Leader"
+	debugRangeHeaderVote                 = "Vote"
+	debugRangeHeaderTerm                 = "Term"
+	debugRangeHeaderApplied              = "Applied"
+	debugRangeHeaderCommit               = "Commit"
+	debugRangeHeaderLastIndex            = "Last Index"
+	debugRangeHeaderLogSize              = "Log Size"
+	debugRangeHeaderLeaseholderQPS       = "Leaseholder QPS"
+	debugRangeHeaderKeysWrittenPerSecond = "Keys Written Per Second"
+	debugRangeHeaderApproxProposalQuota  = "Approx Proposal Quota"
+	debugRangeHeaderPendingCommands      = "Pending Commands"
+	debugRangeHeaderDroppedCommands      = "Dropped Commands"
+	debugRangeHeaderTruncatedIndex       = "Truncated Index"
+	debugRangeHeaderTruncatedTerm        = "Truncated Term"
+	debugRangeHeaderMVCCLastUpdate       = "MVCC Last Update"
+	debugRangeHeaderMVCCIntentAge        = "MVCC Intent Age"
+	debugRangeHeaderMVCCGCBytesAge       = "MVCC GC Bytes Age"
+	debugRangeHeaderMVCCLive             = "MVCC Live Bytes/Count"
+	debugRangeHeaderMVCCKey              = "MVCC Key Bytes/Count"
+	debugRangeHeaderMVCCVal              = "MVCC Value Bytes/Count"
+	debugRangeHeaderMVCCIntent           = "MVCC Intent Bytes/Count"
+	debugRangeHeaderMVCCSys              = "MVCC System Bytes/Count"
 
 	debugRangeClassWarning       = "warning"
 	debugRangeClassMatch         = "match"
@@ -358,6 +360,8 @@ func (d *debugRangeData) postProcessing() {
 	addHeader(debugRangeHeaderCommit)
 	addHeader(debugRangeHeaderLastIndex)
 	addHeader(debugRangeHeaderLogSize)
+	addHeader(debugRangeHeaderLeaseholderQPS)
+	addHeader(debugRangeHeaderKeysWrittenPerSecond)
 	addHeader(debugRangeHeaderApproxProposalQuota)
 	addHeader(debugRangeHeaderPendingCommands)
 	addHeader(debugRangeHeaderDroppedCommands)
@@ -511,6 +515,15 @@ func (d *debugRangeData) postProcessing() {
 			outputSameTitleValue(strconv.FormatUint(info.State.LastIndex, 10))
 		d.Results[debugRangeHeaderLogSize][info.SourceStoreID] =
 			outputSameTitleValue(strconv.FormatInt(info.State.RaftLogSize, 10))
+		if leaseClass == debugRangeClassLeaseHolder {
+			d.Results[debugRangeHeaderLeaseholderQPS][info.SourceStoreID] =
+				outputSameTitleValue(strconv.FormatFloat(info.Stats.QueriesPerSecond, 'g', -1, 64))
+		} else {
+			d.Results[debugRangeHeaderLeaseholderQPS][info.SourceStoreID] =
+				outputSameTitleValue(debugRangeValueEmpty)
+		}
+		d.Results[debugRangeHeaderKeysWrittenPerSecond][info.SourceStoreID] =
+			outputSameTitleValue(strconv.FormatFloat(info.Stats.WritesPerSecond, 'g', -1, 64))
 		if raftLeader {
 			d.Results[debugRangeHeaderApproxProposalQuota][info.SourceStoreID] =
 				outputSameTitleValue(strconv.FormatInt(info.State.ApproximateProposalQuota, 10))
