@@ -910,7 +910,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
 
 	// Setup HTTP<->gRPC handlers.
-	conn, err := s.rpcContext.GRPCDial(s.cfg.Addr)
+	conn, err := s.rpcContext.GRPCDial(s.cfg.AdvertiseAddr)
 	if err != nil {
 		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}
