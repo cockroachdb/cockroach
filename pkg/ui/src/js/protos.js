@@ -20694,6 +20694,416 @@ export const cockroach = $root.cockroach = (() => {
                 return CancelQueryResponse;
             })();
 
+            serverpb.CancelTransactionRequest = (function() {
+
+                /**
+                 * Properties of a CancelTransactionRequest.
+                 * @typedef cockroach.server.serverpb.CancelTransactionRequest$Properties
+                 * @type {Object}
+                 * @property {string} [transaction_id] CancelTransactionRequest transaction_id.
+                 * @property {string} [node_id] CancelTransactionRequest node_id.
+                 * @property {string} [username] CancelTransactionRequest username.
+                 */
+
+                /**
+                 * Constructs a new CancelTransactionRequest.
+                 * @exports cockroach.server.serverpb.CancelTransactionRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest$Properties=} [properties] Properties to set
+                 */
+                function CancelTransactionRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * CancelTransactionRequest transaction_id.
+                 * @type {string}
+                 */
+                CancelTransactionRequest.prototype.transaction_id = "";
+
+                /**
+                 * CancelTransactionRequest node_id.
+                 * @type {string}
+                 */
+                CancelTransactionRequest.prototype.node_id = "";
+
+                /**
+                 * CancelTransactionRequest username.
+                 * @type {string}
+                 */
+                CancelTransactionRequest.prototype.username = "";
+
+                /**
+                 * Creates a new CancelTransactionRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CancelTransactionRequest} CancelTransactionRequest instance
+                 */
+                CancelTransactionRequest.create = function create(properties) {
+                    return new CancelTransactionRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified CancelTransactionRequest message. Does not implicitly {@link cockroach.server.serverpb.CancelTransactionRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest$Properties} message CancelTransactionRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CancelTransactionRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.transaction_id != null && message.hasOwnProperty("transaction_id"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.transaction_id);
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.node_id);
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        writer.uint32(/* id 3, wireType 2 =*/26).string(message.username);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified CancelTransactionRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CancelTransactionRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest$Properties} message CancelTransactionRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CancelTransactionRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a CancelTransactionRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CancelTransactionRequest} CancelTransactionRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CancelTransactionRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.CancelTransactionRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.transaction_id = reader.string();
+                            break;
+                        case 2:
+                            message.node_id = reader.string();
+                            break;
+                        case 3:
+                            message.username = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a CancelTransactionRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CancelTransactionRequest} CancelTransactionRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CancelTransactionRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a CancelTransactionRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                CancelTransactionRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.transaction_id != null && message.hasOwnProperty("transaction_id"))
+                        if (!$util.isString(message.transaction_id))
+                            return "transaction_id: string expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isString(message.node_id))
+                            return "node_id: string expected";
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        if (!$util.isString(message.username))
+                            return "username: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a CancelTransactionRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelTransactionRequest} CancelTransactionRequest
+                 */
+                CancelTransactionRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.CancelTransactionRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.CancelTransactionRequest();
+                    if (object.transaction_id != null)
+                        message.transaction_id = String(object.transaction_id);
+                    if (object.node_id != null)
+                        message.node_id = String(object.node_id);
+                    if (object.username != null)
+                        message.username = String(object.username);
+                    return message;
+                };
+
+                /**
+                 * Creates a CancelTransactionRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CancelTransactionRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelTransactionRequest} CancelTransactionRequest
+                 */
+                CancelTransactionRequest.from = CancelTransactionRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a CancelTransactionRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest} message CancelTransactionRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CancelTransactionRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.transaction_id = "";
+                        object.node_id = "";
+                        object.username = "";
+                    }
+                    if (message.transaction_id != null && message.hasOwnProperty("transaction_id"))
+                        object.transaction_id = message.transaction_id;
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        object.node_id = message.node_id;
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        object.username = message.username;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this CancelTransactionRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CancelTransactionRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this CancelTransactionRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                CancelTransactionRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return CancelTransactionRequest;
+            })();
+
+            serverpb.CancelTransactionResponse = (function() {
+
+                /**
+                 * Properties of a CancelTransactionResponse.
+                 * @typedef cockroach.server.serverpb.CancelTransactionResponse$Properties
+                 * @type {Object}
+                 * @property {boolean} [cancelled] CancelTransactionResponse cancelled.
+                 * @property {string} [error] CancelTransactionResponse error.
+                 */
+
+                /**
+                 * Constructs a new CancelTransactionResponse.
+                 * @exports cockroach.server.serverpb.CancelTransactionResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse$Properties=} [properties] Properties to set
+                 */
+                function CancelTransactionResponse(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * CancelTransactionResponse cancelled.
+                 * @type {boolean}
+                 */
+                CancelTransactionResponse.prototype.cancelled = false;
+
+                /**
+                 * CancelTransactionResponse error.
+                 * @type {string}
+                 */
+                CancelTransactionResponse.prototype.error = "";
+
+                /**
+                 * Creates a new CancelTransactionResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CancelTransactionResponse} CancelTransactionResponse instance
+                 */
+                CancelTransactionResponse.create = function create(properties) {
+                    return new CancelTransactionResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified CancelTransactionResponse message. Does not implicitly {@link cockroach.server.serverpb.CancelTransactionResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse$Properties} message CancelTransactionResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CancelTransactionResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.cancelled != null && message.hasOwnProperty("cancelled"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).bool(message.cancelled);
+                    if (message.error != null && message.hasOwnProperty("error"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.error);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified CancelTransactionResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CancelTransactionResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse$Properties} message CancelTransactionResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CancelTransactionResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a CancelTransactionResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CancelTransactionResponse} CancelTransactionResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CancelTransactionResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.CancelTransactionResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.cancelled = reader.bool();
+                            break;
+                        case 2:
+                            message.error = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a CancelTransactionResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CancelTransactionResponse} CancelTransactionResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CancelTransactionResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a CancelTransactionResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                CancelTransactionResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.cancelled != null && message.hasOwnProperty("cancelled"))
+                        if (typeof message.cancelled !== "boolean")
+                            return "cancelled: boolean expected";
+                    if (message.error != null && message.hasOwnProperty("error"))
+                        if (!$util.isString(message.error))
+                            return "error: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a CancelTransactionResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelTransactionResponse} CancelTransactionResponse
+                 */
+                CancelTransactionResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.CancelTransactionResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.CancelTransactionResponse();
+                    if (object.cancelled != null)
+                        message.cancelled = Boolean(object.cancelled);
+                    if (object.error != null)
+                        message.error = String(object.error);
+                    return message;
+                };
+
+                /**
+                 * Creates a CancelTransactionResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CancelTransactionResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelTransactionResponse} CancelTransactionResponse
+                 */
+                CancelTransactionResponse.from = CancelTransactionResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a CancelTransactionResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse} message CancelTransactionResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CancelTransactionResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.cancelled = false;
+                        object.error = "";
+                    }
+                    if (message.cancelled != null && message.hasOwnProperty("cancelled"))
+                        object.cancelled = message.cancelled;
+                    if (message.error != null && message.hasOwnProperty("error"))
+                        object.error = message.error;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this CancelTransactionResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CancelTransactionResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this CancelTransactionResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                CancelTransactionResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return CancelTransactionResponse;
+            })();
+
             serverpb.SpanStatsRequest = (function() {
 
                 /**
@@ -23552,6 +23962,33 @@ export const cockroach = $root.cockroach = (() => {
                  * @function
                  * @param {cockroach.server.serverpb.CancelQueryRequest|Object.<string,*>} request CancelQueryRequest message or plain object
                  * @returns {Promise<cockroach.server.serverpb.CancelQueryResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Status#cancelTransaction}.
+                 * @typedef Status_cancelTransaction_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse} [response] CancelTransactionResponse
+                 */
+
+                /**
+                 * Calls CancelTransaction.
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest|Object.<string,*>} request CancelTransactionRequest message or plain object
+                 * @param {Status_cancelTransaction_Callback} callback Node-style callback called with the error, if any, and CancelTransactionResponse
+                 * @returns {undefined}
+                 */
+                Status.prototype.cancelTransaction = function cancelTransaction(request, callback) {
+                    return this.rpcCall(cancelTransaction, $root.cockroach.server.serverpb.CancelTransactionRequest, $root.cockroach.server.serverpb.CancelTransactionResponse, request, callback);
+                };
+
+                /**
+                 * Calls CancelTransaction.
+                 * @name Status#cancelTransaction
+                 * @function
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest|Object.<string,*>} request CancelTransactionRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.CancelTransactionResponse>} Promise
                  * @variation 2
                  */
 

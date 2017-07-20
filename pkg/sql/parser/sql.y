@@ -503,6 +503,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> cancel_stmt
 %type <Statement> cancel_job_stmt
 %type <Statement> cancel_query_stmt
+%type <Statement> cancel_transaction_stmt
 
 %type <Statement> commit_stmt
 %type <Statement> copy_from_stmt
@@ -1378,11 +1379,12 @@ copy_from_stmt:
 
 // %Help: CANCEL
 // %Category: Group
-// %Text: CANCEL JOB, CANCEL QUERY
+// %Text: CANCEL JOB, CANCEL QUERY, CANCEL TRANSACTION
 cancel_stmt:
-  cancel_job_stmt   // EXTEND WITH HELP: CANCEL JOB
-| cancel_query_stmt // EXTEND WITH HELP: CANCEL QUERY
-| CANCEL error      // SHOW HELP: CANCEL
+  cancel_job_stmt         // EXTEND WITH HELP: CANCEL JOB
+| cancel_query_stmt       // EXTEND WITH HELP: CANCEL QUERY
+| cancel_transaction_stmt // EXTEND WITH HELP: CANCEL TRANSACTION
+| CANCEL error            // SHOW HELP: CANCEL
 
 // %Help: CANCEL JOB - cancel a background job
 // %Category: Misc
@@ -1405,6 +1407,17 @@ cancel_query_stmt:
     $$.val = &CancelQuery{ID: $3.expr()}
   }
 | CANCEL QUERY error // SHOW HELP: CANCEL QUERY
+
+// %Help: CANCEL TRANSACTION - cancel a running transaction
+// %Category: Misc
+// %Text: CANCEL TRANSACTION <txnid>
+// %SeeAlso: CANCEL QUERY
+cancel_transaction_stmt:
+  CANCEL TRANSACTION a_expr
+  {
+    $$.val = &CancelTransaction{ID: $3.expr()}
+  }
+| CANCEL TRANSACTION error // SHOW HELP: CANCEL TRANSACTION
 
 // %Help: CREATE
 // %Category: Group

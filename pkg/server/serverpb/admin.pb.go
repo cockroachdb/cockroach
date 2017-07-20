@@ -96,6 +96,8 @@
 		ListSessionsResponse
 		CancelQueryRequest
 		CancelQueryResponse
+		CancelTransactionRequest
+		CancelTransactionResponse
 		SpanStatsRequest
 		SpanStatsResponse
 		ProblemRangesRequest

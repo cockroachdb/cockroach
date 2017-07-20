@@ -418,6 +418,24 @@ message CancelQueryResponse {
   string error = 2;
 }
 
+// CancelTransactionRequest requests transaction cancellation.
+message CancelTransactionRequest {
+  // transaction_id of the transaction to be cancelled.
+  string transaction_id = 1;
+  // node_id of the transaction to be cancelled.
+  string node_id = 2;
+  // username of the user making this cancellation request.
+  string username = 3;
+}
+
+// CancelTransactionResponse responds to a transaction cancellation request.
+message CancelTransactionResponse {
+  // cancelled indicates whether the transaction was cancelled.
+  bool cancelled = 1;
+  // error message (accompanied with cancelled = false).
+  string error = 2;
+}
+
 message SpanStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
   bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
@@ -578,6 +596,11 @@ service Status {
   rpc CancelQuery(CancelQueryRequest) returns (CancelQueryResponse) {
     option (google.api.http) = {
       get: "/_status/cancel_query/{node_id}"
+    };
+  }
+  rpc CancelTransaction(CancelTransactionRequest) returns (CancelTransactionResponse) {
+    option (google.api.http) = {
+      get: "/_status/cancel_transaction/{transaction_id}"
     };
   }
 

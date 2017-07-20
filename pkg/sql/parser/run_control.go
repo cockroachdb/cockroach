@@ -59,3 +59,14 @@ func (node *CancelQuery) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("CANCEL QUERY ")
 	FormatNode(buf, f, node.ID)
 }
+
+// CancelTransaction represents a CANCEL TRANSACTION statement.
+type CancelTransaction struct {
+	ID Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CancelTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("CANCEL TRANSACTION ")
+	FormatNode(buf, f, node.ID)
+}
