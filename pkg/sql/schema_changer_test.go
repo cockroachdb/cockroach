@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -58,6 +59,7 @@ func TestSchemaChangeLease(t *testing.T) {
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
+	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	// Set MinSchemaChangeLeaseDuration to always expire the lease.
 	minLeaseDuration := sql.MinSchemaChangeLeaseDuration
 	sql.MinSchemaChangeLeaseDuration = 2 * sql.SchemaChangeLeaseDuration
@@ -75,7 +77,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
-	changer := sql.NewSchemaChangerForTesting(id, 0, node, *kvDB, nil)
+	changer := sql.NewSchemaChangerForTesting(id, 0, node, *kvDB, nil, jobRegistry)
 
 	ctx := context.TODO()
 
@@ -179,8 +181,9 @@ func TestSchemaChangeProcess(t *testing.T) {
 		stopper,
 		&sql.MemoryMetrics{},
 	)
+	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.TODO())
-	changer := sql.NewSchemaChangerForTesting(id, 0, node, *kvDB, leaseMgr)
+	changer := sql.NewSchemaChangerForTesting(id, 0, node, *kvDB, leaseMgr, jobRegistry)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -252,7 +255,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	index.Name = "bar"
 	index.ID = tableDesc.NextIndexID
 	tableDesc.NextIndexID++
-	changer = sql.NewSchemaChangerForTesting(id, tableDesc.NextMutationID, node, *kvDB, leaseMgr)
+	changer = sql.NewSchemaChangerForTesting(
+		id, tableDesc.NextMutationID, node, *kvDB, leaseMgr, jobRegistry)
 	tableDesc.Mutations = append(tableDesc.Mutations, sqlbase.DescriptorMutation{
 		Descriptor_: &sqlbase.DescriptorMutation_Index{Index: index},
 		Direction:   sqlbase.DescriptorMutation_ADD,
@@ -423,6 +427,7 @@ func runSchemaChangeWithOperations(
 	t *testing.T,
 	sqlDB *gosql.DB,
 	kvDB *client.DB,
+	jobRegistry *jobs.Registry,
 	schemaChange string,
 	maxValue int,
 	keyMultiple int,
@@ -451,7 +456,7 @@ func runSchemaChangeWithOperations(
 
 	// Grabbing a schema change lease on the table will fail, disallowing
 	// another schema change from being simultaneously executed.
-	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil)
+	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil, jobRegistry)
 	if l, err := sc.AcquireLease(ctx); err == nil {
 		t.Fatalf("schema change lease acquisition on table %d succeeded: %v", tableDesc.ID, l)
 	}
@@ -576,6 +581,7 @@ func TestRaceWithBackfill(t *testing.T) {
 	defer tc.Stopper().Stop(context.TODO())
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 	sqlDB := tc.ServerConn(0)
+	jobRegistry := tc.Server(0).JobRegistry().(*jobs.Registry)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -613,6 +619,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t,
 		sqlDB,
 		kvDB,
+		jobRegistry,
 		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
 		maxValue,
 		2,
@@ -623,6 +630,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t,
 		sqlDB,
 		kvDB,
+		jobRegistry,
 		"ALTER TABLE t.test DROP pi",
 		maxValue,
 		2,
@@ -633,6 +641,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t,
 		sqlDB,
 		kvDB,
+		jobRegistry,
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
 		3,
@@ -643,6 +652,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t,
 		sqlDB,
 		kvDB,
+		jobRegistry,
 		"DROP INDEX t.test@vidx",
 		maxValue,
 		2,
