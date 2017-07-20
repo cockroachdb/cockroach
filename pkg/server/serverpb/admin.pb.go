@@ -50,6 +50,7 @@
 		NodeRequest
 		RaftState
 		RangeProblems
+		RangeStatistics
 		PrettySpan
 		RangeInfo
 		RangesRequest
