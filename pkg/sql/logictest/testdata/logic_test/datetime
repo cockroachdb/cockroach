@@ -647,7 +647,7 @@ CREATE TABLE tz (
 query TTBTT
 SHOW COLUMNS FROM tz
 ----
-a     INT                       false     NULL {primary}
+a     INT                       false     NULL {"primary"}
 b     TIMESTAMP                 true      NULL {}
 c     TIMESTAMP WITH TIME ZONE  true      NULL {}
 d     TIMESTAMP WITH TIME ZONE  true      NULL {}

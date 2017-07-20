@@ -765,7 +765,11 @@ func (*DString) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
-	encodeSQLStringWithFlags(buf, string(*d), f)
+	if f.withinArray {
+		encodeSQLStringInsideArray(buf, string(*d))
+	} else {
+		encodeSQLStringWithFlags(buf, string(*d), f)
+	}
 }
 
 // Size implements the Datum interface.

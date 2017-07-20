@@ -43,6 +43,8 @@ type fmtFlags struct {
 	bareStrings bool
 	// If true, identifiers will be rendered without wrapping quotes.
 	bareIdentifiers bool
+	// If true, strings will be formatted for being contents of ARRAYs.
+	withinArray bool
 	// If true, datums and placeholders will have type annotations (like
 	// :::interval) as necessary to disambiguate between possible type
 	// resolutions.
@@ -69,6 +71,10 @@ var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
 // FmtBareStrings instructs the pretty-printer to print strings without
 // wrapping quotes, if the string contains no special characters.
 var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
+
+// FmtArrays instructs the pretty-printer to print strings without
+// wrapping quotes, if the string contains no special characters.
+var FmtArrays FmtFlags = &fmtFlags{withinArray: true}
 
 // FmtBareIdentifiers instructs the pretty-printer to print
 // identifiers without wrapping quotes in any case.

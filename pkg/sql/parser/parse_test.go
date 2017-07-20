@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"go/constant"
 	"reflect"
+	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -1647,4 +1648,18 @@ func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, str
 		t.Fatalf("expected %s, but found %s", sql, stmt)
 	}
 	return stmt
+}
+
+func BenchmarkEncodeSQLString(b *testing.B) {
+	str := strings.Repeat("foo", 10000)
+	b.Run("old version", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			encodeSQLStringWithFlags(bytes.NewBuffer(nil), str, FmtBareStrings)
+		}
+	})
+	b.Run("new version", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			encodeSQLStringInsideArray(bytes.NewBuffer(nil), str)
+		}
+	})
 }

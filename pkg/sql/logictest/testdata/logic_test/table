@@ -79,7 +79,7 @@ query TTBTT colnames
 SHOW COLUMNS FROM d
 ----
 Field Type   Null  Default Indices
-id    INT    false NULL    {primary}
+id    INT    false NULL    {"primary"}
 
 statement ok
 CREATE TABLE e (
@@ -90,7 +90,7 @@ query TTBTT colnames
 SHOW COLUMNS FROM e
 ----
 Field Type   Null   Default Indices
-id    INT    false  NULL    {primary}
+id    INT    false  NULL    {"primary"}
 
 statement ok
 CREATE TABLE f (
@@ -104,9 +104,9 @@ query TTBTT colnames
 SHOW COLUMNS FROM f
 ----
 Field Type   Null  Default Indices
-a     INT   false  NULL    {primary}
-b     INT   false  NULL    {primary}
-c     INT   false  NULL    {primary}
+a     INT   false  NULL    {"primary"}
+b     INT   false  NULL    {"primary"}
+c     INT   false  NULL    {"primary"}
 
 query T
 SHOW TABLES FROM test
@@ -160,8 +160,8 @@ query TTBTT colnames
 SHOW COLUMNS FROM test.users
 ----
 Field       Type        Null    Default Indices
-id          INT         false   NULL    {primary,foo,bar}
-name        STRING      false   NULL    {foo,bar}
+id          INT         false   NULL    {"primary","foo","bar"}
+name        STRING      false   NULL    {"foo","bar"}
 title       STRING      true    NULL    {}
 nickname    STRING      true    NULL	{}
 username    STRING(10)  true    NULL	{}

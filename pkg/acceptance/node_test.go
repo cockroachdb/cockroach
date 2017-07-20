@@ -52,12 +52,13 @@ const client = new pg.Client(config);
 client.connect(function (err) {
   if (err) throw err;
 
-  client.query("SELECT 1 as first, 2+$1 as second", [%v], function (err, results) {
+  client.query("SELECT 1 as first, 2+$1 as second, ARRAY['\"','',''] as third", [%v], function (err, results) {
     if (err) throw err;
 
     assert.deepEqual(results.rows, [{
       first: 1,
-      second: 5
+      second: 5,
+      third: ['"', '', '']
     }]);
     client.end(function (err) {
       if (err) throw err;
