@@ -281,6 +281,7 @@ func (n *Node) initDescriptor(addr net.Addr, attrs roachpb.Attributes, locality 
 	n.Descriptor.Address = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	n.Descriptor.Attrs = attrs
 	n.Descriptor.Locality = locality
+	n.Descriptor.ServerVersion = base.ServerVersion
 }
 
 // initNodeID updates the internal NodeDescriptor with the given ID. If zero is
@@ -450,6 +451,13 @@ func (n *Node) initStores(
 	// node addresses.
 	if err := n.storeCfg.Gossip.SetStorage(n.stores); err != nil {
 		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
+	}
+
+	// Read persisted ClusterVersion from each configured store to
+	// verify there are no stores with data too old or too new for this
+	// binary.
+	if _, err := n.stores.ReadClusterVersion(ctx); err != nil {
+		return err
 	}
 
 	// Connect gossip before starting bootstrap. For new nodes, connecting

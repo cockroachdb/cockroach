@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/sync/syncmap"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -47,6 +48,7 @@ type Stores struct {
 		syncutil.Mutex
 		biLatestTS hlc.Timestamp         // Timestamp of gossip bootstrap info
 		latestBI   *gossip.BootstrapInfo // Latest cached bootstrap info
+		latestCV   base.ClusterVersion
 	}
 }
 
@@ -100,6 +102,14 @@ func (ls *Stores) AddStore(s *Store) {
 		if err := ls.updateBootstrapInfoLocked(ls.mu.latestBI); err != nil {
 			ctx := ls.AnnotateCtx(context.TODO())
 			log.Errorf(ctx, "failed to update bootstrap info on newly added store: %s", err)
+		}
+	}
+	// Similarly, if we've read a cluster version, ensure all stores
+	// agree on the most recent version.
+	if ls.mu.latestCV != (base.ClusterVersion{}) {
+		ctx := ls.AnnotateCtx(context.TODO())
+		if err := ls.updateClusterVersionLocked(ctx, ls.mu.latestCV); err != nil {
+			log.Errorf(ctx, "failed to update cluster version on newly added store: %s", err)
 		}
 	}
 }
@@ -326,6 +336,83 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	ls.storeMap.Range(func(k, v interface{}) bool {
 		s := v.(*Store)
 		err = engine.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.Timestamp{}, nil, bi)
+		return err == nil
+	})
+	return err
+}
+
+// ReadClusterVersion reads and returns the ClusterVersion protobuf
+// written to any of the configured stores which has the highest
+// minimum version. The returned value is also replicated to all
+// stores for consistency, in case a new store was added or an old
+// store re-configured.
+func (ls *Stores) ReadClusterVersion(ctx context.Context) (base.ClusterVersion, error) {
+	// Find the most recent bootstrap info.
+	var err error
+	var maxClusterVersion base.ClusterVersion
+	ls.storeMap.Range(func(k, v interface{}) bool {
+		s := v.(*Store)
+		var cv base.ClusterVersion
+		var ok bool
+		ok, err = engine.MVCCGetProto(ctx, s.engine, keys.StoreClusterVersionKey(), hlc.Timestamp{}, true, nil, &cv)
+		if err != nil {
+			return false
+		}
+		// Verify that the persisted cluster version (or default empty) is
+		// not older than this binary's minimum supported version.
+		if cv.UseVersion.Less(base.MinimumSupportedVersion) {
+			err = errors.Errorf("store %s currently configured to use version %s, "+
+				"which is < minimum supported version %s", cv.UseVersion, base.MinimumSupportedVersion)
+			return false
+		}
+		// Verify that the persisted cluster version (or default empty) is
+		// not too new for this binary's server version.
+		if base.ServerVersion.Less(cv.MinimumVersion) {
+			err = errors.Errorf("store %s currently configured to require version %s, "+
+				"which is > supported version %s", cv.MinimumVersion, base.ServerVersion)
+			return false
+		}
+
+		// Keep the highest minimum version encountered.
+		if ok && maxClusterVersion.MinimumVersion.Less(cv.MinimumVersion) {
+			maxClusterVersion = cv
+		}
+		return true
+	})
+	if err != nil {
+		return base.ClusterVersion{}, err
+	}
+	log.Eventf(ctx, "read ClusterVersion %+v", maxClusterVersion)
+
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	if err = ls.updateClusterVersionLocked(ctx, maxClusterVersion); err != nil {
+		return maxClusterVersion, err
+	}
+	return maxClusterVersion, nil
+}
+
+// WriteClusterVersion persists the supplied ClusterVersion to every
+// configured store. Returns nil on success; otherwise returns first
+// error encountered writing to the stores.
+func (ls *Stores) WriteClusterVersion(ctx context.Context, cv base.ClusterVersion) error {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	if err := ls.updateClusterVersionLocked(ctx, cv); err != nil {
+		return err
+	}
+	log.Eventf(ctx, "wrote ClusterVersion %+v", cv)
+	return nil
+}
+
+func (ls *Stores) updateClusterVersionLocked(ctx context.Context, cv base.ClusterVersion) error {
+	// Update the latest timestamp and set cached version.
+	ls.mu.latestCV = cv
+	// Update all stores.
+	var err error
+	ls.storeMap.Range(func(k, v interface{}) bool {
+		s := v.(*Store)
+		err = engine.MVCCPutProto(ctx, s.engine, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
 		return err == nil
 	})
 	return err

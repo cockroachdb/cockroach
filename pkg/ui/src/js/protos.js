@@ -26643,6 +26643,7 @@ export const cockroach = $root.cockroach = (() => {
              * @property {cockroach.util.UnresolvedAddr$Properties} [address] NodeDescriptor address.
              * @property {cockroach.roachpb.Attributes$Properties} [attrs] NodeDescriptor attrs.
              * @property {cockroach.roachpb.Locality$Properties} [locality] NodeDescriptor locality.
+             * @property {cockroach.roachpb.Version$Properties} [ServerVersion] NodeDescriptor ServerVersion.
              */
 
             /**
@@ -26683,6 +26684,12 @@ export const cockroach = $root.cockroach = (() => {
             NodeDescriptor.prototype.locality = null;
 
             /**
+             * NodeDescriptor ServerVersion.
+             * @type {(cockroach.roachpb.Version$Properties|null)}
+             */
+            NodeDescriptor.prototype.ServerVersion = null;
+
+            /**
              * Creates a new NodeDescriptor instance using the specified properties.
              * @param {cockroach.roachpb.NodeDescriptor$Properties=} [properties] Properties to set
              * @returns {cockroach.roachpb.NodeDescriptor} NodeDescriptor instance
@@ -26708,6 +26715,8 @@ export const cockroach = $root.cockroach = (() => {
                     $root.cockroach.roachpb.Attributes.encode(message.attrs, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 if (message.locality != null && message.hasOwnProperty("locality"))
                     $root.cockroach.roachpb.Locality.encode(message.locality, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+                if (message.ServerVersion != null && message.hasOwnProperty("ServerVersion"))
+                    $root.cockroach.roachpb.Version.encode(message.ServerVersion, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
                 return writer;
             };
 
@@ -26747,6 +26756,9 @@ export const cockroach = $root.cockroach = (() => {
                         break;
                     case 4:
                         message.locality = $root.cockroach.roachpb.Locality.decode(reader, reader.uint32());
+                        break;
+                    case 5:
+                        message.ServerVersion = $root.cockroach.roachpb.Version.decode(reader, reader.uint32());
                         break;
                     default:
                         reader.skipType(tag & 7);
@@ -26795,6 +26807,11 @@ export const cockroach = $root.cockroach = (() => {
                     if (error)
                         return "locality." + error;
                 }
+                if (message.ServerVersion != null && message.hasOwnProperty("ServerVersion")) {
+                    let error = $root.cockroach.roachpb.Version.verify(message.ServerVersion);
+                    if (error)
+                        return "ServerVersion." + error;
+                }
                 return null;
             };
 
@@ -26824,6 +26841,11 @@ export const cockroach = $root.cockroach = (() => {
                         throw TypeError(".cockroach.roachpb.NodeDescriptor.locality: object expected");
                     message.locality = $root.cockroach.roachpb.Locality.fromObject(object.locality);
                 }
+                if (object.ServerVersion != null) {
+                    if (typeof object.ServerVersion !== "object")
+                        throw TypeError(".cockroach.roachpb.NodeDescriptor.ServerVersion: object expected");
+                    message.ServerVersion = $root.cockroach.roachpb.Version.fromObject(object.ServerVersion);
+                }
                 return message;
             };
 
@@ -26851,6 +26873,7 @@ export const cockroach = $root.cockroach = (() => {
                     object.address = null;
                     object.attrs = null;
                     object.locality = null;
+                    object.ServerVersion = null;
                 }
                 if (message.node_id != null && message.hasOwnProperty("node_id"))
                     object.node_id = message.node_id;
@@ -26860,6 +26883,8 @@ export const cockroach = $root.cockroach = (() => {
                     object.attrs = $root.cockroach.roachpb.Attributes.toObject(message.attrs, options);
                 if (message.locality != null && message.hasOwnProperty("locality"))
                     object.locality = $root.cockroach.roachpb.Locality.toObject(message.locality, options);
+                if (message.ServerVersion != null && message.hasOwnProperty("ServerVersion"))
+                    object.ServerVersion = $root.cockroach.roachpb.Version.toObject(message.ServerVersion, options);
                 return object;
             };
 
