@@ -106,3 +106,41 @@ func (p *planner) CancelQuery(ctx context.Context, n *parser.CancelQuery) (planN
 		queryID: typedQueryID,
 	}, nil
 }
+
+type cancelTransactionNode struct {
+	p     *planner
+	txnID parser.TypedExpr
+}
+
+func (*cancelTransactionNode) Values() parser.Datums { return nil }
+
+func (n *cancelTransactionNode) Start(ctx context.Context) error {
+	return fmt.Errorf("transaction cancellation is not implemented")
+}
+
+func (*cancelTransactionNode) Close(context.Context) {}
+
+func (n *cancelTransactionNode) Next(nextParams) (bool, error) {
+	return false, nil
+}
+
+func (p *planner) CancelTransaction(ctx context.Context, n *parser.CancelTransaction) (planNode, error) {
+
+	typedTxnID, err := p.analyzeExpr(
+		ctx,
+		n.ID,
+		nil,
+		parser.IndexedVarHelper{},
+		parser.TypeString,
+		true, /* requireType */
+		"CANCEL TRANSACTION",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cancelTransactionNode{
+		p:     p,
+		txnID: typedTxnID,
+	}, nil
+}

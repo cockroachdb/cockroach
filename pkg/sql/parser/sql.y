@@ -505,6 +505,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> cancel_stmt
 %type <Statement> cancel_job_stmt
 %type <Statement> cancel_query_stmt
+%type <Statement> cancel_transaction_stmt
 
 %type <Statement> commit_stmt
 %type <Statement> copy_from_stmt
@@ -1245,10 +1246,11 @@ copy_from_stmt:
     $$.val = &CopyFrom{Table: $2.normalizableTableName(), Columns: $4.unresolvedNames(), Stdin: true}
   }
 
-// CANCEL [JOB|QUERY] id
+// CANCEL [JOB|QUERY|TRANSACTION] id
 cancel_stmt:
   cancel_job_stmt
 | cancel_query_stmt
+| cancel_transaction_stmt
 
 cancel_job_stmt:
   CANCEL JOB a_expr
@@ -1262,6 +1264,13 @@ cancel_query_stmt:
   {
     /* SKIP DOC */
     $$.val = &CancelQuery{ID: $3.expr()}
+  }
+
+cancel_transaction_stmt:
+  CANCEL TRANSACTION a_expr
+  {
+    /* SKIP DOC */
+    $$.val = &CancelTransaction{ID: $3.expr()}
   }
 
 // CREATE [DATABASE|INDEX|TABLE|TABLE AS|VIEW]

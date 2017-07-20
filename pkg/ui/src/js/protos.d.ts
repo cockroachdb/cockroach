@@ -10572,6 +10572,246 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type CancelTransactionRequest$Properties = {
+                transaction_id?: string;
+                username?: string;
+            };
+
+            /**
+             * Constructs a new CancelTransactionRequest.
+             * @exports cockroach.server.serverpb.CancelTransactionRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.CancelTransactionRequest$Properties=} [properties] Properties to set
+             */
+            class CancelTransactionRequest {
+
+                /**
+                 * Constructs a new CancelTransactionRequest.
+                 * @exports cockroach.server.serverpb.CancelTransactionRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.CancelTransactionRequest$Properties);
+
+                /**
+                 * CancelTransactionRequest transaction_id.
+                 * @type {string}
+                 */
+                public transaction_id: string;
+
+                /**
+                 * CancelTransactionRequest username.
+                 * @type {string}
+                 */
+                public username: string;
+
+                /**
+                 * Creates a new CancelTransactionRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CancelTransactionRequest} CancelTransactionRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.CancelTransactionRequest$Properties): cockroach.server.serverpb.CancelTransactionRequest;
+
+                /**
+                 * Encodes the specified CancelTransactionRequest message. Does not implicitly {@link cockroach.server.serverpb.CancelTransactionRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest$Properties} message CancelTransactionRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.CancelTransactionRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified CancelTransactionRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CancelTransactionRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest$Properties} message CancelTransactionRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.CancelTransactionRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a CancelTransactionRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CancelTransactionRequest} CancelTransactionRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.CancelTransactionRequest;
+
+                /**
+                 * Decodes a CancelTransactionRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CancelTransactionRequest} CancelTransactionRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.CancelTransactionRequest;
+
+                /**
+                 * Verifies a CancelTransactionRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a CancelTransactionRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelTransactionRequest} CancelTransactionRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.CancelTransactionRequest;
+
+                /**
+                 * Creates a CancelTransactionRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CancelTransactionRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelTransactionRequest} CancelTransactionRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.CancelTransactionRequest;
+
+                /**
+                 * Creates a plain object from a CancelTransactionRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest} message CancelTransactionRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.CancelTransactionRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this CancelTransactionRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this CancelTransactionRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type CancelTransactionResponse$Properties = {
+                cancelled?: boolean;
+                error?: string;
+            };
+
+            /**
+             * Constructs a new CancelTransactionResponse.
+             * @exports cockroach.server.serverpb.CancelTransactionResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.CancelTransactionResponse$Properties=} [properties] Properties to set
+             */
+            class CancelTransactionResponse {
+
+                /**
+                 * Constructs a new CancelTransactionResponse.
+                 * @exports cockroach.server.serverpb.CancelTransactionResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.CancelTransactionResponse$Properties);
+
+                /**
+                 * CancelTransactionResponse cancelled.
+                 * @type {boolean}
+                 */
+                public cancelled: boolean;
+
+                /**
+                 * CancelTransactionResponse error.
+                 * @type {string}
+                 */
+                public error: string;
+
+                /**
+                 * Creates a new CancelTransactionResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CancelTransactionResponse} CancelTransactionResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.CancelTransactionResponse$Properties): cockroach.server.serverpb.CancelTransactionResponse;
+
+                /**
+                 * Encodes the specified CancelTransactionResponse message. Does not implicitly {@link cockroach.server.serverpb.CancelTransactionResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse$Properties} message CancelTransactionResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.CancelTransactionResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified CancelTransactionResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CancelTransactionResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse$Properties} message CancelTransactionResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.CancelTransactionResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a CancelTransactionResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CancelTransactionResponse} CancelTransactionResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.CancelTransactionResponse;
+
+                /**
+                 * Decodes a CancelTransactionResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CancelTransactionResponse} CancelTransactionResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.CancelTransactionResponse;
+
+                /**
+                 * Verifies a CancelTransactionResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a CancelTransactionResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelTransactionResponse} CancelTransactionResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.CancelTransactionResponse;
+
+                /**
+                 * Creates a CancelTransactionResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CancelTransactionResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CancelTransactionResponse} CancelTransactionResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.CancelTransactionResponse;
+
+                /**
+                 * Creates a plain object from a CancelTransactionResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CancelTransactionResponse} message CancelTransactionResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.CancelTransactionResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this CancelTransactionResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this CancelTransactionResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type SpanStatsRequest$Properties = {
                 node_id?: string;
                 start_key?: Uint8Array;
@@ -11317,6 +11557,14 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public cancelQuery(request: (cockroach.server.serverpb.CancelQueryRequest|{ [k: string]: any }), callback: Status_cancelQuery_Callback): void;
+
+                /**
+                 * Calls CancelTransaction.
+                 * @param {cockroach.server.serverpb.CancelTransactionRequest|Object.<string,*>} request CancelTransactionRequest message or plain object
+                 * @param {Status_cancelTransaction_Callback} callback Node-style callback called with the error, if any, and CancelTransactionResponse
+                 * @returns {undefined}
+                 */
+                public cancelTransaction(request: (cockroach.server.serverpb.CancelTransactionRequest|{ [k: string]: any }), callback: Status_cancelTransaction_Callback): void;
 
                 /**
                  * Calls SpanStats.
@@ -21759,6 +22007,8 @@ type Status_listSessions_Callback = (error: Error, response?: cockroach.server.s
 type Status_listLocalSessions_Callback = (error: Error, response?: cockroach.server.serverpb.ListSessionsResponse) => void;
 
 type Status_cancelQuery_Callback = (error: Error, response?: cockroach.server.serverpb.CancelQueryResponse) => void;
+
+type Status_cancelTransaction_Callback = (error: Error, response?: cockroach.server.serverpb.CancelTransactionResponse) => void;
 
 type Status_spanStats_Callback = (error: Error, response?: cockroach.server.serverpb.SpanStatsResponse) => void;
 

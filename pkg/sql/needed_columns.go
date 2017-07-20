@@ -185,6 +185,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 
 	case *alterTableNode:
 	case *cancelQueryNode:
+	case *cancelTransactionNode:
 	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
