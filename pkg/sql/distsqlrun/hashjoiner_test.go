@@ -24,8 +24,10 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
@@ -503,27 +505,37 @@ func TestHashJoiner(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
+	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			// Run tests with a variety of initial buffer sizes.
 			for _, initialBuffer := range []int64{0, 32, 64, 128, 1024 * 1024} {
 				t.Run(fmt.Sprintf("InitialBuffer=%d", initialBuffer), func(t *testing.T) {
-					hs := c.spec
 					leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
 					rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
 					out := &RowBuffer{}
 					evalCtx := parser.MakeTestingEvalContext()
-					defer evalCtx.Stop(context.Background())
-					flowCtx := FlowCtx{evalCtx: evalCtx}
+					defer evalCtx.Stop(ctx)
+					flowCtx := FlowCtx{
+						evalCtx:     evalCtx,
+						tempStorage: tempEngine,
+					}
 
 					post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-					h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
+					h, err := newHashJoiner(&flowCtx, &c.spec, leftInput, rightInput, &post, out)
 					if err != nil {
 						t.Fatal(err)
 					}
 					h.initialBufferSize = initialBuffer
+					// TODO(asubiotto): Test with a variety of testingKnobMemLimits.
+					h.testingKnobMemLimit = 1
 
-					h.Run(context.Background(), nil)
+					h.Run(ctx, nil)
 
 					if !out.ProducerClosed {
 						t.Fatalf("output RowReceiver not closed")

@@ -22,9 +22,12 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // hashJoinerInitialBufferSize controls the size of the initial buffering phase
@@ -50,6 +53,8 @@ const hashJoinerInitialBufferSize = 4 * 1024 * 1024
 type hashJoiner struct {
 	joinerBase
 
+	flowCtx *FlowCtx
+
 	// initialBufferSize is the maximum amount of data we buffer from each stream
 	// as part of the initial buffering phase. Normally
 	// hashJoinerInitialBufferSize, can be tweaked for tests.
@@ -63,11 +68,16 @@ type hashJoiner struct {
 	// We read a portion of both streams, in the hope that one is small. One of
 	// the containers will contain the entire "stored" stream, the other just the
 	// start of the other stream.
+	// TODO(asubiotto): This does not need to be part of the hashJoiner struct.
 	rows [2]memRowContainer
 
 	// storedSide is set by the initial buffering phase and indicates which
 	// stream we store fully and build the hashRowContainer from.
 	storedSide joinSide
+
+	// testingKnobMemLimit is used in testing to set a limit on the memory that
+	// should be used by the hashJoiner. Minimum value to enable is 1.
+	testingKnobMemLimit int64
 }
 
 var _ processor = &hashJoiner{}
@@ -81,19 +91,17 @@ func newHashJoiner(
 	output RowReceiver,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
+		flowCtx:           flowCtx,
 		initialBufferSize: hashJoinerInitialBufferSize,
 	}
 	h.eqCols[leftSide] = columns(spec.LeftEqColumns)
 	h.eqCols[rightSide] = columns(spec.RightEqColumns)
-	h.rows[leftSide] = makeRowContainer(nil /* ordering */, leftSource.Types(), &flowCtx.evalCtx)
-	h.rows[rightSide] = makeRowContainer(nil /* ordering */, rightSource.Types(), &flowCtx.evalCtx)
 
 	if err := h.joinerBase.init(
 		flowCtx, leftSource, rightSource, spec.Type, spec.OnExpr, post, output,
 	); err != nil {
 		return nil, err
 	}
-
 	return h, nil
 }
 
@@ -112,10 +120,95 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting hash joiner run")
 	}
 
+	useTempStorage := distSQLUseTempStorage.Get() || h.testingKnobMemLimit > 0
+	evalCtx := h.flowCtx.evalCtx
+	if useTempStorage {
+		// Limit the memory use by creating a child monitor with a hard limit.
+		// The hashJoiner will overflow to disk if this limit is not enough.
+		limit := h.testingKnobMemLimit
+		if limit <= 0 {
+			limit = workMemBytes
+		}
+		limitedMon := mon.MakeMonitorInheritWithLimit("hashjoiner-limited", limit, evalCtx.Mon)
+		limitedMon.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+		defer limitedMon.Stop(ctx)
+
+		evalCtx.Mon = &limitedMon
+	}
+
+	h.rows[leftSide] = makeRowContainer(nil /* ordering */, h.leftSource.Types(), &evalCtx)
+	h.rows[rightSide] = makeRowContainer(nil /* ordering */, h.rightSource.Types(), &evalCtx)
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
 
-	streamConsumed, earlyExit, err := h.bufferPhase(ctx)
+	var storedRows hashRowContainer
+	defer func() {
+		if storedRows != nil {
+			storedRows.Close(ctx)
+		}
+	}()
+	// processMemoryError is a helper function that processes an error. If this
+	// error is a memory error, this function determines whether external
+	// storage can be used to continue the Run() and returns (true, nil) if so.
+	// If external storage cannot be used, the given error is wrapped with the
+	// reason why not.
+	// If the given error is not a memory error, the same error is returned.
+	processMemoryError := func(err error) (bool, error) {
+		if err == nil {
+			return false, nil
+		}
+		if pgErr, ok := err.(*pgerror.Error); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+			return false, err
+		}
+		if !useTempStorage {
+			return false, errors.Wrap(err, "external storage for large queries disabled")
+		}
+		if h.flowCtx.tempStorage == nil {
+			return false, errors.Wrap(err, "external storage not provided on this cockroach node")
+		}
+		return true, nil
+	}
+	// fallBackToDisk is a helper function that creates a hashDiskRowContainer
+	// from h.rows[h.storedSide] and sets storedRows to it, closing the
+	// previous storedRows hashRowContainer if any. The given row is added
+	// to the container.
+	fallBackToDisk := func(row sqlbase.EncDatumRow) error {
+		storedDiskRows, err := makeHashDiskRowContainer(
+			ctx,
+			h.eqCols[h.storedSide],
+			h.eqCols[otherSide(h.storedSide)],
+			h.rows[h.storedSide],
+			nil, /* marks */
+			h.flowCtx.tempStorage,
+		)
+		if err != nil {
+			return err
+		}
+		if storedRows != nil {
+			storedRows.Close(ctx)
+		}
+		storedRows = &storedDiskRows
+
+		if row != nil {
+			if err := storedRows.AddRow(ctx, row); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	streamConsumed, earlyExit, err := func() (bool, bool, error) {
+		row, streamConsumed, earlyExit, err := h.bufferPhase(ctx)
+		if earlyExit {
+			return streamConsumed, earlyExit, err
+		}
+		if useDisk, err := processMemoryError(err); !useDisk {
+			return streamConsumed, earlyExit, err
+		}
+
+		log.VEventf(ctx, 2, "buffer phase falling back to disk")
+		return streamConsumed, false, fallBackToDisk(row)
+	}()
 	if earlyExit || err != nil {
 		if err != nil {
 			// We got an error. We still want to drain. Any error encountered while
@@ -133,23 +226,45 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		srcToClose = h.rightSource
 	}
 
-	storedRows, err := makeHashRowContainer(
-		ctx, h.eqCols[h.storedSide], h.eqCols[otherSide(h.storedSide)], &h.rows[h.storedSide],
-	)
-	if err != nil {
-		// We got an error. We still want to drain. Any error encountered while
-		// draining will be swallowed, and the original error will be forwarded
-		// to the consumer.
-		log.Infof(ctx, "error making hash row container %s", err)
-		DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
-		return
+	// If storedRows is not nil, there was a memory limit reached in the buffer
+	// phase so we have already fallen back to disk.
+	if storedRows == nil {
+		storedMemRows, err := makeHashRowContainer(
+			ctx, h.eqCols[h.storedSide], h.eqCols[otherSide(h.storedSide)], &h.rows[h.storedSide],
+		)
+		if err != nil {
+			// We got an error. We still want to drain. Any error encountered
+			// while draining will be swallowed, and the original error will be
+			// forwarded to the consumer.
+			log.Infof(ctx, "error making hash row container %s", err)
+			DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
+			return
+		}
+		storedRows = &storedMemRows
 	}
-	defer storedRows.Close(ctx)
 
 	// If the buffer phase did not fully consume the chosen stream, we proceed
 	// to a build phase which will do so.
 	if !streamConsumed {
-		if earlyExit, err := h.buildPhase(ctx, &storedRows); earlyExit || err != nil {
+		if earlyExit, err := func() (bool, error) {
+			row, earlyExit, err := h.buildPhase(ctx, storedRows)
+			if earlyExit {
+				return earlyExit, err
+			}
+			if useDisk, err := processMemoryError(err); !useDisk {
+				return false, err
+			}
+
+			log.VEventf(ctx, 2, "build phase falling back to disk")
+			if err := fallBackToDisk(row); err != nil {
+				return false, err
+			}
+
+			if _, earlyExit, err := h.buildPhase(ctx, storedRows); earlyExit || err != nil {
+				return earlyExit, err
+			}
+			return false, nil
+		}(); earlyExit || err != nil {
 			if err != nil {
 				log.Infof(ctx, "build phase error %s", err)
 			}
@@ -159,7 +274,36 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 	log.VEventf(ctx, 1, "build phase complete")
 
-	if earlyExit, err := h.probePhase(ctx, &storedRows); earlyExit || err != nil {
+	if earlyExit, err := func() (bool, error) {
+		// The probe phase can run out of memory because of the data structure
+		// used to keep track of marked rows.
+		row, earlyExit, err := h.probePhase(ctx, storedRows)
+		if earlyExit {
+			return earlyExit, err
+		}
+		if useDisk, err := processMemoryError(err); !useDisk {
+			return earlyExit, err
+		}
+
+		// NOTE: Due to the current hashMemRowContainer implementation, the
+		// probe phase can only run out of memory once the first row to mark
+		// is marked. Therefore, there is no marking information to transfer
+		// to the hashDiskRowContainer.
+		log.VEventf(ctx, 2, "probe phase falling back to disk")
+		if err := fallBackToDisk(nil); err != nil {
+			return false, err
+		}
+
+		// Probe with the row that caused the memory error.
+		if earlyExit, err := h.probeRow(ctx, row, storedRows); earlyExit || err != nil {
+			return earlyExit, err
+		}
+
+		if _, earlyExit, err := h.probePhase(ctx, storedRows); earlyExit || err != nil {
+			return earlyExit, err
+		}
+		return false, nil
+	}(); earlyExit || err != nil {
 		if err != nil {
 			// We got an error. We still want to drain. Any error encountered while
 			// draining will be swallowed, and the original error will be forwarded to
@@ -221,14 +365,19 @@ func (h *hashJoiner) receiveRow(
 // Rows that contain NULLs on equality columns go straight to the output if it's
 // an outer join; otherwise they are discarded.
 //
-// A successful initial buffering phase sets h.storedSide.
+// A successful initial buffering phase or an error while adding a row sets
+// h.storedSide.
+//
+// If an error occurs while adding a row to a container, the row is returned in
+// order to not lose it. In this case, h.storedSide is set to the side that this
+// row would have been added to.
 //
 // If streamConsumed is set, the chosen stream has been fully consumed.
 //
 // If earlyExit is set, the output doesn't need more rows.
 func (h *hashJoiner) bufferPhase(
 	ctx context.Context,
-) (streamConsumed bool, earlyExit bool, _ error) {
+) (row sqlbase.EncDatumRow, streamConsumed bool, earlyExit bool, _ error) {
 	srcs := [2]RowSource{h.leftSource, h.rightSource}
 	for {
 		leftUsage := h.rows[leftSide].MemUsage()
@@ -244,27 +393,28 @@ func (h *hashJoiner) bufferPhase(
 		row, earlyExit, err := h.receiveRow(ctx, srcs[side], side)
 		if row == nil {
 			if err != nil {
-				return false, false, err
+				return nil, false, false, err
 			}
 			if earlyExit {
-				return false, true, nil
+				return nil, false, true, nil
 			}
 
 			// This stream is done, great! We will build the hashtable using this
 			// stream.
 			h.storedSide = side
-			return true, false, nil
+			return nil, true, false, nil
 		}
 		// Add the row to the correct container.
 		if err := h.rows[side].AddRow(ctx, row); err != nil {
-			return false, false, err
+			h.storedSide = side
+			return row, false, false, err
 		}
 	}
 
 	// We did not find a short stream. Stop reading for both streams, just
 	// choose the right stream.
 	h.storedSide = rightSide
-	return false, false, nil
+	return nil, false, false, nil
 }
 
 // buildPhase constructs our internal hash map of rows seen. This is done
@@ -273,9 +423,12 @@ func (h *hashJoiner) bufferPhase(
 // have a NULL in an equality column (and thus will not match anything), it
 // might be routed directly to the output (for outer joins). In such cases it is
 // possible that the buildPhase will fully satisfy the consumer.
+//
+// If an error occurs while adding a row to the given container, the row is
+// returned in order to not lose it.
 func (h *hashJoiner) buildPhase(
 	ctx context.Context, storedRows hashRowContainer,
-) (earlyExit bool, _ error) {
+) (_ sqlbase.EncDatumRow, earlyExit bool, _ error) {
 	// Consume the rest of the stream chosen to be stored.
 	source := h.rightSource
 	if h.storedSide == leftSide {
@@ -286,12 +439,12 @@ func (h *hashJoiner) buildPhase(
 		row, earlyExit, err := h.receiveRow(ctx, source, h.storedSide)
 		if row == nil {
 			if err != nil {
-				return false, err
+				return nil, false, err
 			}
-			return earlyExit, nil
+			return nil, earlyExit, nil
 		}
 		if err := storedRows.AddRow(ctx, row); err != nil {
-			return false, err
+			return row, false, err
 		}
 	}
 }
@@ -368,9 +521,12 @@ func (h *hashJoiner) probeRow(
 //
 // In error or earlyExit cases it is the caller's responsibility to drain the
 // input stream and close the output stream.
+//
+// If an error occurs while probing a row, the row is returned in order to not
+// lose it.
 func (h *hashJoiner) probePhase(
 	ctx context.Context, storedRows hashRowContainer,
-) (earlyExit bool, _ error) {
+) (_ sqlbase.EncDatumRow, earlyExit bool, _ error) {
 	side := otherSide(h.storedSide)
 
 	src := h.leftSource
@@ -383,7 +539,7 @@ func (h *hashJoiner) probePhase(
 		row := bufferedRows.EncRow(i)
 		earlyExit, err := h.probeRow(ctx, row, storedRows)
 		if earlyExit || err != nil {
-			return earlyExit, err
+			return row, earlyExit, err
 		}
 	}
 	bufferedRows.Clear(ctx)
@@ -392,12 +548,12 @@ func (h *hashJoiner) probePhase(
 		row, earlyExit, err := h.receiveRow(ctx, src, side)
 		if row == nil {
 			if earlyExit || err != nil {
-				return earlyExit, err
+				return nil, earlyExit, err
 			}
 			break
 		}
 		if earlyExit, err := h.probeRow(ctx, row, storedRows); earlyExit || err != nil {
-			return earlyExit, err
+			return row, earlyExit, err
 		}
 	}
 
@@ -408,16 +564,16 @@ func (h *hashJoiner) probePhase(
 		defer i.Close()
 		for i.Rewind(); ; i.Next() {
 			if ok, err := i.Valid(); err != nil {
-				return false, err
+				return nil, false, err
 			} else if !ok {
 				break
 			}
 			row, err := i.Row()
 			if err != nil {
-				return false, err
+				return nil, false, err
 			}
 			if !h.maybeEmitUnmatchedRow(ctx, row, h.storedSide) {
-				return true, nil
+				return nil, true, nil
 			}
 
 		}
@@ -425,7 +581,7 @@ func (h *hashJoiner) probePhase(
 
 	sendTraceData(ctx, h.out.output)
 	h.out.close()
-	return false, nil
+	return nil, false, nil
 }
 
 // encodeColumnsOfRow returns the encoding for the grouping columns. This is
