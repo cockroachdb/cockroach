@@ -399,12 +399,12 @@ func (r *Replica) computeChecksumPostApply(
 
 // leasePostApply is called when a RequestLease or TransferLease
 // request is executed for a range.
-func (r *Replica) leasePostApply(
-	ctx context.Context,
-	newLease *roachpb.Lease,
-	replicaID roachpb.ReplicaID,
-	prevLease *roachpb.Lease,
-) {
+func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
+	r.mu.Lock()
+	replicaID := r.mu.replicaID
+	prevLease := *r.mu.state.Lease
+	r.mu.Unlock()
+
 	iAmTheLeaseHolder := newLease.Replica.ReplicaID == replicaID
 	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID
 
@@ -444,21 +444,30 @@ func (r *Replica) leasePostApply(
 		if r.stats != nil {
 			r.stats.resetRequestCounts()
 		}
-
-		// Gossip the first range whenever its lease is acquired. We check to
-		// make sure the lease is active so that a trailing replica won't process
-		// an old lease request and attempt to gossip the first range.
-		if r.IsFirstRange() && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
-			r.gossipFirstRange(ctx)
-		}
 	}
+
+	// We're setting the new lease after we've updated the timestamp cache in
+	// order to avoid race conditions where a replica starts serving requests
+	// for a lease without first having taken into account requests served
+	// by the previous lease holder.
+	r.mu.Lock()
+	r.mu.state.Lease = &newLease
+	r.mu.Unlock()
+
+	// Gossip the first range whenever its lease is acquired. We check to
+	// make sure the lease is active so that a trailing replica won't process
+	// an old lease request and attempt to gossip the first range.
+	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.IsLeaseValid(&newLease, r.store.Clock().Now()) {
+		r.gossipFirstRange(ctx)
+	}
+
 	if leaseChangingHands && !iAmTheLeaseHolder {
 		// Also clear and disable the push transaction queue. Any waiters
 		// must be redirected to the new lease holder.
 		r.pushTxnQueue.Clear(true /* disable */)
 	}
 
-	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
+	if !iAmTheLeaseHolder && r.IsLeaseValid(&newLease, r.store.Clock().Now()) {
 		// If this replica is the raft leader but it is not the new lease holder,
 		// then try to transfer the raft leadership to match the lease. We like it
 		// when leases and raft leadership are collocated because that facilitates
@@ -496,7 +505,7 @@ func (r *Replica) leasePostApply(
 
 	// Mark the new lease in the replica's lease history.
 	if r.leaseHistory != nil {
-		r.leaseHistory.add(*newLease)
+		r.leaseHistory.add(newLease)
 	}
 }
 
@@ -651,13 +660,7 @@ func (r *Replica) handleReplicatedEvalResult(
 	if newLease := rResult.State.Lease; newLease != nil {
 		rResult.State.Lease = nil // for assertion
 
-		r.mu.Lock()
-		replicaID := r.mu.replicaID
-		prevLease := r.mu.state.Lease
-		r.mu.state.Lease = newLease
-		r.mu.Unlock()
-
-		r.leasePostApply(ctx, newLease, replicaID, prevLease)
+		r.leasePostApply(ctx, *newLease)
 	}
 
 	if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
