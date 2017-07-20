@@ -383,6 +383,47 @@ func (r *QueryRegistry) Cancel(queryIDStr string, username string) (bool, error)
 	return false, fmt.Errorf("query ID %s not found", queryID)
 }
 
+// CancelTransaction cancells all active queries under the txn in addition to rolling it back.
+func (s *Session) CancelTransaction(txnID string, username string) (bool, error) {
+	if err := func() error {
+		s.TxnState.mu.Lock()
+		defer s.TxnState.mu.Unlock()
+
+		if s.TxnState.mu.txn == nil {
+			return errors.Errorf("the session has no txn")
+		}
+
+		txnUUID := s.TxnState.mu.txn.ID()
+		if txnUUID == nil {
+			return errors.Errorf("the session has no txn id %s", txnID)
+		}
+
+		sTxnID := txnUUID.Short()
+		if sTxnID != txnID {
+			return errors.Errorf("a txn with ID %s was not found in this session", txnID)
+		}
+
+		return nil
+	}(); err != nil {
+		return false, err
+	}
+	if username != security.RootUser && username != s.User {
+		return true, errors.Errorf("a matching txn was found but the user is not authorized")
+	}
+
+	s.mu.Lock()
+	for _, query := range s.mu.ActiveQueries {
+		query.cancel()
+
+		s.TxnState.mu.Lock()
+		s.TxnState.mu.IsTxnCancelled = true
+		s.TxnState.mu.Unlock()
+	}
+	s.mu.Unlock()
+
+	return true, nil
+}
+
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
 func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
@@ -1395,7 +1436,12 @@ func (e *Executor) execStmtInOpenTxn(
 
 	// After the statement is executed, we might have to do state transitions.
 	defer func() {
-		if err != nil {
+		if txnState.IsTxnCancelled() {
+			rollbackSQLTransaction(txnState)
+			txnState.mu.Lock()
+			txnState.mu.IsTxnCancelled = false
+			txnState.mu.Unlock()
+		} else if err != nil {
 			if !txnState.TxnIsOpen() {
 				panic(fmt.Sprintf("unexpected txnState when cleaning up: %v", txnState.State()))
 			}

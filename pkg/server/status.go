@@ -976,6 +976,61 @@ func (s *statusServer) CancelQuery(
 	return output, nil
 }
 
+// CancelTransaction responds to a transaction cancellation request, and cancels
+// the active queries under the target transaction.
+func (s *statusServer) CancelTransaction(
+	ctx context.Context, req *serverpb.CancelTransactionRequest,
+) (*serverpb.CancelTransactionResponse, error) {
+	// Returns `nil, error` either if txn wasn't found, invalid args or internal error.
+	// If txn was found then returns `response{isCancelled, err}, nil`.
+	ctx = s.AnnotateCtx(ctx)
+
+	// Attempt to cancel the transaction locally.
+	found, err := s.sessionRegistry.CancelTransaction(req.TransactionId, req.Username)
+
+	if !found {
+		// Unfortunately ListSessions grabs local sessions too.
+		sessions, err := s.ListSessions(ctx,
+			&serverpb.ListSessionsRequest{
+				Username: req.Username,
+			})
+		if err != nil {
+			return nil, err
+		}
+		var nodeID roachpb.NodeID
+		for _, session := range sessions.Sessions {
+			if session.KvTxnID == nil {
+				continue
+			}
+			if session.KvTxnID.Short() != req.TransactionId {
+				continue
+			}
+			nodeID = session.NodeID
+			break
+		}
+		if nodeID == 0 {
+			return nil, grpc.Errorf(codes.NotFound,
+				"txn with ID %s was not found", req.TransactionId)
+		}
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.CancelTransaction(ctx, req)
+	}
+
+	var errMsg string
+	if err != nil {
+		errMsg = err.Error()
+	}
+	output := &serverpb.CancelTransactionResponse{
+		Cancelled: err == nil,
+		Error:     errMsg,
+	}
+
+	return output, nil
+}
+
 // SpanStats requests the total statistics stored on a node for a given key
 // span, which may include multiple ranges.
 func (s *statusServer) SpanStats(
