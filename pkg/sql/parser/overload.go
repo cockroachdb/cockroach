@@ -19,6 +19,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"math"
 )
 
 // overloadImpl is an implementation of an overloaded function. It provides
@@ -236,7 +237,7 @@ func returnTypeToFixedType(s returnTyper) Type {
 
 type typeCheckOverloadState struct {
 	overloads        []overloadImpl
-	overloadIdxs     []int
+	overloadIdxs     []uint8
 	typedExprs       []TypedExpr
 	resolvableExprs  []indexedExpr
 	constExprs       []indexedExpr
@@ -250,6 +251,10 @@ type typeCheckOverloadState struct {
 func typeCheckOverloadedExprs(
 	ctx *SemaContext, desired Type, overloads []overloadImpl, exprs ...Expr,
 ) ([]TypedExpr, overloadImpl, error) {
+	if len(overloads) > math.MaxUint8 {
+		return nil, nil, fmt.Errorf("too many overloads (%d > 255)", len(overloads))
+	}
+
 	var s typeCheckOverloadState
 	s.overloads = overloads
 
@@ -304,9 +309,9 @@ func typeCheckOverloadedExprs(
 		return s.typedExprs, nil, nil
 	}
 
-	s.overloadIdxs = make([]int, len(overloads))
+	s.overloadIdxs = make([]uint8, len(overloads))
 	for i := 0; i < len(overloads); i++ {
-		s.overloadIdxs[i] = i
+		s.overloadIdxs[i] = uint8(i)
 	}
 
 	// Filter out incorrect parameter length overloads.
@@ -495,8 +500,8 @@ func typeCheckOverloadedExprs(
 // filterOverloads filters overloads which return false from the provided
 // closure.
 func filterOverloads(
-	overloads []overloadImpl, overloadIdxs []int, fn func(overloadImpl) bool,
-) []int {
+	overloads []overloadImpl, overloadIdxs []uint8, fn func(overloadImpl) bool,
+) []uint8 {
 	for i := 0; i < len(overloadIdxs); {
 		if fn(overloads[overloadIdxs[i]]) {
 			i++
