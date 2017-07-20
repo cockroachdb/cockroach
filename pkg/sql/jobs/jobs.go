@@ -33,157 +33,156 @@ import (
 	"github.com/pkg/errors"
 )
 
-// JobLogger manages logging the progress of long-running system processes, like
+// Job manages logging the progress of long-running system processes, like
 // backups and restores, to the system.jobs table.
 //
-// The Job field can be directly modified before Created is called. Updates to
+// The Record field can be directly modified before Created is called. Updates to
 // the Job field after the job has been created will not be written to the
 // database, however, even when calling e.g. Started or Succeeded.
-type JobLogger struct {
-	db    *client.DB
-	ex    sqlutil.InternalExecutor
-	jobID *int64
-	Job   JobRecord
-	txn   *client.Txn
+type Job struct {
+	db     *client.DB
+	ex     sqlutil.InternalExecutor
+	id     *int64
+	Record Record
+	txn    *client.Txn
 
 	mu struct {
 		syncutil.Mutex
-		payload JobPayload
+		payload Payload
 	}
 }
 
-// JobDetails is a marker interface for job details proto structs.
-type JobDetails interface{}
+// Details is a marker interface for job details proto structs.
+type Details interface{}
 
-// JobRecord stores the job fields that are not automatically managed by
-// JobLogger.
-type JobRecord struct {
+// Record stores the job fields that are not automatically managed by
+// Job.
+type Record struct {
 	Description   string
 	Username      string
 	DescriptorIDs sqlbase.IDs
-	Details       JobDetails
+	Details       Details
 }
 
-// JobStatus represents the status of a job in the system.jobs table.
-type JobStatus string
+// Status represents the status of a job in the system.jobs table.
+type Status string
 
 const (
-	// JobStatusPending is for jobs that have been created but on which work has
+	// StatusPending is for jobs that have been created but on which work has
 	// not yet started.
-	JobStatusPending JobStatus = "pending"
-	// JobStatusRunning is for jobs that are currently in progress.
-	JobStatusRunning JobStatus = "running"
-	// JobStatusFailed is for jobs that failed.
-	JobStatusFailed JobStatus = "failed"
-	// JobStatusSucceeded is for jobs that have successfully completed.
-	JobStatusSucceeded JobStatus = "succeeded"
+	StatusPending Status = "pending"
+	// StatusRunning is for jobs that are currently in progress.
+	StatusRunning Status = "running"
+	// StatusFailed is for jobs that failed.
+	StatusFailed Status = "failed"
+	// StatusSucceeded is for jobs that have successfully completed.
+	StatusSucceeded Status = "succeeded"
 )
 
-// NewJobLogger creates a new JobLogger.
-func NewJobLogger(db *client.DB, ex sqlutil.InternalExecutor, job JobRecord) *JobLogger {
-	return &JobLogger{
-		db:  db,
-		ex:  ex,
-		Job: job,
+// NewJob creates a new Job.
+func NewJob(db *client.DB, ex sqlutil.InternalExecutor, record Record) *Job {
+	return &Job{
+		db:     db,
+		ex:     ex,
+		Record: record,
 	}
 }
 
-// GetJobLogger creates a new JobLogger initialized from a previously created
+// GetJob creates a new Job initialized from a previously created
 // job id.
-func GetJobLogger(
-	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor, jobID int64,
-) (*JobLogger, error) {
-	jl := &JobLogger{
-		db:    db,
-		ex:    ex,
-		jobID: &jobID,
+func GetJob(
+	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor, id int64,
+) (*Job, error) {
+	j := &Job{
+		db: db,
+		ex: ex,
+		id: &id,
 	}
-	if err := jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		payload, err := jl.retrieveJobPayload(ctx, txn)
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		payload, err := j.retrievePayload(ctx, txn)
 		if err != nil {
 			return err
 		}
-		jl.Job.Description = payload.Description
-		jl.Job.Username = payload.Username
-		jl.Job.DescriptorIDs = payload.DescriptorIDs
+		j.Record.Description = payload.Description
+		j.Record.Username = payload.Username
+		j.Record.DescriptorIDs = payload.DescriptorIDs
 		switch d := payload.Details.(type) {
-		case *JobPayload_Backup:
-			jl.Job.Details = *d.Backup
-		case *JobPayload_Restore:
-			jl.Job.Details = *d.Restore
-		case *JobPayload_SchemaChange:
-			jl.Job.Details = *d.SchemaChange
+		case *Payload_Backup:
+			j.Record.Details = *d.Backup
+		case *Payload_Restore:
+			j.Record.Details = *d.Restore
+		case *Payload_SchemaChange:
+			j.Record.Details = *d.SchemaChange
 		default:
-			return errors.Errorf("JobLogger: unsupported job details type %T", d)
+			return errors.Errorf("Job: unsupported job details type %T", d)
 		}
 		// Don't need to lock because we're the only one who has a handle on this
-		// JobLogger so far.
-		jl.mu.payload = *payload
+		// Job so far.
+		j.mu.payload = *payload
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	return jl, nil
+	return j, nil
 }
 
-func (jl *JobLogger) runInTxn(
+func (j *Job) runInTxn(
 	ctx context.Context, retryable func(context.Context, *client.Txn) error,
 ) error {
-	if jl.txn != nil {
-		defer func() { jl.txn = nil }()
-		return jl.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true, AssignTimestampImmediately: true},
+	if j.txn != nil {
+		defer func() { j.txn = nil }()
+		return j.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true, AssignTimestampImmediately: true},
 			func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
 				return retryable(ctx, txn)
 			})
 	}
-	return jl.db.Txn(ctx, retryable)
+	return j.db.Txn(ctx, retryable)
 }
 
-// WithTxn sets the transaction that this JobLogger will use for its next
-// operation. If the transaction is nil, the JobLogger will create a one-off
-// transaction instead. If you use WithTxn, this JobLogger will no longer be
-// threadsafe.
-func (jl *JobLogger) WithTxn(txn *client.Txn) *JobLogger {
-	jl.txn = txn
-	return jl
+// WithTxn sets the transaction that this Job will use for its next operation.
+// If the transaction is nil, the Job will create a one-off transaction instead.
+// If you use WithTxn, this Job will no longer be threadsafe.
+func (j *Job) WithTxn(txn *client.Txn) *Job {
+	j.txn = txn
+	return j
 }
 
-// JobID returns the ID of the job that this JobLogger is currently tracking.
-// This will be nil if Created has not yet been called.
-func (jl *JobLogger) JobID() *int64 {
-	return jl.jobID
+// ID returns the ID of the job that this Job is currently tracking. This will
+// be nil if Created has not yet been called.
+func (j *Job) ID() *int64 {
+	return j.id
 }
 
 // Created records the creation of a new job in the system.jobs table and
-// remembers the assigned ID of the job in the JobLogger. The job information is
-// read from the Job field at the time Created is called.
-func (jl *JobLogger) Created(ctx context.Context) error {
-	payload := &JobPayload{
-		Description:   jl.Job.Description,
-		Username:      jl.Job.Username,
-		DescriptorIDs: jl.Job.DescriptorIDs,
+// remembers the assigned ID of the job in the Job. The job information is read
+// from the Record field at the time Created is called.
+func (j *Job) Created(ctx context.Context) error {
+	payload := &Payload{
+		Description:   j.Record.Description,
+		Username:      j.Record.Username,
+		DescriptorIDs: j.Record.DescriptorIDs,
 	}
-	switch d := jl.Job.Details.(type) {
-	case BackupJobDetails:
-		payload.Details = &JobPayload_Backup{Backup: &d}
-	case RestoreJobDetails:
-		payload.Details = &JobPayload_Restore{Restore: &d}
-	case SchemaChangeJobDetails:
-		payload.Details = &JobPayload_SchemaChange{SchemaChange: &d}
+	switch d := j.Record.Details.(type) {
+	case BackupDetails:
+		payload.Details = &Payload_Backup{Backup: &d}
+	case RestoreDetails:
+		payload.Details = &Payload_Restore{Restore: &d}
+	case SchemaChangeDetails:
+		payload.Details = &Payload_SchemaChange{SchemaChange: &d}
 	default:
-		return errors.Errorf("JobLogger: unsupported job details type %T", d)
+		return errors.Errorf("Job: unsupported job details type %T", d)
 	}
-	return jl.insertJobRecord(ctx, payload)
+	return j.insert(ctx, payload)
 }
 
 // Started marks the tracked job as started.
-func (jl *JobLogger) Started(ctx context.Context) error {
-	return jl.updateJobRecord(ctx, JobStatusRunning, func(payload *JobPayload) (bool, error) {
+func (j *Job) Started(ctx context.Context) error {
+	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
 		if payload.StartedMicros != 0 {
 			// Already started - do nothing.
 			return false, nil
 		}
-		payload.StartedMicros = jobTimestamp(timeutil.Now())
+		payload.StartedMicros = roundTimestamp(timeutil.Now())
 		return true, nil
 	})
 }
@@ -201,21 +200,21 @@ var Noop ProgressedFn
 // a pointer to the job's details to allow for modifications to the details
 // before the job is saved. If no such modifications are required, pass Noop
 // instead of nil for readability.
-func (jl *JobLogger) Progressed(
+func (j *Job) Progressed(
 	ctx context.Context, fractionCompleted float32, progressedFn ProgressedFn,
 ) error {
 	if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
 		return errors.Errorf(
-			"JobLogger: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
-			fractionCompleted, jl.jobID,
+			"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
+			fractionCompleted, j.id,
 		)
 	}
-	return jl.updateJobRecord(ctx, JobStatusRunning, func(payload *JobPayload) (bool, error) {
+	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
 		if payload.StartedMicros == 0 {
-			return false, errors.Errorf("JobLogger: job %d not started", jl.jobID)
+			return false, errors.Errorf("Job: job %d not started", j.id)
 		}
 		if payload.FinishedMicros != 0 {
-			return false, errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+			return false, errors.Errorf("Job: job %d already finished", j.id)
 		}
 		if fractionCompleted > payload.FractionCompleted {
 			payload.FractionCompleted = fractionCompleted
@@ -231,96 +230,96 @@ func (jl *JobLogger) Progressed(
 // errors encountered while updating the jobs table are logged but not returned,
 // under the assumption that the the caller is already handling a more important
 // error and doesn't care about this one.
-func (jl *JobLogger) Failed(ctx context.Context, err error) {
+func (j *Job) Failed(ctx context.Context, err error) {
 	// To simplify cleanup routines, it is not an error to call Failed on a job
 	// that was never Created.
-	if jl.jobID == nil {
+	if j.id == nil {
 		return
 	}
-	internalErr := jl.updateJobRecord(ctx, JobStatusFailed, func(payload *JobPayload) (bool, error) {
+	internalErr := j.update(ctx, StatusFailed, func(payload *Payload) (bool, error) {
 		if payload.FinishedMicros != 0 {
 			// Already finished - do nothing.
 			return false, nil
 		}
 		payload.Error = err.Error()
-		payload.FinishedMicros = jobTimestamp(timeutil.Now())
+		payload.FinishedMicros = roundTimestamp(timeutil.Now())
 		return true, nil
 	})
 	if internalErr != nil {
-		log.Errorf(ctx, "JobLogger: ignoring error %v while logging failure for job %d: %+v",
-			err, jl.jobID, internalErr)
+		log.Errorf(ctx, "Job: ignoring error %v while logging failure for job %d: %+v",
+			err, j.id, internalErr)
 	}
 }
 
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
-func (jl *JobLogger) Succeeded(ctx context.Context) error {
-	return jl.updateJobRecord(ctx, JobStatusSucceeded, func(payload *JobPayload) (bool, error) {
+func (j *Job) Succeeded(ctx context.Context) error {
+	return j.update(ctx, StatusSucceeded, func(payload *Payload) (bool, error) {
 		if payload.FinishedMicros != 0 {
 			// Already finished - do nothing.
 			return false, nil
 		}
-		payload.FinishedMicros = jobTimestamp(timeutil.Now())
+		payload.FinishedMicros = roundTimestamp(timeutil.Now())
 		payload.FractionCompleted = 1.0
 		return true, nil
 	})
 }
 
-// Payload returns the most recently sent JobPayload for this JobLogger. Will
-// return an empty JobPayload until Created() is called on a new JobLogger.
-func (jl *JobLogger) Payload() JobPayload {
-	jl.mu.Lock()
-	defer jl.mu.Unlock()
-	return jl.mu.payload
+// Payload returns the most recently sent Payload for this Job. Will return an
+// empty Payload until Created() is called on a new Job.
+func (j *Job) Payload() Payload {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.mu.payload
 }
 
-func (jl *JobLogger) insertJobRecord(ctx context.Context, payload *JobPayload) error {
-	if jl.jobID != nil {
+func (j *Job) insert(ctx context.Context, payload *Payload) error {
+	if j.id != nil {
 		// Already created - do nothing.
 		return nil
 	}
 
 	var row parser.Datums
-	if err := jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		payload.ModifiedMicros = jobTimestamp(txn.Proto().OrigTimestamp.GoTime())
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		payload.ModifiedMicros = roundTimestamp(txn.Proto().OrigTimestamp.GoTime())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
 		}
 
 		const stmt = "INSERT INTO system.jobs (status, payload) VALUES ($1, $2) RETURNING id"
-		row, err = jl.ex.QueryRowInTransaction(ctx, "job-insert", txn, stmt, JobStatusPending, payloadBytes)
+		row, err = j.ex.QueryRowInTransaction(ctx, "job-insert", txn, stmt, StatusPending, payloadBytes)
 		return err
 	}); err != nil {
 		return err
 	}
-	jl.mu.payload = *payload
-	jl.jobID = (*int64)(row[0].(*parser.DInt))
+	j.mu.payload = *payload
+	j.id = (*int64)(row[0].(*parser.DInt))
 
 	return nil
 }
 
-func (jl *JobLogger) retrieveJobPayload(ctx context.Context, txn *client.Txn) (*JobPayload, error) {
+func (j *Job) retrievePayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
 	const selectStmt = "SELECT payload FROM system.jobs WHERE id = $1"
-	row, err := jl.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *jl.jobID)
+	row, err := j.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
 	if err != nil {
 		return nil, err
 	}
 
-	return UnmarshalJobPayload(row[0])
+	return UnmarshalPayload(row[0])
 }
 
-func (jl *JobLogger) updateJobRecord(
-	ctx context.Context, newStatus JobStatus, updateFn func(*JobPayload) (doUpdate bool, err error),
+func (j *Job) update(
+	ctx context.Context, newStatus Status, updateFn func(*Payload) (doUpdate bool, err error),
 ) error {
-	if jl.jobID == nil {
-		return errors.New("JobLogger cannot update job: job not created")
+	if j.id == nil {
+		return errors.New("Job: cannot update: job not created")
 	}
 
-	var payload *JobPayload
-	if err := jl.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	var payload *Payload
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		payload, err = jl.retrieveJobPayload(ctx, txn)
+		payload, err = j.retrievePayload(ctx, txn)
 		if err != nil {
 			return err
 		}
@@ -331,62 +330,62 @@ func (jl *JobLogger) updateJobRecord(
 		if !doUpdate {
 			return nil
 		}
-		payload.ModifiedMicros = jobTimestamp(timeutil.Now())
+		payload.ModifiedMicros = roundTimestamp(timeutil.Now())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
 		}
 
 		const updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
-		n, err := jl.ex.ExecuteStatementInTransaction(
-			ctx, "job-update", txn, updateStmt, newStatus, payloadBytes, *jl.jobID)
+		n, err := j.ex.ExecuteStatementInTransaction(
+			ctx, "job-update", txn, updateStmt, newStatus, payloadBytes, *j.id)
 		if err != nil {
 			return err
 		}
 		if n != 1 {
-			return errors.Errorf("JobLogger: expected exactly one row affected, but %d rows affected by job update", n)
+			return errors.Errorf("Job: expected exactly one row affected, but %d rows affected by job update", n)
 		}
 		return nil
 	}); err != nil {
 		return err
 	}
 	if payload != nil {
-		jl.mu.Lock()
-		jl.mu.payload = *payload
-		jl.mu.Unlock()
+		j.mu.Lock()
+		j.mu.payload = *payload
+		j.mu.Unlock()
 	}
 	return nil
 }
 
 // Job types are named for the SQL query that creates them.
 const (
-	JobTypeBackup       string = "BACKUP"
-	JobTypeRestore      string = "RESTORE"
-	JobTypeSchemaChange string = "SCHEMA CHANGE"
+	TypeBackup       string = "BACKUP"
+	TypeRestore      string = "RESTORE"
+	TypeSchemaChange string = "SCHEMA CHANGE"
 )
 
 // Typ returns the payload's job type.
-func (jp *JobPayload) Typ() string {
-	switch jp.Details.(type) {
-	case *JobPayload_Backup:
-		return JobTypeBackup
-	case *JobPayload_Restore:
-		return JobTypeRestore
-	case *JobPayload_SchemaChange:
-		return JobTypeSchemaChange
+func (p *Payload) Typ() string {
+	switch p.Details.(type) {
+	case *Payload_Backup:
+		return TypeBackup
+	case *Payload_Restore:
+		return TypeRestore
+	case *Payload_SchemaChange:
+		return TypeSchemaChange
 	default:
-		panic("JobPayload.Typ called on a payload with an unknown details type")
+		panic("Payload.Typ called on a payload with an unknown details type")
 	}
 }
 
-// UnmarshalJobPayload unmarshals and returns the JobPayload encoded in the
+// UnmarshalPayload unmarshals and returns the Payload encoded in the
 // input datum, which should be a DBytes.
-func UnmarshalJobPayload(datum parser.Datum) (*JobPayload, error) {
-	payload := &JobPayload{}
+func UnmarshalPayload(datum parser.Datum) (*Payload, error) {
+	payload := &Payload{}
 	bytes, ok := datum.(*parser.DBytes)
 	if !ok {
 		return nil, errors.Errorf(
-			"JobLogger: failed to unmarshal job payload as DBytes (was %T)", bytes)
+			"Job: failed to unmarshal payload as DBytes (was %T)", bytes)
 	}
 	if err := proto.Unmarshal([]byte(*bytes), payload); err != nil {
 		return nil, err
@@ -397,10 +396,10 @@ func UnmarshalJobPayload(datum parser.Datum) (*JobPayload, error) {
 // TIMESTAMP columns round to the nearest microsecond, so we replicate that
 // behavior for our protobuf fields. Naive truncation can lead to anomalies
 // where jobs are started before they're created.
-func jobTimestamp(ts time.Time) int64 {
+func roundTimestamp(ts time.Time) int64 {
 	return ts.Round(time.Microsecond).UnixNano() / time.Microsecond.Nanoseconds()
 }
 
-var _ JobDetails = BackupJobDetails{}
-var _ JobDetails = RestoreJobDetails{}
-var _ JobDetails = SchemaChangeJobDetails{}
+var _ Details = BackupDetails{}
+var _ Details = RestoreDetails{}
+var _ Details = SchemaChangeDetails{}

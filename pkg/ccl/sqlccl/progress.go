@@ -32,7 +32,7 @@ const (
 
 type jobProgressLogger struct {
 	// These fields must be externally initialized.
-	jobLogger    *jobs.JobLogger
+	job          *jobs.Job
 	totalChunks  int
 	progressedFn jobs.ProgressedFn
 
@@ -58,7 +58,7 @@ func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
 	jpl.mu.Unlock()
 
 	if shouldLogProgress {
-		return jpl.jobLogger.Progressed(ctx, fraction, jpl.progressedFn)
+		return jpl.job.Progressed(ctx, fraction, jpl.progressedFn)
 	}
 	return nil
 }

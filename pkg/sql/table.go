@@ -472,18 +472,18 @@ func (p *planner) createSchemaChangeJob(
 	if err != nil {
 		return sqlbase.InvalidMutationID, err
 	}
-	jobRecord := jobs.JobRecord{
+	jobRecord := jobs.Record{
 		Description:   stmt,
 		Username:      p.User(),
 		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
-		Details:       jobs.SchemaChangeJobDetails{},
+		Details:       jobs.SchemaChangeDetails{},
 	}
-	jobLogger := jobs.NewJobLogger(p.ExecCfg().DB, InternalExecutor{LeaseManager: p.session.tables.leaseMgr}, jobRecord)
-	if err := jobLogger.WithTxn(p.txn).Created(ctx); err != nil {
+	job := jobs.NewJob(p.ExecCfg().DB, InternalExecutor{LeaseManager: p.session.tables.leaseMgr}, jobRecord)
+	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
 		return sqlbase.InvalidMutationID, nil
 	}
 	tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
-		MutationID: mutationID, JobID: *jobLogger.JobID()})
+		MutationID: mutationID, JobID: *job.ID()})
 	return mutationID, nil
 }
 
