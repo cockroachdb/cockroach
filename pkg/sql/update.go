@@ -18,6 +18,7 @@ package sql
 
 import (
 	"fmt"
+	"sync"
 
 	"golang.org/x/net/context"
 
@@ -28,6 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
+
+var updateNodePool = sync.Pool{
+	New: func() interface{} {
+		return &updateNode{}
+	},
+}
 
 // editNode (Base, Run) is shared between all row updating
 // statements (DELETE, UPDATE, INSERT).
@@ -373,7 +380,8 @@ func (p *planner) Update(
 		updateColsIdx[col.ID] = i
 	}
 
-	un := &updateNode{
+	un := updateNodePool.Get().(*updateNode)
+	*un = updateNode{
 		n:             n,
 		editNodeBase:  en,
 		updateCols:    ru.UpdateCols,
@@ -400,6 +408,8 @@ func (u *updateNode) Start(ctx context.Context) error {
 
 func (u *updateNode) Close(ctx context.Context) {
 	u.run.rows.Close(ctx)
+	*u = updateNode{}
+	updateNodePool.Put(u)
 }
 
 func (u *updateNode) Next(ctx context.Context) (bool, error) {
