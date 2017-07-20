@@ -20,19 +20,19 @@ option go_package = "jobs";
 
 import "gogoproto/gogo.proto";
 
-message BackupJobDetails {
+message BackupDetails {
   // Intentionally empty.
 }
 
-message RestoreJobDetails {
+message RestoreDetails {
   bytes low_water_mark = 1;
 }
 
-message SchemaChangeJobDetails {
+message SchemaChangeDetails {
   // Intentionally empty.
 }
 
-message JobPayload {
+message Payload {
   string description = 1;
   string username = 2;
   // For consistency with the SQL timestamp type, which has microsecond
@@ -50,8 +50,8 @@ message JobPayload {
   // ID 9 is intentionally reserved for lease information.
   reserved 9;
   oneof details {
-    BackupJobDetails backup = 10;
-    RestoreJobDetails restore = 11;
-    SchemaChangeJobDetails schemaChange = 12;
+    BackupDetails backup = 10;
+    RestoreDetails restore = 11;
+    SchemaChangeDetails schemaChange = 12;
   }
 }

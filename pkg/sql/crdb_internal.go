@@ -308,7 +308,7 @@ CREATE TABLE crdb_internal.jobs (
 
 		for _, r := range rows {
 			id, status, created, bytes := r[0], r[1], r[2], r[3]
-			payload, err := jobs.UnmarshalJobPayload(bytes)
+			payload, err := jobs.UnmarshalPayload(bytes)
 			if err != nil {
 				return err
 			}

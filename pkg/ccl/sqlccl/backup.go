@@ -292,7 +292,7 @@ func Backup(
 	targets parser.TargetList,
 	startTime, endTime hlc.Timestamp,
 	_ parser.KVOptions,
-	jobLogger *jobs.JobLogger,
+	job *jobs.Job,
 ) (BackupDescriptor, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
@@ -402,17 +402,17 @@ func Backup(
 	}
 
 	progressLogger := jobProgressLogger{
-		jobLogger:   jobLogger,
+		job:         job,
 		totalChunks: len(spans),
 	}
 
 	for _, desc := range tables {
-		jobLogger.Job.DescriptorIDs = append(jobLogger.Job.DescriptorIDs, desc.GetID())
+		job.Record.DescriptorIDs = append(job.Record.DescriptorIDs, desc.GetID())
 	}
-	if err := jobLogger.Created(ctx); err != nil {
+	if err := job.Created(ctx); err != nil {
 		return BackupDescriptor{}, err
 	}
-	if err := jobLogger.Started(ctx); err != nil {
+	if err := job.Started(ctx); err != nil {
 		return BackupDescriptor{}, err
 	}
 
@@ -479,7 +479,7 @@ func Backup(
 				// Errors while updating progress are not important enough to merit
 				// failing the entire backup.
 				log.Errorf(ctx, "BACKUP ignoring error while updating progress on job %d (%s): %+v",
-					jobLogger.JobID(), jobLogger.Job.Description, err)
+					job.ID(), job.Record.Description, err)
 			}
 
 			if doCheckpoint {
@@ -591,10 +591,10 @@ func backupPlanHook(
 		if err != nil {
 			return nil, err
 		}
-		jobLogger := jobs.NewJobLogger(p.ExecCfg().DB, sql.InternalExecutor{LeaseManager: p.LeaseMgr()}, jobs.JobRecord{
+		job := jobs.NewJob(p.ExecCfg().DB, sql.InternalExecutor{LeaseManager: p.LeaseMgr()}, jobs.Record{
 			Description: description,
 			Username:    p.User(),
-			Details:     jobs.BackupJobDetails{},
+			Details:     jobs.BackupDetails{},
 		})
 		desc, err := Backup(ctx,
 			p,
@@ -602,23 +602,23 @@ func backupPlanHook(
 			backup.Targets,
 			startTime, endTime,
 			backup.Options,
-			jobLogger,
+			job,
 		)
 		if err != nil {
-			jobLogger.Failed(ctx, err)
+			job.Failed(ctx, err)
 			return nil, err
 		}
-		if err := jobLogger.Succeeded(ctx); err != nil {
+		if err := job.Succeeded(ctx); err != nil {
 			// An error while marking the job as successful is not important enough to
 			// merit failing the entire backup.
 			log.Errorf(ctx, "BACKUP ignoring error while marking job %d (%s) as successful: %+v",
-				jobLogger.JobID(), description, err)
+				job.ID(), description, err)
 		}
 		// TODO(benesch): emit periodic progress updates once we have the
 		// infrastructure to stream responses.
 		ret := []parser.Datums{{
-			parser.NewDInt(parser.DInt(*jobLogger.JobID())),
-			parser.NewDString(string(jobs.JobStatusSucceeded)),
+			parser.NewDInt(parser.DInt(*job.ID())),
+			parser.NewDString(string(jobs.StatusSucceeded)),
 			parser.NewDFloat(parser.DFloat(1.0)),
 			parser.NewDInt(parser.DInt(desc.EntryCounts.Rows)),
 			parser.NewDInt(parser.DInt(desc.EntryCounts.IndexEntries)),

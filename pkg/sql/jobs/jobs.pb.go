@@ -9,10 +9,10 @@
 		cockroach/pkg/sql/jobs/jobs.proto
 
 	It has these top-level messages:
-		BackupJobDetails
-		RestoreJobDetails
-		SchemaChangeJobDetails
-		JobPayload
+		BackupDetails
+		RestoreDetails
+		SchemaChangeDetails
+		Payload
 */
 package jobs
 
@@ -35,32 +35,32 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-type BackupJobDetails struct {
+type BackupDetails struct {
 }
 
-func (m *BackupJobDetails) Reset()                    { *m = BackupJobDetails{} }
-func (m *BackupJobDetails) String() string            { return proto.CompactTextString(m) }
-func (*BackupJobDetails) ProtoMessage()               {}
-func (*BackupJobDetails) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{0} }
+func (m *BackupDetails) Reset()                    { *m = BackupDetails{} }
+func (m *BackupDetails) String() string            { return proto.CompactTextString(m) }
+func (*BackupDetails) ProtoMessage()               {}
+func (*BackupDetails) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{0} }
 
-type RestoreJobDetails struct {
+type RestoreDetails struct {
 	LowWaterMark []byte `protobuf:"bytes,1,opt,name=low_water_mark,json=lowWaterMark,proto3" json:"low_water_mark,omitempty"`
 }
 
-func (m *RestoreJobDetails) Reset()                    { *m = RestoreJobDetails{} }
-func (m *RestoreJobDetails) String() string            { return proto.CompactTextString(m) }
-func (*RestoreJobDetails) ProtoMessage()               {}
-func (*RestoreJobDetails) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{1} }
+func (m *RestoreDetails) Reset()                    { *m = RestoreDetails{} }
+func (m *RestoreDetails) String() string            { return proto.CompactTextString(m) }
+func (*RestoreDetails) ProtoMessage()               {}
+func (*RestoreDetails) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{1} }
 
-type SchemaChangeJobDetails struct {
+type SchemaChangeDetails struct {
 }
 
-func (m *SchemaChangeJobDetails) Reset()                    { *m = SchemaChangeJobDetails{} }
-func (m *SchemaChangeJobDetails) String() string            { return proto.CompactTextString(m) }
-func (*SchemaChangeJobDetails) ProtoMessage()               {}
-func (*SchemaChangeJobDetails) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{2} }
+func (m *SchemaChangeDetails) Reset()                    { *m = SchemaChangeDetails{} }
+func (m *SchemaChangeDetails) String() string            { return proto.CompactTextString(m) }
+func (*SchemaChangeDetails) ProtoMessage()               {}
+func (*SchemaChangeDetails) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{2} }
 
-type JobPayload struct {
+type Payload struct {
 	Description string `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
 	Username    string `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
 	// For consistency with the SQL timestamp type, which has microsecond
@@ -73,147 +73,147 @@ type JobPayload struct {
 	FractionCompleted float32                                               `protobuf:"fixed32,7,opt,name=fraction_completed,json=fractionCompleted,proto3" json:"fraction_completed,omitempty"`
 	Error             string                                                `protobuf:"bytes,8,opt,name=error,proto3" json:"error,omitempty"`
 	// Types that are valid to be assigned to Details:
-	//	*JobPayload_Backup
-	//	*JobPayload_Restore
-	//	*JobPayload_SchemaChange
-	Details isJobPayload_Details `protobuf_oneof:"details"`
+	//	*Payload_Backup
+	//	*Payload_Restore
+	//	*Payload_SchemaChange
+	Details isPayload_Details `protobuf_oneof:"details"`
 }
 
-func (m *JobPayload) Reset()                    { *m = JobPayload{} }
-func (m *JobPayload) String() string            { return proto.CompactTextString(m) }
-func (*JobPayload) ProtoMessage()               {}
-func (*JobPayload) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{3} }
+func (m *Payload) Reset()                    { *m = Payload{} }
+func (m *Payload) String() string            { return proto.CompactTextString(m) }
+func (*Payload) ProtoMessage()               {}
+func (*Payload) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{3} }
 
-type isJobPayload_Details interface {
-	isJobPayload_Details()
+type isPayload_Details interface {
+	isPayload_Details()
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
 
-type JobPayload_Backup struct {
-	Backup *BackupJobDetails `protobuf:"bytes,10,opt,name=backup,oneof"`
+type Payload_Backup struct {
+	Backup *BackupDetails `protobuf:"bytes,10,opt,name=backup,oneof"`
 }
-type JobPayload_Restore struct {
-	Restore *RestoreJobDetails `protobuf:"bytes,11,opt,name=restore,oneof"`
+type Payload_Restore struct {
+	Restore *RestoreDetails `protobuf:"bytes,11,opt,name=restore,oneof"`
 }
-type JobPayload_SchemaChange struct {
-	SchemaChange *SchemaChangeJobDetails `protobuf:"bytes,12,opt,name=schemaChange,oneof"`
+type Payload_SchemaChange struct {
+	SchemaChange *SchemaChangeDetails `protobuf:"bytes,12,opt,name=schemaChange,oneof"`
 }
 
-func (*JobPayload_Backup) isJobPayload_Details()       {}
-func (*JobPayload_Restore) isJobPayload_Details()      {}
-func (*JobPayload_SchemaChange) isJobPayload_Details() {}
+func (*Payload_Backup) isPayload_Details()       {}
+func (*Payload_Restore) isPayload_Details()      {}
+func (*Payload_SchemaChange) isPayload_Details() {}
 
-func (m *JobPayload) GetDetails() isJobPayload_Details {
+func (m *Payload) GetDetails() isPayload_Details {
 	if m != nil {
 		return m.Details
 	}
 	return nil
 }
 
-func (m *JobPayload) GetBackup() *BackupJobDetails {
-	if x, ok := m.GetDetails().(*JobPayload_Backup); ok {
+func (m *Payload) GetBackup() *BackupDetails {
+	if x, ok := m.GetDetails().(*Payload_Backup); ok {
 		return x.Backup
 	}
 	return nil
 }
 
-func (m *JobPayload) GetRestore() *RestoreJobDetails {
-	if x, ok := m.GetDetails().(*JobPayload_Restore); ok {
+func (m *Payload) GetRestore() *RestoreDetails {
+	if x, ok := m.GetDetails().(*Payload_Restore); ok {
 		return x.Restore
 	}
 	return nil
 }
 
-func (m *JobPayload) GetSchemaChange() *SchemaChangeJobDetails {
-	if x, ok := m.GetDetails().(*JobPayload_SchemaChange); ok {
+func (m *Payload) GetSchemaChange() *SchemaChangeDetails {
+	if x, ok := m.GetDetails().(*Payload_SchemaChange); ok {
 		return x.SchemaChange
 	}
 	return nil
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*JobPayload) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
-	return _JobPayload_OneofMarshaler, _JobPayload_OneofUnmarshaler, _JobPayload_OneofSizer, []interface{}{
-		(*JobPayload_Backup)(nil),
-		(*JobPayload_Restore)(nil),
-		(*JobPayload_SchemaChange)(nil),
+func (*Payload) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+	return _Payload_OneofMarshaler, _Payload_OneofUnmarshaler, _Payload_OneofSizer, []interface{}{
+		(*Payload_Backup)(nil),
+		(*Payload_Restore)(nil),
+		(*Payload_SchemaChange)(nil),
 	}
 }
 
-func _JobPayload_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
-	m := msg.(*JobPayload)
+func _Payload_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*Payload)
 	// details
 	switch x := m.Details.(type) {
-	case *JobPayload_Backup:
+	case *Payload_Backup:
 		_ = b.EncodeVarint(10<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.Backup); err != nil {
 			return err
 		}
-	case *JobPayload_Restore:
+	case *Payload_Restore:
 		_ = b.EncodeVarint(11<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.Restore); err != nil {
 			return err
 		}
-	case *JobPayload_SchemaChange:
+	case *Payload_SchemaChange:
 		_ = b.EncodeVarint(12<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.SchemaChange); err != nil {
 			return err
 		}
 	case nil:
 	default:
-		return fmt.Errorf("JobPayload.Details has unexpected type %T", x)
+		return fmt.Errorf("Payload.Details has unexpected type %T", x)
 	}
 	return nil
 }
 
-func _JobPayload_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
-	m := msg.(*JobPayload)
+func _Payload_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*Payload)
 	switch tag {
 	case 10: // details.backup
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
-		msg := new(BackupJobDetails)
+		msg := new(BackupDetails)
 		err := b.DecodeMessage(msg)
-		m.Details = &JobPayload_Backup{msg}
+		m.Details = &Payload_Backup{msg}
 		return true, err
 	case 11: // details.restore
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
-		msg := new(RestoreJobDetails)
+		msg := new(RestoreDetails)
 		err := b.DecodeMessage(msg)
-		m.Details = &JobPayload_Restore{msg}
+		m.Details = &Payload_Restore{msg}
 		return true, err
 	case 12: // details.schemaChange
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
-		msg := new(SchemaChangeJobDetails)
+		msg := new(SchemaChangeDetails)
 		err := b.DecodeMessage(msg)
-		m.Details = &JobPayload_SchemaChange{msg}
+		m.Details = &Payload_SchemaChange{msg}
 		return true, err
 	default:
 		return false, nil
 	}
 }
 
-func _JobPayload_OneofSizer(msg proto.Message) (n int) {
-	m := msg.(*JobPayload)
+func _Payload_OneofSizer(msg proto.Message) (n int) {
+	m := msg.(*Payload)
 	// details
 	switch x := m.Details.(type) {
-	case *JobPayload_Backup:
+	case *Payload_Backup:
 		s := proto.Size(x.Backup)
 		n += proto.SizeVarint(10<<3 | proto.WireBytes)
 		n += proto.SizeVarint(uint64(s))
 		n += s
-	case *JobPayload_Restore:
+	case *Payload_Restore:
 		s := proto.Size(x.Restore)
 		n += proto.SizeVarint(11<<3 | proto.WireBytes)
 		n += proto.SizeVarint(uint64(s))
 		n += s
-	case *JobPayload_SchemaChange:
+	case *Payload_SchemaChange:
 		s := proto.Size(x.SchemaChange)
 		n += proto.SizeVarint(12<<3 | proto.WireBytes)
 		n += proto.SizeVarint(uint64(s))
@@ -226,12 +226,12 @@ func _JobPayload_OneofSizer(msg proto.Message) (n int) {
 }
 
 func init() {
-	proto.RegisterType((*BackupJobDetails)(nil), "cockroach.sql.jobs.BackupJobDetails")
-	proto.RegisterType((*RestoreJobDetails)(nil), "cockroach.sql.jobs.RestoreJobDetails")
-	proto.RegisterType((*SchemaChangeJobDetails)(nil), "cockroach.sql.jobs.SchemaChangeJobDetails")
-	proto.RegisterType((*JobPayload)(nil), "cockroach.sql.jobs.JobPayload")
+	proto.RegisterType((*BackupDetails)(nil), "cockroach.sql.jobs.BackupDetails")
+	proto.RegisterType((*RestoreDetails)(nil), "cockroach.sql.jobs.RestoreDetails")
+	proto.RegisterType((*SchemaChangeDetails)(nil), "cockroach.sql.jobs.SchemaChangeDetails")
+	proto.RegisterType((*Payload)(nil), "cockroach.sql.jobs.Payload")
 }
-func (m *BackupJobDetails) Marshal() (dAtA []byte, err error) {
+func (m *BackupDetails) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -241,7 +241,7 @@ func (m *BackupJobDetails) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *BackupJobDetails) MarshalTo(dAtA []byte) (int, error) {
+func (m *BackupDetails) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -249,7 +249,7 @@ func (m *BackupJobDetails) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *RestoreJobDetails) Marshal() (dAtA []byte, err error) {
+func (m *RestoreDetails) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -259,7 +259,7 @@ func (m *RestoreJobDetails) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *RestoreJobDetails) MarshalTo(dAtA []byte) (int, error) {
+func (m *RestoreDetails) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -273,7 +273,7 @@ func (m *RestoreJobDetails) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *SchemaChangeJobDetails) Marshal() (dAtA []byte, err error) {
+func (m *SchemaChangeDetails) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -283,7 +283,7 @@ func (m *SchemaChangeJobDetails) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *SchemaChangeJobDetails) MarshalTo(dAtA []byte) (int, error) {
+func (m *SchemaChangeDetails) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -291,7 +291,7 @@ func (m *SchemaChangeJobDetails) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *JobPayload) Marshal() (dAtA []byte, err error) {
+func (m *Payload) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -301,7 +301,7 @@ func (m *JobPayload) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *JobPayload) MarshalTo(dAtA []byte) (int, error) {
+func (m *Payload) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -371,7 +371,7 @@ func (m *JobPayload) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *JobPayload_Backup) MarshalTo(dAtA []byte) (int, error) {
+func (m *Payload_Backup) MarshalTo(dAtA []byte) (int, error) {
 	i := 0
 	if m.Backup != nil {
 		dAtA[i] = 0x52
@@ -385,7 +385,7 @@ func (m *JobPayload_Backup) MarshalTo(dAtA []byte) (int, error) {
 	}
 	return i, nil
 }
-func (m *JobPayload_Restore) MarshalTo(dAtA []byte) (int, error) {
+func (m *Payload_Restore) MarshalTo(dAtA []byte) (int, error) {
 	i := 0
 	if m.Restore != nil {
 		dAtA[i] = 0x5a
@@ -399,7 +399,7 @@ func (m *JobPayload_Restore) MarshalTo(dAtA []byte) (int, error) {
 	}
 	return i, nil
 }
-func (m *JobPayload_SchemaChange) MarshalTo(dAtA []byte) (int, error) {
+func (m *Payload_SchemaChange) MarshalTo(dAtA []byte) (int, error) {
 	i := 0
 	if m.SchemaChange != nil {
 		dAtA[i] = 0x62
@@ -440,13 +440,13 @@ func encodeVarintJobs(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
-func (m *BackupJobDetails) Size() (n int) {
+func (m *BackupDetails) Size() (n int) {
 	var l int
 	_ = l
 	return n
 }
 
-func (m *RestoreJobDetails) Size() (n int) {
+func (m *RestoreDetails) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.LowWaterMark)
@@ -456,13 +456,13 @@ func (m *RestoreJobDetails) Size() (n int) {
 	return n
 }
 
-func (m *SchemaChangeJobDetails) Size() (n int) {
+func (m *SchemaChangeDetails) Size() (n int) {
 	var l int
 	_ = l
 	return n
 }
 
-func (m *JobPayload) Size() (n int) {
+func (m *Payload) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Description)
@@ -502,7 +502,7 @@ func (m *JobPayload) Size() (n int) {
 	return n
 }
 
-func (m *JobPayload_Backup) Size() (n int) {
+func (m *Payload_Backup) Size() (n int) {
 	var l int
 	_ = l
 	if m.Backup != nil {
@@ -511,7 +511,7 @@ func (m *JobPayload_Backup) Size() (n int) {
 	}
 	return n
 }
-func (m *JobPayload_Restore) Size() (n int) {
+func (m *Payload_Restore) Size() (n int) {
 	var l int
 	_ = l
 	if m.Restore != nil {
@@ -520,7 +520,7 @@ func (m *JobPayload_Restore) Size() (n int) {
 	}
 	return n
 }
-func (m *JobPayload_SchemaChange) Size() (n int) {
+func (m *Payload_SchemaChange) Size() (n int) {
 	var l int
 	_ = l
 	if m.SchemaChange != nil {
@@ -543,7 +543,7 @@ func sovJobs(x uint64) (n int) {
 func sozJobs(x uint64) (n int) {
 	return sovJobs(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *BackupJobDetails) Unmarshal(dAtA []byte) error {
+func (m *BackupDetails) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -566,10 +566,10 @@ func (m *BackupJobDetails) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: BackupJobDetails: wiretype end group for non-group")
+			return fmt.Errorf("proto: BackupDetails: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: BackupJobDetails: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: BackupDetails: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:
@@ -593,7 +593,7 @@ func (m *BackupJobDetails) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *RestoreJobDetails) Unmarshal(dAtA []byte) error {
+func (m *RestoreDetails) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -616,10 +616,10 @@ func (m *RestoreJobDetails) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RestoreJobDetails: wiretype end group for non-group")
+			return fmt.Errorf("proto: RestoreDetails: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RestoreJobDetails: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: RestoreDetails: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -674,7 +674,7 @@ func (m *RestoreJobDetails) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *SchemaChangeJobDetails) Unmarshal(dAtA []byte) error {
+func (m *SchemaChangeDetails) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -697,10 +697,10 @@ func (m *SchemaChangeJobDetails) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SchemaChangeJobDetails: wiretype end group for non-group")
+			return fmt.Errorf("proto: SchemaChangeDetails: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SchemaChangeJobDetails: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SchemaChangeDetails: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:
@@ -724,7 +724,7 @@ func (m *SchemaChangeJobDetails) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *JobPayload) Unmarshal(dAtA []byte) error {
+func (m *Payload) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -747,10 +747,10 @@ func (m *JobPayload) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: JobPayload: wiretype end group for non-group")
+			return fmt.Errorf("proto: Payload: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: JobPayload: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Payload: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -999,11 +999,11 @@ func (m *JobPayload) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &BackupJobDetails{}
+			v := &BackupDetails{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Details = &JobPayload_Backup{v}
+			m.Details = &Payload_Backup{v}
 			iNdEx = postIndex
 		case 11:
 			if wireType != 2 {
@@ -1031,11 +1031,11 @@ func (m *JobPayload) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &RestoreJobDetails{}
+			v := &RestoreDetails{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Details = &JobPayload_Restore{v}
+			m.Details = &Payload_Restore{v}
 			iNdEx = postIndex
 		case 12:
 			if wireType != 2 {
@@ -1063,11 +1063,11 @@ func (m *JobPayload) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &SchemaChangeJobDetails{}
+			v := &SchemaChangeDetails{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Details = &JobPayload_SchemaChange{v}
+			m.Details = &Payload_SchemaChange{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -1198,36 +1198,36 @@ var (
 func init() { proto.RegisterFile("cockroach/pkg/sql/jobs/jobs.proto", fileDescriptorJobs) }
 
 var fileDescriptorJobs = []byte{
-	// 492 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x92, 0xcd, 0x6e, 0xda, 0x40,
-	0x14, 0x85, 0x71, 0x20, 0xfc, 0x5c, 0x7e, 0x9a, 0x8c, 0xa2, 0x6a, 0x94, 0x85, 0xe3, 0xa2, 0x44,
-	0x45, 0x95, 0x6a, 0x4b, 0xcd, 0xaa, 0x9b, 0x4a, 0x25, 0x2c, 0x00, 0x29, 0x52, 0xe4, 0x2e, 0x2a,
-	0x75, 0x83, 0xc6, 0xe3, 0x01, 0xa6, 0xd8, 0x5c, 0x98, 0x31, 0x42, 0x7d, 0x8b, 0x3e, 0x56, 0x96,
-	0x5d, 0x76, 0x95, 0xb6, 0xf4, 0x2d, 0xba, 0xaa, 0x18, 0x30, 0xa6, 0x85, 0x8d, 0xe5, 0x39, 0xe7,
-	0xdc, 0x4f, 0xa3, 0xb9, 0x07, 0x5e, 0x70, 0xe4, 0x13, 0x85, 0x8c, 0x8f, 0xbd, 0xd9, 0x64, 0xe4,
-	0xe9, 0x79, 0xe4, 0x7d, 0xc6, 0x40, 0x9b, 0x8f, 0x3b, 0x53, 0x98, 0x20, 0x21, 0xbb, 0x88, 0xab,
-	0xe7, 0x91, 0xbb, 0x76, 0x2e, 0x2f, 0x46, 0x38, 0x42, 0x63, 0x7b, 0xeb, 0xbf, 0x4d, 0xb2, 0x49,
-	0xe0, 0xac, 0xcd, 0xf8, 0x64, 0x31, 0xeb, 0x63, 0xd0, 0x11, 0x09, 0x93, 0x91, 0x6e, 0xbe, 0x85,
-	0x73, 0x5f, 0xe8, 0x04, 0x95, 0xc8, 0x44, 0x72, 0x0d, 0x8d, 0x08, 0x97, 0x83, 0x25, 0x4b, 0x84,
-	0x1a, 0xc4, 0x4c, 0x4d, 0xa8, 0xe5, 0x58, 0xad, 0x9a, 0x5f, 0x8b, 0x70, 0xf9, 0x71, 0x2d, 0xde,
-	0x33, 0x35, 0x69, 0x52, 0x78, 0xfe, 0x81, 0x8f, 0x45, 0xcc, 0xee, 0xc6, 0x6c, 0x3a, 0xda, 0x9b,
-	0x6f, 0xfe, 0x28, 0x00, 0xf4, 0x31, 0x78, 0x60, 0x5f, 0x22, 0x64, 0x21, 0x71, 0xa0, 0x1a, 0x0a,
-	0xcd, 0x95, 0x9c, 0x25, 0x12, 0xa7, 0x86, 0x55, 0xf1, 0xf7, 0x25, 0x72, 0x09, 0xe5, 0x85, 0x16,
-	0x6a, 0xca, 0x62, 0x41, 0x4f, 0x8c, 0xbd, 0x3b, 0x93, 0x1b, 0x68, 0xe8, 0x84, 0xa9, 0x44, 0x84,
-	0x83, 0x58, 0x72, 0x85, 0x9a, 0xe6, 0x1d, 0xab, 0x95, 0xf7, 0xeb, 0x5b, 0xf5, 0xde, 0x88, 0xe4,
-	0x25, 0x3c, 0x1b, 0xca, 0xa9, 0xd4, 0xe3, 0x2c, 0x57, 0x30, 0xb9, 0x46, 0x2a, 0x67, 0xc1, 0x18,
-	0x43, 0x39, 0x94, 0x59, 0xf0, 0x74, 0x13, 0x4c, 0xe5, 0x6d, 0x10, 0xa1, 0x91, 0xde, 0x11, 0xd5,
-	0x40, 0x86, 0x9a, 0x16, 0x9d, 0x7c, 0xab, 0xde, 0xee, 0xae, 0x9e, 0xae, 0xea, 0x9d, 0x9d, 0xd3,
-	0xeb, 0xe8, 0x3f, 0x4f, 0x57, 0xb7, 0x23, 0x99, 0x8c, 0x17, 0x81, 0xcb, 0x31, 0xf6, 0x76, 0x0b,
-	0x09, 0x03, 0xef, 0x70, 0x7f, 0x7a, 0x1e, 0x05, 0x4c, 0x0b, 0xb7, 0xd7, 0xf1, 0xeb, 0x19, 0xbf,
-	0x17, 0x6a, 0xf2, 0x1a, 0xc8, 0x50, 0x31, 0xbe, 0x7e, 0x91, 0x01, 0xc7, 0x78, 0x16, 0x89, 0x44,
-	0x84, 0xb4, 0xe4, 0x58, 0xad, 0x13, 0xff, 0x3c, 0x75, 0xee, 0x52, 0x83, 0x5c, 0xc0, 0xa9, 0x50,
-	0x0a, 0x15, 0x2d, 0x9b, 0x17, 0xdb, 0x1c, 0xc8, 0x3b, 0x28, 0x06, 0x66, 0xc9, 0x14, 0x1c, 0xab,
-	0x55, 0x7d, 0x73, 0xed, 0x1e, 0xf6, 0xc3, 0xfd, 0xbf, 0x06, 0xdd, 0x9c, 0xbf, 0x9d, 0x22, 0xef,
-	0xa1, 0xa4, 0x36, 0x85, 0xa0, 0x55, 0x03, 0xb8, 0x39, 0x06, 0x38, 0xe8, 0x4c, 0x37, 0xe7, 0xa7,
-	0x73, 0xe4, 0x01, 0x6a, 0x7a, 0xaf, 0x18, 0xb4, 0x66, 0x38, 0xaf, 0x8e, 0x71, 0x8e, 0x17, 0xa8,
-	0x9b, 0xf3, 0xff, 0x21, 0xb4, 0x2b, 0x50, 0x0a, 0x37, 0x56, 0xbf, 0x50, 0xae, 0x9c, 0x41, 0xdb,
-	0x7e, 0xfc, 0x65, 0xe7, 0x1e, 0x57, 0xb6, 0xf5, 0x6d, 0x65, 0x5b, 0xdf, 0x57, 0xb6, 0xf5, 0x73,
-	0x65, 0x5b, 0x5f, 0x7f, 0xdb, 0xb9, 0x4f, 0x85, 0x35, 0x37, 0x28, 0x9a, 0xc6, 0xdf, 0xfe, 0x0d,
-	0x00, 0x00, 0xff, 0xff, 0x59, 0xd1, 0xa2, 0xa6, 0x40, 0x03, 0x00, 0x00,
+	// 485 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x52, 0xcd, 0x6a, 0xdb, 0x30,
+	0x00, 0x8e, 0x9b, 0x34, 0x3f, 0x4a, 0xec, 0x6e, 0x5a, 0x07, 0xa6, 0x07, 0xd7, 0x35, 0x1b, 0xf5,
+	0x65, 0x36, 0xac, 0xb0, 0xcb, 0x60, 0x87, 0x34, 0x87, 0x64, 0x10, 0x18, 0xde, 0x61, 0xb0, 0x8b,
+	0x91, 0x65, 0xc5, 0xd6, 0x6c, 0x47, 0x8e, 0xe4, 0x10, 0xf6, 0x16, 0x7b, 0xac, 0x1e, 0x07, 0xbb,
+	0xec, 0x54, 0x36, 0xef, 0x2d, 0x76, 0x2a, 0x96, 0xe3, 0xa4, 0xa1, 0xb9, 0x18, 0xeb, 0xfb, 0x43,
+	0xe8, 0xfb, 0xc0, 0x15, 0x66, 0x38, 0xe1, 0x0c, 0xe1, 0xd8, 0xcd, 0x93, 0xc8, 0x15, 0xab, 0xd4,
+	0xfd, 0xc6, 0x02, 0x21, 0x3f, 0x4e, 0xce, 0x59, 0xc1, 0x20, 0xdc, 0x49, 0x1c, 0xb1, 0x4a, 0x9d,
+	0x8a, 0xb9, 0x38, 0x8f, 0x58, 0xc4, 0x24, 0xed, 0x56, 0x7f, 0xb5, 0xd2, 0x3a, 0x03, 0xea, 0x18,
+	0xe1, 0x64, 0x9d, 0x4f, 0x48, 0x81, 0x68, 0x2a, 0xac, 0x77, 0x40, 0xf3, 0x88, 0x28, 0x18, 0x27,
+	0x5b, 0x04, 0xbe, 0x02, 0x5a, 0xca, 0x36, 0xfe, 0x06, 0x15, 0x84, 0xfb, 0x19, 0xe2, 0x89, 0xae,
+	0x98, 0x8a, 0x3d, 0xf2, 0x46, 0x29, 0xdb, 0x7c, 0xa9, 0xc0, 0x39, 0xe2, 0x89, 0xf5, 0x12, 0xbc,
+	0xf8, 0x8c, 0x63, 0x92, 0xa1, 0xdb, 0x18, 0x2d, 0xa3, 0xc6, 0x6c, 0xfd, 0xea, 0x80, 0xde, 0x27,
+	0xf4, 0x3d, 0x65, 0x28, 0x84, 0x26, 0x18, 0x86, 0x44, 0x60, 0x4e, 0xf3, 0x82, 0xb2, 0xa5, 0x4c,
+	0x19, 0x78, 0x8f, 0x21, 0x78, 0x01, 0xfa, 0x6b, 0x41, 0xf8, 0x12, 0x65, 0x44, 0x3f, 0x91, 0xf4,
+	0xee, 0x0c, 0x5f, 0x03, 0x4d, 0x14, 0x88, 0x17, 0x24, 0xf4, 0x33, 0x8a, 0x39, 0x13, 0x7a, 0xdb,
+	0x54, 0xec, 0xb6, 0xa7, 0x6e, 0xd1, 0xb9, 0x04, 0xe1, 0x35, 0x38, 0x5b, 0xd0, 0x25, 0x15, 0xf1,
+	0x5e, 0xd7, 0x91, 0x3a, 0xad, 0x81, 0xf7, 0xc2, 0x8c, 0x85, 0x74, 0x41, 0xf7, 0xc2, 0xd3, 0x5a,
+	0xd8, 0xc0, 0x5b, 0x21, 0x03, 0x5a, 0x73, 0x47, 0xc6, 0x7d, 0x1a, 0x0a, 0xbd, 0x6b, 0xb6, 0x6d,
+	0x75, 0x3c, 0x2d, 0xef, 0x2f, 0xd5, 0xc9, 0x8e, 0x99, 0x4d, 0xc4, 0xff, 0xfb, 0xcb, 0x9b, 0x88,
+	0x16, 0xf1, 0x3a, 0x70, 0x30, 0xcb, 0xdc, 0x5d, 0x09, 0x61, 0xe0, 0x3e, 0xed, 0x4c, 0xac, 0xd2,
+	0x00, 0x09, 0xe2, 0xcc, 0x26, 0x9e, 0xba, 0xcf, 0x9f, 0x85, 0x02, 0xbe, 0x01, 0x70, 0xc1, 0x11,
+	0xae, 0x5e, 0xc4, 0xc7, 0x2c, 0xcb, 0x53, 0x52, 0x90, 0x50, 0xef, 0x99, 0x8a, 0x7d, 0xe2, 0x3d,
+	0x6f, 0x98, 0xdb, 0x86, 0x80, 0xe7, 0xe0, 0x94, 0x70, 0xce, 0xb8, 0xde, 0x97, 0x2f, 0x56, 0x1f,
+	0xe0, 0x7b, 0xd0, 0x0d, 0x64, 0xb1, 0x3a, 0x30, 0x15, 0x7b, 0xf8, 0xf6, 0xca, 0x79, 0xba, 0x09,
+	0xe7, 0xa0, 0xfa, 0x69, 0xcb, 0xdb, 0x5a, 0xe0, 0x07, 0xd0, 0xe3, 0xf5, 0x08, 0xf4, 0xa1, 0x74,
+	0x5b, 0xc7, 0xdc, 0x87, 0x3b, 0x99, 0xb6, 0xbc, 0xc6, 0x04, 0xe7, 0x60, 0x24, 0x1e, 0x8d, 0x41,
+	0x1f, 0xc9, 0x90, 0xeb, 0x63, 0x21, 0x47, 0x46, 0x33, 0x6d, 0x79, 0x07, 0xf6, 0xf1, 0x00, 0xf4,
+	0xc2, 0x9a, 0xfa, 0xd8, 0xe9, 0x0f, 0x9e, 0x81, 0xb1, 0x71, 0xf7, 0xd7, 0x68, 0xdd, 0x95, 0x86,
+	0xf2, 0xb3, 0x34, 0x94, 0xdf, 0xa5, 0xa1, 0xfc, 0x29, 0x0d, 0xe5, 0xc7, 0x3f, 0xa3, 0xf5, 0xb5,
+	0x53, 0x85, 0x06, 0x5d, 0x39, 0xee, 0x9b, 0x87, 0x00, 0x00, 0x00, 0xff, 0xff, 0xeb, 0x96, 0x40,
+	0x8e, 0x2b, 0x03, 0x00, 0x00,
 }

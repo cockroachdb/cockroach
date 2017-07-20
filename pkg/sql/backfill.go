@@ -411,7 +411,7 @@ func (sc *SchemaChanger) distBackfill(
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
 	origNRanges := -1
-	origFractionCompleted := sc.jobLogger.Payload().FractionCompleted
+	origFractionCompleted := sc.job.Payload().FractionCompleted
 	fractionLeft := 1 - origFractionCompleted
 	for {
 		// Repeat until getMutationToBackfill returns a mutation with no remaining
@@ -451,8 +451,8 @@ func (sc *SchemaChanger) distBackfill(
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				if err := sc.jobLogger.Progressed(ctx, fractionCompleted, jobs.Noop); err != nil {
-					log.Infof(ctx, "Ignoring error reporting progress %f for job %d: %v", fractionCompleted, *sc.jobLogger.JobID(), err)
+				if err := sc.job.Progressed(ctx, fractionCompleted, jobs.Noop); err != nil {
+					log.Infof(ctx, "Ignoring error reporting progress %f for job %d: %v", fractionCompleted, *sc.job.ID(), err)
 				}
 			}
 
