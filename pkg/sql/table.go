@@ -20,6 +20,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -247,7 +248,8 @@ type TableCollection struct {
 	// They are released once the transaction using them is complete.
 	// If the transaction gets pushed and the timestamp changes,
 	// the tables are released.
-	tables []*sqlbase.TableDescriptor
+	tables     []*sqlbase.TableDescriptor
+	origTables []*sqlbase.TableDescriptor
 
 	// leaseMgr manages acquiring and releasing per-table leases.
 	leaseMgr *LeaseManager
@@ -336,6 +338,7 @@ func (tc *TableCollection) getTableVersion(
 	}
 	tc.timestamp = txn.OrigTimestamp()
 	tc.tables = append(tc.tables, table)
+	tc.origTables = append(tc.origTables, table)
 	if log.V(2) {
 		log.Infof(ctx, "added table '%s' to table collection", tn)
 	}
@@ -391,6 +394,7 @@ func (tc *TableCollection) getTableVersionByID(
 	}
 	tc.timestamp = txn.OrigTimestamp()
 	tc.tables = append(tc.tables, table)
+	tc.origTables = append(tc.origTables, table)
 	if log.V(2) {
 		log.Infof(ctx, "added table '%s' to table collection", table.Name)
 	}
@@ -404,12 +408,17 @@ func (tc *TableCollection) getTableVersionByID(
 func (tc *TableCollection) releaseTables(ctx context.Context) {
 	if len(tc.tables) > 0 {
 		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
-		for _, table := range tc.tables {
+		for i, table := range tc.tables {
+			if !reflect.DeepEqual(*tc.tables[i], *tc.origTables[i]) {
+				panic("uh-oh!")
+			}
 			if err := tc.leaseMgr.Release(table); err != nil {
 				log.Warning(ctx, err)
 			}
 		}
+
 		tc.tables = tc.tables[:0]
+		tc.origTables = tc.origTables[:0]
 	}
 }
 
