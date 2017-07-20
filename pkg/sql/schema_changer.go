@@ -63,6 +63,7 @@ type SchemaChanger struct {
 	execAfter      time.Time
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *distSQLPlanner
+	jobRegistry    *jobs.Registry
 	job            *jobs.Job
 }
 
@@ -73,13 +74,15 @@ func NewSchemaChangerForTesting(
 	nodeID roachpb.NodeID,
 	db client.DB,
 	leaseMgr *LeaseManager,
+	jobRegistry *jobs.Registry,
 ) SchemaChanger {
 	return SchemaChanger{
-		tableID:    tableID,
-		mutationID: mutationID,
-		nodeID:     nodeID,
-		db:         db,
-		leaseMgr:   leaseMgr,
+		tableID:     tableID,
+		mutationID:  mutationID,
+		nodeID:      nodeID,
+		db:          db,
+		leaseMgr:    leaseMgr,
+		jobRegistry: jobRegistry,
 	}
 }
 
@@ -406,11 +409,11 @@ func (sc *SchemaChanger) exec(
 	foundJobID := false
 	for _, g := range tableDesc.MutationJobs {
 		if g.MutationID == sc.mutationID {
-			jl, err := jobs.GetJob(ctx, &sc.db, InternalExecutor{LeaseManager: sc.leaseMgr}, g.JobID)
+			job, err := sc.jobRegistry.LoadJob(ctx, g.JobID)
 			if err != nil {
 				return err
 			}
-			sc.job = jl
+			sc.job = job
 			foundJobID = true
 			break
 		}
@@ -697,7 +700,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				// Create a roll back job.
 				record := sc.job.Record
 				record.Description = "ROLL BACK " + record.Description
-				job := jobs.NewJob(&sc.db, InternalExecutor{LeaseManager: sc.leaseMgr}, record)
+				job := sc.jobRegistry.NewJob(record)
 				if err := job.Created(ctx); err != nil {
 					return err
 				}
@@ -861,6 +864,7 @@ type SchemaChangeManager struct {
 	schemaChangers map[sqlbase.ID]SchemaChanger
 	distSQLPlanner *distSQLPlanner
 	clock          *hlc.Clock
+	jobRegistry    *jobs.Registry
 }
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
@@ -874,6 +878,7 @@ func NewSchemaChangeManager(
 	gossip *gossip.Gossip,
 	leaseMgr *LeaseManager,
 	clock *hlc.Clock,
+	jobRegistry *jobs.Registry,
 ) *SchemaChangeManager {
 	return &SchemaChangeManager{
 		db:             db,
@@ -892,7 +897,8 @@ func NewSchemaChangeManager(
 			// TODO(radu): pass these knobs
 			DistSQLPlannerTestingKnobs{},
 		),
-		clock: clock,
+		jobRegistry: jobRegistry,
+		clock:       clock,
 	}
 }
 
@@ -939,6 +945,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					leaseMgr:       s.leaseMgr,
 					testingKnobs:   s.testingKnobs,
 					distSQLPlanner: s.distSQLPlanner,
+					jobRegistry:    s.jobRegistry,
 				}
 				// Keep track of existing schema changers.
 				oldSchemaChangers := make(map[sqlbase.ID]struct{}, len(s.schemaChangers))

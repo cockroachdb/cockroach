@@ -229,6 +229,14 @@ func (ts *TestServer) Clock() *hlc.Clock {
 	return nil
 }
 
+// JobRegistry returns the *jobs.Registry as an interface{}.
+func (ts *TestServer) JobRegistry() interface{} {
+	if ts != nil {
+		return ts.jobRegistry
+	}
+	return nil
+}
+
 // RPCContext returns the rpc context used by the TestServer.
 func (ts *TestServer) RPCContext() *rpc.Context {
 	if ts != nil {
