@@ -83,6 +83,9 @@ type TestServerInterface interface {
 	// DistSQLServer returns the *distsqlrun.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 
+	// JobRegistry returns the *jobs.Registry as an interface{}.
+	JobRegistry() interface{}
+
 	// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL inside the
 	// server's executor. The argument must be a distsqlplan.SpanResolver
 	// instance.
