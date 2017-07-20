@@ -48,7 +48,7 @@ func Format(buf *bytes.Buffer, ast interface{}) {
 	case Def:
 		buf.WriteString(kindNames[n.Kind])
 		buf.WriteByte(' ')
-		buf.WriteString(string(n.Name.Name))
+		buf.WriteString(n.Name.Name.String())
 		if n.Kind != PrimDef {
 			buf.WriteString(" {\n")
 			Format(buf, n.Items)
@@ -64,14 +64,14 @@ func Format(buf *bytes.Buffer, ast interface{}) {
 		}
 	case DefItem:
 		if n.Type.Name != "" {
-			buf.WriteString(string(n.Type.Name))
+			buf.WriteString(n.Type.Name.String())
 			if n.IsSlice {
 				buf.WriteString("[]")
 			}
 			buf.WriteByte(' ')
 		}
 		if n.Name.Name != "" {
-			buf.WriteString(string(n.Name.Name))
+			buf.WriteString(n.Name.Name.String())
 			buf.WriteByte(' ')
 		}
 		if n.Type.Name != "" || n.Name.Name != "" {

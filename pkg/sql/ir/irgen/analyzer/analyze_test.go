@@ -29,53 +29,60 @@ func TestAnalyze(t *testing.T) {
 		exp    string
 		expErr string
 	}{
-		{`prim a; prim a`, ``, `<input>:1:14: type "a" was defined previously at <input>:1:6`},
+		{`prim A; prim A`, ``, `<input>:1:14: type "A" was defined previously at <input>:1:6`},
 
-		{`struct blah{}`, `(typedef
-    :name blah
+		{`struct Blah{}`, `(typedef
+    :name Blah
     :type (struct))
 `, ``},
 
-		{`struct blah{int x = 3}`, ``, `<input>:1:13: type "int" was not defined`},
-		{`prim int; struct blah{int x = 3}`, `(typedef :name int)
+		{`struct Blah{int X = 3}`, ``, `<input>:1:13: type "int" was not defined`},
+		{`prim int; struct Blah{int X = 3}`, `(typedef :name int)
 (typedef
-    :name blah
+    :name Blah
     :type 
         (struct
-            (field :name x :type int :isslice false :tag 3)
+            (field :name X :type int :isslice false :tag 3)
         ))
 `, ``},
 
-		{`enum x{a=1;a=2}`, ``, `<input>:1:12: enumeration constant or struct field "a" appeared previously in this definition at <input>:1:8`},
-		{`enum x{a=1;b=1}`, ``, `<input>:1:14: tag 1 appeared previously in this definition at <input>:1:10`},
-		{`enum x{a=1;b=2}`, `(typedef
-    :name x
+		{`enum X{A=1;A=2}`, ``, `<input>:1:12: enumeration constant or struct field "A" appeared previously in this definition at <input>:1:8`},
+		{`enum X{A=1;B=1}`, ``, `<input>:1:14: tag 1 appeared previously in this definition at <input>:1:10`},
+		{`enum X{A=1;B=2}`, `(typedef
+    :name X
     :type 
         (enum
-            (const :name a :tag 1)
-            (const :name b :tag 2)
+            (const :name A :tag 1)
+            (const :name B :tag 2)
         ))
 `, ``},
 
-		{`sum x{a=1;b=2}`, ``,
-			`<input>:1:7: type "a" was not defined`},
-		{`prim a;prim b;sum x{a=1;b=2}`, ``,
-			`<input>:1:21: sum alternative "a" is not a struct`},
-		{`struct a{}sum x{a=1;a=2}`, ``, `<input>:1:21: sum alternative "a" appeared previously in this definition at <input>:1:17`},
-		{`struct a{}struct b{}sum x{a=1;b=2}`, `(typedef
-    :name a
+		{`sum X{A=1;B=2}`, ``,
+			`<input>:1:7: type "A" was not defined`},
+		{`prim A;prim B;sum X{A=1;B=2}`, ``,
+			`<input>:1:21: sum alternative "A" is not a struct`},
+		{`struct A{}sum X{A=1;A=2}`, ``, `<input>:1:21: sum alternative "A" appeared previously in this definition at <input>:1:17`},
+		{`struct A{}struct B{}sum X{A=1;B=2}`, `(typedef
+    :name A
     :type (struct))
 (typedef
-    :name b
+    :name B
     :type (struct))
 (typedef
-    :name x
+    :name X
     :type 
         (sum
-            (alt :type a :tag 1)
-            (alt :type b :tag 2)
+            (alt :type A :tag 1)
+            (alt :type B :tag 2)
         ))
 `, ``},
+
+		{`sum foo{}`, ``,
+			`<input>:1:5: name "foo" is not exported`},
+		{`enum Foo{bar=1}`, ``,
+			`<input>:1:10: name "bar" is not exported`},
+		{`struct Foo{Foo bar=1}`, ``,
+			`<input>:1:16: name "bar" is not exported`},
 	}
 
 	for _, test := range testData {
