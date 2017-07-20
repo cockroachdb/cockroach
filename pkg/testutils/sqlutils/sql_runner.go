@@ -92,7 +92,7 @@ func (sr *SQLRunner) QueryRow(query string, args ...interface{}) *Row {
 // represented as "NULL". Empty results are represented by an empty (but
 // non-nil) slice. Kills the test on errors.
 func (sr *SQLRunner) QueryStr(query string, args ...interface{}) [][]string {
-	rows := sr.Query(query)
+	rows := sr.Query(query, args...)
 	cols, err := rows.Columns()
 	if err != nil {
 		sr.Fatal(err)
