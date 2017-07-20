@@ -445,6 +445,22 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
+// CancelTransaction looks up and cancells the matching txn in the session registry.
+func (r *SessionRegistry) CancelTransaction(txnID string, username string) error {
+	r.Lock()
+	defer r.Unlock()
+
+	var found bool
+	var err error
+	for s := range r.store {
+		found, err = s.CancelTransaction(txnID, username)
+		if found {
+			return err
+		}
+	}
+	return errors.Errorf("no txn %s was found", txnID)
+}
+
 // NewSession creates and initializes a new Session object.
 // remote can be nil.
 func NewSession(
@@ -948,6 +964,12 @@ type txnState struct {
 		syncutil.RWMutex
 
 		txn *client.Txn
+
+		// IsTxnCancelled indicates whether the txn is cancelled.
+		// It will be set in transaction cancellation.
+		// It will be checked at key points by the executor
+		// and if it is true the executor will abort the txn.
+		IsTxnCancelled bool
 	}
 
 	// If we're in a SQL txn, txnResults is the ResultsGroup that statements in
@@ -1011,6 +1033,13 @@ func (ts *txnState) SetState(val TxnStateEnum) {
 // not in an error state.
 func (ts *txnState) TxnIsOpen() bool {
 	return ts.State() == Open || ts.State() == AutoRetry
+}
+
+// IsTxnCancelled returns true if the txn was flagged as cancelled.
+func (ts *txnState) IsTxnCancelled() bool {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	return ts.mu.IsTxnCancelled
 }
 
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
@@ -1104,6 +1133,7 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	ts.mu.Lock()
 	ts.mu.txn = client.NewTxn(e.cfg.DB)
+	ts.mu.txn.Proto().ID = uuid.FromUint128(e.generateID())
 	ts.mu.Unlock()
 	if ts.implicitTxn {
 		ts.mu.txn.SetDebugName(sqlImplicitTxnName)

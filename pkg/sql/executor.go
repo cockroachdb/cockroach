@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -359,6 +360,43 @@ type DistSQLPlannerTestingKnobs struct {
 	// return a 0..+inf acceptable version range.
 	OverrideDistSQLVersionCheck func(
 		node roachpb.NodeID) (distsqlrun.DistSQLVersionGossipInfo, error)
+}
+
+// CancelTransaction cancells all active queries under the txn in addition to rolling it back.
+func (s *Session) CancelTransaction(txnID string, username string) (bool, error) {
+	if err := func() error {
+		s.TxnState.mu.Lock()
+		defer s.TxnState.mu.Unlock()
+
+		if s.TxnState.mu.txn == nil {
+			return errors.Errorf("the session has no txn")
+		}
+
+		sTxnID := s.TxnState.mu.txn.ID().String()
+		if sTxnID != txnID {
+			return errors.Errorf("a txn with ID %s was not found in this session", txnID)
+		}
+
+		return nil
+	}(); err != nil {
+		return false, err
+	}
+	if username != security.RootUser && username != s.User {
+		return true, errors.Errorf("a matching txn was found but the user is not authorized")
+	}
+
+	s.mu.Lock()
+	for _, query := range s.mu.ActiveQueries {
+		query.cancel()
+	}
+
+	s.TxnState.mu.Lock()
+	s.TxnState.mu.IsTxnCancelled = true
+	s.TxnState.mu.Unlock()
+
+	s.mu.Unlock()
+
+	return true, nil
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -1115,7 +1153,7 @@ func (e *Executor) execSingleStatement(
 		panic("execStmt called outside of a txn")
 	}
 
-	queryID := e.generateQueryID()
+	queryID := e.generateID()
 
 	queryMeta := &queryMeta{
 		start: session.phaseTimes[sessionEndParse],
@@ -1402,6 +1440,12 @@ func (e *Executor) execStmtInOpenTxn(
 
 	// After the statement is executed, we might have to do state transitions.
 	defer func() {
+		// WIP - this is where we rollback the txn and reset the flag. (?)
+		// if txnState.IsTxnCancelled() {
+		// rollbackSQLTransaction(txnState)
+		// txnState.mu.Lock()
+		// txnState.mu.IsTxnCancelled = false
+		// txnState.mu.Unlock()
 		if err != nil {
 			if !txnState.TxnIsOpen() {
 				panic(fmt.Sprintf("unexpected txnState when cleaning up: %v", txnState.State()))
@@ -2018,9 +2062,9 @@ func (e *Executor) updateStmtCounts(stmt Statement) {
 	}
 }
 
-// generateQueryID generates a unique ID for a query based on the node's
+// generateID generates a unique ID based on the node's
 // ID and its current HLC timestamp.
-func (e *Executor) generateQueryID() uint128.Uint128 {
+func (e *Executor) generateID() uint128.Uint128 {
 	timestamp := e.cfg.Clock.Now()
 
 	loInt := (uint64)(e.cfg.NodeID.Get())

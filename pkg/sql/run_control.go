@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 type controlJobNode struct {
@@ -207,8 +208,40 @@ type cancelTransactionNode struct {
 
 func (*cancelTransactionNode) Values() parser.Datums { return nil }
 
-func (n *cancelTransactionNode) Start(runParams) error {
-	return fmt.Errorf("transaction cancellation is not implemented")
+func (n *cancelTransactionNode) Start(params runParams) error {
+	statusServer := n.p.session.execCfg.StatusServer
+
+	txnIDDatum, err := n.txnID.Eval(&n.p.evalCtx)
+	if err != nil {
+		return err
+	}
+	txnIDStr := parser.AsStringWithFlags(txnIDDatum, parser.FmtBareStrings)
+
+	txnUUID, error := uuid.FromString(txnIDStr)
+	if error != nil {
+		return errors.Wrapf(err, "invalid transaction ID '%s'", txnIDStr)
+	}
+	txnID := txnUUID.ToUint128()
+
+	// Get the lowest 32 bits of the txn ID.
+	nodeID := 0xFFFFFFFF & txnID.Lo
+
+	request := &serverpb.CancelTransactionRequest{
+		TransactionId: txnIDStr,
+		NodeId:        fmt.Sprintf("%d", nodeID),
+		Username:      n.p.session.User,
+	}
+
+	response, err := statusServer.CancelTransaction(params.ctx, request)
+	if err != nil {
+		return err
+	}
+
+	if !response.Cancelled {
+		return fmt.Errorf("could not cancel transaction %s: %s", txnID, response.Error)
+	}
+
+	return nil
 }
 
 func (*cancelTransactionNode) Close(context.Context) {}
