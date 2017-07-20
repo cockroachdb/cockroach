@@ -57,12 +57,17 @@ type insertNode struct {
 	insertColIDtoRowIndex map[sqlbase.ColumnID]int
 	tw                    tableWriter
 
+	isUpsertReturning bool
+
 	run struct {
 		// The following fields are populated during Start().
 		editNodeRun
 
 		rowIdxToRetIdx []int
 		rowTemplate    parser.Datums
+
+		doneUpserting bool
+		rowsUpserted  *sqlbase.RowContainer
 	}
 }
 
@@ -82,16 +87,15 @@ func (p *planner) Insert(
 	if err != nil {
 		return nil, err
 	}
+	isUpsertReturning := false
 	if n.OnConflict != nil {
 		if !n.OnConflict.DoNothing {
 			if err := p.CheckPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
 				return nil, err
 			}
 		}
-		// TODO(dan): Support RETURNING in UPSERTs.
 		if _, ok := n.Returning.(*parser.ReturningExprs); ok {
-			return nil, pgerror.UnimplementedWithIssueErrorf(6637,
-				"RETURNING is not supported with UPSERT")
+			isUpsertReturning = true
 		}
 	}
 
@@ -179,6 +183,7 @@ func (p *planner) Insert(
 				conflictIndex: *conflictIndex,
 				alloc:         &p.alloc,
 				mon:           &p.session.TxnState.mon,
+				collectRows:   isUpsertReturning,
 			}
 			tw = tu
 		} else {
@@ -218,6 +223,7 @@ func (p *planner) Insert(
 				autoCommit:    p.autoCommit,
 				alloc:         &p.alloc,
 				mon:           &p.session.TxnState.mon,
+				collectRows:   isUpsertReturning,
 				fkTables:      fkTables,
 				updateCols:    updateCols,
 				conflictIndex: *conflictIndex,
@@ -235,7 +241,8 @@ func (p *planner) Insert(
 		defaultExprs:          defaultExprs,
 		insertCols:            ri.InsertCols,
 		insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
-		tw: tw,
+		isUpsertReturning:     isUpsertReturning,
+		tw:                    tw,
 	}
 
 	if err := in.checkHelper.init(ctx, p, tn, en.tableDesc); err != nil {
@@ -252,6 +259,7 @@ func (p *planner) Insert(
 
 func (n *insertNode) Start(params runParams) error {
 	// Prepare structures for building values to pass to rh.
+	// TODO(couchand): Delete this, use tablewriter interface.
 	if n.rh.exprs != nil {
 		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain all the table
 		// columns. We need to pass values for all table columns to rh, in the correct order; we
@@ -282,8 +290,11 @@ func (n *insertNode) Start(params runParams) error {
 }
 
 func (n *insertNode) Close(ctx context.Context) {
-	n.run.rows.Close(ctx)
 	n.tw.close(ctx)
+	n.run.rows.Close(ctx)
+	if n.run.rowsUpserted != nil {
+		n.run.rowsUpserted.Close(ctx)
+	}
 	switch t := n.tw.(type) {
 	case *tableInserter:
 		*t = tableInserter{}
@@ -297,13 +308,57 @@ func (n *insertNode) Close(ctx context.Context) {
 }
 
 func (n *insertNode) Next(params runParams) (bool, error) {
+	if n.isUpsertReturning {
+		return n.drain(params)
+	}
+
+	return n.internalNext(params)
+}
+
+// Because TableUpserter batches the upserts, we need to completely drain the
+// source and handle all the rows before returning from the first call to Next,
+// so that we can return an upserted row from each call to Values.
+func (n *insertNode) drain(params runParams) (bool, error) {
+	for !n.run.doneUpserting {
+		_, err := n.internalNext(params)
+		if err != nil {
+			return false, err
+		}
+	}
+	hasRows := n.run.rowsUpserted.Len() > 0
+	return hasRows, nil
+}
+
+func (n *insertNode) internalNext(params runParams) (bool, error) {
 	if next, err := n.run.rows.Next(params); !next {
 		if err == nil {
 			if err := params.p.cancelChecker.Check(); err != nil {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			err = n.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
+			rows, err := n.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
+			if err != nil {
+				return false, err
+			}
+
+			if n.isUpsertReturning {
+				n.run.rowsUpserted = sqlbase.NewRowContainer(
+					params.p.session.TxnState.makeBoundAccount(),
+					sqlbase.ColTypeInfoFromResCols(n.rh.columns),
+					0,
+				)
+				for i := 0; i < rows.Len(); i++ {
+					cooked, err := n.rh.cookResultRow(rows.At(i))
+					if err != nil {
+						return false, err
+					}
+					_, err = n.run.rowsUpserted.AddRow(params.ctx, cooked)
+					if err != nil {
+						return false, err
+					}
+				}
+				n.run.doneUpserting = true
+			}
 		}
 		return false, err
 	}
@@ -325,17 +380,20 @@ func (n *insertNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	for i, val := range rowVals {
-		if n.run.rowTemplate != nil {
-			n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
+	// Handle regular INSERT ... RETURNING without ON CONFLICT clause
+	if !n.isUpsertReturning {
+		for i, val := range rowVals {
+			if n.run.rowTemplate != nil {
+				n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
+			}
 		}
-	}
 
-	resultRow, err := n.rh.cookResultRow(n.run.rowTemplate)
-	if err != nil {
-		return false, err
+		resultRow, err := n.rh.cookResultRow(n.run.rowTemplate)
+		if err != nil {
+			return false, err
+		}
+		n.run.resultRow = resultRow
 	}
-	n.run.resultRow = resultRow
 
 	return true, nil
 }
@@ -508,5 +566,11 @@ func fillDefaults(
 }
 
 func (n *insertNode) Values() parser.Datums {
-	return n.run.resultRow
+	if !n.isUpsertReturning {
+		return n.run.resultRow
+	}
+
+	row := n.run.rowsUpserted.At(0)
+	n.run.rowsUpserted.PopFirst()
+	return row
 }
