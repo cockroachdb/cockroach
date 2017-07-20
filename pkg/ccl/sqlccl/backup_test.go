@@ -348,9 +348,9 @@ func backupAndRestore(
 }
 
 func verifySystemJob(
-	db *sqlutils.SQLRunner, offset int, expectedType string, expected jobs.JobRecord,
+	db *sqlutils.SQLRunner, offset int, expectedType string, expected jobs.Record,
 ) error {
-	var actual jobs.JobRecord
+	var actual jobs.Record
 	var rawDescriptorIDs pq.Int64Array
 	var actualType string
 	var statusString string
@@ -377,7 +377,7 @@ func verifySystemJob(
 			offset, strings.Join(pretty.Diff(e, a), "\n"))
 	}
 
-	if e, a := jobs.JobStatusSucceeded, jobs.JobStatus(statusString); e != a {
+	if e, a := jobs.StatusSucceeded, jobs.Status(statusString); e != a {
 		return errors.Errorf("job %d: expected status %v, got %v", offset, e, a)
 	}
 	if e, a := expectedType, actualType; e != a {
@@ -422,7 +422,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`, fullDir)
 
 	sqlDB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
-	if err := verifySystemJob(sqlDB, 1, jobs.JobTypeBackup, jobs.JobRecord{
+	if err := verifySystemJob(sqlDB, 1, jobs.TypeBackup, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`BACKUP DATABASE data TO '%s' INCREMENTAL FROM '%s'`,
@@ -438,7 +438,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	}
 
 	sqlDB.Exec(`RESTORE data.* FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
-	if err := verifySystemJob(sqlDB, 2, jobs.JobTypeRestore, jobs.JobRecord{
+	if err := verifySystemJob(sqlDB, 2, jobs.TypeRestore, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`RESTORE data.* FROM '%s', '%s' WITH OPTIONS ('into_db'='restoredb')`,
@@ -612,12 +612,12 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 		).Scan(&payloadBytes); err != nil {
 			return err
 		}
-		var payload jobs.JobPayload
+		var payload jobs.Payload
 		if err := payload.Unmarshal(payloadBytes); err != nil {
 			return err
 		}
 		switch d := payload.Details.(type) {
-		case *jobs.JobPayload_Restore:
+		case *jobs.Payload_Restore:
 			lowWaterMark := d.Restore.LowWaterMark
 			low := keys.MakeTablePrefix(ip.backupTableID)
 			high := keys.MakeTablePrefix(ip.backupTableID + 1)

@@ -609,7 +609,7 @@ func Restore(
 	uris []string,
 	targets parser.TargetList,
 	opt parser.KVOptions,
-	jobLogger *jobs.JobLogger,
+	job *jobs.Job,
 ) (roachpb.BulkOpSummary, error) {
 
 	db := *p.ExecCfg().DB
@@ -692,12 +692,12 @@ func Restore(
 	}
 
 	for _, desc := range newTableIDs {
-		jobLogger.Job.DescriptorIDs = append(jobLogger.Job.DescriptorIDs, desc)
+		job.Record.DescriptorIDs = append(job.Record.DescriptorIDs, desc)
 	}
-	if err := jobLogger.Created(initCtx); err != nil {
+	if err := job.Created(initCtx); err != nil {
 		return failed, err
 	}
-	if err := jobLogger.Started(initCtx); err != nil {
+	if err := job.Started(initCtx); err != nil {
 		return failed, err
 	}
 
@@ -789,11 +789,11 @@ func Restore(
 	}
 
 	progressLogger := jobProgressLogger{
-		jobLogger:   jobLogger,
+		job:         job,
 		totalChunks: len(importRequests),
 		progressedFn: func(ctx context.Context, details interface{}) {
 			switch d := details.(type) {
-			case *jobs.JobPayload_Restore:
+			case *jobs.Payload_Restore:
 				mu.Lock()
 				if mu.lowWaterMark >= 0 {
 					d.Restore.LowWaterMark = importRequests[mu.lowWaterMark].Key
@@ -843,7 +843,7 @@ func Restore(
 				// Errors while updating progress are not important enough to merit
 				// failing the entire restore.
 				log.Errorf(progressCtx, "RESTORE ignoring error while updating progress on job %d (%s): %+v",
-					jobLogger.JobID(), jobLogger.Job.Description, err)
+					job.ID(), job.Record.Description, err)
 			}
 			return nil
 		})
@@ -924,10 +924,10 @@ func restorePlanHook(
 		if err != nil {
 			return nil, err
 		}
-		jobLogger := jobs.NewJobLogger(p.ExecCfg().DB, sql.InternalExecutor{LeaseManager: p.LeaseMgr()}, jobs.JobRecord{
+		job := jobs.NewJob(p.ExecCfg().DB, sql.InternalExecutor{LeaseManager: p.LeaseMgr()}, jobs.Record{
 			Description: description,
 			Username:    p.User(),
-			Details:     jobs.RestoreJobDetails{},
+			Details:     jobs.RestoreDetails{},
 		})
 		res, err := Restore(
 			ctx,
@@ -935,25 +935,25 @@ func restorePlanHook(
 			from,
 			restore.Targets,
 			restore.Options,
-			jobLogger,
+			job,
 		)
 		jobCtx, jobSpan := tracing.ChildSpan(ctx, "log-job")
 		defer tracing.FinishSpan(jobSpan)
 		if err != nil {
-			jobLogger.Failed(jobCtx, err)
+			job.Failed(jobCtx, err)
 			return nil, err
 		}
-		if err := jobLogger.Succeeded(jobCtx); err != nil {
+		if err := job.Succeeded(jobCtx); err != nil {
 			// An error while marking the job as successful is not important enough to
 			// merit failing the entire restore.
 			log.Errorf(jobCtx, "RESTORE ignoring error while marking job %d (%s) as successful: %+v",
-				jobLogger.JobID(), description, err)
+				job.ID(), description, err)
 		}
 		// TODO(benesch): emit periodic progress updates once we have the
 		// infrastructure to stream responses.
 		ret := []parser.Datums{{
-			parser.NewDInt(parser.DInt(*jobLogger.JobID())),
-			parser.NewDString(string(jobs.JobStatusSucceeded)),
+			parser.NewDInt(parser.DInt(*job.ID())),
+			parser.NewDString(string(jobs.StatusSucceeded)),
 			parser.NewDFloat(parser.DFloat(1.0)),
 			parser.NewDInt(parser.DInt(res.Rows)),
 			parser.NewDInt(parser.DInt(res.IndexEntries)),

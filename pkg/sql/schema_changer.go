@@ -63,7 +63,7 @@ type SchemaChanger struct {
 	execAfter      time.Time
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *distSQLPlanner
-	jobLogger      *jobs.JobLogger
+	job            *jobs.Job
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -406,11 +406,11 @@ func (sc *SchemaChanger) exec(
 	foundJobID := false
 	for _, g := range tableDesc.MutationJobs {
 		if g.MutationID == sc.mutationID {
-			jl, err := jobs.GetJobLogger(ctx, &sc.db, InternalExecutor{LeaseManager: sc.leaseMgr}, g.JobID)
+			jl, err := jobs.GetJob(ctx, &sc.db, InternalExecutor{LeaseManager: sc.leaseMgr}, g.JobID)
 			if err != nil {
 				return err
 			}
-			sc.jobLogger = jl
+			sc.job = jl
 			foundJobID = true
 			break
 		}
@@ -421,9 +421,9 @@ func (sc *SchemaChanger) exec(
 		return nil
 	}
 
-	if err := sc.jobLogger.Started(ctx); err != nil {
+	if err := sc.job.Started(ctx); err != nil {
 		if log.V(2) {
-			log.Infof(ctx, "Failed to mark job %d as started: %v", *sc.jobLogger.JobID(), err)
+			log.Infof(ctx, "Failed to mark job %d as started: %v", *sc.job.ID(), err)
 		}
 	}
 
@@ -451,8 +451,8 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	evalCtx parser.EvalContext,
 ) error {
-	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.jobLogger.JobID(), err)
-	sc.jobLogger.Failed(ctx, err)
+	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
+	sc.job.Failed(ctx, err)
 	if errReverse := sc.reverseMutations(ctx, err); errReverse != nil {
 		// Although the backfill did hit an integrity constraint violation
 		// and made a decision to reverse the mutations,
@@ -595,9 +595,9 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 		}
 		return nil
 	}, func(txn *client.Txn) error {
-		if err := sc.jobLogger.WithTxn(txn).Succeeded(ctx); err != nil {
+		if err := sc.job.WithTxn(txn).Succeeded(ctx); err != nil {
 			log.Warningf(ctx, "schema change ignoring error while marking job %d as successful: %+v",
-				sc.jobLogger.JobID(), err)
+				sc.job.ID(), err)
 		}
 		// Log "Finish Schema Change" event. Only the table ID and mutation ID
 		// are logged; this can be correlated with the DDL statement that
@@ -645,9 +645,9 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	if err := sc.RunStateMachineBeforeBackfill(ctx); err != nil {
 		return err
 	}
-	if err := sc.jobLogger.Progressed(ctx, .1, jobs.Noop); err != nil {
+	if err := sc.job.Progressed(ctx, .1, jobs.Noop); err != nil {
 		log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
-			sc.jobLogger.JobID(), err)
+			sc.job.ID(), err)
 	}
 
 	// Run backfill(s).
@@ -695,17 +695,17 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 		for i := range desc.MutationJobs {
 			if desc.MutationJobs[i].MutationID == sc.mutationID {
 				// Create a roll back job.
-				job := sc.jobLogger.Job
-				job.Description = "ROLL BACK " + job.Description
-				jobLogger := jobs.NewJobLogger(&sc.db, InternalExecutor{LeaseManager: sc.leaseMgr}, job)
-				if err := jobLogger.Created(ctx); err != nil {
+				record := sc.job.Record
+				record.Description = "ROLL BACK " + record.Description
+				job := jobs.NewJob(&sc.db, InternalExecutor{LeaseManager: sc.leaseMgr}, record)
+				if err := job.Created(ctx); err != nil {
 					return err
 				}
-				if err := jobLogger.Started(ctx); err != nil {
+				if err := job.Started(ctx); err != nil {
 					return err
 				}
-				desc.MutationJobs[i].JobID = *jobLogger.JobID()
-				sc.jobLogger = jobLogger
+				desc.MutationJobs[i].JobID = *job.ID()
+				sc.job = job
 				break
 			}
 		}

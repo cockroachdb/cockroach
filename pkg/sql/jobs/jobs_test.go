@@ -43,28 +43,28 @@ import (
 	"github.com/lib/pq"
 )
 
-// jobExpectation defines the information necessary to determine the validity of
+// expectation defines the information necessary to determine the validity of
 // a job in the system.jobs table.
-type jobExpectation struct {
-	Job               jobs.JobRecord
+type expectation struct {
+	Record            jobs.Record
 	Type              string
 	Before            time.Time
 	FractionCompleted float32
 	Error             string
 }
 
-// verifyJobRecord verifies that the jobExpectation matches the job record
+// verifyJobRecord verifies that the expectation matches the job record
 // stored in the system.jobs table.
 func verifyJobRecord(
 	db *sqlutils.SQLRunner,
 	kvDB *client.DB,
 	ex sqlutil.InternalExecutor,
-	jl *jobs.JobLogger,
-	expectedStatus jobs.JobStatus,
-	expected jobExpectation,
+	job *jobs.Job,
+	expectedStatus jobs.Status,
+	expected expectation,
 ) error {
 	testSource := func(source string) error {
-		var actualJob jobs.JobRecord
+		var actualJob jobs.Record
 		var typ string
 		var rawDescriptorIDs pq.Int64Array
 		var statusString string
@@ -87,28 +87,28 @@ func verifyJobRecord(
 			&created, &started, &finished, &modified, &fractionCompleted, &errMessage,
 		)
 
-		// Verify a newly-instantiated JobLogger's properties.
-		fetched, err := jobs.GetJobLogger(context.TODO(), kvDB, ex, *jl.JobID())
+		// Verify a newly-instantiated Record's properties.
+		fetched, err := jobs.GetJob(context.TODO(), kvDB, ex, *job.ID())
 		if err != nil {
 			return err
 		}
-		if e, a := jl.Payload(), fetched.Payload(); !reflect.DeepEqual(e, a) {
+		if e, a := job.Payload(), fetched.Payload(); !reflect.DeepEqual(e, a) {
 			diff := strings.Join(pretty.Diff(e, a), "\n")
-			return errors.Errorf("Job Payloads do not match:\n%s", diff)
+			return errors.Errorf("Record Payloads do not match:\n%s", diff)
 		}
 
 		// Verify the upstream-provided fields.
-		actualJob.Details = fetched.Job.Details
+		actualJob.Details = fetched.Record.Details
 		for _, id := range rawDescriptorIDs {
 			actualJob.DescriptorIDs = append(actualJob.DescriptorIDs, sqlbase.ID(id))
 		}
-		if e, a := expected.Job, actualJob; !reflect.DeepEqual(e, a) {
+		if e, a := expected.Record, actualJob; !reflect.DeepEqual(e, a) {
 			diff := strings.Join(pretty.Diff(e, a), "\n")
 			return errors.Errorf("JobRecords do not match:\n%s", diff)
 		}
 
-		// Verify JobLogger-managed fields.
-		status := jobs.JobStatus(statusString)
+		// Verify Record-managed fields.
+		status := jobs.Status(statusString)
 		if e, a := expectedStatus, status; e != a {
 			return errors.Errorf("expected status %v, got %v", e, a)
 		}
@@ -119,7 +119,7 @@ func verifyJobRecord(
 			return errors.Errorf("expected fraction completed %f, got %f", e, a)
 		}
 
-		// Check JobLogger-managed timestamps for sanity.
+		// Check Record-managed timestamps for sanity.
 		verifyModifiedAgainst := func(name string, ts time.Time) error {
 			if modified.Time.Before(ts) {
 				return errors.Errorf("modified time %v before %s time %v", modified, name, ts)
@@ -136,17 +136,17 @@ func verifyJobRecord(
 				created, expected.Before,
 			)
 		}
-		if status == jobs.JobStatusPending {
+		if status == jobs.StatusPending {
 			return verifyModifiedAgainst("created", created.Time)
 		}
 
-		if !started.Valid && status == jobs.JobStatusSucceeded {
+		if !started.Valid && status == jobs.StatusSucceeded {
 			return errors.Errorf("started time is NULL but job claims to be successful")
 		}
 		if started.Valid && created.Time.After(started.Time) {
 			return errors.Errorf("created time %v is after started time %v", created, started)
 		}
-		if status == jobs.JobStatusRunning {
+		if status == jobs.StatusRunning {
 			return verifyModifiedAgainst("started", started.Time)
 		}
 
@@ -175,30 +175,30 @@ func TestJobLogger(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(t, rawSQLDB)
 
 		// Woody is a successful job.
-		woodyJob := jobs.JobRecord{
+		woodyRecord := jobs.Record{
 			Description:   "There's a snake in my boot!",
 			Username:      "Woody Pride",
 			DescriptorIDs: []sqlbase.ID{1, 2, 3},
-			Details:       jobs.RestoreJobDetails{},
+			Details:       jobs.RestoreDetails{},
 		}
-		woodyExpectation := jobExpectation{
-			Job:    woodyJob,
-			Type:   jobs.JobTypeRestore,
+		woodyExpectation := expectation{
+			Record: woodyRecord,
+			Type:   jobs.TypeRestore,
 			Before: timeutil.Now(),
 		}
-		woodyLogger := jobs.NewJobLogger(kvDB, executor, woodyJob)
+		woodyJob := jobs.NewJob(kvDB, executor, woodyRecord)
 
-		if err := woodyLogger.Created(ctx); err != nil {
+		if err := woodyJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, woodyLogger, jobs.JobStatusPending, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusPending, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := woodyLogger.Started(ctx); err != nil {
+		if err := woodyJob.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, woodyLogger, jobs.JobStatusRunning, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
@@ -212,229 +212,229 @@ func TestJobLogger(t *testing.T) {
 			{0.0, 0.0}, {0.5, 0.5}, {0.5, 0.5}, {0.4, 0.5}, {0.8, 0.8}, {1.0, 1.0},
 		}
 		for _, f := range progresses {
-			if err := woodyLogger.Progressed(ctx, f.actual, jobs.Noop); err != nil {
+			if err := woodyJob.Progressed(ctx, f.actual, jobs.Noop); err != nil {
 				t.Fatal(err)
 			}
 			woodyExpectation.FractionCompleted = f.expected
-			if err := verifyJobRecord(db, kvDB, executor, woodyLogger, jobs.JobStatusRunning, woodyExpectation); err != nil {
+			if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
 				t.Fatal(err)
 			}
 		}
 
 		// Test Progressed callbacks.
-		if err := woodyLogger.Progressed(ctx, 1.0, func(_ context.Context, details interface{}) {
-			details.(*jobs.JobPayload_Restore).Restore.LowWaterMark = roachpb.Key("mariana")
+		if err := woodyJob.Progressed(ctx, 1.0, func(_ context.Context, details interface{}) {
+			details.(*jobs.Payload_Restore).Restore.LowWaterMark = roachpb.Key("mariana")
 		}); err != nil {
 			t.Fatal(err)
 		}
-		woodyExpectation.Job.Details = jobs.RestoreJobDetails{LowWaterMark: roachpb.Key("mariana")}
-		if err := verifyJobRecord(db, kvDB, executor, woodyLogger, jobs.JobStatusRunning, woodyExpectation); err != nil {
+		woodyExpectation.Record.Details = jobs.RestoreDetails{LowWaterMark: roachpb.Key("mariana")}
+		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := woodyLogger.Succeeded(ctx); err != nil {
+		if err := woodyJob.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, woodyLogger, jobs.JobStatusSucceeded, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		// Buzz fails after it starts running.
-		buzzJob := jobs.JobRecord{
+		buzzRecord := jobs.Record{
 			Description:   "To infinity and beyond!",
 			Username:      "Buzz Lightyear",
 			DescriptorIDs: []sqlbase.ID{3, 2, 1},
 		}
-		buzzExpectation := jobExpectation{
-			Job:    buzzJob,
-			Type:   jobs.JobTypeBackup,
+		buzzExpectation := expectation{
+			Record: buzzRecord,
+			Type:   jobs.TypeBackup,
 			Before: timeutil.Now(),
 			Error:  "Buzz Lightyear can't fly",
 		}
-		buzzLogger := jobs.NewJobLogger(kvDB, executor, buzzJob)
+		buzzJob := jobs.NewJob(kvDB, executor, buzzRecord)
 
 		// Test modifying the job details before calling `Created`.
-		buzzLogger.Job.Details = jobs.BackupJobDetails{}
-		buzzExpectation.Job.Details = jobs.BackupJobDetails{}
-		if err := buzzLogger.Created(ctx); err != nil {
+		buzzJob.Record.Details = jobs.BackupDetails{}
+		buzzExpectation.Record.Details = jobs.BackupDetails{}
+		if err := buzzJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, buzzLogger, jobs.JobStatusPending, buzzExpectation); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := buzzLogger.Started(ctx); err != nil {
-			t.Fatal(err)
-		}
-		if err := verifyJobRecord(db, kvDB, executor, buzzLogger, jobs.JobStatusRunning, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, kvDB, executor, buzzJob, jobs.StatusPending, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := buzzLogger.Progressed(ctx, .42, jobs.Noop); err != nil {
+		if err := buzzJob.Started(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := verifyJobRecord(db, kvDB, executor, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := buzzJob.Progressed(ctx, .42, jobs.Noop); err != nil {
 			t.Fatal(err)
 		}
 		buzzExpectation.FractionCompleted = .42
-		if err := verifyJobRecord(db, kvDB, executor, buzzLogger, jobs.JobStatusRunning, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, kvDB, executor, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
-		buzzLogger.Failed(ctx, errors.New("Buzz Lightyear can't fly"))
-		if err := verifyJobRecord(db, kvDB, executor, buzzLogger, jobs.JobStatusFailed, buzzExpectation); err != nil {
+		buzzJob.Failed(ctx, errors.New("Buzz Lightyear can't fly"))
+		if err := verifyJobRecord(db, kvDB, executor, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		// Ensure that logging Buzz didn't corrupt Woody.
-		if err := verifyJobRecord(db, kvDB, executor, woodyLogger, jobs.JobStatusSucceeded, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		// Sid fails before it starts running.
-		sidJob := jobs.JobRecord{
+		sidRecord := jobs.Record{
 			Description:   "The toys! The toys are alive!",
 			Username:      "Sid Phillips",
 			DescriptorIDs: []sqlbase.ID{6, 6, 6},
-			Details:       jobs.RestoreJobDetails{},
+			Details:       jobs.RestoreDetails{},
 		}
-		sidExpectation := jobExpectation{
-			Job:    sidJob,
-			Type:   jobs.JobTypeRestore,
+		sidExpectation := expectation{
+			Record: sidRecord,
+			Type:   jobs.TypeRestore,
 			Before: timeutil.Now(),
 			Error:  "Sid is a total failure",
 		}
-		sidLogger := jobs.NewJobLogger(kvDB, executor, sidJob)
+		sidJob := jobs.NewJob(kvDB, executor, sidRecord)
 
-		if err := sidLogger.Created(ctx); err != nil {
+		if err := sidJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, sidLogger, jobs.JobStatusPending, sidExpectation); err != nil {
+		if err := verifyJobRecord(db, kvDB, executor, sidJob, jobs.StatusPending, sidExpectation); err != nil {
 			t.Fatal(err)
 		}
 
-		sidLogger.Failed(ctx, errors.New("Sid is a total failure"))
-		if err := verifyJobRecord(db, kvDB, executor, sidLogger, jobs.JobStatusFailed, sidExpectation); err != nil {
+		sidJob.Failed(ctx, errors.New("Sid is a total failure"))
+		if err := verifyJobRecord(db, kvDB, executor, sidJob, jobs.StatusFailed, sidExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		// Ensure that logging Sid didn't corrupt Woody or Buzz.
-		if err := verifyJobRecord(db, kvDB, executor, woodyLogger, jobs.JobStatusSucceeded, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, buzzLogger, jobs.JobStatusFailed, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, kvDB, executor, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("bad job details fail", func(t *testing.T) {
-		logger := jobs.NewJobLogger(kvDB, executor, jobs.JobRecord{
+		job := jobs.NewJob(kvDB, executor, jobs.Record{
 			Details: 42,
 		})
-		if err := logger.Created(ctx); !testutils.IsError(err, "unsupported job details type int") {
+		if err := job.Created(ctx); !testutils.IsError(err, "unsupported job details type int") {
 			t.Fatalf("expected 'unsupported job details type int', but got %v", err)
 		}
 	})
 
 	t.Run("update before create fails", func(t *testing.T) {
-		logger := jobs.NewJobLogger(kvDB, executor, jobs.JobRecord{})
-		if err := logger.Started(ctx); !testutils.IsError(err, "job not created") {
+		job := jobs.NewJob(kvDB, executor, jobs.Record{})
+		if err := job.Started(ctx); !testutils.IsError(err, "job not created") {
 			t.Fatalf("expected 'job not created' error, but got %v", err)
 		}
 	})
 
 	t.Run("same state transition twice succeeds silently", func(t *testing.T) {
-		logger := jobs.NewJobLogger(kvDB, executor, jobs.JobRecord{
-			Details: jobs.BackupJobDetails{},
+		job := jobs.NewJob(kvDB, executor, jobs.Record{
+			Details: jobs.BackupDetails{},
 		})
-		if err := logger.Created(ctx); err != nil {
+		if err := job.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Created(ctx); err != nil {
+		if err := job.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Started(ctx); err != nil {
+		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Started(ctx); err != nil {
+		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Succeeded(ctx); err != nil {
+		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Succeeded(ctx); err != nil {
+		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("out of bounds progress fails", func(t *testing.T) {
-		logger := jobs.NewJobLogger(kvDB, executor, jobs.JobRecord{
-			Details: jobs.BackupJobDetails{},
+		job := jobs.NewJob(kvDB, executor, jobs.Record{
+			Details: jobs.BackupDetails{},
 		})
-		if err := logger.Created(ctx); err != nil {
+		if err := job.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Started(ctx); err != nil {
+		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Progressed(ctx, -0.1, jobs.Noop); !testutils.IsError(err, "outside allowable range") {
+		if err := job.Progressed(ctx, -0.1, jobs.Noop); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
-		if err := logger.Progressed(ctx, 1.1, jobs.Noop); !testutils.IsError(err, "outside allowable range") {
+		if err := job.Progressed(ctx, 1.1, jobs.Noop); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
 	})
 
 	t.Run("progress on non-started job fails", func(t *testing.T) {
-		logger := jobs.NewJobLogger(kvDB, executor, jobs.JobRecord{
-			Details: jobs.BackupJobDetails{},
+		job := jobs.NewJob(kvDB, executor, jobs.Record{
+			Details: jobs.BackupDetails{},
 		})
-		if err := logger.Created(ctx); err != nil {
+		if err := job.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(err, `job \d+ not started`) {
+		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(err, `job \d+ not started`) {
 			t.Fatalf("expected 'job not started' error, but got %v", err)
 		}
 	})
 
 	t.Run("progress on finished job fails", func(t *testing.T) {
-		logger := jobs.NewJobLogger(kvDB, executor, jobs.JobRecord{
-			Details: jobs.BackupJobDetails{},
+		job := jobs.NewJob(kvDB, executor, jobs.Record{
+			Details: jobs.BackupDetails{},
 		})
-		if err := logger.Created(ctx); err != nil {
+		if err := job.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Started(ctx); err != nil {
+		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Succeeded(ctx); err != nil {
+		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(err, `job \d+ already finished`) {
+		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(err, `job \d+ already finished`) {
 			t.Fatalf("expected 'job already finished' error, but got %v", err)
 		}
 	})
 
 	t.Run("succeeded forces fraction completed to 1.0", func(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(t, rawSQLDB)
-		job := jobs.JobRecord{Details: jobs.BackupJobDetails{}}
-		expectation := jobExpectation{
-			Job:               job,
-			Type:              jobs.JobTypeBackup,
+		record := jobs.Record{Details: jobs.BackupDetails{}}
+		expect := expectation{
+			Record:            record,
+			Type:              jobs.TypeBackup,
 			Before:            timeutil.Now(),
 			FractionCompleted: 1.0,
 		}
-		logger := jobs.NewJobLogger(kvDB, executor, job)
-		if err := logger.Created(ctx); err != nil {
+		job := jobs.NewJob(kvDB, executor, record)
+		if err := job.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Started(ctx); err != nil {
+		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Progressed(ctx, 0.2, jobs.Noop); err != nil {
+		if err := job.Progressed(ctx, 0.2, jobs.Noop); err != nil {
 			t.Fatal(err)
 		}
-		if err := logger.Succeeded(ctx); err != nil {
+		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, logger, jobs.JobStatusSucceeded, expectation); err != nil {
+		if err := verifyJobRecord(db, kvDB, executor, job, jobs.StatusSucceeded, expect); err != nil {
 			t.Fatal(err)
 		}
 	})
