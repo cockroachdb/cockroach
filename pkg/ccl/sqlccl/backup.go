@@ -48,10 +48,11 @@ const (
 	BackupDescriptorCheckpointName = "BACKUP-CHECKPOINT"
 	// BackupFormatInitialVersion is the first version of backup and its files.
 	BackupFormatInitialVersion uint32 = 0
-	// backupCheckpointInterval is the interval at which backup progress is saved
-	// to durable storage.
-	backupCheckpointInterval = time.Minute
 )
+
+// BackupCheckpointInterval is the interval at which backup progress is saved
+// to durable storage.
+var BackupCheckpointInterval = time.Minute
 
 // exportStorageFromURI returns an ExportStorage for the given URI.
 func exportStorageFromURI(ctx context.Context, uri string) (storageccl.ExportStorage, error) {
@@ -467,11 +468,12 @@ func Backup(
 				})
 				mu.exported.Add(file.Exported)
 			}
-			doCheckpoint := timeutil.Since(mu.lastCheckpoint) > backupCheckpointInterval
-			if doCheckpoint {
+			var checkpointFiles backupFileDescriptors
+			if timeutil.Since(mu.lastCheckpoint) > BackupCheckpointInterval {
 				// We optimistically assume the checkpoint will succeed to prevent
 				// multiple threads from attempting to checkpoint.
 				mu.lastCheckpoint = timeutil.Now()
+				checkpointFiles = append(checkpointFiles, mu.files...)
 			}
 			mu.Unlock()
 
@@ -482,9 +484,9 @@ func Backup(
 					jobLogger.JobID(), jobLogger.Job.Description, err)
 			}
 
-			if doCheckpoint {
+			if checkpointFiles != nil {
 				desc.Lock()
-				desc.Files = append(backupFileDescriptors(nil), mu.files...)
+				desc.Files = checkpointFiles
 				if err := writeBackupDescriptor(
 					ctx, exportStore, BackupDescriptorCheckpointName, &desc.BackupDescriptor,
 				); err != nil {
