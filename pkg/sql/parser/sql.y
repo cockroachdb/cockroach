@@ -1254,6 +1254,11 @@ cancel_query_stmt:
     /* SKIP DOC */
     $$.val = &CancelQuery{ID: $3.expr()}
   }
+| CANCEL TRANSACTION a_expr
+  {
+    /* SKIP DOC */
+    $$.val = &CancelTransaction{ID: $3.expr()}
+  }
 
 // CREATE [DATABASE|INDEX|TABLE|TABLE AS|VIEW]
 create_stmt:
