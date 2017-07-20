@@ -57,12 +57,17 @@ type insertNode struct {
 	insertColIDtoRowIndex map[sqlbase.ColumnID]int
 	tw                    tableWriter
 
+	isUpsertReturning bool
+
 	run struct {
 		// The following fields are populated during Start().
 		editNodeRun
 
 		rowIdxToRetIdx []int
 		rowTemplate    parser.Datums
+
+		doneUpserting bool
+		rowsUpserted  []parser.Datums
 	}
 }
 
@@ -82,16 +87,15 @@ func (p *planner) Insert(
 	if err != nil {
 		return nil, err
 	}
+	isUpsertReturning := false
 	if n.OnConflict != nil {
 		if !n.OnConflict.DoNothing {
 			if err := p.CheckPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
 				return nil, err
 			}
 		}
-		// TODO(dan): Support RETURNING in UPSERTs.
 		if _, ok := n.Returning.(*parser.ReturningExprs); ok {
-			return nil, pgerror.UnimplementedWithIssueErrorf(6637,
-				"RETURNING is not supported with UPSERT")
+			isUpsertReturning = true
 		}
 	}
 
@@ -233,7 +237,8 @@ func (p *planner) Insert(
 		defaultExprs:          defaultExprs,
 		insertCols:            ri.InsertCols,
 		insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
-		tw: tw,
+		isUpsertReturning:     isUpsertReturning,
+		tw:                    tw,
 	}
 
 	if err := in.checkHelper.init(ctx, p, tn, en.tableDesc); err != nil {
@@ -250,6 +255,7 @@ func (p *planner) Insert(
 
 func (n *insertNode) Start(ctx context.Context) error {
 	// Prepare structures for building values to pass to rh.
+	// TODO(couchand): Delete this, use tablewriter interface.
 	if n.rh.exprs != nil {
 		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain all the table
 		// columns. We need to pass values for all table columns to rh, in the correct order; we
@@ -294,10 +300,42 @@ func (n *insertNode) Close(ctx context.Context) {
 }
 
 func (n *insertNode) Next(ctx context.Context) (bool, error) {
+	if n.isUpsertReturning {
+		return n.drain(ctx)
+	}
+
+	return n.internalNext(ctx)
+}
+
+func (n *insertNode) drain(ctx context.Context) (bool, error) {
+	for !n.run.doneUpserting {
+		_, err := n.internalNext(ctx)
+		if err != nil {
+			return false, err
+		}
+	}
+	return len(n.run.rowsUpserted) > 0, nil
+}
+
+func (n *insertNode) internalNext(ctx context.Context) (bool, error) {
 	if next, err := n.run.rows.Next(ctx); !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = n.tw.finalize(ctx, n.p.session.Tracing.KVTracingEnabled())
+			rows, err := n.tw.finalize(ctx, n.p.session.Tracing.KVTracingEnabled())
+			if err != nil {
+				return false, err
+			}
+
+			if n.isUpsertReturning {
+				n.run.rowsUpserted = make([]parser.Datums, len(rows))
+				for i, row := range rows {
+					n.run.rowsUpserted[i], err = n.rh.cookResultRow(row)
+					if err != nil {
+						return false, err
+					}
+				}
+				n.run.doneUpserting = true
+			}
 		}
 		return false, err
 	}
@@ -319,17 +357,19 @@ func (n *insertNode) Next(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	for i, val := range rowVals {
-		if n.run.rowTemplate != nil {
-			n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
+	if !n.isUpsertReturning {
+		for i, val := range rowVals {
+			if n.run.rowTemplate != nil {
+				n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
+			}
 		}
-	}
 
-	resultRow, err := n.rh.cookResultRow(n.run.rowTemplate)
-	if err != nil {
-		return false, err
+		resultRow, err := n.rh.cookResultRow(n.run.rowTemplate)
+		if err != nil {
+			return false, err
+		}
+		n.run.resultRow = resultRow
 	}
-	n.run.resultRow = resultRow
 
 	return true, nil
 }
@@ -502,5 +542,11 @@ func fillDefaults(
 }
 
 func (n *insertNode) Values() parser.Datums {
+	if n.isUpsertReturning {
+		row := n.run.rowsUpserted[0]
+		n.run.rowsUpserted = n.run.rowsUpserted[1:]
+		return row
+	}
+
 	return n.run.resultRow
 }

@@ -153,7 +153,8 @@ func (d *deleteNode) Next(ctx context.Context) (bool, error) {
 	if !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = d.tw.finalize(ctx, traceKV)
+			// TODO(couchand): Use the first result?
+			_, err = d.tw.finalize(ctx, traceKV)
 		}
 		return false, err
 	}

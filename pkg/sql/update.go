@@ -417,7 +417,8 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 	if !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = u.tw.finalize(ctx, u.p.session.Tracing.KVTracingEnabled())
+			// TODO(couchand): Use the first result?
+			_, err = u.tw.finalize(ctx, u.p.session.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}

@@ -69,11 +69,11 @@ type tableWriter interface {
 	row(ctx context.Context, values parser.Datums, traceKV bool) (parser.Datums, error)
 
 	// finalize flushes out any remaining writes. It is called after all calls to
-	// row.
+	// row.  It returns a slice of all Datums not yet returned by calls to `row`.
 	// The traceKV parameter determines whether the individual K/V operations
 	// should be logged to the context. See the comment above for why
 	// this a separate parameter as opposed to a Value field on the context.
-	finalize(ctx context.Context, traceKV bool) error
+	finalize(ctx context.Context, traceKV bool) ([]parser.Datums, error)
 
 	// spans collects the upper bound set of read and write spans that the
 	// tableWriter will touch when executed. This is contractual, and the
@@ -115,7 +115,7 @@ func (ti *tableInserter) row(
 	return nil, ti.ri.InsertRow(ctx, ti.b, values, false, traceKV)
 }
 
-func (ti *tableInserter) finalize(ctx context.Context, _ bool) error {
+func (ti *tableInserter) finalize(ctx context.Context, _ bool) ([]parser.Datums, error) {
 	var err error
 	if ti.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
@@ -127,9 +127,9 @@ func (ti *tableInserter) finalize(ctx context.Context, _ bool) error {
 	}
 
 	if err != nil {
-		return sqlbase.ConvertBatchError(ti.ri.Helper.TableDesc, ti.b)
+		return nil, sqlbase.ConvertBatchError(ti.ri.Helper.TableDesc, ti.b)
 	}
-	return nil
+	return nil, nil
 }
 
 func (ti *tableInserter) spans() (reads, writes roachpb.Spans, err error) {
@@ -162,7 +162,7 @@ func (tu *tableUpdater) row(
 	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, traceKV)
 }
 
-func (tu *tableUpdater) finalize(ctx context.Context, _ bool) error {
+func (tu *tableUpdater) finalize(ctx context.Context, _ bool) ([]parser.Datums, error) {
 	var err error
 	if tu.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
@@ -174,9 +174,9 @@ func (tu *tableUpdater) finalize(ctx context.Context, _ bool) error {
 	}
 
 	if err != nil {
-		return sqlbase.ConvertBatchError(tu.ru.Helper.TableDesc, tu.b)
+		return nil, sqlbase.ConvertBatchError(tu.ru.Helper.TableDesc, tu.b)
 	}
-	return nil
+	return nil, nil
 }
 
 func (tu *tableUpdater) spans() (reads, writes roachpb.Spans, err error) {
@@ -281,7 +281,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	}
 
 	// TODO(dan): This could be made tighter, just the rows needed for the ON
-	// CONFLICT exprs.
+	// CONFLICT and RETURNING exprs.
 	requestedCols := tu.tableDesc.Columns
 
 	if len(tu.updateCols) == 0 {
@@ -333,6 +333,11 @@ func (tu *tableUpserter) row(
 		}
 		tu.fastPathKeys[string(primaryKey)] = struct{}{}
 		err = tu.ri.InsertRow(ctx, tu.fastPathBatch, row, true, traceKV)
+
+		// Copy the row because the `tableWriter` interface guarantees that it's not
+		// used after this returns.
+		tu.insertRows = append(tu.insertRows, append([]parser.Datum(nil), row...))
+
 		return nil, err
 	}
 
@@ -344,14 +349,37 @@ func (tu *tableUpserter) row(
 }
 
 // flush commits to tu.txn any rows batched up in tu.insertRows.
-func (tu *tableUpserter) flush(ctx context.Context, finalize, traceKV bool) error {
+func (tu *tableUpserter) flush(
+	ctx context.Context, finalize, traceKV bool,
+) ([]parser.Datums, error) {
 	defer func() {
 		tu.insertRows = nil
 	}()
 
 	existingRows, err := tu.fetchExisting(ctx, traceKV)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	rowsUpserted := make([]parser.Datums, 0, len(tu.insertRows))
+
+	// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain all the table
+	// columns. We need to pass values for all table columns to rh, in the correct order; we
+	// will use rowTemplate for this. We also need a table that maps row indices to rowTemplate indices
+	// to fill in the row values; any absent values will be NULLs.
+	rowTemplate := make(parser.Datums, len(tu.tableDesc.Columns))
+	for i := range rowTemplate {
+		rowTemplate[i] = parser.DNull
+	}
+
+	colIDToRetIndex := map[sqlbase.ColumnID]int{}
+	for i, col := range tu.tableDesc.Columns {
+		colIDToRetIndex[col.ID] = i
+	}
+
+	rowIdxToRetIdx := make([]int, len(tu.ri.InsertCols))
+	for i, col := range tu.ri.InsertCols {
+		rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
 	}
 
 	b := tu.txn.NewBatch()
@@ -361,20 +389,27 @@ func (tu *tableUpserter) flush(ctx context.Context, finalize, traceKV bool) erro
 		if existingRow == nil {
 			err := tu.ri.InsertRow(ctx, b, insertRow, false, traceKV)
 			if err != nil {
-				return err
+				return nil, err
 			}
+
+			for i, val := range insertRow {
+				rowTemplate[rowIdxToRetIdx[i]] = val
+			}
+
+			rowsUpserted = append(rowsUpserted, append(parser.Datums{}, rowTemplate...))
 		} else {
 			// If len(tu.updateCols) == 0, then we're in the DO NOTHING case.
 			if len(tu.updateCols) > 0 {
 				existingValues := existingRow[:len(tu.ru.FetchCols)]
 				updateValues, err := tu.evaler.eval(insertRow, existingValues)
 				if err != nil {
-					return err
+					return nil, err
 				}
-				_, err = tu.ru.UpdateRow(ctx, b, existingValues, updateValues, traceKV)
+				updatedRow, err := tu.ru.UpdateRow(ctx, b, existingValues, updateValues, traceKV)
 				if err != nil {
-					return err
+					return nil, err
 				}
+				rowsUpserted = append(rowsUpserted, append(parser.Datums{}, updatedRow...))
 			}
 		}
 	}
@@ -388,9 +423,9 @@ func (tu *tableUpserter) flush(ctx context.Context, finalize, traceKV bool) erro
 		err = tu.txn.Run(ctx, b)
 	}
 	if err != nil {
-		return sqlbase.ConvertBatchError(tu.tableDesc, b)
+		return nil, sqlbase.ConvertBatchError(tu.tableDesc, b)
 	}
-	return nil
+	return rowsUpserted, nil
 }
 
 // upsertRowPKs returns the primary keys of any rows with potential upsert
@@ -510,15 +545,24 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]par
 	return rows, nil
 }
 
-func (tu *tableUpserter) finalize(ctx context.Context, traceKV bool) error {
+func (tu *tableUpserter) finalize(ctx context.Context, traceKV bool) ([]parser.Datums, error) {
 	if tu.fastPathBatch != nil {
 		if tu.autoCommit {
 			// An auto-txn can commit the transaction with the batch. This is an
 			// optimization to avoid an extra round-trip to the transaction
 			// coordinator.
-			return tu.txn.CommitInBatch(ctx, tu.fastPathBatch)
+			err := tu.txn.CommitInBatch(ctx, tu.fastPathBatch)
+			if err != nil {
+				return nil, err
+			}
+			return tu.insertRows, nil
 		}
-		return tu.txn.Run(ctx, tu.fastPathBatch)
+		err := tu.txn.Run(ctx, tu.fastPathBatch)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(couchand): Test this case.
+		return tu.insertRows, nil
 	}
 	return tu.flush(ctx, true /* finalize */, traceKV)
 }
@@ -552,14 +596,14 @@ func (td *tableDeleter) row(
 	return nil, td.rd.DeleteRow(ctx, td.b, values, traceKV)
 }
 
-func (td *tableDeleter) finalize(ctx context.Context, _ bool) error {
+func (td *tableDeleter) finalize(ctx context.Context, _ bool) ([]parser.Datums, error) {
 	if td.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		return td.txn.CommitInBatch(ctx, td.b)
+		return nil, td.txn.CommitInBatch(ctx, td.b)
 	}
-	return td.txn.Run(ctx, td.b)
+	return nil, td.txn.Run(ctx, td.b)
 }
 
 // fastPathAvailable returns true if the fastDelete optimization can be used.
@@ -600,7 +644,7 @@ func (td *tableDeleter) fastDelete(
 		td.b.DelRange(span.Key, span.EndKey, true)
 	}
 
-	err = td.finalize(ctx, traceKV)
+	_, err = td.finalize(ctx, traceKV)
 	if err != nil {
 		return 0, err
 	}
@@ -671,7 +715,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	}
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
-	if err := td.finalize(ctx, traceKV); err != nil {
+	if _, err := td.finalize(ctx, traceKV); err != nil {
 		return resume, err
 	}
 	if l := len(td.b.Results); l != 1 {
@@ -722,7 +766,8 @@ func (td *tableDeleter) deleteAllRowsScan(
 		// Update the resume start key for the next iteration.
 		resume.Key = rf.Key()
 	}
-	return resume, td.finalize(ctx, traceKV)
+	_, err = td.finalize(ctx, traceKV)
+	return resume, err
 }
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the
@@ -758,7 +803,7 @@ func (td *tableDeleter) deleteIndexFast(
 	}
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
-	if err := td.finalize(ctx, traceKV); err != nil {
+	if _, err := td.finalize(ctx, traceKV); err != nil {
 		return resume, err
 	}
 	if l := len(td.b.Results); l != 1 {
@@ -808,7 +853,8 @@ func (td *tableDeleter) deleteIndexScan(
 		// Update the resume start key for the next iteration.
 		resume.Key = rf.Key()
 	}
-	return resume, td.finalize(ctx, traceKV)
+	_, err = td.finalize(ctx, traceKV)
+	return resume, err
 }
 
 func (td *tableDeleter) spans() (reads, writes roachpb.Spans, err error) {
