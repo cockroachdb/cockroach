@@ -572,9 +572,52 @@ func (txn *Txn) AddCommitTrigger(trigger func()) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
+// maybeFinishReadonly provides a fast-path for finishing a read-only
+// transaction without going through the overhead of creating an
+// EndTransactionRequest only to not send it.
+//
+// NB: The logic here must be kept in sync with the logic in txn.Send.
+//
+// TODO(andrei): Can we share this code with txn.Send?
+func (txn *Txn) maybeFinishReadonly(commit bool, deadline *hlc.Timestamp) (bool, *roachpb.Error) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	if txn.mu.Proto.Writing || txn.mu.writingTxnRecord {
+		return false, nil
+	}
+	txn.mu.finalized = true
+	// Check that read only transactions do not violate their deadline. This can NOT
+	// happen since the txn deadline is normally updated when it is about to expire
+	// or expired. We will just keep the code for safety (see TestReacquireLeaseOnRestart).
+	if deadline != nil && deadline.Less(txn.mu.Proto.Timestamp) {
+		// NB: The returned error contains a pointer to txn.mu.Proto, but that's ok
+		// because we can't have concurrent operations going on while
+		// committing/aborting.
+		//
+		// TODO(andrei): What is happening in this case?
+		//
+		//     1. our txn starts at ts1
+		//     2. catches uncertainty read error
+		//     3. updates its timestamp
+		//     4. new timestamp violates deadline
+		//     5. txn retries the read
+		//     6. commit fails - only thanks to this code path?
+		return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txn.mu.Proto)
+	}
+	if commit {
+		txn.mu.Proto.Status = roachpb.COMMITTED
+	} else {
+		txn.mu.Proto.Status = roachpb.ABORTED
+	}
+	return true, nil
+}
+
 func (txn *Txn) sendEndTxnReq(
 	ctx context.Context, commit bool, deadline *hlc.Timestamp,
 ) *roachpb.Error {
+	if ok, err := txn.maybeFinishReadonly(commit, deadline); ok || err != nil {
+		return err
+	}
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(commit, deadline, txn.systemConfigTrigger))
 	_, pErr := txn.Send(ctx, ba)
@@ -978,6 +1021,9 @@ func (txn *Txn) Send(
 		// or expired. We will just keep the code for safety (see TestReacquireLeaseOnRestart).
 		if endTxnRequest.Deadline != nil {
 			if endTxnRequest.Deadline.Less(txn.mu.Proto.Timestamp) {
+				// NB: The returned error contains a pointer to txn.mu.Proto, but
+				// that's ok because we can't have concurrent operations going on while
+				// committing/aborting.
 				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txn.mu.Proto)
 			}
 		}
