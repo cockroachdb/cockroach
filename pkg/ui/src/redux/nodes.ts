@@ -38,6 +38,10 @@ export enum LivenessStatus {
    * considered dead.
    */
   DEAD,
+ /**
+  * DEAD and the node's liveness record indicates decommissioning mode.
+  */
+  DECOMMISSIONED,
 }
 
 // Functions to select data directly from the redux state.
@@ -72,7 +76,11 @@ const livenessStatusByNodeIDSelector = createSelector(
       return _.mapValues(livenessByNodeID, (l) => {
         const expiration = moment(NanoToMilli(l.expiration.wall_time.toNumber()));
         if (expiration.isBefore(deadCutoff)) {
-          return LivenessStatus.DEAD;
+          if (l.decommissioning) {
+            return LivenessStatus.DECOMMISSIONED;
+          } else {
+            return LivenessStatus.DEAD;
+          }
         } else if (expiration.isBefore(livenessCheckedAt)) {
           return LivenessStatus.SUSPECT;
         }
@@ -121,6 +129,7 @@ const nodeSumsSelector = createSelector(
         healthy: 0,
         suspect: 0,
         dead: 0,
+        decommissioned: 0,
       },
       capacityAvailable: 0,
       capacityTotal: 0,
@@ -131,7 +140,7 @@ const nodeSumsSelector = createSelector(
     };
     if (_.isArray(nodeStatuses) && _.isObject(livenessStatusByNodeID)) {
       nodeStatuses.forEach((n) => {
-        result.nodeCounts.total += 1;
+        result.nodeCounts.total++;
         const status = livenessStatusByNodeID[n.desc.node_id];
         switch (status) {
           case LivenessStatus.HEALTHY:
@@ -142,6 +151,9 @@ const nodeSumsSelector = createSelector(
             break;
           case LivenessStatus.DEAD:
             result.nodeCounts.dead++;
+            break;
+          case LivenessStatus.DECOMMISSIONED:
+            result.nodeCounts.total--; // hide
             break;
           default:
             result.nodeCounts.dead++;
