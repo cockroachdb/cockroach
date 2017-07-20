@@ -403,14 +403,14 @@ func (tc *TableCollection) getTableVersionByID(
 
 // releaseTables releases all tables currently held by the Session.
 func (tc *TableCollection) releaseTables(ctx context.Context) {
-	if tc.tables != nil {
+	if len(tc.tables) > 0 {
 		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
 		for i := range tc.tables {
 			if err := tc.leaseMgr.Release(&tc.tables[i]); err != nil {
 				log.Warning(ctx, err)
 			}
 		}
-		tc.tables = nil
+		tc.tables = tc.tables[:0]
 	}
 }
 
