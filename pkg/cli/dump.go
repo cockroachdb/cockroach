@@ -274,12 +274,12 @@ func getMetadataForTable(
 	name := &parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
 
 	vals, err = conn.QueryRow(fmt.Sprintf(`
-		SELECT CREATE_TABLE
-		FROM "".crdb_internal.tables
+		SELECT create_statement
+		FROM %s.crdb_internal.create_statements
 		AS OF SYSTEM TIME '%s'
-		WHERE NAME = $1
-			AND DATABASE_NAME = $2
-		`, ts), []driver.Value{tableName, dbName})
+		WHERE descriptor_name = $1
+			AND database_name = $2
+		`, parser.Name(dbName).String(), ts), []driver.Value{tableName, dbName})
 	if err != nil {
 		if err == io.EOF {
 			return tableMetadata{}, errors.Errorf("relation %s does not exist", name)

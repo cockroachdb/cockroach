@@ -34,18 +34,11 @@ SELECT * FROM crdb_internal.schema_changes
 ----
 table_id parent_id name type target_id target_name state direction
 
-query IITTITRTTTTT colnames
+query IITTITRTTTT colnames
 SELECT * FROM crdb_internal.tables WHERE NAME = 'namespace'
 ----
-table_id  parent_id  name       database_name  version  mod_time                         mod_time_logical  format_version            state   sc_lease_node_id  sc_lease_expiration_time  create_table  
-2         1          namespace  system         1        1970-01-01 00:00:00 +0000 +0000  0E-10             InterleavedFormatVersion  PUBLIC  NULL              NULL                      CREATE TABLE namespace (
-          "parentID" INT NOT NULL,
-          "name" STRING NOT NULL,
-          id INT NULL,
-          CONSTRAINT "primary" PRIMARY KEY ("parentID" ASC, "name" ASC),
-          FAMILY "primary" ("parentID", "name"),
-          FAMILY fam_3_id (id)
-)
+table_id  parent_id  name       database_name  version  mod_time                         mod_time_logical  format_version            state   sc_lease_node_id  sc_lease_expiration_time
+2         1          namespace  system         1        1970-01-01 00:00:00 +0000 +0000  0E-10             InterleavedFormatVersion  PUBLIC  NULL              NULL
 
 # Verify that table names are not double escaped.
 
@@ -80,8 +73,11 @@ SELECT * FROM crdb_internal.jobs
 ----
 id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error
 
-query error pq: crdb_internal.force_internal_error\(\): foo
-SELECT crdb_internal.force_internal_error('foo')
+query error pq: foo
+SELECT crdb_internal.force_error('', 'foo')
+
+query error pgcode FOOYAA pq: foo
+SELECT crdb_internal.force_error('FOOYAA', 'foo')
 
 # Check that privileged builtins are only allowed for 'root'
 query I
@@ -93,9 +89,6 @@ user testuser
 
 query error pq: insufficient privilege
 select crdb_internal.force_retry(interval '0s')
-
-query error pq: insufficient privilege
-select crdb_internal.force_internal_error('foo')
 
 query error pq: insufficient privilege
 select crdb_internal.force_panic('foo')

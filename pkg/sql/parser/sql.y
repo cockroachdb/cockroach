@@ -2108,10 +2108,10 @@ table_elem:
   }
 
 opt_interleave:
-  INTERLEAVE IN PARENT name '(' name_list ')' opt_interleave_drop_behavior
+  INTERLEAVE IN PARENT qualified_name '(' name_list ')' opt_interleave_drop_behavior
   {
     $$.val = &InterleaveDef{
-               Parent: NormalizableTableName{UnresolvedName{Name($4)}},
+               Parent: $4.newNormalizableTableName(),
                Fields: $6.nameList(),
                DropBehavior: $8.dropBehavior(),
     }

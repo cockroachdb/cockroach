@@ -653,7 +653,7 @@ by distSQL are still unchecked.
   `CopyData()`/`CopyDone()`/`CopyEnd()`;
 
 - for the internal SQL interface: `QueryRow()`, `queryRows()`,
-  `query()`, `queryRowsAsRoot()`, `exec()`;
+  `query()`, `exec()`;
 
 - into the other components within the SQL layer: see the interfaces
   in the previous sections of this document;

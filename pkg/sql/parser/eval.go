@@ -2646,7 +2646,12 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		if _, ok := err.(*roachpb.HandledRetryableTxnError); ok {
 			return nil, err
 		}
-		return nil, pgerror.AnnotateError(fmt.Sprintf("%s():", expr.Func), err)
+		// If we are facing an explicit error, propagate it unchanged.
+		fName := expr.Func.String()
+		if fName == `crdb_internal.force_error` {
+			return nil, err
+		}
+		return nil, pgerror.AnnotateError(fmt.Sprintf("%s():", fName), err)
 	}
 	return res, nil
 }
