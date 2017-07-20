@@ -110,6 +110,9 @@ extern TransactionDefaultTypeInternal _Transaction_default_instance_;
 class Value;
 class ValueDefaultTypeInternal;
 extern ValueDefaultTypeInternal _Value_default_instance_;
+class Version;
+class VersionDefaultTypeInternal;
+extern VersionDefaultTypeInternal _Version_default_instance_;
 }  // namespace roachpb
 namespace storage {
 namespace engine {

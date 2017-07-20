@@ -113,6 +113,7 @@ message NodeDescriptor {
   optional util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
   optional Attributes attrs = 3 [(gogoproto.nullable) = false];
   optional Locality locality = 4 [(gogoproto.nullable) = false];
+  optional Version server_version = 5 [(gogoproto.nullable) = false];
 }
 
 // StoreDescriptor holds store information including store attributes, node
@@ -150,4 +151,17 @@ message Tier {
   optional string key = 1 [(gogoproto.nullable) = false];
   // Value is node specific value corresponding to the key.
   optional string value = 2 [(gogoproto.nullable) = false];
+}
+
+message Version {
+  option (gogoproto.goproto_stringer) = false;
+
+  optional int32 major = 1 [(gogoproto.nullable) = false];
+  optional int32 minor = 2 [(gogoproto.nullable) = false];
+  // Note that patch is a placeholder and will always be zero.
+  optional int32 patch = 3 [(gogoproto.nullable) = false];
+  // The unstable version is used to migrate during development.
+  // Users of stable, public releases will only use binaries
+  // with unstable set to 0.
+  optional int32 unstable = 4 [(gogoproto.nullable) = false];
 }

@@ -18,12 +18,14 @@ package storage
 
 import (
 	"errors"
+	"math"
 	"reflect"
 	"testing"
 	"time"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -343,10 +345,170 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 	ls3 := NewStores(log.AmbientContext{}, ls.clock)
 	ls3.AddStore(stores[0])
 	verifyBI.Reset()
-	if err := ls2.ReadBootstrapInfo(&verifyBI); err != nil {
+	if err := ls3.ReadBootstrapInfo(&verifyBI); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(bi, verifyBI) {
 		t.Errorf("bootstrap info %+v not equal to expected %+v", verifyBI, bi)
+	}
+}
+
+// TestStoresClusterVersion verifies reading and writing of cluster
+// version to all configured stores.
+func TestStoresClusterVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	_, stores, ls, stopper := createStores(2, t)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	ls.AddStore(stores[0])
+
+	// Verify initial read is empty.
+	var cv base.ClusterVersion
+	var err error
+	if cv, err = ls.ReadClusterVersion(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cv, base.ClusterVersion{}) {
+		t.Errorf("expected empty cluster version: %+v", cv)
+	}
+
+	// Configure versions and write.
+	cv.MinimumVersion = base.VersionVersioning
+	cv.UseVersion = cv.MinimumVersion
+	if err := ls.WriteClusterVersion(ctx, cv); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify on read.
+	var newCV base.ClusterVersion
+	if newCV, err = ls.ReadClusterVersion(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cv, newCV) {
+		t.Errorf("expected %+v; got %+v", cv, newCV)
+	}
+
+	// Add another store and verify it has cluster version written.
+	ls.AddStore(stores[1])
+
+	// Create a new stores object to verify read.
+	ls2 := NewStores(log.AmbientContext{}, ls.clock)
+	ls2.AddStore(stores[1])
+	var verifyCV base.ClusterVersion
+	if verifyCV, err = ls2.ReadClusterVersion(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cv, verifyCV) {
+		t.Errorf("expected %+v; got %+v", verifyCV, cv)
+	}
+}
+
+// TestStoresClusterVersionReadLatest verifies that in the presence
+// of more than one ClusterVersion amongst multiple stores, the
+// ClusterVersion with the highest MinimumVersion is chosen.
+func TestStoresClusterVersionReadLatest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	_, stores, ls, stopper := createStores(2, t)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	ls.AddStore(stores[0])
+
+	// Configure versions and write.
+	var cv base.ClusterVersion
+	cv.MinimumVersion = base.VersionBase
+	cv.UseVersion = cv.MinimumVersion
+	if err := ls.WriteClusterVersion(ctx, cv); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now remove store 0 and add store 1.
+	ls.RemoveStore(stores[0])
+	ls.AddStore(stores[1])
+
+	// Configure a lower MinimumVersion and write.
+	cv.MinimumVersion = base.VersionVersioning
+	cv.UseVersion = cv.MinimumVersion
+	if err := ls.WriteClusterVersion(ctx, cv); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a new stores object to freshly read. Should get version
+	// from store 1, with the higher MinimumVersion.
+	ls2 := NewStores(log.AmbientContext{}, ls.clock)
+	ls2.AddStore(stores[0])
+	ls2.AddStore(stores[1])
+	var verifyCV base.ClusterVersion
+	var err error
+	if verifyCV, err = ls2.ReadClusterVersion(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cv, verifyCV) {
+		t.Errorf("expected %+v; got %+v", verifyCV, cv)
+	}
+
+	// Verify that stores[0], which had old cluster version, was updated.
+	ls3 := NewStores(log.AmbientContext{}, ls.clock)
+	ls3.AddStore(stores[0])
+	verifyCV.Reset()
+	if verifyCV, err = ls2.ReadClusterVersion(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cv, verifyCV) {
+		t.Errorf("expected %+v; got %+v", verifyCV, cv)
+	}
+}
+
+// TestStoresClusterVersionMinimumSupported verifies that a persisted
+// ClusterVersion containing a UseVersion earlier than the server's
+// MinimumSupportedVersion will return an error on read.
+func TestStoresClusterVersionMinimumSupported(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	_, stores, ls, stopper := createStores(1, t)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	ls.AddStore(stores[0])
+
+	// Configure versions and write.
+	var cv base.ClusterVersion
+	cv.MinimumVersion = base.VersionBase
+	// Set unstable to -1 to guarantee an older version than configured
+	// minimum.
+	cv.UseVersion = roachpb.Version{0, 0, 0, -1}
+	if err := ls.WriteClusterVersion(ctx, cv); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a new stores object to freshly read.
+	ls2 := NewStores(log.AmbientContext{}, ls.clock)
+	ls2.AddStore(stores[0])
+	var err error
+	if _, err = ls2.ReadClusterVersion(ctx); !testutils.IsError(err, "which is < minimum supported version") {
+		t.Errorf("expected error reading version older than minimum supported")
+	}
+}
+
+// TestStoresClusterVersionRequired verifies that a persisted
+// ClusterVersion containing a MinimumVersion greater than what the
+// server supports (base.ServerVersion) will return an error on read.
+func TestStoresClusterVersionRequired(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	_, stores, ls, stopper := createStores(1, t)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	ls.AddStore(stores[0])
+
+	// Configure minimum version to the maximum value and write.
+	var cv base.ClusterVersion
+	cv.MinimumVersion = roachpb.Version{math.MaxInt32, 0, 0, 0}
+	if err := ls.WriteClusterVersion(ctx, cv); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a new stores object to freshly read.
+	ls2 := NewStores(log.AmbientContext{}, ls.clock)
+	ls2.AddStore(stores[0])
+	var err error
+	if _, err = ls2.ReadClusterVersion(ctx); !testutils.IsError(err, "which is > supported version") {
+		t.Errorf("expected error reading required version later than supported")
 	}
 }

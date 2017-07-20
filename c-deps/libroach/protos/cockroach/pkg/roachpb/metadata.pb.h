@@ -65,6 +65,9 @@ extern StoreDescriptorDefaultTypeInternal _StoreDescriptor_default_instance_;
 class Tier;
 class TierDefaultTypeInternal;
 extern TierDefaultTypeInternal _Tier_default_instance_;
+class Version;
+class VersionDefaultTypeInternal;
+extern VersionDefaultTypeInternal _Version_default_instance_;
 }  // namespace roachpb
 namespace util {
 class UnresolvedAddr;
@@ -862,6 +865,14 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::Locality* release_locality();
   void set_allocated_locality(::cockroach::roachpb::Locality* locality);
 
+  bool has_server_version() const;
+  void clear_server_version();
+  static const int kServerVersionFieldNumber = 5;
+  const ::cockroach::roachpb::Version& server_version() const;
+  ::cockroach::roachpb::Version* mutable_server_version();
+  ::cockroach::roachpb::Version* release_server_version();
+  void set_allocated_server_version(::cockroach::roachpb::Version* server_version);
+
   bool has_node_id() const;
   void clear_node_id();
   static const int kNodeIdFieldNumber = 1;
@@ -878,6 +889,8 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   void clear_has_attrs();
   void set_has_locality();
   void clear_has_locality();
+  void set_has_server_version();
+  void clear_has_server_version();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -885,6 +898,7 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::util::UnresolvedAddr* address_;
   ::cockroach::roachpb::Attributes* attrs_;
   ::cockroach::roachpb::Locality* locality_;
+  ::cockroach::roachpb::Version* server_version_;
   ::google::protobuf::int32 node_id_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::TableStruct;
 };
@@ -1315,6 +1329,122 @@ class Tier : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr value_;
+  friend struct protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class Version : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Version) */ {
+ public:
+  Version();
+  virtual ~Version();
+
+  Version(const Version& from);
+
+  inline Version& operator=(const Version& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::std::string& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::std::string* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const Version& default_instance();
+
+  static inline const Version* internal_default_instance() {
+    return reinterpret_cast<const Version*>(
+               &_Version_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    11;
+
+  void Swap(Version* other);
+
+  // implements Message ----------------------------------------------
+
+  inline Version* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  Version* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    PROTOBUF_FINAL;
+  void CopyFrom(const Version& from);
+  void MergeFrom(const Version& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  void DiscardUnknownFields();
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(Version* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_major() const;
+  void clear_major();
+  static const int kMajorFieldNumber = 1;
+  ::google::protobuf::int32 major() const;
+  void set_major(::google::protobuf::int32 value);
+
+  bool has_minor() const;
+  void clear_minor();
+  static const int kMinorFieldNumber = 2;
+  ::google::protobuf::int32 minor() const;
+  void set_minor(::google::protobuf::int32 value);
+
+  bool has_patch() const;
+  void clear_patch();
+  static const int kPatchFieldNumber = 3;
+  ::google::protobuf::int32 patch() const;
+  void set_patch(::google::protobuf::int32 value);
+
+  bool has_unstable() const;
+  void clear_unstable();
+  static const int kUnstableFieldNumber = 4;
+  ::google::protobuf::int32 unstable() const;
+  void set_unstable(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.Version)
+ private:
+  void set_has_major();
+  void clear_has_major();
+  void set_has_minor();
+  void clear_has_minor();
+  void set_has_patch();
+  void clear_has_patch();
+  void set_has_unstable();
+  void clear_has_unstable();
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::HasBits<1> _has_bits_;
+  mutable int _cached_size_;
+  ::google::protobuf::int32 major_;
+  ::google::protobuf::int32 minor_;
+  ::google::protobuf::int32 patch_;
+  ::google::protobuf::int32 unstable_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::TableStruct;
 };
 // ===================================================================
@@ -1914,13 +2044,13 @@ inline void StoreCapacity::set_writes_per_second(double value) {
 // NodeDescriptor
 
 inline bool NodeDescriptor::has_node_id() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void NodeDescriptor::set_has_node_id() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void NodeDescriptor::clear_has_node_id() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void NodeDescriptor::clear_node_id() {
   node_id_ = 0;
@@ -2066,6 +2196,50 @@ inline void NodeDescriptor::set_allocated_locality(::cockroach::roachpb::Localit
     clear_has_locality();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.locality)
+}
+
+inline bool NodeDescriptor::has_server_version() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void NodeDescriptor::set_has_server_version() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void NodeDescriptor::clear_has_server_version() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void NodeDescriptor::clear_server_version() {
+  if (server_version_ != NULL) server_version_->::cockroach::roachpb::Version::Clear();
+  clear_has_server_version();
+}
+inline const ::cockroach::roachpb::Version& NodeDescriptor::server_version() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.server_version)
+  return server_version_ != NULL ? *server_version_
+                         : *::cockroach::roachpb::Version::internal_default_instance();
+}
+inline ::cockroach::roachpb::Version* NodeDescriptor::mutable_server_version() {
+  set_has_server_version();
+  if (server_version_ == NULL) {
+    server_version_ = new ::cockroach::roachpb::Version;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.server_version)
+  return server_version_;
+}
+inline ::cockroach::roachpb::Version* NodeDescriptor::release_server_version() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.NodeDescriptor.server_version)
+  clear_has_server_version();
+  ::cockroach::roachpb::Version* temp = server_version_;
+  server_version_ = NULL;
+  return temp;
+}
+inline void NodeDescriptor::set_allocated_server_version(::cockroach::roachpb::Version* server_version) {
+  delete server_version_;
+  server_version_ = server_version;
+  if (server_version) {
+    set_has_server_version();
+  } else {
+    clear_has_server_version();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.server_version)
 }
 
 // -------------------------------------------------------------------
@@ -2444,7 +2618,105 @@ inline void Tier::set_allocated_value(::std::string* value) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Tier.value)
 }
 
+// -------------------------------------------------------------------
+
+// Version
+
+inline bool Version::has_major() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void Version::set_has_major() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void Version::clear_has_major() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void Version::clear_major() {
+  major_ = 0;
+  clear_has_major();
+}
+inline ::google::protobuf::int32 Version::major() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.major)
+  return major_;
+}
+inline void Version::set_major(::google::protobuf::int32 value) {
+  set_has_major();
+  major_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.major)
+}
+
+inline bool Version::has_minor() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void Version::set_has_minor() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void Version::clear_has_minor() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void Version::clear_minor() {
+  minor_ = 0;
+  clear_has_minor();
+}
+inline ::google::protobuf::int32 Version::minor() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.minor)
+  return minor_;
+}
+inline void Version::set_minor(::google::protobuf::int32 value) {
+  set_has_minor();
+  minor_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.minor)
+}
+
+inline bool Version::has_patch() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void Version::set_has_patch() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void Version::clear_has_patch() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void Version::clear_patch() {
+  patch_ = 0;
+  clear_has_patch();
+}
+inline ::google::protobuf::int32 Version::patch() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.patch)
+  return patch_;
+}
+inline void Version::set_patch(::google::protobuf::int32 value) {
+  set_has_patch();
+  patch_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.patch)
+}
+
+inline bool Version::has_unstable() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void Version::set_has_unstable() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void Version::clear_has_unstable() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void Version::clear_unstable() {
+  unstable_ = 0;
+  clear_has_unstable();
+}
+inline ::google::protobuf::int32 Version::unstable() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.unstable)
+  return unstable_;
+}
+inline void Version::set_unstable(::google::protobuf::int32 value) {
+  set_has_unstable();
+  unstable_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.unstable)
+}
+
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
