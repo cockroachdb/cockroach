@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"sync"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -30,6 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
+
+var scanNodePool = sync.Pool{
+	New: func() interface{} {
+		return &scanNode{}
+	},
+}
 
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
@@ -100,7 +107,9 @@ type scanNode struct {
 }
 
 func (p *planner) Scan() *scanNode {
-	return &scanNode{p: p}
+	n := scanNodePool.Get().(*scanNode)
+	n.p = p
+	return n
 }
 
 func (n *scanNode) Values() parser.Datums {
@@ -120,7 +129,10 @@ func (n *scanNode) Start(context.Context) error {
 		n.valNeededForCol, false /* returnRangeInfo */, &n.p.alloc)
 }
 
-func (n *scanNode) Close(context.Context) {}
+func (n *scanNode) Close(context.Context) {
+	*n = scanNode{}
+	scanNodePool.Put(n)
+}
 
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan(ctx context.Context) error {
