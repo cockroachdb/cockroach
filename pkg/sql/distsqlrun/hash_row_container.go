@@ -15,12 +15,16 @@
 package distsqlrun
 
 import (
+	"bytes"
 	"unsafe"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -39,10 +43,17 @@ type rowMarkerIterator interface {
 // iterate over the unmarked rows to produce a result.
 type hashRowContainer interface {
 	// Init initializes the hashRowContainer with the given equality columns.
-	// The hashRowContainer will store rows in buckets matching the encoding
-	// of their storedEqCols and given a row, will return rows in the bucket
-	// matching the encoding of its probeEqCols.
-	Init(ctx context.Context, storedEqCols, probeEqCols columns) error
+	//	- shouldMark specifies whether the caller cares about marking rows. If
+	//	  not, the hashRowContainer will not perform any row marking logic. This
+	//	  is meant to optimize space usage and runtime.
+	//	- types is the schema of rows that will be added to this container.
+	//	- storedEqCols are the equality columns of rows stored in this
+	// 	  container.
+	// 	  i.e. when adding a row, the columns specified by storedEqCols are used
+	// 	  to get the bucket that the row should be added to.
+	Init(
+		ctx context.Context, shouldMark bool, types []sqlbase.ColumnType, storedEqCols columns,
+	) error
 	AddRow(context.Context, sqlbase.EncDatumRow) error
 
 	// NewBucketIterator returns a rowMarkerIterator that iterates over a bucket
@@ -55,9 +66,14 @@ type hashRowContainer interface {
 	// emitted. For full/outer joins, this is tracked through marking rows if
 	// they match and then iterating over all unmarked rows to emit those that
 	// did not match.
-	NewBucketIterator(context.Context, sqlbase.EncDatumRow) (rowMarkerIterator, error)
+	// 	- probeEqCols are the equality columns of the given row that are used to
+	// 	  get the bucket of matching rows.
+	NewBucketIterator(
+		ctx context.Context, row sqlbase.EncDatumRow, probeEqCols columns,
+	) (rowMarkerIterator, error)
 
 	// NewUnmarkedIterator returns a rowIterator that iterates over unmarked
+	// rows. If shouldMark was false in Init(), this iterator iterates over all
 	// rows.
 	NewUnmarkedIterator(context.Context) rowIterator
 
@@ -72,6 +88,9 @@ type columnEncoder struct {
 	datumAlloc sqlbase.DatumAlloc
 }
 
+// encodeEqualityCols returns the encoding of the specified columns of the given
+// row. The returned byte slice is only valid until the next call to
+// encodeEqualityColumns().
 // TODO(asubiotto): This logic could be shared with the diskRowContainer.
 func (e columnEncoder) encodeEqualityCols(
 	ctx context.Context, row sqlbase.EncDatumRow, eqCols columns,
@@ -104,10 +123,12 @@ const sizeOfBool = int64(unsafe.Sizeof(false))
 // error can only occur at the start of the marking phase, thus not having to
 // deal with half-emitted buckets and marks when falling back to disk.
 type hashMemRowContainer struct {
-	// TODO(asubiotto): This memRowContainer then has an underlying
-	// sqlbase.RowContainer. This can be cleaned up.
 	*memRowContainer
 	columnEncoder
+
+	// shouldMark specifies whether the caller cares about marking rows. If not,
+	// marked is never initialized.
+	shouldMark bool
 
 	// marked specifies for each row in memRowContainer whether that row has
 	// been marked. Used for iterating over unmarked rows.
@@ -120,20 +141,16 @@ type hashMemRowContainer struct {
 	// are all in the memRowContainer.
 	bucketsAcc mon.BoundAccount
 
-	// {stored, probe}eqCols contain the indices of the columns of a row that
-	// are encoded and used as a key into buckets. probeEqCols are used in
-	// NewBucketIterator(), and storedEqCols are used in AddRow().
+	// storedEqCols contains the indices of the columns of a row that are
+	// encoded and used as a key into buckets when adding a row.
 	storedEqCols columns
-	probeEqCols  columns
 }
 
 var _ hashRowContainer = &hashMemRowContainer{}
 
 // makeHashMemRowContainer creates a hashMemRowContainer from the given
 // rowContainer. This rowContainer must still be Close()d by the caller.
-func makeHashMemRowContainer(
-	ctx context.Context, rowContainer *memRowContainer,
-) hashMemRowContainer {
+func makeHashMemRowContainer(rowContainer *memRowContainer) hashMemRowContainer {
 	return hashMemRowContainer{
 		memRowContainer: rowContainer,
 		buckets:         make(map[string][]int),
@@ -141,14 +158,17 @@ func makeHashMemRowContainer(
 	}
 }
 
-// Init implements the hashRowContainer interface.
-func (h *hashMemRowContainer) Init(ctx context.Context, storedEqCols, probeEqCols columns) error {
-	if h.storedEqCols != nil || h.probeEqCols != nil {
+// Init implements the hashRowContainer interface. types is ignored because the
+// schema is inferred from the memRowContainer.
+func (h *hashMemRowContainer) Init(
+	ctx context.Context, shouldMark bool, _ []sqlbase.ColumnType, storedEqCols columns,
+) error {
+	if h.storedEqCols != nil {
 		return errors.New("hashMemRowContainer has already been initialized")
 	}
 
+	h.shouldMark = shouldMark
 	h.storedEqCols = storedEqCols
-	h.probeEqCols = probeEqCols
 
 	// Build buckets from the rowContainer.
 	for rowIdx := 0; rowIdx < h.Len(); rowIdx++ {
@@ -211,9 +231,9 @@ var _ rowMarkerIterator = &hashMemRowBucketIterator{}
 
 // NewBucketIterator implements the hashRowContainer interface.
 func (h *hashMemRowContainer) NewBucketIterator(
-	ctx context.Context, row sqlbase.EncDatumRow,
+	ctx context.Context, row sqlbase.EncDatumRow, probeEqCols columns,
 ) (rowMarkerIterator, error) {
-	encoded, err := h.encodeEqualityCols(ctx, row, h.probeEqCols)
+	encoded, err := h.encodeEqualityCols(ctx, row, probeEqCols)
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +263,9 @@ func (i *hashMemRowBucketIterator) Row() (sqlbase.EncDatumRow, error) {
 
 // Mark implements the rowMarkerIterator interface.
 func (i *hashMemRowBucketIterator) Mark(ctx context.Context, mark bool) error {
+	if !i.shouldMark {
+		log.Fatal(ctx, "hash mem row container not set up for marking")
+	}
 	if i.marked == nil {
 		if err := i.bucketsAcc.Grow(ctx, sizeOfBoolSlice+(sizeOfBool*int64(i.Len()))); err != nil {
 			return err
@@ -299,3 +322,236 @@ func (i *hashMemRowIterator) Row() (sqlbase.EncDatumRow, error) {
 
 // Close implements the rowIterator interface.
 func (i *hashMemRowIterator) Close() {}
+
+// hashDiskRowContainer is an on-disk implementation of a hashRowContainer.
+// The rows are stored in an underlying diskRowContainer with an extra boolean
+// column to keep track of that row's mark.
+type hashDiskRowContainer struct {
+	diskRowContainer
+	columnEncoder
+
+	// shouldMark specifies whether the caller cares about marking rows. If not,
+	// rows are stored with one less column (which usually specifies that row's
+	// mark).
+	shouldMark    bool
+	engine        engine.Engine
+	scratchEncRow sqlbase.EncDatumRow
+}
+
+var _ hashRowContainer = &hashDiskRowContainer{}
+
+var (
+	encodedTrue  = encoding.EncodeBoolValue(nil, encoding.NoColumnID, true)
+	encodedFalse = encoding.EncodeBoolValue(nil, encoding.NoColumnID, false)
+)
+
+// makeHashDiskRowContainer creates a hashDiskRowContainer with the given engine
+// as the underlying store that rows are stored on. shouldMark specifies whether
+// the hashDiskRowContainer should set itself up to mark rows.
+func makeHashDiskRowContainer(e engine.Engine) hashDiskRowContainer {
+	return hashDiskRowContainer{engine: e}
+}
+
+// Init implements the hashRowContainer interface.
+func (h *hashDiskRowContainer) Init(
+	ctx context.Context, shouldMark bool, types []sqlbase.ColumnType, storedEqCols columns,
+) error {
+	// Provide the diskRowContainer with an ordering on the equality columns of
+	// the rows that we will store. This will result in rows with the
+	// same equality columns ocurring contiguously in the keyspace.
+	ordering := make(sqlbase.ColumnOrdering, len(storedEqCols))
+	for i := range ordering {
+		ordering[i] = sqlbase.ColumnOrderInfo{
+			ColIdx:    int(storedEqCols[i]),
+			Direction: encoding.Ascending,
+		}
+	}
+
+	h.shouldMark = shouldMark
+
+	storedTypes := types
+	if h.shouldMark {
+		// Add a boolean column to the end of the rows to implement marking rows.
+		storedTypes = make([]sqlbase.ColumnType, len(types)+1)
+		copy(storedTypes, types)
+		storedTypes[len(storedTypes)-1] = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
+	}
+
+	if h.shouldMark {
+		h.scratchEncRow = make(sqlbase.EncDatumRow, len(storedTypes))
+		// Initialize the last column of the scratch row we use in AddRow() to
+		// be unmarked.
+		h.scratchEncRow[len(h.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL},
+			parser.MakeDBool(false),
+		)
+	}
+
+	h.diskRowContainer = makeDiskRowContainer(ctx, storedTypes, ordering, h.engine)
+	return nil
+}
+
+// AddRow adds a row to the hashDiskRowContainer. This row is unmarked by
+// default.
+func (h *hashDiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	var err error
+	if h.shouldMark {
+		// len(h.scratchEncRow) == len(row) + 1 if h.shouldMark == true. The
+		// last column has been initialized to a false mark in Init().
+		copy(h.scratchEncRow, row)
+		err = h.diskRowContainer.AddRow(ctx, h.scratchEncRow)
+	} else {
+		err = h.diskRowContainer.AddRow(ctx, row)
+	}
+	return err
+}
+
+// hashDiskRowBucketIterator iterates over the rows in a bucket.
+type hashDiskRowBucketIterator struct {
+	diskRowIterator
+	hashDiskRowContainer *hashDiskRowContainer
+	// encodedEqCols is the encoding of the equality columns of the rows in the
+	// bucket that this iterator iterates over.
+	encodedEqCols []byte
+}
+
+var _ rowMarkerIterator = hashDiskRowBucketIterator{}
+
+// NewBucketIterator implements the hashRowContainer interface.
+func (h *hashDiskRowContainer) NewBucketIterator(
+	ctx context.Context, row sqlbase.EncDatumRow, probeEqCols columns,
+) (rowMarkerIterator, error) {
+	encoded, err := h.encodeEqualityCols(ctx, row, probeEqCols)
+	if err != nil {
+		return nil, err
+	}
+	encodedEqCols := make([]byte, len(encoded))
+	copy(encodedEqCols, encoded)
+
+	return hashDiskRowBucketIterator{
+		diskRowIterator: h.NewIterator(ctx).(diskRowIterator),
+
+		hashDiskRowContainer: h,
+		encodedEqCols:        encodedEqCols,
+	}, nil
+}
+
+// Rewind implements the rowIterator interface.
+func (i hashDiskRowBucketIterator) Rewind() {
+	i.Seek(i.encodedEqCols)
+}
+
+// Valid implements the rowIterator interface.
+func (i hashDiskRowBucketIterator) Valid() (bool, error) {
+	ok, err := i.diskRowIterator.Valid()
+	if !ok || err != nil {
+		return ok, err
+	}
+	// Since the underlying map is sorted, once the key prefix does not equal
+	// the encoded equality columns, we have gone past the end of the bucket.
+	// TODO(asubiotto): Make UnsafeKey() and UnsafeValue() part of the
+	// SortedDiskMapIterator interface to avoid allocation here, in Mark(), and
+	// isRowMarked().
+	return bytes.HasPrefix(i.Key(), i.encodedEqCols), nil
+}
+
+// Row implements the rowIterator interface.
+func (i hashDiskRowBucketIterator) Row() (sqlbase.EncDatumRow, error) {
+	row, err := i.diskRowIterator.Row()
+	if err != nil {
+		return nil, err
+	}
+
+	// Remove the mark from the end of the row.
+	if i.hashDiskRowContainer.shouldMark {
+		row = row[:len(row)-1]
+	}
+	return row, nil
+}
+
+// Mark implements the rowMarkerIterator interface.
+func (i hashDiskRowBucketIterator) Mark(ctx context.Context, mark bool) error {
+	if !i.hashDiskRowContainer.shouldMark {
+		log.Fatal(ctx, "hash disk row container not set up for marking")
+	}
+	markBytes := encodedFalse
+	if mark {
+		markBytes = encodedTrue
+	}
+	// rowVal are the non-equality encoded columns, the last of which is the
+	// column we use to mark a row.
+	rowVal := i.Value()
+	originalLen := len(rowVal)
+	rowVal = append(rowVal, markBytes...)
+
+	// Write the new encoding of mark over the old encoding of mark and truncate
+	// the extra bytes.
+	copy(rowVal[originalLen-len(markBytes):], rowVal[originalLen:])
+	rowVal = rowVal[:originalLen]
+
+	// These marks only matter when using a hashDiskRowIterator to iterate over
+	// unmarked rows. The writes are flushed when creating a NewIterator() in
+	// NewUnmarkedIterator().
+	return i.hashDiskRowContainer.bufferedRows.Put(i.Key(), rowVal)
+}
+
+// hashDiskRowIterator iterates over all unmarked rows in a
+// hashDiskRowContainer.
+type hashDiskRowIterator struct {
+	diskRowIterator
+}
+
+var _ rowIterator = hashDiskRowIterator{}
+
+// NewUnmarkedIterator implements the hashRowContainer interface.
+func (h *hashDiskRowContainer) NewUnmarkedIterator(ctx context.Context) rowIterator {
+	if h.shouldMark {
+		return hashDiskRowIterator{
+			diskRowIterator: h.NewIterator(ctx).(diskRowIterator),
+		}
+	}
+	return h.NewIterator(ctx)
+}
+
+// Rewind implements the rowIterator interface.
+func (i hashDiskRowIterator) Rewind() {
+	i.diskRowIterator.Rewind()
+	// If the current row is marked, move the iterator to the next unmarked row.
+	if i.isRowMarked() {
+		i.Next()
+	}
+}
+
+// Next implements the rowIterator interface.
+func (i hashDiskRowIterator) Next() {
+	i.diskRowIterator.Next()
+	for i.isRowMarked() {
+		i.diskRowIterator.Next()
+	}
+}
+
+// Row implements the rowIterator interface.
+func (i hashDiskRowIterator) Row() (sqlbase.EncDatumRow, error) {
+	row, err := i.diskRowIterator.Row()
+	if err != nil {
+		return nil, err
+	}
+
+	// Remove the mark from the end of the row.
+	row = row[:len(row)-1]
+	return row, nil
+}
+
+// isRowMarked returns true if the current row is marked or false if it wasn't
+// marked or there was an error establishing the row's validity. Subsequent
+// calls to Valid() will uncover this error.
+func (i hashDiskRowIterator) isRowMarked() bool {
+	// isRowMarked is not necessarily called after Valid().
+	ok, err := i.diskRowIterator.Valid()
+	if !ok || err != nil {
+		return false
+	}
+
+	rowVal := i.Value()
+	return bytes.Equal(rowVal[len(rowVal)-len(encodedTrue):], encodedTrue)
+}
