@@ -386,6 +386,80 @@ func (r *QueryRegistry) Cancel(queryIDStr string, username string) (bool, error)
 	return false, fmt.Errorf("query ID %s not found", queryID)
 }
 
+// CancelTransaction cancells all active queries under the txn in addition to rolling it back.
+func (s *Session) CancelTransaction(txnID string, username string) (bool, error) {
+	if err := func() error {
+		s.TxnState.mu.Lock()
+		defer s.TxnState.mu.Unlock()
+
+		if s.TxnState.mu.txn == nil {
+			return errors.Errorf("the session has no txn")
+		}
+
+		txnUUID := s.TxnState.mu.txn.ID()
+		if txnUUID == nil {
+			return errors.Errorf("the session has no txn id %s", txnID)
+		}
+
+		sTxnID := txnUUID.Short()
+		if sTxnID != txnID {
+			return errors.Errorf("a txn with ID %s was not found in this session", txnID)
+		}
+
+		return nil
+	}(); err != nil {
+		return false, err
+	}
+	if username != security.RootUser && username != s.User {
+		return true, errors.Errorf("a matching txn was found but the user is not authorized")
+	}
+
+	if err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		// Cancel all running queries under the txn.
+		// Query cancellation is not guaranteed.
+		// Queries may finish executing regardless.
+		for _, query := range s.mu.ActiveQueries {
+			query.cancel()
+			atomic.StoreInt32(&query.session.mu.IsTxnCancelled, 1)
+		}
+		return nil
+	}(); err != nil {
+		return true, err
+	}
+
+	return true, nil
+
+	// Wait for the queries to either finish cancelling or executing.
+	// This will also handle the case when there's an active txn without running queries.
+	// hasQueries := func() bool {
+	// 	s.mu.Lock()
+	// 	defer s.mu.Unlock()
+	// 	return len(s.mu.ActiveQueries) != 0
+	// }
+	// timeout := time.After(time.Second * 10)
+	// for {
+	// 	select {
+	// 	case <-timeout:
+	// 		return true, errors.Errorf("timed out while waiting for queries to cancel")
+	// 	default:
+	// 		if hasQueries() {
+	// 			continue
+	// 		}
+	// 		// If the queries were successfully cancelled, then the txn should
+	// 		// already transition to an aborted state, rollback and get cleaned-up.
+	// 		if s.TxnState.State() == NoTxn || s.TxnState.State() == Aborted {
+	// 			return true, nil
+	// 		}
+	// 		// If the queries finished executing(weren't cancelled)
+	// 		// then rollback the txn.
+	// 		res := rollbackSQLTransaction(&s.TxnState)
+	// 		return true, res.Err
+	// 	}
+	// }
+}
+
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
 func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
