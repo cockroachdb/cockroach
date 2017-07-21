@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -48,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -1301,6 +1299,7 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 
 func TestBackupRestoreChecksum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(dan) BEFORE MERGE")
 
 	const numAccounts = 1000
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
@@ -1431,64 +1430,6 @@ func TestTimestampMismatch(t *testing.T) {
 			t.Errorf("expected 'no backup covers time' error got: %+v", err)
 		}
 	})
-}
-
-func TestPresplitRanges(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx, _, tc, _, cleanupFn := backupRestoreTestSetup(t, multiNode, 0)
-	defer cleanupFn()
-	kvDB := tc.Server(0).KVClient().(*client.DB)
-
-	numRangesTests := []int{0, 1, 2, 3, 4, 10}
-	for testNum, numRanges := range numRangesTests {
-		t.Run(strconv.Itoa(numRanges), func(t *testing.T) {
-			baseKey := keys.MakeTablePrefix(uint32(keys.MaxReservedDescID + testNum))
-			var splitPoints []roachpb.Key
-			for i := 0; i < numRanges; i++ {
-				key := encoding.EncodeUvarintAscending(append([]byte(nil), baseKey...), uint64(i))
-				splitPoints = append(splitPoints, key)
-			}
-			if err := sqlccl.PresplitRanges(ctx, *kvDB, splitPoints); err != nil {
-				t.Error(err)
-			}
-
-			// Verify that the splits exist.
-			// Note that PresplitRanges adds the row sentinel to make a valid table
-			// key, but AdminSplit internally removes it (via EnsureSafeSplitKey). So
-			// we expect splits that match the splitPoints exactly.
-			for _, splitKey := range splitPoints {
-				// Scan the meta range for splitKey.
-				rk, err := keys.Addr(splitKey)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				startKey := keys.RangeMetaKey(rk)
-				endKey := keys.Meta2Prefix.PrefixEnd()
-
-				kvs, err := kvDB.Scan(context.Background(), startKey, endKey, 1)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if len(kvs) != 1 {
-					t.Fatalf("expected 1 KV, got %v", kvs)
-				}
-				desc := &roachpb.RangeDescriptor{}
-				if err := kvs[0].ValueProto(desc); err != nil {
-					t.Fatal(err)
-				}
-				if !desc.EndKey.Equal(rk) {
-					t.Errorf(
-						"missing split %s: range %s to %s",
-						keys.PrettyPrint(splitKey),
-						keys.PrettyPrint(desc.StartKey.AsRawKey()),
-						keys.PrettyPrint(desc.EndKey.AsRawKey()),
-					)
-				}
-			}
-		})
-	}
 }
 
 func TestBackupLevelDB(t *testing.T) {
