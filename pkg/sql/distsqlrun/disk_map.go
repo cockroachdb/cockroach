@@ -78,7 +78,7 @@ type SortedDiskMapBatchWriter interface {
 
 	// Close flushes all writes to the underlying store and frees up resources
 	// held by the batch writer.
-	Close(context.Context)
+	Close(context.Context) error
 }
 
 // SortedDiskMap is an on-disk map. Keys are iterated over in sorted order.
@@ -279,9 +279,8 @@ func (b *RocksDBMapBatchWriter) Flush() error {
 }
 
 // Close implements the SortedDiskMapBatchWriter interface.
-func (b *RocksDBMapBatchWriter) Close(ctx context.Context) {
-	if err := b.Flush(); err != nil {
-		log.Warning(ctx, errors.Wrapf(err, "batch writer could not be flushed on close"))
-	}
+func (b *RocksDBMapBatchWriter) Close(ctx context.Context) error {
+	err := b.Flush()
 	b.batch.Close()
+	return err
 }
