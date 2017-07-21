@@ -13,9 +13,11 @@
 // permissions and limitations under the License.
 //
 
-package d
+package base
 
-// template.go can almost be compiled by itself. This file fills the gap.
+// This file contains shim Go functions that make it possible for the
+// Go compiler (and linters) to check the templates *before* they are
+// transformed into generated code.
 
 // Type is a mock struct type.
 type Type struct{ ref *node }
