@@ -526,7 +526,7 @@ func TestShowJobs(t *testing.T) {
 			return ids
 		}(),
 		Error:   in.err,
-		Details: &jobs.Payload_SchemaChange{SchemaChange: &jobs.SchemaChangeDetails{}},
+		Details: jobs.WrapPayloadDetails(jobs.SchemaChangeDetails{}),
 	}).Marshal()
 	if err != nil {
 		t.Fatal(err)
