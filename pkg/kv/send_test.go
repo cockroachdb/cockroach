@@ -25,7 +25,6 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -37,17 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
-
-func newTestServer(t *testing.T, ctx *rpc.Context) (*grpc.Server, net.Listener) {
-	s := rpc.NewServer(ctx)
-
-	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return s, ln
-}
 
 type Node time.Duration
 
@@ -88,8 +76,12 @@ func TestSendToOneClient(t *testing.T) {
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		stopper,
 	)
-	s, ln := newTestServer(t, rpcContext)
+	s := rpc.NewServer(rpcContext)
 	roachpb.RegisterInternalServer(s, Node(0))
+	ln, err := netutil.ListenAndServeGRPC(rpcContext.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	reply, err := sendBatch(context.Background(), SendOptions{}, []net.Addr{ln.Addr()}, rpcContext)
 	if err != nil {
