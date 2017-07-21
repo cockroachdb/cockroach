@@ -54,6 +54,10 @@ type Job struct {
 // Details is a marker interface for job details proto structs.
 type Details interface{}
 
+var _ Details = BackupDetails{}
+var _ Details = RestoreDetails{}
+var _ Details = SchemaChangeDetails{}
+
 // Record stores the job fields that are not automatically managed by
 // Job.
 type Record struct {
@@ -77,46 +81,6 @@ const (
 	// StatusSucceeded is for jobs that have successfully completed.
 	StatusSucceeded Status = "succeeded"
 )
-
-func (j *Job) load(ctx context.Context) error {
-	return j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		payload, err := j.retrievePayload(ctx, txn)
-		if err != nil {
-			return err
-		}
-		j.Record.Description = payload.Description
-		j.Record.Username = payload.Username
-		j.Record.DescriptorIDs = payload.DescriptorIDs
-		if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
-			return err
-		}
-		// Don't need to lock because we're the only one who has a handle on this
-		// Job so far.
-		j.mu.payload = *payload
-		return nil
-	})
-}
-
-func (j *Job) runInTxn(
-	ctx context.Context, retryable func(context.Context, *client.Txn) error,
-) error {
-	if j.txn != nil {
-		defer func() { j.txn = nil }()
-		return j.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true, AssignTimestampImmediately: true},
-			func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
-				return retryable(ctx, txn)
-			})
-	}
-	return j.registry.db.Txn(ctx, retryable)
-}
-
-// WithTxn sets the transaction that this Job will use for its next operation.
-// If the transaction is nil, the Job will create a one-off transaction instead.
-// If you use WithTxn, this Job will no longer be threadsafe.
-func (j *Job) WithTxn(txn *client.Txn) *Job {
-	j.txn = txn
-	return j
-}
 
 // ID returns the ID of the job that this Job is currently tracking. This will
 // be nil if Created has not yet been called.
@@ -235,6 +199,56 @@ func (j *Job) Payload() Payload {
 	return j.mu.payload
 }
 
+// WithTxn sets the transaction that this Job will use for its next operation.
+// If the transaction is nil, the Job will create a one-off transaction instead.
+// If you use WithTxn, this Job will no longer be threadsafe.
+func (j *Job) WithTxn(txn *client.Txn) *Job {
+	j.txn = txn
+	return j
+}
+
+func (j *Job) runInTxn(
+	ctx context.Context, retryable func(context.Context, *client.Txn) error,
+) error {
+	if j.txn != nil {
+		defer func() { j.txn = nil }()
+		return j.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true, AssignTimestampImmediately: true},
+			func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
+				return retryable(ctx, txn)
+			})
+	}
+	return j.registry.db.Txn(ctx, retryable)
+}
+
+func (j *Job) load(ctx context.Context) error {
+	return j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		payload, err := j.loadPayload(ctx, txn)
+		if err != nil {
+			return err
+		}
+		j.Record.Description = payload.Description
+		j.Record.Username = payload.Username
+		j.Record.DescriptorIDs = payload.DescriptorIDs
+		if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
+			return err
+		}
+		// Don't need to lock because we're the only one who has a handle on this
+		// Job so far.
+		j.mu.payload = *payload
+		return nil
+	})
+}
+
+func (j *Job) loadPayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
+	const selectStmt = "SELECT payload FROM system.jobs WHERE id = $1"
+	row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
+	if err != nil {
+		return nil, err
+	}
+
+	return UnmarshalPayload(row[0])
+}
+
 func (j *Job) insert(ctx context.Context, payload *Payload) error {
 	if j.id != nil {
 		// Already created - do nothing.
@@ -261,16 +275,6 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 	return nil
 }
 
-func (j *Job) retrievePayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
-	const selectStmt = "SELECT payload FROM system.jobs WHERE id = $1"
-	row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
-	if err != nil {
-		return nil, err
-	}
-
-	return UnmarshalPayload(row[0])
-}
-
 func (j *Job) update(
 	ctx context.Context, newStatus Status, updateFn func(*Payload) (doUpdate bool, err error),
 ) error {
@@ -281,7 +285,7 @@ func (j *Job) update(
 	var payload *Payload
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		payload, err = j.retrievePayload(ctx, txn)
+		payload, err = j.loadPayload(ctx, txn)
 		if err != nil {
 			return err
 		}
@@ -400,7 +404,3 @@ func UnmarshalPayload(datum parser.Datum) (*Payload, error) {
 func roundTimestamp(ts time.Time) int64 {
 	return ts.Round(time.Microsecond).UnixNano() / time.Microsecond.Nanoseconds()
 }
-
-var _ Details = BackupDetails{}
-var _ Details = RestoreDetails{}
-var _ Details = SchemaChangeDetails{}
