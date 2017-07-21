@@ -17,6 +17,7 @@
 package jobs_test
 
 import (
+	gosql "database/sql"
 	"reflect"
 	"strings"
 	"testing"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
@@ -40,6 +40,7 @@ import (
 // expectation defines the information necessary to determine the validity of
 // a job in the system.jobs table.
 type expectation struct {
+	DB                *gosql.DB
 	Record            jobs.Record
 	Type              string
 	Before            time.Time
@@ -47,23 +48,22 @@ type expectation struct {
 	Error             string
 }
 
-// verifyJobRecord verifies that the expectation matches the job record
-// stored in the system.jobs table.
-func verifyJobRecord(
-	db *sqlutils.SQLRunner,
-	job *jobs.Job,
-	expectedStatus jobs.Status,
-	expected expectation,
-) error {
+func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error {
 	var statusString string
 	var created time.Time
 	var payloadBytes []byte
-	db.QueryRow(
-		`SELECT status, created, payload FROM system.jobs WHERE id = $1`, job.ID(),
-	).Scan(&statusString, &created, &payloadBytes)
+	if err := expected.DB.QueryRow(
+		`SELECT status, created, payload FROM system.jobs WHERE id = $1`, id,
+	).Scan(
+		&statusString, &created, &payloadBytes,
+	); err != nil {
+		return err
+	}
 
 	var payload jobs.Payload
-	payload.Unmarshal(payloadBytes)
+	if err := payload.Unmarshal(payloadBytes); err != nil {
+		return err
+	}
 
 	// Verify the upstream-provided fields.
 	details, err := payload.UnwrapDetails()
@@ -141,14 +141,12 @@ func TestJobLifecycle(t *testing.T) {
 
 	ctx := context.TODO()
 
-	s, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	registry := s.JobRegistry().(*jobs.Registry)
 
 	t.Run("valid job lifecycles succeed", func(t *testing.T) {
-		db := sqlutils.MakeSQLRunner(t, rawSQLDB)
-
 		// Woody is a successful job.
 		woodyRecord := jobs.Record{
 			Description:   "There's a snake in my boot!",
@@ -157,6 +155,7 @@ func TestJobLifecycle(t *testing.T) {
 			Details:       jobs.RestoreDetails{},
 		}
 		woodyExpectation := expectation{
+			DB:     sqlDB,
 			Record: woodyRecord,
 			Type:   jobs.TypeRestore,
 			Before: timeutil.Now(),
@@ -166,14 +165,14 @@ func TestJobLifecycle(t *testing.T) {
 		if err := woodyJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, woodyJob, jobs.StatusPending, woodyExpectation); err != nil {
+		if err := woodyExpectation.verify(woodyJob.ID(), jobs.StatusPending); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := woodyJob.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
+		if err := woodyExpectation.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 
@@ -191,7 +190,7 @@ func TestJobLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			woodyExpectation.FractionCompleted = f.expected
-			if err := verifyJobRecord(db, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
+			if err := woodyExpectation.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -203,14 +202,14 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		woodyExpectation.Record.Details = jobs.RestoreDetails{LowWaterMark: roachpb.Key("mariana")}
-		if err := verifyJobRecord(db, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
+		if err := woodyExpectation.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := woodyJob.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
+		if err := woodyExpectation.verify(woodyJob.ID(), jobs.StatusSucceeded); err != nil {
 			t.Fatal(err)
 		}
 
@@ -221,6 +220,7 @@ func TestJobLifecycle(t *testing.T) {
 			DescriptorIDs: []sqlbase.ID{3, 2, 1},
 		}
 		buzzExpectation := expectation{
+			DB:     sqlDB,
 			Record: buzzRecord,
 			Type:   jobs.TypeBackup,
 			Before: timeutil.Now(),
@@ -234,14 +234,14 @@ func TestJobLifecycle(t *testing.T) {
 		if err := buzzJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, buzzJob, jobs.StatusPending, buzzExpectation); err != nil {
+		if err := buzzExpectation.verify(buzzJob.ID(), jobs.StatusPending); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := buzzJob.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
+		if err := buzzExpectation.verify(buzzJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 
@@ -249,17 +249,17 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		buzzExpectation.FractionCompleted = .42
-		if err := verifyJobRecord(db, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
+		if err := buzzExpectation.verify(buzzJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 
 		buzzJob.Failed(ctx, errors.New("Buzz Lightyear can't fly"))
-		if err := verifyJobRecord(db, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
+		if err := buzzExpectation.verify(buzzJob.ID(), jobs.StatusFailed); err != nil {
 			t.Fatal(err)
 		}
 
 		// Ensure that logging Buzz didn't corrupt Woody.
-		if err := verifyJobRecord(db, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
+		if err := woodyExpectation.verify(woodyJob.ID(), jobs.StatusSucceeded); err != nil {
 			t.Fatal(err)
 		}
 
@@ -271,6 +271,7 @@ func TestJobLifecycle(t *testing.T) {
 			Details:       jobs.RestoreDetails{},
 		}
 		sidExpectation := expectation{
+			DB:     sqlDB,
 			Record: sidRecord,
 			Type:   jobs.TypeRestore,
 			Before: timeutil.Now(),
@@ -281,20 +282,20 @@ func TestJobLifecycle(t *testing.T) {
 		if err := sidJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, sidJob, jobs.StatusPending, sidExpectation); err != nil {
+		if err := sidExpectation.verify(sidJob.ID(), jobs.StatusPending); err != nil {
 			t.Fatal(err)
 		}
 
 		sidJob.Failed(ctx, errors.New("Sid is a total failure"))
-		if err := verifyJobRecord(db, sidJob, jobs.StatusFailed, sidExpectation); err != nil {
+		if err := sidExpectation.verify(sidJob.ID(), jobs.StatusFailed); err != nil {
 			t.Fatal(err)
 		}
 
 		// Ensure that logging Sid didn't corrupt Woody or Buzz.
-		if err := verifyJobRecord(db, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
+		if err := woodyExpectation.verify(woodyJob.ID(), jobs.StatusSucceeded); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
+		if err := buzzExpectation.verify(buzzJob.ID(), jobs.StatusFailed); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -392,9 +393,9 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("succeeded forces fraction completed to 1.0", func(t *testing.T) {
-		db := sqlutils.MakeSQLRunner(t, rawSQLDB)
 		record := jobs.Record{Details: jobs.BackupDetails{}}
 		expect := expectation{
+			DB:                sqlDB,
 			Record:            record,
 			Type:              jobs.TypeBackup,
 			Before:            timeutil.Now(),
@@ -413,7 +414,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, job, jobs.StatusSucceeded, expect); err != nil {
+		if err := expect.verify(job.ID(), jobs.StatusSucceeded); err != nil {
 			t.Fatal(err)
 		}
 	})
