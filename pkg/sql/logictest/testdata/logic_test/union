@@ -146,28 +146,28 @@ SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 
 query ITTT rowsort
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
-0  union
-1  render
-2  scan
-2          table  uniontest@primary
-2          spans  ALL
-1  render
-2  scan
-2          table  uniontest@primary
-2          spans  ALL
+0  union    (empty)  (empty)            
+1  render   (empty)  (empty)            
+2  scan     (empty)  (empty)            
+2  (empty)  table    uniontest@primary  
+2  (empty)  spans    ALL                
+1  render   (empty)  (empty)            
+2  scan     (empty)  (empty)            
+2  (empty)  table    uniontest@primary  
+2  (empty)  spans    ALL                
 
 query ITTT rowsort
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
-0  append
-1  render
-2  scan
-2          table  uniontest@primary
-2          spans  ALL
-1  render
-2  scan
-2          table  uniontest@primary
-2          spans  ALL
+0  append   (empty)  (empty)            
+1  render   (empty)  (empty)            
+2  scan     (empty)  (empty)            
+2  (empty)  table    uniontest@primary  
+2  (empty)  spans    ALL                
+1  render   (empty)  (empty)            
+2  scan     (empty)  (empty)            
+2  (empty)  table    uniontest@primary  
+2  (empty)  spans    ALL                
 
 query II
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
@@ -204,9 +204,10 @@ SELECT 1 UNION SELECT 3 ORDER BY z
 query ITTT
 EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
 ----
-0  union
-1  render
-2  values
-2          size  3 columns, 5 rows
-1  values
-1          size  1 column, 1 row
+0  union    (empty)  (empty)            
+1  render   (empty)  (empty)            
+2  values   (empty)  (empty)            
+2  (empty)  size     3 columns, 5 rows  
+1  values   (empty)  (empty)            
+1  (empty)  size     1 column, 1 row    
+

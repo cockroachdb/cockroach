@@ -9,10 +9,10 @@ CREATE TABLE t (
 query ITTT
 EXPLAIN INSERT INTO t VALUES (1, 2)
 ----
-0  insert
-0          into  t(k, v)
-1  values
-1          size  2 columns, 1 row
+0  insert   (empty)  (empty)           
+0  (empty)  into     t(k, v)           
+1  values   (empty)  (empty)           
+1  (empty)  size     2 columns, 1 row  
 
 query I
 SELECT MAX("Level") FROM [EXPLAIN INSERT INTO t VALUES (1, 2)]
@@ -25,76 +25,76 @@ INSERT INTO t VALUES (1, 2)
 query ITTT
 EXPLAIN SELECT * FROM t
 ----
-0  scan
-0        table  t@primary
-0        spans  ALL
+0  scan     (empty)  (empty)    
+0  (empty)  table    t@primary  
+0  (empty)  spans    ALL        
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM t
 ----
-0  scan                      (k, v)
-0          table  t@primary
-0          spans  ALL
+0  scan     (empty)  (empty)    (k, v)   (empty)  
+0  (empty)  table    t@primary  (empty)  (empty)  
+0  (empty)  spans    ALL        (empty)  (empty)  
 
 query ITTT
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
-0  scan
-0        table  t@primary
-0        spans  /1-/2 /3-/4
+0  scan     (empty)  (empty)      
+0  (empty)  table    t@primary    
+0  (empty)  spans    /1-/2 /3-/4  
 
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
-0  scan                                  (k, v)
-0                 table     t@primary
-0                 spans     ALL
-0                 filter    (k % 2) = 0
+0  scan     (empty)  (empty)      (k, v)   (empty)  
+0  (empty)  table    t@primary    (empty)  (empty)  
+0  (empty)  spans    ALL          (empty)  (empty)  
+0  (empty)  filter   (k % 2) = 0  (empty)  (empty)  
 
 query ITTT
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
 ----
-0  values
-0          size  3 columns, 2 rows
+0  values   (empty)  (empty)            
+0  (empty)  size     3 columns, 2 rows  
 
 query ITTT
 EXPLAIN VALUES (1)
 ----
-0  values
-0          size  1 column, 1 row
+0  values   (empty)  (empty)          
+0  (empty)  size     1 column, 1 row  
 
 query ITTT
 EXPLAIN (EXPRS) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
 ----
-0  limit
-0                 count     1
-0                 offset    1
-1  ordinality
-2  scan
-2                 table     t@primary
-2                 spans     ALL
-2                 limit     2
+0  limit       (empty)  (empty)    
+0  (empty)     count    1          
+0  (empty)     offset   1          
+1  ordinality  (empty)  (empty)    
+2  scan        (empty)  (empty)    
+2  (empty)     table    t@primary  
+2  (empty)     spans    ALL        
+2  (empty)     limit    2          
 
 query ITTT
 EXPLAIN SELECT DISTINCT * FROM t
 ----
-0  distinct
-0            key    k
-1  scan
-1            table  t@primary
-1            spans  ALL
+0  distinct  (empty)  (empty)    
+0  (empty)   key      k          
+1  scan      (empty)  (empty)    
+1  (empty)   table    t@primary  
+1  (empty)   spans    ALL        
 
 query ITTT
 EXPLAIN (EXPRS) SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
 ----
-0  limit
-0                 count     1
-0                 offset    1
-1  distinct
-1                 key       k
-2  scan
-2                 table     t@primary
-2                 spans     ALL
+0  limit     (empty)  (empty)    
+0  (empty)   count    1          
+0  (empty)   offset   1          
+1  distinct  (empty)  (empty)    
+1  (empty)   key      k          
+2  scan      (empty)  (empty)    
+2  (empty)   table    t@primary  
+2  (empty)   spans    ALL        
 
 # Ensure EXPLAIN EXECUTE works properly
 
@@ -104,13 +104,13 @@ PREPARE x AS SELECT DISTINCT * from t LIMIT $1
 query ITTT
 EXPLAIN (EXPRS) EXECUTE x(3)
 ----
-0  limit
-0                 count     3
-1  distinct
-1                 key       k
-2  scan
-2                 table     t@primary
-2                 spans     ALL
+0  limit     (empty)  (empty)    
+0  (empty)   count    3          
+1  distinct  (empty)  (empty)    
+1  (empty)   key      k          
+2  scan      (empty)  (empty)    
+2  (empty)   table    t@primary  
+2  (empty)   spans    ALL        
 
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
@@ -118,12 +118,13 @@ CREATE TABLE tc (a INT, b INT, INDEX c(a))
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-0  sort                           (a, b)                                   =a,+b
-0              order  +b
-1  render                         (a, b)                                   =a
-2  index-join                     (a, b, rowid[hidden,omitted])            =a
-3  scan                           (a[omitted], b[omitted], rowid[hidden])  =a
-3              table  tc@c
-3              spans  /10-/11
-3  scan                           (a, b, rowid[hidden,omitted])
-3              table  tc@primary
+0  sort        (empty)  (empty)     (a, b)                                   =a,+b    
+0  (empty)     order    +b          (empty)                                  (empty)  
+1  render      (empty)  (empty)     (a, b)                                   =a       
+2  index-join  (empty)  (empty)     (a, b, rowid[hidden,omitted])            =a       
+3  scan        (empty)  (empty)     (a[omitted], b[omitted], rowid[hidden])  =a       
+3  (empty)     table    tc@c        (empty)                                  (empty)  
+3  (empty)     spans    /10-/11     (empty)                                  (empty)  
+3  scan        (empty)  (empty)     (a, b, rowid[hidden,omitted])            (empty)  
+3  (empty)     table    tc@primary  (empty)                                  (empty)  
+

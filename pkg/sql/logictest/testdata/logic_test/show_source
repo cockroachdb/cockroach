@@ -19,26 +19,26 @@ UTF8                1
 query TT colnames
 SELECT * FROM [SHOW ALL]
 ----
-variable                       value
-application_name
-client_encoding                UTF8
-client_min_messages
-database                       test
-datestyle                      ISO
-default_transaction_isolation  SERIALIZABLE
-distsql                        off
-extra_float_digits
-max_index_keys                 32
-node_id                        1
-search_path                    pg_catalog
-server_version                 9.5.0
-session_user                   root
-standard_conforming_strings    on
-time zone                      UTC
-tracing                        off
-transaction isolation level    SERIALIZABLE
-transaction priority           NORMAL
-transaction status             NoTxn
+variable                       value         
+application_name               (empty)       
+client_encoding                UTF8          
+client_min_messages            (empty)       
+database                       test          
+datestyle                      ISO           
+default_transaction_isolation  SERIALIZABLE  
+distsql                        off           
+extra_float_digits             (empty)       
+max_index_keys                 32            
+node_id                        1             
+search_path                    pg_catalog    
+server_version                 9.5.0         
+session_user                   root          
+standard_conforming_strings    on            
+time zone                      UTC           
+tracing                        off           
+transaction isolation level    SERIALIZABLE  
+transaction priority           NORMAL        
+transaction status             NoTxn         
 
 query I colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
@@ -49,35 +49,35 @@ sql.defaults.distsql
 query TTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE name != 'diagnostics.reporting.enabled'
 ----
-name                                               current_value  type  description
-cluster.organization                                              s     organization name
-diagnostics.reporting.interval                     1h0m0s         d     interval at which diagnostics data should be reported
-diagnostics.reporting.report_metrics               true           b     enable collection and reporting diagnostic metrics to cockroach labs
-diagnostics.reporting.send_crash_reports           true           b     send crash and panic reports
-kv.allocator.lease_rebalancing_aggressiveness      1E+00          f     set greater than 1.0 to rebalance leases toward load more aggressively, or between 0 and 1.0 to be more conservative about rebalancing leases
-kv.allocator.load_based_lease_rebalancing.enabled  true           b     set to enable rebalancing of range leases based on load and latency
-kv.gc.batch_size                                   100000         i     maximum number of keys in a batch for MVCC garbage collection
-kv.raft.command.max_size                           64 MiB         z     maximum size of a raft command
-kv.raft_log.synchronize                            true           b     set to true to synchronize on Raft log writes to persistent storage
-kv.snapshot_rebalance.max_rate                     2.0 MiB        z     the rate limit (bytes/sec) to use for rebalance snapshots
-kv.snapshot_recovery.max_rate                      8.0 MiB        z     the rate limit (bytes/sec) to use for recovery snapshots
-kv.transaction.max_intents                         100000         i     maximum number of write intents allowed for a KV transaction
-rocksdb.min_wal_sync_interval                      1ms            d     minimum duration between syncs of the RocksDB WAL
-server.declined_reservation_timeout                1s             d     the amount of time to consider the store throttled for up-replication after a reservation was declined
-server.failed_reservation_timeout                  5s             d     the amount of time to consider the store throttled for up-replication after a failed reservation call
-server.remote_debugging.mode                       local          s     set to enable remote debugging, localhost-only or disable (any, local, off)
-server.time_until_store_dead                       5m0s           d     the time after which if there is no new gossiped information about a store, it is considered dead
-sql.defaults.distsql                               1              e     Default distributed SQL execution mode [off = 0, auto = 1, on = 2]
-sql.defaults.distsql.tempstorage                   false          b     set to true to enable use of disk for larger distributed sql queries
-sql.metrics.statement_details.dump_to_logs         false          b     dump collected statement statistics to node logs when periodically cleared
-sql.metrics.statement_details.enabled              true           b     collect per-statement query statistics
-sql.metrics.statement_details.threshold            0s             d     minmum execution time to cause statics to be collected
-sql.trace.log_statement_execute                    false          b     set to true to enable logging of executed statements
-sql.trace.session_eventlog.enabled                 false          b     set to true to enable session tracing
-sql.trace.txn.enable_threshold                     0s             d     duration beyond which all transactions are traced (set to 0 to disable)
-trace.debug.enable                                 false          b     if set, traces for recent requests can be seen in the /debug page
-trace.lightstep.token                                             s     if set, traces go to Lightstep using this token
-trace.zipkin.collector                                            s     if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.
+name                                               current_value  type  description                                                                                                                                    
+cluster.organization                               (empty)        s     organization name                                                                                                                              
+diagnostics.reporting.interval                     1h0m0s         d     interval at which diagnostics data should be reported                                                                                          
+diagnostics.reporting.report_metrics               true           b     enable collection and reporting diagnostic metrics to cockroach labs                                                                           
+diagnostics.reporting.send_crash_reports           true           b     send crash and panic reports                                                                                                                   
+kv.allocator.lease_rebalancing_aggressiveness      1E+00          f     set greater than 1.0 to rebalance leases toward load more aggressively, or between 0 and 1.0 to be more conservative about rebalancing leases  
+kv.allocator.load_based_lease_rebalancing.enabled  true           b     set to enable rebalancing of range leases based on load and latency                                                                            
+kv.gc.batch_size                                   100000         i     maximum number of keys in a batch for MVCC garbage collection                                                                                  
+kv.raft.command.max_size                           64 MiB         z     maximum size of a raft command                                                                                                                 
+kv.raft_log.synchronize                            true           b     set to true to synchronize on Raft log writes to persistent storage                                                                            
+kv.snapshot_rebalance.max_rate                     2.0 MiB        z     the rate limit (bytes/sec) to use for rebalance snapshots                                                                                      
+kv.snapshot_recovery.max_rate                      8.0 MiB        z     the rate limit (bytes/sec) to use for recovery snapshots                                                                                       
+kv.transaction.max_intents                         100000         i     maximum number of write intents allowed for a KV transaction                                                                                   
+rocksdb.min_wal_sync_interval                      1ms            d     minimum duration between syncs of the RocksDB WAL                                                                                              
+server.declined_reservation_timeout                1s             d     the amount of time to consider the store throttled for up-replication after a reservation was declined                                         
+server.failed_reservation_timeout                  5s             d     the amount of time to consider the store throttled for up-replication after a failed reservation call                                          
+server.remote_debugging.mode                       local          s     set to enable remote debugging, localhost-only or disable (any, local, off)                                                                    
+server.time_until_store_dead                       5m0s           d     the time after which if there is no new gossiped information about a store, it is considered dead                                              
+sql.defaults.distsql                               1              e     Default distributed SQL execution mode [off = 0, auto = 1, on = 2]                                                                             
+sql.defaults.distsql.tempstorage                   false          b     set to true to enable use of disk for larger distributed sql queries                                                                           
+sql.metrics.statement_details.dump_to_logs         false          b     dump collected statement statistics to node logs when periodically cleared                                                                     
+sql.metrics.statement_details.enabled              true           b     collect per-statement query statistics                                                                                                         
+sql.metrics.statement_details.threshold            0s             d     minmum execution time to cause statics to be collected                                                                                         
+sql.trace.log_statement_execute                    false          b     set to true to enable logging of executed statements                                                                                           
+sql.trace.session_eventlog.enabled                 false          b     set to true to enable session tracing                                                                                                          
+sql.trace.txn.enable_threshold                     0s             d     duration beyond which all transactions are traced (set to 0 to disable)                                                                        
+trace.debug.enable                                 false          b     if set, traces for recent requests can be seen in the /debug page                                                                              
+trace.lightstep.token                              (empty)        s     if set, traces go to Lightstep using this token                                                                                                
+trace.zipkin.collector                             (empty)        s     if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.                           
 
 
 
@@ -146,8 +146,8 @@ zones
 query ITTTT colnames
 SELECT node_id,username,application_name,active_queries,kv_txn FROM [SHOW SESSIONS]
 ----
-node_id   username   application_name  active_queries                                                                                       kv_txn
-1         root                         SELECT node_id, username, application_name, active_queries, kv_txn FROM [SHOW CLUSTER SESSIONS];     NULL
+node_id  username  application_name  active_queries                                                                                     kv_txn  
+1        root      (empty)           SELECT node_id, username, application_name, active_queries, kv_txn FROM [SHOW CLUSTER SESSIONS];   NULL    
 
 query ITT colnames
 SELECT node_id, username, query FROM [SHOW QUERIES]

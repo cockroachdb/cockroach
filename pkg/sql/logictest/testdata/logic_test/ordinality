@@ -85,18 +85,19 @@ true
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
 ----
-0  ordinality                      (x, "ordinality")  +x,unique
-1  scan                            (x)                +x,unique
-1              table  foo@primary
-1              spans  /"a\x00"-
+0  ordinality  (empty)  (empty)      (x, "ordinality")  +x,unique  
+1  scan        (empty)  (empty)      (x)                +x,unique  
+1  (empty)     table    foo@primary  (empty)            (empty)    
+1  (empty)     spans    /"a\x00"-    (empty)            (empty)    
 
 # Show that the primary key cannot be used with a PK predicate
 # outside of ordinalityNode.
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
 ----
-0  filter                          (x, "ordinality")  +x,unique
-1  ordinality                      (x, "ordinality")  +x,unique
-2  scan                            (x)                +x,unique
-2              table  foo@primary
-2              spans  ALL
+0  filter      (empty)  (empty)      (x, "ordinality")  +x,unique  
+1  ordinality  (empty)  (empty)      (x, "ordinality")  +x,unique  
+2  scan        (empty)  (empty)      (x)                +x,unique  
+2  (empty)     table    foo@primary  (empty)            (empty)    
+2  (empty)     spans    ALL          (empty)            (empty)    
+

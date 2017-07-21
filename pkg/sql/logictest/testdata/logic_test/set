@@ -38,8 +38,8 @@ SET DATABASE = ""
 query T colnames
 SHOW DATABASE
 ----
-database
-
+database  
+(empty)   
 
 statement error no database specified
 SHOW TABLES
@@ -76,25 +76,25 @@ helloworld
 query TT
 SHOW ALL
 ----
-application_name               helloworld
-client_encoding                UTF8
-client_min_messages
-database                       foo
-datestyle                      ISO
-default_transaction_isolation  SERIALIZABLE
-distsql                        off
-extra_float_digits
-max_index_keys                 32
-node_id                        1
-search_path                    pg_catalog
-server_version                 9.5.0
-session_user                   root
-standard_conforming_strings    on
-time zone                      UTC
-tracing                        off
-transaction isolation level    SERIALIZABLE
-transaction priority           NORMAL
-transaction status             NoTxn
+application_name               helloworld    
+client_encoding                UTF8          
+client_min_messages            (empty)       
+database                       foo           
+datestyle                      ISO           
+default_transaction_isolation  SERIALIZABLE  
+distsql                        off           
+extra_float_digits             (empty)       
+max_index_keys                 32            
+node_id                        1             
+search_path                    pg_catalog    
+server_version                 9.5.0         
+session_user                   root          
+standard_conforming_strings    on            
+time zone                      UTC           
+tracing                        off           
+transaction isolation level    SERIALIZABLE  
+transaction priority           NORMAL        
+transaction status             NoTxn         
 
 # SESSION_USER is a special keyword, check that SHOW knows about it.
 query T

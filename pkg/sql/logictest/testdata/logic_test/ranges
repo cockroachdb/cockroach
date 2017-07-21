@@ -112,14 +112,14 @@ NULL       /8       {1}       1
 query ITTTTT colnames
 EXPLAIN (METADATA) ALTER TABLE t SPLIT AT SELECT k1,k2 FROM t ORDER BY k1 LIMIT 3
 ----
-Level  Type    Field  Description  Columns                           Ordering
-0      split                       (key, pretty)
-1      limit                       (k1, k2)                          +k1
-2      render                      (k1, k2)                          +k1
-3      scan                        (k1, k2, v[omitted], w[omitted])  +k1
-3              table  t@primary
-3              spans  ALL
-3              limit  3
+Level  Type     Field    Description  Columns                           Ordering  
+0      split    (empty)  (empty)      (key, pretty)                     (empty)   
+1      limit    (empty)  (empty)      (k1, k2)                          +k1       
+2      render   (empty)  (empty)      (k1, k2)                          +k1       
+3      scan     (empty)  (empty)      (k1, k2, v[omitted], w[omitted])  +k1       
+3      (empty)  table    t@primary    (empty)                           (empty)   
+3      (empty)  spans    ALL          (empty)                           (empty)   
+3      (empty)  limit    3            (empty)                           (empty)   
 
 # -- Tests with interleaved tables --
 

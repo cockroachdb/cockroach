@@ -32,13 +32,13 @@ INSERT INTO t VALUES
 query ITTT
 EXPLAIN (EXPRS) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 ----
-0  index-join
-1  scan
-1                 table     t@bc
-1                 spans     /2-/3
-1                 filter    (c % 2) = 0
-1  scan
-1                 table     t@primary
+0  index-join  (empty)  (empty)      
+1  scan        (empty)  (empty)      
+1  (empty)     table    t@bc         
+1  (empty)     spans    /2-/3        
+1  (empty)     filter   (c % 2) = 0  
+1  scan        (empty)  (empty)      
+1  (empty)     table    t@primary    
 
 # We do NOT look up the table row for '21' and '23'.
 query T
@@ -57,13 +57,13 @@ output row: [5 2 2 '22']
 query ITTT
 EXPLAIN (EXPRS) SELECT * FROM t WHERE b = 2 AND c != b
 ----
-0  index-join
-1  scan
-1                 table     t@bc
-1                 spans     /2-/3
-1                 filter    c != b
-1  scan
-1                 table     t@primary
+0  index-join  (empty)  (empty)    
+1  scan        (empty)  (empty)    
+1  (empty)     table    t@bc       
+1  (empty)     spans    /2-/3      
+1  (empty)     filter   c != b     
+1  scan        (empty)  (empty)    
+1  (empty)     table    t@primary  
 
 # We do NOT look up the table row for '22'.
 query T
@@ -134,14 +134,14 @@ output row: [9 3 3 '33']
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
-0  render                           (a)
-0              render 0  test.t.a
-1  index-join                       (a, b[omitted], c[omitted], s[omitted])
-2  scan                             (a, b[omitted], c[omitted], s[omitted])
-2              table     t@bc
-2              spans     /2-/3
-2  scan                             (a, b[omitted], c[omitted], s[omitted])
-2              table     t@primary
+0  render      (empty)   (empty)    (a)                                      (empty)  
+0  (empty)     render 0  test.t.a   (empty)                                  (empty)  
+1  index-join  (empty)   (empty)    (a, b[omitted], c[omitted], s[omitted])  (empty)  
+2  scan        (empty)   (empty)    (a, b[omitted], c[omitted], s[omitted])  (empty)  
+2  (empty)     table     t@bc       (empty)                                  (empty)  
+2  (empty)     spans     /2-/3      (empty)                                  (empty)  
+2  scan        (empty)   (empty)    (a, b[omitted], c[omitted], s[omitted])  (empty)  
+2  (empty)     table     t@primary  (empty)                                  (empty)  
 
 query I rowsort
 SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
