@@ -68,19 +68,14 @@ func newSorter(
 		// will discard the first Offset ones.
 		count = int64(post.Limit) + int64(post.Offset)
 	}
-	var tempStorageID uint64
-	if flowCtx.tempStorage != nil {
-		tempStorageID = flowCtx.tempStorageIDGenerator.NewID()
-	}
 	s := &sorter{
-		flowCtx:       flowCtx,
-		input:         MakeNoMetadataRowSource(input, output),
-		rawInput:      input,
-		ordering:      convertToColumnOrdering(spec.OutputOrdering),
-		matchLen:      spec.OrderingMatchLen,
-		count:         count,
-		tempStorage:   flowCtx.tempStorage,
-		tempStorageID: tempStorageID,
+		flowCtx:     flowCtx,
+		input:       MakeNoMetadataRowSource(input, output),
+		rawInput:    input,
+		ordering:    convertToColumnOrdering(spec.OutputOrdering),
+		matchLen:    spec.OrderingMatchLen,
+		count:       count,
+		tempStorage: flowCtx.tempStorage,
 	}
 	if err := s.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
 		return nil, err

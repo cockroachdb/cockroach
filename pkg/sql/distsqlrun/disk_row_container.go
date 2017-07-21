@@ -74,17 +74,13 @@ var _ sortableRowContainer = &diskRowContainer{}
 // 	- e is the underlying store that rows are stored on.
 func makeDiskRowContainer(
 	ctx context.Context,
-	tempStorageID uint64,
 	types []sqlbase.ColumnType,
 	ordering sqlbase.ColumnOrdering,
 	rowContainer memRowContainer,
 	e engine.Engine,
 ) (diskRowContainer, error) {
 	// Use the tempStorageID as the prefix.
-	diskMap, err := NewRocksDBMap(tempStorageID, e)
-	if err != nil {
-		return diskRowContainer{}, err
-	}
+	diskMap := NewRocksDBMap(e)
 	d := diskRowContainer{
 		diskMap:       diskMap,
 		types:         types,

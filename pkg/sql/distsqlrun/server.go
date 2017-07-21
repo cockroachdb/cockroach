@@ -110,15 +110,15 @@ type ServerConfig struct {
 	ClusterID uuid.UUID
 }
 
-// TempStorageIDGenerator generates unique IDs for each processor to use as a
+// tempStorageIDGenerator generates unique IDs for each processor to use as a
 // unique (unique to this node, on this uptime) prefix when writing to temp
 // storage.
-type TempStorageIDGenerator struct {
+type tempStorageIDGenerator struct {
 	nextID uint64
 }
 
 // NewID generates a new unique ID.
-func (t *TempStorageIDGenerator) NewID() uint64 {
+func (t *tempStorageIDGenerator) NewID() uint64 {
 	return atomic.AddUint64(&t.nextID, 1)
 }
 
@@ -133,9 +133,6 @@ type ServerImpl struct {
 	// larger than memory. It can be nil, in which case processors should still
 	// gracefully OOM if the working set gets too large.
 	tempStorage engine.Engine
-	// tempStorageIDGenerator is used to generate unique prefixes per processor so that
-	// each processor uses a nonoverlapping part of the temp keyspace.
-	tempStorageIDGenerator TempStorageIDGenerator
 }
 
 var _ DistSQLServer = &ServerImpl{}
@@ -149,8 +146,7 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper),
 		memMonitor: mon.MakeMonitor("distsql",
 			cfg.Counter, cfg.Hist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
-		tempStorage:            cfg.TempStorage,
-		tempStorageIDGenerator: TempStorageIDGenerator{},
+		tempStorage: cfg.TempStorage,
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 	return ds
@@ -226,18 +222,17 @@ func (ds *ServerImpl) setupFlow(
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
 	flowCtx := FlowCtx{
-		AmbientContext:         ds.AmbientContext,
-		stopper:                ds.Stopper,
-		id:                     req.Flow.FlowID,
-		evalCtx:                evalCtx,
-		rpcCtx:                 ds.RPCContext,
-		txnProto:               &req.Txn,
-		clientDB:               ds.DB,
-		remoteTxnDB:            ds.FlowDB,
-		testingKnobs:           ds.TestingKnobs,
-		nodeID:                 nodeID,
-		tempStorageIDGenerator: &ds.tempStorageIDGenerator,
-		tempStorage:            ds.tempStorage,
+		AmbientContext: ds.AmbientContext,
+		stopper:        ds.Stopper,
+		id:             req.Flow.FlowID,
+		evalCtx:        evalCtx,
+		rpcCtx:         ds.RPCContext,
+		txnProto:       &req.Txn,
+		clientDB:       ds.DB,
+		remoteTxnDB:    ds.FlowDB,
+		testingKnobs:   ds.TestingKnobs,
+		nodeID:         nodeID,
+		tempStorage:    ds.tempStorage,
 	}
 
 	ctx = flowCtx.AnnotateCtx(ctx)
