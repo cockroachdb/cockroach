@@ -50,6 +50,18 @@ func Generate(
 				a := slotAllocator{numRefs: numRefs, numEnums: numEnums, structNode: node}
 				for _, i := range t.Items {
 					child := node.NewChild("item")
+					isAtomic := true
+					if i.Type.Type != nil {
+						_ = child.NewChild("isNotPrimitive")
+						_, isAtomic = i.Type.Type.(*ir.EnumType)
+					} else {
+						_ = child.NewChild("isPrimitive")
+					}
+					if !isAtomic {
+						_ = child.NewChild("isNotAtomic")
+					} else {
+						_ = child.NewChild("isAtomic")
+					}
 					child.AddReplacement(paramName, i.Name)
 					child.AddReplacement(paramType, i.Type)
 					child.AddReplacement(paramTag, i.Tag)
