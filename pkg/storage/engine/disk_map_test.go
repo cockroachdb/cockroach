@@ -14,7 +14,7 @@
 //
 // Author: Alfonso Subiotto Marqués (alfonso@cockroachlabs.com)
 
-package distsqlrun
+package engine
 
 import (
 	"bytes"
@@ -28,7 +28,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -36,7 +35,7 @@ import (
 func TestRocksDBMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	tempEngine, err := NewTempEngine(ctx, base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +136,7 @@ func TestRocksDBMap(t *testing.T) {
 func TestRocksDBMapSandbox(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	tempEngine, err := NewTempEngine(ctx, base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +198,7 @@ func TestRocksDBMapSandbox(t *testing.T) {
 			func() {
 				i := tempEngine.NewIterator(false)
 				defer i.Close()
-				for i.Seek(engine.NilKey); ; i.Next() {
+				for i.Seek(NilKey); ; i.Next() {
 					if ok, err := i.Valid(); err != nil {
 						t.Fatal(err)
 					} else if !ok {
@@ -234,7 +233,7 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 		}
 	}()
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.StoreSpec{Path: dir})
+	tempEngine, err := NewTempEngine(ctx, base.StoreSpec{Path: dir})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -279,7 +278,7 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 		}
 	}()
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.StoreSpec{Path: dir})
+	tempEngine, err := NewTempEngine(ctx, base.StoreSpec{Path: dir})
 	if err != nil {
 		b.Fatal(err)
 	}
