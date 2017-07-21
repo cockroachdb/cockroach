@@ -103,7 +103,7 @@ func verifyJobRecord(
 			return errors.Errorf("JobRecords do not match:\n%s", diff)
 		}
 
-		// Verify Record-managed fields.
+		// Verify internally-managed fields.
 		status := jobs.Status(statusString)
 		if e, a := expectedStatus, status; e != a {
 			return errors.Errorf("expected status %v, got %v", e, a)
@@ -115,7 +115,7 @@ func verifyJobRecord(
 			return errors.Errorf("expected fraction completed %f, got %f", e, a)
 		}
 
-		// Check Record-managed timestamps for sanity.
+		// Check internally-managed timestamps for sanity.
 		verifyModifiedAgainst := func(name string, ts time.Time) error {
 			if modified.Time.Before(ts) {
 				return errors.Errorf("modified time %v before %s time %v", modified, name, ts)

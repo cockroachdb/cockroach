@@ -36,8 +36,8 @@ import (
 // Job manages logging the progress of long-running system processes, like
 // backups and restores, to the system.jobs table.
 //
-// The Record field can be directly modified before Created is called. Updates to
-// the Job field after the job has been created will not be written to the
+// The Record field can be directly modified before Created is called. Updates
+// to the Record field after the job has been created will not be written to the
 // database, however, even when calling e.g. Started or Succeeded.
 type Job struct {
 	// TODO(benesch): avoid giving Job a reference to Registry. This will likely
@@ -62,8 +62,7 @@ var _ Details = BackupDetails{}
 var _ Details = RestoreDetails{}
 var _ Details = SchemaChangeDetails{}
 
-// Record stores the job fields that are not automatically managed by
-// Job.
+// Record stores the job fields that are not automatically managed by Job.
 type Record struct {
 	Description   string
 	Username      string
@@ -387,8 +386,8 @@ func (p *Payload) UnwrapDetails() (Details, error) {
 	}
 }
 
-// UnmarshalPayload unmarshals and returns the Payload encoded in the
-// input datum, which should be a DBytes.
+// UnmarshalPayload unmarshals and returns the Payload encoded in the input
+// datum, which should be a parser.DBytes.
 func UnmarshalPayload(datum parser.Datum) (*Payload, error) {
 	payload := &Payload{}
 	bytes, ok := datum.(*parser.DBytes)
