@@ -205,9 +205,8 @@ func TestSorter(t *testing.T) {
 				evalCtx := parser.MakeTestingEvalContext()
 				defer evalCtx.Stop(ctx)
 				flowCtx := FlowCtx{
-					evalCtx:                evalCtx,
-					tempStorage:            tempEngine,
-					tempStorageIDGenerator: &TempStorageIDGenerator{},
+					evalCtx:     evalCtx,
+					tempStorage: tempEngine,
 				}
 
 				s, err := newSorter(&flowCtx, &c.spec, in, &c.post, out)

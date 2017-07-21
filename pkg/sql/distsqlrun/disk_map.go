@@ -18,7 +18,7 @@ package distsqlrun
 
 import (
 	"bytes"
-	"math"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -140,19 +140,28 @@ var _ SortedDiskMapBatchWriter = &RocksDBMapBatchWriter{}
 var _ SortedDiskMapIterator = &RocksDBMapIterator{}
 var _ SortedDiskMap = &RocksDBMap{}
 
+// tempIDGenerator is the temp ID generator for a node. Although it is possible
+// that, if more than one RocksDB engine were being used, we could reuse
+// prefixes, since we are using a uint64, that is an unneeded optimization that
+// makes the API more difficult. Since the prefix is a uint64, we will never run
+// out since it can safely reset after node restarts.
+
+// tempStorageID is the temp ID generator for a node. It generates unique
+// prefixes for NewRocksDBMap. It is a global because NewRocksDBMap needs to
+// prefix its writes uniquely, and using a global prevents users from having to
+// specify the prefex themselves and correctly guarantee that it is unique.
+var tempStorageID uint64
+
+func generateTempStorageID() uint64 {
+	return atomic.AddUint64(&tempStorageID, 1)
+}
+
 // NewRocksDBMap creates a new RocksDBMap with the passed in engine.Engine as
 // the underlying store. The RocksDBMap instance will have a keyspace prefixed
-// by prefix.
-func NewRocksDBMap(prefix uint64, e engine.Engine) (*RocksDBMap, error) {
-	// When we close this instance, we also delete the associated keyspace. If
-	// we accepted math.MaxUint64 as a prefix, our prefixBytes would be
-	// []byte{0xff, ..., 0xff} for which there is no end key, thus deleting
-	// nothing.
-	if prefix == math.MaxUint64 {
-		return nil, errors.New("invalid prefix")
-	}
-
-	return &RocksDBMap{prefix: encoding.EncodeUvarintAscending([]byte(nil), prefix), store: e}, nil
+// by a unique prefix.
+func NewRocksDBMap(e engine.Engine) *RocksDBMap {
+	prefix := generateTempStorageID()
+	return &RocksDBMap{prefix: encoding.EncodeUvarintAscending([]byte(nil), prefix), store: e}
 }
 
 // makeKey appends k to the RocksDBMap's prefix to keep the key local to this
