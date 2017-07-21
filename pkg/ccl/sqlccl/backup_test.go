@@ -31,6 +31,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
@@ -1220,6 +1221,53 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	bad := sqlDB.QueryStr(`SELECT id, balance, payload FROM data.bank WHERE id != balance`)
 	for _, r := range bad {
 		t.Errorf("bad row ID %s = bal %s (payload: %q)", r[0], r[1], r[2])
+	}
+}
+
+func TestConcurrentBackupRestores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 10
+	const concurrency, numIterations = 2, 3
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+
+	g, gCtx := errgroup.WithContext(ctx)
+	for i := 0; i < concurrency; i++ {
+		table := fmt.Sprintf("bank_%d", i)
+		sqlDB.Exec(fmt.Sprintf(
+			`CREATE TABLE data.%s AS (SELECT * FROM data.bank WHERE id > %d ORDER BY id)`,
+			table, i,
+		))
+		g.Go(func() error {
+			for j := 0; j < numIterations; j++ {
+				dbName := fmt.Sprintf("%s_%d", table, j)
+				backupDir := filepath.Join(dir, dbName)
+				backupQ := fmt.Sprintf(`BACKUP data.%s TO $1`, table)
+				if _, err := sqlDB.DB.ExecContext(gCtx, backupQ, backupDir); err != nil {
+					return err
+				}
+				if _, err := sqlDB.DB.Exec(fmt.Sprintf(`CREATE DATABASE %s`, dbName)); err != nil {
+					return err
+				}
+				restoreQ := fmt.Sprintf(`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='%s')`, dbName)
+				if _, err := sqlDB.DB.ExecContext(gCtx, restoreQ, backupDir); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	for i := 0; i < concurrency; i++ {
+		orig := sqlDB.QueryStr(`SELECT * FROM data.bank WHERE id > $1 ORDER BY id`, i)
+		for j := 0; j < numIterations; j++ {
+			selectQ := fmt.Sprintf(`SELECT * FROM bank_%d_%d.bank_%d ORDER BY id`, i, j, i)
+			sqlDB.CheckQueryResults(selectQ, orig)
+		}
 	}
 }
 
