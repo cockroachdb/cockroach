@@ -25,8 +25,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -37,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
-	"github.com/lib/pq"
 )
 
 // expectation defines the information necessary to determine the validity of
@@ -54,110 +51,89 @@ type expectation struct {
 // stored in the system.jobs table.
 func verifyJobRecord(
 	db *sqlutils.SQLRunner,
-	registry *jobs.Registry,
 	job *jobs.Job,
 	expectedStatus jobs.Status,
 	expected expectation,
 ) error {
-	testSource := func(source string) error {
-		var actualJob jobs.Record
-		var typ string
-		var rawDescriptorIDs pq.Int64Array
-		var statusString string
-		var created pq.NullTime
-		var started pq.NullTime
-		var finished pq.NullTime
-		var modified pq.NullTime
-		var fractionCompleted float32
-		var errMessage string
-		// We have to query for the nth job created rather than filtering by ID,
-		// because job-generating SQL queries (e.g. BACKUP) do not currently return
-		// the job ID.
-		db.QueryRow(fmt.Sprintf(
-			`SELECT type, description, username, descriptor_ids, status,
-			   created, started, finished, modified, fraction_completed, error
-			FROM %s WHERE created >= $1 ORDER BY created LIMIT 1`, source),
-			expected.Before,
-		).Scan(
-			&typ, &actualJob.Description, &actualJob.Username, &rawDescriptorIDs, &statusString,
-			&created, &started, &finished, &modified, &fractionCompleted, &errMessage,
-		)
+	var statusString string
+	var created time.Time
+	var payloadBytes []byte
+	db.QueryRow(
+		`SELECT status, created, payload FROM system.jobs WHERE id = $1`, job.ID(),
+	).Scan(&statusString, &created, &payloadBytes)
 
-		// Verify a newly-instantiated Record's properties.
-		fetched, err := registry.LoadJob(context.TODO(), *job.ID())
-		if err != nil {
-			return err
-		}
-		if e, a := job.Payload(), fetched.Payload(); !reflect.DeepEqual(e, a) {
-			diff := strings.Join(pretty.Diff(e, a), "\n")
-			return errors.Errorf("Record Payloads do not match:\n%s", diff)
-		}
+	var payload jobs.Payload
+	payload.Unmarshal(payloadBytes)
 
-		// Verify the upstream-provided fields.
-		actualJob.Details = fetched.Record.Details
-		for _, id := range rawDescriptorIDs {
-			actualJob.DescriptorIDs = append(actualJob.DescriptorIDs, sqlbase.ID(id))
-		}
-		if e, a := expected.Record, actualJob; !reflect.DeepEqual(e, a) {
-			diff := strings.Join(pretty.Diff(e, a), "\n")
-			return errors.Errorf("JobRecords do not match:\n%s", diff)
-		}
-
-		// Verify internally-managed fields.
-		status := jobs.Status(statusString)
-		if e, a := expectedStatus, status; e != a {
-			return errors.Errorf("expected status %v, got %v", e, a)
-		}
-		if e, a := expected.Type, typ; e != a {
-			return errors.Errorf("expected type %v, got type %v", e, a)
-		}
-		if e, a := expected.FractionCompleted, fractionCompleted; e != a {
-			return errors.Errorf("expected fraction completed %f, got %f", e, a)
-		}
-
-		// Check internally-managed timestamps for sanity.
-		verifyModifiedAgainst := func(name string, ts time.Time) error {
-			if modified.Time.Before(ts) {
-				return errors.Errorf("modified time %v before %s time %v", modified, name, ts)
-			}
-			if now := timeutil.Now().Round(time.Microsecond); modified.Time.After(now) {
-				return errors.Errorf("modified time %v after current time %v", modified, now)
-			}
-			return nil
-		}
-
-		if expected.Before.After(created.Time) {
-			return errors.Errorf(
-				"created time %v is before expected created time %v",
-				created, expected.Before,
-			)
-		}
-		if status == jobs.StatusPending {
-			return verifyModifiedAgainst("created", created.Time)
-		}
-
-		if !started.Valid && status == jobs.StatusSucceeded {
-			return errors.Errorf("started time is NULL but job claims to be successful")
-		}
-		if started.Valid && created.Time.After(started.Time) {
-			return errors.Errorf("created time %v is after started time %v", created, started)
-		}
-		if status == jobs.StatusRunning {
-			return verifyModifiedAgainst("started", started.Time)
-		}
-
-		if started.Time.After(finished.Time) {
-			return errors.Errorf("started time %v is after finished time %v", started, finished)
-		}
-		if e, a := expected.Error, errMessage; e != a {
-			return errors.Errorf("expected error %v, got %v", e, a)
-		}
-		return verifyModifiedAgainst("finished", finished.Time)
-	}
-	if err := testSource(`crdb_internal.jobs`); err != nil {
+	// Verify the upstream-provided fields.
+	details, err := payload.UnwrapDetails()
+	if err != nil {
 		return err
 	}
-	return testSource(`[SHOW JOBS]`)
+	if e, a := expected.Record, (jobs.Record{
+		Description:   payload.Description,
+		Details:       details,
+		DescriptorIDs: payload.DescriptorIDs,
+		Username:      payload.Username,
+	}); !reflect.DeepEqual(e, a) {
+		diff := strings.Join(pretty.Diff(e, a), "\n")
+		return errors.Errorf("Records do not match:\n%s", diff)
+	}
+
+	// Verify internally-managed fields.
+	status := jobs.Status(statusString)
+	if e, a := expectedStatus, status; e != a {
+		return errors.Errorf("expected status %v, got %v", e, a)
+	}
+	if e, a := expected.Type, payload.Typ(); e != a {
+		return errors.Errorf("expected type %v, got type %v", e, a)
+	}
+	if e, a := expected.FractionCompleted, payload.FractionCompleted; e != a {
+		return errors.Errorf("expected fraction completed %f, got %f", e, a)
+	}
+
+	// Check internally-managed timestamps for sanity.
+	started := time.Unix(0, payload.StartedMicros*time.Microsecond.Nanoseconds())
+	modified := time.Unix(0, payload.ModifiedMicros*time.Microsecond.Nanoseconds())
+	finished := time.Unix(0, payload.FinishedMicros*time.Microsecond.Nanoseconds())
+
+	verifyModifiedAgainst := func(name string, ts time.Time) error {
+		if modified.Before(ts) {
+			return errors.Errorf("modified time %v before %s time %v", modified, name, ts)
+		}
+		if now := timeutil.Now().Round(time.Microsecond); modified.After(now) {
+			return errors.Errorf("modified time %v after current time %v", modified, now)
+		}
+		return nil
+	}
+
+	if expected.Before.After(created) {
+		return errors.Errorf(
+			"created time %v is before expected created time %v",
+			created, expected.Before,
+		)
+	}
+	if status == jobs.StatusPending {
+		return verifyModifiedAgainst("created", created)
+	}
+
+	if started == time.Unix(0, 0) && status == jobs.StatusSucceeded {
+		return errors.Errorf("started time is empty but job claims to be successful")
+	}
+	if started != time.Unix(0, 0) && created.After(started) {
+		return errors.Errorf("created time %v is after started time %v", created, started)
+	}
+	if status == jobs.StatusRunning {
+		return verifyModifiedAgainst("started", started)
+	}
+
+	if started.After(finished) {
+		return errors.Errorf("started time %v is after finished time %v", started, finished)
+	}
+	if e, a := expected.Error, payload.Error; e != a {
+		return errors.Errorf("expected error %v, got %v", e, a)
+	}
+	return verifyModifiedAgainst("finished", finished)
 }
 
 func TestJobLifecycle(t *testing.T) {
@@ -190,14 +166,14 @@ func TestJobLifecycle(t *testing.T) {
 		if err := woodyJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusPending, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, woodyJob, jobs.StatusPending, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := woodyJob.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
@@ -215,7 +191,7 @@ func TestJobLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			woodyExpectation.FractionCompleted = f.expected
-			if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
+			if err := verifyJobRecord(db, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -227,14 +203,14 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		woodyExpectation.Record.Details = jobs.RestoreDetails{LowWaterMark: roachpb.Key("mariana")}
-		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := woodyJob.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
@@ -258,14 +234,14 @@ func TestJobLifecycle(t *testing.T) {
 		if err := buzzJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, registry, buzzJob, jobs.StatusPending, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, buzzJob, jobs.StatusPending, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := buzzJob.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, registry, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
@@ -273,17 +249,17 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		buzzExpectation.FractionCompleted = .42
-		if err := verifyJobRecord(db, registry, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		buzzJob.Failed(ctx, errors.New("Buzz Lightyear can't fly"))
-		if err := verifyJobRecord(db, registry, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		// Ensure that logging Buzz didn't corrupt Woody.
-		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
@@ -305,20 +281,20 @@ func TestJobLifecycle(t *testing.T) {
 		if err := sidJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, registry, sidJob, jobs.StatusPending, sidExpectation); err != nil {
+		if err := verifyJobRecord(db, sidJob, jobs.StatusPending, sidExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		sidJob.Failed(ctx, errors.New("Sid is a total failure"))
-		if err := verifyJobRecord(db, registry, sidJob, jobs.StatusFailed, sidExpectation); err != nil {
+		if err := verifyJobRecord(db, sidJob, jobs.StatusFailed, sidExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		// Ensure that logging Sid didn't corrupt Woody or Buzz.
-		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, registry, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -437,7 +413,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, registry, job, jobs.StatusSucceeded, expect); err != nil {
+		if err := verifyJobRecord(db, job, jobs.StatusSucceeded, expect); err != nil {
 			t.Fatal(err)
 		}
 	})
