@@ -112,7 +112,7 @@ func TestDiskRowContainer(t *testing.T) {
 				row := sqlbase.EncDatumRow(sqlbase.RandEncDatumSliceOfTypes(rng, types))
 				func() {
 					d, err := makeDiskRowContainer(
-						ctx, 0 /* tempStorageID */, types, ordering, memRowContainer{}, tempEngine,
+						ctx, types, ordering, memRowContainer{}, tempEngine,
 					)
 					if err != nil {
 						t.Fatal(err)
@@ -182,7 +182,6 @@ func TestDiskRowContainer(t *testing.T) {
 
 				d, err := makeDiskRowContainer(
 					ctx,
-					0, /* tempStorageID */
 					types,
 					ordering,
 					memoryContainer,
