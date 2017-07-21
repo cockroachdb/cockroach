@@ -160,7 +160,7 @@ func verifyJobRecord(
 	return testSource(`[SHOW JOBS]`)
 }
 
-func TestJobLogger(t *testing.T) {
+func TestJobLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.TODO()
