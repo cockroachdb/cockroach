@@ -21,7 +21,7 @@ requirement for incoming requests.  Also included in this proposal is a method
 for preventing CSRF (Cross-site request forgery) attacks.
 
 The AdminUI will be modified to require that users create a new session by
-"signing in" before the UI becomes useable. Outgoing requests will be modified
+"signing in" before the UI becomes usable. Outgoing requests will be modified
 slightly to utilize the new CSRF mitigation method.
 
 This RPC does not propose any new *authorization* mechanisms; it only
@@ -55,6 +55,7 @@ username will be added to the method context if the session is valid.
 + The Admin UI will be modified to require a logged-in session before allowing
 users to navigate to the current pages. If the user is not logged in, a dialog
 will be displayed for the user to input a username and password.
+
 + A CSRF mitigation method will be added to both the client and the server.
     + The server gives the client a cookie containing a cryptographically random
       value. This is done when static assets are loaded.
@@ -187,7 +188,7 @@ appropriate HTTP response headers.
 The "session" cookie is marked as "httponly" and is thus not accessible from
 javascript; this is a defense-in-depth measure to prevent session exfiltration
 by XSS attacks. The cookie is also marked as "secure", which prevents the cookie
-from being sent over an unsecured http conection.
+from being sent over an unsecured http connection.
 
 The UserLogin method, when called successfully, will revoke the current session
 by setting its `revokedAt` field to the current time. It will then return the
@@ -253,12 +254,12 @@ CSRF involves an attacker's third-party website constructing a request to your
 website, where the request contains some sort of malicious action. If the user
 is logged in to your website, their valid session cookie will be sent with the
 request and the action will be authorized. "Double-cookie" prevents this by
-requiring the requestor to set the "x-csrf-token" header based on a
+requiring the requester to set the "x-csrf-token" header based on a
 domain-specific cookie; the third-party website cannot access that cookie, so it
 cannot properly set the header. Simply explained, "Double cookie" works by
 requiring the sender to prove that it can read cookies from a trusted origin.
 
-The random value must be set on the server because it must be cryptographicaly
+The random value must be set on the server because it must be cryptographically
 random; the client application is javascript and does not have reliable access
 to a reliable random source, and attackers could possibly guess any random
 values generated.
