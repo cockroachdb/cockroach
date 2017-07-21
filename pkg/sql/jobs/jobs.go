@@ -18,7 +18,6 @@ package jobs
 
 import (
 	"fmt"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -107,7 +106,7 @@ func (j *Job) Started(ctx context.Context) error {
 			// Already started - do nothing.
 			return false, nil
 		}
-		payload.StartedMicros = roundTimestamp(timeutil.Now())
+		payload.StartedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
 	})
 }
@@ -167,7 +166,7 @@ func (j *Job) Failed(ctx context.Context, err error) {
 			return false, nil
 		}
 		payload.Error = err.Error()
-		payload.FinishedMicros = roundTimestamp(timeutil.Now())
+		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
 	})
 	if internalErr != nil {
@@ -184,7 +183,7 @@ func (j *Job) Succeeded(ctx context.Context) error {
 			// Already finished - do nothing.
 			return false, nil
 		}
-		payload.FinishedMicros = roundTimestamp(timeutil.Now())
+		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payload.FractionCompleted = 1.0
 		return true, nil
 	})
@@ -256,7 +255,7 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 
 	var row parser.Datums
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		payload.ModifiedMicros = roundTimestamp(txn.Proto().OrigTimestamp.GoTime())
+		payload.ModifiedMicros = timeutil.ToUnixMicros(txn.Proto().OrigTimestamp.GoTime())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
@@ -295,7 +294,7 @@ func (j *Job) update(
 		if !doUpdate {
 			return nil
 		}
-		payload.ModifiedMicros = roundTimestamp(timeutil.Now())
+		payload.ModifiedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
@@ -395,11 +394,4 @@ func UnmarshalPayload(datum parser.Datum) (*Payload, error) {
 		return nil, err
 	}
 	return payload, nil
-}
-
-// TIMESTAMP columns round to the nearest microsecond, so we replicate that
-// behavior for our protobuf fields. Naive truncation can lead to anomalies
-// where jobs are started before they're created.
-func roundTimestamp(ts time.Time) int64 {
-	return ts.Round(time.Microsecond).UnixNano() / time.Microsecond.Nanoseconds()
 }
