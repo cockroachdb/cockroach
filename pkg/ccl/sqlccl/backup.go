@@ -109,7 +109,7 @@ func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp,
 	// This reuses Restore's logic for lining up all the start and end
 	// timestamps to validate the previous backups that this one is incremental
 	// from.
-	_, endTime, err := makeImportRequests(nil, backups)
+	_, endTime, err := makeImportSpans(nil, backups)
 	return endTime, err
 }
 

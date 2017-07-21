@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -3959,19 +3958,6 @@ func (r *Replica) adminScatter(
 		}
 
 		return nil
-	}
-
-	// Sleep for a random duration to avoid dumping too many leases or replicas on
-	// one underfull store when many ranges are scattered simultaneously. It's
-	// unfortunate this sleep is server-side instead of client-side, but since
-	// scatter is the only command that needs it, it's not worth building jitter
-	// support into DistSender.
-	const maxJitter = 3 * time.Second
-	jitter := time.Duration(rand.Int63n(maxJitter.Nanoseconds())) * time.Nanosecond
-	select {
-	case <-time.After(jitter):
-	case <-ctx.Done():
-		return roachpb.AdminScatterResponse{}, ctx.Err()
 	}
 
 	if err := refreshDescAndZone(); err != nil {
