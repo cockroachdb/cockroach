@@ -65,7 +65,7 @@ var (
 	// making decisions based on them. The higher this is, the less likely
 	// thrashing is (up to a point).
 	// Made configurable for the sake of testing.
-	MinLeaseTransferStatsDuration = replStatsRotateInterval
+	MinLeaseTransferStatsDuration = 30 * time.Second
 
 	// EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
 	// via the new heuristic based on request load and latency or via the simpler
