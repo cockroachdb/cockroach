@@ -324,12 +324,16 @@ func TestJobLogger(t *testing.T) {
 	})
 
 	t.Run("bad job details fail", func(t *testing.T) {
+		defer func() {
+			if r, ok := recover().(string); !ok || !strings.Contains(r, "unknown details type int") {
+				t.Fatalf("expected 'unknown details type int', but got: %v", r)
+			}
+		}()
+
 		job := registry.NewJob(jobs.Record{
 			Details: 42,
 		})
-		if err := job.Created(ctx); !testutils.IsError(err, "unsupported job details type int") {
-			t.Fatalf("expected 'unsupported job details type int', but got %v", err)
-		}
+		_ = job.Created(ctx)
 	})
 
 	t.Run("update before create fails", func(t *testing.T) {
