@@ -93,9 +93,9 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	}
 
 	// Check internally-managed timestamps for sanity.
-	started := time.Unix(0, payload.StartedMicros*time.Microsecond.Nanoseconds())
-	modified := time.Unix(0, payload.ModifiedMicros*time.Microsecond.Nanoseconds())
-	finished := time.Unix(0, payload.FinishedMicros*time.Microsecond.Nanoseconds())
+	started := timeutil.FromUnixMicros(payload.StartedMicros)
+	modified := timeutil.FromUnixMicros(payload.ModifiedMicros)
+	finished := timeutil.FromUnixMicros(payload.FinishedMicros)
 
 	verifyModifiedAgainst := func(name string, ts time.Time) error {
 		if modified.Before(ts) {
@@ -117,10 +117,10 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 		return verifyModifiedAgainst("created", created)
 	}
 
-	if started == time.Unix(0, 0) && status == jobs.StatusSucceeded {
+	if started == timeutil.UnixEpoch && status == jobs.StatusSucceeded {
 		return errors.Errorf("started time is empty but job claims to be successful")
 	}
-	if started != time.Unix(0, 0) && created.After(started) {
+	if started != timeutil.UnixEpoch && created.After(started) {
 		return errors.Errorf("created time %v is after started time %v", created, started)
 	}
 	if status == jobs.StatusRunning {
