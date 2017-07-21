@@ -50,7 +50,7 @@ func TestRocksDBMap(t *testing.T) {
 	defer diskMap.Close(ctx)
 
 	batchWriter := diskMap.NewBatchWriterCapacity(64)
-	defer batchWriter.Close(ctx)
+	defer func() { _ = batchWriter.Close(ctx) }()
 
 	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
 
@@ -258,7 +258,7 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 					defer diskMap.Close(ctx)
 					batchWriter := diskMap.NewBatchWriter()
 					// This Close() flushes writes.
-					defer batchWriter.Close(ctx)
+					defer func() { _ = batchWriter.Close(ctx) }()
 					for j := 0; j < inputSize; j++ {
 						k := fmt.Sprintf("%d", rng.Int())
 						v := fmt.Sprintf("%d", rng.Int())
