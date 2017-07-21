@@ -181,7 +181,9 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 func (d *diskRowContainer) Sort() {}
 
 func (d *diskRowContainer) Close(ctx context.Context) {
-	d.bufferedRows.Close(ctx)
+	// We can ignore the error here because the flushed data is immediately cleared
+	// in the following Close.
+	_ = d.bufferedRows.Close(ctx)
 	d.diskMap.Close(ctx)
 }
 
