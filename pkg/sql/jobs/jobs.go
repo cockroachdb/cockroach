@@ -17,6 +17,7 @@
 package jobs
 
 import (
+	"fmt"
 	"time"
 
 	"golang.org/x/net/context"
@@ -90,15 +91,8 @@ func (j *Job) load(ctx context.Context) error {
 		j.Record.Description = payload.Description
 		j.Record.Username = payload.Username
 		j.Record.DescriptorIDs = payload.DescriptorIDs
-		switch d := payload.Details.(type) {
-		case *Payload_Backup:
-			j.Record.Details = *d.Backup
-		case *Payload_Restore:
-			j.Record.Details = *d.Restore
-		case *Payload_SchemaChange:
-			j.Record.Details = *d.SchemaChange
-		default:
-			return errors.Errorf("Job: unsupported job details type %T", d)
+		if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
+			return err
 		}
 		// Don't need to lock because we're the only one who has a handle on this
 		// Job so far.
@@ -142,16 +136,7 @@ func (j *Job) Created(ctx context.Context) error {
 		Description:   j.Record.Description,
 		Username:      j.Record.Username,
 		DescriptorIDs: j.Record.DescriptorIDs,
-	}
-	switch d := j.Record.Details.(type) {
-	case BackupDetails:
-		payload.Details = &Payload_Backup{Backup: &d}
-	case RestoreDetails:
-		payload.Details = &Payload_Restore{Restore: &d}
-	case SchemaChangeDetails:
-		payload.Details = &Payload_SchemaChange{SchemaChange: &d}
-	default:
-		return errors.Errorf("Job: unsupported job details type %T", d)
+		Details:       WrapPayloadDetails(j.Record.Details),
 	}
 	return j.insert(ctx, payload)
 }
@@ -356,6 +341,45 @@ func (p *Payload) Typ() string {
 		return TypeSchemaChange
 	default:
 		panic("Payload.Typ called on a payload with an unknown details type")
+	}
+}
+
+// WrapPayloadDetails wraps a Details object in the protobuf wrapper struct
+// necessary to make it usable as the Details field of a Payload.
+//
+// Providing an unknown details type indicates programmer error and so causes a
+// panic.
+func WrapPayloadDetails(details Details) interface {
+	isPayload_Details
+} {
+	switch d := details.(type) {
+	case BackupDetails:
+		return &Payload_Backup{Backup: &d}
+	case RestoreDetails:
+		return &Payload_Restore{Restore: &d}
+	case SchemaChangeDetails:
+		return &Payload_SchemaChange{SchemaChange: &d}
+	default:
+		panic(fmt.Sprintf("jobs.WrapPayloadDetails: unknown details type %T", d))
+	}
+}
+
+// UnwrapDetails returns the details object stored within the payload's Details
+// field, discarding the protobuf wrapper struct.
+//
+// Unlike in WrapPayloadDetails, an unknown details type may simply indicate
+// that the Payload originated on a node aware of more details types, and so the
+// error is returned to the caller.
+func (p *Payload) UnwrapDetails() (Details, error) {
+	switch d := p.Details.(type) {
+	case *Payload_Backup:
+		return *d.Backup, nil
+	case *Payload_Restore:
+		return *d.Restore, nil
+	case *Payload_SchemaChange:
+		return *d.SchemaChange, nil
+	default:
+		return nil, errors.Errorf("jobs.Payload: unsupported details type %T", d)
 	}
 }
 
