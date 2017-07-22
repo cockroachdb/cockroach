@@ -14,7 +14,7 @@
 //
 // Author: Alfonso Subiotto Marqués (alfonso@cockroachlabs.com)
 
-package distsqlrun
+package engine
 
 import (
 	"bytes"
@@ -24,7 +24,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -113,17 +112,17 @@ type RocksDBMapBatchWriter struct {
 
 	// makeKey is a function that transforms a key into an MVCCKey with a prefix
 	// to be written to the underlying store.
-	makeKey func(k []byte) engine.MVCCKey
-	batch   engine.Batch
-	store   engine.Engine
+	makeKey func(k []byte) MVCCKey
+	batch   Batch
+	store   Engine
 }
 
 // RocksDBMapIterator iterates over the keys of a RocksDBMap in sorted order.
 type RocksDBMapIterator struct {
-	iter engine.Iterator
+	iter Iterator
 	// makeKey is a function that transforms a key into an MVCCKey with a prefix
 	// used to Seek() the underlying iterator.
-	makeKey func(k []byte) engine.MVCCKey
+	makeKey func(k []byte) MVCCKey
 	// prefix is the prefix of keys that this iterator iterates over.
 	prefix []byte
 }
@@ -133,33 +132,27 @@ type RocksDBMapIterator struct {
 type RocksDBMap struct {
 	// TODO(asubiotto): Add memory accounting.
 	prefix []byte
-	store  engine.Engine
+	store  Engine
 }
 
 var _ SortedDiskMapBatchWriter = &RocksDBMapBatchWriter{}
 var _ SortedDiskMapIterator = &RocksDBMapIterator{}
 var _ SortedDiskMap = &RocksDBMap{}
 
-// tempIDGenerator is the temp ID generator for a node. Although it is possible
-// that, if more than one RocksDB engine were being used, we could reuse
-// prefixes, since we are using a uint64, that is an unneeded optimization that
-// makes the API more difficult. Since the prefix is a uint64, we will never run
-// out since it can safely reset after node restarts.
-
 // tempStorageID is the temp ID generator for a node. It generates unique
 // prefixes for NewRocksDBMap. It is a global because NewRocksDBMap needs to
 // prefix its writes uniquely, and using a global prevents users from having to
-// specify the prefex themselves and correctly guarantee that it is unique.
+// specify the prefix themselves and correctly guarantee that it is unique.
 var tempStorageID uint64
 
 func generateTempStorageID() uint64 {
 	return atomic.AddUint64(&tempStorageID, 1)
 }
 
-// NewRocksDBMap creates a new RocksDBMap with the passed in engine.Engine as
+// NewRocksDBMap creates a new RocksDBMap with the passed in Engine as
 // the underlying store. The RocksDBMap instance will have a keyspace prefixed
 // by a unique prefix.
-func NewRocksDBMap(e engine.Engine) *RocksDBMap {
+func NewRocksDBMap(e Engine) *RocksDBMap {
 	prefix := generateTempStorageID()
 	return &RocksDBMap{prefix: encoding.EncodeUvarintAscending([]byte(nil), prefix), store: e}
 }
@@ -167,13 +160,13 @@ func NewRocksDBMap(e engine.Engine) *RocksDBMap {
 // makeKey appends k to the RocksDBMap's prefix to keep the key local to this
 // instance and creates an MVCCKey, which is what the underlying storage engine
 // expects. The returned key is only valid until the next call to makeKey().
-func (r *RocksDBMap) makeKey(k []byte) engine.MVCCKey {
+func (r *RocksDBMap) makeKey(k []byte) MVCCKey {
 	// TODO(asubiotto): We can make this more performant by bypassing MVCCKey
 	// creation (have to generalize storage API). See
 	// https://github.com/cockroachdb/cockroach/issues/16718#issuecomment-311493414
 	prefixLen := len(r.prefix)
 	r.prefix = append(r.prefix, k...)
-	mvccKey := engine.MVCCKey{Key: r.prefix}
+	mvccKey := MVCCKey{Key: r.prefix}
 	r.prefix = r.prefix[:prefixLen]
 	return mvccKey
 }
@@ -214,8 +207,8 @@ func (r *RocksDBMap) NewBatchWriterCapacity(capacityBytes int) SortedDiskMapBatc
 // Close implements the SortedDiskMap interface.
 func (r *RocksDBMap) Close(ctx context.Context) {
 	if err := r.store.ClearRange(
-		engine.MVCCKey{Key: r.prefix},
-		engine.MVCCKey{Key: roachpb.Key(r.prefix).PrefixEnd()},
+		MVCCKey{Key: r.prefix},
+		MVCCKey{Key: roachpb.Key(r.prefix).PrefixEnd()},
 	); err != nil {
 		log.Error(ctx, errors.Wrapf(err, "unable to clear range with prefix %v", r.prefix))
 	}
