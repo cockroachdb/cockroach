@@ -1804,6 +1804,62 @@ CREATE TABLE t.test (
 	}
 }
 
+// This test checks whether a column can be added using the name of a column that has just been dropped.
+func TestAddColumnDuringColumnDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	backfillNotification := make(chan struct{})
+	continueBackfillNotification := make(chan struct{})
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				if backfillNotification != nil {
+					// Close channel to notify that the schema change has
+					// been queued and the backfill has started.
+					close(backfillNotification)
+					backfillNotification = nil
+					<-continueBackfillNotification
+				}
+				return nil
+			},
+		},
+	}
+	server, sqlDB, _ := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (
+    k INT PRIMARY KEY NOT NULL,
+    v INT NOT NULL
+);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := bulkInsertIntoTable(sqlDB, 1000); err != nil {
+		t.Fatal(err)
+	}
+	// Run the column schema change in a separate goroutine.
+	notification := backfillNotification
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP column v;`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-notification
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD column v INT DEFAULT 0;`); !testutils.IsError(err, `column "v" being dropped, try again later`) {
+		t.Fatal(err)
+	}
+
+	close(continueBackfillNotification)
+	wg.Wait()
+}
+
 // Test an UPDATE using a primary and a secondary index in the middle
 // of a column backfill.
 func TestUpdateDuringColumnBackfill(t *testing.T) {
