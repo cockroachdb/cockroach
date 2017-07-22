@@ -31,9 +31,9 @@ import (
 // is a SortedDiskMap so the sorting itself is delegated. Use an iterator
 // created through NewIterator() to read the rows in sorted order.
 type diskRowContainer struct {
-	diskMap SortedDiskMap
+	diskMap engine.SortedDiskMap
 	// bufferedRows buffers writes to the diskMap.
-	bufferedRows  SortedDiskMapBatchWriter
+	bufferedRows  engine.SortedDiskMapBatchWriter
 	scratchKey    []byte
 	scratchVal    []byte
 	scratchEncRow sqlbase.EncDatumRow
@@ -76,7 +76,7 @@ func makeDiskRowContainer(
 	rowContainer memRowContainer,
 	e engine.Engine,
 ) (diskRowContainer, error) {
-	diskMap := NewRocksDBMap(e)
+	diskMap := engine.NewRocksDBMap(e)
 	d := diskRowContainer{
 		diskMap:       diskMap,
 		types:         types,
@@ -213,7 +213,7 @@ func (d *diskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow,
 // diskRowIterator iterates over the rows in a diskRowContainer.
 type diskRowIterator struct {
 	rowContainer *diskRowContainer
-	SortedDiskMapIterator
+	engine.SortedDiskMapIterator
 }
 
 var _ rowIterator = diskRowIterator{}
