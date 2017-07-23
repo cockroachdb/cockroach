@@ -318,17 +318,17 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 	if s.netTr != nil {
 		s.netTr.LazyPrintf("%s:%v", key, value)
 	}
-	if s.isRecording() {
-		if !locked {
-			s.mu.Lock()
-		}
-		if s.mu.tags == nil {
-			s.mu.tags = make(opentracing.Tags)
-		}
-		s.mu.tags[key] = value
-		if !locked {
-			s.mu.Unlock()
-		}
+	// We need to set tags even if we are not recording, in order to
+	// correctly support GetSpanTag.
+	if !locked {
+		s.mu.Lock()
+	}
+	if s.mu.tags == nil {
+		s.mu.tags = make(opentracing.Tags)
+	}
+	s.mu.tags[key] = value
+	if !locked {
+		s.mu.Unlock()
 	}
 	return s
 }
