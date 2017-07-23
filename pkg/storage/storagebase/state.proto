@@ -18,6 +18,8 @@ syntax = "proto3";
 package cockroach.storage.storagebase;
 option go_package = "storagebase";
 
+option (gogoproto.equal_all) = true;
+
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "cockroach/pkg/roachpb/internal_raft.proto";
 import "cockroach/pkg/roachpb/metadata.proto";
@@ -38,8 +40,6 @@ import "gogoproto/gogo.proto";
 // For the ReplicaState persisted on the Replica, all optional fields are
 // populated (i.e. no nil pointers or enums with the default value).
 message ReplicaState {
-  option (gogoproto.equal) = true;
-
   // The highest (and last) index applied to the state machine.
   uint64 raft_applied_index = 1;
   // The highest (and last) lease index applied to the state machine.
