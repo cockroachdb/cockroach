@@ -564,3 +564,17 @@ func TestSteady_6Medium(t *testing.T) {
 	}
 	at.RunAndCleanup(ctx, t)
 }
+
+// TestSteady_3Small tests schema changes against a 3-node cluster.
+func TestSteady_3Small(t *testing.T) {
+	ctx := context.Background()
+	at := allocatorTest{
+		StartNodes:          3,
+		EndNodes:            3,
+		StoreURL:            urlStore3s,
+		Prefix:              "steady-3s",
+		CockroachDiskSizeGB: 250, // GB
+		RunSchemaChanges:    true,
+	}
+	at.RunAndCleanup(ctx, t)
+}
