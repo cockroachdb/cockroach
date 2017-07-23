@@ -65,7 +65,9 @@ var (
 		Help: "Number of times this node has incremented its liveness epoch"}
 )
 
-func (l *Liveness) isLive(now hlc.Timestamp, maxOffset time.Duration) bool {
+// IsLive returns whether the node is considered live at the given time with the
+// given clock offset.
+func (l *Liveness) IsLive(now hlc.Timestamp, maxOffset time.Duration) bool {
 	if maxOffset == timeutil.ClocklessMaxOffset {
 		// When using clockless reads, we're live without a buffer period.
 		maxOffset = 0
@@ -294,7 +296,7 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return liveness.isLive(nl.clock.Now(), nl.clock.MaxOffset()), nil
+	return liveness.IsLive(nl.clock.Now(), nl.clock.MaxOffset()), nil
 }
 
 // StartHeartbeat starts a periodic heartbeat to refresh this node's
@@ -422,7 +424,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 			// considered live, treat the heartbeat as a success. This can
 			// happen when the periodic heartbeater races with a concurrent
 			// lease acquisition.
-			if actual.isLive(nl.clock.Now(), nl.clock.MaxOffset()) && !incrementEpoch {
+			if actual.IsLive(nl.clock.Now(), nl.clock.MaxOffset()) && !incrementEpoch {
 				return errNodeAlreadyLive
 			}
 			// Otherwise, return error.
@@ -479,9 +481,9 @@ func (nl *NodeLiveness) GetIsLiveMap() map[roachpb.NodeID]bool {
 	maxOffset := nl.clock.MaxOffset()
 	for nID, l := range nl.mu.nodes {
 		if nID == nl.mu.self.NodeID {
-			lMap[nID] = nl.mu.self.isLive(now, maxOffset)
+			lMap[nID] = nl.mu.self.IsLive(now, maxOffset)
 		} else {
-			lMap[nID] = l.isLive(now, maxOffset)
+			lMap[nID] = l.IsLive(now, maxOffset)
 		}
 	}
 	return lMap
@@ -544,7 +546,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 		<-sem
 	}()
 
-	if liveness.isLive(nl.clock.Now(), nl.clock.MaxOffset()) {
+	if liveness.IsLive(nl.clock.Now(), nl.clock.MaxOffset()) {
 		return errors.Errorf("cannot increment epoch on live node: %+v", liveness)
 	}
 	newLiveness := *liveness
@@ -684,7 +686,7 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 
 		// If isLive status is now true, but previously false, invoke any registered callbacks.
 		now, offset := nl.clock.Now(), nl.clock.MaxOffset()
-		if !exLiveness.isLive(now, offset) && liveness.isLive(now, offset) {
+		if !exLiveness.IsLive(now, offset) && liveness.IsLive(now, offset) {
 			callbacks = append(callbacks, nl.mu.callbacks...)
 		}
 	}
@@ -717,13 +719,13 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 	// because it's more likely to be inaccurate than the view of a live node.
 	now := nl.clock.Now()
 	maxOffset := nl.clock.MaxOffset()
-	if !nl.mu.self.isLive(now, maxOffset) {
+	if !nl.mu.self.IsLive(now, maxOffset) {
 		return 0
 	}
 
 	var liveNodes int64
 	for _, l := range nl.mu.nodes {
-		if l.isLive(now, maxOffset) {
+		if l.IsLive(now, maxOffset) {
 			liveNodes++
 		}
 	}
