@@ -4475,7 +4475,7 @@ func (r *Replica) evaluateProposalInner(
 			batch = nil
 			// Restore the original txn's Writing bool if pd.Err specifies
 			// a transaction.
-			if txn := result.Local.Err.GetTxn(); txn != nil && txn.Equal(ba.Txn) {
+			if txn := result.Local.Err.GetTxn(); txn != nil && txn.EqualIDs(ba.Txn) {
 				txn.Writing = wasWriting
 			}
 			return result

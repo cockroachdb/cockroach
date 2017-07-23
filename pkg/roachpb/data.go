@@ -740,9 +740,9 @@ func (t Transaction) Clone() Transaction {
 	return t
 }
 
-// Equal tests two transactions for equality. They are equal if they are
+// EqualIDs tests two transactions for equality. They are equal if they are
 // either simultaneously nil or their IDs match.
-func (t *Transaction) Equal(s *Transaction) bool {
+func (t *Transaction) EqualIDs(s *Transaction) bool {
 	if t == nil && s == nil {
 		return true
 	}

@@ -83,6 +83,8 @@ enum ValueType {
 // TODO(peter): Is a 4-byte checksum overkill when most (all?) values
 // will be less than 64KB?
 message Value {
+  option (gogoproto.equal) = true;
+
   // raw_bytes contains the encoded value and checksum.
   optional bytes raw_bytes = 1;
   // Timestamp of value.
@@ -160,6 +162,8 @@ message ChangeReplicasTrigger {
 // ModifiedSpanTrigger indicates that a specific span has been modified.
 // This can be used to trigger scan-and-gossip for the given span.
 message ModifiedSpanTrigger {
+  option (gogoproto.equal) = true;
+
   optional bool system_config_span = 1 [(gogoproto.nullable) = false];
   // node_liveness_span is set to indicate that node liveness records
   // need re-gossiping after modification or range lease updates. The
@@ -173,6 +177,8 @@ message ModifiedSpanTrigger {
 // InternalCommitTrigger encapsulates all of the internal-only commit triggers.
 // Only one may be set.
 message InternalCommitTrigger {
+  option (gogoproto.equal) = true;
+
   // InternalCommitTrigger is always nullable, and these getters are
   // nil-safe, which is often convenient.
   option (gogoproto.goproto_getters) = true;
@@ -206,6 +212,7 @@ enum TransactionStatus {
 }
 
 message ObservedTimestamp {
+  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
@@ -223,6 +230,7 @@ message ObservedTimestamp {
 // If you add fields to Transaction you'll need to update
 // Transaction.Clone. Failure to do so will result in test failures.
 message Transaction {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 
@@ -315,6 +323,8 @@ message Transaction {
 
 // A Intent is a Span together with a Transaction metadata and its status.
 message Intent {
+  option (gogoproto.equal) = true;
+
   optional Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   optional TransactionStatus status = 3 [(gogoproto.nullable) = false];

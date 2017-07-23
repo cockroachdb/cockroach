@@ -32,6 +32,8 @@ import "gogoproto/gogo.proto";
 // A NotLeaseHolderError indicates that the current range is not the lease
 // holder. If the lease holder is known, its Replica is set in the error.
 message NotLeaseHolderError {
+  option (gogoproto.equal) = true;
+
   // The replica the error originated from. Used in the error's string
   // representation.
   optional ReplicaDescriptor replica = 1 [(gogoproto.nullable) = false];
@@ -54,11 +56,14 @@ message NotLeaseHolderError {
 // not process requests at the time, and that the client should
 // retry the request with another peer.
 message NodeUnavailableError {
+  option (gogoproto.equal) = true;
 }
 
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 message RangeNotFoundError {
+  option (gogoproto.equal) = true;
+
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }
@@ -66,6 +71,8 @@ message RangeNotFoundError {
 // A RangeKeyMismatchError indicates that a command was sent to a
 // range which did not contain the key(s) specified by the command.
 message RangeKeyMismatchError {
+  option (gogoproto.equal) = true;
+
   optional bytes request_start_key = 1 [(gogoproto.casttype) = "Key"];
   optional bytes request_end_key = 2 [(gogoproto.casttype) = "Key"];
   // mismatched_range is the range that the command was incorrectly sent to.
@@ -85,6 +92,8 @@ message RangeKeyMismatchError {
 // lower bound for a new timestamp at which at least the read producing
 // this error would succeed on retry.
 message ReadWithinUncertaintyIntervalError {
+  option (gogoproto.equal) = true;
+
   optional util.hlc.Timestamp read_timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
 }
@@ -97,12 +106,15 @@ message ReadWithinUncertaintyIntervalError {
 // pErr carrying this ErrorDetail is not supposed to be used by the client,
 // besides checking that the transaction's ID is right.
 message TransactionAbortedError {
+  option (gogoproto.equal) = true;
 }
 
 // A TransactionPushError indicates that the transaction could not
 // continue because it encountered a write intent from another
 // transaction which it was unable to push.
 message TransactionPushError {
+  option (gogoproto.equal) = true;
+
   optional Transaction pushee_txn = 1 [(gogoproto.nullable) = false];
 }
 
@@ -127,6 +139,8 @@ enum TransactionRetryReason {
 // A TransactionRetryError indicates that the transaction must be
 // retried, usually with an increased transaction timestamp.
 message TransactionRetryError {
+  option (gogoproto.equal) = true;
+
   optional TransactionRetryReason reason = 1 [(gogoproto.nullable) = false];
 }
 
@@ -135,6 +149,7 @@ message TransactionRetryError {
 // BeginTransaction request is sent again either from the client or
 // is belatedly delivered after an earlier attempt succeeded.
 message TransactionReplayError {
+  option (gogoproto.equal) = true;
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -144,6 +159,8 @@ message TransactionReplayError {
 // regression in transaction epoch or timestamp, both of which may
 // only monotonically increase.
 message TransactionStatusError {
+  option (gogoproto.equal) = true;
+
   optional string msg = 1 [(gogoproto.nullable) = false];
 }
 
@@ -153,6 +170,8 @@ message TransactionStatusError {
 // was encountered are set, as are the txn records for the intents'
 // transactions.
 message WriteIntentError {
+  option (gogoproto.equal) = true;
+
   repeated Intent intents = 1 [(gogoproto.nullable) = false];
   reserved 2;
 }
@@ -162,6 +181,8 @@ message WriteIntentError {
 // history. The write is instead done at actual timestamp, which is
 // the timestamp of the existing version+1.
 message WriteTooOldError {
+  option (gogoproto.equal) = true;
+
   optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];
 }
@@ -171,6 +192,7 @@ message WriteTooOldError {
 // For example, a Scan which spans ranges requires a transaction.
 // The operation should be retried inside of a transaction.
 message OpRequiresTxnError {
+  option (gogoproto.equal) = true;
 }
 
 // A ConditionFailedError indicates that the expected value
@@ -178,12 +200,16 @@ message OpRequiresTxnError {
 // because it was missing or was not equal. The error will
 // contain the actual value found.
 message ConditionFailedError {
+  option (gogoproto.equal) = true;
+
   optional Value actual_value = 1;
 }
 
 // A LeaseRejectedError indicates that the requested replica could
 // not acquire the desired lease because of an existing range lease.
 message LeaseRejectedError {
+  option (gogoproto.equal) = true;
+
   optional string message = 1 [(gogoproto.nullable) = false];
   optional Lease requested = 2 [(gogoproto.nullable) = false];
   optional Lease existing = 3 [(gogoproto.nullable) = false];
@@ -192,6 +218,8 @@ message LeaseRejectedError {
 // A SendError indicates that a message could not be delivered to
 // the desired recipient(s).
 message SendError {
+  option (gogoproto.equal) = true;
+
   optional string message = 1 [(gogoproto.nullable) = false];
   reserved 2;
 }
@@ -199,6 +227,8 @@ message SendError {
 // An AmbiguousResultError indicates that a request may have succeeded or
 // failed, but the response was not received and the final result is ambiguous.
 message AmbiguousResultError {
+  option (gogoproto.equal) = true;
+
   optional string message = 1 [(gogoproto.nullable) = false];
   // This can be set to give extra information about which error was converted
   // into an AmbiguousResultError. Useful for tests.
@@ -208,11 +238,14 @@ message AmbiguousResultError {
 // A RaftGroupDeletedError indicates a raft group has been deleted for
 // the replica.
 message RaftGroupDeletedError {
+  option (gogoproto.equal) = true;
 }
 
 // A ReplicaCorruptionError indicates that the replica has experienced
 // an error which puts its integrity at risk.
 message ReplicaCorruptionError {
+  option (gogoproto.equal) = true;
+
   optional string error_msg = 1 [(gogoproto.nullable) = false];;
   // processed indicates that the error has been taken into account and
   // necessary steps will be taken. For now, required for testing.
@@ -223,6 +256,8 @@ message ReplicaCorruptionError {
 // recipient of the raft message believes the sender of the raft
 // message to have been removed from the raft group
 message ReplicaTooOldError {
+  option (gogoproto.equal) = true;
+
   // replica_id is the ID of the replica that is too old.
   optional int32 replica_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID"];
@@ -231,12 +266,15 @@ message ReplicaTooOldError {
 // A StoreNotFoundError indicates that a command was sent to a store
 // which is not hosted on this node.
 message StoreNotFoundError {
+  option (gogoproto.equal) = true;
+
   optional int64 store_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
 }
 
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
+  option (gogoproto.equal) = true;
   option (gogoproto.onlyone) = true;
 
   optional NotLeaseHolderError not_lease_holder = 1;
@@ -294,6 +332,8 @@ enum TransactionRestart {
 // primitive field would break compatibility with proto3, where primitive fields
 // are no longer allowed to be nullable.
 message ErrPosition {
+  option (gogoproto.equal) = true;
+
   optional int32 index = 1 [(gogoproto.nullable) = false];
 }
 
@@ -301,6 +341,7 @@ message ErrPosition {
 // and information about retryability.
 message Error {
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
 
   // message is a human-readable error message.
   optional string message = 1 [(gogoproto.nullable) = false];
@@ -362,6 +403,8 @@ message UnhandledRetryableError {
 // its state, and then passed along to SQL in a pErr (through the
 // client.Sender() interface).
 message HandledRetryableTxnError {
+  option (gogoproto.equal) = true;
+
   // A user-readable message.
   optional string msg = 1 [(gogoproto.nullable) = false];
 

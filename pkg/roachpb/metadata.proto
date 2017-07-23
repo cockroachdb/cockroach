@@ -33,6 +33,7 @@ message Attributes {
 // ReplicationTarget identifies a node/store pair.
 message ReplicationTarget {
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
 
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];

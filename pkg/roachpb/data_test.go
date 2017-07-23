@@ -331,7 +331,7 @@ func TestTxnEqual(t *testing.T) {
 		{&Transaction{TxnMeta: enginepb.TxnMeta{ID: &u1}}, &Transaction{TxnMeta: enginepb.TxnMeta{ID: &u2}}, false},
 	}
 	for i, c := range tc {
-		if c.txn1.Equal(c.txn2) != c.txn2.Equal(c.txn1) || c.txn1.Equal(c.txn2) != c.eq {
+		if c.txn1.EqualIDs(c.txn2) != c.txn2.EqualIDs(c.txn1) || c.txn1.EqualIDs(c.txn2) != c.eq {
 			t.Errorf("%d: wanted %t", i, c.eq)
 		}
 	}
