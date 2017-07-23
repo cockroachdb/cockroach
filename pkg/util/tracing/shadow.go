@@ -27,6 +27,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
@@ -112,7 +113,7 @@ func linkShadowSpan(
 var lightStepToken = settings.RegisterStringSetting(
 	"trace.lightstep.token",
 	"if set, traces go to Lightstep using this token",
-	"",
+	envutil.EnvOrDefaultString("COCKROACH_TEST_LIGHTSTEP_TOKEN", ""),
 )
 
 func createLightStepTracer(token string) (shadowTracerManager, opentracing.Tracer) {
@@ -127,7 +128,7 @@ func createLightStepTracer(token string) (shadowTracerManager, opentracing.Trace
 var zipkinCollector = settings.RegisterStringSetting(
 	"trace.zipkin.collector",
 	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.",
-	"",
+	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
 )
 
 func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.Tracer) {
