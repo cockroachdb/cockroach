@@ -694,7 +694,9 @@ func Restore(
 	for _, desc := range newTableIDs {
 		job.Record.DescriptorIDs = append(job.Record.DescriptorIDs, desc)
 	}
-	if err := job.Created(initCtx); err != nil {
+
+	ctx, cancel := context.WithCancel(ctx)
+	if err := job.Created(initCtx, cancel); err != nil {
 		return failed, err
 	}
 	if err := job.Started(initCtx); err != nil {

@@ -383,7 +383,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
-	s.jobRegistry = jobs.MakeRegistry(s.db, sqlExecutor)
+	s.jobRegistry = jobs.MakeRegistry(s.clock, s.db, sqlExecutor)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
@@ -896,6 +896,12 @@ func (s *Server) Start(ctx context.Context) error {
 			}
 		}
 	})
+
+	if err := s.jobRegistry.WatchLiveness(
+		s.stopper, s.nodeLiveness, base.DefaultHeartbeatInterval,
+	); err != nil {
+		return err
+	}
 
 	// Initialize grpc-gateway mux and context.
 	jsonpb := &protoutil.JSONPb{
