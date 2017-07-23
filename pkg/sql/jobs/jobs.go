@@ -90,17 +90,35 @@ func (j *Job) ID() *int64 {
 	return j.id
 }
 
+// WithoutCancel indicates that the job should not have its leasing and
+// cancelation managed by Registry. This is only a temporary measure; eventually
+// all jobs will use the Registry's leasing and cancelation.
+var WithoutCancel func()
+
 // Created records the creation of a new job in the system.jobs table and
 // remembers the assigned ID of the job in the Job. The job information is read
-// from the Record field at the time Created is called.
-func (j *Job) Created(ctx context.Context) error {
+// from the Record field at the time Created is called. If cancelFn is not
+// WithoutCancel, the Registry will automatically acquire a lease for this job
+// and invoke cancelFn if the lease expires.
+func (j *Job) Created(ctx context.Context, cancelFn func()) error {
 	payload := &Payload{
 		Description:   j.Record.Description,
 		Username:      j.Record.Username,
 		DescriptorIDs: j.Record.DescriptorIDs,
 		Details:       WrapPayloadDetails(j.Record.Details),
 	}
-	return j.insert(ctx, payload)
+	if cancelFn != nil {
+		payload.Lease = j.registry.newLease()
+	}
+	if err := j.insert(ctx, payload); err != nil {
+		return err
+	}
+	if cancelFn != nil {
+		if err := j.registry.register(*j.id, cancelFn); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Started marks the tracked job as started.
@@ -177,12 +195,13 @@ func (j *Job) Failed(ctx context.Context, err error) {
 		log.Errorf(ctx, "Job: ignoring error %v while logging failure for job %d: %+v",
 			err, j.id, internalErr)
 	}
+	j.registry.unregister(*j.id)
 }
 
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
 func (j *Job) Succeeded(ctx context.Context) error {
-	return j.update(ctx, StatusSucceeded, func(payload *Payload) (bool, error) {
+	if err := j.update(ctx, StatusSucceeded, func(payload *Payload) (bool, error) {
 		if payload.FinishedMicros != 0 {
 			// Already finished - do nothing.
 			return false, nil
@@ -190,7 +209,11 @@ func (j *Job) Succeeded(ctx context.Context) error {
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payload.FractionCompleted = 1.0
 		return true, nil
-	})
+	}); err != nil {
+		return err
+	}
+	j.registry.unregister(*j.id)
+	return nil
 }
 
 // SetDetails sets the details field of the currently running tracked job.
