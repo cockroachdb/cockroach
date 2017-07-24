@@ -516,7 +516,7 @@ func main() {
 		os.Exit(exitStatus)
 	}()
 
-	allNodeArgs := append(flag.Args(), "--vmodule=allocator=3,allocator_scorer=3")
+	allNodeArgs := append(flag.Args(), "--vmodule=allocator=3,allocator_scorer=3,replicate_queue=3")
 	c.Start("allocsim", *workers, os.Args[0], allNodeArgs, perNodeArgs, perNodeEnv)
 	c.UpdateZoneConfig(1, 1<<20)
 	_, err := c.DB[0].Exec("SET CLUSTER SETTING kv.raft_log.synchronize = false;")
