@@ -177,12 +177,8 @@ type queryMeta struct {
 	// Current phase of execution of query.
 	phase queryPhase
 
-	// Context associated with this query. Forked from session.Ctx().
+	// Context associated with this query.
 	ctx context.Context
-
-	// Cancellation handle - calling this function cancels the context associated
-	// with this query.
-	cancel context.CancelFunc
 
 	// Flag that denotes if this query has been cancelled yet. Set and checked
 	// using sync.atomic.{Load,Store}Int32.

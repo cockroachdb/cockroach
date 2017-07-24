@@ -362,9 +362,6 @@ func (r *QueryRegistry) Cancel(queryID string, username string) (bool, error) {
 			return false, fmt.Errorf("query ID %s not found", queryID)
 		}
 
-		// Close the context
-		queryMeta.cancel()
-
 		// Atomically set isCancelled to 1
 		atomic.StoreInt32(&queryMeta.isCancelled, 1)
 
@@ -1098,8 +1095,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 		stmt.queryID = queryID
 		stmt.queryMeta = queryMeta
 
-		// Fork context for this statement.
-		queryMeta.ctx, queryMeta.cancel = context.WithCancel(session.Ctx())
+		// TODO(itsbilal): Fork a statement-specific context here, that gets cancelled
+		// upon request by user.
+		queryMeta.ctx = session.Ctx()
 
 		session.addActiveQuery(queryID, queryMeta)
 		defer session.removeActiveQuery(stmt.queryID)
