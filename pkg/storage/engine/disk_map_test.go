@@ -14,13 +14,12 @@
 //
 // Author: Alfonso Subiotto Marqués (alfonso@cockroachlabs.com)
 
-package distsqlrun
+package engine
 
 import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"math"
 	"math/rand"
 	"os"
 	"sort"
@@ -29,7 +28,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -37,20 +35,22 @@ import (
 func TestRocksDBMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	tempEngine, err := NewTempEngine(ctx, base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
 
-	diskMap, err := NewRocksDBMap(0 /* prefix */, tempEngine)
-	if err != nil {
-		t.Fatal(err)
-	}
+	diskMap := NewRocksDBMap(tempEngine)
 	defer diskMap.Close(ctx)
 
 	batchWriter := diskMap.NewBatchWriterCapacity(64)
-	defer batchWriter.Close(ctx)
+	defer func() {
+		err := batchWriter.Close(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
 
@@ -136,21 +136,15 @@ func TestRocksDBMap(t *testing.T) {
 func TestRocksDBMapSandbox(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	tempEngine, err := NewTempEngine(ctx, base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
 
-	if _, err := NewRocksDBMap(math.MaxUint64, tempEngine); err == nil {
-		t.Fatal("expected error when creating map with prefix math.MaxUint64")
-	}
-
 	diskMaps := make([]*RocksDBMap, 3)
 	for i := 0; i < len(diskMaps); i++ {
-		if diskMaps[i], err = NewRocksDBMap(uint64(i) /* prefix */, tempEngine); err != nil {
-			t.Fatal(err)
-		}
+		diskMaps[i] = NewRocksDBMap(tempEngine)
 	}
 
 	// Put [0,10) as a key into each diskMap with the value specifying which
@@ -204,7 +198,7 @@ func TestRocksDBMapSandbox(t *testing.T) {
 			func() {
 				i := tempEngine.NewIterator(false)
 				defer i.Close()
-				for i.Seek(engine.NilKey); ; i.Next() {
+				for i.Seek(NilKey); ; i.Next() {
 					if ok, err := i.Valid(); err != nil {
 						t.Fatal(err)
 					} else if !ok {
@@ -239,7 +233,7 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 		}
 	}()
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.StoreSpec{Path: dir})
+	tempEngine, err := NewTempEngine(ctx, base.StoreSpec{Path: dir})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -251,14 +245,15 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 		b.Run(fmt.Sprintf("InputSize%d", inputSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				func() {
-					diskMap, err := NewRocksDBMap(uint64(i) /* prefix */, tempEngine)
-					if err != nil {
-						b.Fatal(err)
-					}
+					diskMap := NewRocksDBMap(tempEngine)
 					defer diskMap.Close(ctx)
 					batchWriter := diskMap.NewBatchWriter()
 					// This Close() flushes writes.
-					defer batchWriter.Close(ctx)
+					defer func() {
+						if err := batchWriter.Close(ctx); err != nil {
+							b.Fatal(err)
+						}
+					}()
 					for j := 0; j < inputSize; j++ {
 						k := fmt.Sprintf("%d", rng.Int())
 						v := fmt.Sprintf("%d", rng.Int())
@@ -283,16 +278,13 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 		}
 	}()
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.StoreSpec{Path: dir})
+	tempEngine, err := NewTempEngine(ctx, base.StoreSpec{Path: dir})
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer tempEngine.Close()
 
-	diskMap, err := NewRocksDBMap(0 /* prefix */, tempEngine)
-	if err != nil {
-		b.Fatal(err)
-	}
+	diskMap := NewRocksDBMap(tempEngine)
 	defer diskMap.Close(context.Background())
 
 	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))

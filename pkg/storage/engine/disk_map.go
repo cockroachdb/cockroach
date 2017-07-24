@@ -14,17 +14,16 @@
 //
 // Author: Alfonso Subiotto Marqués (alfonso@cockroachlabs.com)
 
-package distsqlrun
+package engine
 
 import (
 	"bytes"
-	"math"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -78,7 +77,7 @@ type SortedDiskMapBatchWriter interface {
 
 	// Close flushes all writes to the underlying store and frees up resources
 	// held by the batch writer.
-	Close(context.Context)
+	Close(context.Context) error
 }
 
 // SortedDiskMap is an on-disk map. Keys are iterated over in sorted order.
@@ -113,17 +112,17 @@ type RocksDBMapBatchWriter struct {
 
 	// makeKey is a function that transforms a key into an MVCCKey with a prefix
 	// to be written to the underlying store.
-	makeKey func(k []byte) engine.MVCCKey
-	batch   engine.Batch
-	store   engine.Engine
+	makeKey func(k []byte) MVCCKey
+	batch   Batch
+	store   Engine
 }
 
 // RocksDBMapIterator iterates over the keys of a RocksDBMap in sorted order.
 type RocksDBMapIterator struct {
-	iter engine.Iterator
+	iter Iterator
 	// makeKey is a function that transforms a key into an MVCCKey with a prefix
 	// used to Seek() the underlying iterator.
-	makeKey func(k []byte) engine.MVCCKey
+	makeKey func(k []byte) MVCCKey
 	// prefix is the prefix of keys that this iterator iterates over.
 	prefix []byte
 }
@@ -133,38 +132,41 @@ type RocksDBMapIterator struct {
 type RocksDBMap struct {
 	// TODO(asubiotto): Add memory accounting.
 	prefix []byte
-	store  engine.Engine
+	store  Engine
 }
 
 var _ SortedDiskMapBatchWriter = &RocksDBMapBatchWriter{}
 var _ SortedDiskMapIterator = &RocksDBMapIterator{}
 var _ SortedDiskMap = &RocksDBMap{}
 
-// NewRocksDBMap creates a new RocksDBMap with the passed in engine.Engine as
-// the underlying store. The RocksDBMap instance will have a keyspace prefixed
-// by prefix.
-func NewRocksDBMap(prefix uint64, e engine.Engine) (*RocksDBMap, error) {
-	// When we close this instance, we also delete the associated keyspace. If
-	// we accepted math.MaxUint64 as a prefix, our prefixBytes would be
-	// []byte{0xff, ..., 0xff} for which there is no end key, thus deleting
-	// nothing.
-	if prefix == math.MaxUint64 {
-		return nil, errors.New("invalid prefix")
-	}
+// tempStorageID is the temp ID generator for a node. It generates unique
+// prefixes for NewRocksDBMap. It is a global because NewRocksDBMap needs to
+// prefix its writes uniquely, and using a global prevents users from having to
+// specify the prefix themselves and correctly guarantee that it is unique.
+var tempStorageID uint64
 
-	return &RocksDBMap{prefix: encoding.EncodeUvarintAscending([]byte(nil), prefix), store: e}, nil
+func generateTempStorageID() uint64 {
+	return atomic.AddUint64(&tempStorageID, 1)
+}
+
+// NewRocksDBMap creates a new RocksDBMap with the passed in Engine as
+// the underlying store. The RocksDBMap instance will have a keyspace prefixed
+// by a unique prefix.
+func NewRocksDBMap(e Engine) *RocksDBMap {
+	prefix := generateTempStorageID()
+	return &RocksDBMap{prefix: encoding.EncodeUvarintAscending([]byte(nil), prefix), store: e}
 }
 
 // makeKey appends k to the RocksDBMap's prefix to keep the key local to this
 // instance and creates an MVCCKey, which is what the underlying storage engine
 // expects. The returned key is only valid until the next call to makeKey().
-func (r *RocksDBMap) makeKey(k []byte) engine.MVCCKey {
+func (r *RocksDBMap) makeKey(k []byte) MVCCKey {
 	// TODO(asubiotto): We can make this more performant by bypassing MVCCKey
 	// creation (have to generalize storage API). See
 	// https://github.com/cockroachdb/cockroach/issues/16718#issuecomment-311493414
 	prefixLen := len(r.prefix)
 	r.prefix = append(r.prefix, k...)
-	mvccKey := engine.MVCCKey{Key: r.prefix}
+	mvccKey := MVCCKey{Key: r.prefix}
 	r.prefix = r.prefix[:prefixLen]
 	return mvccKey
 }
@@ -205,8 +207,8 @@ func (r *RocksDBMap) NewBatchWriterCapacity(capacityBytes int) SortedDiskMapBatc
 // Close implements the SortedDiskMap interface.
 func (r *RocksDBMap) Close(ctx context.Context) {
 	if err := r.store.ClearRange(
-		engine.MVCCKey{Key: r.prefix},
-		engine.MVCCKey{Key: roachpb.Key(r.prefix).PrefixEnd()},
+		MVCCKey{Key: r.prefix},
+		MVCCKey{Key: roachpb.Key(r.prefix).PrefixEnd()},
 	); err != nil {
 		log.Error(ctx, errors.Wrapf(err, "unable to clear range with prefix %v", r.prefix))
 	}
@@ -279,9 +281,8 @@ func (b *RocksDBMapBatchWriter) Flush() error {
 }
 
 // Close implements the SortedDiskMapBatchWriter interface.
-func (b *RocksDBMapBatchWriter) Close(ctx context.Context) {
-	if err := b.Flush(); err != nil {
-		log.Warning(ctx, errors.Wrapf(err, "batch writer could not be flushed on close"))
-	}
+func (b *RocksDBMapBatchWriter) Close(ctx context.Context) error {
+	err := b.Flush()
 	b.batch.Close()
+	return err
 }
