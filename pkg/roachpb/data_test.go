@@ -320,23 +320,6 @@ func TestSetGetChecked(t *testing.T) {
 	}
 }
 
-func TestTxnEqual(t *testing.T) {
-	u1, u2 := uuid.MakeV4(), uuid.MakeV4()
-	tc := []struct {
-		txn1, txn2 *Transaction
-		eq         bool
-	}{
-		{nil, nil, true},
-		{&Transaction{}, nil, false},
-		{&Transaction{TxnMeta: enginepb.TxnMeta{ID: &u1}}, &Transaction{TxnMeta: enginepb.TxnMeta{ID: &u2}}, false},
-	}
-	for i, c := range tc {
-		if c.txn1.Equal(c.txn2) != c.txn2.Equal(c.txn1) || c.txn1.Equal(c.txn2) != c.eq {
-			t.Errorf("%d: wanted %t", i, c.eq)
-		}
-	}
-}
-
 func TestTxnIDEqual(t *testing.T) {
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
 	txn1Copy := txn1
