@@ -137,6 +137,7 @@ func (d *deleteNode) Start(params runParams) error {
 
 func (d *deleteNode) Close(ctx context.Context) {
 	d.run.rows.Close(ctx)
+	d.tw.close(ctx)
 	*d = deleteNode{}
 	deleteNodePool.Put(d)
 }

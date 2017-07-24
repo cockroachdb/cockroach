@@ -408,6 +408,7 @@ func (u *updateNode) Start(params runParams) error {
 
 func (u *updateNode) Close(ctx context.Context) {
 	u.run.rows.Close(ctx)
+	u.tw.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)
 }
