@@ -131,6 +131,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	RegisterHeartbeatServer(s, heartbeat)
 
 	clientCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	clientCtx.Addr = "localserver"
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
@@ -198,6 +199,10 @@ func TestHeartbeatHealth(t *testing.T) {
 
 	if err := clientCtx.ConnHealth("non-existent connection"); err != ErrNotConnected {
 		t.Errorf("unexpected error: %v", err)
+	}
+
+	if err := clientCtx.ConnHealth("localserver"); err != nil {
+		t.Fatalf("local server should always be healthy: %s", err)
 	}
 }
 
