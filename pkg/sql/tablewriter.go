@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -219,6 +220,7 @@ type tableUpserter struct {
 	conflictIndex sqlbase.IndexDescriptor
 	isUpsertAlias bool
 	alloc         *sqlbase.DatumAlloc
+	mon           *mon.MemoryMonitor
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
 	updateCols []sqlbase.ColumnDescriptor
@@ -239,7 +241,7 @@ type tableUpserter struct {
 	fastPathKeys  map[string]struct{}
 
 	// Batched up in run/flush.
-	insertRows []parser.Datums
+	insertRows *sqlbase.RowContainer
 
 	// For allocation avoidance.
 	indexKeyPrefix []byte
@@ -306,6 +308,10 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		}
 	}
 
+	tu.insertRows = sqlbase.NewRowContainer(
+		tu.mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+	)
+
 	valNeededForCol := make([]bool, len(tu.fetchCols))
 	for i, col := range tu.fetchCols {
 		if _, ok := tu.fetchColIDtoRowIndex[col.ID]; ok {
@@ -336,17 +342,15 @@ func (tu *tableUpserter) row(
 		return nil, err
 	}
 
-	// Copy the row because the `tableWriter` interface guarantees that it's not
-	// used after this returns.
-	tu.insertRows = append(tu.insertRows, append([]parser.Datum(nil), row...))
+	_, err := tu.insertRows.AddRow(ctx, row)
 	// TODO(dan): If len(tu.insertRows) > some threshold, call flush().
-	return nil, nil
+	return nil, err
 }
 
 // flush commits to tu.txn any rows batched up in tu.insertRows.
 func (tu *tableUpserter) flush(ctx context.Context, finalize, traceKV bool) error {
 	defer func() {
-		tu.insertRows = nil
+		tu.insertRows.Close(ctx)
 	}()
 
 	existingRows, err := tu.fetchExisting(ctx, traceKV)
@@ -355,7 +359,8 @@ func (tu *tableUpserter) flush(ctx context.Context, finalize, traceKV bool) erro
 	}
 
 	b := tu.txn.NewBatch()
-	for i, insertRow := range tu.insertRows {
+	for i := 0; i < tu.insertRows.Len(); i++ {
+		insertRow := tu.insertRows.At(i)
 		existingRow := existingRows[i]
 
 		if existingRow == nil {
@@ -396,13 +401,14 @@ func (tu *tableUpserter) flush(ctx context.Context, finalize, traceKV bool) erro
 // upsertRowPKs returns the primary keys of any rows with potential upsert
 // conflicts.
 func (tu *tableUpserter) upsertRowPKs(ctx context.Context, traceKV bool) ([]roachpb.Key, error) {
-	upsertRowPKs := make([]roachpb.Key, len(tu.insertRows))
+	upsertRowPKs := make([]roachpb.Key, tu.insertRows.Len())
 
 	if tu.conflictIndex.ID == tu.tableDesc.PrimaryIndex.ID {
 		// If the conflict index is the primary index, we can compute them directly.
 		// In this case, the slice will be filled, but not all rows will have
 		// conflicts.
-		for i, insertRow := range tu.insertRows {
+		for i := 0; i < tu.insertRows.Len(); i++ {
+			insertRow := tu.insertRows.At(i)
 			upsertRowPK, _, err := sqlbase.EncodeIndexKey(
 				tu.tableDesc, &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 			if err != nil {
@@ -418,7 +424,8 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context, traceKV bool) ([]roac
 	// case, some spots in the slice will be nil (indicating no conflict) and the
 	// others will be conflicting rows.
 	b := tu.txn.NewBatch()
-	for _, insertRow := range tu.insertRows {
+	for i := 0; i < tu.insertRows.Len(); i++ {
+		insertRow := tu.insertRows.At(i)
 		entry, err := sqlbase.EncodeSecondaryIndex(
 			tu.tableDesc, &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow)
 		if err != nil {
@@ -448,7 +455,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context, traceKV bool) ([]roac
 			}
 		} else if len(result.Rows) > 1 {
 			panic(fmt.Errorf(
-				"Expected <= 1 but got %d conflicts for row %s", len(result.Rows), tu.insertRows[i]))
+				"Expected <= 1 but got %d conflicts for row %s", len(result.Rows), tu.insertRows.At(i)))
 		}
 	}
 

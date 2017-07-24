@@ -178,6 +178,7 @@ func (p *planner) Insert(
 				autoCommit:    p.autoCommit,
 				conflictIndex: *conflictIndex,
 				alloc:         &p.alloc,
+				mon:           &p.session.TxnState.mon,
 			}
 			tw = tu
 		} else {
@@ -216,6 +217,7 @@ func (p *planner) Insert(
 				ri:            ri,
 				autoCommit:    p.autoCommit,
 				alloc:         &p.alloc,
+				mon:           &p.session.TxnState.mon,
 				fkTables:      fkTables,
 				updateCols:    updateCols,
 				conflictIndex: *conflictIndex,
