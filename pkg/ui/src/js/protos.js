@@ -8829,6 +8829,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {cockroach.server.serverpb.CertificateDetails.CertificateType} [type] CertificateDetails type.
                  * @property {string} [error_message] CertificateDetails error_message.
                  * @property {Uint8Array} [data] CertificateDetails data.
+                 * @property {Array.<cockroach.server.serverpb.CertificateDetails.Fields$Properties>} [fields] CertificateDetails fields.
                  */
 
                 /**
@@ -8838,6 +8839,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @param {cockroach.server.serverpb.CertificateDetails$Properties=} [properties] Properties to set
                  */
                 function CertificateDetails(properties) {
+                    this.fields = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                             if (properties[keys[i]] != null)
@@ -8863,6 +8865,12 @@ export const cockroach = $root.cockroach = (() => {
                 CertificateDetails.prototype.data = $util.newBuffer([]);
 
                 /**
+                 * CertificateDetails fields.
+                 * @type {Array.<cockroach.server.serverpb.CertificateDetails.Fields$Properties>}
+                 */
+                CertificateDetails.prototype.fields = $util.emptyArray;
+
+                /**
                  * Creates a new CertificateDetails instance using the specified properties.
                  * @param {cockroach.server.serverpb.CertificateDetails$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.CertificateDetails} CertificateDetails instance
@@ -8886,6 +8894,9 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 2, wireType 2 =*/18).string(message.error_message);
                     if (message.data != null && message.hasOwnProperty("data"))
                         writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.data);
+                    if (message.fields != null && message.fields.length)
+                        for (let i = 0; i < message.fields.length; ++i)
+                            $root.cockroach.server.serverpb.CertificateDetails.Fields.encode(message.fields[i], writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                     return writer;
                 };
 
@@ -8922,6 +8933,11 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 3:
                             message.data = reader.bytes();
+                            break;
+                        case 4:
+                            if (!(message.fields && message.fields.length))
+                                message.fields = [];
+                            message.fields.push($root.cockroach.server.serverpb.CertificateDetails.Fields.decode(reader, reader.uint32()));
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -8966,6 +8982,15 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.data != null && message.hasOwnProperty("data"))
                         if (!(message.data && typeof message.data.length === "number" || $util.isString(message.data)))
                             return "data: buffer expected";
+                    if (message.fields != null && message.hasOwnProperty("fields")) {
+                        if (!Array.isArray(message.fields))
+                            return "fields: array expected";
+                        for (let i = 0; i < message.fields.length; ++i) {
+                            let error = $root.cockroach.server.serverpb.CertificateDetails.Fields.verify(message.fields[i]);
+                            if (error)
+                                return "fields." + error;
+                        }
+                    }
                     return null;
                 };
 
@@ -8995,6 +9020,16 @@ export const cockroach = $root.cockroach = (() => {
                             $util.base64.decode(object.data, message.data = $util.newBuffer($util.base64.length(object.data)), 0);
                         else if (object.data.length)
                             message.data = object.data;
+                    if (object.fields) {
+                        if (!Array.isArray(object.fields))
+                            throw TypeError(".cockroach.server.serverpb.CertificateDetails.fields: array expected");
+                        message.fields = [];
+                        for (let i = 0; i < object.fields.length; ++i) {
+                            if (typeof object.fields[i] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.CertificateDetails.fields: object expected");
+                            message.fields[i] = $root.cockroach.server.serverpb.CertificateDetails.Fields.fromObject(object.fields[i]);
+                        }
+                    }
                     return message;
                 };
 
@@ -9017,6 +9052,8 @@ export const cockroach = $root.cockroach = (() => {
                     if (!options)
                         options = {};
                     let object = {};
+                    if (options.arrays || options.defaults)
+                        object.fields = [];
                     if (options.defaults) {
                         object.type = options.enums === String ? "CA" : 0;
                         object.error_message = "";
@@ -9028,6 +9065,11 @@ export const cockroach = $root.cockroach = (() => {
                         object.error_message = message.error_message;
                     if (message.data != null && message.hasOwnProperty("data"))
                         object.data = options.bytes === String ? $util.base64.encode(message.data, 0, message.data.length) : options.bytes === Array ? Array.prototype.slice.call(message.data) : message.data;
+                    if (message.fields && message.fields.length) {
+                        object.fields = [];
+                        for (let j = 0; j < message.fields.length; ++j)
+                            object.fields[j] = $root.cockroach.server.serverpb.CertificateDetails.Fields.toObject(message.fields[j], options);
+                    }
                     return object;
                 };
 
@@ -9061,6 +9103,419 @@ export const cockroach = $root.cockroach = (() => {
                     values[valuesById[0] = "CA"] = 0;
                     values[valuesById[1] = "NODE"] = 1;
                     return values;
+                })();
+
+                CertificateDetails.Fields = (function() {
+
+                    /**
+                     * Properties of a Fields.
+                     * @typedef cockroach.server.serverpb.CertificateDetails.Fields$Properties
+                     * @type {Object}
+                     * @property {string} [issuer] Fields issuer.
+                     * @property {string} [subject] Fields subject.
+                     * @property {Long} [valid_from] Fields valid_from.
+                     * @property {Long} [valid_until] Fields valid_until.
+                     * @property {Array.<string>} [addresses] Fields addresses.
+                     * @property {string} [signature_algorithm] Fields signature_algorithm.
+                     * @property {string} [public_key] Fields public_key.
+                     * @property {Array.<string>} [key_usage] Fields key_usage.
+                     * @property {Array.<string>} [extended_key_usage] Fields extended_key_usage.
+                     */
+
+                    /**
+                     * Constructs a new Fields.
+                     * @exports cockroach.server.serverpb.CertificateDetails.Fields
+                     * @constructor
+                     * @param {cockroach.server.serverpb.CertificateDetails.Fields$Properties=} [properties] Properties to set
+                     */
+                    function Fields(properties) {
+                        this.addresses = [];
+                        this.key_usage = [];
+                        this.extended_key_usage = [];
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * Fields issuer.
+                     * @type {string}
+                     */
+                    Fields.prototype.issuer = "";
+
+                    /**
+                     * Fields subject.
+                     * @type {string}
+                     */
+                    Fields.prototype.subject = "";
+
+                    /**
+                     * Fields valid_from.
+                     * @type {Long}
+                     */
+                    Fields.prototype.valid_from = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * Fields valid_until.
+                     * @type {Long}
+                     */
+                    Fields.prototype.valid_until = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * Fields addresses.
+                     * @type {Array.<string>}
+                     */
+                    Fields.prototype.addresses = $util.emptyArray;
+
+                    /**
+                     * Fields signature_algorithm.
+                     * @type {string}
+                     */
+                    Fields.prototype.signature_algorithm = "";
+
+                    /**
+                     * Fields public_key.
+                     * @type {string}
+                     */
+                    Fields.prototype.public_key = "";
+
+                    /**
+                     * Fields key_usage.
+                     * @type {Array.<string>}
+                     */
+                    Fields.prototype.key_usage = $util.emptyArray;
+
+                    /**
+                     * Fields extended_key_usage.
+                     * @type {Array.<string>}
+                     */
+                    Fields.prototype.extended_key_usage = $util.emptyArray;
+
+                    /**
+                     * Creates a new Fields instance using the specified properties.
+                     * @param {cockroach.server.serverpb.CertificateDetails.Fields$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.CertificateDetails.Fields} Fields instance
+                     */
+                    Fields.create = function create(properties) {
+                        return new Fields(properties);
+                    };
+
+                    /**
+                     * Encodes the specified Fields message. Does not implicitly {@link cockroach.server.serverpb.CertificateDetails.Fields.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.CertificateDetails.Fields$Properties} message Fields message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Fields.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.issuer != null && message.hasOwnProperty("issuer"))
+                            writer.uint32(/* id 1, wireType 2 =*/10).string(message.issuer);
+                        if (message.subject != null && message.hasOwnProperty("subject"))
+                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.subject);
+                        if (message.valid_from != null && message.hasOwnProperty("valid_from"))
+                            writer.uint32(/* id 3, wireType 0 =*/24).int64(message.valid_from);
+                        if (message.valid_until != null && message.hasOwnProperty("valid_until"))
+                            writer.uint32(/* id 4, wireType 0 =*/32).int64(message.valid_until);
+                        if (message.addresses != null && message.addresses.length)
+                            for (let i = 0; i < message.addresses.length; ++i)
+                                writer.uint32(/* id 5, wireType 2 =*/42).string(message.addresses[i]);
+                        if (message.signature_algorithm != null && message.hasOwnProperty("signature_algorithm"))
+                            writer.uint32(/* id 6, wireType 2 =*/50).string(message.signature_algorithm);
+                        if (message.public_key != null && message.hasOwnProperty("public_key"))
+                            writer.uint32(/* id 7, wireType 2 =*/58).string(message.public_key);
+                        if (message.key_usage != null && message.key_usage.length)
+                            for (let i = 0; i < message.key_usage.length; ++i)
+                                writer.uint32(/* id 8, wireType 2 =*/66).string(message.key_usage[i]);
+                        if (message.extended_key_usage != null && message.extended_key_usage.length)
+                            for (let i = 0; i < message.extended_key_usage.length; ++i)
+                                writer.uint32(/* id 9, wireType 2 =*/74).string(message.extended_key_usage[i]);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified Fields message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CertificateDetails.Fields.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.CertificateDetails.Fields$Properties} message Fields message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Fields.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a Fields message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.CertificateDetails.Fields} Fields
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Fields.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.CertificateDetails.Fields();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.issuer = reader.string();
+                                break;
+                            case 2:
+                                message.subject = reader.string();
+                                break;
+                            case 3:
+                                message.valid_from = reader.int64();
+                                break;
+                            case 4:
+                                message.valid_until = reader.int64();
+                                break;
+                            case 5:
+                                if (!(message.addresses && message.addresses.length))
+                                    message.addresses = [];
+                                message.addresses.push(reader.string());
+                                break;
+                            case 6:
+                                message.signature_algorithm = reader.string();
+                                break;
+                            case 7:
+                                message.public_key = reader.string();
+                                break;
+                            case 8:
+                                if (!(message.key_usage && message.key_usage.length))
+                                    message.key_usage = [];
+                                message.key_usage.push(reader.string());
+                                break;
+                            case 9:
+                                if (!(message.extended_key_usage && message.extended_key_usage.length))
+                                    message.extended_key_usage = [];
+                                message.extended_key_usage.push(reader.string());
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a Fields message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.CertificateDetails.Fields} Fields
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Fields.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a Fields message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    Fields.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.issuer != null && message.hasOwnProperty("issuer"))
+                            if (!$util.isString(message.issuer))
+                                return "issuer: string expected";
+                        if (message.subject != null && message.hasOwnProperty("subject"))
+                            if (!$util.isString(message.subject))
+                                return "subject: string expected";
+                        if (message.valid_from != null && message.hasOwnProperty("valid_from"))
+                            if (!$util.isInteger(message.valid_from) && !(message.valid_from && $util.isInteger(message.valid_from.low) && $util.isInteger(message.valid_from.high)))
+                                return "valid_from: integer|Long expected";
+                        if (message.valid_until != null && message.hasOwnProperty("valid_until"))
+                            if (!$util.isInteger(message.valid_until) && !(message.valid_until && $util.isInteger(message.valid_until.low) && $util.isInteger(message.valid_until.high)))
+                                return "valid_until: integer|Long expected";
+                        if (message.addresses != null && message.hasOwnProperty("addresses")) {
+                            if (!Array.isArray(message.addresses))
+                                return "addresses: array expected";
+                            for (let i = 0; i < message.addresses.length; ++i)
+                                if (!$util.isString(message.addresses[i]))
+                                    return "addresses: string[] expected";
+                        }
+                        if (message.signature_algorithm != null && message.hasOwnProperty("signature_algorithm"))
+                            if (!$util.isString(message.signature_algorithm))
+                                return "signature_algorithm: string expected";
+                        if (message.public_key != null && message.hasOwnProperty("public_key"))
+                            if (!$util.isString(message.public_key))
+                                return "public_key: string expected";
+                        if (message.key_usage != null && message.hasOwnProperty("key_usage")) {
+                            if (!Array.isArray(message.key_usage))
+                                return "key_usage: array expected";
+                            for (let i = 0; i < message.key_usage.length; ++i)
+                                if (!$util.isString(message.key_usage[i]))
+                                    return "key_usage: string[] expected";
+                        }
+                        if (message.extended_key_usage != null && message.hasOwnProperty("extended_key_usage")) {
+                            if (!Array.isArray(message.extended_key_usage))
+                                return "extended_key_usage: array expected";
+                            for (let i = 0; i < message.extended_key_usage.length; ++i)
+                                if (!$util.isString(message.extended_key_usage[i]))
+                                    return "extended_key_usage: string[] expected";
+                        }
+                        return null;
+                    };
+
+                    /**
+                     * Creates a Fields message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.CertificateDetails.Fields} Fields
+                     */
+                    Fields.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.server.serverpb.CertificateDetails.Fields)
+                            return object;
+                        let message = new $root.cockroach.server.serverpb.CertificateDetails.Fields();
+                        if (object.issuer != null)
+                            message.issuer = String(object.issuer);
+                        if (object.subject != null)
+                            message.subject = String(object.subject);
+                        if (object.valid_from != null)
+                            if ($util.Long)
+                                (message.valid_from = $util.Long.fromValue(object.valid_from)).unsigned = false;
+                            else if (typeof object.valid_from === "string")
+                                message.valid_from = parseInt(object.valid_from, 10);
+                            else if (typeof object.valid_from === "number")
+                                message.valid_from = object.valid_from;
+                            else if (typeof object.valid_from === "object")
+                                message.valid_from = new $util.LongBits(object.valid_from.low >>> 0, object.valid_from.high >>> 0).toNumber();
+                        if (object.valid_until != null)
+                            if ($util.Long)
+                                (message.valid_until = $util.Long.fromValue(object.valid_until)).unsigned = false;
+                            else if (typeof object.valid_until === "string")
+                                message.valid_until = parseInt(object.valid_until, 10);
+                            else if (typeof object.valid_until === "number")
+                                message.valid_until = object.valid_until;
+                            else if (typeof object.valid_until === "object")
+                                message.valid_until = new $util.LongBits(object.valid_until.low >>> 0, object.valid_until.high >>> 0).toNumber();
+                        if (object.addresses) {
+                            if (!Array.isArray(object.addresses))
+                                throw TypeError(".cockroach.server.serverpb.CertificateDetails.Fields.addresses: array expected");
+                            message.addresses = [];
+                            for (let i = 0; i < object.addresses.length; ++i)
+                                message.addresses[i] = String(object.addresses[i]);
+                        }
+                        if (object.signature_algorithm != null)
+                            message.signature_algorithm = String(object.signature_algorithm);
+                        if (object.public_key != null)
+                            message.public_key = String(object.public_key);
+                        if (object.key_usage) {
+                            if (!Array.isArray(object.key_usage))
+                                throw TypeError(".cockroach.server.serverpb.CertificateDetails.Fields.key_usage: array expected");
+                            message.key_usage = [];
+                            for (let i = 0; i < object.key_usage.length; ++i)
+                                message.key_usage[i] = String(object.key_usage[i]);
+                        }
+                        if (object.extended_key_usage) {
+                            if (!Array.isArray(object.extended_key_usage))
+                                throw TypeError(".cockroach.server.serverpb.CertificateDetails.Fields.extended_key_usage: array expected");
+                            message.extended_key_usage = [];
+                            for (let i = 0; i < object.extended_key_usage.length; ++i)
+                                message.extended_key_usage[i] = String(object.extended_key_usage[i]);
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Creates a Fields message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.CertificateDetails.Fields.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.CertificateDetails.Fields} Fields
+                     */
+                    Fields.from = Fields.fromObject;
+
+                    /**
+                     * Creates a plain object from a Fields message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.CertificateDetails.Fields} message Fields
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Fields.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.arrays || options.defaults) {
+                            object.addresses = [];
+                            object.key_usage = [];
+                            object.extended_key_usage = [];
+                        }
+                        if (options.defaults) {
+                            object.issuer = "";
+                            object.subject = "";
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.valid_from = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.valid_from = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.valid_until = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.valid_until = options.longs === String ? "0" : 0;
+                            object.signature_algorithm = "";
+                            object.public_key = "";
+                        }
+                        if (message.issuer != null && message.hasOwnProperty("issuer"))
+                            object.issuer = message.issuer;
+                        if (message.subject != null && message.hasOwnProperty("subject"))
+                            object.subject = message.subject;
+                        if (message.valid_from != null && message.hasOwnProperty("valid_from"))
+                            if (typeof message.valid_from === "number")
+                                object.valid_from = options.longs === String ? String(message.valid_from) : message.valid_from;
+                            else
+                                object.valid_from = options.longs === String ? $util.Long.prototype.toString.call(message.valid_from) : options.longs === Number ? new $util.LongBits(message.valid_from.low >>> 0, message.valid_from.high >>> 0).toNumber() : message.valid_from;
+                        if (message.valid_until != null && message.hasOwnProperty("valid_until"))
+                            if (typeof message.valid_until === "number")
+                                object.valid_until = options.longs === String ? String(message.valid_until) : message.valid_until;
+                            else
+                                object.valid_until = options.longs === String ? $util.Long.prototype.toString.call(message.valid_until) : options.longs === Number ? new $util.LongBits(message.valid_until.low >>> 0, message.valid_until.high >>> 0).toNumber() : message.valid_until;
+                        if (message.addresses && message.addresses.length) {
+                            object.addresses = [];
+                            for (let j = 0; j < message.addresses.length; ++j)
+                                object.addresses[j] = message.addresses[j];
+                        }
+                        if (message.signature_algorithm != null && message.hasOwnProperty("signature_algorithm"))
+                            object.signature_algorithm = message.signature_algorithm;
+                        if (message.public_key != null && message.hasOwnProperty("public_key"))
+                            object.public_key = message.public_key;
+                        if (message.key_usage && message.key_usage.length) {
+                            object.key_usage = [];
+                            for (let j = 0; j < message.key_usage.length; ++j)
+                                object.key_usage[j] = message.key_usage[j];
+                        }
+                        if (message.extended_key_usage && message.extended_key_usage.length) {
+                            object.extended_key_usage = [];
+                            for (let j = 0; j < message.extended_key_usage.length; ++j)
+                                object.extended_key_usage[j] = message.extended_key_usage[j];
+                        }
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this Fields message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Fields.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this Fields to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    Fields.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return Fields;
                 })();
 
                 return CertificateDetails;
