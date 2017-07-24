@@ -31,9 +31,9 @@ import (
 // is a SortedDiskMap so the sorting itself is delegated. Use an iterator
 // created through NewIterator() to read the rows in sorted order.
 type diskRowContainer struct {
-	diskMap SortedDiskMap
+	diskMap engine.SortedDiskMap
 	// bufferedRows buffers writes to the diskMap.
-	bufferedRows  SortedDiskMapBatchWriter
+	bufferedRows  engine.SortedDiskMapBatchWriter
 	scratchKey    []byte
 	scratchVal    []byte
 	scratchEncRow sqlbase.EncDatumRow
@@ -64,9 +64,6 @@ var _ sortableRowContainer = &diskRowContainer{}
 // rowContainer and deletes them so rowContainer cannot be used after creating
 // a diskRowContainer. The caller must still Close() the rowContainer.
 // Arguments:
-// 	- tempStorageID is the ID of the processor that is calling
-// 	  makeDiskRowContainer. It is used as a prefix in the underlying
-// 	  SortedDiskMap to have a private keyspace.
 // 	- types is the schema of rows that will be added to this container.
 // 	- ordering is the output ordering; the order in which rows should be sorted.
 // 	- rowContainer contains the initial set of rows that this diskRowContainer
@@ -74,17 +71,12 @@ var _ sortableRowContainer = &diskRowContainer{}
 // 	- e is the underlying store that rows are stored on.
 func makeDiskRowContainer(
 	ctx context.Context,
-	tempStorageID uint64,
 	types []sqlbase.ColumnType,
 	ordering sqlbase.ColumnOrdering,
 	rowContainer memRowContainer,
 	e engine.Engine,
 ) (diskRowContainer, error) {
-	// Use the tempStorageID as the prefix.
-	diskMap, err := NewRocksDBMap(tempStorageID, e)
-	if err != nil {
-		return diskRowContainer{}, err
-	}
+	diskMap := engine.NewRocksDBMap(e)
 	d := diskRowContainer{
 		diskMap:       diskMap,
 		types:         types,
@@ -181,7 +173,9 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 func (d *diskRowContainer) Sort() {}
 
 func (d *diskRowContainer) Close(ctx context.Context) {
-	d.bufferedRows.Close(ctx)
+	// We can ignore the error here because the flushed data is immediately cleared
+	// in the following Close.
+	_ = d.bufferedRows.Close(ctx)
 	d.diskMap.Close(ctx)
 }
 
@@ -219,7 +213,7 @@ func (d *diskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow,
 // diskRowIterator iterates over the rows in a diskRowContainer.
 type diskRowIterator struct {
 	rowContainer *diskRowContainer
-	SortedDiskMapIterator
+	engine.SortedDiskMapIterator
 }
 
 var _ rowIterator = diskRowIterator{}
