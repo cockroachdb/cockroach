@@ -1371,10 +1371,36 @@ func (e *Executor) execStmtInOpenTxn(
 				// txn in the Aborted state; we transition back to NoTxn.
 				txnState.resetStateAndTxn(NoTxn)
 			}
+		} else if txnState.autoRetry &&
+			session.parallelizeQueue.Empty() &&
+			txnState.isSerializableRestart() {
+			// If we can still automatically retry the txn, and we detect that the
+			// transaction won't be allowed to commit because its timestamp has been
+			// pushed, we go ahead and retry now - if we'd execute further statements,
+			// we probably wouldn't be allowed to retry automatically any more.
+			// If there are any statements currently being executed (through the
+			// parallelize queue), then we don't do this push detection. That's
+			// because it's currently not kosher to send request after the proto has
+			// been restarted (see #17197).
+			// TODO(andrei): Remove the parallelizeQueue restriction after #17197 is
+			// fixed.
+			txnState.mu.txn.Proto().Restart(
+				0 /* userPriority */, 0 /* upgradePriority */, e.cfg.Clock.Now())
+			// Force an auto-retry by returning a retryable error to the higher
+			// levels.
+			err = roachpb.NewHandledRetryableTxnError(
+				"serializable transaction timestamp pushed (detected by sql Executor)",
+				txnState.mu.txn.ID(),
+				// No updated transaction required; we've already manually updated our
+				// client.Txn.
+				roachpb.Transaction{},
+			)
 		} else if txnState.State() == FirstBatch &&
 			!canStayInFirstBatchState(stmt) {
 			// Transition from FirstBatch to Open except in the case of special
-			// statements that don't return results to the client.
+			// statements that don't return results to the client. This transition
+			// does not affect the current batch - future statements in it will still
+			// be retried automatically.
 			txnState.SetState(Open)
 		}
 	}()
@@ -1450,6 +1476,8 @@ func (e *Executor) execStmtInOpenTxn(
 		// restart the client txn's proto to increment the epoch. The SQL
 		// txn's state is already set to OPEN.
 		if txnState.mu.txn.CommandCount() > 0 {
+			// TODO(andrei): Should the timestamp below be e.cfg.Clock.Now(), so that
+			// the transaction gets a new timestamp?
 			txnState.mu.txn.Proto().Restart(
 				0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
 		}

@@ -1440,3 +1440,90 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Test that a serializable txn that has pushed its timestamp is detected and
+// retried automatically while the SQL txn is in state FirstBatch. It also tests
+// that, once the SQL txn has moved out of FirstBatch, the pushed timestamp is
+// no longer detected - the txn is left alone to run until completion and lay
+// down its intents, and only finds out that it can't commit at COMMIT time.
+func TestPushedTxnDetectionInFirstBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const marker = "marker"
+	var injectRead int64
+	var sqlDB *gosql.DB
+	var s serverutils.TestServerInterface
+	params, _ := createTestServerParams()
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		StatementFilter: func(ctx context.Context, stmt string, r *sql.Result) {
+			if atomic.LoadInt64(&injectRead) == 0 {
+				return
+			}
+			if strings.Contains(stmt, marker) {
+				// Outside of the transaction, do a read. This will conflict with the
+				// next writer.
+				if _, err := sqlDB.Exec(`SELECT COUNT(1) FROM t.test`); err != nil {
+					t.Error(err)
+				}
+				// Only do the filter once, to allow retries to succeed.
+				atomic.StoreInt64(&injectRead, 0)
+			}
+		},
+	}
+	s, sqlDB, _ = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Two tests, one where the txn is pushed while in FirstBatch, one where it's
+	// pushed after the txn transitioned from FirstBatch to Open.
+	for i, moveOutOfFirstBatch := range []bool{false, true} {
+		t.Run(fmt.Sprintf("%t", moveOutOfFirstBatch),
+			func(t *testing.T) {
+				// Start our transaction and get a timestamp.
+				tx, err := sqlDB.Begin()
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if moveOutOfFirstBatch {
+					if _, err := tx.Exec(`SELECT 1`); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				atomic.StoreInt64(&injectRead, 1)
+
+				// Do a couple of operations on the txn, in the same batch:
+				//   - a KV operation to make sure the txn is properly initialized and
+				//     gets a timestamp.
+				// 	   TODO(andrei): This can go once #16908 is resolved, and instead of
+				// 	   a statement filter, we can do the read in the main routine, after
+				// 	   the BEGIN.
+				//   - a marker statement recognized by the filter.
+				//   - a write that will conflict with the read done by the filter and
+				//     will cause the txn's timestamp to be pushed.
+				if _, err := tx.Exec(
+					fmt.Sprintf(
+						`SHOW DATABASES; SELECT '%s'; INSERT INTO t.test VALUES (%d)`,
+						marker, i)); err != nil {
+					t.Fatal(err)
+				}
+
+				err = tx.Commit()
+				if moveOutOfFirstBatch {
+					if !isRetryableErr(err) {
+						t.Fatalf("expected retryable error, got: %v", err)
+					}
+				} else {
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+			})
+	}
+}

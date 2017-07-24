@@ -278,6 +278,26 @@ func (txn *Txn) Proto() *roachpb.Transaction {
 	return &txn.mu.Proto
 }
 
+// IsSerializableRestart returns true if the transaction is serializable and
+// its timestamp has been pushed. Used to detect whether the txn will be
+// allowed to commit.
+//
+// Note that this method allows for false negatives: sometimes the client only
+// figures out that it's been pushed when it sends an EndTransaction - i.e. it's
+// possible for the txn to have been pushed asynchoronously by some other
+// operation (usually, but not exclusively, by a high-priority txn with
+// conflicting writes).
+func (txn *Txn) IsSerializableRestart() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	// TODO(andrei): The Walltime != 0 test is necessary but it feels like it
+	// shouldn't be. Hopefully the proto initialization can be improved such that
+	// Timestamp is always set.
+	isTxnPushed := txn.Proto().Timestamp.WallTime != 0 &&
+		txn.Proto().Timestamp != txn.Proto().OrigTimestamp
+	return txn.Proto().Isolation == enginepb.SERIALIZABLE && isTxnPushed
+}
+
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
 	return &Batch{txn: txn}
@@ -711,6 +731,17 @@ func (txn *Txn) Exec(
 				// `cluster_logical_timestamp()` is consistent with the commit
 				// (serializable) ordering.
 				txn.mu.Proto.OrigTimestamp = txn.db.clock.Now()
+				// Assigning Timestamp, besides OrigTimestamp, should not be necessary -
+				// if the proto is not initialized, someone else generally is in charge
+				// of assigning it. However, it can be that Timestamp is initialized
+				// even though txn.mu.Proto.IsInitialized() returns false, in which case
+				// we have overwrite it here (otherwise it's not set again and Timestamp
+				// remains < OrigTimestamp, which is no good). The case where this is
+				// exercised with Timestamp set and IsInitialized() = false is a
+				// TestTxnUserRestart, which probably injects retryable errors into
+				// uninitialized txns. See also #16827.
+				// TODO(andrei): revisit this when Proto.IsInitialized() goes away.
+				txn.mu.Proto.Timestamp = txn.mu.Proto.OrigTimestamp
 			}
 			txn.mu.Unlock()
 		}
