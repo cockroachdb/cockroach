@@ -33,7 +33,6 @@ import (
 )
 
 type dropDatabaseNode struct {
-	p      *planner
 	n      *parser.DropDatabase
 	dbDesc *sqlbase.DatabaseDescriptor
 	td     []*sqlbase.TableDescriptor
@@ -100,7 +99,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		return nil, err
 	}
 
-	return &dropDatabaseNode{n: n, p: p, dbDesc: dbDesc, td: td}, nil
+	return &dropDatabaseNode{n: n, dbDesc: dbDesc, td: td}, nil
 }
 
 // filterCascadedTables takes a list of table descriptors and removes any
@@ -143,17 +142,18 @@ func (p *planner) accumulateDependentTables(
 	return nil
 }
 
-func (n *dropDatabaseNode) Start(ctx context.Context) error {
+func (n *dropDatabaseNode) Start(params runParams) error {
 	tbNameStrings := make([]string, 0, len(n.td))
+	ctx := params.ctx
 	for _, tbDesc := range n.td {
 		if tbDesc.IsView() {
-			cascadedViews, err := n.p.dropViewImpl(ctx, tbDesc, parser.DropCascade)
+			cascadedViews, err := params.p.dropViewImpl(ctx, tbDesc, parser.DropCascade)
 			if err != nil {
 				return err
 			}
 			tbNameStrings = append(tbNameStrings, cascadedViews...)
 		} else {
-			cascadedViews, err := n.p.dropTableImpl(ctx, tbDesc)
+			cascadedViews, err := params.p.dropTableImpl(ctx, tbDesc)
 			if err != nil {
 				return err
 			}
@@ -165,7 +165,7 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 	zoneKey, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
 
 	b := &client.Batch{}
-	if n.p.session.Tracing.KVTracingEnabled() {
+	if params.p.session.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", descKey)
 		log.VEventf(ctx, 2, "Del %s", nameKey)
 		log.VEventf(ctx, 2, "Del %s", zoneKey)
@@ -175,7 +175,7 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 	// Delete the zone config entry for this database.
 	b.Del(zoneKey)
 
-	n.p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	params.p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
 			if err := expectDeleted(systemConfig, key); err != nil {
 				return err
@@ -184,38 +184,37 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 		return nil
 	})
 
-	n.p.session.tables.addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
+	params.p.session.tables.addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
 
-	if err := n.p.txn.Run(ctx, b); err != nil {
+	if err := params.p.txn.Run(ctx, b); err != nil {
 		return err
 	}
 
 	// Log Drop Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+	if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
 		ctx,
-		n.p.txn,
+		params.p.txn,
 		EventLogDropDatabase,
 		int32(n.dbDesc.ID),
-		int32(n.p.evalCtx.NodeID),
+		int32(params.p.evalCtx.NodeID),
 		struct {
 			DatabaseName          string
 			Statement             string
 			User                  string
 			DroppedTablesAndViews []string
-		}{n.n.Name.String(), n.n.String(), n.p.session.User, tbNameStrings},
+		}{n.n.Name.String(), n.n.String(), params.p.session.User, tbNameStrings},
 	); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (*dropDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropDatabaseNode) Close(context.Context)              {}
-func (*dropDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropDatabaseNode) Next(runParams) (bool, error) { return false, nil }
+func (*dropDatabaseNode) Close(context.Context)        {}
+func (*dropDatabaseNode) Values() parser.Datums        { return parser.Datums{} }
 
 type dropIndexNode struct {
-	p        *planner
 	n        *parser.DropIndex
 	idxNames []fullIndexName
 }
@@ -249,16 +248,17 @@ func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode,
 		idxNames[i].tn = tn
 		idxNames[i].idxName = index.Index
 	}
-	return &dropIndexNode{n: n, p: p, idxNames: idxNames}, nil
+	return &dropIndexNode{n: n, idxNames: idxNames}, nil
 }
 
-func (n *dropIndexNode) Start(ctx context.Context) error {
+func (n *dropIndexNode) Start(params runParams) error {
+	ctx := params.ctx
 	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		tableDesc, err := getTableDesc(ctx, n.p.txn, n.p.getVirtualTabler(), index.tn)
+		tableDesc, err := getTableDesc(ctx, params.p.txn, params.p.getVirtualTabler(), index.tn)
 		if err != nil || tableDesc == nil {
 			// newPlan() and Start() ultimately run within the same
 			// transaction. If we got a descriptor during newPlan(), we
@@ -266,7 +266,7 @@ func (n *dropIndexNode) Start(ctx context.Context) error {
 			panic(fmt.Sprintf("table descriptor for %s became unavailable within same txn", index.tn))
 		}
 
-		if err := n.p.dropIndexByName(
+		if err := params.p.dropIndexByName(
 			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, n.n.String(),
 		); err != nil {
 			return err
@@ -398,12 +398,11 @@ func (p *planner) dropIndexByName(
 	return nil
 }
 
-func (*dropIndexNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropIndexNode) Close(context.Context)              {}
-func (*dropIndexNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropIndexNode) Next(runParams) (bool, error) { return false, nil }
+func (*dropIndexNode) Close(context.Context)        {}
+func (*dropIndexNode) Values() parser.Datums        { return parser.Datums{} }
 
 type dropViewNode struct {
-	p  *planner
 	n  *parser.DropView
 	td []*sqlbase.TableDescriptor
 }
@@ -460,7 +459,7 @@ func (p *planner) DropView(ctx context.Context, n *parser.DropView) (planNode, e
 	if len(td) == 0 {
 		return &emptyNode{}, nil
 	}
-	return &dropViewNode{p: p, n: n, td: td}, nil
+	return &dropViewNode{n: n, td: td}, nil
 }
 
 func descInSlice(descID sqlbase.ID, td []*sqlbase.TableDescriptor) bool {
@@ -472,30 +471,31 @@ func descInSlice(descID sqlbase.ID, td []*sqlbase.TableDescriptor) bool {
 	return false
 }
 
-func (n *dropViewNode) Start(ctx context.Context) error {
+func (n *dropViewNode) Start(params runParams) error {
+	ctx := params.ctx
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
 			continue
 		}
-		cascadeDroppedViews, err := n.p.dropViewImpl(ctx, droppedDesc, n.n.DropBehavior)
+		cascadeDroppedViews, err := params.p.dropViewImpl(ctx, droppedDesc, n.n.DropBehavior)
 		if err != nil {
 			return err
 		}
 		// Log a Drop View event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+		if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
 			ctx,
-			n.p.txn,
+			params.p.txn,
 			EventLogDropView,
 			int32(droppedDesc.ID),
-			int32(n.p.evalCtx.NodeID),
+			int32(params.p.evalCtx.NodeID),
 			struct {
 				ViewName            string
 				Statement           string
 				User                string
 				CascadeDroppedViews []string
-			}{droppedDesc.Name, n.n.String(), n.p.session.User, cascadeDroppedViews},
+			}{droppedDesc.Name, n.n.String(), params.p.session.User, cascadeDroppedViews},
 		); err != nil {
 			return err
 		}
@@ -503,12 +503,11 @@ func (n *dropViewNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropViewNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropViewNode) Close(context.Context)              {}
-func (*dropViewNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropViewNode) Next(runParams) (bool, error) { return false, nil }
+func (*dropViewNode) Close(context.Context)        {}
+func (*dropViewNode) Values() parser.Datums        { return parser.Datums{} }
 
 type dropTableNode struct {
-	p  *planner
 	n  *parser.DropTable
 	td []*sqlbase.TableDescriptor
 }
@@ -579,7 +578,7 @@ func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode,
 	if len(td) == 0 {
 		return &emptyNode{}, nil
 	}
-	return &dropTableNode{p: p, n: n, td: td}, nil
+	return &dropTableNode{n: n, td: td}, nil
 }
 
 func (p *planner) canRemoveFK(
@@ -706,30 +705,31 @@ func (p *planner) removeDependentView(
 	return p.dropViewImpl(ctx, viewDesc, parser.DropCascade)
 }
 
-func (n *dropTableNode) Start(ctx context.Context) error {
+func (n *dropTableNode) Start(params runParams) error {
+	ctx := params.ctx
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
 			continue
 		}
-		droppedViews, err := n.p.dropTableImpl(ctx, droppedDesc)
+		droppedViews, err := params.p.dropTableImpl(ctx, droppedDesc)
 		if err != nil {
 			return err
 		}
 		// Log a Drop Table event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+		if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
 			ctx,
-			n.p.txn,
+			params.p.txn,
 			EventLogDropTable,
 			int32(droppedDesc.ID),
-			int32(n.p.evalCtx.NodeID),
+			int32(params.p.evalCtx.NodeID),
 			struct {
 				TableName           string
 				Statement           string
 				User                string
 				CascadeDroppedViews []string
-			}{droppedDesc.Name, n.n.String(), n.p.session.User, droppedViews},
+			}{droppedDesc.Name, n.n.String(), params.p.session.User, droppedViews},
 		); err != nil {
 			return err
 		}
@@ -737,9 +737,9 @@ func (n *dropTableNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropTableNode) Close(context.Context)              {}
-func (*dropTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropTableNode) Next(runParams) (bool, error) { return false, nil }
+func (*dropTableNode) Close(context.Context)        {}
+func (*dropTableNode) Values() parser.Datums        { return parser.Datums{} }
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE
@@ -1019,13 +1019,12 @@ func (p *planner) getViewDescForCascade(
 }
 
 type dropUserNode struct {
-	p *planner
 	n *parser.DropUser
 	// The number of users deleted.
 	numDeleted int
 }
 
-func (n *dropUserNode) Start(ctx context.Context) error {
+func (n *dropUserNode) Start(params runParams) error {
 	numDeleted := 0
 	for _, name := range n.n.Names {
 		normalizedUsername, err := NormalizeAndValidateUsername(string(name))
@@ -1039,11 +1038,11 @@ func (n *dropUserNode) Start(ctx context.Context) error {
 		// TODO: Remove the privileges granted to the user.
 		// Note: The current remove user from CLI just deletes the entry from system.users,
 		// keeping the functionality same for now.
-		internalExecutor := InternalExecutor{LeaseManager: n.p.LeaseMgr()}
+		internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
 		rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
-			ctx,
+			params.ctx,
 			"drop-user",
-			n.p.txn,
+			params.p.txn,
 			"DELETE FROM system.users WHERE username=$1",
 			normalizedUsername,
 		)
@@ -1063,10 +1062,10 @@ func (n *dropUserNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (*dropUserNode) Next(context.Context) (bool, error) { return false, nil }
-func (*dropUserNode) Close(context.Context)              {}
-func (*dropUserNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *dropUserNode) FastPathResults() (int, bool)     { return n.numDeleted, true }
+func (*dropUserNode) Next(runParams) (bool, error)   { return false, nil }
+func (*dropUserNode) Close(context.Context)          {}
+func (*dropUserNode) Values() parser.Datums          { return parser.Datums{} }
+func (n *dropUserNode) FastPathResults() (int, bool) { return n.numDeleted, true }
 
 // DropUser drops a list of users.
 // Privileges: DELETE on system.users.
@@ -1080,5 +1079,5 @@ func (p *planner) DropUser(ctx context.Context, n *parser.DropUser) (planNode, e
 		return nil, err
 	}
 
-	return &dropUserNode{p: p, n: n}, nil
+	return &dropUserNode{n: n}, nil
 }

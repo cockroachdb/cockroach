@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -257,6 +259,7 @@ type ExecutorConfig struct {
 	DistSQLSrv      *distsqlrun.ServerImpl
 	StatusServer    serverpb.StatusServer
 	SessionRegistry *SessionRegistry
+	QueryRegistry   *QueryRegistry
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
@@ -321,6 +324,52 @@ type DistSQLPlannerTestingKnobs struct {
 	// If OverrideSQLHealthCheck is set, we use this callback to get the health of
 	// a node.
 	OverrideHealthCheck func(node roachpb.NodeID, addrString string) error
+}
+
+// QueryRegistry holds a map of all queries executing with this node as its gateway.
+type QueryRegistry struct {
+	syncutil.Mutex
+	store map[string]*queryMeta
+}
+
+// MakeQueryRegistry instantiates a new, empty query registry.
+func MakeQueryRegistry() *QueryRegistry {
+	return &QueryRegistry{store: make(map[string]*queryMeta)}
+}
+
+func (r *QueryRegistry) register(queryID string, query *queryMeta) {
+	r.Lock()
+	defer r.Unlock()
+	r.store[queryID] = query
+}
+
+func (r *QueryRegistry) deregister(queryID string) {
+	r.Lock()
+	defer r.Unlock()
+	delete(r.store, queryID)
+}
+
+// Cancel looks up the associated query in the registry and cancels it (if it is cancellable).
+func (r *QueryRegistry) Cancel(queryID string, username string) (bool, error) {
+	r.Lock()
+	defer r.Unlock()
+
+	if queryMeta, exists := r.store[queryID]; exists {
+		if !(username == security.RootUser || username == queryMeta.session.User) {
+			// This user does not have cancel privileges over this query.
+			return false, fmt.Errorf("query ID %s not found", queryID)
+		}
+
+		// Close the context
+		queryMeta.cancel()
+
+		// Atomically set isCancelled to 1
+		atomic.StoreInt32(&queryMeta.isCancelled, 1)
+
+		return true, nil
+	}
+
+	return false, fmt.Errorf("query ID %s not found", queryID)
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -927,15 +976,15 @@ func (e *Executor) execParsed(
 
 // If the plan has a fast path we attempt to query that,
 // otherwise we fall back to counting via plan.Next().
-func countRowsAffected(ctx context.Context, p planNode) (int, error) {
+func countRowsAffected(runParams runParams, p planNode) (int, error) {
 	if a, ok := p.(planNodeFastPath); ok {
 		if count, res := a.FastPathResults(); res {
 			return count, nil
 		}
 	}
 	count := 0
-	next, err := p.Next(ctx)
-	for ; next; next, err = p.Next(ctx) {
+	next, err := p.Next(runParams)
+	for ; next; next, err = p.Next(runParams) {
 		count++
 	}
 	return count, err
@@ -1036,8 +1085,24 @@ func (e *Executor) execStmtsInCurrentTxn(
 
 		txnState.schemaChangers.curStatementIdx = i
 
-		stmt.queryHandle = session.addActiveQuery(stmt)
-		defer session.removeActiveQuery(stmt.queryHandle)
+		queryID := e.generateQueryID().GetString()
+
+		queryMeta := &queryMeta{
+			start: session.phaseTimes[sessionEndParse],
+			stmt:  stmt.AST,
+			phase: preparing,
+		}
+
+		stmt.queryID = queryID
+		stmt.queryMeta = queryMeta
+
+		// Fork context for this statement.
+		queryMeta.ctx, queryMeta.cancel = context.WithCancel(session.Ctx())
+
+		session.addActiveQuery(queryID, queryMeta)
+		defer session.removeActiveQuery(stmt.queryID)
+		e.cfg.QueryRegistry.register(queryID, queryMeta)
+		defer e.cfg.QueryRegistry.deregister(queryID)
 
 		var stmtStrBefore string
 		// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
@@ -1078,7 +1143,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
-			filter(session.Ctx(), stmt.String(), &res)
+			filter(queryMeta.ctx, stmt.String(), &res)
 		}
 		results = append(results, res)
 		if err != nil {
@@ -1423,6 +1488,8 @@ func (e *Executor) execStmtInOpenTxn(
 	p.semaCtx.Placeholders.Assign(pinfo)
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	p.stmt = &stmt
+	p.cancelChecker = makeCancelChecker(p.stmt)
 
 	// constantMemAcc accounts for all constant folded values that are computed
 	// prior to any rows being computed.
@@ -1539,7 +1606,7 @@ func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, er
 // runs it.
 func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
-	ctx := planner.session.Ctx()
+	ctx := planner.stmt.queryMeta.ctx
 	recv, err := makeDistSQLReceiver(
 		ctx, result.Rows,
 		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
@@ -1567,7 +1634,7 @@ func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) 
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) error {
-	ctx := planner.session.Ctx()
+	ctx := planner.stmt.queryMeta.ctx
 	rowAcc := planner.evalCtx.Mon.MakeBoundAccount()
 	planner.evalCtx.ActiveMemAcc = &rowAcc
 	// We enclose this in a func because in the parser.Rows case we swap out the
@@ -1581,17 +1648,22 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 		return err
 	}
 
+	params := runParams{
+		ctx: ctx,
+		p:   planner,
+	}
+
 	switch result.Type {
 	case parser.RowsAffected:
-		count, err := countRowsAffected(ctx, plan)
+		count, err := countRowsAffected(params, plan)
 		if err != nil {
 			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		next, err := plan.Next(ctx)
-		for ; next; next, err = plan.Next(ctx) {
+		next, err := plan.Next(params)
+		for ; next; next, err = plan.Next(params) {
 			planner.evalCtx.ActiveMemAcc.Close(ctx)
 			rowAcc = planner.evalCtx.Mon.MakeBoundAccount()
 			planner.evalCtx.ActiveMemAcc = &rowAcc
@@ -1694,15 +1766,16 @@ func (e *Executor) execStmt(
 	stmt Statement, planner *planner, automaticRetryCount int, mockResults bool,
 ) (Result, error) {
 	session := planner.session
+	ctx := planner.stmt.queryMeta.ctx
 
 	planner.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
-	plan, err := planner.makePlan(session.Ctx(), stmt)
+	plan, err := planner.makePlan(ctx, stmt)
 	planner.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
 	if err != nil {
 		return Result{}, err
 	}
 
-	defer plan.Close(session.Ctx())
+	defer plan.Close(ctx)
 
 	result, err := makeRes(stmt, planner, plan)
 	if err != nil {
@@ -1711,12 +1784,12 @@ func (e *Executor) execStmt(
 
 	useDistSQL, err := e.shouldUseDistSQL(planner, plan)
 	if err != nil {
-		result.Close(session.Ctx())
+		result.Close(ctx)
 		return Result{}, err
 	}
 
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
-	session.setQueryExecutionMode(stmt.queryHandle, useDistSQL)
+	session.setQueryExecutionMode(stmt.queryID, useDistSQL)
 	if useDistSQL {
 		err = e.execDistSQL(planner, plan, &result)
 	} else {
@@ -1727,12 +1800,12 @@ func (e *Executor) execStmt(
 		planner, stmt, useDistSQL, automaticRetryCount, result, err,
 	)
 	if err != nil {
-		result.Close(session.Ctx())
+		result.Close(ctx)
 		return Result{}, err
 	}
 
 	if mockResults {
-		result.Close(session.Ctx())
+		result.Close(ctx)
 		return makeRes(stmt, planner, plan)
 	}
 	return result, nil
@@ -1802,6 +1875,17 @@ func (e *Executor) updateStmtCounts(stmt Statement) {
 			e.MiscCount.Inc(1)
 		}
 	}
+}
+
+// generateQueryID generates a unique ID for a query based on the node's
+// ID and its current HLC timestamp.
+func (e *Executor) generateQueryID() uint128.Uint128 {
+	timestamp := e.cfg.Clock.Now()
+
+	loInt := (uint64)(e.cfg.NodeID.Get())
+	loInt = loInt | ((uint64)(timestamp.Logical) << 32)
+
+	return uint128.FromInts((uint64)(timestamp.WallTime), loInt)
 }
 
 // golangFillQueryArguments populates the placeholder map with

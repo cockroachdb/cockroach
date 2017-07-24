@@ -44,6 +44,9 @@ type planner struct {
 	// As the planner executes statements, it may change the current user session.
 	session *Session
 
+	// Reference to the corresponding sql Statement for this query.
+	stmt *Statement
+
 	// Contexts for different stages of planning and execution.
 	semaCtx parser.SemaContext
 	evalCtx parser.EvalContext
@@ -68,6 +71,10 @@ type planner struct {
 	// phaseTimes helps measure the time spent in each phase of SQL execution.
 	// See executor_statement_metrics.go for details.
 	phaseTimes phaseTimes
+
+	// cancelChecker is used by planNodes to check for cancellation of the associated
+	// query.
+	cancelChecker CancelChecker
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
@@ -219,7 +226,11 @@ func (p *planner) queryRows(
 	if err := p.startPlan(ctx, plan); err != nil {
 		return nil, err
 	}
-	if next, err := plan.Next(ctx); err != nil || !next {
+	params := runParams{
+		ctx: ctx,
+		p:   p,
+	}
+	if next, err := plan.Next(params); err != nil || !next {
 		return nil, err
 	}
 
@@ -230,7 +241,7 @@ func (p *planner) queryRows(
 			rows = append(rows, valCopy)
 		}
 
-		next, err := plan.Next(ctx)
+		next, err := plan.Next(params)
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +263,11 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 	if err := p.startPlan(ctx, plan); err != nil {
 		return 0, err
 	}
-	return countRowsAffected(ctx, plan)
+	params := runParams{
+		ctx: ctx,
+		p:   p,
+	}
+	return countRowsAffected(params, plan)
 }
 
 func (p *planner) fillFKTableMap(ctx context.Context, m sqlbase.TableLookupsByID) error {

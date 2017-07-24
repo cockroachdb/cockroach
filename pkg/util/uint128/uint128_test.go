@@ -18,6 +18,7 @@ package uint128
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -28,6 +29,36 @@ func TestBytes(t *testing.T) {
 
 	if !bytes.Equal(i.GetBytes(), b) {
 		t.Errorf("incorrect bytes representation for num: %v", i)
+	}
+}
+
+func TestString(t *testing.T) {
+	s := "a95e31998f38490651c02b97c7f2acca"
+
+	i, _ := FromString(s)
+
+	if s != i.GetString() {
+		t.Errorf("incorrect string representation for num: %v", i)
+	}
+}
+
+func TestStringTooLong(t *testing.T) {
+	s := "ba95e31998f38490651c02b97c7f2acca"
+
+	_, err := FromString(s)
+
+	if err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Error("did not get error for encoding invalid uint128 string")
+	}
+}
+
+func TestStringInvalidHex(t *testing.T) {
+	s := "bazz95e31998849051c02b97c7f2acca"
+
+	_, err := FromString(s)
+
+	if err == nil || !strings.Contains(err.Error(), "Could not decode") {
+		t.Error("did not get error for encoding invalid uint128 string")
 	}
 }
 

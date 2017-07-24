@@ -378,6 +378,9 @@ func (v *planVisitor) visit(plan planNode) {
 			v.observer.attr(name, "expanded", strconv.FormatBool(n.expanded))
 		}
 		v.visit(n.plan)
+	case *cancelQueryNode:
+		subplans := v.expr(name, "queryID", -1, n.queryID, nil)
+		v.subqueries(name, subplans)
 	}
 }
 
@@ -486,6 +489,7 @@ func nodeName(plan planNode) string {
 // be changed without changing the output of "EXPLAIN".
 var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableNode{}):       "alter table",
+	reflect.TypeOf(&cancelQueryNode{}):      "cancel query",
 	reflect.TypeOf(&copyNode{}):             "copy",
 	reflect.TypeOf(&createDatabaseNode{}):   "create database",
 	reflect.TypeOf(&createIndexNode{}):      "create index",

@@ -124,7 +124,7 @@ func (n *scanNode) disableBatchLimit() {
 	n.softLimit = 0
 }
 
-func (n *scanNode) Start(context.Context) error {
+func (n *scanNode) Start(runParams) error {
 	return n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
 		n.valNeededForCol, false /* returnRangeInfo */, &n.p.alloc)
 }
@@ -162,10 +162,10 @@ func (n *scanNode) limitHint() int64 {
 	return limitHint
 }
 
-func (n *scanNode) Next(ctx context.Context) (bool, error) {
+func (n *scanNode) Next(params runParams) (bool, error) {
 	tracing.AnnotateTrace()
 	if !n.scanInitialized {
-		if err := n.initScan(ctx); err != nil {
+		if err := n.initScan(params.ctx); err != nil {
 			return false, err
 		}
 	}
@@ -173,7 +173,7 @@ func (n *scanNode) Next(ctx context.Context) (bool, error) {
 	// We fetch one row at a time until we find one that passes the filter.
 	for n.hardLimit == 0 || n.rowIndex < n.hardLimit {
 		var err error
-		n.row, err = n.fetcher.NextRowDecoded(ctx, n.p.session.Tracing.KVTracingEnabled())
+		n.row, err = n.fetcher.NextRowDecoded(params.ctx, n.p.session.Tracing.KVTracingEnabled())
 		if err != nil || n.row == nil {
 			return false, err
 		}

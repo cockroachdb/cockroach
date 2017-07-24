@@ -91,7 +91,6 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 	}
 
 	return &splitNode{
-		p:         p,
 		tableDesc: tableDesc,
 		index:     index,
 		rows:      rows,
@@ -101,23 +100,22 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 type splitNode struct {
 	optColumnsSlot
 
-	p            *planner
 	tableDesc    *sqlbase.TableDescriptor
 	index        *sqlbase.IndexDescriptor
 	rows         planNode
 	lastSplitKey []byte
 }
 
-func (n *splitNode) Start(ctx context.Context) error {
-	return n.rows.Start(ctx)
+func (n *splitNode) Start(params runParams) error {
+	return n.rows.Start(params)
 }
 
-func (n *splitNode) Next(ctx context.Context) (bool, error) {
+func (n *splitNode) Next(params runParams) (bool, error) {
 	// TODO(radu): instead of performing the splits sequentially, accumulate all
 	// the split keys and then perform the splits in parallel (e.g. split at the
 	// middle key and recursively to the left and right).
 
-	if ok, err := n.rows.Next(ctx); err != nil || !ok {
+	if ok, err := n.rows.Next(params); err != nil || !ok {
 		return ok, err
 	}
 
@@ -126,7 +124,7 @@ func (n *splitNode) Next(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	if err := n.p.session.execCfg.DB.AdminSplit(ctx, rowKey, rowKey); err != nil {
+	if err := params.p.session.execCfg.DB.AdminSplit(params.ctx, rowKey, rowKey); err != nil {
 		return false, err
 	}
 
@@ -209,7 +207,6 @@ func (p *planner) TestingRelocate(
 	}
 
 	return &testingRelocateNode{
-		p:         p,
 		tableDesc: tableDesc,
 		index:     index,
 		rows:      rows,
@@ -220,7 +217,6 @@ func (p *planner) TestingRelocate(
 type testingRelocateNode struct {
 	optColumnsSlot
 
-	p                 *planner
 	tableDesc         *sqlbase.TableDescriptor
 	index             *sqlbase.IndexDescriptor
 	rows              planNode
@@ -231,8 +227,8 @@ type testingRelocateNode struct {
 	storeMap map[roachpb.StoreID]roachpb.NodeID
 }
 
-func (n *testingRelocateNode) Start(ctx context.Context) error {
-	return n.rows.Start(ctx)
+func (n *testingRelocateNode) Start(params runParams) error {
+	return n.rows.Start(params)
 }
 
 func lookupRangeDescriptor(
@@ -257,11 +253,11 @@ func lookupRangeDescriptor(
 	return desc, nil
 }
 
-func (n *testingRelocateNode) Next(ctx context.Context) (bool, error) {
+func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	// Each Next call relocates one range (corresponding to one row from n.rows).
 	// TODO(radu): perform multiple relocations in parallel.
 
-	if ok, err := n.rows.Next(ctx); err != nil || !ok {
+	if ok, err := n.rows.Next(params); err != nil || !ok {
 		return ok, err
 	}
 
@@ -289,7 +285,7 @@ func (n *testingRelocateNode) Next(ctx context.Context) (bool, error) {
 			// Lookup the store in gossip.
 			var storeDesc roachpb.StoreDescriptor
 			gossipStoreKey := gossip.MakeStoreKey(storeID)
-			if err := n.p.session.execCfg.Gossip.GetInfoProto(gossipStoreKey, &storeDesc); err != nil {
+			if err := params.p.session.execCfg.Gossip.GetInfoProto(gossipStoreKey, &storeDesc); err != nil {
 				return false, errors.Wrapf(err, "error looking up store %d", storeID)
 			}
 			nodeID = storeDesc.Node.NodeID
@@ -307,13 +303,13 @@ func (n *testingRelocateNode) Next(ctx context.Context) (bool, error) {
 	}
 	rowKey = keys.MakeFamilyKey(rowKey, 0)
 
-	rangeDesc, err := lookupRangeDescriptor(ctx, n.p.session.execCfg.DB, rowKey)
+	rangeDesc, err := lookupRangeDescriptor(params.ctx, params.p.session.execCfg.DB, rowKey)
 	if err != nil {
 		return false, errors.Wrap(err, "error looking up range descriptor")
 	}
 	n.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 
-	if err := storage.TestingRelocateRange(ctx, n.p.ExecCfg().DB, rangeDesc, targets); err != nil {
+	if err := storage.TestingRelocateRange(params.ctx, params.p.ExecCfg().DB, rangeDesc, targets); err != nil {
 		return false, err
 	}
 
@@ -421,7 +417,6 @@ func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, err
 	}
 
 	return &scatterNode{
-		p:    p,
 		span: span,
 	}, nil
 }
@@ -429,19 +424,18 @@ func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, err
 type scatterNode struct {
 	optColumnsSlot
 
-	p    *planner
 	span roachpb.Span
 
 	rangeIdx int
 	ranges   []roachpb.AdminScatterResponse_Range
 }
 
-func (n *scatterNode) Start(ctx context.Context) error {
-	db := n.p.ExecCfg().DB
+func (n *scatterNode) Start(params runParams) error {
+	db := params.p.ExecCfg().DB
 	req := &roachpb.AdminScatterRequest{
 		Span: roachpb.Span{Key: n.span.Key, EndKey: n.span.EndKey},
 	}
-	res, pErr := client.SendWrapped(ctx, db.GetSender(), req)
+	res, pErr := client.SendWrapped(params.ctx, db.GetSender(), req)
 	if pErr != nil {
 		return pErr.GoError()
 	}
@@ -450,7 +444,7 @@ func (n *scatterNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *scatterNode) Next(ctx context.Context) (bool, error) {
+func (n *scatterNode) Next(params runParams) (bool, error) {
 	n.rangeIdx++
 	hasNext := n.rangeIdx < len(n.ranges)
 	return hasNext, nil

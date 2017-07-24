@@ -27,11 +27,14 @@ CANCEL JOB 'foo'
 query error unimplemented
 CANCEL JOB (SELECT id FROM system.jobs)
 
-query error unimplemented
+query error argument of CANCEL QUERY must be type string, not type int
 CANCEL QUERY 1
 
-query error unimplemented
-CANCEL QUERY 'foo'
+query error odd length hex string
+CANCEL QUERY 'f54'
+
+query error not found
+CANCEL QUERY '14d2355b9cccbca50000000000000001'
 
 query error unimplemented
 CANCEL JOB (SELECT * FROM VALUES ((1),(2)))

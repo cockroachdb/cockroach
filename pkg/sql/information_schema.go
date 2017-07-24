@@ -846,9 +846,13 @@ func forEachUser(ctx context.Context, p *planner, fn func(username string) error
 	if err := fn(security.RootUser); err != nil {
 		return err
 	}
+	params := runParams{
+		ctx: ctx,
+		p:   p,
+	}
 
 	for {
-		next, err := plan.Next(ctx)
+		next, err := plan.Next(params)
 		if err != nil {
 			return err
 		}

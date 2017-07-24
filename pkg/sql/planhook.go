@@ -70,14 +70,14 @@ type hookFnNode struct {
 
 func (*hookFnNode) Close(context.Context) {}
 
-func (f *hookFnNode) Start(ctx context.Context) error {
+func (f *hookFnNode) Start(params runParams) error {
 	var err error
-	f.res, err = f.f(ctx)
+	f.res, err = f.f(params.ctx)
 	f.resIdx = -1
 	return err
 }
 
-func (f *hookFnNode) Next(context.Context) (bool, error) {
+func (f *hookFnNode) Next(runParams) (bool, error) {
 	if f.res == nil {
 		return false, nil
 	}
