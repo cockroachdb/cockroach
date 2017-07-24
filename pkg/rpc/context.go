@@ -386,7 +386,7 @@ var ErrNotHeartbeated = errors.New("not yet heartbeated")
 // This should not be used as a definite status of a node's health and just used
 // to prioritize healthy nodes over unhealthy ones.
 func (ctx *Context) ConnHealth(target string) error {
-	if target == ctx.Addr {
+	if ctx.GetLocalInternalServerForAddr(target) != nil {
 		// The local server is always considered healthy.
 		return nil
 	}

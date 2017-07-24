@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -101,6 +102,14 @@ func TestHeartbeatCB(t *testing.T) {
 			<-ch
 		})
 	}
+}
+
+type internalServer struct{}
+
+func (*internalServer) Batch(
+	context.Context, *roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	return nil, nil
 }
 
 // TestHeartbeatHealth verifies that the health status changes after
@@ -202,8 +211,14 @@ func TestHeartbeatHealth(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	if err := clientCtx.ConnHealth("localserver"); err != nil {
-		t.Fatalf("local server should always be healthy: %s", err)
+	if err := clientCtx.ConnHealth(clientCtx.Addr); err != ErrNotConnected {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	clientCtx.SetLocalInternalServer(&internalServer{})
+
+	if err := clientCtx.ConnHealth(clientCtx.Addr); err != nil {
+		t.Error(err)
 	}
 }
 
