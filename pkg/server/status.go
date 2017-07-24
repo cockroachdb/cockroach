@@ -107,6 +107,7 @@ type statusServer struct {
 	stores          *storage.Stores
 	stopper         *stop.Stopper
 	sessionRegistry *sql.SessionRegistry
+	queryRegistry   *sql.QueryRegistry
 }
 
 // newStatusServer allocates and returns a statusServer.
@@ -122,6 +123,7 @@ func newStatusServer(
 	stores *storage.Stores,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
+	queryRegistry *sql.QueryRegistry,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
@@ -136,6 +138,7 @@ func newStatusServer(
 		stores:          stores,
 		stopper:         stopper,
 		sessionRegistry: sessionRegistry,
+		queryRegistry:   queryRegistry,
 	}
 
 	return server
@@ -896,6 +899,37 @@ func (s *statusServer) ListSessions(
 		numNodes--
 	}
 	return &resp, nil
+}
+
+// CancelQuery responds to a query cancellation request, and cancels
+// the target query's associated context and sets a cancellation flag.
+func (s *statusServer) CancelQuery(
+	ctx context.Context, req *serverpb.CancelQueryRequest,
+) (*serverpb.CancelQueryResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.CancelQuery(ctx, req)
+	}
+
+	output := &serverpb.CancelQueryResponse{}
+	cancelled, err := s.queryRegistry.Cancel(req.QueryID, req.Username)
+
+	if err != nil {
+		output.Error = err.Error()
+	}
+
+	output.Cancelled = cancelled
+	return output, nil
 }
 
 // SpanStats requests the total statistics stored on a node for a given key

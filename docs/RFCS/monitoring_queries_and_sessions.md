@@ -1,5 +1,5 @@
 - Feature Name: Monitoring Queries and Sessions
-- Status: in-progress
+- Status: completed
 - Start Date: 2017-05-04
 - Authors: Bilal Akhtar
 - RFC PR: https://github.com/cockroachdb/cockroach/pull/15761

@@ -97,12 +97,12 @@ func (r *renderNode) Values() parser.Datums {
 	return r.row
 }
 
-func (r *renderNode) Start(ctx context.Context) error {
-	return r.source.plan.Start(ctx)
+func (r *renderNode) Start(params runParams) error {
+	return r.source.plan.Start(params)
 }
 
-func (r *renderNode) Next(ctx context.Context) (bool, error) {
-	if next, err := r.source.plan.Next(ctx); !next {
+func (r *renderNode) Next(params runParams) (bool, error) {
+	if next, err := r.source.plan.Next(params); !next {
 		return false, err
 	}
 
@@ -441,7 +441,7 @@ func (r *renderNode) rewriteSRFs(
 }
 
 func (r *renderNode) initWhere(ctx context.Context, whereExpr parser.Expr) (*filterNode, error) {
-	f := &filterNode{p: r.planner, source: r.source}
+	f := &filterNode{source: r.source}
 	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(r.sourceInfo[0].sourceColumns))
 
 	if whereExpr != nil {

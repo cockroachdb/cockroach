@@ -34,7 +34,7 @@ import (
 //
 // The action of calling this method triggers limit-based query plan
 // optimizations, e.g. in expandSelectNode(). The primary user is
-// limitNode.Start(ctx) after it has fully evaluated the limit and
+// limitNode.Start(params) after it has fully evaluated the limit and
 // offset expressions. EXPLAIN also does this, see expandPlan() for
 // explainPlanNode.
 //
@@ -168,6 +168,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 
 	case *valuesNode:
 	case *alterTableNode:
+	case *cancelQueryNode:
 	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:

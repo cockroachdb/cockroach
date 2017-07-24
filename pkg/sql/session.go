@@ -159,7 +159,7 @@ const (
 )
 
 // queryMeta stores metadata about a query. Stored as reference in
-// session.mu.ActiveQueries and planner.queryMeta.
+// session.mu.ActiveQueries and executor.cfg.queryRegistry.
 type queryMeta struct {
 	// The timestamp when this query began execution.
 	start time.Time
@@ -176,10 +176,21 @@ type queryMeta struct {
 
 	// Current phase of execution of query.
 	phase queryPhase
-}
 
-// queryHandle is a type for uniquely identifying queries in a session.
-type queryHandle *queryMeta
+	// Context associated with this query. Forked from session.Ctx().
+	ctx context.Context
+
+	// Cancellation handle - calling this function cancels the context associated
+	// with this query.
+	cancel context.CancelFunc
+
+	// Flag that denotes if this query has been cancelled yet. Set and checked
+	// using sync.atomic.{Load,Store}Int32.
+	isCancelled int32
+
+	// Reference to the Session that contains this query.
+	session *Session
+}
 
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
@@ -311,7 +322,7 @@ type Session struct {
 		//
 
 		// ActiveQueries contains all queries in flight.
-		ActiveQueries map[queryHandle]struct{}
+		ActiveQueries map[string]*queryMeta
 	}
 
 	//
@@ -434,7 +445,7 @@ func NewSession(
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
 	s.Tracing.session = s
-	s.mu.ActiveQueries = make(map[queryHandle]struct{})
+	s.mu.ActiveQueries = make(map[string]*queryMeta)
 
 	remoteStr := "<admin>"
 	if remote != nil {
@@ -576,6 +587,8 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.session = s
 	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
 	p.phaseTimes = s.phaseTimes
+	p.stmt = nil
+	p.cancelChecker = &nullCancelChecker{}
 
 	p.semaCtx = parser.MakeSemaContext(s.User == security.RootUser)
 	p.semaCtx.Location = &s.Location
@@ -640,31 +653,26 @@ func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 
 // addActiveQuery adds a running query to the session's internal store of active
 // queries. Called from executor's execStmt and execStmtInParallel.
-func (s *Session) addActiveQuery(stmt Statement) queryHandle {
+func (s *Session) addActiveQuery(queryID string, queryMeta *queryMeta) {
 	s.mu.Lock()
-	query := &queryMeta{
-		start: timeutil.Now(),
-		stmt:  stmt.AST,
-		phase: preparing,
-	}
-	s.mu.ActiveQueries[query] = struct{}{}
+	s.mu.ActiveQueries[queryID] = queryMeta
+	queryMeta.session = s
 	s.mu.Unlock()
-	return query
 }
 
 // removeActiveQuery removes a query from a session's internal store of active
 // queries. Called when a query finishes execution.
-func (s *Session) removeActiveQuery(query queryHandle) {
+func (s *Session) removeActiveQuery(queryID string) {
 	s.mu.Lock()
-	delete(s.mu.ActiveQueries, query)
+	delete(s.mu.ActiveQueries, queryID)
 	s.mu.Unlock()
 }
 
 // setQueryExecutionMode is called upon start of execution of a query, and sets
 // the query's metadata to indicate whether it's distributed or not.
-func (s *Session) setQueryExecutionMode(query queryHandle, isDistributed bool) {
+func (s *Session) setQueryExecutionMode(queryID string, isDistributed bool) {
 	s.mu.Lock()
-	queryMeta := (*queryMeta)(query)
+	queryMeta := s.mu.ActiveQueries[queryID]
 	queryMeta.phase = executing
 	queryMeta.isDistributed = isDistributed
 	s.mu.Unlock()
@@ -690,7 +698,7 @@ func (s *Session) serialize() serverpb.Session {
 
 	activeQueries := make([]serverpb.ActiveQuery, 0, len(s.mu.ActiveQueries))
 
-	for query := range s.mu.ActiveQueries {
+	for id, query := range s.mu.ActiveQueries {
 		sql := query.stmt.String()
 		if len(sql) > MaxSQLBytes {
 			sql = sql[:MaxSQLBytes-utf8.RuneLen('…')]
@@ -704,6 +712,7 @@ func (s *Session) serialize() serverpb.Session {
 			sql += "…"
 		}
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
+			ID:            id,
 			Start:         query.start.UTC(),
 			Sql:           sql,
 			IsDistributed: query.isDistributed,
