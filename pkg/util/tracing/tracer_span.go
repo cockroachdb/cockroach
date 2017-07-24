@@ -137,17 +137,6 @@ func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
 	group.addSpan(s)
 }
 
-// GetSpanTag returns the value of a tag in a span.
-func GetSpanTag(os opentracing.Span, key string) interface{} {
-	if _, noop := os.(*noopSpan); noop {
-		return nil
-	}
-	sp := os.(*span)
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-	return sp.mu.tags[key]
-}
-
 // StartRecording enables recording on the span. Events from this point forward
 // are recorded; also, all direct and indirect child spans started from now on
 // will be part of the same recording.
