@@ -869,6 +869,11 @@ func (e *Executor) execParsed(
 		// check this just once per metadata callback (setting the callback
 		// clears session.verifyFnCheckedOnce).
 		if e.cfg.TestingKnobs.WaitForGossipUpdate {
+			// Turn off test verification of metadata changes made by the
+			// transaction if an error is seen during a transaction.
+			if err != nil {
+				session.testingVerifyMetadataFn = nil
+			}
 			if fn := session.testingVerifyMetadataFn; fn != nil && !session.verifyFnCheckedOnce {
 				if fn(e.systemConfig) == nil {
 					panic(fmt.Sprintf(
@@ -1342,6 +1347,9 @@ func (e *Executor) execStmtInOpenTxn(
 		return commitSQLTransaction(txnState, release)
 
 	case *parser.RollbackTransaction:
+		// Turn off test verification of metadata changes made by the
+		// transaction.
+		session.testingVerifyMetadataFn = nil
 		// RollbackTransaction is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
 		// Notice that we don't return any errors on rollback.
