@@ -645,6 +645,9 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (bool, error) {
 func (sc *SchemaChanger) runStateMachineAndBackfill(
 	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease, evalCtx parser.EvalContext,
 ) error {
+	if fn := sc.testingKnobs.RunBeforeWriteAndDelete; fn != nil {
+		fn()
+	}
 	// Run through mutation state machine before backfill.
 	if err := sc.RunStateMachineBeforeBackfill(ctx); err != nil {
 		return err
@@ -810,8 +813,16 @@ type SchemaChangerTestingKnobs struct {
 	// AsyncExecNotification.
 	SyncFilter SyncSchemaChangersFilter
 
-	// RunBeforeBackfille is called just before starting the backfill.
+	// RunAfterDeleteOnly is called right after the cluster is in the delete
+	// only state.
+	RunBeforeWriteAndDelete func()
+
+	// RunBeforeBackfill is called just before starting the backfill.
 	RunBeforeBackfill func() error
+
+	// RunBeforeBackfill is called just before starting the index backfill, after
+	// fixing the index backfill scan timestamp.
+	RunBeforeIndexBackfill func()
 
 	// RunBeforeBackfillChunk is called before executing each chunk of a
 	// backfill during a schema change operation. It is called with the
