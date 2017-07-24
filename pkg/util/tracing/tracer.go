@@ -163,7 +163,7 @@ func (t *Tracer) StartSpan(
 	// case) with a noop context, return a noop span now.
 	if len(opts) == 1 {
 		if o, ok := opts[0].(opentracing.SpanReference); ok {
-			if _, noopCtx := o.ReferencedContext.(noopSpanContext); noopCtx {
+			if IsNoopContext(o.ReferencedContext) {
 				return &t.noopSpan
 			}
 		}
@@ -198,7 +198,7 @@ func (t *Tracer) StartSpan(
 		if r.ReferencedContext == nil {
 			continue
 		}
-		if _, noopCtx := r.ReferencedContext.(noopSpanContext); noopCtx {
+		if IsNoopContext(r.ReferencedContext) {
 			continue
 		}
 		hasParent = true
@@ -373,7 +373,7 @@ func (fn textMapWriterFn) Set(key, val string) {
 func (t *Tracer) Inject(
 	osc opentracing.SpanContext, format interface{}, carrier interface{},
 ) error {
-	if _, noopCtx := osc.(noopSpanContext); noopCtx {
+	if IsNoopContext(osc) {
 		// Fast path when tracing is disabled. Extract will accept an empty map as a
 		// noop context.
 		return nil

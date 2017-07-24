@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/syncmap"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func init() {
@@ -312,9 +314,19 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		}
 
 		if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
-			dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(
-				otgrpc.OpenTracingClientInterceptor(tracer),
-			))
+			// We use a SpanInclusionFunc to circumvent the interceptor's work when
+			// tracing is disabled. Otherwise, the interceptor causes an increase in
+			// the number of packets (even with an empty context!). See #17177.
+			inclusionFunc := func(
+				parentSpanCtx opentracing.SpanContext, method string, req, resp interface{},
+			) bool {
+				return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
+			}
+			interceptor := otgrpc.OpenTracingClientInterceptor(
+				tracer,
+				otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(inclusionFunc)),
+			)
+			dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(interceptor))
 		}
 
 		if log.V(1) {
