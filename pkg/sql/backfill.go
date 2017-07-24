@@ -535,6 +535,10 @@ func (sc *SchemaChanger) backfillIndexes(
 		return err
 	}
 
+	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
+		fn()
+	}
+
 	return sc.distBackfill(
 		ctx, evalCtx, lease, version, indexBackfill, indexBackfillChunkSize,
 		distsqlrun.IndexMutationFilter)
