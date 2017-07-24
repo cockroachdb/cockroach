@@ -17,6 +17,9 @@
 package server
 
 import (
+	"crypto/ecdsa"
+	"crypto/rsa"
+	"crypto/x509/pkix"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +28,7 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/coreos/etcd/raft"
@@ -69,9 +73,6 @@ const (
 
 	// rangeDebugEndpoint exposes an html page with information about a specific range.
 	rangeDebugEndpoint = "/debug/range"
-
-	// certificatesDebugEndpoint lists the certificates on a node.
-	certificatesDebugEndpoint = "/debug/certificates"
 
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
@@ -252,6 +253,9 @@ func (s *statusServer) Certificates(
 
 		if cert.Error == nil {
 			details.Data = cert.FileContents
+			if err := extractCertFields(details.Data, &details); err != nil {
+				details.ErrorMessage = err.Error()
+			}
 		} else {
 			details.ErrorMessage = cert.Error.Error()
 		}
@@ -259,6 +263,52 @@ func (s *statusServer) Certificates(
 	}
 
 	return cr, nil
+}
+
+func formatCertNames(p pkix.Name) string {
+	return fmt.Sprintf("CommonName=%s, Organization=%s", p.CommonName, strings.Join(p.Organization, ","))
+}
+
+func extractCertFields(contents []byte, details *serverpb.CertificateDetails) error {
+	certs, err := security.PEMContentsToX509(contents)
+	if err != nil {
+		return err
+	}
+
+	for _, c := range certs {
+		addresses := c.DNSNames
+		for _, ip := range c.IPAddresses {
+			addresses = append(addresses, ip.String())
+		}
+
+		extKeyUsage := make([]string, len(c.ExtKeyUsage))
+		for i, eku := range c.ExtKeyUsage {
+			extKeyUsage[i] = security.ExtKeyUsageToString(eku)
+		}
+
+		var pubKeyInfo string
+		if rsaPub, ok := c.PublicKey.(*rsa.PublicKey); ok {
+			pubKeyInfo = fmt.Sprintf("%d bit RSA", rsaPub.N.BitLen())
+		} else if ecdsaPub, ok := c.PublicKey.(*ecdsa.PublicKey); ok {
+			pubKeyInfo = fmt.Sprintf("%d bit ECDSA", ecdsaPub.Params().BitSize)
+		} else {
+			// go's x509 library does not support other types (so far).
+			pubKeyInfo = fmt.Sprintf("unknown key type %T", c.PublicKey)
+		}
+
+		details.Fields = append(details.Fields, serverpb.CertificateDetails_Fields{
+			Issuer:             formatCertNames(c.Issuer),
+			Subject:            formatCertNames(c.Subject),
+			ValidFrom:          c.NotBefore.UnixNano(),
+			ValidUntil:         c.NotAfter.UnixNano(),
+			Addresses:          addresses,
+			SignatureAlgorithm: c.SignatureAlgorithm.String(),
+			PublicKey:          pubKeyInfo,
+			KeyUsage:           security.KeyUsageToString(c.KeyUsage),
+			ExtendedKeyUsage:   extKeyUsage,
+		})
+	}
+	return nil
 }
 
 // Details returns node details.
