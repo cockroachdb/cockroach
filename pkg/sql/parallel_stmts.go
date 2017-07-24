@@ -122,6 +122,15 @@ func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(pl
 	}()
 }
 
+// Empty returns true if there's currently no statements being executed or
+// queued.
+func (pq *ParallelizeQueue) Empty() bool {
+	pq.mu.Lock()
+	empty := len(pq.plans) == 0
+	pq.mu.Unlock()
+	return empty
+}
+
 // insertInQueue inserts the planNode in the queue. It returns a list of the "done"
 // channels of prerequisite blocking the new plan from executing. It also returns a
 // function to call when the new plan has finished executing. This function must be
