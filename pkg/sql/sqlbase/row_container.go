@@ -92,6 +92,15 @@ func ColTypeInfoFromColTypes(colTypes []ColumnType) ColTypeInfo {
 	return ColTypeInfo{colTypes: colTypes}
 }
 
+// ColTypeInfoFromColDescs creates a ColTypeInfo from []ColumnDescriptor.
+func ColTypeInfoFromColDescs(colDescs []ColumnDescriptor) ColTypeInfo {
+	colTypes := make([]ColumnType, len(colDescs))
+	for i, colDesc := range colDescs {
+		colTypes[i] = colDesc.Type
+	}
+	return ColTypeInfoFromColTypes(colTypes)
+}
+
 // NumColumns returns the number of columns in the type.
 func (ti ColTypeInfo) NumColumns() int {
 	if ti.resCols != nil {
