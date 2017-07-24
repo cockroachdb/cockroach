@@ -924,7 +924,7 @@ func restorePlanHook(
 		if err != nil {
 			return nil, err
 		}
-		job := jobs.NewJob(p.ExecCfg().DB, sql.InternalExecutor{LeaseManager: p.LeaseMgr()}, jobs.Record{
+		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
 			Description: description,
 			Username:    p.User(),
 			Details:     jobs.RestoreDetails{},
