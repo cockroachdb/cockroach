@@ -89,6 +89,8 @@ message ReplicaState {
 }
 
 message RangeInfo {
+  option (gogoproto.equal) = true;
+
   ReplicaState state = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The highest (and last) index in the Raft log.
   uint64 lastIndex = 2;
