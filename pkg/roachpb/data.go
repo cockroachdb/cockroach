@@ -740,18 +740,6 @@ func (t Transaction) Clone() Transaction {
 	return t
 }
 
-// Equal tests two transactions for equality. They are equal if they are
-// either simultaneously nil or their IDs match.
-func (t *Transaction) Equal(s *Transaction) bool {
-	if t == nil && s == nil {
-		return true
-	}
-	if (t == nil && s != nil) || (t != nil && s == nil) {
-		return false
-	}
-	return TxnIDEqual(t.ID, s.ID)
-}
-
 // IsInitialized returns true if the transaction has been initialized.
 func (t *Transaction) IsInitialized() bool {
 	return t.ID != nil
