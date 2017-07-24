@@ -236,6 +236,13 @@ func IsBlackHoleSpan(s opentracing.Span) bool {
 	return !sp.isRecording() && sp.netTr == nil && sp.shadowTr == nil
 }
 
+// IsNoopContext returns true if the span context is from a "no-op" span. If
+// this is true, any span derived from this context will be a "black hole span".
+func IsNoopContext(spanCtx opentracing.SpanContext) bool {
+	_, noop := spanCtx.(noopSpanContext)
+	return noop
+}
+
 // Finish is part of the opentracing.Span interface.
 func (s *span) Finish() {
 	s.FinishWithOptions(opentracing.FinishOptions{})

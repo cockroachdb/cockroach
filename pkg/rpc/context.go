@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/syncmap"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func init() {
@@ -85,6 +87,12 @@ var SourceAddr = func() net.Addr {
 
 var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
 
+func spanInclusionFunc(
+	parentSpanCtx opentracing.SpanContext, method string, req, resp interface{},
+) bool {
+	return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
+}
+
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
 func NewServer(ctx *Context) *grpc.Server {
@@ -121,9 +129,13 @@ func NewServer(ctx *Context) *grpc.Server {
 		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
-		opts = append(opts, grpc.UnaryInterceptor(
-			otgrpc.OpenTracingServerInterceptor(tracer),
-		))
+		// We use a SpanInclusionFunc to save a bit of unnecessary work when
+		// tracing is disabled.
+		interceptor := otgrpc.OpenTracingServerInterceptor(
+			tracer,
+			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFunc)),
+		)
+		opts = append(opts, grpc.UnaryInterceptor(interceptor))
 	}
 	s := grpc.NewServer(opts...)
 	RegisterHeartbeatServer(s, &HeartbeatService{
@@ -312,9 +324,14 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		}
 
 		if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
-			dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(
-				otgrpc.OpenTracingClientInterceptor(tracer),
-			))
+			// We use a SpanInclusionFunc to circumvent the interceptor's work when
+			// tracing is disabled. Otherwise, the interceptor causes an increase in
+			// the number of packets (even with an empty context!). See #17177.
+			interceptor := otgrpc.OpenTracingClientInterceptor(
+				tracer,
+				otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFunc)),
+			)
+			dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(interceptor))
 		}
 
 		if log.V(1) {
