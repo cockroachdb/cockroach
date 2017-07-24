@@ -19,6 +19,7 @@ package kv
 
 import (
 	"sort"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
 )
 
@@ -150,6 +150,7 @@ func grpcTransportFactoryImpl(
 		opts:           opts,
 		rpcContext:     rpcContext,
 		orderedClients: clients,
+		cancels:        make([]func(), 0, 1), // usually we send 1 RPC
 	}, nil
 }
 
@@ -159,6 +160,8 @@ type grpcTransport struct {
 	clientIndex     int
 	orderedClients  []batchClient
 	clientPendingMu syncutil.Mutex // protects access to all batchClient pending flags
+	closeWG         sync.WaitGroup // Done() when all SendNext goroutines are done
+	cancels         []func()       // cancelled when Close() is called
 }
 
 // IsExhausted returns false if there are any untried replicas
@@ -225,17 +228,23 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	gt.clientIndex++
 	gt.setState(client.args.Replica, true /* pending */, false /* retryable */)
 
-	// Fork the original context as this async send may outlast the
-	// caller's context.
-	// TODO(andrei): We shouldn't have to fork the ctx here; it's sketchy that
-	// these spans can outlast the caller's context. Instead, DistSender should
-	// wait on all the RPCs that it sends and it should also have the ability to
-	// cancel them when it received the first result.
-	ctx, sp := tracing.ForkCtxSpan(ctx, "grpcTransport SendNext")
+	{
+		var cancel func()
+		ctx, cancel = context.WithCancel(ctx)
+		gt.cancels = append(gt.cancels, cancel)
+	}
+	// Even though the transport may launch multiple goroutines which may
+	// overlap in activity, we trace everything to the master context. This is
+	// kosher because we make the caller wait for all activity to subside when
+	// they close the context, so there is no danger of use-after-finish.
+	gt.closeWG.Add(1)
 	go func() {
+		defer gt.closeWG.Done()
 		gt.opts.metrics.SentCount.Inc(1)
 		reply, err := func() (*roachpb.BatchResponse, error) {
 			if localServer := gt.rpcContext.GetLocalInternalServerForAddr(client.remoteAddr); localServer != nil {
+				log.VEvent(ctx, 2, "sending request to local server")
+
 				// Clone the request. At the time of writing, Replica may mutate it
 				// during command execution which can lead to data races.
 				//
@@ -253,7 +262,6 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 				localCtx := grpcutil.NewLocalRequestContext(ctx)
 
 				gt.opts.metrics.LocalSentCount.Inc(1)
-				log.VEvent(localCtx, 2, "sending request to local server")
 				return localServer.Batch(localCtx, &client.args)
 			}
 
@@ -278,7 +286,6 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 			}
 		}
 		gt.setState(client.args.Replica, false /* pending */, retryable)
-		tracing.FinishSpan(sp)
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
 }
@@ -319,10 +326,11 @@ func (gt *grpcTransport) moveToFrontLocked(replica roachpb.ReplicaDescriptor) {
 	}
 }
 
-func (*grpcTransport) Close() {
-	// TODO(bdarnell): Save the cancel functions of all pending RPCs and
-	// call them here. (it's fine to ignore them for now since they'll
-	// time out anyway)
+func (gt *grpcTransport) Close() {
+	for _, cancel := range gt.cancels {
+		cancel()
+	}
+	gt.closeWG.Wait()
 }
 
 // NB: this method's callers may have a reference to the client they wish to
