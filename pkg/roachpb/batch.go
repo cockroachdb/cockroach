@@ -251,7 +251,6 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) err
 		}
 	}
 	br.Txn.Update(otherBatch.Txn)
-	br.CollectedSpans = append(br.CollectedSpans, otherBatch.CollectedSpans...)
 	return nil
 }
 
