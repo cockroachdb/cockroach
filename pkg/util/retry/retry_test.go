@@ -20,6 +20,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"golang.org/x/net/context"
 )
 
 func TestRetryExceedsMaxBackoff(t *testing.T) {
@@ -141,7 +143,7 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 		return expectedErr
 	}
 
-	actualErr := WithMaxAttempts(nil, opts, maxAttempts, errFn)
+	actualErr := WithMaxAttempts(context.TODO(), opts, maxAttempts, errFn)
 	if actualErr != expectedErr {
 		t.Fatalf("expected err %v, got %v", expectedErr, actualErr)
 	}

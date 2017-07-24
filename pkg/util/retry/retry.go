@@ -46,7 +46,7 @@ type Retry struct {
 // Start returns a new Retry initialized to some default values. The Retry can
 // then be used in an exponential-backoff retry loop.
 func Start(opts Options) Retry {
-	return StartWithCtx(nil, opts)
+	return StartWithCtx(context.Background(), opts)
 }
 
 // StartWithCtx returns a new Retry initialized to some default values. The
@@ -67,9 +67,7 @@ func StartWithCtx(ctx context.Context, opts Options) Retry {
 	}
 
 	r := Retry{opts: opts}
-	if ctx != nil {
-		r.ctxDoneChan = ctx.Done()
-	}
+	r.ctxDoneChan = ctx.Done()
 	r.Reset()
 	return r
 }
