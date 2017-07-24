@@ -78,7 +78,7 @@ func TestPrepareCanAcquireLeases(t *testing.T) {
 				// Acquire a lease and assert that the store did in fact create a
 				// new lease.
 				_, _, err := s.LeaseManager().(*LeaseManager).Acquire(
-					ctx, planner.txn, sqlbase.ID(dummyTableID), 0 /* version */)
+					ctx, planner.txn, sqlbase.ID(dummyTableID))
 				if err != nil {
 					return nil, err
 				}
