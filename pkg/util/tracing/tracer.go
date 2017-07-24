@@ -238,10 +238,6 @@ func (t *Tracer) StartSpan(
 	}
 	s.mu.duration = -1
 
-	for k, v := range sso.Tags {
-		s.SetTag(k, v)
-	}
-
 	if !hasParent {
 		// No parent Span; allocate new trace id.
 		s.TraceID = uint64(rand.Int63())
@@ -279,11 +275,14 @@ func (t *Tracer) StartSpan(
 		}
 	}
 
-	if netTrace || shadowTr != nil {
-		// Copy baggage items to tags so they show up in the shadow tracer UI or x/net/trace.
-		for k, v := range s.mu.Baggage {
-			s.SetTag(k, v)
-		}
+	for k, v := range sso.Tags {
+		s.SetTag(k, v)
+	}
+
+	// Copy baggage items to tags so they show up in the shadow tracer UI,
+	// x/net/trace, or recordings.
+	for k, v := range s.mu.Baggage {
+		s.SetTag(k, v)
 	}
 
 	return s
