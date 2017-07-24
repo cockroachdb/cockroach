@@ -28,12 +28,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -57,8 +54,7 @@ type expectation struct {
 // stored in the system.jobs table.
 func verifyJobRecord(
 	db *sqlutils.SQLRunner,
-	kvDB *client.DB,
-	ex sqlutil.InternalExecutor,
+	registry *jobs.Registry,
 	job *jobs.Job,
 	expectedStatus jobs.Status,
 	expected expectation,
@@ -88,7 +84,7 @@ func verifyJobRecord(
 		)
 
 		// Verify a newly-instantiated Record's properties.
-		fetched, err := jobs.GetJob(context.TODO(), kvDB, ex, *job.ID())
+		fetched, err := registry.LoadJob(context.TODO(), *job.ID())
 		if err != nil {
 			return err
 		}
@@ -166,11 +162,14 @@ func verifyJobRecord(
 
 func TestJobLogger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.TODO()
-	s, rawSQLDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
 
-	executor := sql.InternalExecutor{LeaseManager: s.LeaseManager().(*sql.LeaseManager)}
+	ctx := context.TODO()
+
+	s, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+
 	t.Run("valid job lifecycles succeed", func(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(t, rawSQLDB)
 
@@ -186,19 +185,19 @@ func TestJobLogger(t *testing.T) {
 			Type:   jobs.TypeRestore,
 			Before: timeutil.Now(),
 		}
-		woodyJob := jobs.NewJob(kvDB, executor, woodyRecord)
+		woodyJob := registry.NewJob(woodyRecord)
 
 		if err := woodyJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusPending, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusPending, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := woodyJob.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
@@ -216,7 +215,7 @@ func TestJobLogger(t *testing.T) {
 				t.Fatal(err)
 			}
 			woodyExpectation.FractionCompleted = f.expected
-			if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
+			if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -228,14 +227,14 @@ func TestJobLogger(t *testing.T) {
 			t.Fatal(err)
 		}
 		woodyExpectation.Record.Details = jobs.RestoreDetails{LowWaterMark: roachpb.Key("mariana")}
-		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusRunning, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := woodyJob.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
@@ -251,7 +250,7 @@ func TestJobLogger(t *testing.T) {
 			Before: timeutil.Now(),
 			Error:  "Buzz Lightyear can't fly",
 		}
-		buzzJob := jobs.NewJob(kvDB, executor, buzzRecord)
+		buzzJob := registry.NewJob(buzzRecord)
 
 		// Test modifying the job details before calling `Created`.
 		buzzJob.Record.Details = jobs.BackupDetails{}
@@ -259,14 +258,14 @@ func TestJobLogger(t *testing.T) {
 		if err := buzzJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, buzzJob, jobs.StatusPending, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, buzzJob, jobs.StatusPending, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := buzzJob.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
@@ -274,17 +273,17 @@ func TestJobLogger(t *testing.T) {
 			t.Fatal(err)
 		}
 		buzzExpectation.FractionCompleted = .42
-		if err := verifyJobRecord(db, kvDB, executor, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, buzzJob, jobs.StatusRunning, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		buzzJob.Failed(ctx, errors.New("Buzz Lightyear can't fly"))
-		if err := verifyJobRecord(db, kvDB, executor, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		// Ensure that logging Buzz didn't corrupt Woody.
-		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
 
@@ -301,31 +300,31 @@ func TestJobLogger(t *testing.T) {
 			Before: timeutil.Now(),
 			Error:  "Sid is a total failure",
 		}
-		sidJob := jobs.NewJob(kvDB, executor, sidRecord)
+		sidJob := registry.NewJob(sidRecord)
 
 		if err := sidJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, sidJob, jobs.StatusPending, sidExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, sidJob, jobs.StatusPending, sidExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		sidJob.Failed(ctx, errors.New("Sid is a total failure"))
-		if err := verifyJobRecord(db, kvDB, executor, sidJob, jobs.StatusFailed, sidExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, sidJob, jobs.StatusFailed, sidExpectation); err != nil {
 			t.Fatal(err)
 		}
 
 		// Ensure that logging Sid didn't corrupt Woody or Buzz.
-		if err := verifyJobRecord(db, kvDB, executor, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, woodyJob, jobs.StatusSucceeded, woodyExpectation); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
+		if err := verifyJobRecord(db, registry, buzzJob, jobs.StatusFailed, buzzExpectation); err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("bad job details fail", func(t *testing.T) {
-		job := jobs.NewJob(kvDB, executor, jobs.Record{
+		job := registry.NewJob(jobs.Record{
 			Details: 42,
 		})
 		if err := job.Created(ctx); !testutils.IsError(err, "unsupported job details type int") {
@@ -334,14 +333,14 @@ func TestJobLogger(t *testing.T) {
 	})
 
 	t.Run("update before create fails", func(t *testing.T) {
-		job := jobs.NewJob(kvDB, executor, jobs.Record{})
+		job := registry.NewJob(jobs.Record{})
 		if err := job.Started(ctx); !testutils.IsError(err, "job not created") {
 			t.Fatalf("expected 'job not created' error, but got %v", err)
 		}
 	})
 
 	t.Run("same state transition twice succeeds silently", func(t *testing.T) {
-		job := jobs.NewJob(kvDB, executor, jobs.Record{
+		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
 		if err := job.Created(ctx); err != nil {
@@ -365,7 +364,7 @@ func TestJobLogger(t *testing.T) {
 	})
 
 	t.Run("out of bounds progress fails", func(t *testing.T) {
-		job := jobs.NewJob(kvDB, executor, jobs.Record{
+		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
 		if err := job.Created(ctx); err != nil {
@@ -383,7 +382,7 @@ func TestJobLogger(t *testing.T) {
 	})
 
 	t.Run("progress on non-started job fails", func(t *testing.T) {
-		job := jobs.NewJob(kvDB, executor, jobs.Record{
+		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
 		if err := job.Created(ctx); err != nil {
@@ -395,7 +394,7 @@ func TestJobLogger(t *testing.T) {
 	})
 
 	t.Run("progress on finished job fails", func(t *testing.T) {
-		job := jobs.NewJob(kvDB, executor, jobs.Record{
+		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
 		if err := job.Created(ctx); err != nil {
@@ -421,7 +420,7 @@ func TestJobLogger(t *testing.T) {
 			Before:            timeutil.Now(),
 			FractionCompleted: 1.0,
 		}
-		job := jobs.NewJob(kvDB, executor, record)
+		job := registry.NewJob(record)
 		if err := job.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -434,7 +433,7 @@ func TestJobLogger(t *testing.T) {
 		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := verifyJobRecord(db, kvDB, executor, job, jobs.StatusSucceeded, expect); err != nil {
+		if err := verifyJobRecord(db, registry, job, jobs.StatusSucceeded, expect); err != nil {
 			t.Fatal(err)
 		}
 	})

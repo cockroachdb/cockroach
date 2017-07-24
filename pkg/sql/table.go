@@ -575,7 +575,7 @@ func (p *planner) createSchemaChangeJob(
 		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
 		Details:       jobs.SchemaChangeDetails{},
 	}
-	job := jobs.NewJob(p.ExecCfg().DB, InternalExecutor{LeaseManager: p.session.tables.leaseMgr}, jobRecord)
+	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
 	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
 		return sqlbase.InvalidMutationID, nil
 	}
@@ -589,10 +589,11 @@ func (p *planner) notifySchemaChange(
 	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) {
 	sc := SchemaChanger{
-		tableID:    tableDesc.GetID(),
-		mutationID: mutationID,
-		nodeID:     p.evalCtx.NodeID,
-		leaseMgr:   p.LeaseMgr(),
+		tableID:     tableDesc.GetID(),
+		mutationID:  mutationID,
+		nodeID:      p.evalCtx.NodeID,
+		leaseMgr:    p.LeaseMgr(),
+		jobRegistry: p.ExecCfg().JobRegistry,
 	}
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
 }
