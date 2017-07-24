@@ -179,7 +179,7 @@ func init() {
       </tr>
       <tr>
         <td>security</td>
-        <td><a href="/debug/certificates">certificates</a></td>
+        <td><a href="../#/reports/certificates/local">certificates</a></td>
       </tr>
       <tr>
         <td>pprof</td>
