@@ -593,11 +593,17 @@ func addSSTablePreApply(
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			panic(err)
 		}
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			if err := ioutil.WriteFile(path, sst.Data, 0600); err != nil {
-				log.Fatalf(ctx, "while ingesting %s: %s", path, err)
+		if _, err := os.Stat(path); err == nil {
+			// The file we want to ingest exists. This can happen since the
+			// ingestion may apply twice (we ingest before we mark the Raft
+			// command as committed). Just unlink the file (RocksDB created a
+			// hard link); after that we're free to write it again.
+			if err := os.Remove(path); err != nil {
+				log.Fatalf(ctx, "while removing existing file during ingestion of %s: %s", path, err)
 			}
-		} else if err != nil {
+		}
+
+		if err := ioutil.WriteFile(path, sst.Data, 0600); err != nil {
 			log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 		}
 	}
