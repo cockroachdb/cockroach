@@ -279,14 +279,14 @@ func writeBackupDescriptor(
 	return nil
 }
 
-// Backup exports a snapshot of every kv entry into ranged sstables.
+// backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
 // - <dir>/<unique_int>.sst
 // - <dir> is given by the user and may be cloud storage
 // - Each file contains data for a key range that doesn't overlap with any other
 //   file.
-func Backup(
+func backup(
 	ctx context.Context,
 	p sql.PlanHookState,
 	uri string,
@@ -527,7 +527,7 @@ func Backup(
 func backupPlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
 ) (func(context.Context) ([]parser.Datums, error), sqlbase.ResultColumns, error) {
-	backup, ok := stmt.(*parser.Backup)
+	backupStmt, ok := stmt.(*parser.Backup)
 	if !ok {
 		return nil, nil, nil
 	}
@@ -542,11 +542,11 @@ func backupPlanHook(
 		return nil, nil, err
 	}
 
-	toFn, err := p.TypeAsString(backup.To, "BACKUP")
+	toFn, err := p.TypeAsString(backupStmt.To, "BACKUP")
 	if err != nil {
 		return nil, nil, err
 	}
-	incrementalFromFn, err := p.TypeAsStringArray(backup.IncrementalFrom, "BACKUP")
+	incrementalFromFn, err := p.TypeAsStringArray(backupStmt.IncrementalFrom, "BACKUP")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -575,7 +575,7 @@ func backupPlanHook(
 		}
 
 		var startTime hlc.Timestamp
-		if backup.IncrementalFrom != nil {
+		if backupStmt.IncrementalFrom != nil {
 			var err error
 			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom)
 			if err != nil {
@@ -583,13 +583,13 @@ func backupPlanHook(
 			}
 		}
 		endTime := p.ExecCfg().Clock.Now()
-		if backup.AsOf.Expr != nil {
+		if backupStmt.AsOf.Expr != nil {
 			var err error
-			if endTime, err = sql.EvalAsOfTimestamp(nil, backup.AsOf, endTime); err != nil {
+			if endTime, err = sql.EvalAsOfTimestamp(nil, backupStmt.AsOf, endTime); err != nil {
 				return nil, err
 			}
 		}
-		description, err := backupJobDescription(backup, to, incrementalFrom)
+		description, err := backupJobDescription(backupStmt, to, incrementalFrom)
 		if err != nil {
 			return nil, err
 		}
@@ -598,12 +598,12 @@ func backupPlanHook(
 			Username:    p.User(),
 			Details:     jobs.BackupDetails{},
 		})
-		desc, err := Backup(ctx,
+		desc, err := backup(ctx,
 			p,
 			to,
-			backup.Targets,
+			backupStmt.Targets,
 			startTime, endTime,
-			backup.Options,
+			backupStmt.Options,
 			job,
 		)
 		if err != nil {

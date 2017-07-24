@@ -601,9 +601,9 @@ func restoreJobDescription(restore *parser.Restore, from []string) (string, erro
 	return r.String(), nil
 }
 
-// Restore imports a SQL table (or tables) from sets of non-overlapping sstable
+// restore imports a SQL table (or tables) from sets of non-overlapping sstable
 // files.
-func Restore(
+func restore(
 	ctx context.Context,
 	p sql.PlanHookState,
 	uris []string,
@@ -883,7 +883,7 @@ func Restore(
 func restorePlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
 ) (func(context.Context) ([]parser.Datums, error), sqlbase.ResultColumns, error) {
-	restore, ok := stmt.(*parser.Restore)
+	restoreStmt, ok := stmt.(*parser.Restore)
 	if !ok {
 		return nil, nil, nil
 	}
@@ -897,7 +897,7 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
-	fromFn, err := p.TypeAsStringArray(restore.From, "RESTORE")
+	fromFn, err := p.TypeAsStringArray(restoreStmt.From, "RESTORE")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -920,7 +920,7 @@ func restorePlanHook(
 		if err != nil {
 			return nil, err
 		}
-		description, err := restoreJobDescription(restore, from)
+		description, err := restoreJobDescription(restoreStmt, from)
 		if err != nil {
 			return nil, err
 		}
@@ -929,12 +929,12 @@ func restorePlanHook(
 			Username:    p.User(),
 			Details:     jobs.RestoreDetails{},
 		})
-		res, err := Restore(
+		res, err := restore(
 			ctx,
 			p,
 			from,
-			restore.Targets,
-			restore.Options,
+			restoreStmt.Targets,
+			restoreStmt.Options,
 			job,
 		)
 		jobCtx, jobSpan := tracing.ChildSpan(ctx, "log-job")
