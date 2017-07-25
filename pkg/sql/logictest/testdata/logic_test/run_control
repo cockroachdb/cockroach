@@ -27,6 +27,9 @@ CANCEL JOB 'foo'
 query error unimplemented
 CANCEL JOB (SELECT id FROM system.jobs)
 
+query error unimplemented
+CANCEL JOB (SELECT * FROM VALUES ((1),(2)))
+
 query error argument of CANCEL QUERY must be type string, not type int
 CANCEL QUERY 1
 
@@ -36,5 +39,11 @@ CANCEL QUERY 'f54'
 query error not found
 CANCEL QUERY '14d2355b9cccbca50000000000000001'
 
-query error unimplemented
-CANCEL JOB (SELECT * FROM VALUES ((1),(2)))
+query error argument of CANCEL TRANSACTION must be type string, not type int
+CANCEL TRANSACTION 1
+
+query error invalid txn id length, expected 8 but got 3
+CANCEL TRANSACTION 'f54'
+
+query error rpc error: code = NotFound desc = txn with ID 44448888 was not found
+CANCEL TRANSACTION '44448888'
