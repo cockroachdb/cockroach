@@ -181,12 +181,10 @@ func (s keySlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
-	stopper.AddCloser(e)
+	defer e.Close()
 	if _, err := bootstrapCluster(
-		storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +225,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	if _, err := bootstrapCluster(
-		storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +277,7 @@ func TestNodeJoin(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(e)
 	if _, err := bootstrapCluster(
-		storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +360,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 	if _, err := bootstrapCluster(
-		storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -692,7 +690,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
 		if _, err := bootstrapCluster(
-			storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+			context.TODO(), storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {
 			t.Fatal(err)
 		}

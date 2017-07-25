@@ -155,7 +155,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 	if tc.transport == nil {
 		tc.transport = NewDummyRaftTransport()
 	}
-
+	ctx := context.TODO()
 	if tc.store == nil {
 		cfg.Gossip = tc.gossip
 		cfg.Transport = tc.transport
@@ -166,7 +166,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		sender := &testSender{}
 		cfg.DB = client.NewDB(sender, cfg.Clock)
 		tc.store = NewStore(cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
-		if err := tc.store.Bootstrap(roachpb.StoreIdent{
+		if err := tc.store.Bootstrap(ctx, roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
@@ -183,7 +183,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 				t.Fatal(err)
 			}
 		}
-		if err := tc.store.Start(context.Background(), stopper); err != nil {
+		if err := tc.store.Start(ctx, stopper); err != nil {
 			t.Fatal(err)
 		}
 		tc.store.WaitForInit()
@@ -195,7 +195,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		if tc.bootstrapMode == bootstrapRangeOnly {
 			testDesc := testRangeDescriptor()
 			if _, err := writeInitialState(
-				context.Background(),
+				ctx,
 				tc.store.Engine(),
 				enginepb.MVCCStats{},
 				*testDesc,
