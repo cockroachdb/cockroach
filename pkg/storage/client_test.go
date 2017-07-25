@@ -758,6 +758,11 @@ func (m *multiTestContext) addStore(idx int) {
 		}
 	}
 
+	sender := storage.NewStores(ambient, clock)
+	sender.AddStore(store)
+	storesServer := storage.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
+	storage.RegisterConsistencyServer(grpcServer, storesServer)
+
 	ln, err := netutil.ListenAndServeGRPC(m.transportStopper, grpcServer, util.TestAddr)
 	if err != nil {
 		m.t.Fatal(err)
@@ -774,11 +779,6 @@ func (m *multiTestContext) addStore(idx int) {
 	if ok {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
-
-	sender := storage.NewStores(ambient, clock)
-	sender.AddStore(store)
-	storesServer := storage.MakeServer(m.nodeDesc(nodeID), sender)
-	storage.RegisterConsistencyServer(grpcServer, storesServer)
 
 	// Add newly created objects to the multiTestContext's collections.
 	// (these must be populated before the store is started so that

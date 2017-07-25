@@ -145,10 +145,6 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	nodeID roachpb.NodeID, addr net.Addr, stopper *stop.Stopper,
 ) (*storage.RaftTransport, net.Addr) {
 	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
-	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
-	if err != nil {
-		rttc.t.Fatal(err)
-	}
 	transport := storage.NewRaftTransport(
 		log.AmbientContext{},
 		storage.GossipAddressResolver(rttc.gossip),
@@ -156,6 +152,10 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 		rttc.nodeRPCContext,
 	)
 	rttc.transports[nodeID] = transport
+	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
+	if err != nil {
+		rttc.t.Fatal(err)
+	}
 	return transport, ln.Addr()
 }
 
