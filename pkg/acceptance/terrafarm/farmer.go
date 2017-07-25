@@ -142,7 +142,7 @@ func (f *Farmer) Add(nodes int) error {
 		args = append(args, fmt.Sprintf(`-var=%s="%s"`, v, val))
 	}
 	if len(f.AddFlags) > 0 {
-		args = append(args, fmt.Sprintf("cockroach_flags=%q", strings.Join(f.AddFlags, " ")))
+		args = append(args, fmt.Sprintf("-var=cockroach_flags=%q", strings.Join(f.AddFlags, " ")))
 	}
 
 	if nodes == 0 {
