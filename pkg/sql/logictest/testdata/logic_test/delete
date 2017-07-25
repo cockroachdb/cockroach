@@ -144,12 +144,12 @@ query ITTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
 Level  Type    Field  Description
-0      delete
-0              from   unindexed
-1      render
-2      scan
-2              table  unindexed@primary
-2              spans  ALL
+0      delete  ·      ·
+0      ·       from   unindexed
+1      render  ·      ·
+2      scan    ·      ·
+2      ·       table  unindexed@primary
+2      ·       spans  ALL
 
 query II colnames,rowsort
 SELECT k, v FROM unindexed
