@@ -222,7 +222,9 @@ func WriteResumeSpan(
 }
 
 // ConvertBackfillError returns a cleaner SQL error for a failed Batch.
-func ConvertBackfillError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) error {
+func ConvertBackfillError(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, b *client.Batch,
+) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
@@ -237,5 +239,5 @@ func ConvertBackfillError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) e
 		}
 		desc.MakeMutationComplete(mutation)
 	}
-	return sqlbase.ConvertBatchError(desc, b)
+	return sqlbase.ConvertBatchError(ctx, desc, b)
 }

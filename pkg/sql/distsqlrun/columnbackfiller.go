@@ -237,7 +237,7 @@ func (cb *columnBackfiller) runChunk(
 		}
 		// Write the new row values.
 		if err := txn.CommitInBatch(ctx, b); err != nil {
-			return ConvertBackfillError(&cb.spec.Table, b)
+			return ConvertBackfillError(ctx, &cb.spec.Table, b)
 		}
 		return nil
 	})

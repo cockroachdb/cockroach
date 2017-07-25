@@ -127,7 +127,7 @@ func (ti *tableInserter) finalize(ctx context.Context, _ bool) error {
 	}
 
 	if err != nil {
-		return sqlbase.ConvertBatchError(ti.ri.Helper.TableDesc, ti.b)
+		return sqlbase.ConvertBatchError(ctx, ti.ri.Helper.TableDesc, ti.b)
 	}
 	return nil
 }
@@ -174,7 +174,7 @@ func (tu *tableUpdater) finalize(ctx context.Context, _ bool) error {
 	}
 
 	if err != nil {
-		return sqlbase.ConvertBatchError(tu.ru.Helper.TableDesc, tu.b)
+		return sqlbase.ConvertBatchError(ctx, tu.ru.Helper.TableDesc, tu.b)
 	}
 	return nil
 }
@@ -388,7 +388,7 @@ func (tu *tableUpserter) flush(ctx context.Context, finalize, traceKV bool) erro
 		err = tu.txn.Run(ctx, b)
 	}
 	if err != nil {
-		return sqlbase.ConvertBatchError(tu.tableDesc, b)
+		return sqlbase.ConvertBatchError(ctx, tu.tableDesc, b)
 	}
 	return nil
 }
