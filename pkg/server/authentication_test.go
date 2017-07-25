@@ -15,20 +15,30 @@
 package server
 
 import (
+	"crypto/sha256"
 	"crypto/tls"
+	gosql "database/sql"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
+
+	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq"
 )
 
 type ctxI interface {
@@ -145,5 +155,261 @@ func TestSSLEnforcement(t *testing.T) {
 				t.Errorf("orig=%s url=%s err=%v", tc.path, u, err)
 			}
 		})
+	}
+}
+
+func TestVerifyPassword(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	ts := s.(*TestServer)
+
+	for _, user := range []struct {
+		username string
+		password string
+	}{
+		{"azure_diamond", "hunter2"},
+		{"druidia", "12345"},
+	} {
+		cmd := fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", user.username, user.password)
+		if _, err := db.Exec(cmd); err != nil {
+			t.Fatalf("failed to create user: %s", err)
+		}
+	}
+
+	for _, tc := range []struct {
+		username           string
+		password           string
+		shouldAuthenticate bool
+	}{
+		{"azure_diamond", "hunter2", true},
+		{"azure_diamond", "hunter", false},
+		{"azure_diamond", "", false},
+		{"azure_diamond", "🍦", false},
+		{"azure_diamond", "hunter2345", false},
+		{"azure_diamond", "12345", false},
+		{"azure_diamond", "*******", false},
+		{"druidia", "12345", true},
+		{"druidia", "hunter2", false},
+		{"root", "", false},
+		{"", "", false},
+	} {
+		t.Run("", func(t *testing.T) {
+			err := ts.authentication.verifyPassword(context.TODO(), tc.username, tc.password)
+			if tc.shouldAuthenticate {
+				if err != nil {
+					t.Errorf(
+						"expected %s/%s to authenticate, but failed with error %s",
+						tc.username,
+						tc.password,
+						err,
+					)
+				}
+			} else {
+				if err == nil {
+					t.Errorf(
+						"expected %s/%s to fail to authenticate, but verifyPassword returned no error",
+						tc.username,
+						tc.password,
+					)
+				}
+			}
+		})
+	}
+}
+
+func TestCreateSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	ts := s.(*TestServer)
+
+	username := "testUser"
+
+	// Create an authentication, noting the time before and after creation. This
+	// lets us ensure that the timestamps created are accurate.
+	timeBoundBefore := ts.clock.PhysicalTime()
+	id, origSecret, err := ts.authentication.newAuthSession(context.TODO(), username)
+	if err != nil {
+		t.Fatalf("error creating auth session: %s", err)
+	}
+	timeBoundAfter := ts.clock.PhysicalTime()
+
+	// Query fields from created session.
+	query := `
+SELECT "hashedSecret", "username", "createdAt", "lastUsedAt", "expiresAt", "revokedAt", "auditInfo"
+FROM system.web_sessions 
+WHERE id = $1`
+
+	result := db.QueryRow(query, id)
+	var (
+		sessHashedSecret []byte
+		sessUsername     string
+		sessCreated      time.Time
+		sessLastUsed     time.Time
+		sessExpires      time.Time
+		sessRevoked      pq.NullTime
+		sessAuditInfo    gosql.NullString
+	)
+	if err := result.Scan(
+		&sessHashedSecret,
+		&sessUsername,
+		&sessCreated,
+		&sessLastUsed,
+		&sessExpires,
+		&sessRevoked,
+		&sessAuditInfo,
+	); err != nil {
+		t.Fatalf("error querying created auth session: %s", err)
+	}
+
+	// Verify hashed secret matches original secret
+	hasher := sha256.New()
+	hashedSecret := hasher.Sum(origSecret)
+	if !bytes.Equal(sessHashedSecret, hashedSecret) {
+		t.Fatalf("hashed value of %v was %v, wanted %v", origSecret, hashedSecret, sessHashedSecret)
+	}
+
+	// Username.
+	if a, e := sessUsername, username; a != e {
+		t.Fatalf("session username got %s, wanted %s", a, e)
+	}
+
+	// Timestamps.
+	verifyTimestamp := func(actual time.Time, early time.Time, late time.Time) error {
+		if actual.Before(early) {
+			return fmt.Errorf("time %s was before early bound %s", actual, early)
+		}
+		if late.Before(early) {
+			return fmt.Errorf("time %s was after late bound %s", actual, late)
+		}
+		return nil
+	}
+
+	if err := verifyTimestamp(sessCreated, timeBoundBefore, timeBoundAfter); err != nil {
+		t.Fatalf("bad createdAt timestamp: %s", err)
+	}
+	if err := verifyTimestamp(sessLastUsed, timeBoundBefore, timeBoundAfter); err != nil {
+		t.Fatalf("bad lastUsedAt timestamp: %s", err)
+	}
+	timeout := webSessionTimeout.Get()
+	if err := verifyTimestamp(
+		sessExpires, timeBoundBefore.Add(timeout), timeBoundAfter.Add(timeout),
+	); err != nil {
+		t.Fatalf("bad expiresAt timestamp: %s", err)
+	}
+
+	// Null fields
+	if sessRevoked.Valid {
+		t.Fatalf("sess had revokedAt timestamp %s, wanted null", sessRevoked.Time)
+	}
+	if sessAuditInfo.Valid {
+		t.Fatalf("sess had auditInfo %s, wanted null", sessAuditInfo.String)
+	}
+}
+
+func TestAuthenticationAPIUserLogin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	ts := s.(*TestServer)
+
+	const (
+		username = "testuser"
+		password = "password"
+	)
+
+	cmd := fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", username, password)
+	if _, err := db.Exec(cmd); err != nil {
+		t.Fatalf("failed to create user: %s", err)
+	}
+
+	tryLogin := func(username, password string) (http.Header, error) {
+		// We need to instantiate our own HTTP Request, because we must inspect
+		// the returned headers.
+		httpClient, err := ts.GetHTTPClient()
+		if err != nil {
+			t.Fatalf("could not get HTTP client: %s", err)
+		}
+		req := serverpb.UserLoginRequest{
+			Username: username,
+			Password: password,
+		}
+		var resp serverpb.UserLoginResponse
+		responseHeaders, err := httputil.PostJSONWithHeaders(
+			httpClient, ts.AdminURL()+authPrefix+"login", nil, &req, &resp,
+		)
+		return responseHeaders, err
+	}
+
+	// Unsuccessful attempt. Should come back with a 401 and no "Set-Cookie"
+	headers, err := tryLogin(username, "wrongpassword")
+	if !testutils.IsError(err, "status: 401") {
+		t.Fatalf("login got error %s, wanted error with 401 status", err)
+	}
+	if e := headers.Get("Set-Cookie"); e != "" {
+		t.Fatalf("bad login got Set-Cookie %s, wanted empty", e)
+	}
+
+	// Successful attempt. Should succeed and return a Set-Cookie header.
+	headers, err = tryLogin(username, password)
+	if err != nil {
+		t.Fatalf("good login got error %s, wanted no error", err)
+	}
+	rawCookie := headers.Get("set-cookie")
+	if rawCookie == "" {
+		t.Logf("%v", headers)
+		t.Fatalf("good login got no Set-Cookie header")
+	}
+
+	// Validate the returned cookie.
+	// http.Cookie doesn't export ReadCookies, so we construct a request
+	// and use the Cookies() method.
+	var cookie *http.Cookie
+	{
+		header := http.Header{}
+		header.Set("cookie", rawCookie)
+		request := http.Request{Header: header}
+		cookie, err = request.Cookie(sessionCookieName)
+		if err != nil {
+			t.Fatalf("could not retrieve session cookie: %s", err)
+		}
+	}
+
+	// Cookie value should be a base64 encoded protobuf.
+	cookieBytes, err := base64.StdEncoding.DecodeString(cookie.Value)
+	if err != nil {
+		t.Fatalf("expected cookie to be base64 encoded, got %s: %s", cookie.Value, err)
+	}
+	var sessionCookieValue serverpb.SessionCookie
+	if err := sessionCookieValue.Unmarshal(cookieBytes); err != nil {
+		t.Fatalf("failed to unmarshal session cookie value: %s", err)
+	}
+
+	// Look up session in database and verify hashed secret value and username.
+	id := sessionCookieValue.Id
+	query := `SELECT "hashedSecret", "username" FROM system.web_sessions WHERE id = $1`
+	result := db.QueryRow(query, id)
+	var (
+		sessHashedSecret []byte
+		sessUsername     string
+	)
+	if err := result.Scan(&sessHashedSecret, &sessUsername); err != nil {
+		t.Fatalf("error querying auth session: %s", err)
+	}
+
+	if a, e := sessUsername, username; a != e {
+		t.Fatalf("created auth session had username %s, wanted %s", a, e)
+	}
+
+	hasher := sha256.New()
+	hashedSecret := hasher.Sum(sessionCookieValue.Secret)
+	if a, e := sessHashedSecret, hashedSecret; !bytes.Equal(a, e) {
+		t.Fatalf(
+			"session secret hash was %v, wanted %v (derived from original secret %v)",
+			a,
+			e,
+			sessionCookieValue.Secret,
+		)
 	}
 }
