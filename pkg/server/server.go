@@ -111,6 +111,7 @@ type Server struct {
 	runtime            status.RuntimeStatSampler
 	admin              *adminServer
 	status             *statusServer
+	authentication     *authenticationServer
 	tsDB               *ts.DB
 	tsServer           ts.Server
 	raftTransport      *storage.RaftTransport
@@ -401,7 +402,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.sessionRegistry,
 		s.queryRegistry,
 	)
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
+	s.authentication = newAuthenticationServer(s)
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
 
@@ -948,6 +950,7 @@ func (s *Server) Start(ctx context.Context) error {
 		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
 		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
 		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
+		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
 	)
 	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
@@ -958,7 +961,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}
 
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}
@@ -975,6 +978,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(adminPrefix, gwMux)
 	s.mux.Handle(ts.URLPrefix, gwMux)
 	s.mux.Handle(statusPrefix, gwMux)
+	s.mux.Handle(authPrefix, gwMux)
 	s.mux.Handle("/health", gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	s.mux.Handle(rangeDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugRange)))
