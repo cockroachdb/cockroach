@@ -18,14 +18,27 @@ syntax = "proto3";
 package cockroach.sql.jobs;
 option go_package = "jobs";
 
+import "cockroach/pkg/sql/sqlbase/privilege.proto";
 import "gogoproto/gogo.proto";
 
 message BackupDetails {
   // Intentionally empty.
 }
 
+message RestoreTableRewrite {
+  uint32 new_id = 1 [
+    (gogoproto.customname) = "NewID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
+  cockroach.sql.sqlbase.PrivilegeDescriptor privileges = 2;
+}
+
 message RestoreDetails {
   bytes low_water_mark = 1;
+
+  map<uint32, RestoreTableRewrite> table_rewrites = 2 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
 }
 
 message SchemaChangeDetails {

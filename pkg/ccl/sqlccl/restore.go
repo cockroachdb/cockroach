@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -55,135 +56,155 @@ func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, er
 	return backupDescs, nil
 }
 
-func reassignParentIDs(
-	ctx context.Context,
-	txn *client.Txn,
-	p sql.PlanHookState,
-	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
+func selectTargets(
+	ctx context.Context, backupDescs []BackupDescriptor, targets parser.TargetList,
+) ([]sqlbase.Descriptor, error) {
+	if len(targets.Databases) > 0 {
+		return nil, errors.Errorf("RESTORE DATABASE is not yet supported " +
+			"(but you can use 'RESTORE somedb.*' to restore all backed up tables for a given DB).")
+	}
+
+	// TODO(dan): Plumb the session database down.
+	sessionDatabase := ""
+	lastBackupDesc := backupDescs[len(backupDescs)-1]
+	sqlDescs, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
+	if err != nil {
+		return nil, err
+	}
+
+	seenTable := false
+	for _, desc := range sqlDescs {
+		if desc.GetTable() != nil {
+			seenTable = true
+		}
+	}
+	if !seenTable {
+		return nil, errors.Errorf("no tables found: %s", parser.AsString(targets))
+	}
+
+	return sqlDescs, nil
+}
+
+// makeTableRewrites determines the new IDs and privileges (a TableRewrite) for
+// each table in sqlDescs and returns a mapping from old ID to said
+// TableRewrite. It first validates that the provided sqlDescs can be restored
+// into their original database (or the database specified in opt) to avoid
+// leaking table IDs if we can be sure the restore would fail.
+func makeTableRewrites(
+	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, opt parser.KVOptions,
+) (map[sqlbase.ID]*jobs.RestoreTableRewrite, error) {
+	tableRewrites := make(map[sqlbase.ID]*jobs.RestoreTableRewrite)
+
+	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
+	var tables []*sqlbase.TableDescriptor
+	for _, desc := range sqlDescs {
+		if dbDesc := desc.GetDatabase(); dbDesc != nil {
+			databasesByID[dbDesc.ID] = dbDesc
+		} else if tableDesc := desc.GetTable(); tableDesc != nil {
+			tables = append(tables, tableDesc)
+		}
+	}
+
+	// Fail fast if the necessary databases don't exist since the below logic
+	// leaks table IDs when restore fails.
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		for _, table := range tables {
+			// Update the parentID to point to the named DB in the new cluster.
+			{
+				var targetDB string
+				if override, ok := opt.Get(restoreOptIntoDB); ok {
+					targetDB = override
+				} else {
+					database, ok := databasesByID[table.ParentID]
+					if !ok {
+						return errors.Errorf("no database with ID %d in backup for table %q",
+							table.ParentID, table.Name)
+					}
+					targetDB = database.Name
+				}
+
+				// Make sure the target DB exists.
+				existingDatabaseID, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, targetDB))
+				if err != nil {
+					return err
+				}
+				if existingDatabaseID.Value == nil {
+					return errors.Errorf("a database named %q needs to exist to restore table %q",
+						targetDB, table.Name)
+				}
+				newParentID, err := existingDatabaseID.Value.GetInt()
+				if err != nil {
+					return err
+				}
+				table.ParentID = sqlbase.ID(newParentID)
+			}
+			// Check that the table name is _not_ in use.
+			// This would fail the CPut later anyway, but this yields a prettier error.
+			{
+				nameKey := table.GetNameMetadataKey()
+				res, err := txn.Get(ctx, nameKey)
+				if err != nil {
+					return err
+				}
+				if res.Exists() {
+					return sqlbase.NewRelationAlreadyExistsError(table.Name)
+				}
+			}
+
+			// Check and set privileges.
+			{
+				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, table.ParentID)
+				if err != nil {
+					return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
+				}
+
+				if err := p.CheckPrivilege(parentDB, privilege.CREATE); err != nil {
+					return err
+				}
+
+				// Default is to copy privs from restoring parent db, like CREATE TABLE.
+				// TODO(dt): Make this more configurable.
+				tableRewrites[table.ID] = &jobs.RestoreTableRewrite{Privileges: parentDB.GetPrivileges()}
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	// Allocate new IDs for each table.
+	//
+	// NB: we do this in a standalone transaction, not one that covers the entire
+	// restore since restarts would be terrible (and our bulk import primitive are
+	// non-transactional), but this does mean if something fails during restore
+	// we've "leaked" the IDs, in that the generator will have been incremented.
+	for _, table := range tables {
+		newTableID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+		if err != nil {
+			return nil, err
+		}
+		tableRewrites[table.ID].NewID = newTableID
+	}
+
+	return tableRewrites, nil
+}
+
+// rewriteTableDescs mutates tables to match the ID and privilege specified in
+// tableRewrites, as well as adjusting cross-table references to use the new
+// IDs.
+func rewriteTableDescs(
 	tables []*sqlbase.TableDescriptor,
+	tableRewrites map[sqlbase.ID]*jobs.RestoreTableRewrite,
 	opt parser.KVOptions,
 ) error {
 	for _, table := range tables {
-		// Update the parentID to point to the named DB in the new cluster.
-		{
-			var targetDB string
-			if override, ok := opt.Get(restoreOptIntoDB); ok {
-				targetDB = override
-			} else {
-				database, ok := databasesByID[table.ParentID]
-				if !ok {
-					return errors.Errorf("no database with ID %d in backup for table %q", table.ParentID, table.Name)
-				}
-				targetDB = database.Name
-			}
-
-			// Make sure the target DB exists.
-			existingDatabaseID, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, targetDB))
-			if err != nil {
-				return err
-			}
-			if existingDatabaseID.Value == nil {
-				return errors.Errorf("a database named %q needs to exist to restore table %q",
-					targetDB, table.Name)
-			}
-			newParentID, err := existingDatabaseID.Value.GetInt()
-			if err != nil {
-				return err
-			}
-			table.ParentID = sqlbase.ID(newParentID)
+		tableRewrite, ok := tableRewrites[table.ID]
+		if !ok {
+			return errors.Errorf("missing table rewrite for table %d", table.ID)
 		}
-		// Check that the table name is _not_ in use.
-		// This would fail the CPut later anyway, but this yields a prettier error.
-		{
-			nameKey := table.GetNameMetadataKey()
-			res, err := txn.Get(ctx, nameKey)
-			if err != nil {
-				return err
-			}
-			if res.Exists() {
-				return sqlbase.NewRelationAlreadyExistsError(table.Name)
-			}
-		}
+		table.ID = tableRewrite.NewID
+		table.Privileges = tableRewrite.Privileges
 
-		// Check and set privileges.
-		{
-			parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, table.ParentID)
-			if err != nil {
-				return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
-			}
-
-			if err := p.CheckPrivilege(parentDB, privilege.CREATE); err != nil {
-				return err
-			}
-
-			// Default is to copy privs from restoring parent db, like CREATE TABLE.
-			// TODO(dt): Make this more configurable.
-			{
-				table.Privileges = parentDB.GetPrivileges()
-			}
-		}
-	}
-	return nil
-}
-
-// reassignTableIDs updates the tables being restored with new TableIDs reserved
-// in the restoring cluster, as well as fixing cross-table references to use the
-// new IDs. It returns a slice of TableRekeys which can be used to transform KV
-// data to reflect the ID remapping done in the descriptors.
-//
-// TODO(dan): For backward compatibility, KeyRewriter, which is a subset of the
-// information returned by the TableRekeys, is also returned. Remove this when
-// we can.
-func reassignTableIDs(
-	ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor, opt parser.KVOptions,
-) (
-	map[sqlbase.ID]sqlbase.ID,
-	*storageccl.KeyRewriter,
-	[]roachpb.ImportRequest_TableRekey,
-	error,
-) {
-	var newTableIDs map[sqlbase.ID]sqlbase.ID
-	var rekeys []roachpb.ImportRequest_TableRekey
-
-	newTableIDs = make(map[sqlbase.ID]sqlbase.ID, len(tables))
-	for _, table := range tables {
-		newTableID, err := sql.GenerateUniqueDescID(ctx, &db)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		newTableIDs[table.ID] = newTableID
-		oldID := table.ID
-		table.ID = newTableID
-
-		desc := sqlbase.Descriptor{
-			Union: &sqlbase.Descriptor_Table{Table: table},
-		}
-		newDescBytes, err := desc.Marshal()
-		if err != nil {
-			return nil, nil, nil, errors.Wrap(err, "marshalling descriptor")
-		}
-		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
-			OldID:   uint32(oldID),
-			NewDesc: newDescBytes,
-		})
-	}
-
-	if err := reassignReferencedTables(tables, newTableIDs, opt); err != nil {
-		return nil, nil, nil, err
-	}
-
-	kr, err := storageccl.MakeKeyRewriter(rekeys)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	return newTableIDs, kr, rekeys, nil
-}
-
-func reassignReferencedTables(
-	tables []*sqlbase.TableDescriptor, newTableIDs map[sqlbase.ID]sqlbase.ID, opt parser.KVOptions,
-) error {
-	for _, table := range tables {
 		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 			// Verify that for any interleaved index being restored, the interleave
 			// parent is also being restored. Otherwise, the interleave entries in the
@@ -191,28 +212,28 @@ func reassignReferencedTables(
 			// TODO(dan): It seems like this restriction could be lifted by restoring
 			// stub TableDescriptors for the missing interleave parents.
 			for j, a := range index.Interleave.Ancestors {
-				ancestorID, ok := newTableIDs[a.TableID]
+				ancestorRewrite, ok := tableRewrites[a.TableID]
 				if !ok {
 					return errors.Errorf(
 						"cannot restore table %q without interleave parent %d", table.Name, a.TableID,
 					)
 				}
-				index.Interleave.Ancestors[j].TableID = ancestorID
+				index.Interleave.Ancestors[j].TableID = ancestorRewrite.NewID
 			}
 			for j, c := range index.InterleavedBy {
-				childID, ok := newTableIDs[c.Table]
+				childRewrite, ok := tableRewrites[c.Table]
 				if !ok {
 					return errors.Errorf(
 						"cannot restore table %q without interleave child table %d", table.Name, c.Table,
 					)
 				}
-				index.InterleavedBy[j].Table = childID
+				index.InterleavedBy[j].Table = childRewrite.NewID
 			}
 
 			if index.ForeignKey.IsSet() {
 				to := index.ForeignKey.Table
-				if newID, ok := newTableIDs[to]; ok {
-					index.ForeignKey.Table = newID
+				if indexRewrite, ok := tableRewrites[to]; ok {
+					index.ForeignKey.Table = indexRewrite.NewID
 				} else {
 					if empty, ok := opt.Get(restoreOptSkipMissingFKs); ok {
 						if empty != "" {
@@ -235,8 +256,8 @@ func reassignReferencedTables(
 			origRefs := index.ReferencedBy
 			index.ReferencedBy = nil
 			for _, ref := range origRefs {
-				if newID, ok := newTableIDs[ref.Table]; ok {
-					ref.Table = newID
+				if refRewrite, ok := tableRewrites[ref.Table]; ok {
+					ref.Table = refRewrite.NewID
 					index.ReferencedBy = append(index.ReferencedBy, ref)
 				}
 			}
@@ -250,8 +271,8 @@ func reassignReferencedTables(
 		}
 
 		for i, dest := range table.DependsOn {
-			if newID, ok := newTableIDs[dest]; ok {
-				table.DependsOn[i] = newID
+			if depRewrite, ok := tableRewrites[dest]; ok {
+				table.DependsOn[i] = depRewrite.NewID
 			} else {
 				return errors.Errorf(
 					"cannot restore %q without restoring referenced table %d in same operation",
@@ -261,8 +282,8 @@ func reassignReferencedTables(
 		origRefs := table.DependedOnBy
 		table.DependedOnBy = nil
 		for _, ref := range origRefs {
-			if newID, ok := newTableIDs[ref.ID]; ok {
-				ref.ID = newID
+			if refRewrite, ok := tableRewrites[ref.ID]; ok {
+				ref.ID = refRewrite.NewID
 				table.DependedOnBy = append(table.DependedOnBy, ref)
 			}
 		}
@@ -271,6 +292,7 @@ func reassignReferencedTables(
 		// lease is obviously bogus (plus the nodeID is relative to backup cluster).
 		table.Lease = nil
 	}
+
 	return nil
 }
 
@@ -447,7 +469,9 @@ func makeImportSpans(
 // Write the new descriptors. First the ID -> TableDescriptor for the new table,
 // then flip (or initialize) the name -> ID entry so any new queries will use
 // the new one.
-func restoreTableDescs(ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor) error {
+func restoreTableDescs(
+	ctx context.Context, db *client.DB, tables []*sqlbase.TableDescriptor,
+) error {
 	ctx, span := tracing.ChildSpan(ctx, "restoreTableDescs")
 	defer tracing.FinishSpan(span)
 	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -493,82 +517,55 @@ func restoreJobDescription(restore *parser.Restore, from []string) (string, erro
 // files.
 func restore(
 	restoreCtx context.Context,
-	p sql.PlanHookState,
-	uris []string,
-	targets parser.TargetList,
+	db *client.DB,
+	gossip *gossip.Gossip,
+	backupDescs []BackupDescriptor,
+	sqlDescs []sqlbase.Descriptor,
+	tableRewrites map[sqlbase.ID]*jobs.RestoreTableRewrite,
 	opt parser.KVOptions,
 	job *jobs.Job,
 ) (roachpb.BulkOpSummary, error) {
-
-	db := *p.ExecCfg().DB
+	// A note about contexts and spans in this method: the top-level context
+	// `restoreCtx` is used for orchestration logging. All operations that carry
+	// out work get their individual contexts.
 
 	failed := roachpb.BulkOpSummary{}
 
-	if len(targets.Databases) > 0 {
-		return failed, errors.Errorf("RESTORE DATABASE is not yet supported " +
-			"(but you can use 'RESTORE somedb.*' to restore all backed up tables for a given DB).")
-	}
-
-	// A note about contexts and spans in this method: the top-level context
-	// `ctx` is used for orchestration logging. All operations that carry out
-	// work get their individual contexts.
-	initCtx, initSpan := tracing.ChildSpan(restoreCtx, "init")
-	defer func() {
-		tracing.FinishSpan(initSpan) // want late binding
-	}()
-
-	backupDescs, err := loadBackupDescs(initCtx, uris)
-	if err != nil {
-		return failed, err
-	}
-	lastBackupDesc := backupDescs[len(backupDescs)-1]
-
-	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
 	var tables []*sqlbase.TableDescriptor
-	{
-		// TODO(dan): Plumb the session database down.
-		sessionDatabase := ""
-		sqlDescs := lastBackupDesc.Descriptors
-		var err error
-		if sqlDescs, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
-			return failed, err
-		}
-		for _, desc := range sqlDescs {
-			if dbDesc := desc.GetDatabase(); dbDesc != nil {
-				databasesByID[dbDesc.ID] = dbDesc
-			} else if tableDesc := desc.GetTable(); tableDesc != nil {
-				tables = append(tables, tableDesc)
-			}
-		}
-		if len(tables) == 0 {
-			return failed, errors.Errorf("no tables found: %s", parser.AsString(targets))
+	var oldTableIDs []sqlbase.ID
+	for _, desc := range sqlDescs {
+		if tableDesc := desc.GetTable(); tableDesc != nil {
+			tables = append(tables, tableDesc)
+			oldTableIDs = append(oldTableIDs, tableDesc.ID)
 		}
 	}
 
 	log.Eventf(restoreCtx, "starting restore for %d tables", len(tables))
 
-	// Fail fast if the necessary databases don't exist since the below logic
-	// leaks table IDs when Restore fails.
-	if err := db.Txn(initCtx, func(txnCtx context.Context, txn *client.Txn) error {
-		return reassignParentIDs(txnCtx, txn, p, databasesByID, tables, opt)
-	}); err != nil {
-		return failed, err
-	}
-
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
 	spans := spansForAllTableIndexes(tables)
 
-	// Assign new IDs to the tables and update all references to use the new IDs,
-	// and get TableRekeys to use when importing their raw data.
-	//
-	// NB: we do this in a standalone transaction, not one that covers the entire
-	// restore since restarts would be terrible (and our bulk import primitive
-	// are non-transactional), but this does mean if something fails during Import,
-	// we've "leaked" the IDs, in that the generator will have been incremented.
-	newTableIDs, kr, rekeys, err := reassignTableIDs(initCtx, db, tables, opt)
+	// Assign new IDs and privileges to the tables, and update all references to
+	// use the new IDs.
+	if err := rewriteTableDescs(tables, tableRewrites, opt); err != nil {
+		return failed, err
+	}
+
+	// Get TableRekeys to use when importing raw data.
+	var rekeys []roachpb.ImportRequest_TableRekey
+	for i := range tables {
+		newDescBytes, err := sqlbase.WrapDescriptor(tables[i]).Marshal()
+		if err != nil {
+			return failed, errors.Wrap(err, "marshalling descriptor")
+		}
+		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
+			OldID:   uint32(oldTableIDs[i]),
+			NewDesc: newDescBytes,
+		})
+	}
+	kr, err := storageccl.MakeKeyRewriter(rekeys)
 	if err != nil {
-		// We expect user-facing usage errors here, so don't wrapf.
 		return failed, err
 	}
 
@@ -579,18 +576,15 @@ func restore(
 		return failed, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
-	for _, desc := range newTableIDs {
-		job.Record.DescriptorIDs = append(job.Record.DescriptorIDs, desc)
+	for _, tableRewrite := range tableRewrites {
+		job.Record.DescriptorIDs = append(job.Record.DescriptorIDs, tableRewrite.NewID)
 	}
-	if err := job.Created(initCtx); err != nil {
+	if err := job.Created(restoreCtx); err != nil {
 		return failed, err
 	}
-	if err := job.Started(initCtx); err != nil {
+	if err := job.Started(restoreCtx); err != nil {
 		return failed, err
 	}
-
-	tracing.FinishSpan(initSpan)
-	initCtx, initSpan = nil, nil
 
 	mu := struct {
 		syncutil.Mutex
@@ -635,7 +629,7 @@ func restore(
 	// TODO(dan): Make this limiting per node.
 	//
 	// TODO(dan): See if there's some better solution than rate-limiting #14798.
-	maxConcurrentImports := clusterNodeCount(p.ExecCfg().Gossip) * runtime.NumCPU()
+	maxConcurrentImports := clusterNodeCount(gossip) * runtime.NumCPU()
 	importsSem := make(chan struct{}, maxConcurrentImports)
 
 	log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
@@ -819,6 +813,18 @@ func restorePlanHook(
 		if err != nil {
 			return nil, err
 		}
+		backupDescs, err := loadBackupDescs(ctx, from)
+		if err != nil {
+			return nil, err
+		}
+		sqlDescs, err := selectTargets(ctx, backupDescs, restoreStmt.Targets)
+		if err != nil {
+			return nil, err
+		}
+		tableRewrites, err := makeTableRewrites(ctx, p, sqlDescs, restoreStmt.Options)
+		if err != nil {
+			return nil, err
+		}
 		description, err := restoreJobDescription(restoreStmt, from)
 		if err != nil {
 			return nil, err
@@ -830,9 +836,11 @@ func restorePlanHook(
 		})
 		res, err := restore(
 			ctx,
-			p,
-			from,
-			restoreStmt.Targets,
+			p.ExecCfg().DB,
+			p.ExecCfg().Gossip,
+			backupDescs,
+			sqlDescs,
+			tableRewrites,
 			restoreStmt.Options,
 			job,
 		)
