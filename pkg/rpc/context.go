@@ -230,9 +230,9 @@ func NewContext(
 }
 
 // GetLocalInternalServerForAddr returns the context's internal batch server
-// for addr, if it exists.
-func (ctx *Context) GetLocalInternalServerForAddr(addr string) roachpb.InternalServer {
-	if addr == ctx.Addr {
+// for target, if it exists.
+func (ctx *Context) GetLocalInternalServerForAddr(target string) roachpb.InternalServer {
+	if target == ctx.Addr {
 		return ctx.localInternalServer
 	}
 	return nil
@@ -385,18 +385,18 @@ var ErrNotHeartbeated = errors.New("not yet heartbeated")
 // ConnHealth returns whether the most recent heartbeat succeeded or not.
 // This should not be used as a definite status of a node's health and just used
 // to prioritize healthy nodes over unhealthy ones.
-func (ctx *Context) ConnHealth(remoteAddr string) error {
-	if remoteAddr == ctx.Addr {
+func (ctx *Context) ConnHealth(target string) error {
+	if ctx.GetLocalInternalServerForAddr(target) != nil {
 		// The local server is always considered healthy.
 		return nil
 	}
-	if value, ok := ctx.conns.Load(remoteAddr); ok {
+	if value, ok := ctx.conns.Load(target); ok {
 		return value.(*connMeta).heartbeatErr.Load().(errValue).error
 	}
 	return ErrNotConnected
 }
 
-func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
+func (ctx *Context) runHeartbeat(meta *connMeta, target string) error {
 	maxOffset := ctx.LocalClock.MaxOffset()
 
 	request := PingRequest{
@@ -463,7 +463,7 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 				remoteTimeNow := time.Unix(0, response.ServerTime).Add(pingDuration / 2)
 				request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 			}
-			ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, remoteAddr, request.Offset, pingDuration)
+			ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, target, request.Offset, pingDuration)
 
 			if cb := ctx.HeartbeatCB; cb != nil {
 				cb()
