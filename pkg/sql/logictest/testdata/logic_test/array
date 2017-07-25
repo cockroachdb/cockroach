@@ -27,7 +27,7 @@ SELECT ARRAY['a,', 'b{', 'c}', 'd', 'e f']
 query TTTTTTT
 SELECT '', 'NULL', 'Null', 'null', NULL, '"', e'\''
 ----
-  NULL Null null NULL " '
+·  NULL  Null  null  NULL  "  '
 
 query T
 SELECT ARRAY['', 'NULL', 'Null', 'null', NULL, '"', e'\'']
