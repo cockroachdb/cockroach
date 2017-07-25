@@ -1587,8 +1587,7 @@ x 3 2 three -3
 x 5 0 five -5
 x 5 0 five -5
 
-# TODO: remove valuesort
-query TIITI valuesort
+query TIITI rowsort
 SELECT 'x' AS "xxx", * FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, b) USING (b) ORDER BY b, t1.a
 ----
 x 0 5 five NULL
@@ -1667,8 +1666,7 @@ x 4 1 four 2 4
 x 0 NULL zero 2 4
 x 0 NULL zero NULL 0
 
-# TODO: remove valuesort
-query TIITI valuesort
+query TIITI rowsort
 SELECT 'x' AS "xxx", * FROM J1_TBL LEFT OUTER JOIN J2_TBL USING (i) ORDER BY i, k, t
 ----
 x 0 NULL zero NULL
@@ -1685,8 +1683,7 @@ x 8 8 eight NULL
 x NULL NULL null NULL
 x NULL 0 zero NULL
 
-# TODO: remove valuesort
-query TIITI valuesort
+query TIITI rowsort
 SELECT 'x' AS "xxx", * FROM J1_TBL LEFT JOIN J2_TBL USING (i) ORDER BY i, k, t
 ----
 x 0 NULL zero NULL
@@ -1729,8 +1726,7 @@ x 5 0 five -5
 x NULL NULL NULL NULL
 x NULL NULL NULL 0
 
-# TODO: remove valuesort
-query TIITI valuesort
+query TIITI rowsort
 SELECT 'x' AS "xxx", * FROM J1_TBL FULL OUTER JOIN J2_TBL USING (i) ORDER BY i, k, t
 ----
 x 0 NULL zero NULL
@@ -1749,8 +1745,7 @@ x NULL NULL null NULL
 x NULL 0 zero NULL
 x NULL NULL NULL NULL
 
-# TODO: remove valuesort
-query TIITI valuesort
+query TIITI rowsort
 SELECT 'x' AS "xxx", * FROM J1_TBL FULL JOIN J2_TBL USING (i) ORDER BY i, k, t
 ----
 x 0 NULL zero NULL
