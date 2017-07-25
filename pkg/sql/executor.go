@@ -304,6 +304,15 @@ type ExecutorTestingKnobs struct {
 	// and normal preparation is short-circuited.
 	BeforePrepare func(ctx context.Context, stmt string, planner *planner) (*PreparedStatement, error)
 
+	// BeforeExecute is called by the Executor before plan execution. It is useful
+	// for synchronizing statement execution, such as with parallel statemets.
+	BeforeExecute func(ctx context.Context, stmt string, isDistributed bool)
+
+	// AfterExecute is like StatementFilter, but it runs in the same goroutine of the
+	// statement. Note that this function gets the actual execution error/result
+	// which could differ from the result the client got (such as in the parallel case).
+	AfterExecute func(ctx context.Context, stmt string, res *Result, err error)
+
 	// DisableAutoCommit, if set, disables the auto-commit functionality of some
 	// SQL statements. That functionality allows some statements to commit
 	// directly when they're executed in an implicit SQL txn, without waiting for
@@ -369,8 +378,7 @@ func (r *QueryRegistry) Cancel(queryIDStr string, username string) (bool, error)
 			return false, fmt.Errorf("query ID %s not found", queryID)
 		}
 
-		// Atomically set isCancelled to 1
-		atomic.StoreInt32(&queryMeta.isCancelled, 1)
+		queryMeta.cancel()
 
 		return true, nil
 	}
@@ -1102,9 +1110,16 @@ func (e *Executor) execStmtsInCurrentTxn(
 		stmt.queryID = queryID
 		stmt.queryMeta = queryMeta
 
-		// TODO(itsbilal): Fork a statement-specific context here, that gets cancelled
-		// upon request by user.
-		queryMeta.ctx = session.Ctx()
+		// Cancelling a query cancels its transaction's context. Copy reference to
+		// txn context and its cancellation function here.
+		//
+		// TODO(itsbilal): Ideally we'd like to fork off a context for each individual
+		// statement. But the heartbeat loop in TxnCoordSender currently assumes that the context of the
+		// first operation in a txn batch lasts at least as long as the transaction itself. Once that
+		// sender is able to distinguish between statement and transaction contexts, queryMeta could
+		// move to per-statement contexts.
+		queryMeta.ctx = txnState.Ctx
+		queryMeta.ctxCancel = txnState.cancel
 
 		session.addActiveQuery(queryID, queryMeta)
 		defer session.removeActiveQuery(queryID)
@@ -1150,7 +1165,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
-			filter(queryMeta.ctx, stmt.String(), &res)
+			filter(session.Ctx(), stmt.String(), &res)
 		}
 		results = append(results, res)
 		if err != nil {
@@ -1641,7 +1656,7 @@ func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, er
 // runs it.
 func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
-	ctx := planner.stmt.queryMeta.ctx
+	ctx := planner.session.Ctx()
 	recv, err := makeDistSQLReceiver(
 		ctx, result.Rows,
 		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
@@ -1669,7 +1684,7 @@ func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) 
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) error {
-	ctx := planner.stmt.queryMeta.ctx
+	ctx := planner.session.Ctx()
 	rowAcc := planner.evalCtx.Mon.MakeBoundAccount()
 	planner.evalCtx.ActiveMemAcc = &rowAcc
 	// We enclose this in a func because in the parser.Rows case we swap out the
@@ -1801,7 +1816,7 @@ func (e *Executor) execStmt(
 	stmt Statement, planner *planner, automaticRetryCount int, mockResults bool,
 ) (Result, error) {
 	session := planner.session
-	ctx := planner.stmt.queryMeta.ctx
+	ctx := session.Ctx()
 
 	planner.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
 	plan, err := planner.makePlan(ctx, stmt)
@@ -1823,6 +1838,10 @@ func (e *Executor) execStmt(
 		return Result{}, err
 	}
 
+	if e.cfg.TestingKnobs.BeforeExecute != nil {
+		e.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), useDistSQL)
+	}
+
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	session.setQueryExecutionMode(stmt.queryID, useDistSQL)
 	if useDistSQL {
@@ -1834,6 +1853,9 @@ func (e *Executor) execStmt(
 	e.recordStatementSummary(
 		planner, stmt, useDistSQL, automaticRetryCount, result, err,
 	)
+	if e.cfg.TestingKnobs.AfterExecute != nil {
+		e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), &result, err)
+	}
 	if err != nil {
 		result.Close(ctx)
 		return Result{}, err
@@ -1875,10 +1897,17 @@ func (e *Executor) execStmtInParallel(stmt Statement, planner *planner) (Result,
 		}
 		defer result.Close(ctx)
 
+		if e.cfg.TestingKnobs.BeforeExecute != nil {
+			e.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), false /* isDistributed */)
+		}
+
 		planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 		err = e.execClassic(planner, plan, &result)
 		planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 		e.recordStatementSummary(planner, stmt, false, 0, result, err)
+		if e.cfg.TestingKnobs.AfterExecute != nil {
+			e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), &result, err)
+		}
 		return err
 	})
 	return mockResult, nil
