@@ -580,7 +580,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	defer func(oldInterval time.Duration) {
 		sqlccl.BackupCheckpointInterval = oldInterval
 	}(sqlccl.BackupCheckpointInterval)
-	sqlccl.BackupCheckpointInterval = time.Millisecond
+	sqlccl.BackupCheckpointInterval = 0
 
 	var checkpointPath string
 
