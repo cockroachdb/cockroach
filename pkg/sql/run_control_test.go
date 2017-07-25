@@ -76,3 +76,50 @@ func TestCancelSelectQuery(t *testing.T) {
 	}
 
 }
+
+func TestCancelSelectTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const transactionToCancel = "CREATE DATABASE txn; CREATE TABLE txn.cancel AS SELECT * FROM generate_series(1,20000000)"
+
+	var conn1 *gosql.DB
+	var conn2 *gosql.DB
+
+	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	conn1 = tc.ServerConn(0)
+	conn2 = tc.ServerConn(1)
+
+	sem := make(chan struct{})
+	errChan := make(chan error)
+
+	go func() {
+		sem <- struct{}{}
+		_, err := conn2.Query(transactionToCancel)
+		if err != nil {
+			errChan <- err
+		}
+	}()
+
+	<-sem
+	time.Sleep(time.Second * 2)
+
+	const cancelTransaction = "CANCEL TRANSACTION (SELECT left(kv_txn, 8) FROM [SHOW CLUSTER SESSIONS] WHERE node_id = 2)"
+
+	if _, err := conn1.Exec(cancelTransaction); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-errChan:
+		if !strings.Contains(err.Error(), "query execution cancelled") {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second * 5):
+		t.Fatal("no error received from query supposed to be cancelled")
+	}
+}
