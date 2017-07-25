@@ -127,10 +127,20 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 	leftReturn := leftTyped.ResolvedType()
 	rightReturn := rightTyped.ResolvedType()
 
-	// Return NULL if at least one overload is possible and NULL is an argument.
-	if len(fns) > 0 {
-		if leftReturn == TypeNull || rightReturn == TypeNull {
-			return DNull, nil
+	// Return NULL if at least one overload is possible, NULL is an argument,
+	// and none of the overloads accept NULL.
+	if leftReturn == TypeNull || rightReturn == TypeNull {
+		if len(fns) > 0 {
+			noneAcceptNull := true
+			for _, e := range fns {
+				if e.(BinOp).nullableArgs {
+					noneAcceptNull = false
+					break
+				}
+			}
+			if noneAcceptNull {
+				return DNull, nil
+			}
 		}
 	}
 
