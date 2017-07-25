@@ -142,7 +142,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	cfg.DB = client.NewDB(sender, cfg.Clock)
 	store := NewStore(*cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 	sender.store = store
-	if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+	if err := store.Bootstrap(context.TODO(), roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.BootstrapRange(nil); err != nil {
@@ -182,7 +182,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	// We need a fixed clock to avoid LastUpdateNanos drifting on us.
 	cfg := TestStoreConfig(hlc.NewClock(func() int64 { return 123 }, time.Nanosecond))
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	ctx := context.TODO()
+	defer stopper.Stop(ctx)
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport()
@@ -190,12 +191,12 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	{
 		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		// Can't start as haven't bootstrapped.
-		if err := store.Start(context.Background(), stopper); err == nil {
+		if err := store.Start(ctx, stopper); err == nil {
 			t.Error("expected failure starting un-bootstrapped store")
 		}
 
 		// Bootstrap with a fake ident.
-		if err := store.Bootstrap(testIdent); err != nil {
+		if err := store.Bootstrap(ctx, testIdent); err != nil {
 			t.Errorf("error bootstrapping store: %s", err)
 		}
 
@@ -203,7 +204,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		if err := eng.Flush(); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := ReadStoreIdent(context.Background(), eng); err != nil {
+		if _, err := ReadStoreIdent(ctx, eng); err != nil {
 			t.Fatalf("unable to read store ident: %s", err)
 		}
 
@@ -221,7 +222,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	// Now, attempt to initialize a store with a now-bootstrapped range.
 	{
 		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
-		if err := store.Start(context.Background(), stopper); err != nil {
+		if err := store.Start(ctx, stopper); err != nil {
 			t.Fatalf("failure initializing bootstrapped store: %s", err)
 		}
 		// 1st range should be available.
@@ -246,7 +247,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	ctx := context.TODO()
+	defer stopper.Stop(ctx)
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
 
@@ -259,14 +261,14 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
-	switch err := errors.Cause(store.Start(context.Background(), stopper)); err.(type) {
+	switch err := errors.Cause(store.Start(ctx, stopper)); err.(type) {
 	case *NotBootstrappedError:
 	default:
 		t.Errorf("unexpected error initializing un-bootstrapped store: %v", err)
 	}
 
 	// Bootstrap should fail on non-empty engine.
-	switch err := errors.Cause(store.Bootstrap(testIdent)); err.(type) {
+	switch err := errors.Cause(store.Bootstrap(ctx, testIdent)); err.(type) {
 	case *NotBootstrappedError:
 	default:
 		t.Errorf("unexpected error bootstrapping non-empty store: %v", err)
@@ -2076,7 +2078,8 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	ctx := context.TODO()
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 	s := tc.store
 
@@ -2093,7 +2096,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := s.RemoveReplica(context.Background(), repl1, *repl1.Desc(), true); err != nil {
+	if err := s.RemoveReplica(ctx, repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -2130,7 +2133,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test that simple deletion works.
-	if !s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID) {
+	if !s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID) {
 		t.Fatalf("could not remove placeholder that was present")
 	}
 
@@ -2143,10 +2146,10 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test cannot double delete a placeholder.
-	if !s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID) {
+	if !s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID) {
 		t.Fatalf("could not remove placeholder that was present")
 	}
-	if s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID) {
+	if s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID) {
 		t.Fatalf("successfully removed placeholder that was not present")
 	}
 
@@ -2165,7 +2168,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test that Placeholder deletion doesn't delete replicas.
-	if s.removePlaceholderLocked(repID) {
+	if s.removePlaceholderLocked(ctx, repID) {
 		t.Fatalf("should not be able to process removeReplicaPlaceholder for a RangeID where a Replica exists")
 	}
 }
@@ -2367,7 +2370,8 @@ func TestRemovedReplicaTombstone(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			tc := testContext{}
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.TODO())
+			ctx := context.TODO()
+			defer stopper.Stop(ctx)
 			tc.Start(t, stopper)
 			s := tc.store
 
@@ -2400,7 +2404,7 @@ func TestRemovedReplicaTombstone(t *testing.T) {
 						RangeID:       rangeID,
 						NextReplicaID: c.descNextReplicaID,
 					}
-					errChan <- s.RemoveReplica(context.Background(), repl1, desc, true)
+					errChan <- s.RemoveReplica(ctx, repl1, desc, true)
 				}()
 
 				time.Sleep(1 * time.Millisecond)
@@ -2417,7 +2421,7 @@ func TestRemovedReplicaTombstone(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, created, err := s.getOrCreateReplica(rangeID, c.createReplicaID, &creatingReplica)
+			_, created, err := s.getOrCreateReplica(ctx, rangeID, c.createReplicaID, &creatingReplica)
 			if created != c.expectCreated {
 				t.Errorf("expected s.getOrCreateReplica(%d, %d, %v).created=%v, got %v",
 					rangeID, c.createReplicaID, creatingReplica, c.expectCreated, created)

@@ -153,8 +153,9 @@ func createTestStoreWithEngine(
 	storeCfg.Transport = storage.NewDummyRaftTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(storeCfg, eng, nodeDesc)
+	ctx := context.Background()
 	if bootstrap {
-		if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+		if err := store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -165,13 +166,13 @@ func createTestStoreWithEngine(
 			t.Fatal(err)
 		}
 	}
-	if err := store.Start(context.Background(), stopper); err != nil {
+	if err := store.Start(ctx, stopper); err != nil {
 		t.Fatal(err)
 	}
 
 	// Connect to gossip and gossip the store's capacity.
 	<-store.Gossip().Connected
-	if err := store.GossipStore(context.Background()); err != nil {
+	if err := store.GossipStore(ctx); err != nil {
 		t.Fatal(err)
 	}
 	// Wait for the store's single range to have quorum before proceeding.
@@ -741,8 +742,9 @@ func (m *multiTestContext) addStore(idx int) {
 	cfg.StorePool = m.storePools[idx]
 
 	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
+	ctx := context.Background()
 	if needBootstrap {
-		if err := store.Bootstrap(roachpb.StoreIdent{
+		if err := store.Bootstrap(ctx, roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
 		}); err != nil {
@@ -803,7 +805,7 @@ func (m *multiTestContext) addStore(idx int) {
 
 	m.gossips[idx].Start(ln.Addr(), resolvers)
 
-	if err := store.Start(context.Background(), stopper); err != nil {
+	if err := store.Start(ctx, stopper); err != nil {
 		m.t.Fatal(err)
 	}
 	if err := m.gossipNodeDesc(m.gossips[idx], nodeID); err != nil {
@@ -811,7 +813,7 @@ func (m *multiTestContext) addStore(idx int) {
 	}
 	store.WaitForInit()
 
-	m.nodeLivenesses[idx].StartHeartbeat(context.Background(), stopper, func(ctx context.Context) {
+	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, func(ctx context.Context) {
 		now := m.clock.Now()
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
 			log.Warning(ctx, err)
@@ -973,7 +975,7 @@ func (m *multiTestContext) restart() {
 func (m *multiTestContext) changeReplicasLocked(
 	rangeID roachpb.RangeID, dest int, changeType roachpb.ReplicaChangeType,
 ) (roachpb.ReplicaID, error) {
-	ctx := context.TODO()
+	ctx := context.Background()
 	startKey := m.findStartKeyLocked(rangeID)
 
 	// Perform a consistent read to get the updated range descriptor (as
