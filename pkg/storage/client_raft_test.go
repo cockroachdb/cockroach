@@ -1829,26 +1829,28 @@ func TestRaftHeartbeats(t *testing.T) {
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
+
+	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(1, 1, 2)
 
 	// Capture the initial term and state.
 	leaderIdx := -1
 	for i, store := range mtc.stores {
-		if store.RaftStatus(1).SoftState.RaftState == raft.StateLeader {
+		if store.RaftStatus(rangeID).SoftState.RaftState == raft.StateLeader {
 			leaderIdx = i
 			break
 		}
 	}
-	initialTerm := mtc.stores[leaderIdx].RaftStatus(1).Term
+	initialTerm := mtc.stores[leaderIdx].RaftStatus(rangeID).Term
 
 	// Wait for several ticks to elapse.
-	ticksToWait := 2 * mtc.makeStoreConfig(0).RaftElectionTimeoutTicks
+	ticksToWait := 2 * mtc.makeStoreConfig(leaderIdx).RaftElectionTimeoutTicks
 	ticks := mtc.stores[leaderIdx].Metrics().RaftTicks.Count
 	for targetTicks := ticks() + int64(ticksToWait); ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
 	}
 
-	status := mtc.stores[leaderIdx].RaftStatus(1)
+	status := mtc.stores[leaderIdx].RaftStatus(rangeID)
 	if status.SoftState.RaftState != raft.StateLeader {
 		t.Errorf("expected node %d to be leader after sleeping but was %s", leaderIdx, status.SoftState.RaftState)
 	}
@@ -1866,16 +1868,17 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
-	mtc.replicateRange(1, 1, 2)
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2)
 
 	leaderIdx := -1
 	for i, store := range mtc.stores {
-		if store.RaftStatus(1).SoftState.RaftState == raft.StateLeader {
+		if store.RaftStatus(rangeID).SoftState.RaftState == raft.StateLeader {
 			leaderIdx = i
 			break
 		}
 	}
-	initialTerm := mtc.stores[leaderIdx].RaftStatus(1).Term
+	initialTerm := mtc.stores[leaderIdx].RaftStatus(rangeID).Term
 	// Choose a follower index that is guaranteed to not be the leader.
 	followerIdx := (leaderIdx + 1) % len(mtc.stores)
 
@@ -1888,7 +1891,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// Send a command to ensure Raft is aware of lost follower so that it won't
 	// quiesce (which would prevent heartbeats).
 	if _, err := client.SendWrappedWith(
-		context.Background(), rg1(mtc.stores[0]), roachpb.Header{RangeID: 1},
+		context.Background(), rg1(mtc.stores[0]), roachpb.Header{RangeID: rangeID},
 		incrementArgs(roachpb.Key("a"), 1)); err != nil {
 		t.Fatal(err)
 	}
@@ -1901,7 +1904,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 
 	// Ensure that the leadership has not changed, to confirm that heartbeats
 	// are sent to the store with a functioning transport.
-	status := mtc.stores[leaderIdx].RaftStatus(1)
+	status := mtc.stores[leaderIdx].RaftStatus(rangeID)
 	if status.SoftState.RaftState != raft.StateLeader {
 		t.Errorf("expected node %d to be leader after sleeping but was %s", leaderIdx, status.SoftState.RaftState)
 	}
@@ -2101,7 +2104,6 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		StoreID:   mtc.stores[2].StoreID(),
 	}
 	mtc.transport.SendAsync(&storage.RaftMessageRequest{
-		RangeID:     0,
 		ToReplica:   replica1,
 		FromReplica: replica2,
 		Heartbeats: []storage.RaftHeartbeat{
@@ -2301,7 +2303,6 @@ func TestReplicaGCRace(t *testing.T) {
 	}
 
 	hbReq := storage.RaftMessageRequest{
-		RangeID:     0,
 		FromReplica: fromReplicaDesc,
 		ToReplica:   toReplicaDesc,
 		Heartbeats: []storage.RaftHeartbeat{
@@ -3381,7 +3382,8 @@ func TestRangeQuiescence(t *testing.T) {
 	pauseNodeLivenessHeartbeats(mtc, true)
 
 	// Replica range 1 to all 3 nodes.
-	mtc.replicateRange(1, 1, 2)
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2)
 
 	waitForQuiescence := func(rangeID roachpb.RangeID) {
 		testutils.SucceedsSoon(t, func() error {
@@ -3399,7 +3401,7 @@ func TestRangeQuiescence(t *testing.T) {
 	}
 
 	// Wait for the range to quiesce.
-	waitForQuiescence(1)
+	waitForQuiescence(rangeID)
 
 	// Find the leader replica.
 	var rep *storage.Replica
@@ -3417,7 +3419,7 @@ func TestRangeQuiescence(t *testing.T) {
 	// Unquiesce a follower range, this should "wake the leader" and not result
 	// in an election.
 	followerIdx := (leaderIdx + 1) % len(mtc.stores)
-	mtc.stores[followerIdx].EnqueueRaftUpdateCheck(1)
+	mtc.stores[followerIdx].EnqueueRaftUpdateCheck(rangeID)
 
 	// Wait for a bunch of ticks to occur which will allow the follower time to
 	// campaign.
@@ -3427,7 +3429,7 @@ func TestRangeQuiescence(t *testing.T) {
 	}
 
 	// Wait for the range to quiesce again.
-	waitForQuiescence(1)
+	waitForQuiescence(rangeID)
 
 	// The leadership should not have changed.
 	if state := rep.RaftStatus().SoftState.RaftState; state != raft.StateLeader {
