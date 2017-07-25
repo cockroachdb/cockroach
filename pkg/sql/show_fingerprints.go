@@ -129,7 +129,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		// if they're different types.
 		switch col.Type.SemanticType {
 		case sqlbase.ColumnType_BYTES:
-			cols = append(cols, fmt.Sprintf("%s:::bytes", col.Name))
+			cols = append(cols, fmt.Sprintf("%s:::bytes", parser.Name(col.Name).String()))
 		default:
 			cols = append(cols, fmt.Sprintf("%s::string::bytes", parser.Name(col.Name).String()))
 		}
