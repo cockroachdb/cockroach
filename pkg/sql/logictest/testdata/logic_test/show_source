@@ -20,14 +20,14 @@ query TT colnames
 SELECT * FROM [SHOW ALL]
 ----
 variable                       value
-application_name
+application_name               ·
 client_encoding                UTF8
-client_min_messages
+client_min_messages            ·
 database                       test
 datestyle                      ISO
 default_transaction_isolation  SERIALIZABLE
 distsql                        off
-extra_float_digits
+extra_float_digits             ·
 max_index_keys                 32
 node_id                        1
 search_path                    pg_catalog
@@ -50,7 +50,7 @@ query TTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE name != 'diagnostics.reporting.enabled'
 ----
 name                                               current_value  type  description
-cluster.organization                                              s     organization name
+cluster.organization                               ·              s     organization name
 diagnostics.reporting.interval                     1h0m0s         d     interval at which diagnostics data should be reported
 diagnostics.reporting.report_metrics               true           b     enable collection and reporting diagnostic metrics to cockroach labs
 diagnostics.reporting.send_crash_reports           true           b     send crash and panic reports
@@ -76,8 +76,8 @@ sql.trace.log_statement_execute                    false          b     set to t
 sql.trace.session_eventlog.enabled                 false          b     set to true to enable session tracing
 sql.trace.txn.enable_threshold                     0s             d     duration beyond which all transactions are traced (set to 0 to disable)
 trace.debug.enable                                 false          b     if set, traces for recent requests can be seen in the /debug page
-trace.lightstep.token                                             s     if set, traces go to Lightstep using this token
-trace.zipkin.collector                                            s     if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.
+trace.lightstep.token                              ·              s     if set, traces go to Lightstep using this token
+trace.zipkin.collector                             ·              s     if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.
 
 
 
@@ -146,8 +146,8 @@ zones
 query ITTTT colnames
 SELECT node_id,username,application_name,active_queries,kv_txn FROM [SHOW SESSIONS]
 ----
-node_id   username   application_name  active_queries                                                                                       kv_txn
-1         root                         SELECT node_id, username, application_name, active_queries, kv_txn FROM [SHOW CLUSTER SESSIONS];     NULL
+node_id  username  application_name  active_queries                                                                                     kv_txn
+1        root      ·                 SELECT node_id, username, application_name, active_queries, kv_txn FROM [SHOW CLUSTER SESSIONS];   NULL
 
 query ITT colnames
 SELECT node_id, username, query FROM [SHOW QUERIES]

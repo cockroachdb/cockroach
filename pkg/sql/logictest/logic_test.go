@@ -1287,6 +1287,10 @@ func (t *logicTest) execQuery(query logicQuery) error {
 						val = str
 					}
 				}
+				// Empty strings are rendered as "·" (middle dot)
+				if val == "" {
+					val = "·"
+				}
 				// We split string results on whitespace and append a separate result
 				// for each string. A bit unusual, but otherwise we can't match strings
 				// containing whitespace.
