@@ -39,15 +39,22 @@ type AuthorizationAccessor interface {
 
 var _ AuthorizationAccessor = &planner{}
 
+// CheckPrivilege verifies that `user`` has `privilege` on `descriptor`.
+func CheckPrivilege(
+	user string, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+) error {
+	if descriptor.GetPrivileges().CheckPrivilege(user, privilege) {
+		return nil
+	}
+	return fmt.Errorf("user %s does not have %s privilege on %s %s",
+		user, privilege, descriptor.TypeName(), descriptor.GetName())
+}
+
 // CheckPrivilege implements the AuthorizationAccessor interface.
 func (p *planner) CheckPrivilege(
 	descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
-	if descriptor.GetPrivileges().CheckPrivilege(p.session.User, privilege) {
-		return nil
-	}
-	return fmt.Errorf("user %s does not have %s privilege on %s %s",
-		p.session.User, privilege, descriptor.TypeName(), descriptor.GetName())
+	return CheckPrivilege(p.session.User, descriptor, privilege)
 }
 
 // anyPrivilege implements the AuthorizationAccessor interface.
