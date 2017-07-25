@@ -10868,6 +10868,609 @@ export namespace cockroach {
                  */
                 public problemRanges(request: (cockroach.server.serverpb.ProblemRangesRequest|{ [k: string]: any }), callback: Status_problemRanges_Callback): void;
             }
+
+            type UserLoginRequest$Properties = {
+                username?: string;
+                password?: string;
+            };
+
+            /**
+             * Constructs a new UserLoginRequest.
+             * @exports cockroach.server.serverpb.UserLoginRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.UserLoginRequest$Properties=} [properties] Properties to set
+             */
+            class UserLoginRequest {
+
+                /**
+                 * Constructs a new UserLoginRequest.
+                 * @exports cockroach.server.serverpb.UserLoginRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.UserLoginRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.UserLoginRequest$Properties);
+
+                /**
+                 * UserLoginRequest username.
+                 * @type {string}
+                 */
+                public username: string;
+
+                /**
+                 * UserLoginRequest password.
+                 * @type {string}
+                 */
+                public password: string;
+
+                /**
+                 * Creates a new UserLoginRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.UserLoginRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.UserLoginRequest} UserLoginRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.UserLoginRequest$Properties): cockroach.server.serverpb.UserLoginRequest;
+
+                /**
+                 * Encodes the specified UserLoginRequest message. Does not implicitly {@link cockroach.server.serverpb.UserLoginRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLoginRequest$Properties} message UserLoginRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.UserLoginRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified UserLoginRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.UserLoginRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLoginRequest$Properties} message UserLoginRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.UserLoginRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a UserLoginRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.UserLoginRequest} UserLoginRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.UserLoginRequest;
+
+                /**
+                 * Decodes a UserLoginRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.UserLoginRequest} UserLoginRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.UserLoginRequest;
+
+                /**
+                 * Verifies a UserLoginRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a UserLoginRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLoginRequest} UserLoginRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.UserLoginRequest;
+
+                /**
+                 * Creates a UserLoginRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.UserLoginRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLoginRequest} UserLoginRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.UserLoginRequest;
+
+                /**
+                 * Creates a plain object from a UserLoginRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.UserLoginRequest} message UserLoginRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.UserLoginRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this UserLoginRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this UserLoginRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type UserLoginResponse$Properties = {};
+
+            /**
+             * Constructs a new UserLoginResponse.
+             * @exports cockroach.server.serverpb.UserLoginResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.UserLoginResponse$Properties=} [properties] Properties to set
+             */
+            class UserLoginResponse {
+
+                /**
+                 * Constructs a new UserLoginResponse.
+                 * @exports cockroach.server.serverpb.UserLoginResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.UserLoginResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.UserLoginResponse$Properties);
+
+                /**
+                 * Creates a new UserLoginResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.UserLoginResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.UserLoginResponse} UserLoginResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.UserLoginResponse$Properties): cockroach.server.serverpb.UserLoginResponse;
+
+                /**
+                 * Encodes the specified UserLoginResponse message. Does not implicitly {@link cockroach.server.serverpb.UserLoginResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLoginResponse$Properties} message UserLoginResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.UserLoginResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified UserLoginResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.UserLoginResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLoginResponse$Properties} message UserLoginResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.UserLoginResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a UserLoginResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.UserLoginResponse} UserLoginResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.UserLoginResponse;
+
+                /**
+                 * Decodes a UserLoginResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.UserLoginResponse} UserLoginResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.UserLoginResponse;
+
+                /**
+                 * Verifies a UserLoginResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a UserLoginResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLoginResponse} UserLoginResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.UserLoginResponse;
+
+                /**
+                 * Creates a UserLoginResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.UserLoginResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLoginResponse} UserLoginResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.UserLoginResponse;
+
+                /**
+                 * Creates a plain object from a UserLoginResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.UserLoginResponse} message UserLoginResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.UserLoginResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this UserLoginResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this UserLoginResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type UserLogoutRequest$Properties = {};
+
+            /**
+             * Constructs a new UserLogoutRequest.
+             * @exports cockroach.server.serverpb.UserLogoutRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.UserLogoutRequest$Properties=} [properties] Properties to set
+             */
+            class UserLogoutRequest {
+
+                /**
+                 * Constructs a new UserLogoutRequest.
+                 * @exports cockroach.server.serverpb.UserLogoutRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.UserLogoutRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.UserLogoutRequest$Properties);
+
+                /**
+                 * Creates a new UserLogoutRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.UserLogoutRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.UserLogoutRequest} UserLogoutRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.UserLogoutRequest$Properties): cockroach.server.serverpb.UserLogoutRequest;
+
+                /**
+                 * Encodes the specified UserLogoutRequest message. Does not implicitly {@link cockroach.server.serverpb.UserLogoutRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLogoutRequest$Properties} message UserLogoutRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.UserLogoutRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified UserLogoutRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.UserLogoutRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLogoutRequest$Properties} message UserLogoutRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.UserLogoutRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a UserLogoutRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.UserLogoutRequest} UserLogoutRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.UserLogoutRequest;
+
+                /**
+                 * Decodes a UserLogoutRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.UserLogoutRequest} UserLogoutRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.UserLogoutRequest;
+
+                /**
+                 * Verifies a UserLogoutRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a UserLogoutRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLogoutRequest} UserLogoutRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.UserLogoutRequest;
+
+                /**
+                 * Creates a UserLogoutRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.UserLogoutRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLogoutRequest} UserLogoutRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.UserLogoutRequest;
+
+                /**
+                 * Creates a plain object from a UserLogoutRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.UserLogoutRequest} message UserLogoutRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.UserLogoutRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this UserLogoutRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this UserLogoutRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type UserLogoutResponse$Properties = {};
+
+            /**
+             * Constructs a new UserLogoutResponse.
+             * @exports cockroach.server.serverpb.UserLogoutResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.UserLogoutResponse$Properties=} [properties] Properties to set
+             */
+            class UserLogoutResponse {
+
+                /**
+                 * Constructs a new UserLogoutResponse.
+                 * @exports cockroach.server.serverpb.UserLogoutResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.UserLogoutResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.UserLogoutResponse$Properties);
+
+                /**
+                 * Creates a new UserLogoutResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.UserLogoutResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.UserLogoutResponse} UserLogoutResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.UserLogoutResponse$Properties): cockroach.server.serverpb.UserLogoutResponse;
+
+                /**
+                 * Encodes the specified UserLogoutResponse message. Does not implicitly {@link cockroach.server.serverpb.UserLogoutResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLogoutResponse$Properties} message UserLogoutResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.UserLogoutResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified UserLogoutResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.UserLogoutResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLogoutResponse$Properties} message UserLogoutResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.UserLogoutResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a UserLogoutResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.UserLogoutResponse} UserLogoutResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.UserLogoutResponse;
+
+                /**
+                 * Decodes a UserLogoutResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.UserLogoutResponse} UserLogoutResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.UserLogoutResponse;
+
+                /**
+                 * Verifies a UserLogoutResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a UserLogoutResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLogoutResponse} UserLogoutResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.UserLogoutResponse;
+
+                /**
+                 * Creates a UserLogoutResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.UserLogoutResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLogoutResponse} UserLogoutResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.UserLogoutResponse;
+
+                /**
+                 * Creates a plain object from a UserLogoutResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.UserLogoutResponse} message UserLogoutResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.UserLogoutResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this UserLogoutResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this UserLogoutResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type SessionCookie$Properties = {
+                id?: Long;
+                secret?: Uint8Array;
+            };
+
+            /**
+             * Constructs a new SessionCookie.
+             * @exports cockroach.server.serverpb.SessionCookie
+             * @constructor
+             * @param {cockroach.server.serverpb.SessionCookie$Properties=} [properties] Properties to set
+             */
+            class SessionCookie {
+
+                /**
+                 * Constructs a new SessionCookie.
+                 * @exports cockroach.server.serverpb.SessionCookie
+                 * @constructor
+                 * @param {cockroach.server.serverpb.SessionCookie$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.SessionCookie$Properties);
+
+                /**
+                 * SessionCookie id.
+                 * @type {Long}
+                 */
+                public id: Long;
+
+                /**
+                 * SessionCookie secret.
+                 * @type {Uint8Array}
+                 */
+                public secret: Uint8Array;
+
+                /**
+                 * Creates a new SessionCookie instance using the specified properties.
+                 * @param {cockroach.server.serverpb.SessionCookie$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.SessionCookie} SessionCookie instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.SessionCookie$Properties): cockroach.server.serverpb.SessionCookie;
+
+                /**
+                 * Encodes the specified SessionCookie message. Does not implicitly {@link cockroach.server.serverpb.SessionCookie.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SessionCookie$Properties} message SessionCookie message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.SessionCookie$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified SessionCookie message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SessionCookie.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SessionCookie$Properties} message SessionCookie message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.SessionCookie$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a SessionCookie message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.SessionCookie} SessionCookie
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.SessionCookie;
+
+                /**
+                 * Decodes a SessionCookie message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.SessionCookie} SessionCookie
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.SessionCookie;
+
+                /**
+                 * Verifies a SessionCookie message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a SessionCookie message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SessionCookie} SessionCookie
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.SessionCookie;
+
+                /**
+                 * Creates a SessionCookie message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.SessionCookie.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SessionCookie} SessionCookie
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.SessionCookie;
+
+                /**
+                 * Creates a plain object from a SessionCookie message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.SessionCookie} message SessionCookie
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.SessionCookie, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this SessionCookie message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this SessionCookie to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            /**
+             * Constructs a new Authentication service.
+             * @exports cockroach.server.serverpb.Authentication
+             * @extends $protobuf.rpc.Service
+             * @constructor
+             * @param {$protobuf.RPCImpl} rpcImpl RPC implementation
+             * @param {boolean} [requestDelimited=false] Whether requests are length-delimited
+             * @param {boolean} [responseDelimited=false] Whether responses are length-delimited
+             */
+            class Authentication extends $protobuf.rpc.Service {
+
+                /**
+                 * Constructs a new Authentication service.
+                 * @exports cockroach.server.serverpb.Authentication
+                 * @extends $protobuf.rpc.Service
+                 * @constructor
+                 * @param {$protobuf.RPCImpl} rpcImpl RPC implementation
+                 * @param {boolean} [requestDelimited=false] Whether requests are length-delimited
+                 * @param {boolean} [responseDelimited=false] Whether responses are length-delimited
+                 */
+                constructor(rpcImpl: $protobuf.RPCImpl, requestDelimited?: boolean, responseDelimited?: boolean);
+
+                /**
+                 * Creates new Authentication service using the specified rpc implementation.
+                 * @param {$protobuf.RPCImpl} rpcImpl RPC implementation
+                 * @param {boolean} [requestDelimited=false] Whether requests are length-delimited
+                 * @param {boolean} [responseDelimited=false] Whether responses are length-delimited
+                 * @returns {Authentication} RPC service. Useful where requests and/or responses are streamed.
+                 */
+                public static create(rpcImpl: $protobuf.RPCImpl, requestDelimited?: boolean, responseDelimited?: boolean): Authentication;
+
+                /**
+                 * Calls UserLogin.
+                 * @param {cockroach.server.serverpb.UserLoginRequest|Object.<string,*>} request UserLoginRequest message or plain object
+                 * @param {Authentication_userLogin_Callback} callback Node-style callback called with the error, if any, and UserLoginResponse
+                 * @returns {undefined}
+                 */
+                public userLogin(request: (cockroach.server.serverpb.UserLoginRequest|{ [k: string]: any }), callback: Authentication_userLogin_Callback): void;
+
+                /**
+                 * Calls UserLogout.
+                 * @param {cockroach.server.serverpb.UserLogoutRequest|Object.<string,*>} request UserLogoutRequest message or plain object
+                 * @param {Authentication_userLogout_Callback} callback Node-style callback called with the error, if any, and UserLogoutResponse
+                 * @returns {undefined}
+                 */
+                public userLogout(request: (cockroach.server.serverpb.UserLogoutRequest|{ [k: string]: any }), callback: Authentication_userLogout_Callback): void;
+            }
         }
 
         /**
@@ -20540,6 +21143,10 @@ type Status_logFile_Callback = (error: Error, response?: cockroach.server.server
 type Status_logs_Callback = (error: Error, response?: cockroach.server.serverpb.LogEntriesResponse) => void;
 
 type Status_problemRanges_Callback = (error: Error, response?: cockroach.server.serverpb.ProblemRangesResponse) => void;
+
+type Authentication_userLogin_Callback = (error: Error, response?: cockroach.server.serverpb.UserLoginResponse) => void;
+
+type Authentication_userLogout_Callback = (error: Error, response?: cockroach.server.serverpb.UserLogoutResponse) => void;
 
 type Gossip_gossip_Callback = (error: Error, response?: cockroach.gossip.Response) => void;
 
