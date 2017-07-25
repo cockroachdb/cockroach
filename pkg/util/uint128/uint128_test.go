@@ -37,7 +37,7 @@ func TestString(t *testing.T) {
 
 	i, _ := FromString(s)
 
-	if s != i.GetString() {
+	if s != i.String() {
 		t.Errorf("incorrect string representation for num: %v", i)
 	}
 }
