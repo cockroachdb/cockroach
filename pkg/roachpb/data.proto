@@ -28,8 +28,8 @@ import "gogoproto/gogo.proto";
 message Span {
   option (gogoproto.equal) = true;
 
-  option (gogoproto.populate) = true;
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
 
   // The key for request. If the request operates on a range, this
   // represents the starting key for the range.
@@ -150,6 +150,8 @@ enum ReplicaChangeType {
 message ChangeReplicasTrigger {
   option (gogoproto.equal) = true;
 
+  option (gogoproto.goproto_stringer) = false;
+
   optional ReplicaChangeType change_type = 1 [(gogoproto.nullable) = false];
   // The replica being modified.
   optional ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
@@ -213,6 +215,7 @@ enum TransactionStatus {
 
 message ObservedTimestamp {
   option (gogoproto.equal) = true;
+
   option (gogoproto.populate) = true;
 
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
@@ -231,6 +234,7 @@ message ObservedTimestamp {
 // Transaction.Clone. Failure to do so will result in test failures.
 message Transaction {
   option (gogoproto.equal) = true;
+
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 
