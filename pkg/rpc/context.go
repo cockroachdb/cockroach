@@ -309,6 +309,9 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 			// Do the pings even when there are no ongoing RPCs.
 			PermitWithoutStream: true,
 		}))
+		dialOpts = append(dialOpts,
+			grpc.WithInitialWindowSize(initialWindowSize),
+			grpc.WithInitialConnWindowSize(initialConnWindowSize))
 		dialOpts = append(dialOpts, opts...)
 
 		if SourceAddr != nil {

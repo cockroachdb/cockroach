@@ -548,26 +548,12 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		}()
 		rpcCtx := newInsecureRPCContext(stopper)
 		server := rpc.NewServer(rpcCtx)
-		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
-		if err != nil {
-			t.Fatal(err)
-		}
-		addrs = append(addrs, ln.Addr())
 
-		var resolvers []resolver.Resolver
-		// Only third node has resolvers.
 		switch i {
 		case 0, 1:
 			clusterIDs = append(clusterIDs, uuid.MakeV4())
 		case 2:
 			clusterIDs = append(clusterIDs, clusterIDs[0])
-			for j := 0; j < 2; j++ {
-				resolver, err := resolver.NewResolver(addrs[j].String())
-				if err != nil {
-					t.Fatal(err)
-				}
-				resolvers = append(resolvers, resolver)
-			}
 		}
 
 		// node ID must be non-zero
@@ -578,6 +564,25 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		gnode.SetStallInterval(interval)
 		gnode.SetBootstrapInterval(interval)
 		gnode.SetClusterID(clusterIDs[i])
+
+		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		addrs = append(addrs, ln.Addr())
+
+		// Only the third node has resolvers.
+		var resolvers []resolver.Resolver
+		switch i {
+		case 2:
+			for j := 0; j < 2; j++ {
+				resolver, err := resolver.NewResolver(addrs[j].String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				resolvers = append(resolvers, resolver)
+			}
+		}
 		gnode.Start(ln.Addr(), resolvers)
 	}
 

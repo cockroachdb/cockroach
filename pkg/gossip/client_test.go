@@ -426,6 +426,12 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		RPCContext := newInsecureRPCContext(stopper)
 
 		server := rpc.NewServer(RPCContext)
+		// node ID must be non-zero
+		gnode := NewTest(
+			roachpb.NodeID(i+1), RPCContext, server, stopper, metric.NewRegistry(),
+		)
+		g = append(g, gnode)
+
 		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
 		if err != nil {
 			t.Fatal(err)
@@ -442,11 +448,6 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 			t.Fatal(err)
 		}
 		resolvers = append(resolvers, resolver)
-		// node ID must be non-zero
-		gnode := NewTest(
-			roachpb.NodeID(i+1), RPCContext, server, stopper, metric.NewRegistry(),
-		)
-		g = append(g, gnode)
 		gnode.Start(ln.Addr(), resolvers)
 	}
 
