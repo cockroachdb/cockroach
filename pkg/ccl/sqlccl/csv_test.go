@@ -70,9 +70,6 @@ func TestLoadCSV(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Exec("SET CLUSTER SETTING enterprise.enabled = true"); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := db.Exec("CREATE DATABASE csv"); err != nil {
 		t.Fatal(err)
 	}
