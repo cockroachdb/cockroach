@@ -55,6 +55,8 @@ message Merge {
 message ChangeReplicas {
   option (gogoproto.equal) = true;
 
+  option (gogoproto.goproto_stringer) = false;
+
   optional roachpb.ChangeReplicasTrigger trigger = 1 [(gogoproto.nullable) = false,
     (gogoproto.embed) = true];
 }
