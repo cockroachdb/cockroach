@@ -48,3 +48,7 @@ ignored = [
   name = "github.com/chzyer/readline"
   source = "https://github.com/cockroachdb/readline"
   branch = "master"
+
+[[constraint]]
+  name = "github.com/coreos/etcd"
+  branch = "master"
