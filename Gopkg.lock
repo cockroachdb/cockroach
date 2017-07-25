@@ -151,9 +151,10 @@
   revision = "3a0bb77429bd3a61596f5e8a3172445844342120"
 
 [[projects]]
+  branch = "master"
   name = "github.com/coreos/etcd"
   packages = ["raft","raft/raftpb"]
-  revision = "6dd807481cebac062e82c5ecaecdb2c3d0f605ad"
+  revision = "d2654f85223276cfb6c1803d6e2bcc5db91c17ba"
 
 [[projects]]
   name = "github.com/cpuguy83/go-md2man"
@@ -659,6 +660,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "7da157eca498fe957e185931fe43036e08ed977ae4abd7fe9a7cac5ac001a465"
+  inputs-digest = "f9ae1d1f3ee2271b84771ce05b074f3438cc66b54910b9355d1789b157e774ad"
   solver-name = "gps-cdcl"
   solver-version = 1
