@@ -35,6 +35,11 @@ SELECT ARRAY['', 'NULL', 'Null', 'null', NULL, '"', e'\'']
 {"","NULL","Null","null",NULL,"\"","'"}
 
 query T
+SELECT NULL::INT[]
+----
+NULL
+
+query T
 SELECT ARRAY[e'\n', e'g\x10h']
 ----
 {"\n","g\x10h"}
@@ -576,3 +581,154 @@ DROP TABLE a
 # TODO(justin)
 statement error collated strings not allowed as array contents
 CREATE TABLE a (b STRING[] COLLATE en)
+
+# Array operators
+
+# Element append
+
+query T
+SELECT ARRAY['a','b','c'] || 'd'
+----
+{"a","b","c","d"}
+
+query T
+SELECT ARRAY[1,2,3] || 4
+----
+{1,2,3,4}
+
+query T
+SELECT NULL::INT[] || 4
+----
+{4}
+
+query T
+SELECT 4 || NULL::INT[]
+----
+{4}
+
+query T
+SELECT ARRAY[1,2,3] || NULL::INT
+----
+{1,2,3,NULL}
+
+query T
+SELECT NULL::INT[] || NULL::INT
+----
+{NULL}
+
+query T
+SELECT NULL::INT || ARRAY[1,2,3]
+----
+{NULL,1,2,3}
+
+query TT
+SELECT NULL::INT || NULL::INT[], NULL::INT[] || NULL::INT
+----
+{NULL} {NULL}
+
+query T
+SELECT 1 || ARRAY[2,3,4]
+----
+{1,2,3,4}
+
+# This is a departure from Postgres' behaviour.
+# In Postgres, ARRAY[1,2,3] || NULL = ARRAY[1,2,3].
+
+query TT
+SELECT ARRAY[1,2,3] || NULL, NULL || ARRAY[1,2,3]
+----
+NULL NULL
+
+statement ok
+CREATE TABLE a (b INT[])
+
+# Ensure arrays appended to still encode properly.
+
+statement ok
+INSERT INTO a VALUES (ARRAY[])
+
+statement ok
+UPDATE a SET b = b || 1
+
+statement ok
+UPDATE a SET b = b || 2
+
+statement ok
+UPDATE a SET b = b || 3
+
+statement ok
+UPDATE a SET b = b || 4
+
+query T
+SELECT b FROM a
+----
+{1,2,3,4}
+
+statement ok
+UPDATE a SET b = NULL::INT || b || NULL::INT
+
+query T
+SELECT b FROM a
+----
+{NULL,1,2,3,4,NULL}
+
+# Array append
+
+query T
+SELECT ARRAY[1,2,3] || ARRAY[4,5,6]
+----
+{1,2,3,4,5,6}
+
+query T
+SELECT ARRAY['a','b','c'] || ARRAY['d','e','f']
+----
+{"a","b","c","d","e","f"}
+
+query T
+SELECT ARRAY[1,2,3] || NULL::INT[]
+----
+{1,2,3}
+
+query T
+SELECT NULL::INT[] || ARRAY[4,5,6]
+----
+{4,5,6}
+
+query T
+SELECT NULL::INT[] || NULL::INT[]
+----
+NULL
+
+# Array equality
+
+query B
+SELECT ARRAY[1,2,3] = ARRAY[1,2,3]
+----
+true
+
+query B
+SELECT ARRAY[1,2,4] = ARRAY[1,2,3]
+----
+false
+
+query B
+SELECT ARRAY[1,2,3] != ARRAY[1,2,3]
+----
+false
+
+query B
+SELECT ARRAY[1,2,4] != ARRAY[1,2,3]
+----
+true
+
+query B
+SELECT ARRAY[1,2,4] = NULL
+----
+NULL
+
+# This behaviour is surprising (one might expect that the result would be
+# NULL), but it's how Postgres behaves.
+query B
+SELECT ARRAY[1,2,NULL] = ARRAY[1,2,3]
+----
+false
