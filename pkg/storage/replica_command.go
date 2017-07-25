@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1907,7 +1906,7 @@ func evalTruncateLog(
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.RangeID(), args.Index))
 
 	var ms enginepb.MVCCStats
-	if util.IsMigrated() {
+	if cArgs.EvalCtx.repl.store.cfg.IsActive(base.VersionRaftLogTruncationBelowRaft) {
 		// Compute the stats delta that were to occur should the log entries be
 		// purged. We do this as a side effect of seeing a new TruncatedState,
 		// downstream of Raft. A follower may not run the side effect in the event
@@ -3106,7 +3105,7 @@ func splitTrigger(
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
 
-		if !util.IsMigrated() {
+		if !rec.repl.store.cfg.IsActive(base.VersionSplitHardStateBelowRaft) {
 			// Write an initial state upstream of Raft even though it might
 			// clobber downstream simply because that's what 1.0 does and if we
 			// don't write it here, then a 1.0 version applying it as a follower

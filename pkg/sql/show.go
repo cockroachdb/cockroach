@@ -62,7 +62,7 @@ func (p *planner) showClusterSetting(ctx context.Context, name string) (planNode
 	switch val.(type) {
 	case *settings.IntSetting, *settings.EnumSetting:
 		dType = parser.TypeInt
-	case *settings.StringSetting, *settings.ByteSizeSetting:
+	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.StatemachineSetting:
 		dType = parser.TypeString
 	case *settings.BoolSetting:
 		dType = parser.TypeBool
@@ -85,6 +85,31 @@ func (p *planner) showClusterSetting(ctx context.Context, name string) (planNode
 				d = parser.NewDInt(parser.DInt(s.Get()))
 			case *settings.StringSetting:
 				d = parser.NewDString(s.String())
+			case *settings.StatemachineSetting:
+				// Show consistent values for statemachine settings. This isn't necessary
+				// for correctness, but helpful for testability.
+				ie := InternalExecutor{LeaseManager: p.LeaseMgr()}
+				datums, err := ie.QueryRowInTransaction(
+					ctx, "retrieve-prev-setting", p.txn,
+					"SELECT value FROM system.settings WHERE name = $1",
+					name,
+				)
+				if err != nil {
+					return nil, err
+				}
+				var prevRawVal []byte
+				if len(datums) != 0 {
+					dStr, ok := datums[0].(*parser.DString)
+					if !ok {
+						return nil, errors.New("the existing value is not a string")
+					}
+					prevRawVal = []byte(string(*dStr))
+				}
+				_, obj, err := s.Validate(prevRawVal, nil)
+				if err != nil {
+					return nil, errors.Errorf("unable to read existing value: %s", err)
+				}
+				d = parser.NewDString(obj.(fmt.Stringer).String())
 			case *settings.BoolSetting:
 				d = parser.MakeDBool(parser.DBool(s.Get()))
 			case *settings.FloatSetting:

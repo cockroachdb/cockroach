@@ -55,7 +55,7 @@ func MakeUpdater() Updater {
 }
 
 // Set attempts to parse and update a setting and notes that it was updated.
-func (u Updater) Set(key, rawValue, vt string) error {
+func (u Updater) Set(key string, rawValue string, vt string) error {
 	d, ok := registry[key]
 	if !ok {
 		// Likely a new setting this old node doesn't know about.
@@ -101,6 +101,8 @@ func (u Updater) Set(key, rawValue, vt string) error {
 			return err
 		}
 		return setting.set(int64(i))
+	case *StatemachineSetting:
+		return setting.set([]byte(rawValue))
 	}
 	return nil
 }
