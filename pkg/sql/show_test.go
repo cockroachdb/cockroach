@@ -19,17 +19,23 @@ package sql_test
 import (
 	gosql "database/sql"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/kr/pretty"
+	"github.com/lib/pq"
 )
 
 func TestShowCreateTable(t *testing.T) {
@@ -455,4 +461,94 @@ func TestShowQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 
+}
+
+// TestShowJobs manually inserts a row into system.jobs and checks that the
+// encoded protobuf payload is properly decoded and visible in both SHOW JOBS
+// and crdb_internal.jobs.
+func TestShowJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := createTestServerParams()
+	s, rawSQLDB, _ := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(t, rawSQLDB)
+	defer s.Stopper().Stop(context.TODO())
+
+	// row represents a row returned from crdb_internal.jobs or SHOW JOBS, but
+	// *not* a row in system.jobs.
+	type row struct {
+		id                int64
+		typ               string
+		status            string
+		description       string
+		username          string
+		descriptorIDs     pq.Int64Array
+		err               string
+		created           time.Time
+		started           time.Time
+		finished          time.Time
+		modified          time.Time
+		fractionCompleted float32
+	}
+
+	in := row{
+		id:            42,
+		typ:           "SCHEMA CHANGE",
+		status:        "superfailed",
+		description:   "failjob",
+		username:      "failure",
+		descriptorIDs: pq.Int64Array{42},
+		err:           "boom",
+		// lib/pq returns time.Time objects with goofy locations, which breaks
+		// reflect.DeepEqual without this time.FixedZone song and dance.
+		// See: https://github.com/lib/pq/issues/329
+		created:           time.Unix(1, 0).In(time.FixedZone("", 0)),
+		started:           time.Unix(2, 0).In(time.FixedZone("", 0)),
+		finished:          time.Unix(3, 0).In(time.FixedZone("", 0)),
+		modified:          time.Unix(4, 0).In(time.FixedZone("", 0)),
+		fractionCompleted: 0.42,
+	}
+
+	// system.jobs is part proper SQL columns, part protobuf, so we can't use the
+	// row struct directly.
+	inPayload, err := (&jobs.Payload{
+		Description:       in.description,
+		StartedMicros:     in.started.UnixNano() / time.Microsecond.Nanoseconds(),
+		FinishedMicros:    in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
+		ModifiedMicros:    in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
+		FractionCompleted: in.fractionCompleted,
+		Username:          in.username,
+		DescriptorIDs: func() sqlbase.IDs {
+			var ids sqlbase.IDs
+			for _, id := range in.descriptorIDs {
+				ids = append(ids, sqlbase.ID(id))
+			}
+			return ids
+		}(),
+		Error:   in.err,
+		Details: jobs.WrapPayloadDetails(jobs.SchemaChangeDetails{}),
+	}).Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.Exec(
+		`INSERT INTO system.jobs (id, status, created, payload) VALUES ($1, $2, $3, $4)`,
+		in.id, in.status, in.created, inPayload,
+	)
+
+	for _, source := range []string{"[SHOW JOBS]", "crdb_internal.jobs"} {
+		var out row
+		sqlDB.QueryRow(fmt.Sprintf(`
+			SELECT id, type, status, created, description, started, finished,
+						 modified, fraction_completed, username, descriptor_ids, error
+			FROM %s`, source),
+		).Scan(
+			&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started, &out.finished,
+			&out.modified, &out.fractionCompleted, &out.username, &out.descriptorIDs, &out.err,
+		)
+		if !reflect.DeepEqual(in, out) {
+			diff := strings.Join(pretty.Diff(in, out), "\n")
+			t.Fatalf("in job did not match out job:\n%s", diff)
+		}
+	}
 }

@@ -17,7 +17,7 @@
 package jobs
 
 import (
-	"time"
+	"fmt"
 
 	"golang.org/x/net/context"
 
@@ -35,8 +35,8 @@ import (
 // Job manages logging the progress of long-running system processes, like
 // backups and restores, to the system.jobs table.
 //
-// The Record field can be directly modified before Created is called. Updates to
-// the Job field after the job has been created will not be written to the
+// The Record field can be directly modified before Created is called. Updates
+// to the Record field after the job has been created will not be written to the
 // database, however, even when calling e.g. Started or Succeeded.
 type Job struct {
 	// TODO(benesch): avoid giving Job a reference to Registry. This will likely
@@ -57,8 +57,11 @@ type Job struct {
 // Details is a marker interface for job details proto structs.
 type Details interface{}
 
-// Record stores the job fields that are not automatically managed by
-// Job.
+var _ Details = BackupDetails{}
+var _ Details = RestoreDetails{}
+var _ Details = SchemaChangeDetails{}
+
+// Record stores the job fields that are not automatically managed by Job.
 type Record struct {
 	Description   string
 	Username      string
@@ -81,53 +84,6 @@ const (
 	StatusSucceeded Status = "succeeded"
 )
 
-func (j *Job) load(ctx context.Context) error {
-	return j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		payload, err := j.retrievePayload(ctx, txn)
-		if err != nil {
-			return err
-		}
-		j.Record.Description = payload.Description
-		j.Record.Username = payload.Username
-		j.Record.DescriptorIDs = payload.DescriptorIDs
-		switch d := payload.Details.(type) {
-		case *Payload_Backup:
-			j.Record.Details = *d.Backup
-		case *Payload_Restore:
-			j.Record.Details = *d.Restore
-		case *Payload_SchemaChange:
-			j.Record.Details = *d.SchemaChange
-		default:
-			return errors.Errorf("Job: unsupported job details type %T", d)
-		}
-		// Don't need to lock because we're the only one who has a handle on this
-		// Job so far.
-		j.mu.payload = *payload
-		return nil
-	})
-}
-
-func (j *Job) runInTxn(
-	ctx context.Context, retryable func(context.Context, *client.Txn) error,
-) error {
-	if j.txn != nil {
-		defer func() { j.txn = nil }()
-		return j.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true, AssignTimestampImmediately: true},
-			func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
-				return retryable(ctx, txn)
-			})
-	}
-	return j.registry.db.Txn(ctx, retryable)
-}
-
-// WithTxn sets the transaction that this Job will use for its next operation.
-// If the transaction is nil, the Job will create a one-off transaction instead.
-// If you use WithTxn, this Job will no longer be threadsafe.
-func (j *Job) WithTxn(txn *client.Txn) *Job {
-	j.txn = txn
-	return j
-}
-
 // ID returns the ID of the job that this Job is currently tracking. This will
 // be nil if Created has not yet been called.
 func (j *Job) ID() *int64 {
@@ -142,16 +98,7 @@ func (j *Job) Created(ctx context.Context) error {
 		Description:   j.Record.Description,
 		Username:      j.Record.Username,
 		DescriptorIDs: j.Record.DescriptorIDs,
-	}
-	switch d := j.Record.Details.(type) {
-	case BackupDetails:
-		payload.Details = &Payload_Backup{Backup: &d}
-	case RestoreDetails:
-		payload.Details = &Payload_Restore{Restore: &d}
-	case SchemaChangeDetails:
-		payload.Details = &Payload_SchemaChange{SchemaChange: &d}
-	default:
-		return errors.Errorf("Job: unsupported job details type %T", d)
+		Details:       WrapPayloadDetails(j.Record.Details),
 	}
 	return j.insert(ctx, payload)
 }
@@ -163,7 +110,7 @@ func (j *Job) Started(ctx context.Context) error {
 			// Already started - do nothing.
 			return false, nil
 		}
-		payload.StartedMicros = roundTimestamp(timeutil.Now())
+		payload.StartedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
 	})
 }
@@ -223,7 +170,7 @@ func (j *Job) Failed(ctx context.Context, err error) {
 			return false, nil
 		}
 		payload.Error = err.Error()
-		payload.FinishedMicros = roundTimestamp(timeutil.Now())
+		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
 	})
 	if internalErr != nil {
@@ -240,8 +187,16 @@ func (j *Job) Succeeded(ctx context.Context) error {
 			// Already finished - do nothing.
 			return false, nil
 		}
-		payload.FinishedMicros = roundTimestamp(timeutil.Now())
+		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payload.FractionCompleted = 1.0
+		return true, nil
+	})
+}
+
+// SetDetails sets the details field of the currently running tracked job.
+func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
+	return j.update(ctx, "", func(payload *Payload) (bool, error) {
+		payload.Details = WrapPayloadDetails(details)
 		return true, nil
 	})
 }
@@ -254,6 +209,56 @@ func (j *Job) Payload() Payload {
 	return j.mu.payload
 }
 
+// WithTxn sets the transaction that this Job will use for its next operation.
+// If the transaction is nil, the Job will create a one-off transaction instead.
+// If you use WithTxn, this Job will no longer be threadsafe.
+func (j *Job) WithTxn(txn *client.Txn) *Job {
+	j.txn = txn
+	return j
+}
+
+func (j *Job) runInTxn(
+	ctx context.Context, retryable func(context.Context, *client.Txn) error,
+) error {
+	if j.txn != nil {
+		defer func() { j.txn = nil }()
+		return j.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true, AssignTimestampImmediately: true},
+			func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
+				return retryable(ctx, txn)
+			})
+	}
+	return j.registry.db.Txn(ctx, retryable)
+}
+
+func (j *Job) load(ctx context.Context) error {
+	return j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		payload, err := j.loadPayload(ctx, txn)
+		if err != nil {
+			return err
+		}
+		j.Record.Description = payload.Description
+		j.Record.Username = payload.Username
+		j.Record.DescriptorIDs = payload.DescriptorIDs
+		if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
+			return err
+		}
+		// Don't need to lock because we're the only one who has a handle on this
+		// Job so far.
+		j.mu.payload = *payload
+		return nil
+	})
+}
+
+func (j *Job) loadPayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
+	const selectStmt = "SELECT payload FROM system.jobs WHERE id = $1"
+	row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
+	if err != nil {
+		return nil, err
+	}
+
+	return UnmarshalPayload(row[0])
+}
+
 func (j *Job) insert(ctx context.Context, payload *Payload) error {
 	if j.id != nil {
 		// Already created - do nothing.
@@ -262,7 +267,7 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 
 	var row parser.Datums
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		payload.ModifiedMicros = roundTimestamp(txn.Proto().OrigTimestamp.GoTime())
+		payload.ModifiedMicros = timeutil.ToUnixMicros(txn.Proto().OrigTimestamp.GoTime())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
@@ -280,16 +285,6 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 	return nil
 }
 
-func (j *Job) retrievePayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
-	const selectStmt = "SELECT payload FROM system.jobs WHERE id = $1"
-	row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
-	if err != nil {
-		return nil, err
-	}
-
-	return UnmarshalPayload(row[0])
-}
-
 func (j *Job) update(
 	ctx context.Context, newStatus Status, updateFn func(*Payload) (doUpdate bool, err error),
 ) error {
@@ -300,7 +295,7 @@ func (j *Job) update(
 	var payload *Payload
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		payload, err = j.retrievePayload(ctx, txn)
+		payload, err = j.loadPayload(ctx, txn)
 		if err != nil {
 			return err
 		}
@@ -311,15 +306,24 @@ func (j *Job) update(
 		if !doUpdate {
 			return nil
 		}
-		payload.ModifiedMicros = roundTimestamp(timeutil.Now())
+		payload.ModifiedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
 		}
 
-		const updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
+		var updateStmt string
+		var updateArgs []interface{}
+		if newStatus == "" {
+			updateStmt = "UPDATE system.jobs SET payload = $1 WHERE id = $2"
+			updateArgs = []interface{}{payloadBytes, *j.id}
+		} else {
+			updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
+			updateArgs = []interface{}{newStatus, payloadBytes, *j.id}
+		}
+
 		n, err := j.registry.ex.ExecuteStatementInTransaction(
-			ctx, "job-update", txn, updateStmt, newStatus, payloadBytes, *j.id)
+			ctx, "job-update", txn, updateStmt, updateArgs...)
 		if err != nil {
 			return err
 		}
@@ -359,8 +363,47 @@ func (p *Payload) Typ() string {
 	}
 }
 
-// UnmarshalPayload unmarshals and returns the Payload encoded in the
-// input datum, which should be a DBytes.
+// WrapPayloadDetails wraps a Details object in the protobuf wrapper struct
+// necessary to make it usable as the Details field of a Payload.
+//
+// Providing an unknown details type indicates programmer error and so causes a
+// panic.
+func WrapPayloadDetails(details Details) interface {
+	isPayload_Details
+} {
+	switch d := details.(type) {
+	case BackupDetails:
+		return &Payload_Backup{Backup: &d}
+	case RestoreDetails:
+		return &Payload_Restore{Restore: &d}
+	case SchemaChangeDetails:
+		return &Payload_SchemaChange{SchemaChange: &d}
+	default:
+		panic(fmt.Sprintf("jobs.WrapPayloadDetails: unknown details type %T", d))
+	}
+}
+
+// UnwrapDetails returns the details object stored within the payload's Details
+// field, discarding the protobuf wrapper struct.
+//
+// Unlike in WrapPayloadDetails, an unknown details type may simply indicate
+// that the Payload originated on a node aware of more details types, and so the
+// error is returned to the caller.
+func (p *Payload) UnwrapDetails() (Details, error) {
+	switch d := p.Details.(type) {
+	case *Payload_Backup:
+		return *d.Backup, nil
+	case *Payload_Restore:
+		return *d.Restore, nil
+	case *Payload_SchemaChange:
+		return *d.SchemaChange, nil
+	default:
+		return nil, errors.Errorf("jobs.Payload: unsupported details type %T", d)
+	}
+}
+
+// UnmarshalPayload unmarshals and returns the Payload encoded in the input
+// datum, which should be a parser.DBytes.
 func UnmarshalPayload(datum parser.Datum) (*Payload, error) {
 	payload := &Payload{}
 	bytes, ok := datum.(*parser.DBytes)
@@ -373,14 +416,3 @@ func UnmarshalPayload(datum parser.Datum) (*Payload, error) {
 	}
 	return payload, nil
 }
-
-// TIMESTAMP columns round to the nearest microsecond, so we replicate that
-// behavior for our protobuf fields. Naive truncation can lead to anomalies
-// where jobs are started before they're created.
-func roundTimestamp(ts time.Time) int64 {
-	return ts.Round(time.Microsecond).UnixNano() / time.Microsecond.Nanoseconds()
-}
-
-var _ Details = BackupDetails{}
-var _ Details = RestoreDetails{}
-var _ Details = SchemaChangeDetails{}
