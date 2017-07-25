@@ -16,7 +16,8 @@ the node configuration more homogeneous.
 The new procedure will be:
 
 1. Start all nodes with the same `--join` flag.
-2. Run `cockroach init --host=... N`, where `N` is the number of nodes started.
+2. Run `cockroach init --host=...`, where the `host` parameter is the
+   address of one of the nodes in the cluster.
 
 The old procedure of omitting the `--join` flag on one node will still
 be permitted, but discouraged for production use.
