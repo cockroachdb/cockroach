@@ -2919,7 +2919,6 @@ func (r *Replica) isSoloReplicaRLocked() bool {
 }
 
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
-
 	data, err := protoutil.Marshal(&p.command)
 	if err != nil {
 		return err
@@ -2940,8 +2939,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		// EndTransactionRequest with a ChangeReplicasTrigger is special
 		// because raft needs to understand it; it cannot simply be an
 		// opaque command.
-		log.Infof(p.ctx, "proposing %s %+v: %+v",
-			crt.ChangeType, crt.Replica, crt.UpdatedReplicas)
+		log.Infof(p.ctx, "proposing %s", crt)
 
 		// Ensure that we aren't trying to remove ourselves from the range without
 		// having previously given up our lease, since the range won't be able
@@ -2949,12 +2947,9 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		// leases can stay in such a state for a very long time when using epoch-
 		// based range leases). This shouldn't happen often, but has been seen
 		// before (#12591).
-		if crt.ChangeType == roachpb.REMOVE_REPLICA &&
-			crt.Replica.ReplicaID == r.mu.replicaID {
-			log.Errorf(p.ctx, "received invalid ChangeReplicasTrigger %+v to remove leaseholder replica %+v",
-				crt, r.mu.state)
-			return errors.Errorf("%s: invalid ChangeReplicasTrigger %+v to remove leaseholder replica",
-				r, crt)
+		if crt.ChangeType == roachpb.REMOVE_REPLICA && crt.Replica.ReplicaID == r.mu.replicaID {
+			log.Errorf(p.ctx, "received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
+			return errors.Errorf("%s: received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", r, crt)
 		}
 
 		confChangeCtx := ConfChangeContext{
