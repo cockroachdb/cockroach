@@ -1119,6 +1119,8 @@ func validCastTypes(t Type) []Type {
 		// directly to collated string.
 		if t.FamilyEqual(TypeCollatedString) {
 			return stringCastTypes
+		} else if t.FamilyEqual(TypeArray) {
+			return []Type{TypeNull}
 		}
 		return nil
 	}

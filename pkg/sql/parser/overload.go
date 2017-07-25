@@ -472,7 +472,12 @@ func typeCheckOverloadedExprs(
 	if _, err := defaultTypeCheck(ctx, s, len(s.overloads) > 0); err != nil {
 		return nil, nil, err
 	}
-	return s.typedExprs, s.overloads, nil
+
+	possibleOverloads := make([]overloadImpl, len(s.overloadIdxs))
+	for i, o := range s.overloadIdxs {
+		possibleOverloads[i] = s.overloads[o]
+	}
+	return s.typedExprs, possibleOverloads, nil
 }
 
 // filterAttempt attempts to filter the overloads down to a single candidate.
