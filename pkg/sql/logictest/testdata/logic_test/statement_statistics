@@ -98,17 +98,17 @@ query TT colnames
 SELECT key,flags FROM crdb_internal.node_statement_statistics WHERE application_name = 'valuetest' ORDER BY key, flags
 ----
 key                                                      flags
-INSERT INTO test VALUES (_, _, _)
-SELECT ROW(_, _, _, _, _) FROM test WHERE _
-SELECT key FROM crdb_internal.node_statement_statistics
-SELECT sin(_)
+INSERT INTO test VALUES (_, _, _)                        ·
+SELECT ROW(_, _, _, _, _) FROM test WHERE _              ·
+SELECT key FROM crdb_internal.node_statement_statistics  ·
+SELECT sin(_)                                            ·
 SELECT sqrt(-_)                                          !
-SELECT x FROM (VALUES (_, _, _)) AS t (x)
+SELECT x FROM (VALUES (_, _, _)) AS t (x)                ·
 SELECT x FROM test WHERE y = (_ / z)                     !+
-SELECT x FROM test WHERE y IN (_, _)
+SELECT x FROM test WHERE y IN (_, _)                     ·
 SELECT x FROM test WHERE y IN (_, _)                     +
-SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)
-SELECT x FROM test WHERE y NOT IN (_, _)
+SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)        ·
+SELECT x FROM test WHERE y NOT IN (_, _)                 ·
 
 # Check that names are anonymized properly:
 # - virtual table names are preserved
