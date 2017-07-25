@@ -145,19 +145,19 @@ output row: [2]
 query ITTT
 EXPLAIN SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
 ----
-0  render
-1  join
-1              type      inner
-1              equality  (b) = (b)
-2  index-join
-3  scan
-3              table     t@bc
-3              spans     /#-/"3"
-3  scan
-3              table     t@primary
-2  scan
-2              table     t@primary
-2              spans     ALL
+0  render      (empty)   (empty)
+1  join        (empty)   (empty)
+1  (empty)     type      inner
+1  (empty)     equality  (b) = (b)
+2  index-join  (empty)   (empty)
+3  scan        (empty)   (empty)
+3  (empty)     table     t@bc
+3  (empty)     spans     /#-/"3"
+3  scan        (empty)   (empty)
+3  (empty)     table     t@primary
+2  scan        (empty)   (empty)
+2  (empty)     table     t@primary
+2  (empty)     spans     ALL
 
 statement ok
 TRUNCATE TABLE t
@@ -190,8 +190,8 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a > 1 AND b > 'b']
 query ITTT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
-0 render
-1 empty
+0  render  (empty)  (empty)
+1  empty   (empty)  (empty)
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b]
@@ -310,8 +310,8 @@ output row: [3 4]
 query ITTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
-0 render
-1 empty
+0  render  (empty)  (empty)
+1  empty   (empty)  (empty)
 
 # Make sure that mixed type comparison operations are not used
 # for selecting indexes.
@@ -345,82 +345,82 @@ SELECT b FROM t WHERE c > 4.0 AND a < 4
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c > 1
 ----
-0  render
-1  scan
-1        table  t@bc
-1        spans  ALL
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@bc
+1  (empty)  spans    ALL
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c < 1 AND b < 5
 ----
-0  render
-1  scan
-1        table  t@bc
-1        spans  /#-/4/1
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@bc
+1  (empty)  spans    /#-/4/1
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c > 1.0
 ----
-0  render
-1  scan
-1        table  t@bc
-1        spans  ALL
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@bc
+1  (empty)  spans    ALL
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c < 1.0
 ----
-0  render
-1  scan
-1        table  t@bc
-1        spans  ALL
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@bc
+1  (empty)  spans    ALL
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c > 1.0 AND b < 5
 ----
-0  render
-1  scan
-1        table  t@bc
-1        spans  /#-/5
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@bc
+1  (empty)  spans    /#-/5
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE b < 5.0 AND c < 1
 ----
-0  render
-1  scan
-1        table  t@bc
-1        spans  /#-/4/1
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@bc
+1  (empty)  spans    /#-/4/1
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5, 1)
 ----
-0  render
-1  scan
-1        table  t@bc
-1        spans  /5/1-/5/2
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@bc
+1  (empty)  spans    /5/1-/5/2
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
-0  render
-1  scan
-1        table  t@bc
-1        spans  /5/1-/5/2
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@bc
+1  (empty)  spans    /5/1-/5/2
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
 ----
-0  render
-1  scan
-1          table  t@bc
-1          spans  ALL
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@bc
+1  (empty)  spans    ALL
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
 ----
-0  render
-1  scan
-1        table  t@b_desc
-1        spans  /-6-/-5 /-2-/-1
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@b_desc
+1  (empty)  spans    /-6-/-5 /-2-/-1
 
 statement ok
 CREATE TABLE abcd (
@@ -437,18 +437,18 @@ CREATE TABLE abcd (
 query ITTT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) = (1, 4)
 ----
-0  render
-1  scan
-1        table  abcd@abcd
-1        spans  /1/4-/1/5
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    abcd@abcd
+1  (empty)  spans    /1/4-/1/5
 
 query ITTT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
-0  render
-1  scan
-1        table  abcd@abcd
-1        spans  /1/4-/1/5 /2/9-/2/10
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    abcd@abcd
+1  (empty)  spans    /1/4-/1/5 /2/9-/2/10
 
 statement ok
 CREATE TABLE ab (
@@ -474,10 +474,10 @@ SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 query ITTT
 EXPLAIN SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
-0  render
-1  scan
-1        table  ab@baz
-1        spans  /#-/1/"c"
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    ab@baz
+1  (empty)  spans    /#-/1/"c"
 
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
@@ -494,22 +494,22 @@ abz    abz_c_b_key  true      3  a       ASC        false    true
 query ITTT
 EXPLAIN SELECT a FROM abz ORDER BY a DESC LIMIT 1
 ----
-0  limit
-1  render
-2  scan
-2          table  abz@primary
-2          spans  ALL
-2          limit            1
+0  limit    (empty)  (empty)
+1  render   (empty)  (empty)
+2  scan     (empty)  (empty)
+2  (empty)  table    abz@primary
+2  (empty)  spans    ALL
+2  (empty)  limit    1
 
 query ITTT
 EXPLAIN SELECT c FROM abz ORDER BY c DESC LIMIT 1
 ----
-0  limit
-1  render
-2  scan
-2          table  abz@abz_c_b_key
-2          spans  ALL
-2          limit            1
+0  limit    (empty)  (empty)
+1  render   (empty)  (empty)
+2  scan     (empty)  (empty)
+2  (empty)  table    abz@abz_c_b_key
+2  (empty)  spans    ALL
+2  (empty)  limit    1
 
 # Issue #14426: verify we don't have an internal filter that contains "a IN ()"
 # (which causes an error in DistSQL due to expression serialization).
@@ -523,12 +523,12 @@ CREATE TABLE tab0(
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
-0  render                                                  (k)
-0          render 0  test.tab0.k
-1  scan                                                    (k, a, b)
-1          table     tab0@primary
-1          spans     ALL
-1          filter    ((a IN (6)) AND (a > 6)) OR (b >= 4)
+0  render   (empty)   (empty)                               (k)        (empty)
+0  (empty)  render 0  test.tab0.k                           (empty)    (empty)
+1  scan     (empty)   (empty)                               (k, a, b)  (empty)
+1  (empty)  table     tab0@primary                          (empty)    (empty)
+1  (empty)  spans     ALL                                   (empty)    (empty)
+1  (empty)  filter    ((a IN (6)) AND (a > 6)) OR (b >= 4)  (empty)    (empty)
 
 query I
 SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
@@ -610,14 +610,14 @@ CREATE TABLE test2 (id BIGSERIAL PRIMARY KEY, k TEXT UNIQUE, v INT DEFAULT 42);
 query ITTT
 EXPLAIN SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
-0  limit
-1  index-join
-2  revscan
-2             table  test2@test2_k_key
-2              spans  /#-/"100\x00"
-2              limit  20
-2  scan
-2              table  test2@primary
+0  limit       (empty)  (empty)
+1  index-join  (empty)  (empty)
+2  revscan     (empty)  (empty)
+2  (empty)     table    test2@test2_k_key
+2  (empty)     spans    /#-/"100\x00"
+2  (empty)     limit    20
+2  scan        (empty)  (empty)
+2  (empty)     table    test2@primary
 
 # Result check: The following query must not issue more than the
 # requested LIMIT K/V reads, even though an index join batches 100

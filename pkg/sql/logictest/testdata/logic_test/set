@@ -39,6 +39,7 @@ query T colnames
 SHOW DATABASE
 ----
 database
+(empty)
 
 
 statement error no database specified
@@ -78,12 +79,12 @@ SHOW ALL
 ----
 application_name               helloworld
 client_encoding                UTF8
-client_min_messages
+client_min_messages            (empty)
 database                       foo
 datestyle                      ISO
 default_transaction_isolation  SERIALIZABLE
 distsql                        off
-extra_float_digits
+extra_float_digits             (empty)
 max_index_keys                 32
 node_id                        1
 search_path                    pg_catalog

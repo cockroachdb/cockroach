@@ -265,16 +265,16 @@ output row: ['f' 'g']
 query TT
 SELECT * FROM kv ORDER BY k
 ----
-A    NULL
-a    b
-c    d
-e    f
-f    g
-g
-nil1 NULL
-nil2 NULL
-nil3 NULL
-nil4 NULL
+A     NULL
+a     b
+c     d
+e     f
+f     g
+g     (empty)
+nil1  NULL
+nil2  NULL
+nil3  NULL
+nil4  NULL
 
 statement ok
 CREATE TABLE kv2 (
@@ -581,14 +581,14 @@ INSERT INTO select_t VALUES(1, 2),(2,3),(3,4)
 query ITTT
 EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ----
-0  insert
-0                 into      insert_t(x, v)
-1  limit
-1                 count     1
-2  scan
-2                 table     select_t@primary
-2                 spans     ALL
-2                 limit     1
+0  insert   (empty)  (empty)
+0  (empty)  into     insert_t(x, v)
+1  limit    (empty)  (empty)
+1  (empty)  count    1
+2  scan     (empty)  (empty)
+2  (empty)  table    select_t@primary
+2  (empty)  spans    ALL
+2  (empty)  limit    1
 
 statement ok
 INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
@@ -612,29 +612,29 @@ SELECT * FROM insert_t
 query ITTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES(1,'AAA'),(2,'BBB') LIMIT 1
 ----
-0  insert
-0          into           insert_t(x, v)
-1  limit
-2  values
-2          size           2 columns, 2 rows
+0  insert   (empty)  (empty)
+0  (empty)  into     insert_t(x, v)
+1  limit    (empty)  (empty)
+2  values   (empty)  (empty)
+2  (empty)  size     2 columns, 2 rows
 
 query ITTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB')) LIMIT 1
 ----
-0  insert
-0          into           insert_t(x, v)
-1  limit
-2  values
-2          size           2 columns, 2 rows
+0  insert   (empty)  (empty)
+0  (empty)  into     insert_t(x, v)
+1  limit    (empty)  (empty)
+2  values   (empty)  (empty)
+2  (empty)  size     2 columns, 2 rows
 
 query ITTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB') LIMIT 1)
 ----
-0  insert
-0          into  insert_t(x, v)
-1  limit
-2  values
-2          size  2 columns, 2 rows
+0  insert   (empty)  (empty)
+0  (empty)  into     insert_t(x, v)
+1  limit    (empty)  (empty)
+2  values   (empty)  (empty)
+2  (empty)  size     2 columns, 2 rows
 
 statement error pq: multiple LIMIT clauses not allowed
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB') LIMIT 1) LIMIT 1

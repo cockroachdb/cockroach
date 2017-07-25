@@ -48,9 +48,9 @@ pg_constraint
 query ITTTTT
 EXPLAIN (TYPES) SELECT 'pg_constraint'::REGCLASS
 ----
-0  render                                        ("'pg_constraint'::REGCLASS" regclass)  ="'pg_constraint'::REGCLASS"
-0           render 0  (pg_constraint)[regclass]
-1  nullrow                                       ()
+0  render   (empty)   (empty)                    ("'pg_constraint'::REGCLASS" regclass)  ="'pg_constraint'::REGCLASS"
+0  (empty)  render 0  (pg_constraint)[regclass]  (empty)                                 (empty)
+1  nullrow  (empty)   (empty)                    ()                                      (empty)
 
 query OO
 SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS

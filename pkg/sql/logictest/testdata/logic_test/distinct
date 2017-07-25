@@ -44,11 +44,11 @@ SELECT y FROM (SELECT DISTINCT y, z FROM xyz)
 query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz
 ----
-0  distinct
-1  render
-2  scan
-2            table  xyz@primary
-2            spans  ALL
+0  distinct  (empty)  (empty)
+1  render    (empty)  (empty)
+2  scan      (empty)  (empty)
+2  (empty)   table    xyz@primary
+2  (empty)   spans    ALL
 
 query II partialsort(2)
 SELECT DISTINCT y, z FROM xyz ORDER BY z
@@ -62,12 +62,12 @@ SELECT DISTINCT y, z FROM xyz ORDER BY z
 query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
-0  distinct
-0            key    y, z
-1  render
-2  scan
-2            table  xyz@foo
-2            spans  ALL
+0  distinct  (empty)  (empty)
+0  (empty)   key      y, z
+1  render    (empty)  (empty)
+2  scan      (empty)  (empty)
+2  (empty)   table    xyz@foo
+2  (empty)   spans    ALL
 
 query II partialsort(1)
 SELECT DISTINCT y, z FROM xyz ORDER BY y
@@ -81,14 +81,14 @@ SELECT DISTINCT y, z FROM xyz ORDER BY y
 query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
-0  distinct
-0            key    y
-1  sort
-1            order  +y
-2  render
-3  scan
-3            table  xyz@foo
-3            spans  ALL
+0  distinct  (empty)  (empty)
+0  (empty)   key      y
+1  sort      (empty)  (empty)
+1  (empty)   order    +y
+2  render    (empty)  (empty)
+3  scan      (empty)  (empty)
+3  (empty)   table    xyz@foo
+3  (empty)   spans    ALL
 
 query II
 SELECT DISTINCT y, z FROM xyz ORDER BY y, z
@@ -102,14 +102,14 @@ SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 ----
-0  distinct
-0            key    y, z
-1  sort
-1            order  +y,+z
-2  render
-3  scan
-3            table  xyz@foo
-3            spans  ALL
+0  distinct  (empty)  (empty)
+0  (empty)   key      y, z
+1  sort      (empty)  (empty)
+1  (empty)   order    +y,+z
+2  render    (empty)  (empty)
+3  scan      (empty)  (empty)
+3  (empty)   table    xyz@foo
+3  (empty)   spans    ALL
 
 query I
 SELECT DISTINCT y + z FROM xyz ORDER by (y + z)
@@ -121,14 +121,14 @@ SELECT DISTINCT y + z FROM xyz ORDER by (y + z)
 query ITTT
 EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 ----
-0  distinct
-0            key    y + z
-1  sort
-1            order  +"y + z"
-2  render
-3  scan
-3            table  xyz@primary
-3            spans  ALL
+0  distinct  (empty)  (empty)
+0  (empty)   key      y + z
+1  sort      (empty)  (empty)
+1  (empty)   order    +"y + z"
+2  render    (empty)  (empty)
+3  scan      (empty)  (empty)
+3  (empty)   table    xyz@primary
+3  (empty)   spans    ALL
 
 query I
 SELECT DISTINCT y AS w FROM xyz ORDER by z
@@ -140,13 +140,13 @@ SELECT DISTINCT y AS w FROM xyz ORDER by z
 query ITTT
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY z
 ----
-0  distinct
-1  nosort
-1            order  +z
-2  render
-3  scan
-3            table  xyz@foo
-3            spans  ALL
+0  distinct  (empty)  (empty)
+1  nosort    (empty)  (empty)
+1  (empty)   order    +z
+2  render    (empty)  (empty)
+3  scan      (empty)  (empty)
+3  (empty)   table    xyz@foo
+3  (empty)   spans    ALL
 
 query I
 SELECT DISTINCT y AS w FROM xyz ORDER by y
@@ -158,14 +158,14 @@ SELECT DISTINCT y AS w FROM xyz ORDER by y
 query ITTT
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 ----
-0  distinct
-0            key    w
-1  sort
-1            order  +w
-2  render
-3  scan
-3            table  xyz@foo
-3            spans  ALL
+0  distinct  (empty)  (empty)
+0  (empty)   key      w
+1  sort      (empty)  (empty)
+1  (empty)   order    +w
+2  render    (empty)  (empty)
+3  scan      (empty)  (empty)
+3  (empty)   table    xyz@foo
+3  (empty)   spans    ALL
 
 # Insert NULL values for z.
 statement ok

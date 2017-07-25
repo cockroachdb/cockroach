@@ -412,126 +412,126 @@ x  x  y  b  d  e
 query ITTT
 EXPLAIN (EXPRS) SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
-0  render
-0                 render 0  x
-0                 render 1  y
-1  join
-1                 type      inner
-1                 equality  (x) = (x)
-2  scan
-2                 table     onecolumn@primary
-2                 spans     ALL
-2  scan
-2                 table     twocolumn@primary
-2                 spans     ALL
+0  render   (empty)   (empty)
+0  (empty)  render 0  x
+0  (empty)  render 1  y
+1  join     (empty)   (empty)
+1  (empty)  type      inner
+1  (empty)  equality  (x) = (x)
+2  scan     (empty)   (empty)
+2  (empty)  table     onecolumn@primary
+2  (empty)  spans     ALL
+2  scan     (empty)   (empty)
+2  (empty)  table     twocolumn@primary
+2  (empty)  spans     ALL
 
 # Check EXPLAIN.
 query ITTT
 EXPLAIN (EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
-0  render
-0                 render 0  x
-0                 render 1  y
-0                 render 2  x
-0                 render 3  y
-1  join
-1                 type      inner
-1                 equality  (x) = (y)
-2  scan
-2                 table     twocolumn@primary
-2                 spans     ALL
-2  scan
-2                 table     twocolumn@primary
-2                 spans     ALL
+0  render   (empty)   (empty)
+0  (empty)  render 0  x
+0  (empty)  render 1  y
+0  (empty)  render 2  x
+0  (empty)  render 3  y
+1  join     (empty)   (empty)
+1  (empty)  type      inner
+1  (empty)  equality  (x) = (y)
+2  scan     (empty)   (empty)
+2  (empty)  table     twocolumn@primary
+2  (empty)  spans     ALL
+2  scan     (empty)   (empty)
+2  (empty)  table     twocolumn@primary
+2  (empty)  spans     ALL
 
 # Check EXPLAIN.
 query ITTT
 EXPLAIN (EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
-0  render
-0                 render 0  x
-0                 render 1  y
-0                 render 2  x
-0                 render 3  y
-1  join
-1                 type      cross
-2  scan
-2                 table     twocolumn@primary
-2                 spans     ALL
-2                 filter    x = 44
-2  scan
-2                 table     twocolumn@primary
-2                 spans     ALL
+0  render   (empty)   (empty)
+0  (empty)  render 0  x
+0  (empty)  render 1  y
+0  (empty)  render 2  x
+0  (empty)  render 3  y
+1  join     (empty)   (empty)
+1  (empty)  type      cross
+2  scan     (empty)   (empty)
+2  (empty)  table     twocolumn@primary
+2  (empty)  spans     ALL
+2  (empty)  filter    x = 44
+2  scan     (empty)   (empty)
+2  (empty)  table     twocolumn@primary
+2  (empty)  spans     ALL
 
 # Check EXPLAIN.
 query ITTT
 EXPLAIN (EXPRS) SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
-0  render
-0                 render 0  x
-0                 render 1  x
-0                 render 2  y
-1  join
-1                 type      inner
-1                 equality  (x) = (y)
-2  scan
-2                 table     onecolumn@primary
-2                 spans     ALL
-2  scan
-2                 table     twocolumn@primary
-2                 spans     ALL
+0  render   (empty)   (empty)
+0  (empty)  render 0  x
+0  (empty)  render 1  x
+0  (empty)  render 2  y
+1  join     (empty)   (empty)
+1  (empty)  type      inner
+1  (empty)  equality  (x) = (y)
+2  scan     (empty)   (empty)
+2  (empty)  table     onecolumn@primary
+2  (empty)  spans     ALL
+2  scan     (empty)   (empty)
+2  (empty)  table     twocolumn@primary
+2  (empty)  spans     ALL
 
 # Check EXPLAIN.
 query ITTT
 EXPLAIN (EXPRS) SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
-0  render
-0                 render 0  x
-0                 render 1  x
-0                 render 2  y
-1  join
-1                 type      inner
-1                 equality  (x) = (y)
-2  scan
-2                 table     onecolumn@primary
-2                 spans     ALL
-2  scan
-2                 table     twocolumn@primary
-2                 spans     ALL
+0  render   (empty)   (empty)
+0  (empty)  render 0  x
+0  (empty)  render 1  x
+0  (empty)  render 2  y
+1  join     (empty)   (empty)
+1  (empty)  type      inner
+1  (empty)  equality  (x) = (y)
+2  scan     (empty)   (empty)
+2  (empty)  table     onecolumn@primary
+2  (empty)  spans     ALL
+2  scan     (empty)   (empty)
+2  (empty)  table     twocolumn@primary
+2  (empty)  spans     ALL
 
 
 query ITTT
 EXPLAIN (EXPRS) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ----
-0  limit
-0                 count     1
-1  render
-1                 render 0  x
-1                 render 1  x
-1                 render 2  y
-1                 render 3  b
-1                 render 4  d
-1                 render 5  e
-2  join
-2                 type      inner
-2                 equality  (b, x) = (d, d)
-3  join
-3                 type      inner
-3                 equality  (x) = (b)
-4  join
-4                 type      cross
-5  scan
-5                 table     onecolumn@primary
-5                 spans     ALL
-5  scan
-5                 table     twocolumn@primary
-5                 spans     ALL
-4  scan
-4                 table     onecolumn@primary
-4                 spans     ALL
-3  scan
-3                 table     twocolumn@primary
-3                 spans     ALL
+0  limit    (empty)   (empty)
+0  (empty)  count     1
+1  render   (empty)   (empty)
+1  (empty)  render 0  x
+1  (empty)  render 1  x
+1  (empty)  render 2  y
+1  (empty)  render 3  b
+1  (empty)  render 4  d
+1  (empty)  render 5  e
+2  join     (empty)   (empty)
+2  (empty)  type      inner
+2  (empty)  equality  (b, x) = (d, d)
+3  join     (empty)   (empty)
+3  (empty)  type      inner
+3  (empty)  equality  (x) = (b)
+4  join     (empty)   (empty)
+4  (empty)  type      cross
+5  scan     (empty)   (empty)
+5  (empty)  table     onecolumn@primary
+5  (empty)  spans     ALL
+5  scan     (empty)   (empty)
+5  (empty)  table     twocolumn@primary
+5  (empty)  spans     ALL
+4  scan     (empty)   (empty)
+4  (empty)  table     onecolumn@primary
+4  (empty)  spans     ALL
+3  scan     (empty)   (empty)
+3  (empty)  table     twocolumn@primary
+3  (empty)  spans     ALL
 
 # Check sub-queries in ON conditions.
 query III colnames
@@ -623,74 +623,74 @@ CREATE TABLE s(x INT); INSERT INTO s(x) VALUES (1),(2),(3),(4),(5),(6),(7),(8),(
 query ITTTTT
 EXPLAIN (METADATA) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
-0  render                            (x, y)
-1  join                              (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
-1          type   cross
-2  scan                              (x, y[omitted], rowid[hidden,omitted])
-2          table  twocolumn@primary
-2          spans  ALL
-2  scan                              (x[omitted], y, rowid[hidden,omitted])
-2          table  twocolumn@primary
-2          spans  ALL
+0  render   (empty)  (empty)            (x, y)                                                                        (empty)
+1  join     (empty)  (empty)            (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  (empty)
+1  (empty)  type     cross              (empty)                                                                       (empty)
+2  scan     (empty)  (empty)            (x, y[omitted], rowid[hidden,omitted])                                        (empty)
+2  (empty)  table    twocolumn@primary  (empty)                                                                       (empty)
+2  (empty)  spans    ALL                (empty)                                                                       (empty)
+2  scan     (empty)  (empty)            (x[omitted], y, rowid[hidden,omitted])                                        (empty)
+2  (empty)  table    twocolumn@primary  (empty)                                                                       (empty)
+2  (empty)  spans    ALL                (empty)                                                                       (empty)
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
-0  render                               (y)
-1  join                                 (x[omitted], x[hidden,omitted], y[omitted], rowid[hidden,omitted], x[hidden,omitted], y, rowid[hidden,omitted])
-1          type      inner
-1          equality  (x) = (x)
-2  scan                                 (x, y[omitted], rowid[hidden,omitted])
-2          table     twocolumn@primary
-2          spans     ALL
-2  scan                                 (x, y, rowid[hidden,omitted])
-2          table     twocolumn@primary
-2          spans     ALL
+0  render   (empty)   (empty)            (y)                                                                                                              (empty)
+1  join     (empty)   (empty)            (x[omitted], x[hidden,omitted], y[omitted], rowid[hidden,omitted], x[hidden,omitted], y, rowid[hidden,omitted])  (empty)
+1  (empty)  type      inner              (empty)                                                                                                          (empty)
+1  (empty)  equality  (x) = (x)          (empty)                                                                                                          (empty)
+2  scan     (empty)   (empty)            (x, y[omitted], rowid[hidden,omitted])                                                                           (empty)
+2  (empty)  table     twocolumn@primary  (empty)                                                                                                          (empty)
+2  (empty)  spans     ALL                (empty)                                                                                                          (empty)
+2  scan     (empty)   (empty)            (x, y, rowid[hidden,omitted])                                                                                    (empty)
+2  (empty)  table     twocolumn@primary  (empty)                                                                                                          (empty)
+2  (empty)  spans     ALL                (empty)                                                                                                          (empty)
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
-0  render                               (y)
-1  join                                 (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
-1          type      inner
-1          equality  (x) = (x)
-2  scan                                 (x, y[omitted], rowid[hidden,omitted])
-2          table     twocolumn@primary
-2          spans     ALL
-2  scan                                 (x, y, rowid[hidden,omitted])
-2          table     twocolumn@primary
-2          spans     ALL
+0  render   (empty)   (empty)            (y)                                                                                    (empty)
+1  join     (empty)   (empty)            (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  (empty)
+1  (empty)  type      inner              (empty)                                                                                (empty)
+1  (empty)  equality  (x) = (x)          (empty)                                                                                (empty)
+2  scan     (empty)   (empty)            (x, y[omitted], rowid[hidden,omitted])                                                 (empty)
+2  (empty)  table     twocolumn@primary  (empty)                                                                                (empty)
+2  (empty)  spans     ALL                (empty)                                                                                (empty)
+2  scan     (empty)   (empty)            (x, y, rowid[hidden,omitted])                                                          (empty)
+2  (empty)  table     twocolumn@primary  (empty)                                                                                (empty)
+2  (empty)  spans     ALL                (empty)                                                                                (empty)
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
-0  render                            (x)
-1  join                              (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])
-1          type   inner
-2  scan                              (x, y[omitted], rowid[hidden,omitted])
-2          table  twocolumn@primary
-2          spans  ALL
-2  scan                              (x[omitted], y, rowid[hidden,omitted])
-2          table  twocolumn@primary
-2          spans  ALL
+0  render   (empty)  (empty)            (x)                                                                                    (empty)
+1  join     (empty)  (empty)            (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])  (empty)
+1  (empty)  type     inner              (empty)                                                                                (empty)
+2  scan     (empty)  (empty)            (x, y[omitted], rowid[hidden,omitted])                                                 (empty)
+2  (empty)  table    twocolumn@primary  (empty)                                                                                (empty)
+2  (empty)  spans    ALL                (empty)                                                                                (empty)
+2  scan     (empty)  (empty)            (x[omitted], y, rowid[hidden,omitted])                                                 (empty)
+2  (empty)  table    twocolumn@primary  (empty)                                                                                (empty)
+2  (empty)  spans    ALL                (empty)                                                                                (empty)
 
 # Ensure that the ordering information for the result of joins is sane. (#12037)
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
                 INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
-0  sort                                 (k, u, w)                                        +u
-0          order     +u
-1  render                               (k, u, w)
-2  join                                 (k, u, k[hidden,omitted], k[hidden,omitted], w)
-2          type      inner
-2          equality  (k) = (k)
-3  sort                                 (u, k)                                           +k
-3          order     +k
-4  values                               (u, k)
-4          size      2 columns, 2 rows
-3  values                               (column1, column2)
-3          size      2 columns, 2 rows
+0  sort     (empty)   (empty)            (k, u, w)                                        +u
+0  (empty)  order     +u                 (empty)                                          (empty)
+1  render   (empty)   (empty)            (k, u, w)                                        (empty)
+2  join     (empty)   (empty)            (k, u, k[hidden,omitted], k[hidden,omitted], w)  (empty)
+2  (empty)  type      inner              (empty)                                          (empty)
+2  (empty)  equality  (k) = (k)          (empty)                                          (empty)
+3  sort     (empty)   (empty)            (u, k)                                           +k
+3  (empty)  order     +k                 (empty)                                          (empty)
+4  values   (empty)   (empty)            (u, k)                                           (empty)
+4  (empty)  size      2 columns, 2 rows  (empty)                                          (empty)
+3  values   (empty)   (empty)            (column1, column2)                               (empty)
+3  (empty)  size      2 columns, 2 rows  (empty)                                          (empty)
 
 # Ensure that large cross-joins are optimized somehow (#10633)
 statement ok
@@ -763,39 +763,39 @@ SELECT * FROM [EXPLAIN SELECT
 	   pos.n
   ] WHERE "Type" <> 'values' AND "Field" <> 'size'
 ----
-0   sort
-0              order     +pktable_schem,+pktable_name,+fk_name,+key_seq
-1   render
-2   join
-2              type      inner
-2              equality  (oid) = (relnamespace)
-3   join
-3              type      inner
-3              equality  (oid, oid) = (attrelid, confrelid)
-4   join
-4              type      inner
-5   join
-5              type      inner
-5              equality  (oid) = (relnamespace)
-6   filter
-6   join
-6              type      inner
-6              equality  (oid, oid) = (attrelid, conrelid)
-7   filter
-7   join
-7              type      inner
-8   join
-8              type      inner
-8              equality  (oid) = (objid)
-9   filter
-9   join
-9              type      cross
-10  generator
-10  join
-10             type      inner
-10             equality  (refobjid) = (oid)
-11  filter
-11  filter
+0   sort       (empty)   (empty)
+0   (empty)    order     +pktable_schem,+pktable_name,+fk_name,+key_seq
+1   render     (empty)   (empty)
+2   join       (empty)   (empty)
+2   (empty)    type      inner
+2   (empty)    equality  (oid) = (relnamespace)
+3   join       (empty)   (empty)
+3   (empty)    type      inner
+3   (empty)    equality  (oid, oid) = (attrelid, confrelid)
+4   join       (empty)   (empty)
+4   (empty)    type      inner
+5   join       (empty)   (empty)
+5   (empty)    type      inner
+5   (empty)    equality  (oid) = (relnamespace)
+6   filter     (empty)   (empty)
+6   join       (empty)   (empty)
+6   (empty)    type      inner
+6   (empty)    equality  (oid, oid) = (attrelid, conrelid)
+7   filter     (empty)   (empty)
+7   join       (empty)   (empty)
+7   (empty)    type      inner
+8   join       (empty)   (empty)
+8   (empty)    type      inner
+8   (empty)    equality  (oid) = (objid)
+9   filter     (empty)   (empty)
+9   join       (empty)   (empty)
+9   (empty)    type      cross
+10  generator  (empty)   (empty)
+10  join       (empty)   (empty)
+10  (empty)    type      inner
+10  (empty)    equality  (refobjid) = (oid)
+11  filter     (empty)   (empty)
+11  filter     (empty)   (empty)
 
 query TTTTTTTTIIITTI
 SELECT     NULL::text  AS pktable_cat,
@@ -883,16 +883,16 @@ INSERT INTO pairs VALUES (1,1), (1,2), (1,3), (1,4), (1,5), (1,6), (2,3), (2,4),
 query ITTT
 EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
-0  render
-1  join
-1        type      inner
-1        equality  (b) = (n)
-2  scan
-2        table     pairs@primary
-2        spans     ALL
-2  scan
-2        table     square@primary
-2        spans     ALL
+0  render   (empty)   (empty)
+1  join     (empty)   (empty)
+1  (empty)  type      inner
+1  (empty)  equality  (b) = (n)
+2  scan     (empty)   (empty)
+2  (empty)  table     pairs@primary
+2  (empty)  spans     ALL
+2  scan     (empty)   (empty)
+2  (empty)  table     square@primary
+2  (empty)  spans     ALL
 
 query IIII rowsort
 SELECT * FROM pairs, square WHERE pairs.b = square.n
@@ -917,20 +917,20 @@ SELECT * FROM pairs, square WHERE pairs.b = square.n
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
-0  render                                                            (a, b, n, sq)
-0          render 0  test.pairs.a
-0          render 1  test.pairs.b
-0          render 2  test.square.n
-0          render 3  test.square.sq
-1  join                                                              (a, b, rowid[hidden,omitted], n, sq)
-1          type      inner
-1          pred      (test.pairs.a + test.pairs.b) = test.square.sq
-2  scan                                                              (a, b, rowid[hidden,omitted])
-2          table     pairs@primary
-2          spans     ALL
-2  scan                                                              (n, sq)
-2          table     square@primary
-2          spans     ALL
+0  render   (empty)   (empty)                                         (a, b, n, sq)                         (empty)
+0  (empty)  render 0  test.pairs.a                                    (empty)                               (empty)
+0  (empty)  render 1  test.pairs.b                                    (empty)                               (empty)
+0  (empty)  render 2  test.square.n                                   (empty)                               (empty)
+0  (empty)  render 3  test.square.sq                                  (empty)                               (empty)
+1  join     (empty)   (empty)                                         (a, b, rowid[hidden,omitted], n, sq)  (empty)
+1  (empty)  type      inner                                           (empty)                               (empty)
+1  (empty)  pred      (test.pairs.a + test.pairs.b) = test.square.sq  (empty)                               (empty)
+2  scan     (empty)   (empty)                                         (a, b, rowid[hidden,omitted])         (empty)
+2  (empty)  table     pairs@primary                                   (empty)                               (empty)
+2  (empty)  spans     ALL                                             (empty)                               (empty)
+2  scan     (empty)   (empty)                                         (n, sq)                               (empty)
+2  (empty)  table     square@primary                                  (empty)                               (empty)
+2  (empty)  spans     ALL                                             (empty)                               (empty)
 
 query IIII rowsort
 SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
@@ -945,27 +945,27 @@ SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
 ----
-0  render                                         (a, b, n, sq)
-0          render 0  a
-0          render 1  b
-0          render 2  n
-0          render 3  sq
-1  filter                                         (a, b, sum, n, sq)
-1          filter    sum = sq
-2  render                                         (a, b, sum, n, sq)
-2          render 0  test.pairs.a
-2          render 1  test.pairs.b
-2          render 2  test.pairs.a + test.pairs.b
-2          render 3  test.square.n
-2          render 4  test.square.sq
-3  join                                           (a, b, rowid[hidden,omitted], n, sq)
-3          type      cross
-4  scan                                           (a, b, rowid[hidden,omitted])
-4          table     pairs@primary
-4          spans     ALL
-4  scan                                           (n, sq)
-4          table     square@primary
-4          spans     ALL
+0  render   (empty)   (empty)                      (a, b, n, sq)                         (empty)
+0  (empty)  render 0  a                            (empty)                               (empty)
+0  (empty)  render 1  b                            (empty)                               (empty)
+0  (empty)  render 2  n                            (empty)                               (empty)
+0  (empty)  render 3  sq                           (empty)                               (empty)
+1  filter   (empty)   (empty)                      (a, b, sum, n, sq)                    (empty)
+1  (empty)  filter    sum = sq                     (empty)                               (empty)
+2  render   (empty)   (empty)                      (a, b, sum, n, sq)                    (empty)
+2  (empty)  render 0  test.pairs.a                 (empty)                               (empty)
+2  (empty)  render 1  test.pairs.b                 (empty)                               (empty)
+2  (empty)  render 2  test.pairs.a + test.pairs.b  (empty)                               (empty)
+2  (empty)  render 3  test.square.n                (empty)                               (empty)
+2  (empty)  render 4  test.square.sq               (empty)                               (empty)
+3  join     (empty)   (empty)                      (a, b, rowid[hidden,omitted], n, sq)  (empty)
+3  (empty)  type      cross                        (empty)                               (empty)
+4  scan     (empty)   (empty)                      (a, b, rowid[hidden,omitted])         (empty)
+4  (empty)  table     pairs@primary                (empty)                               (empty)
+4  (empty)  spans     ALL                          (empty)                               (empty)
+4  scan     (empty)   (empty)                      (n, sq)                               (empty)
+4  (empty)  table     square@primary               (empty)                               (empty)
+4  (empty)  spans     ALL                          (empty)                               (empty)
 
 query IIII rowsort
 SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
@@ -978,20 +978,20 @@ SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WH
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
-0  render                                                            (a, b, n, sq)
-0          render 0  test.pairs.a
-0          render 1  test.pairs.b
-0          render 2  test.square.n
-0          render 3  test.square.sq
-1  join                                                              (a, b, rowid[hidden,omitted], n, sq)
-1          type      full outer
-1          pred      (test.pairs.a + test.pairs.b) = test.square.sq
-2  scan                                                              (a, b, rowid[hidden,omitted])
-2          table     pairs@primary
-2          spans     ALL
-2  scan                                                              (n, sq)
-2          table     square@primary
-2          spans     ALL
+0  render   (empty)   (empty)                                         (a, b, n, sq)                         (empty)
+0  (empty)  render 0  test.pairs.a                                    (empty)                               (empty)
+0  (empty)  render 1  test.pairs.b                                    (empty)                               (empty)
+0  (empty)  render 2  test.square.n                                   (empty)                               (empty)
+0  (empty)  render 3  test.square.sq                                  (empty)                               (empty)
+1  join     (empty)   (empty)                                         (a, b, rowid[hidden,omitted], n, sq)  (empty)
+1  (empty)  type      full outer                                      (empty)                               (empty)
+1  (empty)  pred      (test.pairs.a + test.pairs.b) = test.square.sq  (empty)                               (empty)
+2  scan     (empty)   (empty)                                         (a, b, rowid[hidden,omitted])         (empty)
+2  (empty)  table     pairs@primary                                   (empty)                               (empty)
+2  (empty)  spans     ALL                                             (empty)                               (empty)
+2  scan     (empty)   (empty)                                         (n, sq)                               (empty)
+2  (empty)  table     square@primary                                  (empty)                               (empty)
+2  (empty)  spans     ALL                                             (empty)                               (empty)
 
 query IIII rowsort
 SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
@@ -1019,22 +1019,22 @@ NULL  NULL  6     36
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
-0  render                                                            (a, b, n, sq)
-0          render 0  test.pairs.a
-0          render 1  test.pairs.b
-0          render 2  test.square.n
-0          render 3  test.square.sq
-1  filter                                                            (a, b, rowid[hidden,omitted], n, sq)
-1          filter    (test.pairs.b % 2) != (test.square.sq % 2)
-2  join                                                              (a, b, rowid[hidden,omitted], n, sq)
-2          type      full outer
-2          pred      (test.pairs.a + test.pairs.b) = test.square.sq
-3  scan                                                              (a, b, rowid[hidden,omitted])
-3          table     pairs@primary
-3          spans     ALL
-3  scan                                                              (n, sq)
-3          table     square@primary
-3          spans     ALL
+0  render   (empty)   (empty)                                         (a, b, n, sq)                         (empty)
+0  (empty)  render 0  test.pairs.a                                    (empty)                               (empty)
+0  (empty)  render 1  test.pairs.b                                    (empty)                               (empty)
+0  (empty)  render 2  test.square.n                                   (empty)                               (empty)
+0  (empty)  render 3  test.square.sq                                  (empty)                               (empty)
+1  filter   (empty)   (empty)                                         (a, b, rowid[hidden,omitted], n, sq)  (empty)
+1  (empty)  filter    (test.pairs.b % 2) != (test.square.sq % 2)      (empty)                               (empty)
+2  join     (empty)   (empty)                                         (a, b, rowid[hidden,omitted], n, sq)  (empty)
+2  (empty)  type      full outer                                      (empty)                               (empty)
+2  (empty)  pred      (test.pairs.a + test.pairs.b) = test.square.sq  (empty)                               (empty)
+3  scan     (empty)   (empty)                                         (a, b, rowid[hidden,omitted])         (empty)
+3  (empty)  table     pairs@primary                                   (empty)                               (empty)
+3  (empty)  spans     ALL                                             (empty)                               (empty)
+3  scan     (empty)   (empty)                                         (n, sq)                               (empty)
+3  (empty)  table     square@primary                                  (empty)                               (empty)
+3  (empty)  spans     ALL                                             (empty)                               (empty)
 
 query IIII rowsort
 SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2

@@ -74,10 +74,10 @@ CREATE INDEX ON t (b, a) STORING (c)
 query ITTT
 EXPLAIN SELECT a, b FROM t ORDER BY a, b
 ----
-0  render
-1  scan
-1          table  t@primary
-1          spans  ALL
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@primary
+1  (empty)  spans    ALL
 
 query TI
 SELECT a, b FROM t ORDER BY a, b
@@ -95,10 +95,10 @@ x  5
 query ITTT
 EXPLAIN SELECT b, a FROM t ORDER BY b, a
 ----
-0  render
-1  scan
-1          table  t@t_b_a_idx
-1          spans  ALL
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@t_b_a_idx
+1  (empty)  spans    ALL
 
 query IT
 SELECT b, a FROM t ORDER BY b, a
@@ -136,10 +136,10 @@ UPDATE t SET a = (a :: STRING || a :: STRING) COLLATE da
 query ITTT
 EXPLAIN SELECT a, b FROM t ORDER BY a, b
 ----
-0  render
-1  scan
-1          table  t@primary
-1          spans  ALL
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@primary
+1  (empty)  spans    ALL
 
 query TI
 SELECT a, b FROM t ORDER BY a, b
@@ -157,10 +157,10 @@ AA  2
 query ITTT
 EXPLAIN SELECT b, a FROM t ORDER BY b, a
 ----
-0  render
-1  scan
-1          table  t@t_b_a_idx
-1          spans  ALL
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@t_b_a_idx
+1  (empty)  spans    ALL
 
 query IT
 SELECT b, a FROM t ORDER BY b, a
@@ -183,10 +183,10 @@ DELETE FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da)
 query ITTT
 EXPLAIN SELECT a, b FROM t ORDER BY a, b
 ----
-0  render
-1  scan
-1          table  t@primary
-1          spans  ALL
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@primary
+1  (empty)  spans    ALL
 
 query TI
 SELECT a, b FROM t ORDER BY a, b
@@ -202,10 +202,10 @@ AA  2
 query ITTT
 EXPLAIN SELECT b, a FROM t ORDER BY b, a
 ----
-0  render
-1  scan
-1          table  t@t_b_a_idx
-1          spans  ALL
+0  render   (empty)  (empty)
+1  scan     (empty)  (empty)
+1  (empty)  table    t@t_b_a_idx
+1  (empty)  spans    ALL
 
 query IT
 SELECT b, a FROM t ORDER BY b, a

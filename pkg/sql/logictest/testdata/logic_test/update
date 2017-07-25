@@ -336,44 +336,44 @@ SELECT * from xyz
 query ITTT
 EXPLAIN UPDATE xyz SET y = x
 ----
-0  update
-0         table  xyz
-0         set    y
-1  scan
-1         table  xyz@primary
-1         spans  ALL
+0  update   (empty)  (empty)
+0  (empty)  table    xyz
+0  (empty)  set      y
+1  scan     (empty)  (empty)
+1  (empty)  table    xyz@primary
+1  (empty)  spans    ALL
 
 query ITTTTT
 EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (1, 2)
 ----
-0  update                      ()
-0          table  xyz
-0          set    x, y
-1  render                      (x, y, z, "1", "2")  ="1",="2"
-2  scan                        (x, y, z)
-2          table  xyz@primary
-2          spans  ALL
+0  update   (empty)  (empty)      ()                   (empty)
+0  (empty)  table    xyz          (empty)              (empty)
+0  (empty)  set      x, y         (empty)              (empty)
+1  render   (empty)  (empty)      (x, y, z, "1", "2")  ="1",="2"
+2  scan     (empty)  (empty)      (x, y, z)            (empty)
+2  (empty)  table    xyz@primary  (empty)              (empty)
+2  (empty)  spans    ALL          (empty)              (empty)
 
 query ITTTTT
 EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (y, x)
 ----
-0  update                      ()
-0          table  xyz
-0          set    x, y
-1  scan                        (x, y, z)
-1          table  xyz@primary
-1          spans  ALL
+0  update   (empty)  (empty)      ()         (empty)
+0  (empty)  table    xyz          (empty)    (empty)
+0  (empty)  set      x, y         (empty)    (empty)
+1  scan     (empty)  (empty)      (x, y, z)  (empty)
+1  (empty)  table    xyz@primary  (empty)    (empty)
+1  (empty)  spans    ALL          (empty)    (empty)
 
 query ITTTTT
 EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (2, 2)
 ----
-0  update                      ()
-0          table  xyz
-0          set    x, y
-1  render                      (x, y, z, "2")  ="2"
-2  scan                        (x, y, z)
-2          table  xyz@primary
-2          spans  ALL
+0  update   (empty)  (empty)      ()              (empty)
+0  (empty)  table    xyz          (empty)         (empty)
+0  (empty)  set      x, y         (empty)         (empty)
+1  render   (empty)  (empty)      (x, y, z, "2")  ="2"
+2  scan     (empty)  (empty)      (x, y, z)       (empty)
+2  (empty)  table    xyz@primary  (empty)         (empty)
+2  (empty)  spans    ALL          (empty)         (empty)
 
 statement ok
 CREATE TABLE lots (

@@ -45,13 +45,13 @@ INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 query ITTT
 EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----
-0  split
-1  values
-1           size        1 column, 1 row
-1           subqueries  1
-2  limit
-3  render
-4  nullrow
+0  split    (empty)     (empty)
+1  values   (empty)     (empty)
+1  (empty)  size        1 column, 1 row
+1  (empty)  subqueries  1
+2  limit    (empty)     (empty)
+3  render   (empty)     (empty)
+4  nullrow  (empty)     (empty)
 
 statement ok
 ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
@@ -78,14 +78,14 @@ SELECT (SELECT a FROM abc)
 query ITTT
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 ----
-0  render
-0           subqueries  1
-1  limit
-2  render
-3  scan
-3           table       abc@primary
-3           spans       ALL
-1  nullrow
+0  render   (empty)     (empty)
+0  (empty)  subqueries  1
+1  limit    (empty)     (empty)
+2  render   (empty)     (empty)
+3  scan     (empty)     (empty)
+3  (empty)  table       abc@primary
+3  (empty)  spans       ALL
+1  nullrow  (empty)     (empty)
 
 query I
 SELECT (SELECT a FROM abc WHERE false)
@@ -288,10 +288,10 @@ foo1 moo2 moo3
 query ITTT
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
 ----
-0  sort
-0          order  +foo1
-1  values
-1          size   3 columns, 3 rows
+0  sort     (empty)  (empty)
+0  (empty)  order    +foo1
+1  values   (empty)  (empty)
+1  (empty)  size     3 columns, 3 rows
 
 query II colnames
 SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
@@ -342,15 +342,15 @@ true
 query ITTTTT
 EXPLAIN (METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
 ----
-0  render                           (x)
-1  scan                             (x, y[omitted], z[omitted])
-1          table       xyz@primary
-1          spans       ALL
-1          subqueries  1
-2  render                           (x)
-3  scan                             (x, y[omitted], z[omitted])
-3          table       xyz@primary
-3          spans       ALL
+0  render   (empty)     (empty)      (x)                          (empty)
+1  scan     (empty)     (empty)      (x, y[omitted], z[omitted])  (empty)
+1  (empty)  table       xyz@primary  (empty)                      (empty)
+1  (empty)  spans       ALL          (empty)                      (empty)
+1  (empty)  subqueries  1            (empty)                      (empty)
+2  render   (empty)     (empty)      (x)                          (empty)
+3  scan     (empty)     (empty)      (x, y[omitted], z[omitted])  (empty)
+3  (empty)  table       xyz@primary  (empty)                      (empty)
+3  (empty)  spans       ALL          (empty)                      (empty)
 
 # This test checks that the double sub-query plan expansion caused by a
 # sub-expression being shared by two or more plan nodes does not
@@ -371,20 +371,20 @@ SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col
 query ITTT
 EXPLAIN SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-0  render
-1  index-join
-2  scan
-2              table       tab4@idx_tab4_0
-2              spans       /#-/5.38/1
-2              subqueries  1
-3  render
-4  scan
-4              table       tab4@primary
-4              spans       ALL
-2  scan
-2              table       tab4@primary
-2              subqueries  1
-3  render
-4  scan
-4              table       tab4@primary
-4              spans       ALL
+0  render      (empty)     (empty)
+1  index-join  (empty)     (empty)
+2  scan        (empty)     (empty)
+2  (empty)     table       tab4@idx_tab4_0
+2  (empty)     spans       /#-/5.38/1
+2  (empty)     subqueries  1
+3  render      (empty)     (empty)
+4  scan        (empty)     (empty)
+4  (empty)     table       tab4@primary
+4  (empty)     spans       ALL
+2  scan        (empty)     (empty)
+2  (empty)     table       tab4@primary
+2  (empty)     subqueries  1
+3  render      (empty)     (empty)
+4  scan        (empty)     (empty)
+4  (empty)     table       tab4@primary
+4  (empty)     spans       ALL
