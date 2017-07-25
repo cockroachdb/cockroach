@@ -82,7 +82,6 @@ func TestCancelSelectQuery(t *testing.T) {
 	case <-time.After(time.Second * 5):
 		t.Fatal("no error received from query supposed to be cancelled")
 	}
-
 }
 
 func TestCancelParallelQuery(t *testing.T) {
@@ -221,5 +220,134 @@ func TestCancelDistSQLQuery(t *testing.T) {
 		t.Fatal(err)
 	} else if err == nil {
 		t.Fatal("didn't get an error from query that should have been cancelled")
+	}
+}	errChan := make(chan error)
+
+	go func() {
+		sem <- struct{}{}
+		_, err := conn1.Exec(txnToRun)
+		if err != nil {
+			errChan <- err
+		}
+	}()
+
+	<-sem
+	time.Sleep(time.Second * 2)
+
+	if _, err := conn2.Exec(cancelTxn); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-errChan:
+		if err != nil && !testutils.IsError(err, `.*query execution cancelled.*`) {
+			t.Fatal(err)
+		} else if err == nil {
+			t.Fatal("didn't get an error from query that should have been cancelled")
+		}
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for an error from query supposed to be cancelled")
+	}
+}
+
+// Cancel a transaction with a query running `show trace for ...` with a long-running statement.
+func TestCancelTraceTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const insertQuery = `INSERT INTO nums VALUES (1);`
+	const traceQuery = `SHOW TRACE FOR SELECT * FROM generate_series(1,20000000);`
+	const txnToRun = `BEGIN TRANSACTION; ` + insertQuery + traceQuery + ` COMMIT;`
+
+	const cancelTxn = `CANCEL TRANSACTION (SELECT left(kv_txn, 8) FROM [SHOW CLUSTER SESSIONS] WHERE node_id = 1)`
+
+	// Runs the txn.
+	var conn1 *gosql.DB
+
+	// Cancels the txn.
+	var conn2 *gosql.DB
+
+	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: `test`,
+				Knobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						BeforeExecute: func(ctx context.Context, stmt string, isDistributed bool) {
+							// We want to cancel the txn on the `SHOW TRACE` query.
+							if strings.Contains(stmt, `SHOW TRACE`) {
+								// Cancel the txn.
+								if _, err := conn2.Exec(cancelTxn); err != nil {
+									t.Fatal(err)
+								}
+							}
+						},
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	conn1 = tc.ServerConn(0)
+	conn2 = tc.ServerConn(1)
+
+	sqlutils.CreateTable(t, conn1, `nums`, `num INT`, 0, nil)
+
+	// Run the txn.
+	_, err := conn1.Exec(txnToRun)
+	if err != nil && !testutils.IsError(err, `.*query execution cancelled.*`) {
+		t.Fatal(err)
+	} else if err == nil {
+		t.Fatal("didn't get an error from txn that should have been cancelled")
+	}
+}
+
+// Cancel a transaction running a distSQL query pre-execution (before any streams have been established)
+func TestCancelDistSQLTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const insertQuery = `INSERT INTO nums SELECT generate_series(1,10);`
+	const selectQuery = `SELECT * FROM nums ORDER BY num DESC;`
+	const txnToRun = `BEGIN TRANSACTION; ` + insertQuery + selectQuery + ` COMMIT;`
+
+	const cancelTxn = `CANCEL TRANSACTION (SELECT left(kv_txn, 8) FROM [SHOW CLUSTER SESSIONS] WHERE node_id = 1)`
+
+	// Runs the txn.
+	var conn1 *gosql.DB
+
+	// Cancels the txn.
+	var conn2 *gosql.DB
+
+	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+				Knobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						BeforeExecute: func(ctx context.Context, stmt string, isDistributed bool) {
+							// We want to cancel the txn on the select query.
+							if strings.Contains(stmt, `ORDER BY num`) {
+								// Cancel the txn.
+								if _, err := conn2.Exec(cancelTxn); err != nil {
+									t.Fatal(err)
+								}
+							}
+						},
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	conn1 = tc.ServerConn(0)
+	conn2 = tc.ServerConn(1)
+
+	sqlutils.CreateTable(t, conn1, `nums`, `num INT`, 0, nil)
+
+	_, err := conn1.Exec(txnToRun)
+	if err != nil && !testutils.IsError(err, `.*query execution cancelled.*`) {
+		t.Fatal(err)
+	} else if err == nil {
+		t.Fatal(`didn't get an error from query that should have been cancelled`)
 	}
 }
