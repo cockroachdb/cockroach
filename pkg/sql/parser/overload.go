@@ -460,6 +460,50 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
+	// In a binary expression, in the case of one of the arguments being untyped NULL,
+	// we prefer overloads where we infer the type of the NULL to be the same as the
+	// other argument. This is used to differentiate the behaviour of
+	// STRING[] || NULL and STRING || NULL.
+	if len(s.exprs) == 2 {
+		if ok, fns, err := filterAttempt(ctx, &s, func() {
+			var err error
+			left := s.typedExprs[0]
+			if left == nil {
+				left, err = s.exprs[0].TypeCheck(ctx, TypeAny)
+				if err != nil {
+					return
+				}
+			}
+			right := s.typedExprs[1]
+			if right == nil {
+				right, err = s.exprs[1].TypeCheck(ctx, TypeAny)
+				if err != nil {
+					return
+				}
+			}
+			leftType := left.ResolvedType()
+			rightType := right.ResolvedType()
+			leftIsNull := leftType == TypeNull
+			rightIsNull := rightType == TypeNull
+			oneIsNull := (leftIsNull || rightIsNull) && !(leftIsNull && rightIsNull)
+			if oneIsNull {
+				if leftIsNull {
+					leftType = rightType
+				}
+				if rightIsNull {
+					rightType = leftType
+				}
+				s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
+					func(o overloadImpl) bool {
+						return o.params().getAt(0).Equivalent(leftType) &&
+							o.params().getAt(1).Equivalent(rightType)
+					})
+			}
+		}); ok {
+			return s.typedExprs, fns, err
+		}
+	}
+
 	// The final heuristic is to defer to preferred candidates, if available.
 	if ok, fns, err := filterAttempt(ctx, &s, func() {
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs, func(o overloadImpl) bool {
@@ -472,7 +516,12 @@ func typeCheckOverloadedExprs(
 	if _, err := defaultTypeCheck(ctx, s, len(s.overloads) > 0); err != nil {
 		return nil, nil, err
 	}
-	return s.typedExprs, s.overloads, nil
+
+	possibleOverloads := make([]overloadImpl, len(s.overloadIdxs))
+	for i, o := range s.overloadIdxs {
+		possibleOverloads[i] = s.overloads[o]
+	}
+	return s.typedExprs, possibleOverloads, nil
 }
 
 // filterAttempt attempts to filter the overloads down to a single candidate.
