@@ -66,7 +66,7 @@ func (n *cancelQueryNode) Start(params runParams) error {
 
 	request := &serverpb.CancelQueryRequest{
 		NodeId:   fmt.Sprintf("%d", nodeID),
-		QueryID:  queryID.GetString(),
+		QueryID:  queryIDString,
 		Username: n.p.session.User,
 	}
 
@@ -76,7 +76,7 @@ func (n *cancelQueryNode) Start(params runParams) error {
 	}
 
 	if !response.Cancelled {
-		return fmt.Errorf("Could not cancel query %s: %s", queryID.GetString(), response.Error)
+		return fmt.Errorf("Could not cancel query %s: %s", queryID, response.Error)
 	}
 
 	return nil

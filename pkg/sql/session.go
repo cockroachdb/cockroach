@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -318,7 +319,7 @@ type Session struct {
 		//
 
 		// ActiveQueries contains all queries in flight.
-		ActiveQueries map[string]*queryMeta
+		ActiveQueries map[uint128.Uint128]*queryMeta
 	}
 
 	//
@@ -441,7 +442,7 @@ func NewSession(
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
 	s.Tracing.session = s
-	s.mu.ActiveQueries = make(map[string]*queryMeta)
+	s.mu.ActiveQueries = make(map[uint128.Uint128]*queryMeta)
 
 	remoteStr := "<admin>"
 	if remote != nil {
@@ -649,7 +650,7 @@ func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 
 // addActiveQuery adds a running query to the session's internal store of active
 // queries. Called from executor's execStmt and execStmtInParallel.
-func (s *Session) addActiveQuery(queryID string, queryMeta *queryMeta) {
+func (s *Session) addActiveQuery(queryID uint128.Uint128, queryMeta *queryMeta) {
 	s.mu.Lock()
 	s.mu.ActiveQueries[queryID] = queryMeta
 	queryMeta.session = s
@@ -658,7 +659,7 @@ func (s *Session) addActiveQuery(queryID string, queryMeta *queryMeta) {
 
 // removeActiveQuery removes a query from a session's internal store of active
 // queries. Called when a query finishes execution.
-func (s *Session) removeActiveQuery(queryID string) {
+func (s *Session) removeActiveQuery(queryID uint128.Uint128) {
 	s.mu.Lock()
 	delete(s.mu.ActiveQueries, queryID)
 	s.mu.Unlock()
@@ -666,7 +667,7 @@ func (s *Session) removeActiveQuery(queryID string) {
 
 // setQueryExecutionMode is called upon start of execution of a query, and sets
 // the query's metadata to indicate whether it's distributed or not.
-func (s *Session) setQueryExecutionMode(queryID string, isDistributed bool) {
+func (s *Session) setQueryExecutionMode(queryID uint128.Uint128, isDistributed bool) {
 	s.mu.Lock()
 	queryMeta := s.mu.ActiveQueries[queryID]
 	queryMeta.phase = executing
@@ -708,7 +709,7 @@ func (s *Session) serialize() serverpb.Session {
 			sql += "…"
 		}
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
-			ID:            id,
+			ID:            id.String(),
 			Start:         query.start.UTC(),
 			Sql:           sql,
 			IsDistributed: query.isDistributed,
