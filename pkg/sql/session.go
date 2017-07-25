@@ -292,6 +292,8 @@ type Session struct {
 	// indicate to Finish() that the session is already closed.
 	emergencyShutdown bool
 
+	ResultWriter ResultWriter
+
 	Tracing SessionTracing
 
 	tables TableCollection
@@ -634,7 +636,6 @@ func (s *Session) resetForBatch(e *Executor) {
 	// Update the database cache to a more recent copy, so that we can use tables
 	// that we created in previous batches of the same transaction.
 	s.tables.databaseCache = e.getDatabaseCache()
-	s.TxnState.schemaChangers.curGroupNum++
 }
 
 // setTestingVerifyMetadata sets a callback to be called after the Session
@@ -821,7 +822,7 @@ type txnState struct {
 	commitSeen bool
 
 	// The schema change closures to run when this txn is done.
-	schemaChangers schemaChangerCollection
+	schemaChangers schemaChangers
 
 	sp opentracing.Span
 
@@ -962,7 +963,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	}
 
 	// Discard the old schemaChangers, if any.
-	ts.schemaChangers = schemaChangerCollection{}
+	ts.schemaChangers = schemaChangers{}
 }
 
 // willBeRetried returns true if the SQL transaction is going to be retried
@@ -1080,34 +1081,12 @@ func (ts *txnState) isSerializableRestart() bool {
 	return txn.IsSerializableRestart()
 }
 
-type schemaChangerCollection struct {
-	// A schemaChangerCollection accumulates schemaChangers from potentially
-	// multiple user requests, part of the same SQL transaction. We need to
-	// remember what group and index within the group each schemaChanger came
-	// from, so we can map failures back to the statement that produced them.
-	curGroupNum int
-
-	// The index of the current statement, relative to its group. For statements
-	// that have been received from the client in the same batch, the
-	// group consists of all statements in the same transaction.
-	curStatementIdx int
-	// schema change callbacks together with the index of the statement
-	// that enqueued it (within its group of statements).
-	schemaChangers []struct {
-		epoch int
-		idx   int
-		sc    SchemaChanger
-	}
+type schemaChangers struct {
+	schemaChangers []SchemaChanger
 }
 
-func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChanger) {
-	scc.schemaChangers = append(
-		scc.schemaChangers,
-		struct {
-			epoch int
-			idx   int
-			sc    SchemaChanger
-		}{scc.curGroupNum, scc.curStatementIdx, schemaChanger})
+func (scc *schemaChangers) queueSchemaChanger(schemaChanger SchemaChanger) {
+	scc.schemaChangers = append(scc.schemaChangers, schemaChanger)
 }
 
 // execSchemaChanges releases schema leases and runs the queued
@@ -1115,14 +1094,8 @@ func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChang
 // scheduling the schema change has finished.
 //
 // The list of closures is cleared after (attempting) execution.
-//
-// Args:
-//  results: The results from all statements in the group that scheduled the
-//    schema changes we're about to execute. Results corresponding to the
-//    schema change statements will be changed in case an error occurs.
-func (scc *schemaChangerCollection) execSchemaChanges(
-	ctx context.Context, e *Executor, session *Session, results ResultList,
-) {
+func (scc *schemaChangers) execSchemaChanges(e *Executor, session *Session) {
+	ctx := session.Ctx()
 	// Release the leases once a transaction is complete.
 	session.tables.releaseTables(ctx)
 	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
@@ -1130,8 +1103,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
-	for _, scEntry := range scc.schemaChangers {
-		sc := &scEntry.sc
+	for _, sc := range scc.schemaChangers {
 		sc.db = *e.cfg.DB
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
 		sc.distSQLPlanner = e.distSQLPlanner
@@ -1143,17 +1115,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				}
 				if err == sqlbase.ErrDescriptorNotFound {
 				} else if sqlbase.IsPermanentSchemaChangeError(err) {
-					// All constraint violations can be reported; we report it as the result
-					// corresponding to the statement that enqueued this changer.
-					// There's some sketchiness here: we assume there's a single result
-					// per statement and we clobber the result/error of the corresponding
-					// statement.
-					// There's also another subtlety: we can only report results for
-					// statements in the current batch; we can't modify the results of older
-					// statements.
-					if scEntry.epoch == scc.curGroupNum {
-						results[scEntry.idx] = Result{Err: err}
-					}
+					session.ResultWriter.Error(err)
 				} else {
 					// retryable error.
 					continue

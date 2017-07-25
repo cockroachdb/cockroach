@@ -782,7 +782,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 // TODO(andrei): get rid of this type once we can have tests internal to the sql
 // package (as of April 2016 we can't because sql can't import server).
 type TestingSchemaChangerCollection struct {
-	scc *schemaChangerCollection
+	scc *schemaChangers
 }
 
 // ClearSchemaChangers clears the schema changers from the collection.

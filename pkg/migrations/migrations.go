@@ -331,7 +331,7 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	// arbitrarily long time.
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		res := r.sqlExecutor.ExecuteStatements(session, alterStmt, nil)
+		res := r.sqlExecutor.ExecuteStatementsBuffered(session, alterStmt, nil)
 		err = checkQueryResults(res.ResultList, 1)
 		if err == nil {
 			break
@@ -389,7 +389,7 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	// arbitrarily long time.
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		res := r.sqlExecutor.ExecuteStatements(session, setStmt, nil)
+		res := r.sqlExecutor.ExecuteStatementsBuffered(session, setStmt, nil)
 		err = checkQueryResults(res.ResultList, 1)
 		if err == nil {
 			break

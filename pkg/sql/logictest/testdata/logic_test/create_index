@@ -60,6 +60,24 @@ output row: [2 1]
 statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON t (b)
 
+statement ok
+BEGIN
+
+statement ok
+CREATE UNIQUE INDEX bar ON t (b)
+
+statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
+COMMIT
+
+statement ok
+BEGIN; CREATE UNIQUE INDEX bar ON t (b)
+
+statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
+COMMIT
+
+statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
+BEGIN; CREATE UNIQUE INDEX bar ON t (b); COMMIT
+
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
