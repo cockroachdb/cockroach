@@ -947,7 +947,6 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	s.mux.Handle(rangeDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugRange)))
 	s.mux.Handle(certificatesDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugCertificates)))
-	s.mux.Handle(nodesDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugNodes)))
 	log.Event(ctx, "added http endpoints")
 
 	// Before serving SQL requests, we have to make sure the database is
