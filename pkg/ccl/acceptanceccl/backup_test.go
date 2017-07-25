@@ -129,6 +129,7 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 		`SET CLUSTER SETTING cluster.organization = "Cockroach Labs - Production Testing"`)
 	sqlutils.MakeSQLRunner(bt.b, sqlDB).Exec(
 		fmt.Sprintf(`SET CLUSTER SETTING enterprise.license = "%s"`, licenseKey))
+	sqlutils.MakeSQLRunner(bt.b, sqlDB).Exec("SET CLUSTER SETTING trace.debug.enable = 'true'")
 
 	log.Info(ctx, "initial cluster is up")
 }
@@ -234,6 +235,44 @@ func BenchmarkRestoreBig(b *testing.B) {
 		log.Infof(ctx, "restored %s", humanizeutil.IBytes(desc.EntryCounts.DataSize))
 		b.StopTimer()
 	})
+}
+
+func BenchmarkRestoreTPCH10(b *testing.B) {
+	restoreBaseURI := getAzureURI(b)
+	restoreBaseURI.Path = `benchmarks/tpch/scalefactor-10`
+	restoreTPCH10URI := restoreBaseURI.String()
+
+	for _, numNodes := range []int{1, 3, 10} {
+		b.Run(fmt.Sprintf("numNodes=%d", numNodes), func(b *testing.B) {
+			if b.N != 1 {
+				b.Fatal("b.N must be 1")
+			}
+
+			bt := benchmarkTest{
+				b:      b,
+				nodes:  numNodes,
+				prefix: "restore-tpch10",
+			}
+
+			ctx := context.Background()
+			bt.Start(ctx)
+			defer bt.Close(ctx)
+
+			db, err := gosql.Open("postgres", bt.f.PGUrl(ctx, 0))
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer db.Close()
+
+			if _, err := db.Exec("CREATE DATABASE tpch"); err != nil {
+				b.Fatal(err)
+			}
+
+			if _, err := db.Exec(`RESTORE tpch.* FROM $1`, restoreTPCH10URI); err != nil {
+				b.Fatal(err)
+			}
+		})
+	}
 }
 
 func BenchmarkRestore2TB(b *testing.B) {
