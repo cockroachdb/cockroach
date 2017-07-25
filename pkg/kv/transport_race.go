@@ -52,10 +52,10 @@ func jitter(avgInterval time.Duration) time.Duration {
 	return time.Duration(rand.Int63n(int64(2 * avgInterval)))
 }
 
-// grpcTransportFactory during race builds wraps the implementation and
+// GRPCTransportFactory during race builds wraps the implementation and
 // intercepts all BatchRequests, reading them in a tight loop. This allows the
 // race detector to catch any mutations of a batch passed to the transport.
-func grpcTransportFactory(
+func GRPCTransportFactory(
 	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {

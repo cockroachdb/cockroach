@@ -69,8 +69,6 @@ type TestServerArgs struct {
 	SSLCertsDir              string
 	TimeSeriesQueryWorkerMax int
 	SQLMemoryPoolSize        int64
-	SendNextTimeout          time.Duration
-	PendingRPCTimeout        time.Duration
 	ListeningURLFile         string
 
 	// If set, this will be appended to the Postgres URL by functions that

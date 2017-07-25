@@ -133,9 +133,11 @@ func createTestStoreWithEngine(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
-		Clock:            storeCfg.Clock,
-		TransportFactory: kv.SenderTransportFactory(tracer, stores),
-		RPCRetryOptions:  &retryOpts,
+		Clock: storeCfg.Clock,
+		TestingKnobs: kv.DistSenderTestingKnobs{
+			TransportFactory: kv.SenderTransportFactory(tracer, stores),
+		},
+		RPCRetryOptions: &retryOpts,
 	}, storeCfg.Gossip)
 
 	sender := kv.NewTxnCoordSender(
@@ -441,15 +443,6 @@ func (t *multiTestContextKVTransport) IsExhausted() bool {
 	return t.idx == len(t.replicas)
 }
 
-func (t *multiTestContextKVTransport) SendNextTimeout(
-	defaultTimeout time.Duration,
-) (time.Duration, bool) {
-	if t.IsExhausted() {
-		return 0, false
-	}
-	return defaultTimeout, true
-}
-
 func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- kv.BatchCall) {
 	rep := t.replicas[t.idx]
 	t.idx++
@@ -651,8 +644,10 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 			multiTestContext: m,
 			ds:               &m.distSenders[idx],
 		},
-		TransportFactory: m.kvTransportFactory,
-		RPCRetryOptions:  &retryOpts,
+		TestingKnobs: kv.DistSenderTestingKnobs{
+			TransportFactory: m.kvTransportFactory,
+		},
+		RPCRetryOptions: &retryOpts,
 	}, m.gossips[idx])
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := kv.NewTxnCoordSender(
