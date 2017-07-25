@@ -69,14 +69,14 @@ A new metadata table will be created to hold system sessions:
 
 ```sql
 CREATE TABLE system.sessions {
-    id          SERIAL      PRIMARY KEY,
-    secret      UUID        NOT NULL,
-    username    STRING      NOT NULL,
-    createdAt   TIMESTAMP   NOT NULL DEFAULT now(),
-    expiresAt   TIMESTAMP   NOT NULL,
-    revokedAt   TIMESTAMP,
-    lastUsedAt  TIMESTAMP   NOT NULL DEFAULT now(),
-    auditInfo   STRING,
+    id              SERIAL      PRIMARY KEY,
+    "hashedSecret"  BYTES       NOT NULL,
+    username        STRING      NOT NULL,
+    "createdAt"     TIMESTAMP   NOT NULL DEFAULT now(),
+    "expiresAt"     TIMESTAMP   NOT NULL,
+    "revokedAt"     TIMESTAMP,
+    "lastUsedAt"    TIMESTAMP   NOT NULL DEFAULT now(),
+    "auditInfo"     STRING,
     INDEX(expiresAt),
     INDEX(createdAt),
 }
@@ -85,11 +85,14 @@ CREATE TABLE system.sessions {
 `id` is the identifier of the session, which is of type SERIAL (equivalent to
 INT DEFAULT unique_rowid()).
 
-`secret` is a cryptographically random UUID generated and shared only with the
-original creator of the session. The server requires incoming requests to have
-the matching secret for their session id. This allows the session's id to be
-used in auditing logs which are readable by non-root users; without the secret,
-any user with access to auditing logs would be able to impersonate sessions.
+`hashedSecret` is the hash of a cryptographically random byte array generated
+and shared only with the original creator of the session. The server does not
+store the original bytes generated, but rather hashes the generated value and
+stores the hash. The server requires incoming requests to have the original
+version of the secret for the provided session id. This allows the session's id
+to be used in auditing logs which are readable by non-root users; if we did not
+require this secret, any user with access to auditing logs would be able to
+impersonate sessions.
 
 `username` stores the username used to create a session.
 
@@ -120,22 +123,7 @@ sessions.
 + `createdAt`, which allows querying sessions in order of creation. This should
 be useful for auditing purposes.
 
-#### Session Log View
-
-To avoid the possibility of impersonating sessions, we want to restrict access
-to the `secret` field; for now, only the root user should have access directly
-to the system.sessions table.
-
-For other users, we provide a view over the table which has access to every
-field except for `secret`:
-
-```sql
-CREATE VIEW system.session_log AS
-SELECT id, username, createdAt, expiresAt, revokedAt, lastUsedAt, auditInfo
-FROM system.sessions
-```
-
-#### Creation of new table and view.
+#### Creation of new table.
 
 The new table will be added using a backwards-compatible migration; the same
 fashion used for the jobs and settings tables. This is trivially possible because
@@ -219,8 +207,9 @@ A valid request will pass all of the following checks:
 2. The value of the id in the "session" cookie contains the ID of a session in
 the session table. This is confirmed by performing a SELECT from the session
 table.
-3. The value of the secret in the "session" cookie matches the secret from the
-session retrieved from the session table.
+3. The value of the secret in the "session" cookie matches the "hashedSecret"
+from the session retrieved from the session table. This is confirmed by
+hashing the secret in the cookie and comparing.
 3. The session's `revokedAt` timestamp is null.
 4. The session's `expiresAt` timestamp is in the future.
 
