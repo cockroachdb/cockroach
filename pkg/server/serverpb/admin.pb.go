@@ -7,6 +7,7 @@
 
 	It is generated from these files:
 		cockroach/pkg/server/serverpb/admin.proto
+		cockroach/pkg/server/serverpb/authentication.proto
 		cockroach/pkg/server/serverpb/init.proto
 		cockroach/pkg/server/serverpb/status.proto
 
@@ -43,6 +44,11 @@
 		RangeLogResponse
 		QueryPlanRequest
 		QueryPlanResponse
+		UserLoginRequest
+		UserLoginResponse
+		UserLogoutRequest
+		UserLogoutResponse
+		SessionCookie
 		BootstrapRequest
 		BootstrapResponse
 		CertificatesRequest

@@ -137,7 +137,7 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 		}
 
 		// If the requested user has an empty password, disallow authentication.
-		if len(password) == 0 || compareHashAndPassword(hashedPassword, password) != nil {
+		if len(password) == 0 || CompareHashAndPassword(hashedPassword, password) != nil {
 			return errors.New("invalid password")
 		}
 

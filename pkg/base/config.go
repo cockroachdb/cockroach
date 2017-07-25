@@ -279,7 +279,7 @@ func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 // if needed. It uses the client TLS config.
 func (cfg *Config) GetHTTPClient() (http.Client, error) {
 	cfg.httpClient.once.Do(func() {
-		cfg.httpClient.httpClient.Timeout = NetworkTimeout
+		cfg.httpClient.httpClient.Timeout = 10 * time.Second
 		var transport http.Transport
 		cfg.httpClient.httpClient.Transport = &transport
 		transport.TLSClientConfig, cfg.httpClient.err = cfg.GetClientTLSConfig()

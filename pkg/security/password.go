@@ -34,7 +34,10 @@ const bcryptCost = bcrypt.DefaultCost
 // ErrEmptyPassword indicates that an empty password was attempted to be set.
 var ErrEmptyPassword = errors.New("empty passwords are not permitted")
 
-func compareHashAndPassword(hashedPassword []byte, password string) error {
+// CompareHashAndPassword tests that the provided bytes are equivalent to the
+// hash of the supplied password. If they are not equivalent, returns an
+// error.
+func CompareHashAndPassword(hashedPassword []byte, password string) error {
 	h := sha256.New()
 	return bcrypt.CompareHashAndPassword(hashedPassword, h.Sum([]byte(password)))
 }
