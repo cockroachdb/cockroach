@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 // PreparedStatement is a SQL statement that has been parsed and the types
@@ -61,7 +62,7 @@ func (p *PreparedStatement) close(ctx context.Context, s *Session) {
 type Statement struct {
 	AST           parser.Statement
 	ExpectedTypes sqlbase.ResultColumns
-	queryID       string
+	queryID       uint128.Uint128
 	queryMeta     *queryMeta
 }
 
