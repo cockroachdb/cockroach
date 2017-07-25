@@ -37,8 +37,8 @@ func (u Uint128) GetBytes() []byte {
 	return buf
 }
 
-// GetString returns a hexadecimal string representation.
-func (u Uint128) GetString() string {
+// String returns a hexadecimal string representation.
+func (u Uint128) String() string {
 	return hex.EncodeToString(u.GetBytes())
 }
 

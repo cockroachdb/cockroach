@@ -330,29 +330,36 @@ type DistSQLPlannerTestingKnobs struct {
 
 // QueryRegistry holds a map of all queries executing with this node as its gateway.
 type QueryRegistry struct {
+	// TODO(peter): Investigate if it is worthwhile to shard based on the query
+	// ID in order to reduce contention on this lock.
 	syncutil.Mutex
-	store map[string]*queryMeta
+	store map[uint128.Uint128]*queryMeta
 }
 
 // MakeQueryRegistry instantiates a new, empty query registry.
 func MakeQueryRegistry() *QueryRegistry {
-	return &QueryRegistry{store: make(map[string]*queryMeta)}
+	return &QueryRegistry{store: make(map[uint128.Uint128]*queryMeta)}
 }
 
-func (r *QueryRegistry) register(queryID string, query *queryMeta) {
+func (r *QueryRegistry) register(queryID uint128.Uint128, query *queryMeta) {
 	r.Lock()
-	defer r.Unlock()
 	r.store[queryID] = query
+	r.Unlock()
 }
 
-func (r *QueryRegistry) deregister(queryID string) {
+func (r *QueryRegistry) deregister(queryID uint128.Uint128) {
 	r.Lock()
-	defer r.Unlock()
 	delete(r.store, queryID)
+	r.Unlock()
 }
 
 // Cancel looks up the associated query in the registry and cancels it (if it is cancellable).
-func (r *QueryRegistry) Cancel(queryID string, username string) (bool, error) {
+func (r *QueryRegistry) Cancel(queryIDStr string, username string) (bool, error) {
+	queryID, err := uint128.FromString(queryIDStr)
+	if err != nil {
+		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
+	}
+
 	r.Lock()
 	defer r.Unlock()
 
@@ -1084,7 +1091,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 
 		txnState.schemaChangers.curStatementIdx = i
 
-		queryID := e.generateQueryID().GetString()
+		queryID := e.generateQueryID()
 
 		queryMeta := &queryMeta{
 			start: session.phaseTimes[sessionEndParse],
@@ -1100,7 +1107,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		queryMeta.ctx = session.Ctx()
 
 		session.addActiveQuery(queryID, queryMeta)
-		defer session.removeActiveQuery(stmt.queryID)
+		defer session.removeActiveQuery(queryID)
 		e.cfg.QueryRegistry.register(queryID, queryMeta)
 		defer e.cfg.QueryRegistry.deregister(queryID)
 
