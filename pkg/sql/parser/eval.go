@@ -172,8 +172,9 @@ type BinOp struct {
 	ReturnType Type
 	fn         func(*EvalContext, Datum, Datum) (Datum, error)
 
-	types   typeList
-	retType returnTyper
+	types        typeList
+	retType      returnTyper
+	nullableArgs bool
 }
 
 func (op BinOp) params() typeList {
@@ -190,6 +191,95 @@ func (op BinOp) returnType() returnTyper {
 
 func (BinOp) preferred() bool {
 	return false
+}
+
+// TODO(justin): these might be improved by making arrays into an interface and
+// then introducing a ConcatenatedArray implementation which just references two
+// existing arrays. This would optimize the common case of appending an element
+// (or array) to an array from O(n) to O(1).
+func initArrayElementConcatenation() {
+	for _, t := range TypesAnyNonArray {
+		typ := t
+		BinOps[Concat] = append(BinOps[Concat], BinOp{
+			LeftType:     TArray{typ},
+			RightType:    typ,
+			ReturnType:   TArray{typ},
+			nullableArgs: true,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				result := NewDArray(typ)
+				if left != DNull {
+					for _, e := range MustBeDArray(left).Array {
+						if err := result.Append(e); err != nil {
+							return nil, err
+						}
+					}
+				}
+				if err := result.Append(right); err != nil {
+					return nil, err
+				}
+				return result, nil
+			},
+		})
+
+		BinOps[Concat] = append(BinOps[Concat], BinOp{
+			LeftType:     typ,
+			RightType:    TArray{typ},
+			ReturnType:   TArray{typ},
+			nullableArgs: true,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				result := NewDArray(typ)
+				if err := result.Append(left); err != nil {
+					return nil, err
+				}
+				if right != DNull {
+					for _, e := range MustBeDArray(right).Array {
+						if err := result.Append(e); err != nil {
+							return nil, err
+						}
+					}
+				}
+				return result, nil
+			},
+		})
+	}
+}
+
+func initArrayToArrayConcatenation() {
+	for _, t := range TypesAnyNonArray {
+		typ := t
+		BinOps[Concat] = append(BinOps[Concat], BinOp{
+			LeftType:     TArray{typ},
+			RightType:    TArray{typ},
+			ReturnType:   TArray{typ},
+			nullableArgs: true,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				if left == DNull && right == DNull {
+					return DNull, nil
+				}
+				result := NewDArray(typ)
+				if left != DNull {
+					for _, e := range MustBeDArray(left).Array {
+						if err := result.Append(e); err != nil {
+							return nil, err
+						}
+					}
+				}
+				if right != DNull {
+					for _, e := range MustBeDArray(right).Array {
+						if err := result.Append(e); err != nil {
+							return nil, err
+						}
+					}
+				}
+				return result, nil
+			},
+		})
+	}
+}
+
+func init() {
+	initArrayElementConcatenation()
+	initArrayToArrayConcatenation()
 }
 
 func init() {
@@ -991,6 +1081,16 @@ func (op CmpOp) returnType() returnTyper {
 
 func (CmpOp) preferred() bool {
 	return false
+}
+
+func init() {
+	for _, t := range TypesAnyNonArray {
+		CmpOps[EQ] = append(CmpOps[EQ], CmpOp{
+			LeftType:  TArray{t},
+			RightType: TArray{t},
+			fn:        cmpOpScalarEQFn,
+		})
+	}
 }
 
 func init() {
@@ -1944,14 +2044,14 @@ func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	if left == DNull {
+	if left == DNull && !expr.fn.nullableArgs {
 		return DNull, nil
 	}
 	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if right == DNull {
+	if right == DNull && !expr.fn.nullableArgs {
 		return DNull, nil
 	}
 	return expr.fn.fn(ctx, left, right)
