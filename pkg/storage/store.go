@@ -126,7 +126,7 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
 
 var enablePreVote = envutil.EnvOrDefaultBool(
-	"COCKROACH_ENABLE_PREVOTE", false)
+	"COCKROACH_ENABLE_PREVOTE", true)
 
 // RaftElectionTimeout returns the raft election timeout, as computed
 // from the specified tick interval and number of election timeout
