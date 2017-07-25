@@ -369,6 +369,10 @@ func (r *QueryRegistry) Cancel(queryIDStr string, username string) (bool, error)
 			return false, fmt.Errorf("query ID %s not found", queryID)
 		}
 
+		if queryMeta.cancel != nil {
+			queryMeta.cancel()
+		}
+
 		// Atomically set isCancelled to 1
 		atomic.StoreInt32(&queryMeta.isCancelled, 1)
 
@@ -1102,9 +1106,10 @@ func (e *Executor) execStmtsInCurrentTxn(
 		stmt.queryID = queryID
 		stmt.queryMeta = queryMeta
 
-		// TODO(itsbilal): Fork a statement-specific context here, that gets cancelled
-		// upon request by user.
-		queryMeta.ctx = session.Ctx()
+		// Cancelling a query cancels its transaction's context. Copy reference to
+		// txn context and its cancellation function here.
+		queryMeta.ctx = session.TxnState.Ctx
+		queryMeta.cancel = session.TxnState.cancel
 
 		session.addActiveQuery(queryID, queryMeta)
 		defer session.removeActiveQuery(queryID)
@@ -1150,7 +1155,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
-			filter(queryMeta.ctx, stmt.String(), &res)
+			filter(session.Ctx(), stmt.String(), &res)
 		}
 		results = append(results, res)
 		if err != nil {
@@ -1641,7 +1646,7 @@ func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, er
 // runs it.
 func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
-	ctx := planner.stmt.queryMeta.ctx
+	ctx := planner.session.Ctx()
 	recv, err := makeDistSQLReceiver(
 		ctx, result.Rows,
 		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
@@ -1669,7 +1674,7 @@ func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) 
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) error {
-	ctx := planner.stmt.queryMeta.ctx
+	ctx := planner.session.Ctx()
 	rowAcc := planner.evalCtx.Mon.MakeBoundAccount()
 	planner.evalCtx.ActiveMemAcc = &rowAcc
 	// We enclose this in a func because in the parser.Rows case we swap out the
@@ -1801,7 +1806,7 @@ func (e *Executor) execStmt(
 	stmt Statement, planner *planner, automaticRetryCount int, mockResults bool,
 ) (Result, error) {
 	session := planner.session
-	ctx := planner.stmt.queryMeta.ctx
+	ctx := session.Ctx()
 
 	planner.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
 	plan, err := planner.makePlan(ctx, stmt)

@@ -101,13 +101,15 @@ root@:26257/> SELECT node_id, id, query FROM [SHOW CLUSTER QUERIES];
 
 ## Context forking / query cancellation mechanism
 
-The `context.Context` will be forked in the SQL executor for each statement, and the cancellation handle
-will be stored inside the `queryMeta` struct for that query. There will also be an integer flag that,
-when set to 1 (using an `atomic.StoreInt32()`), will signal cancellation. PlanNodes that do in-memory
+We will reuse the transaction's context at the query level; all query cancellations will close the entire transaction's
+context. Forking a query-specific context would be technically challenging due to [context scoping assumptions made in
+the TxnCoordSender](https://github.com/cockroachdb/cockroach/blob/master/pkg/kv/txn_coord_sender.go#L619). The
+`queryMeta` will store a reference to the txn context. There will also be an integer flag in `queryMeta`
+that, when set to 1 (using an `atomic.StoreInt32()`), will signal cancellation. PlanNodes that do in-memory
 processing such as insertNode's insert batching, and sortNode's sorting, will periodically check
 for this flag (such as once every some tens of thousands of rows).
 
-Any `CANCEL QUERY` statements directed at that query will close that context's `Done` channel, which would
+Any `CANCEL QUERY` statements directed at that query will close the txn context's `Done` channel, which would
 error out any RPCs being made for that query. The cancellation flag would also be atomically set to 1,
 which would cause any planNodes that check it periodically to return a cancellation error. The error would
 propagate to the SQL executor which would then mark the SQL transaction as aborted. The client would
