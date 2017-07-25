@@ -1914,6 +1914,53 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	}
 }
 
+// TestReportUnreachableRemoveRace adds and removes the raft leader replica
+// repeatedly while one of its peers is unreachable in an attempt to expose
+// races (primarily in asynchronous coalesced heartbeats).
+func TestReportUnreachableRemoveRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2)
+
+outer:
+	for i := 0; i < 5; i++ {
+		for leaderIdx, store := range mtc.stores {
+			repl, err := store.GetReplica(rangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if repl.RaftStatus().SoftState.RaftState == raft.StateLeader {
+				for replicaIdx, toStore := range mtc.stores {
+					if toStore == store {
+						continue
+					}
+					repDesc, err := repl.GetReplicaDescriptor()
+					if err != nil {
+						t.Fatal(err)
+					}
+					if lease, _ := repl.GetLease(); lease.Replica == repDesc {
+						mtc.transferLease(context.TODO(), rangeID, leaderIdx, replicaIdx)
+					}
+					mtc.unreplicateRange(rangeID, leaderIdx)
+					cb := mtc.transport.GetCircuitBreaker(toStore.Ident.NodeID)
+					cb.Break()
+					time.Sleep(mtc.storeConfig.CoalescedHeartbeatsInterval)
+					cb.Reset()
+					mtc.replicateRange(rangeID, leaderIdx)
+					continue outer
+				}
+				t.Fatal("could not find raft replica")
+			}
+		}
+		t.Fatal("could not find raft leader")
+	}
+}
+
 // TestReplicateAfterSplit verifies that a new replica whose start key
 // is not KeyMin replicating to a fresh store can apply snapshots correctly.
 func TestReplicateAfterSplit(t *testing.T) {
