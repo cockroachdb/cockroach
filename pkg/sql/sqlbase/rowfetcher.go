@@ -98,6 +98,11 @@ type RowFetcher struct {
 	alloc *DatumAlloc
 }
 
+type kvFetcher interface {
+	nextKV(ctx context.Context) (bool, client.KeyValue, error)
+	getRangesInfo() []roachpb.RangeInfo
+}
+
 // debugRowFetch can be used to turn on some low-level debugging logs. We use
 // this to avoid using log.V in the hot path.
 const debugRowFetch = false
@@ -186,8 +191,6 @@ func (rf *RowFetcher) StartScan(
 		panic("no spans")
 	}
 
-	rf.indexKey = nil
-
 	// If we have a limit hint, we limit the first batch size. Subsequent
 	// batches get larger to avoid making things too slow (e.g. in case we have
 	// a very restrictive filter and actually have to retrieve a lot of rows).
@@ -200,14 +203,20 @@ func (rf *RowFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	var err error
-	rf.kvFetcher, err = makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
+	f, err := makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
 	if err != nil {
 		return err
 	}
+	return rf.StartScanFrom(ctx, &f)
+}
 
+// StartScanFrom initializes and starts a scan from the given kvFetcher. Can be
+// used multiple times.
+func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
+	rf.indexKey = nil
+	rf.kvFetcher = f
 	// Retrieve the first key.
-	_, err = rf.NextKey(ctx)
+	_, err := rf.NextKey(ctx)
 	return err
 }
 
