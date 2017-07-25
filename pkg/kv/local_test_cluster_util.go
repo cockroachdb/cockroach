@@ -66,17 +66,19 @@ func InitSenderForLocalTestCluster(
 		Clock:           clock,
 		RPCRetryOptions: &retryOpts,
 		nodeDescriptor:  nodeDesc,
-		TransportFactory: func(
-			opts SendOptions,
-			rpcContext *rpc.Context,
-			replicas ReplicaSlice,
-			args roachpb.BatchRequest,
-		) (Transport, error) {
-			transport, err := senderTransportFactory(opts, rpcContext, replicas, args)
-			if err != nil {
-				return nil, err
-			}
-			return &localTestClusterTransport{transport, latency}, nil
+		TestingKnobs: DistSenderTestingKnobs{
+			TransportFactory: func(
+				opts SendOptions,
+				rpcContext *rpc.Context,
+				replicas ReplicaSlice,
+				args roachpb.BatchRequest,
+			) (Transport, error) {
+				transport, err := senderTransportFactory(opts, rpcContext, replicas, args)
+				if err != nil {
+					return nil, err
+				}
+				return &localTestClusterTransport{transport, latency}, nil
+			},
 		},
 	}, gossip)
 

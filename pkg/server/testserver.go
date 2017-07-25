@@ -130,12 +130,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.SQLMemoryPoolSize != 0 {
 		cfg.SQLMemoryPoolSize = params.SQLMemoryPoolSize
 	}
-	if params.SendNextTimeout != 0 {
-		cfg.SendNextTimeout = params.SendNextTimeout
-	}
-	if params.PendingRPCTimeout != 0 {
-		cfg.PendingRPCTimeout = params.PendingRPCTimeout
-	}
 	cfg.JoinList = []string{params.JoinAddr}
 	if cfg.Insecure {
 		// Whenever we can (i.e. in insecure mode), use IsolatedTestAddr

@@ -2526,9 +2526,9 @@ func (r *Replica) tryExecuteWriteBatch(
 
 	log.Event(ctx, "applied timestamp cache")
 
-	ch, tryAbandon, undoQuotaAcquisition, err := r.propose(ctx, lease, ba, endCmds, spans)
-	if err != nil {
-		return nil, roachpb.NewError(err), proposalNoRetry
+	ch, tryAbandon, undoQuotaAcquisition, pErr := r.propose(ctx, lease, ba, endCmds, spans)
+	if pErr != nil {
+		return nil, pErr, proposalNoRetry
 	}
 	defer func() {
 		// NB: We may be double free-ing here, consider the following cases:
@@ -2758,15 +2758,15 @@ func (r *Replica) propose(
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *SpanSet,
-) (chan proposalResult, func() bool, func(), error) {
+) (chan proposalResult, func() bool, func(), *roachpb.Error) {
 	noop := func() {}
 	if err := r.IsDestroyed(); err != nil {
-		return nil, nil, noop, err
+		return nil, nil, noop, roachpb.NewError(err)
 	}
 
 	rSpan, err := keys.Range(ba)
 	if err != nil {
-		return nil, nil, noop, err
+		return nil, nil, noop, roachpb.NewError(err)
 	}
 
 	// Must check that the request is in bounds at proposal time in
@@ -2777,7 +2777,7 @@ func (r *Replica) propose(
 	// the command is also registered in the command queue for the range
 	// descriptor key.
 	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
-		return nil, nil, noop, err
+		return nil, nil, noop, roachpb.NewError(err)
 	}
 
 	idKey := makeIDKey()
@@ -2787,8 +2787,8 @@ func (r *Replica) propose(
 	// in an error and did not need to commit a batch (the common error case).
 	if pErr != nil {
 		if proposal.Local == nil {
-			return nil, nil, noop, errors.Errorf(
-				"requestToProposal returned error %s without eval results", pErr)
+			return nil, nil, noop, roachpb.NewError(errors.Errorf(
+				"requestToProposal returned error %s without eval results", pErr))
 		}
 		intents := proposal.Local.detachIntents(true /* hasError */)
 		if proposal.Local != nil {
@@ -2810,12 +2810,12 @@ func (r *Replica) propose(
 		// Once a command is written to the raft log, it must be loaded
 		// into memory and replayed on all replicas. If a command is
 		// too big, stop it here.
-		return nil, nil, noop, errors.Errorf("command is too large: %d bytes (max: %d)",
-			proposal.command.Size(), maxCommandSize.Get())
+		return nil, nil, noop, roachpb.NewError(errors.Errorf("command is too large: %d bytes (max: %d)",
+			proposal.command.Size(), maxCommandSize.Get()))
 	}
 
 	if err := r.maybeAcquireProposalQuota(ctx, int64(proposal.command.Size())); err != nil {
-		return nil, nil, noop, err
+		return nil, nil, noop, roachpb.NewError(err)
 	}
 
 	// submitProposalLocked calls withRaftGroupLocked which requires that
@@ -2857,10 +2857,7 @@ func (r *Replica) propose(
 				Hdr:   ba.Header,
 			}
 			if pErr := filter(filterArgs); pErr != nil {
-				ch := make(chan proposalResult, 1)
-				ch <- proposalResult{Err: pErr}
-				close(ch)
-				return ch, func() bool { return false }, undoQuotaAcquisition, nil
+				return nil, nil, undoQuotaAcquisition, pErr
 			}
 		}
 	}
@@ -2870,18 +2867,18 @@ func (r *Replica) propose(
 	// and the acquisition of Replica.mu. Failure to do so will leave pending
 	// proposals that never get cleared.
 	if err := r.mu.destroyed; err != nil {
-		return nil, nil, undoQuotaAcquisition, err
+		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
 	}
 
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
-		return nil, nil, undoQuotaAcquisition, err
+		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
 	}
 	r.insertProposalLocked(proposal, repDesc, lease)
 
 	if err := r.submitProposalLocked(proposal); err != nil {
 		delete(r.mu.proposals, proposal.idKey)
-		return nil, nil, undoQuotaAcquisition, err
+		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
 	}
 	// Must not use `proposal` in the closure below as a proposal which is not
 	// present in r.mu.proposals is no longer protected by the mutex. Abandoning

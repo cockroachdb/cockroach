@@ -19,7 +19,6 @@ package kv
 import (
 	"fmt"
 	"sync/atomic"
-	"time"
 	"unsafe"
 
 	"google.golang.org/grpc"
@@ -67,9 +66,6 @@ var (
 	metaTransportLocalSentCount = metric.Metadata{
 		Name: "distsender.rpc.sent.local",
 		Help: "Number of local RPCs sent"}
-	metaDistSenderSendNextTimeoutCount = metric.Metadata{
-		Name: "distsender.rpc.sent.sendnexttimeout",
-		Help: "Number of RPCs sent due to outstanding RPCs not returning promptly"}
 	metaDistSenderNextReplicaErrCount = metric.Metadata{
 		Name: "distsender.rpc.sent.nextreplicaerror",
 		Help: "Number of RPCs sent due to per-replica errors"}
@@ -87,7 +83,6 @@ type DistSenderMetrics struct {
 	PartialBatchCount      *metric.Counter
 	SentCount              *metric.Counter
 	LocalSentCount         *metric.Counter
-	SendNextTimeoutCount   *metric.Counter
 	NextReplicaErrCount    *metric.Counter
 	NotLeaseHolderErrCount *metric.Counter
 	SlowRequestsCount      *metric.Gauge
@@ -99,7 +94,6 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		PartialBatchCount:      metric.NewCounter(metaDistSenderPartialBatchCount),
 		SentCount:              metric.NewCounter(metaTransportSentCount),
 		LocalSentCount:         metric.NewCounter(metaTransportLocalSentCount),
-		SendNextTimeoutCount:   metric.NewCounter(metaDistSenderSendNextTimeoutCount),
 		NextReplicaErrCount:    metric.NewCounter(metaDistSenderNextReplicaErrCount),
 		NotLeaseHolderErrCount: metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
 		SlowRequestsCount:      metric.NewGauge(metaSlowDistSenderRequests),
@@ -141,14 +135,12 @@ type DistSender struct {
 	rangeCache           *RangeDescriptorCache
 	rangeLookupMaxRanges int32
 	// leaseHolderCache caches range lease holders by range ID.
-	leaseHolderCache  *LeaseHolderCache
-	transportFactory  TransportFactory
-	rpcContext        *rpc.Context
-	rpcRetryOptions   retry.Options
-	sendNextTimeout   time.Duration
-	pendingRPCTimeout time.Duration
-	asyncSenderSem    chan struct{}
-	asyncSenderCount  int32
+	leaseHolderCache *LeaseHolderCache
+	transportFactory TransportFactory
+	rpcContext       *rpc.Context
+	rpcRetryOptions  retry.Options
+	asyncSenderSem   chan struct{}
+	asyncSenderCount int32
 }
 
 var _ client.Sender = &DistSender{}
@@ -168,19 +160,29 @@ type DistSenderConfig struct {
 	// nodeDescriptor, if provided, is used to describe which node the DistSender
 	// lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
-	nodeDescriptor *roachpb.NodeDescriptor
-	// The RPC dispatcher. Defaults to grpc but can be changed here for testing
-	// purposes.
-	TransportFactory  TransportFactory
+	nodeDescriptor    *roachpb.NodeDescriptor
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
-	SendNextTimeout   time.Duration
-	PendingRPCTimeout time.Duration
 	// SenderConcurrency specifies the parallelization available when
 	// splitting batches into multiple requests when they span ranges.
 	// TODO(spencer): This is per-process. We should add a per-batch limit.
 	SenderConcurrency int32
+
+	TestingKnobs DistSenderTestingKnobs
 }
+
+// DistSenderTestingKnobs is a part of the context used to control parts of
+// the system.
+type DistSenderTestingKnobs struct {
+	// The RPC dispatcher. Defaults to grpc but can be changed here for
+	// testing purposes.
+	TransportFactory TransportFactory
+}
+
+var _ base.ModuleTestingKnobs = &DistSenderTestingKnobs{}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*DistSenderTestingKnobs) ModuleTestingKnobs() {}
 
 // NewDistSender returns a batch.Sender instance which connects to the
 // Cockroach cluster via the supplied gossip instance. Supplying a
@@ -218,8 +220,10 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if cfg.RangeLookupMaxRanges <= 0 {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	}
-	if cfg.TransportFactory != nil {
-		ds.transportFactory = cfg.TransportFactory
+	if tf := cfg.TestingKnobs.TransportFactory; tf != nil {
+		ds.transportFactory = tf
+	} else {
+		ds.transportFactory = GRPCTransportFactory
 	}
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	if cfg.RPCRetryOptions != nil {
@@ -230,16 +234,6 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 		if ds.rpcRetryOptions.Closer == nil {
 			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 		}
-	}
-	if cfg.SendNextTimeout != 0 {
-		ds.sendNextTimeout = cfg.SendNextTimeout
-	} else {
-		ds.sendNextTimeout = base.DefaultSendNextTimeout
-	}
-	if cfg.PendingRPCTimeout != 0 {
-		ds.pendingRPCTimeout = cfg.PendingRPCTimeout
-	} else {
-		ds.pendingRPCTimeout = base.DefaultPendingRPCTimeout
 	}
 	if cfg.SenderConcurrency != 0 {
 		ds.asyncSenderSem = make(chan struct{}, cfg.SenderConcurrency)
@@ -396,16 +390,10 @@ func (ds *DistSender) sendRPC(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Set RPC opts with stipulation that one of N RPCs must succeed.
-	rpcOpts := SendOptions{
-		SendNextTimeout:  ds.sendNextTimeout,
-		transportFactory: ds.transportFactory,
-		metrics:          &ds.metrics,
-	}
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	return ds.sendToReplicas(ctx, rpcOpts, rangeID, replicas, ba, ds.rpcContext)
+	return ds.sendToReplicas(ctx, SendOptions{metrics: &ds.metrics}, rangeID, replicas, ba, ds.rpcContext)
 }
 
 // CountRanges returns the number of ranges that encompass the given key span.
@@ -471,6 +459,7 @@ func (ds *DistSender) sendSingleRange(
 
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
+		log.ErrEvent(ctx, err.Error())
 		return nil, roachpb.NewError(err)
 	}
 
@@ -1139,17 +1128,11 @@ func (ds *DistSender) sendToReplicas(
 	var haveCommit bool
 	// We only check for committed txns, not aborts because aborts may
 	// be retried without any risk of inconsistencies.
-	if etArg, ok := args.GetArg(roachpb.EndTransaction); ok &&
-		etArg.(*roachpb.EndTransactionRequest).Commit {
-		haveCommit = true
+	if etArg, ok := args.GetArg(roachpb.EndTransaction); ok {
+		haveCommit = etArg.(*roachpb.EndTransactionRequest).Commit
 	}
-	done := make(chan BatchCall, len(replicas))
 
-	transportFactory := opts.transportFactory
-	if transportFactory == nil {
-		transportFactory = grpcTransportFactory
-	}
-	transport, err := transportFactory(opts, rpcContext, replicas, args)
+	transport, err := ds.transportFactory(opts, rpcContext, replicas, args)
 	if err != nil {
 		return nil, err
 	}
@@ -1158,41 +1141,19 @@ func (ds *DistSender) sendToReplicas(
 		return nil, roachpb.NewSendError(
 			fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
 	}
-
-	// Send the first request.
-	pending := 1
-	if log.V(2) || log.HasSpanOrEvent(ctx) {
-		log.VEventf(ctx, 2, "r%d: sending batch %s to %s",
-			rangeID, args.Summary(), transport.NextReplica())
-	}
+	// Must be buffered because tests have blocking SendNext implementations.
+	done := make(chan BatchCall, 1)
+	log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, args.Summary(), transport.NextReplica())
 	transport.SendNext(ctx, done)
 
 	// Wait for completions. This loop will retry operations that fail
 	// with errors that reflect per-replica state and may succeed on
 	// other replicas.
-	sendNextTimer := timeutil.NewTimer()
 	slowTimer := timeutil.NewTimer()
-	defer sendNextTimer.Stop()
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
-		if timeout, ok := transport.SendNextTimeout(opts.SendNextTimeout); ok {
-			// Only start the send-next timer if we haven't exhausted the transport
-			// (i.e. there is another replica to send to).
-			sendNextTimer.Reset(timeout)
-		}
-
 		select {
-		case <-sendNextTimer.C:
-			sendNextTimer.Read = true
-			// On successive RPC timeouts, send to additional replicas if available.
-			if !transport.IsExhausted() {
-				ds.metrics.SendNextTimeoutCount.Inc(1)
-				log.VEventf(ctx, 2, "timeout, trying next peer: %s", transport.NextReplica())
-				pending++
-				transport.SendNext(ctx, done)
-			}
-
 		case <-slowTimer.C:
 			log.Warningf(ctx, "have been waiting %s sending RPC to r%d for batch: %s",
 				base.SlowRequestThreshold, rangeID, args)
@@ -1200,97 +1161,7 @@ func (ds *DistSender) sendToReplicas(
 			defer ds.metrics.SlowRequestsCount.Dec(1)
 
 		case call := <-done:
-			pending--
-			err := call.Err
-			if err == nil {
-				// Determine whether the error must be propagated immediately or whether
-				// sending can continue to alternate replicas.
-				propagateError := false
-				switch tErr := call.Reply.Error.GetDetail().(type) {
-				case nil:
-					return call.Reply, nil
-				case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
-					// These errors are likely to be unique to the replica that reported
-					// them, so no action is required before the next retry.
-				case *roachpb.NotLeaseHolderError:
-					ds.metrics.NotLeaseHolderErrCount.Inc(1)
-					if lh := tErr.LeaseHolder; lh != nil {
-						// If the replica we contacted knows the new lease holder, update the cache.
-						ds.updateLeaseHolderCache(ctx, rangeID, *lh)
-
-						// If the implicated leaseholder is not a known replica,
-						// return a RangeNotFoundError to signal eviction of the
-						// cached RangeDescriptor and re-send.
-						if replicas.FindReplica(lh.StoreID) == -1 {
-							// Replace NotLeaseHolderError with RangeNotFoundError.
-							log.ErrEventf(ctx, "reported lease holder %s not in replicas slice %+v", lh, replicas)
-							call.Reply.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(rangeID))
-							propagateError = true
-						} else {
-							// Move the new lease holder to the head of the queue for the next retry.
-							transport.MoveToFront(*lh)
-						}
-					}
-				default:
-					propagateError = true
-				}
-
-				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
-
-				if propagateError {
-					if pending > 0 {
-						// If there are still pending RPCs, try to wait them out.
-						//
-						// Note that ambiguous result errors can arrive from these
-						// in-flight RPCs, so if we've sent any, we better wait
-						// for them, even if we're not going to generate ambiguous
-						// results from them ourselves.
-						timer := time.NewTimer(ds.pendingRPCTimeout)
-						defer timer.Stop()
-					pendingLoop:
-						for pending > 0 {
-							select {
-							case pendingCall := <-done:
-								pending--
-								if err := pendingCall.Err; err != nil {
-									if grpc.Code(err) != codes.Unavailable {
-										ambiguousError = err
-									}
-								} else if pendingCall.Reply.Error == nil {
-									return pendingCall.Reply, nil
-								}
-							case <-timer.C:
-								break pendingLoop
-							}
-						}
-					}
-
-					// The error received is likely not specific to this
-					// replica, so we should return it instead of trying other
-					// replicas. However, if we're trying to commit a
-					// transaction and there are still other RPCs outstanding
-					// or an ambiguous RPC error was already received, we must
-					// return an ambiguous commit error instead of the
-					// returned error.
-					if haveCommit {
-						if pending > 0 || ambiguousError != nil {
-							log.ErrEventf(ctx, "returning ambiguous result (error=%v pending=%d)", ambiguousError, pending)
-							return nil, roachpb.NewAmbiguousResultError(
-								fmt.Sprintf("error=%v pending=%d", ambiguousError, pending))
-						}
-					}
-					return call.Reply, nil
-				}
-
-				// Extract the detail so it can be included in the error
-				// message if this is our last replica.
-				//
-				// TODO(bdarnell): The last error is not necessarily the best
-				// one to return; we may want to remember the "best" error
-				// we've seen (for example, a NotLeaseHolderError conveys more
-				// information than a RangeNotFound).
-				err = call.Reply.Error.GoError()
-			} else {
+			if err := call.Err; err != nil {
 				// All connection errors except for an unavailable node (this
 				// is GRPC's fail-fast error), may mean that the request
 				// succeeded on the remote server, but we were unable to
@@ -1313,37 +1184,70 @@ func (ds *DistSender) sendToReplicas(
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/call.go#L182
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/stream.go#L158
 				if haveCommit && grpc.Code(err) != codes.Unavailable {
-					log.ErrEventf(ctx, "txn may have committed despite RPC error: %s", err)
 					ambiguousError = err
-				} else {
-					log.ErrEventf(ctx, "RPC error: %s", err)
 				}
+				log.ErrEventf(ctx, "RPC error: %s", err)
+			} else {
+				propagateError := false
+				switch tErr := call.Reply.Error.GetDetail().(type) {
+				case nil:
+					return call.Reply, nil
+				case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
+					// These errors are likely to be unique to the replica that reported
+					// them, so no action is required before the next retry.
+				case *roachpb.NotLeaseHolderError:
+					ds.metrics.NotLeaseHolderErrCount.Inc(1)
+					if lh := tErr.LeaseHolder; lh != nil {
+						// If the replica we contacted knows the new lease holder, update the cache.
+						ds.updateLeaseHolderCache(ctx, rangeID, *lh)
+
+						// If the implicated leaseholder is not a known replica,
+						// return a RangeNotFoundError to signal eviction of the
+						// cached RangeDescriptor and re-send.
+						if replicas.FindReplica(lh.StoreID) == -1 {
+							// Replace NotLeaseHolderError with RangeNotFoundError.
+							call.Reply.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(rangeID))
+							propagateError = true
+						} else {
+							// Move the new lease holder to the head of the queue for the next retry.
+							transport.MoveToFront(*lh)
+						}
+					}
+				default:
+					propagateError = true
+				}
+
+				if propagateError {
+					if ambiguousError != nil {
+						return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s", ambiguousError))
+					}
+
+					// The error received is likely not specific to this
+					// replica, so we should return it instead of trying other
+					// replicas.
+					return call.Reply, nil
+				}
+
+				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
 			}
 
-			// Send to additional replicas if available.
-			if !transport.IsExhausted() {
-				ds.metrics.NextReplicaErrCount.Inc(1)
-				log.VEventf(ctx, 2, "error, trying next peer: %s", transport.NextReplica())
-				pending++
-				transport.SendNext(ctx, done)
-			}
-			if pending == 0 {
+			if transport.IsExhausted() {
 				if ambiguousError != nil {
-					err = roachpb.NewAmbiguousResultError(
-						fmt.Sprintf(
-							"sending to all %d replicas failed, but txn commit was possibly masked by: %s",
-							len(replicas),
-							ambiguousError,
-						),
-					)
-				} else {
-					err = roachpb.NewSendError(
-						fmt.Sprintf("sending to all %d replicas failed; last error: %s", len(replicas), err),
-					)
+					return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s", ambiguousError))
 				}
-				log.ErrEvent(ctx, err.Error())
-				return nil, err
+
+				// TODO(bdarnell): The last error is not necessarily the best
+				// one to return; we may want to remember the "best" error
+				// we've seen (for example, a NotLeaseHolderError conveys more
+				// information than a RangeNotFound).
+				return nil, roachpb.NewSendError(
+					fmt.Sprintf("sending to all %d replicas failed; last error: %v", len(replicas), call),
+				)
 			}
+
+			ds.metrics.NextReplicaErrCount.Inc(1)
+			log.VEventf(ctx, 2, "error: %v; trying next peer %s", call, transport.NextReplica())
+			transport.SendNext(ctx, done)
 		}
 	}
 }
