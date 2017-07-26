@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	reflect "reflect"
 )
 
 const (
@@ -215,21 +216,24 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	if tableDesc.Version != version {
 		return errors.Errorf("table version mismatch: %d, expected: %d", tableDesc.Version, version)
 	}
-	if len(tableDesc.Mutations[mutationIdx].ResumeSpans) > 0 {
-		tableDesc.Mutations[mutationIdx].ResumeSpans[0] = resume
+
+	details, ok := sc.job.Record.Details.(jobs.SchemaChangeDetails)
+	if !ok {
+		return errors.Wrapf(err, "expected SchemaChangeDetails job type, got %T", reflect.TypeOf(sc.job.Record.Details))
+	}
+
+	resumeSpans := details.ResumeSpanList[mutationIdx].ResumeSpans
+	if len(resumeSpans) > 0 {
+		resumeSpans[0] = resume
 	} else {
-		tableDesc.Mutations[mutationIdx].ResumeSpans = append(tableDesc.Mutations[mutationIdx].ResumeSpans, resume)
+		resumeSpans = append(resumeSpans, resume)
 	}
 	if err := txn.SetSystemConfigTrigger(); err != nil {
 		return err
 	}
-	if err := txn.Put(
-		ctx,
-		sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
-		sqlbase.WrapDescriptor(tableDesc),
-	); err != nil {
-		return err
-	}
+
+	details.ResumeSpanList[mutationIdx].ResumeSpans = resumeSpans
+	sc.job.WithTxn(txn).SetDetails(ctx, details)
 	*lastCheckpoint = timeutil.Now()
 	return nil
 }
@@ -339,8 +343,9 @@ func (sc *SchemaChanger) getMutationToBackfill(
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
 	filter distsqlrun.MutationFilter,
-) (*sqlbase.DescriptorMutation, error) {
+) (*sqlbase.DescriptorMutation, int, error) {
 	var mutation *sqlbase.DescriptorMutation
+	var mutationIdx int
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		mutation = nil
 		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
@@ -358,13 +363,44 @@ func (sc *SchemaChanger) getMutationToBackfill(
 				}
 				if filter(tableDesc.Mutations[i]) {
 					mutation = &tableDesc.Mutations[i]
+					mutationIdx = i
 					break
 				}
 			}
 		}
 		return nil
 	})
-	return mutation, err
+	return mutation, mutationIdx, err
+}
+
+// getjobIDForMutation returns the jobID associated with a mutationId.
+func (sc *SchemaChanger) getjobIDForMutation(
+	ctx context.Context,
+	version sqlbase.DescriptorVersion,
+	mutationID sqlbase.MutationID,
+) (int64, error) {
+	var jobID int64
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+
+		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+		if tableDesc.Version != version {
+			return errors.Errorf("table version mismatch: %d, expected: %d", tableDesc.Version, version)
+		}
+
+		if len(tableDesc.MutationJobs) > 0 {
+			for _, job := range tableDesc.MutationJobs {
+				if job.MutationID == mutationID {
+					jobID = job.JobID
+					break
+				}
+			}
+		}
+		return nil
+	})
+	return jobID, err
 }
 
 // nRanges returns the number of ranges that cover a set of spans.
@@ -416,14 +452,27 @@ func (sc *SchemaChanger) distBackfill(
 	for {
 		// Repeat until getMutationToBackfill returns a mutation with no remaining
 		// ResumeSpans, indicating that the backfill is complete.
-		mutation, err := sc.getMutationToBackfill(ctx, version, backfillType, filter)
+		mutation, mutationIdx, err := sc.getMutationToBackfill(ctx, version, backfillType, filter)
 		if err != nil {
 			return err
 		}
+		jobID, err := sc.getjobIDForMutation(ctx, version, mutation.MutationID)
+		if err != nil {
+			return err
+		}
+		job, err := sc.jobRegistry.LoadJob(ctx, jobID)
+		if err != nil {
+			return errors.Wrapf(err, "can't find job %d", jobID)
+		}
+		details, ok := job.Record.Details.(jobs.SchemaChangeDetails)
+		if !ok {
+			return errors.Wrapf(err, "expected SchemaChangeDetails job type, got %T", job.Record.Details)
+		}
+
 		if mutation == nil {
 			break
 		}
-		spans := mutation.ResumeSpans
+		spans := details.ResumeSpanList[mutationIdx].ResumeSpans
 		if len(spans) <= 0 {
 			break
 		}

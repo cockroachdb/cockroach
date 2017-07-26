@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,6 +34,8 @@ import (
 
 func TestWriteResumeSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.TODO()
+
 	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			// Disable all schema change execution.
@@ -46,18 +49,17 @@ func TestWriteResumeSpan(t *testing.T) {
 			},
 		},
 	})
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-CREATE UNIQUE INDEX vidx ON t.test (v);
-`); err != nil {
+	CREATE DATABASE t;
+	CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+	CREATE UNIQUE INDEX vidx ON t.test (v);
+	`); err != nil {
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	tableDesc.Mutations[0].ResumeSpans = []roachpb.Span{
+	resumeSpans := []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 		{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
 		{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")},
@@ -68,13 +70,43 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		{Key: roachpb.Key("o"), EndKey: roachpb.Key("p")},
 		{Key: roachpb.Key("q"), EndKey: roachpb.Key("r")},
 	}
+
+	registry := server.JobRegistry().(*jobs.Registry)
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
 	if err := kvDB.Put(
-		context.TODO(),
+		ctx,
 		sqlbase.MakeDescMetadataKey(tableDesc.ID),
 		sqlbase.WrapDescriptor(tableDesc),
 	); err != nil {
 		t.Fatal(err)
 	}
+
+	mutationID := tableDesc.Mutations[0].MutationID
+	var jobID int64
+
+	if len(tableDesc.MutationJobs) > 0 {
+		for _, job := range tableDesc.MutationJobs {
+			if job.MutationID == mutationID {
+				jobID = job.JobID
+				break
+			}
+		}
+	}
+
+	job, err := registry.LoadJob(ctx, jobID)
+
+	if err != nil {
+		t.Fatal(errors.Wrapf(err, "can't find job %d", jobID))
+	}
+
+	details, ok := job.Record.Details.(jobs.SchemaChangeDetails)
+	if !ok {
+		t.Fatalf("expected SchemaChangeDetails job type, got %T", job.Record.Details)
+	}
+
+	details.ResumeSpanList[0].ResumeSpans = resumeSpans
+	job.SetDetails(ctx, details)
 
 	testData := []struct {
 		orig   roachpb.Span
@@ -107,7 +139,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 	for _, test := range testData {
 		if err := distsqlrun.WriteResumeSpan(
-			context.TODO(), kvDB, tableDesc.ID, test.orig, test.resume, 0,
+			ctx, kvDB, tableDesc.ID, test.orig, test.resume, 0, registry,
 		); err != nil {
 			t.Error(err)
 		}
@@ -135,7 +167,12 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		// Work completed on a span; ["o", "p"] complete.
 		{Key: roachpb.Key("q"), EndKey: roachpb.Key("r")},
 	}
-	got := tableDesc.Mutations[0].ResumeSpans
+
+	job, _ = registry.LoadJob(ctx, jobID)
+
+	details, _ = job.Record.Details.(jobs.SchemaChangeDetails)
+
+	got := details.ResumeSpanList[0].ResumeSpans
 	if len(expected) != len(got) {
 		t.Fatalf("expected = %+v\n got = %+v", expected, got)
 	}

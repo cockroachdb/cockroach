@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -141,7 +142,9 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 		b.spec.Table.ID,
 		work,
 		resume,
-		addedIndexMutationIdx)
+		addedIndexMutationIdx,
+		b.flowCtx.JobRegistry,
+	)
 }
 
 // WriteResumeSpan writes a checkpoint for the backfill work on origSpan.
@@ -154,6 +157,7 @@ func WriteResumeSpan(
 	origSpan roachpb.Span,
 	resume roachpb.Span,
 	mutationIdx int,
+	jobsRegistry *jobs.Registry,
 ) error {
 	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
 	defer tracing.FinishSpan(traceSpan)
@@ -171,18 +175,38 @@ func WriteResumeSpan(
 			log.Infof(ctx, "retrying adding checkpoint %s to table %s", resume, tableDesc.Name)
 		}
 
-		// This loop is finding a span in the checkpoint that fits
-		// origSpan. It then carves a spot for origSpan in the
-		// checkpoint, and replaces origSpan in the checkpoint with
-		// resume.
-		mutation := &tableDesc.Mutations[mutationIdx]
-		for i, sp := range mutation.ResumeSpans {
+		mutationID := tableDesc.Mutations[mutationIdx].MutationID
+		var jobID int64
+
+		if len(tableDesc.MutationJobs) > 0 {
+			for _, job := range tableDesc.MutationJobs {
+				if job.MutationID == mutationID {
+					jobID = job.JobID
+					break
+				}
+			}
+		}
+
+		job, err := jobsRegistry.LoadJobWithTxn(ctx, jobID, txn)
+		if err != nil {
+			return errors.Wrapf(err, "can't find job %d", jobID)
+		}
+		details, ok := job.Record.Details.(jobs.SchemaChangeDetails)
+		if !ok {
+			return errors.Wrapf(err, "expected SchemaChangeDetails job type, got %T", job.Record.Details)
+		}
+		resumeSpans := details.ResumeSpanList[mutationIdx].ResumeSpans
+		//This loop is finding a span in the checkpoint that fits
+		//origSpan. It then carves a spot for origSpan in the
+		//checkpoint, and replaces origSpan in the checkpoint with
+		//resume.
+		for i, sp := range resumeSpans {
 			if sp.Key.Compare(origSpan.Key) <= 0 &&
 				sp.EndKey.Compare(origSpan.EndKey) >= 0 {
 				// origSpan is in sp; split sp if needed to accommodate
 				// origSpan and replace origSpan with resume.
-				before := mutation.ResumeSpans[:i]
-				after := append([]roachpb.Span{}, mutation.ResumeSpans[i+1:]...)
+				before := resumeSpans[:i]
+				after := append([]roachpb.Span{}, resumeSpans[i+1:]...)
 
 				// add span to before, but merge it with the last span
 				// if possible.
@@ -205,18 +229,17 @@ func WriteResumeSpan(
 					log.VEventf(ctx, 2, "completed processing of span: %+v", origSpan)
 				}
 				addSpan(origSpan.EndKey, sp.EndKey)
-				mutation.ResumeSpans = append(before, after...)
+				resumeSpans = append(before, after...)
 
-				log.VEventf(ctx, 2, "ckpt %+v", mutation.ResumeSpans)
-				if err := txn.SetSystemConfigTrigger(); err != nil {
-					return err
-				}
-				return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
+				log.VEventf(ctx, 2, "ckpt %+v", resumeSpans)
+
+				details.ResumeSpanList[mutationIdx].ResumeSpans = resumeSpans
+				return job.WithTxn(txn).SetDetails(ctx, details)
 			}
 		}
-		// Unable to find a span containing origSpan?
+		//Unable to find a span containing origSpan?
 		return errors.Errorf(
-			"span %+v not found among %+v", origSpan, mutation.ResumeSpans,
+			"span %+v not found among %+v", origSpan, resumeSpans,
 		)
 	})
 }

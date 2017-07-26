@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	//"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -1590,7 +1591,6 @@ func (desc *TableDescriptor) AddColumnMutation(
 	c ColumnDescriptor, direction DescriptorMutation_Direction,
 ) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Column{Column: &c}, Direction: direction}
-	m.ResumeSpans = append(m.ResumeSpans, desc.PrimaryIndexSpan())
 	desc.addMutation(m)
 }
 
@@ -1599,7 +1599,6 @@ func (desc *TableDescriptor) AddIndexMutation(
 	idx IndexDescriptor, direction DescriptorMutation_Direction,
 ) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
-	m.ResumeSpans = append(m.ResumeSpans, desc.PrimaryIndexSpan())
 	desc.addMutation(m)
 }
 

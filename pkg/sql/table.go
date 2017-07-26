@@ -563,17 +563,26 @@ func (p *planner) getAliasedTableName(n parser.TableExpr) (*parser.TableName, er
 // The identifiers of the mutations and newly-created job are written to a new
 // MutationJob in the table descriptor.
 func (p *planner) createSchemaChangeJob(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, stmt string,
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, stmt string, span roachpb.Span,
 ) (sqlbase.MutationID, error) {
 	mutationID, err := tableDesc.FinalizeMutation()
 	if err != nil {
 		return sqlbase.InvalidMutationID, err
 	}
+
+	var spanList []jobs.ResumeSpanList
+	for i := 0; i < len(tableDesc.Mutations); i++ {
+		spanList = append(spanList,
+			jobs.ResumeSpanList{
+				ResumeSpans: []roachpb.Span{span},
+			},
+		)
+	}
 	jobRecord := jobs.Record{
 		Description:   stmt,
 		Username:      p.User(),
 		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
-		Details:       jobs.SchemaChangeDetails{},
+		Details:       jobs.SchemaChangeDetails{ResumeSpanList: spanList},
 	}
 	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
 	if err := job.WithTxn(p.txn).Created(ctx); err != nil {

@@ -434,7 +434,7 @@ func (n *alterTableNode) Start(params runParams) error {
 	mutationID := sqlbase.InvalidMutationID
 	var err error
 	if addedMutations {
-		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc, parser.AsString(n.n))
+		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc, parser.AsString(n.n), n.tableDesc.PrimaryIndexSpan())
 	} else {
 		err = n.tableDesc.SetUpVersion()
 	}
