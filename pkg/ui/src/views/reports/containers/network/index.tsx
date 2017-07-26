@@ -154,12 +154,6 @@ function createHeaderCell(staleIDs: Set<number>, id: Identity, key: number) {
   </td>;
 }
 
-const noNodes = (
-  <div>
-    <h2>No nodes match the filters</h2>
-  </div>
-);
-
 const loading = (
   <div className="section">
     <h1>Loading cluster status...</h1>
@@ -218,10 +212,10 @@ class Network extends React.Component<NetworkProps, {}> {
     }
     if (!_.isNil(filters.localityRegex)) {
       healthyIDsContext = healthyIDsContext.filter(nodeID => (
-        !filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
+        filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
       ));
       staleIDsContext = staleIDsContext.filter(nodeID => (
-        !filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
+        filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
       ));
     }
     const healthyIDs = healthyIDsContext.value();
@@ -247,14 +241,6 @@ class Network extends React.Component<NetworkProps, {}> {
         .value()
     ));
 
-    // TODO(bram): turn these values into memoized selectors.
-    const mean = d3Mean(latencies);
-    const stddev = d3Deviation(latencies);
-    const stddevPlus1 = mean + stddev;
-    const stddevPlus2 = stddevPlus1 + stddev;
-    const stddevMinus1 = mean - stddev;
-    const stddevMinus2 = stddevMinus1 - stddev;
-
     const noConnections: NoConnection[] = _.flatMap(healthyIDs, nodeIDa => (
       _.chain(nodesSummary.nodeStatusByID[nodeIDa].latencies)
         .keys()
@@ -270,6 +256,26 @@ class Network extends React.Component<NetworkProps, {}> {
         .sortBy(noConnection => noConnection.from.locality)
         .value()
     ));
+
+    if (_.isEmpty(healthyIDs)) {
+      return (
+        <div>
+          <h1>Network Diagnostics</h1>
+          <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
+          <h2>No healthy nodes match the filters</h2>
+          {staleTable(staleIdentities)}
+          {noConnectionTable(noConnections)}
+        </div>
+      );
+    }
+
+    // TODO(bram): turn these values into memoized selectors.
+    const mean = d3Mean(latencies);
+    const stddev = d3Deviation(latencies);
+    const stddevPlus1 = mean + stddev;
+    const stddevPlus2 = stddevPlus1 + stddev;
+    const stddevMinus1 = mean - stddev;
+    const stddevMinus2 = stddevMinus1 - stddev;
 
     // getLatencyCell creates and decorates a cell based on it's latency.
     function getLatencyCell(nodeIDa: number, nodeIDb: number) {
@@ -383,23 +389,12 @@ class Network extends React.Component<NetworkProps, {}> {
       </div>
     );
 
-    function displayResults() {
-      if (_.isEmpty(displayIdentities)) {
-        return noNodes;
-      }
-      return (
-        <div>
-          {latencyTable}
-          {legend}
-        </div>
-      );
-    }
-
     return (
       <div>
         <h1>Network Diagnostics</h1>
         <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
-        {displayResults()}
+        {latencyTable}
+        {legend}
         {staleTable(staleIdentities)}
         {noConnectionTable(noConnections)}
       </div>

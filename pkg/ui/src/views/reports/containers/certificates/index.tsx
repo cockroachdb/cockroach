@@ -11,18 +11,13 @@ import { LongToMoment } from "src/util/convert";
 
 interface CertificatesOwnProps {
   certificates: protos.cockroach.server.serverpb.CertificatesResponse;
+  lastError: Error;
   refreshCertificates: typeof refreshCertificates;
 }
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 
 type CertificatesProps = CertificatesOwnProps & RouterState;
-
-const loading = (
-  <div className="section">
-    <h1>Loading cluster status...</h1>
-  </div>
-);
 
 const emptyRow = (
   <tr className="certs-table__row">
@@ -37,7 +32,7 @@ const emptyRow = (
 class Certificates extends React.Component<CertificatesProps, {}> {
   refresh(props = this.props) {
     props.refreshCertificates(new protos.cockroach.server.serverpb.CertificatesRequest({
-      node_id: this.props.params[nodeIDAttr],
+      node_id: props.params[nodeIDAttr],
     }));
   }
 
@@ -139,9 +134,21 @@ class Certificates extends React.Component<CertificatesProps, {}> {
   }
 
   render() {
+    const nodeID = this.props.params[nodeIDAttr];
+    if (!_.isNil(this.props.lastError)) {
+      return (
+        <div className="section">
+          <h1>Error loading certificates for node {nodeID}</h1>
+        </div>
+      );
+    }
     const { certificates } = this.props;
     if (_.isEmpty(certificates)) {
-      return loading;
+      return (
+        <div className="section">
+          <h1>Loading cluster status...</h1>
+        </div>
+      );
     }
 
     if (_.isEmpty(certificates.certificates)) {
@@ -152,7 +159,6 @@ class Certificates extends React.Component<CertificatesProps, {}> {
       );
     }
 
-    const nodeID = this.props.params[nodeIDAttr];
     let header: string = null;
     if (_.isNaN(parseInt(nodeID, 10))) {
       header = "Local Node";
@@ -176,6 +182,7 @@ class Certificates extends React.Component<CertificatesProps, {}> {
 function mapStateToProps(state: AdminUIState) {
   return {
     certificates: state.cachedData.certificates.data,
+    lastError: state.cachedData.certificates.lastError,
   };
 }
 
