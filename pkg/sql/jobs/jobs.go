@@ -342,15 +342,18 @@ func (j *Job) update(
 	return nil
 }
 
+// Type is the type of a Job.
+type Type string
+
 // Job types are named for the SQL query that creates them.
 const (
-	TypeBackup       string = "BACKUP"
-	TypeRestore      string = "RESTORE"
-	TypeSchemaChange string = "SCHEMA CHANGE"
+	TypeBackup       Type = "BACKUP"
+	TypeRestore      Type = "RESTORE"
+	TypeSchemaChange Type = "SCHEMA CHANGE"
 )
 
-// Typ returns the payload's job type.
-func (p *Payload) Typ() string {
+// Type returns the payload's job type.
+func (p *Payload) Type() Type {
 	switch p.Details.(type) {
 	case *Payload_Backup:
 		return TypeBackup

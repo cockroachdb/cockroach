@@ -347,7 +347,7 @@ func backupAndRestore(
 }
 
 func verifySystemJob(
-	db *sqlutils.SQLRunner, offset int, expectedType string, expected jobs.Record,
+	db *sqlutils.SQLRunner, offset int, expectedType jobs.Type, expected jobs.Record,
 ) error {
 	var actual jobs.Record
 	var rawDescriptorIDs pq.Int64Array
@@ -379,7 +379,7 @@ func verifySystemJob(
 	if e, a := jobs.StatusSucceeded, jobs.Status(statusString); e != a {
 		return errors.Errorf("job %d: expected status %v, got %v", offset, e, a)
 	}
-	if e, a := expectedType, actualType; e != a {
+	if e, a := expectedType, jobs.Type(actualType); e != a {
 		return errors.Errorf("job %d: expected type %v, got type %v", offset, e, a)
 	}
 
