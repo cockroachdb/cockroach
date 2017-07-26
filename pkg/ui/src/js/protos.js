@@ -43892,12 +43892,208 @@ export const google = $root.google = (() => {
          */
         const api = {};
 
+        api.Http = (function() {
+
+            /**
+             * Properties of a Http.
+             * @typedef google.api.Http$Properties
+             * @type {Object}
+             * @property {Array.<google.api.HttpRule$Properties>} [rules] Http rules.
+             */
+
+            /**
+             * Constructs a new Http.
+             * @exports google.api.Http
+             * @constructor
+             * @param {google.api.Http$Properties=} [properties] Properties to set
+             */
+            function Http(properties) {
+                this.rules = [];
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * Http rules.
+             * @type {Array.<google.api.HttpRule$Properties>}
+             */
+            Http.prototype.rules = $util.emptyArray;
+
+            /**
+             * Creates a new Http instance using the specified properties.
+             * @param {google.api.Http$Properties=} [properties] Properties to set
+             * @returns {google.api.Http} Http instance
+             */
+            Http.create = function create(properties) {
+                return new Http(properties);
+            };
+
+            /**
+             * Encodes the specified Http message. Does not implicitly {@link google.api.Http.verify|verify} messages.
+             * @param {google.api.Http$Properties} message Http message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            Http.encode = function encode(message, writer) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (message.rules != null && message.rules.length)
+                    for (let i = 0; i < message.rules.length; ++i)
+                        $root.google.api.HttpRule.encode(message.rules[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                return writer;
+            };
+
+            /**
+             * Encodes the specified Http message, length delimited. Does not implicitly {@link google.api.Http.verify|verify} messages.
+             * @param {google.api.Http$Properties} message Http message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            Http.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a Http message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {google.api.Http} Http
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            Http.decode = function decode(reader, length) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.google.api.Http();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    switch (tag >>> 3) {
+                    case 1:
+                        if (!(message.rules && message.rules.length))
+                            message.rules = [];
+                        message.rules.push($root.google.api.HttpRule.decode(reader, reader.uint32()));
+                        break;
+                    default:
+                        reader.skipType(tag & 7);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a Http message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {google.api.Http} Http
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            Http.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a Http message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            Http.verify = function verify(message) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (message.rules != null && message.hasOwnProperty("rules")) {
+                    if (!Array.isArray(message.rules))
+                        return "rules: array expected";
+                    for (let i = 0; i < message.rules.length; ++i) {
+                        let error = $root.google.api.HttpRule.verify(message.rules[i]);
+                        if (error)
+                            return "rules." + error;
+                    }
+                }
+                return null;
+            };
+
+            /**
+             * Creates a Http message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {google.api.Http} Http
+             */
+            Http.fromObject = function fromObject(object) {
+                if (object instanceof $root.google.api.Http)
+                    return object;
+                let message = new $root.google.api.Http();
+                if (object.rules) {
+                    if (!Array.isArray(object.rules))
+                        throw TypeError(".google.api.Http.rules: array expected");
+                    message.rules = [];
+                    for (let i = 0; i < object.rules.length; ++i) {
+                        if (typeof object.rules[i] !== "object")
+                            throw TypeError(".google.api.Http.rules: object expected");
+                        message.rules[i] = $root.google.api.HttpRule.fromObject(object.rules[i]);
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Creates a Http message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link google.api.Http.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {google.api.Http} Http
+             */
+            Http.from = Http.fromObject;
+
+            /**
+             * Creates a plain object from a Http message. Also converts values to other types if specified.
+             * @param {google.api.Http} message Http
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            Http.toObject = function toObject(message, options) {
+                if (!options)
+                    options = {};
+                let object = {};
+                if (options.arrays || options.defaults)
+                    object.rules = [];
+                if (message.rules && message.rules.length) {
+                    object.rules = [];
+                    for (let j = 0; j < message.rules.length; ++j)
+                        object.rules[j] = $root.google.api.HttpRule.toObject(message.rules[j], options);
+                }
+                return object;
+            };
+
+            /**
+             * Creates a plain object from this Http message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            Http.prototype.toObject = function toObject(options) {
+                return this.constructor.toObject(this, options);
+            };
+
+            /**
+             * Converts this Http to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            Http.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            return Http;
+        })();
+
         api.HttpRule = (function() {
 
             /**
              * Properties of a HttpRule.
              * @typedef google.api.HttpRule$Properties
              * @type {Object}
+             * @property {string} [selector] HttpRule selector.
              * @property {string} [get] HttpRule get.
              * @property {string} [put] HttpRule put.
              * @property {string} [post] HttpRule post.
@@ -43921,6 +44117,12 @@ export const google = $root.google = (() => {
                         if (properties[keys[i]] != null)
                             this[keys[i]] = properties[keys[i]];
             }
+
+            /**
+             * HttpRule selector.
+             * @type {string}
+             */
+            HttpRule.prototype.selector = "";
 
             /**
              * HttpRule get.
@@ -44001,6 +44203,8 @@ export const google = $root.google = (() => {
             HttpRule.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
+                if (message.selector != null && message.hasOwnProperty("selector"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).string(message.selector);
                 if (message.get != null && message.hasOwnProperty("get"))
                     writer.uint32(/* id 2, wireType 2 =*/18).string(message.get);
                 if (message.put != null && message.hasOwnProperty("put"))
@@ -44046,6 +44250,9 @@ export const google = $root.google = (() => {
                 while (reader.pos < end) {
                     let tag = reader.uint32();
                     switch (tag >>> 3) {
+                    case 1:
+                        message.selector = reader.string();
+                        break;
                     case 2:
                         message.get = reader.string();
                         break;
@@ -44102,6 +44309,9 @@ export const google = $root.google = (() => {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
                 let properties = {};
+                if (message.selector != null && message.hasOwnProperty("selector"))
+                    if (!$util.isString(message.selector))
+                        return "selector: string expected";
                 if (message.get != null && message.hasOwnProperty("get")) {
                     properties.pattern = 1;
                     if (!$util.isString(message.get))
@@ -44167,6 +44377,8 @@ export const google = $root.google = (() => {
                 if (object instanceof $root.google.api.HttpRule)
                     return object;
                 let message = new $root.google.api.HttpRule();
+                if (object.selector != null)
+                    message.selector = String(object.selector);
                 if (object.get != null)
                     message.get = String(object.get);
                 if (object.put != null)
@@ -44218,8 +44430,12 @@ export const google = $root.google = (() => {
                 let object = {};
                 if (options.arrays || options.defaults)
                     object.additional_bindings = [];
-                if (options.defaults)
+                if (options.defaults) {
+                    object.selector = "";
                     object.body = "";
+                }
+                if (message.selector != null && message.hasOwnProperty("selector"))
+                    object.selector = message.selector;
                 if (message.get != null && message.hasOwnProperty("get")) {
                     object.get = message.get;
                     if (options.oneofs)

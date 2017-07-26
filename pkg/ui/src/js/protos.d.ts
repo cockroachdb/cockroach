@@ -22990,7 +22990,121 @@ export namespace google {
      */
     namespace api {
 
+        type Http$Properties = {
+            rules?: google.api.HttpRule$Properties[];
+        };
+
+        /**
+         * Constructs a new Http.
+         * @exports google.api.Http
+         * @constructor
+         * @param {google.api.Http$Properties=} [properties] Properties to set
+         */
+        class Http {
+
+            /**
+             * Constructs a new Http.
+             * @exports google.api.Http
+             * @constructor
+             * @param {google.api.Http$Properties=} [properties] Properties to set
+             */
+            constructor(properties?: google.api.Http$Properties);
+
+            /**
+             * Http rules.
+             * @type {Array.<google.api.HttpRule$Properties>}
+             */
+            public rules: google.api.HttpRule$Properties[];
+
+            /**
+             * Creates a new Http instance using the specified properties.
+             * @param {google.api.Http$Properties=} [properties] Properties to set
+             * @returns {google.api.Http} Http instance
+             */
+            public static create(properties?: google.api.Http$Properties): google.api.Http;
+
+            /**
+             * Encodes the specified Http message. Does not implicitly {@link google.api.Http.verify|verify} messages.
+             * @param {google.api.Http$Properties} message Http message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encode(message: google.api.Http$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified Http message, length delimited. Does not implicitly {@link google.api.Http.verify|verify} messages.
+             * @param {google.api.Http$Properties} message Http message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encodeDelimited(message: google.api.Http$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a Http message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {google.api.Http} Http
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): google.api.Http;
+
+            /**
+             * Decodes a Http message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {google.api.Http} Http
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): google.api.Http;
+
+            /**
+             * Verifies a Http message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): string;
+
+            /**
+             * Creates a Http message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {google.api.Http} Http
+             */
+            public static fromObject(object: { [k: string]: any }): google.api.Http;
+
+            /**
+             * Creates a Http message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link google.api.Http.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {google.api.Http} Http
+             */
+            public static from(object: { [k: string]: any }): google.api.Http;
+
+            /**
+             * Creates a plain object from a Http message. Also converts values to other types if specified.
+             * @param {google.api.Http} message Http
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public static toObject(message: google.api.Http, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Creates a plain object from this Http message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this Http to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            public toJSON(): { [k: string]: any };
+        }
+
         type HttpRule$Properties = {
+            selector?: string;
             get?: string;
             put?: string;
             post?: string;
@@ -23016,6 +23130,12 @@ export namespace google {
              * @param {google.api.HttpRule$Properties=} [properties] Properties to set
              */
             constructor(properties?: google.api.HttpRule$Properties);
+
+            /**
+             * HttpRule selector.
+             * @type {string}
+             */
+            public selector: string;
 
             /**
              * HttpRule get.
