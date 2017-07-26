@@ -22,11 +22,12 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // Cockroach error extensions:
@@ -207,24 +208,41 @@ func errHasCode(err error, code string) bool {
 	return false
 }
 
+type singleKVFetcher struct {
+	kv   client.KeyValue
+	done bool
+}
+
+func (f *singleKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error) {
+	if f.done {
+		return false, client.KeyValue{}, nil
+	}
+	f.done = true
+	return true, f.kv, nil
+}
+
+func (f *singleKVFetcher) getRangesInfo() []roachpb.RangeInfo {
+	panic("getRangesInfo() called on singleKVFetcher")
+}
+
 // ConvertBatchError returns a user friendly constraint violation error.
-func ConvertBatchError(tableDesc *TableDescriptor, b *client.Batch) error {
+func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *client.Batch) error {
 	origPErr := b.MustPErr()
 	if origPErr.Index == nil {
 		return origPErr.GoError()
 	}
-	index := origPErr.Index.Index
-	if index >= int32(len(b.Results)) {
-		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
+	j := origPErr.Index.Index
+	if j >= int32(len(b.Results)) {
+		panic(fmt.Sprintf("index %d outside of results: %+v", j, b.Results))
 	}
-	result := b.Results[index]
+	result := b.Results[j]
 	var alloc DatumAlloc
-	if _, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {
-		row := result.Rows[0]
+	if cErr, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {
+		key := result.Rows[0].Key
 		// TODO(dan): There's too much internal knowledge of the sql table
 		// encoding here (and this callsite is the only reason
 		// DecodeIndexKeyPrefix is exported). Refactor this bit out.
-		indexID, key, err := DecodeIndexKeyPrefix(&alloc, tableDesc, row.Key)
+		indexID, _, err := DecodeIndexKeyPrefix(&alloc, tableDesc, key)
 		if err != nil {
 			return err
 		}
@@ -232,29 +250,31 @@ func ConvertBatchError(tableDesc *TableDescriptor, b *client.Batch) error {
 		if err != nil {
 			return err
 		}
-		vals, err := MakeEncodedKeyVals(tableDesc, index.ColumnIDs)
+		var rf RowFetcher
+		colIdxMap := make(map[ColumnID]int, len(index.ColumnIDs))
+		cols := make([]ColumnDescriptor, len(index.ColumnIDs))
+		valNeededForCol := make([]bool, len(index.ColumnIDs))
+		for i, colID := range index.ColumnIDs {
+			colIdxMap[colID] = i
+			col, err := tableDesc.FindColumnByID(colID)
+			if err != nil {
+				return err
+			}
+			cols[i] = *col
+			valNeededForCol[i] = true
+		}
+		if err := rf.Init(tableDesc, colIdxMap, index, false, /* reverse */
+			indexID != tableDesc.PrimaryIndex.ID /* isSecondaryIndex */, cols, valNeededForCol,
+			false /* returnRangeInfo */, &DatumAlloc{}); err != nil {
+			return err
+		}
+		f := singleKVFetcher{kv: client.KeyValue{Key: key, Value: cErr.ActualValue}}
+		if err := rf.StartScanFrom(ctx, &f); err != nil {
+			return err
+		}
+		decodedVals, err := rf.NextRowDecoded(ctx, false /* traceKV */)
 		if err != nil {
 			return err
-		}
-		dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
-		for _, dir := range index.ColumnDirections {
-			convertedDir, err := dir.ToEncodingDirection()
-			if err != nil {
-				return err
-			}
-			dirs = append(dirs, convertedDir)
-		}
-		if _, err := DecodeKeyVals(vals, dirs, key); err != nil {
-			return err
-		}
-		decodedVals := make([]parser.Datum, len(vals))
-		var da DatumAlloc
-		for i, val := range vals {
-			err := val.EnsureDecoded(&da)
-			if err != nil {
-				return err
-			}
-			decodedVals[i] = val.Datum
 		}
 		return NewUniquenessConstraintViolationError(index, decodedVals)
 	}

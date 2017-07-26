@@ -167,7 +167,7 @@ func (ib *indexBackfiller) runChunk(
 		}
 		// Write the new index values.
 		if err := txn.CommitInBatch(ctx, b); err != nil {
-			return ConvertBackfillError(&ib.spec.Table, b)
+			return ConvertBackfillError(ctx, &ib.spec.Table, b)
 		}
 		return nil
 	})
