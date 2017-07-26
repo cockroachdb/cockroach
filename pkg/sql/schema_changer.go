@@ -686,7 +686,26 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				// mutation ID we're looking for.
 				break
 			}
-			desc.Mutations[i].ResumeSpans = nil
+
+			jobID, err := sc.getJobIDForMutationWithDescriptor(ctx, desc, mutation.MutationID)
+			if err != nil {
+				return err
+			}
+			job, err := sc.jobRegistry.LoadJob(ctx, jobID)
+			if err != nil {
+				return err
+			}
+
+			details, ok := job.Record.Details.(jobs.SchemaChangeDetails)
+			if !ok {
+				return errors.Errorf("expected SchemaChangeDetails job type, got %T", sc.job.Record.Details)
+			}
+			details.ResumeSpanList[i].ResumeSpans = nil
+			err = job.SetDetails(ctx, details)
+			if err != nil {
+				return err
+			}
+
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
 			switch mutation.Direction {
 			case sqlbase.DescriptorMutation_ADD:

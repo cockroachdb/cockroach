@@ -18,8 +18,9 @@ syntax = "proto3";
 package cockroach.sql.jobs;
 option go_package = "jobs";
 
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "cockroach/pkg/roachpb/data.proto";
 import "gogoproto/gogo.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
 
 message Lease {
   option (gogoproto.equal) = true;
@@ -57,8 +58,20 @@ message RestoreDetails {
   repeated string uris = 3 [(gogoproto.customname) = "URIs"];
 }
 
+message ResumeSpanList {
+  repeated roachpb.Span resume_spans = 1 [(gogoproto.nullable) = false];
+}
+
 message SchemaChangeDetails {
- util.hlc.Timestamp read_as_of = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp read_as_of = 1 [(gogoproto.nullable) = false];
+  // A schema change can involve running multiple processors backfilling
+  // or deleting data. They occasionally checkpoint Spans so that the
+  // processing can resume in the event of a node failure. The spans are
+  // non-overlapping contiguous areas of the KV space that still need to
+  // be processed. The index represents the index of a mutation in a
+  // mutation list containing mutations for the same mutationID.
+  repeated ResumeSpanList resume_span_list = 2 [(gogoproto.nullable) = false];
+
 }
 
 message Payload {
