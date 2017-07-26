@@ -168,7 +168,9 @@ func (n *createIndexNode) Start(params runParams) error {
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
-	n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD)
+	if err := n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
+		return err
+	}
 	if err := n.tableDesc.AllocateIDs(); err != nil {
 		return err
 	}
@@ -1222,18 +1224,18 @@ func MakeTableDesc(
 	for _, def := range n.Defs {
 		if d, ok := def.(*parser.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
-				if _, ok := d.Type.(*parser.ArrayColType); ok {
-					return desc, pgerror.UnimplementedWithIssueErrorf(2115, "ARRAY column types are unsupported")
-				}
 				if _, ok := d.Type.(*parser.VectorColType); ok {
-					return desc, pgerror.UnimplementedWithIssueErrorf(2115, "VECTOR column types are unsupported")
+					return desc, pgerror.NewErrorf(
+						pgerror.CodeFeatureNotSupportedError,
+						"VECTOR column types are unsupported",
+					)
 				}
 			}
-
 			col, idx, err := sqlbase.MakeColumnDefDescs(d, searchPath, evalCtx)
 			if err != nil {
 				return desc, err
 			}
+
 			desc.AddColumn(*col)
 			if idx != nil {
 				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {

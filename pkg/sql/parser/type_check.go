@@ -706,15 +706,7 @@ func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, 
 		return nil, err
 	}
 	expr.Subquery = subqueryTyped
-	subqueryType := subqueryTyped.ResolvedType()
-	switch subqueryType {
-	case TypeInt:
-		expr.typ = TypeIntArray
-	case TypeString:
-		expr.typ = TypeStringArray
-	default:
-		return nil, errors.Errorf("unhandled parameterized array type %T", subqueryType)
-	}
+	expr.typ = TArray{subqueryTyped.ResolvedType()}
 	return expr, nil
 }
 

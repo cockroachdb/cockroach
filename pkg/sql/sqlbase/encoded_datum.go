@@ -226,7 +226,7 @@ func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([
 	case DatumEncoding_DESCENDING_KEY:
 		return EncodeTableKey(appendTo, ed.Datum, encoding.Descending)
 	case DatumEncoding_VALUE:
-		return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum)
+		return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
 	default:
 		panic(fmt.Sprintf("unknown encoding requested %s", enc))
 	}

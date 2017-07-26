@@ -2001,9 +2001,7 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
 	case parser.TypeUUID:
-	case parser.TypeStringArray:
 	case parser.TypeNameArray:
-	case parser.TypeIntArray:
 	case parser.TypeOid:
 	case parser.TypeRegClass:
 	case parser.TypeRegNamespace:
@@ -2014,6 +2012,10 @@ func checkResultType(typ parser.Type) error {
 		// Compare all types that cannot rely on == equality.
 		istype := typ.FamilyEqual
 		switch {
+		case istype(parser.TypeArray):
+			if istype(parser.UnwrapType(typ).(parser.TArray).Typ) {
+				return pgerror.Unimplemented("nested arrays", "arrays cannot have arrays as element type")
+			}
 		case istype(parser.TypeCollatedString):
 		case istype(parser.TypeTuple):
 		case istype(parser.TypePlaceholder):
