@@ -74,7 +74,6 @@ func TestTrace(t *testing.T) {
 			},
 			expSpans: []string{
 				"sql txn implicit",
-				"grpcTransport SendNext",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
@@ -110,7 +109,6 @@ func TestTrace(t *testing.T) {
 			},
 			expSpans: []string{
 				"sql txn implicit",
-				"grpcTransport SendNext",
 				"flow",
 				"table reader",
 				"/cockroach.roachpb.Internal/Batch",
@@ -136,7 +134,6 @@ func TestTrace(t *testing.T) {
 				"sql txn implicit",
 				"starting plan",
 				"consuming rows",
-				"grpcTransport SendNext",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
