@@ -34162,6 +34162,201 @@ export const cockroach = $root.cockroach = (() => {
                 return RestoreDetails;
             })();
 
+            jobs.ResumeSpanList = (function() {
+
+                /**
+                 * Properties of a ResumeSpanList.
+                 * @typedef cockroach.sql.jobs.ResumeSpanList$Properties
+                 * @type {Object}
+                 * @property {Array.<cockroach.roachpb.Span$Properties>} [resume_spans] ResumeSpanList resume_spans.
+                 */
+
+                /**
+                 * Constructs a new ResumeSpanList.
+                 * @exports cockroach.sql.jobs.ResumeSpanList
+                 * @constructor
+                 * @param {cockroach.sql.jobs.ResumeSpanList$Properties=} [properties] Properties to set
+                 */
+                function ResumeSpanList(properties) {
+                    this.resume_spans = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * ResumeSpanList resume_spans.
+                 * @type {Array.<cockroach.roachpb.Span$Properties>}
+                 */
+                ResumeSpanList.prototype.resume_spans = $util.emptyArray;
+
+                /**
+                 * Creates a new ResumeSpanList instance using the specified properties.
+                 * @param {cockroach.sql.jobs.ResumeSpanList$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.jobs.ResumeSpanList} ResumeSpanList instance
+                 */
+                ResumeSpanList.create = function create(properties) {
+                    return new ResumeSpanList(properties);
+                };
+
+                /**
+                 * Encodes the specified ResumeSpanList message. Does not implicitly {@link cockroach.sql.jobs.ResumeSpanList.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.ResumeSpanList$Properties} message ResumeSpanList message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ResumeSpanList.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.resume_spans != null && message.resume_spans.length)
+                        for (let i = 0; i < message.resume_spans.length; ++i)
+                            $root.cockroach.roachpb.Span.encode(message.resume_spans[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified ResumeSpanList message, length delimited. Does not implicitly {@link cockroach.sql.jobs.ResumeSpanList.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.ResumeSpanList$Properties} message ResumeSpanList message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ResumeSpanList.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a ResumeSpanList message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.jobs.ResumeSpanList} ResumeSpanList
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ResumeSpanList.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.jobs.ResumeSpanList();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            if (!(message.resume_spans && message.resume_spans.length))
+                                message.resume_spans = [];
+                            message.resume_spans.push($root.cockroach.roachpb.Span.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a ResumeSpanList message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.jobs.ResumeSpanList} ResumeSpanList
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ResumeSpanList.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a ResumeSpanList message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                ResumeSpanList.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.resume_spans != null && message.hasOwnProperty("resume_spans")) {
+                        if (!Array.isArray(message.resume_spans))
+                            return "resume_spans: array expected";
+                        for (let i = 0; i < message.resume_spans.length; ++i) {
+                            let error = $root.cockroach.roachpb.Span.verify(message.resume_spans[i]);
+                            if (error)
+                                return "resume_spans." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a ResumeSpanList message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.ResumeSpanList} ResumeSpanList
+                 */
+                ResumeSpanList.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.jobs.ResumeSpanList)
+                        return object;
+                    let message = new $root.cockroach.sql.jobs.ResumeSpanList();
+                    if (object.resume_spans) {
+                        if (!Array.isArray(object.resume_spans))
+                            throw TypeError(".cockroach.sql.jobs.ResumeSpanList.resume_spans: array expected");
+                        message.resume_spans = [];
+                        for (let i = 0; i < object.resume_spans.length; ++i) {
+                            if (typeof object.resume_spans[i] !== "object")
+                                throw TypeError(".cockroach.sql.jobs.ResumeSpanList.resume_spans: object expected");
+                            message.resume_spans[i] = $root.cockroach.roachpb.Span.fromObject(object.resume_spans[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a ResumeSpanList message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.jobs.ResumeSpanList.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.ResumeSpanList} ResumeSpanList
+                 */
+                ResumeSpanList.from = ResumeSpanList.fromObject;
+
+                /**
+                 * Creates a plain object from a ResumeSpanList message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.jobs.ResumeSpanList} message ResumeSpanList
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ResumeSpanList.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.resume_spans = [];
+                    if (message.resume_spans && message.resume_spans.length) {
+                        object.resume_spans = [];
+                        for (let j = 0; j < message.resume_spans.length; ++j)
+                            object.resume_spans[j] = $root.cockroach.roachpb.Span.toObject(message.resume_spans[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this ResumeSpanList message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ResumeSpanList.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this ResumeSpanList to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                ResumeSpanList.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return ResumeSpanList;
+            })();
+
             jobs.SchemaChangeDetails = (function() {
 
                 /**
@@ -34169,6 +34364,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @typedef cockroach.sql.jobs.SchemaChangeDetails$Properties
                  * @type {Object}
                  * @property {cockroach.util.hlc.Timestamp$Properties} [read_as_of] SchemaChangeDetails read_as_of.
+                 * @property {Array.<cockroach.sql.jobs.ResumeSpanList$Properties>} [resume_span_list] SchemaChangeDetails resume_span_list.
                  */
 
                 /**
@@ -34178,6 +34374,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @param {cockroach.sql.jobs.SchemaChangeDetails$Properties=} [properties] Properties to set
                  */
                 function SchemaChangeDetails(properties) {
+                    this.resume_span_list = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                             if (properties[keys[i]] != null)
@@ -34189,6 +34386,12 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                  */
                 SchemaChangeDetails.prototype.read_as_of = null;
+
+                /**
+                 * SchemaChangeDetails resume_span_list.
+                 * @type {Array.<cockroach.sql.jobs.ResumeSpanList$Properties>}
+                 */
+                SchemaChangeDetails.prototype.resume_span_list = $util.emptyArray;
 
                 /**
                  * Creates a new SchemaChangeDetails instance using the specified properties.
@@ -34210,6 +34413,9 @@ export const cockroach = $root.cockroach = (() => {
                         writer = $Writer.create();
                     if (message.read_as_of != null && message.hasOwnProperty("read_as_of"))
                         $root.cockroach.util.hlc.Timestamp.encode(message.read_as_of, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    if (message.resume_span_list != null && message.resume_span_list.length)
+                        for (let i = 0; i < message.resume_span_list.length; ++i)
+                            $root.cockroach.sql.jobs.ResumeSpanList.encode(message.resume_span_list[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                     return writer;
                 };
 
@@ -34240,6 +34446,11 @@ export const cockroach = $root.cockroach = (() => {
                         switch (tag >>> 3) {
                         case 1:
                             message.read_as_of = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                            break;
+                        case 2:
+                            if (!(message.resume_span_list && message.resume_span_list.length))
+                                message.resume_span_list = [];
+                            message.resume_span_list.push($root.cockroach.sql.jobs.ResumeSpanList.decode(reader, reader.uint32()));
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -34275,6 +34486,15 @@ export const cockroach = $root.cockroach = (() => {
                         if (error)
                             return "read_as_of." + error;
                     }
+                    if (message.resume_span_list != null && message.hasOwnProperty("resume_span_list")) {
+                        if (!Array.isArray(message.resume_span_list))
+                            return "resume_span_list: array expected";
+                        for (let i = 0; i < message.resume_span_list.length; ++i) {
+                            let error = $root.cockroach.sql.jobs.ResumeSpanList.verify(message.resume_span_list[i]);
+                            if (error)
+                                return "resume_span_list." + error;
+                        }
+                    }
                     return null;
                 };
 
@@ -34291,6 +34511,16 @@ export const cockroach = $root.cockroach = (() => {
                         if (typeof object.read_as_of !== "object")
                             throw TypeError(".cockroach.sql.jobs.SchemaChangeDetails.read_as_of: object expected");
                         message.read_as_of = $root.cockroach.util.hlc.Timestamp.fromObject(object.read_as_of);
+                    }
+                    if (object.resume_span_list) {
+                        if (!Array.isArray(object.resume_span_list))
+                            throw TypeError(".cockroach.sql.jobs.SchemaChangeDetails.resume_span_list: array expected");
+                        message.resume_span_list = [];
+                        for (let i = 0; i < object.resume_span_list.length; ++i) {
+                            if (typeof object.resume_span_list[i] !== "object")
+                                throw TypeError(".cockroach.sql.jobs.SchemaChangeDetails.resume_span_list: object expected");
+                            message.resume_span_list[i] = $root.cockroach.sql.jobs.ResumeSpanList.fromObject(object.resume_span_list[i]);
+                        }
                     }
                     return message;
                 };
@@ -34314,10 +34544,17 @@ export const cockroach = $root.cockroach = (() => {
                     if (!options)
                         options = {};
                     let object = {};
+                    if (options.arrays || options.defaults)
+                        object.resume_span_list = [];
                     if (options.defaults)
                         object.read_as_of = null;
                     if (message.read_as_of != null && message.hasOwnProperty("read_as_of"))
                         object.read_as_of = $root.cockroach.util.hlc.Timestamp.toObject(message.read_as_of, options);
+                    if (message.resume_span_list && message.resume_span_list.length) {
+                        object.resume_span_list = [];
+                        for (let j = 0; j < message.resume_span_list.length; ++j)
+                            object.resume_span_list[j] = $root.cockroach.sql.jobs.ResumeSpanList.toObject(message.resume_span_list[j], options);
+                    }
                     return object;
                 };
 
