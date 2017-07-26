@@ -18404,8 +18404,122 @@ export namespace cockroach {
                 }
             }
 
+            type ResumeSpanList$Properties = {
+                resume_spans?: cockroach.roachpb.Span$Properties[];
+            };
+
+            /**
+             * Constructs a new ResumeSpanList.
+             * @exports cockroach.sql.jobs.ResumeSpanList
+             * @constructor
+             * @param {cockroach.sql.jobs.ResumeSpanList$Properties=} [properties] Properties to set
+             */
+            class ResumeSpanList {
+
+                /**
+                 * Constructs a new ResumeSpanList.
+                 * @exports cockroach.sql.jobs.ResumeSpanList
+                 * @constructor
+                 * @param {cockroach.sql.jobs.ResumeSpanList$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.jobs.ResumeSpanList$Properties);
+
+                /**
+                 * ResumeSpanList resume_spans.
+                 * @type {Array.<cockroach.roachpb.Span$Properties>}
+                 */
+                public resume_spans: cockroach.roachpb.Span$Properties[];
+
+                /**
+                 * Creates a new ResumeSpanList instance using the specified properties.
+                 * @param {cockroach.sql.jobs.ResumeSpanList$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.jobs.ResumeSpanList} ResumeSpanList instance
+                 */
+                public static create(properties?: cockroach.sql.jobs.ResumeSpanList$Properties): cockroach.sql.jobs.ResumeSpanList;
+
+                /**
+                 * Encodes the specified ResumeSpanList message. Does not implicitly {@link cockroach.sql.jobs.ResumeSpanList.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.ResumeSpanList$Properties} message ResumeSpanList message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.jobs.ResumeSpanList$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ResumeSpanList message, length delimited. Does not implicitly {@link cockroach.sql.jobs.ResumeSpanList.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.ResumeSpanList$Properties} message ResumeSpanList message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.jobs.ResumeSpanList$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a ResumeSpanList message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.jobs.ResumeSpanList} ResumeSpanList
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.jobs.ResumeSpanList;
+
+                /**
+                 * Decodes a ResumeSpanList message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.jobs.ResumeSpanList} ResumeSpanList
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.jobs.ResumeSpanList;
+
+                /**
+                 * Verifies a ResumeSpanList message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a ResumeSpanList message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.ResumeSpanList} ResumeSpanList
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.jobs.ResumeSpanList;
+
+                /**
+                 * Creates a ResumeSpanList message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.jobs.ResumeSpanList.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.ResumeSpanList} ResumeSpanList
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.jobs.ResumeSpanList;
+
+                /**
+                 * Creates a plain object from a ResumeSpanList message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.jobs.ResumeSpanList} message ResumeSpanList
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.jobs.ResumeSpanList, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ResumeSpanList message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ResumeSpanList to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type SchemaChangeDetails$Properties = {
                 read_as_of?: cockroach.util.hlc.Timestamp$Properties;
+                resume_span_list?: cockroach.sql.jobs.ResumeSpanList$Properties[];
             };
 
             /**
@@ -18429,6 +18543,12 @@ export namespace cockroach {
                  * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                  */
                 public read_as_of: (cockroach.util.hlc.Timestamp$Properties|null);
+
+                /**
+                 * SchemaChangeDetails resume_span_list.
+                 * @type {Array.<cockroach.sql.jobs.ResumeSpanList$Properties>}
+                 */
+                public resume_span_list: cockroach.sql.jobs.ResumeSpanList$Properties[];
 
                 /**
                  * Creates a new SchemaChangeDetails instance using the specified properties.
