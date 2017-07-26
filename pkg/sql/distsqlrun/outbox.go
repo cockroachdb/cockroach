@@ -58,7 +58,6 @@ type outbox struct {
 	numRows int
 
 	err error
-	wg  *sync.WaitGroup
 }
 
 var _ RowReceiver = &outbox{}
@@ -304,7 +303,7 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 	return ch, nil
 }
 
-func (m *outbox) run(ctx context.Context) {
+func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 	err := m.mainLoop(ctx)
 	if m.stream != nil {
 		closeErr := m.stream.CloseSend()
@@ -313,13 +312,15 @@ func (m *outbox) run(ctx context.Context) {
 		}
 	}
 	m.err = err
-	if m.wg != nil {
-		m.wg.Done()
+	if wg != nil {
+		wg.Done()
 	}
 }
 
 func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup) {
-	m.wg = wg
+	if wg != nil {
+		wg.Add(1)
+	}
 	m.RowChannel.Init(nil)
-	go m.run(ctx)
+	go m.run(ctx, wg)
 }

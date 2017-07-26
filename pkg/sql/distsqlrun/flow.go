@@ -95,13 +95,17 @@ const (
 	FlowFinished
 )
 
+type startable interface {
+	start(ctx context.Context, wg *sync.WaitGroup)
+}
+
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
 	FlowCtx
 
 	flowRegistry *flowRegistry
 	processors   []processor
-	outboxes     []*outbox
+	startables   []startable
 	// syncFlowConsumer is a special outbox which instead of sending rows to
 	// another host, returns them directly (as a result to a SetupSyncFlow RPC,
 	// or to the local host).
@@ -186,7 +190,7 @@ func (f *Flow) setupOutboundStream(spec StreamEndpointSpec) (RowReceiver, error)
 
 	case StreamEndpointSpec_REMOTE:
 		outbox := newOutbox(&f.FlowCtx, spec.TargetAddr, f.id, sid)
-		f.outboxes = append(f.outboxes, outbox)
+		f.startables = append(f.startables, outbox)
 		return outbox, nil
 
 	case StreamEndpointSpec_LOCAL:
@@ -310,19 +314,19 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 func (f *Flow) Start(ctx context.Context, doneFn func()) {
 	f.doneFn = doneFn
 	log.VEventf(
-		ctx, 1, "starting (%d processors, %d outboxes)", len(f.outboxes), len(f.processors),
+		ctx, 1, "starting (%d processors, %d startables)", len(f.startables), len(f.processors),
 	)
 	f.status = FlowRunning
 
 	// Once we call RegisterFlow, the inbound streams become accessible; we must
 	// set up the WaitGroup counter before.
-	f.waitGroup.Add(len(f.inboundStreams) + len(f.outboxes) + len(f.processors))
+	f.waitGroup.Add(len(f.inboundStreams) + len(f.processors))
 
 	f.flowRegistry.RegisterFlow(ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout)
 	if log.V(1) {
 		log.Infof(ctx, "registered flow %s", f.id.Short())
 	}
-	for _, o := range f.outboxes {
+	for _, o := range f.startables {
 		o.start(ctx, &f.waitGroup)
 	}
 	for _, p := range f.processors {
