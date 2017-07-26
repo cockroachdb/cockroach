@@ -53,6 +53,8 @@ func (ss *diskSideloadStorage) createDir() error {
 func (ss *diskSideloadStorage) PutIfNotExists(
 	ctx context.Context, index, term uint64, contents []byte,
 ) error {
+	limitBulkIOWrite(ctx, len(contents))
+
 	filename := ss.filename(ctx, index, term)
 	if _, err := os.Stat(filename); err == nil {
 		// File exists.
