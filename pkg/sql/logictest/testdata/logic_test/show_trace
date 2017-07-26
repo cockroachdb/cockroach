@@ -259,7 +259,7 @@ SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv2]
 (0,1)  starting plan   DelRange /Table/53/1 - /Table/53/2
 (0,1)  starting plan   querying next range at /Table/53/1
 (0,1)  starting plan   r1: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
-(0,6)  consuming rows  fast path - rows affected: 2
+(0,4)  consuming rows  fast path - rows affected: 2
 
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR DROP TABLE t.kv2] WHERE message NOT LIKE '%Z/%'
