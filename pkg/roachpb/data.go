@@ -1040,6 +1040,12 @@ func PrepareTransactionForRetry(ctx context.Context, pErr *Error, pri UserPriori
 	return *txn
 }
 
+var _ fmt.Stringer = &ChangeReplicasTrigger{}
+
+func (crt ChangeReplicasTrigger) String() string {
+	return fmt.Sprintf("%s(%s): updated=%s next=%d", crt.ChangeType, crt.Replica, crt.UpdatedReplicas, crt.NextReplicaID)
+}
+
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
