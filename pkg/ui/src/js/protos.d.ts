@@ -4987,6 +4987,7 @@ export namespace cockroach {
                 type?: cockroach.server.serverpb.CertificateDetails.CertificateType;
                 error_message?: string;
                 data?: Uint8Array;
+                fields?: cockroach.server.serverpb.CertificateDetails.Fields$Properties[];
             };
 
             /**
@@ -5022,6 +5023,12 @@ export namespace cockroach {
                  * @type {Uint8Array}
                  */
                 public data: Uint8Array;
+
+                /**
+                 * CertificateDetails fields.
+                 * @type {Array.<cockroach.server.serverpb.CertificateDetails.Fields$Properties>}
+                 */
+                public fields: cockroach.server.serverpb.CertificateDetails.Fields$Properties[];
 
                 /**
                  * Creates a new CertificateDetails instance using the specified properties.
@@ -5123,6 +5130,175 @@ export namespace cockroach {
                 enum CertificateType {
                     CA = 0,
                     NODE = 1
+                }
+
+                type Fields$Properties = {
+                    issuer?: string;
+                    subject?: string;
+                    valid_from?: Long;
+                    valid_until?: Long;
+                    addresses?: string[];
+                    signature_algorithm?: string;
+                    public_key?: string;
+                    key_usage?: string[];
+                    extended_key_usage?: string[];
+                };
+
+                /**
+                 * Constructs a new Fields.
+                 * @exports cockroach.server.serverpb.CertificateDetails.Fields
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CertificateDetails.Fields$Properties=} [properties] Properties to set
+                 */
+                class Fields {
+
+                    /**
+                     * Constructs a new Fields.
+                     * @exports cockroach.server.serverpb.CertificateDetails.Fields
+                     * @constructor
+                     * @param {cockroach.server.serverpb.CertificateDetails.Fields$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.server.serverpb.CertificateDetails.Fields$Properties);
+
+                    /**
+                     * Fields issuer.
+                     * @type {string}
+                     */
+                    public issuer: string;
+
+                    /**
+                     * Fields subject.
+                     * @type {string}
+                     */
+                    public subject: string;
+
+                    /**
+                     * Fields valid_from.
+                     * @type {Long}
+                     */
+                    public valid_from: Long;
+
+                    /**
+                     * Fields valid_until.
+                     * @type {Long}
+                     */
+                    public valid_until: Long;
+
+                    /**
+                     * Fields addresses.
+                     * @type {Array.<string>}
+                     */
+                    public addresses: string[];
+
+                    /**
+                     * Fields signature_algorithm.
+                     * @type {string}
+                     */
+                    public signature_algorithm: string;
+
+                    /**
+                     * Fields public_key.
+                     * @type {string}
+                     */
+                    public public_key: string;
+
+                    /**
+                     * Fields key_usage.
+                     * @type {Array.<string>}
+                     */
+                    public key_usage: string[];
+
+                    /**
+                     * Fields extended_key_usage.
+                     * @type {Array.<string>}
+                     */
+                    public extended_key_usage: string[];
+
+                    /**
+                     * Creates a new Fields instance using the specified properties.
+                     * @param {cockroach.server.serverpb.CertificateDetails.Fields$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.CertificateDetails.Fields} Fields instance
+                     */
+                    public static create(properties?: cockroach.server.serverpb.CertificateDetails.Fields$Properties): cockroach.server.serverpb.CertificateDetails.Fields;
+
+                    /**
+                     * Encodes the specified Fields message. Does not implicitly {@link cockroach.server.serverpb.CertificateDetails.Fields.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.CertificateDetails.Fields$Properties} message Fields message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.server.serverpb.CertificateDetails.Fields$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified Fields message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CertificateDetails.Fields.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.CertificateDetails.Fields$Properties} message Fields message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.server.serverpb.CertificateDetails.Fields$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a Fields message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.CertificateDetails.Fields} Fields
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.CertificateDetails.Fields;
+
+                    /**
+                     * Decodes a Fields message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.CertificateDetails.Fields} Fields
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.CertificateDetails.Fields;
+
+                    /**
+                     * Verifies a Fields message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a Fields message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.CertificateDetails.Fields} Fields
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.CertificateDetails.Fields;
+
+                    /**
+                     * Creates a Fields message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.CertificateDetails.Fields.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.CertificateDetails.Fields} Fields
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.server.serverpb.CertificateDetails.Fields;
+
+                    /**
+                     * Creates a plain object from a Fields message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.CertificateDetails.Fields} message Fields
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.server.serverpb.CertificateDetails.Fields, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this Fields message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this Fields to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
                 }
             }
 
