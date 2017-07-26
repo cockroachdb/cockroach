@@ -54,3 +54,17 @@ func (r *Registry) LoadJob(ctx context.Context, jobID int64) (*Job, error) {
 	}
 	return j, nil
 }
+
+// LoadJobWithTxn does the same as above, but using the transaction passed in
+// the txn argument.
+func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *client.Txn) (*Job, error) {
+	j := &Job{
+		id:       &jobID,
+		registry: r,
+	}
+	j = j.WithTxn(txn)
+	if err := j.load(ctx); err != nil {
+		return nil, err
+	}
+	return j, nil
+}

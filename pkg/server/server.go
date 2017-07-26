@@ -309,32 +309,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
-	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
-	s.registry.AddMetricStruct(distSQLMetrics)
-
-	// Set up the DistSQL server.
-	distSQLCfg := distsqlrun.ServerConfig{
-		AmbientContext: s.cfg.AmbientCtx,
-		DB:             s.db,
-		// DistSQL also uses a DB that bypasses the TxnCoordSender.
-		FlowDB:     client.NewDB(s.distSender, s.clock),
-		RPCContext: s.rpcContext,
-		Stopper:    s.stopper,
-		NodeID:     &s.nodeIDContainer,
-
-		TempStorage: tempEngine,
-
-		ParentMemoryMonitor: &rootSQLMemoryMonitor,
-
-		Metrics: &distSQLMetrics,
-	}
-	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
-		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*distsqlrun.TestingKnobs)
-	}
-
-	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
-	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
-
 	// Set up admin memory metrics for use by admin SQL executors.
 	s.adminMemMetrics = sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(s.adminMemMetrics)
@@ -386,6 +360,34 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.queryRegistry = sql.MakeQueryRegistry()
 	s.jobRegistry = jobs.MakeRegistry(s.db, sqlExecutor)
+
+	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
+	s.registry.AddMetricStruct(distSQLMetrics)
+
+	// Set up the DistSQL server.
+	distSQLCfg := distsqlrun.ServerConfig{
+		AmbientContext: s.cfg.AmbientCtx,
+		DB:             s.db,
+		// DistSQL also uses a DB that bypasses the TxnCoordSender.
+		FlowDB:     client.NewDB(s.distSender, s.clock),
+		RPCContext: s.rpcContext,
+		Stopper:    s.stopper,
+		NodeID:     &s.nodeIDContainer,
+
+		TempStorage: tempEngine,
+
+		ParentMemoryMonitor: &rootSQLMemoryMonitor,
+
+		Metrics: &distSQLMetrics,
+
+		JobRegistry: s.jobRegistry,
+	}
+	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
+		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*distsqlrun.TestingKnobs)
+	}
+
+	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
+	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(

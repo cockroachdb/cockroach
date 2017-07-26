@@ -367,7 +367,7 @@ func (p *planner) dropIndexByName(
 	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}
-	mutationID, err := p.createSchemaChangeJob(ctx, tableDesc, stmt)
+	mutationID, err := p.createSchemaChangeJob(ctx, tableDesc, stmt, tableDesc.PrimaryIndexSpan())
 	if err != nil {
 		return err
 	}
