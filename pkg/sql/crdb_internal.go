@@ -322,7 +322,7 @@ CREATE TABLE crdb_internal.jobs (
 			}
 			if err := addRow(
 				id,
-				parser.NewDString(payload.Typ()),
+				parser.NewDString(payload.Type().String()),
 				parser.NewDString(payload.Description),
 				parser.NewDString(payload.Username),
 				descriptorIDs,
