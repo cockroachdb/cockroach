@@ -154,12 +154,6 @@ function createHeaderCell(staleIDs: Set<number>, id: Identity, key: number) {
   </td>;
 }
 
-const noNodes = (
-  <div>
-    <h2>No nodes match the filters</h2>
-  </div>
-);
-
 const loading = (
   <div className="section">
     <h1>Loading cluster status...</h1>
@@ -186,90 +180,19 @@ class Network extends React.Component<NetworkProps, {}> {
     }
   }
 
-  render() {
-    const { nodesSummary } = this.props;
-    if (_.isEmpty(nodesSummary.nodeIDs) || _.isEmpty(nodesSummary.livenessStatusByNodeID)) {
-      return loading;
-    }
-
-    const filters = getFilters(this.props.location);
-
-    // List of node identities.
-    const identityByID: Map<number, Identity> = new Map();
-    _.forEach(nodesSummary.nodeStatuses, status => {
-      identityByID.set(status.desc.node_id, {
-        nodeID: status.desc.node_id,
-        address: status.desc.address.address_field,
-        locality: localityToString(status.desc.locality),
-        updatedAt: LongToMoment(status.updated_at),
-      });
-    });
-
-    // Calculate the mean and sampled standard deviation.
-    let healthyIDsContext = _.chain(nodesSummary.nodeIDs)
-      .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.HEALTHY)
-      .map(nodeID => Number.parseInt(nodeID, 0));
-    let staleIDsContext = _.chain(nodesSummary.nodeIDs)
-      .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.SUSPECT)
-      .map(nodeID => Number.parseInt(nodeID, 0));
-    if (!_.isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
-      healthyIDsContext = healthyIDsContext.filter(nodeID => filters.nodeIDs.has(nodeID));
-      staleIDsContext = staleIDsContext.filter(nodeID => filters.nodeIDs.has(nodeID));
-    }
-    if (!_.isNil(filters.localityRegex)) {
-      healthyIDsContext = healthyIDsContext.filter(nodeID => (
-        !filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
-      ));
-      staleIDsContext = staleIDsContext.filter(nodeID => (
-        !filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
-      ));
-    }
-    const healthyIDs = healthyIDsContext.value();
-    const staleIDs = new Set(staleIDsContext.value());
-    const displayIdentities: Identity[] = healthyIDsContext
-      .union(staleIDsContext.value())
-      .map(nodeID => identityByID.get(nodeID))
-      .sortBy(identity => identity.nodeID)
-      .sortBy(identity => identity.locality)
-      .value();
-    const staleIdentities = staleIDsContext
-      .map(nodeID => identityByID.get(nodeID))
-      .sortBy(identity => identity.nodeID)
-      .sortBy(identity => identity.locality)
-      .value();
-
-    const latencies = _.flatMap(healthyIDs, nodeIDa => (
-      _.chain(healthyIDs)
-        .without(nodeIDa)
-        .map(nodeIDb => nodesSummary.nodeStatusByID[nodeIDa].latencies[nodeIDb])
-        .map(latency => NanoToMilli(latency.toNumber()))
-        .filter(ms => _.isFinite(ms) && ms > 0)
-        .value()
-    ));
-
+  renderLatencyTable(
+    latencies: number[],
+    staleIDs: Set<number>,
+    nodesSummary: NodesSummary,
+    displayIdentities: Identity[],
+  ) {
     // TODO(bram): turn these values into memoized selectors.
     const mean = d3Mean(latencies);
     const stddev = d3Deviation(latencies);
     const stddevPlus1 = mean + stddev;
     const stddevPlus2 = stddevPlus1 + stddev;
-    const stddevMinus1 = mean - stddev;
-    const stddevMinus2 = stddevMinus1 - stddev;
-
-    const noConnections: NoConnection[] = _.flatMap(healthyIDs, nodeIDa => (
-      _.chain(nodesSummary.nodeStatusByID[nodeIDa].latencies)
-        .keys()
-        .map(nodeIDb => Number.parseInt(nodeIDb, 10))
-        .difference(healthyIDs)
-        .map(nodeIDb => ({
-          from: identityByID.get(nodeIDa),
-          to: identityByID.get(nodeIDb),
-        }))
-        .sortBy(noConnection => noConnection.to.nodeID)
-        .sortBy(noConnection => noConnection.to.locality)
-        .sortBy(noConnection => noConnection.from.nodeID)
-        .sortBy(noConnection => noConnection.from.locality)
-        .value()
-    ));
+    const stddevMinus1 = _.max([mean - stddev, 0]);
+    const stddevMinus2 = _.max([stddevMinus1 - stddev, 0]);
 
     // getLatencyCell creates and decorates a cell based on it's latency.
     function getLatencyCell(nodeIDa: number, nodeIDb: number) {
@@ -383,23 +306,101 @@ class Network extends React.Component<NetworkProps, {}> {
       </div>
     );
 
-    function displayResults() {
-      if (_.isEmpty(displayIdentities)) {
-        return noNodes;
-      }
-      return (
-        <div>
-          {latencyTable}
-          {legend}
-        </div>
-      );
+    return [
+      latencyTable,
+      legend,
+    ];
+  }
+
+  render() {
+    const { nodesSummary } = this.props;
+    if (_.isEmpty(nodesSummary.nodeIDs) || _.isEmpty(nodesSummary.livenessStatusByNodeID)) {
+      return loading;
+    }
+
+    const filters = getFilters(this.props.location);
+
+    // List of node identities.
+    const identityByID: Map<number, Identity> = new Map();
+    _.forEach(nodesSummary.nodeStatuses, status => {
+      identityByID.set(status.desc.node_id, {
+        nodeID: status.desc.node_id,
+        address: status.desc.address.address_field,
+        locality: localityToString(status.desc.locality),
+        updatedAt: LongToMoment(status.updated_at),
+      });
+    });
+
+    // Calculate the mean and sampled standard deviation.
+    let healthyIDsContext = _.chain(nodesSummary.nodeIDs)
+      .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.HEALTHY)
+      .map(nodeID => Number.parseInt(nodeID, 0));
+    let staleIDsContext = _.chain(nodesSummary.nodeIDs)
+      .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.SUSPECT)
+      .map(nodeID => Number.parseInt(nodeID, 0));
+    if (!_.isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
+      healthyIDsContext = healthyIDsContext.filter(nodeID => filters.nodeIDs.has(nodeID));
+      staleIDsContext = staleIDsContext.filter(nodeID => filters.nodeIDs.has(nodeID));
+    }
+    if (!_.isNil(filters.localityRegex)) {
+      healthyIDsContext = healthyIDsContext.filter(nodeID => (
+        filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
+      ));
+      staleIDsContext = staleIDsContext.filter(nodeID => (
+        filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
+      ));
+    }
+    const healthyIDs = healthyIDsContext.value();
+    const staleIDs = new Set(staleIDsContext.value());
+    const displayIdentities: Identity[] = healthyIDsContext
+      .union(staleIDsContext.value())
+      .map(nodeID => identityByID.get(nodeID))
+      .sortBy(identity => identity.nodeID)
+      .sortBy(identity => identity.locality)
+      .value();
+    const staleIdentities = staleIDsContext
+      .map(nodeID => identityByID.get(nodeID))
+      .sortBy(identity => identity.nodeID)
+      .sortBy(identity => identity.locality)
+      .value();
+
+    const latencies = _.flatMap(healthyIDs, nodeIDa => (
+      _.chain(healthyIDs)
+        .without(nodeIDa)
+        .map(nodeIDb => nodesSummary.nodeStatusByID[nodeIDa].latencies[nodeIDb])
+        .map(latency => NanoToMilli(latency.toNumber()))
+        .filter(ms => _.isFinite(ms) && ms > 0)
+        .value()
+    ));
+
+    const noConnections: NoConnection[] = _.flatMap(healthyIDs, nodeIDa => (
+      _.chain(nodesSummary.nodeStatusByID[nodeIDa].latencies)
+        .keys()
+        .map(nodeIDb => Number.parseInt(nodeIDb, 10))
+        .difference(healthyIDs)
+        .map(nodeIDb => ({
+          from: identityByID.get(nodeIDa),
+          to: identityByID.get(nodeIDb),
+        }))
+        .sortBy(noConnection => noConnection.to.nodeID)
+        .sortBy(noConnection => noConnection.to.locality)
+        .sortBy(noConnection => noConnection.from.nodeID)
+        .sortBy(noConnection => noConnection.from.locality)
+        .value()
+    ));
+
+    let content: JSX.Element[] = [];
+    if (_.isEmpty(healthyIDs)) {
+      content = [<h2>No healthy nodes match the filters</h2>];
+    } else {
+      content = this.renderLatencyTable(latencies, staleIDs, nodesSummary, displayIdentities);
     }
 
     return (
       <div>
         <h1>Network Diagnostics</h1>
         <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
-        {displayResults()}
+        {content}
         {staleTable(staleIdentities)}
         {noConnectionTable(noConnections)}
       </div>
