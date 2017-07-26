@@ -71,7 +71,7 @@ func readBackupDescriptor(ctx context.Context, uri string) (BackupDescriptor, er
 	}
 	defer dir.Close()
 	conf := dir.Conf()
-	r, err := dir.ReadFile(ctx, BackupDescriptorName)
+	r, err := dir.ReadMetadataFile(ctx, BackupDescriptorName)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
@@ -272,7 +272,7 @@ func writeBackupDescriptor(
 		return err
 	}
 
-	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf)); err != nil {
+	if err := exportStore.WriteMetadataFile(ctx, filename, descBuf); err != nil {
 		return err
 	}
 
@@ -308,7 +308,7 @@ func backup(
 
 	// Ensure there isn't already a readable backup desc.
 	{
-		r, err := exportStore.ReadFile(ctx, BackupDescriptorName)
+		r, err := exportStore.ReadMetadataFile(ctx, BackupDescriptorName)
 		// TODO(dt): If we audit exactly what not-exists error each ExportStorage
 		// returns (and then wrap/tag them), we could narrow this check.
 		if err == nil {

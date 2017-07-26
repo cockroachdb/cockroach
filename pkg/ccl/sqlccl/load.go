@@ -221,7 +221,7 @@ func Load(
 	if err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "marshal backup descriptor")
 	}
-	if err := dir.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf)); err != nil {
+	if err := dir.WriteMetadataFile(ctx, BackupDescriptorName, descBuf); err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "uploading backup descriptor")
 	}
 
@@ -350,7 +350,8 @@ func writeSST(
 		return err
 	}
 
-	if err := base.WriteFile(ctx, filename, bytes.NewReader(sstContents)); err != nil {
+	stored, err := base.WriteFile(ctx, filename, bytes.NewReader(sstContents))
+	if err != nil {
 		return err
 	}
 
@@ -361,7 +362,7 @@ func writeSST(
 			// greater than the last key in the sst.
 			EndKey: kvs[len(kvs)-1].Key.Key.PrefixEnd(),
 		},
-		Path: filename,
+		Path: stored,
 	})
 	backup.EntryCounts.DataSize += sst.DataSize
 	return nil

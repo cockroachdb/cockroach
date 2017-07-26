@@ -188,13 +188,14 @@ func evalExport(
 	}
 
 	filename := fmt.Sprintf("%d.sst", parser.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
-	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(sstContents)); err != nil {
+	stored, err := exportStore.WriteFile(ctx, filename, bytes.NewReader(sstContents))
+	if err != nil {
 		return storage.EvalResult{}, err
 	}
 
 	reply.Files = []roachpb.ExportResponse_File{{
 		Span:     args.Span,
-		Path:     filename,
+		Path:     stored,
 		Exported: rows.BulkOpSummary,
 		Sha512:   checksum,
 	}}

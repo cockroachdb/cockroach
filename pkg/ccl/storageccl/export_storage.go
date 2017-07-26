@@ -142,10 +142,16 @@ type ExportStorage interface {
 	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
 
 	// WriteFile should write the content to requested name.
-	WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error
+	WriteFile(ctx context.Context, basename string, content io.ReadSeeker) (string, error)
 
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error
+
+	// ReadMetadataFile should return a Reader for requested name.
+	ReadMetadataFile(ctx context.Context, basename string) (io.ReadCloser, error)
+
+	// WriteMetadataFile should write the content to requested name.
+	WriteMetadataFile(ctx context.Context, basename string, content []byte) error
 }
 
 type localFileStorage struct {
@@ -172,18 +178,18 @@ func (l *localFileStorage) Conf() roachpb.ExportStorage {
 
 func (l *localFileStorage) WriteFile(
 	_ context.Context, basename string, content io.ReadSeeker,
-) error {
+) (string, error) {
 	if err := os.MkdirAll(l.base, 0755); err != nil {
-		return errors.Wrap(err, "creating local export storage path")
+		return "", errors.Wrap(err, "creating local export storage path")
 	}
 	path := filepath.Join(l.base, basename)
 	f, err := os.Create(path)
 	if err != nil {
-		return errors.Wrapf(err, "creating local export file %q", path)
+		return "", errors.Wrapf(err, "creating local export file %q", path)
 	}
 	defer f.Close()
 	_, err = io.Copy(f, content)
-	return errors.Wrapf(err, "writing to local export file %q", path)
+	return basename, errors.Wrapf(err, "writing to local export file %q", path)
 }
 
 func (l *localFileStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
@@ -196,6 +202,19 @@ func (l *localFileStorage) Delete(_ context.Context, basename string) error {
 
 func (*localFileStorage) Close() error {
 	return nil
+}
+
+func (l *localFileStorage) ReadMetadataFile(
+	ctx context.Context, basename string,
+) (io.ReadCloser, error) {
+	return l.ReadFile(ctx, basename)
+}
+
+func (l *localFileStorage) WriteMetadataFile(
+	ctx context.Context, basename string, content []byte,
+) error {
+	_, err := l.WriteFile(ctx, basename, bytes.NewReader(content))
+	return err
 }
 
 type httpStorage struct {
@@ -229,9 +248,9 @@ func (h *httpStorage) ReadFile(_ context.Context, basename string) (io.ReadClose
 	return runHTTPRequest(h.client, "GET", h.base, basename, nil)
 }
 
-func (h *httpStorage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
+func (h *httpStorage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) (string, error) {
 	_, err := runHTTPRequest(h.client, "PUT", h.base, basename, content)
-	return err
+	return basename, err
 }
 
 func (h *httpStorage) Delete(_ context.Context, basename string) error {
@@ -241,6 +260,19 @@ func (h *httpStorage) Delete(_ context.Context, basename string) error {
 
 func (h *httpStorage) Close() error {
 	return nil
+}
+
+func (h *httpStorage) ReadMetadataFile(
+	ctx context.Context, basename string,
+) (io.ReadCloser, error) {
+	return h.ReadFile(ctx, basename)
+}
+
+func (h *httpStorage) WriteMetadataFile(
+	ctx context.Context, basename string, content []byte,
+) error {
+	_, err := h.WriteFile(ctx, basename, bytes.NewReader(content))
+	return err
 }
 
 func runHTTPRequest(
@@ -291,14 +323,14 @@ func (s *s3Storage) Conf() roachpb.ExportStorage {
 	}
 }
 
-func (s *s3Storage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
+func (s *s3Storage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) (string, error) {
 	w, err := s.bucket.PutWriter(filepath.Join(s.prefix, basename), nil, nil)
 	if err != nil {
-		return errors.Wrap(err, "creating s3 writer")
+		return "", errors.Wrap(err, "creating s3 writer")
 	}
 	defer w.Close()
 	_, err = io.Copy(w, content)
-	return errors.Wrap(err, "failed to copy to s3")
+	return basename, errors.Wrap(err, "failed to copy to s3")
 }
 
 func (s *s3Storage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
@@ -312,6 +344,19 @@ func (s *s3Storage) Delete(_ context.Context, basename string) error {
 
 func (s *s3Storage) Close() error {
 	return nil
+}
+
+func (s *s3Storage) ReadMetadataFile(
+	ctx context.Context, basename string,
+) (io.ReadCloser, error) {
+	return s.ReadFile(ctx, basename)
+}
+
+func (s *s3Storage) WriteMetadataFile(
+	ctx context.Context, basename string, content []byte,
+) error {
+	_, err := s.WriteFile(ctx, basename, bytes.NewReader(content))
+	return err
 }
 
 type gcsStorage struct {
@@ -346,7 +391,7 @@ func makeGCSStorage(ctx context.Context, conf *roachpb.ExportStorage_GCS) (Expor
 	}, nil
 }
 
-func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
+func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) (string, error) {
 	const maxAttempts = 3
 
 	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
@@ -360,7 +405,7 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 		}
 		return w.Close()
 	})
-	return errors.Wrap(err, "write to google cloud")
+	return basename, errors.Wrap(err, "write to google cloud")
 }
 
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
@@ -373,6 +418,19 @@ func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 
 func (g *gcsStorage) Close() error {
 	return g.client.Close()
+}
+
+func (g *gcsStorage) ReadMetadataFile(
+	ctx context.Context, basename string,
+) (io.ReadCloser, error) {
+	return g.ReadFile(ctx, basename)
+}
+
+func (g *gcsStorage) WriteMetadataFile(
+	ctx context.Context, basename string, content []byte,
+) error {
+	_, err := g.WriteFile(ctx, basename, bytes.NewReader(content))
+	return err
 }
 
 type azureStorage struct {
@@ -407,7 +465,7 @@ func (s *azureStorage) Conf() roachpb.ExportStorage {
 
 func (s *azureStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
-) error {
+) (string, error) {
 	name := filepath.Join(s.prefix, basename)
 	// A blob in Azure is composed of an ordered list of blocks. To create a
 	// blob, we must first create an empty block blob (i.e., a blob backed
@@ -475,7 +533,7 @@ func (s *azureStorage) WriteFile(
 		}
 		return writeFile()
 	})
-	return errors.Wrap(err, "write file")
+	return basename, errors.Wrap(err, "write file")
 }
 
 // chunkReader calls f with chunks of size from r. The same underlying byte
@@ -521,4 +579,17 @@ func (s *azureStorage) Delete(_ context.Context, basename string) error {
 
 func (s *azureStorage) Close() error {
 	return nil
+}
+
+func (s *azureStorage) ReadMetadataFile(
+	ctx context.Context, basename string,
+) (io.ReadCloser, error) {
+	return s.ReadFile(ctx, basename)
+}
+
+func (s *azureStorage) WriteMetadataFile(
+	ctx context.Context, basename string, content []byte,
+) error {
+	_, err := s.WriteFile(ctx, basename, bytes.NewReader(content))
+	return err
 }
