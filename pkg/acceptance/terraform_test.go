@@ -38,7 +38,11 @@ func TestBuildBabyCluster(t *testing.T) {
 
 	ctx := context.Background()
 	f := MakeFarmer(t, "baby", stopper)
-	defer f.CollectLogs()
+	defer func() {
+		if err := f.CollectLogs(); err != nil {
+			t.Logf("error collecting cluster logs: %s\n", err)
+		}
+	}()
 	if err := f.Resize(1); err != nil {
 		t.Fatal(err)
 	}
