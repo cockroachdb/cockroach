@@ -21,13 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// EnterpriseEnabled is temporary, until #14114 is implemented.
-var EnterpriseEnabled = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting("enterprise.enabled", "set to true to enable Enterprise features", false)
-	s.Hide()
-	return s
-}()
-
 var currentLicense = func() *atomic.Value {
 	setting := settings.RegisterValidatedStringSetting(
 		"enterprise.license", "the encoded cluster license", "",
@@ -48,12 +41,22 @@ var currentLicense = func() *atomic.Value {
 	return &ref
 }()
 
+var testingEnterpriseEnabled = false
+
+// TestingEnableEnterprise allows overriding the license check in tests.
+func TestingEnableEnterprise() func() {
+	before := testingEnterpriseEnabled
+	testingEnterpriseEnabled = true
+	return func() {
+		testingEnterpriseEnabled = before
+	}
+}
+
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
 // feature is not enabled, including information or a link explaining how to
 // enable it.
 func CheckEnterpriseEnabled(cluster uuid.UUID, org, feature string) error {
-	// TODO(dt): delete this after a transition period, before 1.1.
-	if EnterpriseEnabled.Get() {
+	if testingEnterpriseEnabled {
 		return nil
 	}
 	return checkEnterpriseEnabledAt(timeutil.Now(), cluster, org, feature)
