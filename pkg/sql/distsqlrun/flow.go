@@ -209,7 +209,7 @@ func (f *Flow) setupOutboundStream(spec StreamEndpointSpec) (RowReceiver, error)
 	}
 }
 
-func (f *Flow) setupRouter(spec *OutputRouterSpec) (RowReceiver, error) {
+func (f *Flow) setupRouter(spec *OutputRouterSpec) (router, error) {
 	streams := make([]RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
@@ -237,13 +237,38 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 	}
 	outputs := make([]RowReceiver, len(ps.Output))
 	for i := range ps.Output {
-		var err error
-		outputs[i], err = f.setupRouter(&ps.Output[i])
+		spec := &ps.Output[i]
+		if spec.Type == OutputRouterSpec_PASS_THROUGH {
+			if len(spec.Streams) != 1 {
+				return nil, errors.Errorf("expected one stream for passthrough router")
+			}
+			var err error
+			outputs[i], err = f.setupOutboundStream(spec.Streams[0])
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		r, err := f.setupRouter(spec)
 		if err != nil {
 			return nil, err
 		}
+		outputs[i] = r
+		f.startables = append(f.startables, r)
 	}
-	return newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+	proc, err := newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+	if err != nil {
+		return nil, err
+	}
+	// Initialize any routers (the setupRouter case above).
+	types := proc.OutputTypes()
+	for _, o := range outputs {
+		if r, ok := o.(router); ok {
+			r.init(&f.FlowCtx, types)
+		}
+	}
+	return proc, nil
 }
 
 func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
