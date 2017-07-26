@@ -1,0 +1,21 @@
+#!/bin/sh
+set -euo pipefail
+
+if [ $# -ne 2 ]; then
+  cat 1>&2 <<EOF
+Usage: BENCHES=regexp PKG=./pkg/yourpkg $0 oldbranch newbranch
+
+Requires golang.org/x/perf/cmd/benchstat.
+EOF
+  exit 1
+fi
+
+dest=$(mktemp -d)
+echo "Writing to ${dest}"
+
+for branch in "${2}" "${1}"; do
+  git checkout "${branch}"
+  make bench PKG="${PKG}" BENCHES="${BENCHES}" TESTFLAGS="-count 10" > "${dest}/bench.${branch}" 2> "${dest}/log.txt"
+done
+
+benchstat "${dest}/bench.$1" "${dest}/bench.$2"
