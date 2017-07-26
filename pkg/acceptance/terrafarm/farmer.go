@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -51,6 +52,7 @@ const (
 type node struct {
 	hostname  string
 	processes []string
+	ssh       *ssh.Client
 }
 
 // A Farmer sets up and manipulates a test cluster via terraform.

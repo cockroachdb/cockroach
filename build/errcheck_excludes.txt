@@ -1,6 +1,7 @@
 (*database/sql.DB).Close
 (*database/sql.Rows).Close
 (*database/sql.Stmt).Close
+(*github.com/cockroachdb/cockroach/vendor/golang.org/x/crypto/ssh.Session).Close
 (*os.File).Close
 (io.Closer).Close
 (net.Conn).Close

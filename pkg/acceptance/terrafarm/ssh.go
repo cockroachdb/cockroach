@@ -17,7 +17,16 @@
 package terrafarm
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"net"
+	"os"
 	"path/filepath"
+	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
@@ -33,19 +42,112 @@ func (f *Farmer) defaultKeyFile() string {
 	return filepath.Join(base, ".ssh/"+f.KeyName)
 }
 
-func (f *Farmer) ssh(host, keyfile, cmd string) (stdout string, stderr string, _ error) {
-	return f.run("ssh",
-		"-o", "ServerAliveInterval=5",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-q", "-i", keyfile, sshUser+"@"+host, cmd)
+func (f *Farmer) getSSH(host, keyfile string) (*ssh.Client, error) {
+	if len(f.nodes) == 0 {
+		f.refresh()
+	}
+	for i := range f.nodes {
+		node := &f.nodes[i]
+		if node.hostname == host {
+			if c := node.ssh; c != nil {
+				return c, nil
+			}
+			c, err := newSSH(host, keyfile)
+			node.ssh = c
+			return c, err
+		}
+	}
+	return newSSH(host, keyfile)
+}
+
+func newSSH(host, keyfile string) (*ssh.Client, error) {
+	privateKey, err := ioutil.ReadFile(keyfile)
+	if err != nil {
+		return nil, err
+	}
+	signer, err := ssh.ParsePrivateKey(privateKey)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := (&net.Dialer{
+		KeepAlive: 5 * time.Second,
+	}).Dial("tcp", net.JoinHostPort(host, "22"))
+	if err != nil {
+		return nil, err
+	}
+	c, chans, reqs, err := ssh.NewClientConn(conn, host, &ssh.ClientConfig{
+		User: sshUser,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(signer),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ssh.NewClient(c, chans, reqs), nil
+}
+
+func (f *Farmer) ssh(host, keyfile, cmd string) (string, string, error) {
+	c, err := f.getSSH(host, keyfile)
+	if err != nil {
+		return "", "", err
+	}
+	s, err := c.NewSession()
+	if err != nil {
+		return "", "", err
+	}
+	defer s.Close()
+
+	var stdout, stderr bytes.Buffer
+
+	s.Stdout = &stdout
+	s.Stderr = &stderr
+
+	return stdout.String(), stderr.String(), s.Run(cmd)
 }
 
 func (f *Farmer) scp(host, keyfile, src, dest string) error {
-	_, _, err := f.run("scp", "-r",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-q", "-i", keyfile,
-		sshUser+"@"+host+":"+src, dest)
-	return err
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	srcFileInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	c, err := f.getSSH(host, keyfile)
+	if err != nil {
+		return err
+	}
+	s, err := c.NewSession()
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	w, err := s.StdinPipe()
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
+	dir, file := filepath.Split(dest)
+
+	if err := s.Start("/usr/bin/scp -t " + dir); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w, "C", srcFileInfo.Mode().String(), srcFileInfo.Size(), file); err != nil {
+		return err
+	}
+	if _, err := io.Copy(w, srcFile); err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte{0}); err != nil {
+		return err
+	}
+
+	return s.Wait()
 }
