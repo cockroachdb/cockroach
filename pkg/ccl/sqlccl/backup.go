@@ -54,6 +54,14 @@ const (
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
 
+// BackupImplicitSQLDescriptors are descriptors for tables that are implicitly
+// included in every backup, plus their parent database descriptors.
+var BackupImplicitSQLDescriptors = []sqlbase.Descriptor{
+	*sqlbase.WrapDescriptor(&sqlbase.SystemDB),
+	*sqlbase.WrapDescriptor(&sqlbase.DescriptorTable),
+	*sqlbase.WrapDescriptor(&sqlbase.UsersTable),
+}
+
 // exportStorageFromURI returns an ExportStorage for the given URI.
 func exportStorageFromURI(ctx context.Context, uri string) (storageccl.ExportStorage, error) {
 	conf, err := storageccl.ExportStorageConfFromURI(uri)
@@ -279,44 +287,14 @@ func writeBackupDescriptor(
 	return nil
 }
 
-// backup exports a snapshot of every kv entry into ranged sstables.
-//
-// The output is an sstable per range with files in the following locations:
-// - <dir>/<unique_int>.sst
-// - <dir> is given by the user and may be cloud storage
-// - Each file contains data for a key range that doesn't overlap with any other
-//   file.
-func backup(
+func makeBackupDescriptor(
 	ctx context.Context,
 	p sql.PlanHookState,
-	uri string,
-	targets parser.TargetList,
 	startTime, endTime hlc.Timestamp,
-	_ parser.KVOptions,
-	job *jobs.Job,
+	targets parser.TargetList,
 ) (BackupDescriptor, error) {
-	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
-	// for grpc.
-
+	var err error
 	var sqlDescs []sqlbase.Descriptor
-
-	exportStore, err := exportStorageFromURI(ctx, uri)
-	if err != nil {
-		return BackupDescriptor{}, err
-	}
-	defer exportStore.Close()
-
-	// Ensure there isn't already a readable backup desc.
-	{
-		r, err := exportStore.ReadFile(ctx, BackupDescriptorName)
-		// TODO(dt): If we audit exactly what not-exists error each ExportStorage
-		// returns (and then wrap/tag them), we could narrow this check.
-		if err == nil {
-			r.Close()
-			return BackupDescriptor{}, errors.Errorf("a %s file already appears to exist in %s",
-				BackupDescriptorName, uri)
-		}
-	}
 
 	db := p.ExecCfg().DB
 
@@ -340,6 +318,24 @@ func backup(
 		return BackupDescriptor{}, err
 	}
 
+	sqlDescs = append(sqlDescs, BackupImplicitSQLDescriptors...)
+
+	// Dedupe. Duplicate descriptors will cause restore to fail.
+	{
+		descsByID := make(map[sqlbase.ID]sqlbase.Descriptor)
+		for _, sqlDesc := range sqlDescs {
+			descsByID[sqlDesc.GetID()] = sqlDesc
+		}
+		sqlDescs = sqlDescs[:0]
+		for _, sqlDesc := range descsByID {
+			sqlDescs = append(sqlDescs, sqlDesc)
+		}
+	}
+
+	// Ensure interleaved tables appear after their parent. Since parents must be
+	// created before their children, simply sorting by ID accomplishes this.
+	sort.Slice(sqlDescs, func(i, j int) bool { return sqlDescs[i].GetID() < sqlDescs[j].GetID() })
+
 	for _, desc := range sqlDescs {
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
 			if err := p.CheckPrivilege(dbDesc, privilege.SELECT); err != nil {
@@ -348,8 +344,7 @@ func backup(
 		}
 	}
 
-	// Backup users, descriptors, and the entire keyspace for user data.
-	tables := []*sqlbase.TableDescriptor{&sqlbase.DescriptorTable, &sqlbase.UsersTable}
+	var tables []*sqlbase.TableDescriptor
 	for _, desc := range sqlDescs {
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			tables = append(tables, tableDesc)
@@ -362,6 +357,36 @@ func backup(
 		}
 	}
 
+	return BackupDescriptor{
+		StartTime:     startTime,
+		EndTime:       endTime,
+		Descriptors:   sqlDescs,
+		Spans:         spansForAllTableIndexes(tables),
+		FormatVersion: BackupFormatInitialVersion,
+		BuildInfo:     build.GetInfo(),
+		NodeID:        p.ExecCfg().NodeID.Get(),
+		ClusterID:     p.ExecCfg().ClusterID(),
+	}, nil
+}
+
+// backup exports a snapshot of every kv entry into ranged sstables.
+//
+// The output is an sstable per range with files in the following locations:
+// - <dir>/<unique_int>.sst
+// - <dir> is given by the user and may be cloud storage
+// - Each file contains data for a key range that doesn't overlap with any other
+//   file.
+func backup(
+	ctx context.Context,
+	db *client.DB,
+	gossip *gossip.Gossip,
+	exportStore storageccl.ExportStorage,
+	job *jobs.Job,
+	backupDesc *BackupDescriptor,
+) error {
+	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
+	// for grpc.
+
 	var ranges []roachpb.RangeDescriptor
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
@@ -371,50 +396,38 @@ func backup(
 		ranges, err = allRangeDescriptors(ctx, txn)
 		return err
 	}); err != nil {
-		return BackupDescriptor{}, err
+		return err
 	}
 
 	// We split the spans into range-sized pieces so that we can use the number of
 	// completed requests as a rough measure of progress.
-	spans := splitSpansByRanges(spansForAllTableIndexes(tables), ranges)
+	spans := splitSpansByRanges(backupDesc.Spans, ranges)
 
 	mu := struct {
 		syncutil.Mutex
 		files          []BackupDescriptor_File
 		exported       roachpb.BulkOpSummary
 		lastCheckpoint time.Time
+		checkpointed   bool
 	}{}
 
-	desc := struct {
-		syncutil.Mutex
-		BackupDescriptor
-		checkpointed bool
-	}{
-		BackupDescriptor: BackupDescriptor{
-			StartTime:     startTime,
-			EndTime:       endTime,
-			Descriptors:   sqlDescs,
-			Spans:         spans,
-			FormatVersion: BackupFormatInitialVersion,
-			BuildInfo:     build.GetInfo(),
-			NodeID:        p.ExecCfg().NodeID.Get(),
-			ClusterID:     p.ExecCfg().ClusterID(),
-		},
-	}
+	var checkpointMu syncutil.Mutex
 
 	progressLogger := jobProgressLogger{
 		job:         job,
 		totalChunks: len(spans),
 	}
 
-	for _, desc := range tables {
-		job.Record.DescriptorIDs = append(job.Record.DescriptorIDs, desc.GetID())
+	for _, desc := range backupDesc.Descriptors {
+		if desc.GetTable() != nil {
+			job.Record.DescriptorIDs = append(job.Record.DescriptorIDs, desc.GetID())
+		}
 	}
 	if err := job.Created(ctx); err != nil {
-		return BackupDescriptor{}, err
+		return err
 	}
 	if err := job.Started(ctx); err != nil {
-		return BackupDescriptor{}, err
+		return err
 	}
 
 	// We're already limiting these on the server-side, but sending all the
@@ -433,16 +446,16 @@ func backup(
 	// TODO(dan): Make this limiting per node.
 	//
 	// TODO(dan): See if there's some better solution than rate-limiting #14798.
-	maxConcurrentExports := clusterNodeCount(p.ExecCfg().Gossip) * storageccl.ExportRequestLimit
+	maxConcurrentExports := clusterNodeCount(gossip) * storageccl.ExportRequestLimit
 	exportsSem := make(chan struct{}, maxConcurrentExports)
 
-	header := roachpb.Header{Timestamp: endTime}
+	header := roachpb.Header{Timestamp: backupDesc.EndTime}
 	g, gCtx := errgroup.WithContext(ctx)
 	for i := range spans {
 		select {
 		case exportsSem <- struct{}{}:
 		case <-ctx.Done():
-			return BackupDescriptor{}, ctx.Err()
+			return ctx.Err()
 		}
 
 		span := spans[i]
@@ -452,7 +465,7 @@ func backup(
 			req := &roachpb.ExportRequest{
 				Span:      span,
 				Storage:   exportStore.Conf(),
-				StartTime: startTime,
+				StartTime: backupDesc.StartTime,
 			}
 			res, pErr := client.SendWrappedWith(gCtx, db.GetSender(), header, req)
 			if pErr != nil {
@@ -485,43 +498,43 @@ func backup(
 			}
 
 			if checkpointFiles != nil {
-				desc.Lock()
-				desc.Files = checkpointFiles
-				if err := writeBackupDescriptor(
-					ctx, exportStore, BackupDescriptorCheckpointName, &desc.BackupDescriptor,
-				); err != nil {
+				checkpointMu.Lock()
+				backupDesc.Files = checkpointFiles
+				err := writeBackupDescriptor(
+					ctx, exportStore, BackupDescriptorCheckpointName, backupDesc,
+				)
+				checkpointMu.Unlock()
+				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
-				} else {
-					desc.checkpointed = true
+					mu.Lock()
+					mu.checkpointed = true
+					mu.Unlock()
 				}
-				desc.Unlock()
 			}
 			return nil
 		})
 	}
 
-	if err = g.Wait(); err != nil {
-		return BackupDescriptor{}, errors.Wrapf(err, "exporting %d ranges", len(spans))
+	if err := g.Wait(); err != nil {
+		return errors.Wrapf(err, "exporting %d ranges", len(spans))
 	}
 
 	// No more concurrency, so no need to acquire locks below.
 
-	desc.Files = mu.files
-	desc.EntryCounts = mu.exported
+	backupDesc.Files = mu.files
+	backupDesc.EntryCounts = mu.exported
 
-	if err := writeBackupDescriptor(
-		ctx, exportStore, BackupDescriptorName, &desc.BackupDescriptor,
-	); err != nil {
-		return BackupDescriptor{}, err
+	if err := writeBackupDescriptor(ctx, exportStore, BackupDescriptorName, backupDesc); err != nil {
+		return err
 	}
 
-	if desc.checkpointed {
+	if mu.checkpointed {
 		if err := exportStore.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
 			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
 		}
 	}
 
-	return desc.BackupDescriptor, nil
+	return nil
 }
 
 func backupPlanHook(
@@ -589,6 +602,30 @@ func backupPlanHook(
 				return nil, err
 			}
 		}
+
+		exportStore, err := exportStorageFromURI(ctx, to)
+		if err != nil {
+			return nil, err
+		}
+		defer exportStore.Close()
+
+		// Ensure there isn't already a readable backup desc.
+		{
+			r, err := exportStore.ReadFile(ctx, BackupDescriptorName)
+			// TODO(dt): If we audit exactly what not-exists error each ExportStorage
+			// returns (and then wrap/tag them), we could narrow this check.
+			if err == nil {
+				r.Close()
+				return nil, errors.Errorf("a %s file already appears to exist in %s",
+					BackupDescriptorName, to)
+			}
+		}
+
+		backupDesc, err := makeBackupDescriptor(ctx, p, startTime, endTime, backupStmt.Targets)
+		if err != nil {
+			return nil, err
+		}
+
 		description, err := backupJobDescription(backupStmt, to, incrementalFrom)
 		if err != nil {
 			return nil, err
@@ -598,15 +635,13 @@ func backupPlanHook(
 			Username:    p.User(),
 			Details:     jobs.BackupDetails{},
 		})
-		desc, err := backup(ctx,
-			p,
-			to,
-			backupStmt.Targets,
-			startTime, endTime,
-			backupStmt.Options,
+		if err := backup(ctx,
+			p.ExecCfg().DB,
+			p.ExecCfg().Gossip,
+			exportStore,
 			job,
-		)
-		if err != nil {
+			&backupDesc,
+		); err != nil {
 			job.Failed(ctx, err)
 			return nil, err
 		}
@@ -622,10 +657,10 @@ func backupPlanHook(
 			parser.NewDInt(parser.DInt(*job.ID())),
 			parser.NewDString(string(jobs.StatusSucceeded)),
 			parser.NewDFloat(parser.DFloat(1.0)),
-			parser.NewDInt(parser.DInt(desc.EntryCounts.Rows)),
-			parser.NewDInt(parser.DInt(desc.EntryCounts.IndexEntries)),
-			parser.NewDInt(parser.DInt(desc.EntryCounts.SystemRecords)),
-			parser.NewDInt(parser.DInt(desc.EntryCounts.DataSize)),
+			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.Rows)),
+			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.IndexEntries)),
+			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.SystemRecords)),
+			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.DataSize)),
 		}}
 		return ret, nil
 	}
