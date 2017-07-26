@@ -179,7 +179,7 @@ func (f *Farmer) CollectLogs() {
 	}
 	const src = "logs"
 	for i := 0; i < f.NumNodes(); i++ {
-		if err := f.scp(f.Hostname(i), f.defaultKeyFile(), src,
+		if err := f.copyDir(f.Hostname(i), f.defaultKeyFile(), src,
 			filepath.Join(f.AbsLogDir(), "node."+strconv.Itoa(i))); err != nil {
 			f.logf("error collecting %s from host %s: %s\n", src, f.Hostname(i), err)
 		}

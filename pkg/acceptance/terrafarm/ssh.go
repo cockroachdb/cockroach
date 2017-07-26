@@ -18,7 +18,6 @@ package terrafarm
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -26,6 +25,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -106,48 +106,41 @@ func (f *Farmer) ssh(host, keyfile, cmd string) (string, string, error) {
 	return stdout.String(), stderr.String(), s.Run(cmd)
 }
 
-func (f *Farmer) scp(host, keyfile, src, dest string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	srcFileInfo, err := srcFile.Stat()
-	if err != nil {
-		return err
-	}
-
+func (f *Farmer) copyDir(host, keyfile, src, dest string) error {
 	c, err := f.getSSH(host, keyfile)
 	if err != nil {
 		return err
 	}
-	s, err := c.NewSession()
+
+	sftp, err := sftp.NewClient(c)
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer sftp.Close()
 
-	w, err := s.StdinPipe()
-	if err != nil {
-		return err
-	}
-	defer w.Close()
+	for w := sftp.Walk(src); w.Step(); {
+		if err := w.Err(); err != nil {
+			return err
+		}
+		if err := func() error {
+			srcFile, err := sftp.Open(w.Path())
+			if err != nil {
+				return err
+			}
+			defer srcFile.Close()
 
-	dir, file := filepath.Split(dest)
-
-	if err := s.Start("/usr/bin/scp -t " + dir); err != nil {
-		return err
+			destFile, err := os.Create(filepath.Join(dest, srcFile.Name()))
+			if err != nil {
+				return err
+			}
+			defer destFile.Close()
+			if _, err := io.Copy(destFile, srcFile); err != nil {
+				return err
+			}
+			return destFile.Close()
+		}(); err != nil {
+			return err
+		}
 	}
-	if _, err := fmt.Fprintln(w, "C", srcFileInfo.Mode().String(), srcFileInfo.Size(), file); err != nil {
-		return err
-	}
-	if _, err := io.Copy(w, srcFile); err != nil {
-		return err
-	}
-	if _, err := w.Write([]byte{0}); err != nil {
-		return err
-	}
-
-	return s.Wait()
+	return nil
 }
