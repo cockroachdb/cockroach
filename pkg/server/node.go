@@ -176,11 +176,11 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 // single range spanning all keys. Initial range lookup metadata is
 // populated for the range. Returns the cluster ID.
 func bootstrapCluster(
-	cfg storage.StoreConfig, engines []engine.Engine, txnMetrics kv.TxnMetrics,
+	ctx context.Context, cfg storage.StoreConfig, engines []engine.Engine, txnMetrics kv.TxnMetrics,
 ) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 
 	// Make sure that the store config has a valid clock and that it doesn't
 	// try to use gossip, since that can introduce race conditions.
@@ -213,7 +213,7 @@ func bootstrapCluster(
 		s := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
 		// Bootstrap store to persist the store ident.
-		if err := s.Bootstrap(sIdent); err != nil {
+		if err := s.Bootstrap(ctx, sIdent); err != nil {
 			return uuid.UUID{}, err
 		}
 		// Create first range, writing directly to engine. Note this does
@@ -225,13 +225,12 @@ func bootstrapCluster(
 				return uuid.UUID{}, err
 			}
 		}
-		if err := s.Start(context.Background(), stopper); err != nil {
+		if err := s.Start(ctx, stopper); err != nil {
 			return uuid.UUID{}, err
 		}
 
 		stores.AddStore(s)
 
-		ctx := context.TODO()
 		// Initialize node and store ids.  Only initialize the node once.
 		if i == 0 {
 			if nodeID, err := allocateNodeID(ctx, cfg.DB); nodeID != sIdent.NodeID || err != nil {
@@ -301,8 +300,8 @@ func (n *Node) initDescriptor(addr net.Addr, attrs roachpb.Attributes, locality 
 //
 // Upon setting a new NodeID, the descriptor is gossiped and the NodeID is
 // stored into the gossip instance.
-func (n *Node) initNodeID(id roachpb.NodeID) {
-	ctx := n.AnnotateCtx(context.TODO())
+func (n *Node) initNodeID(ctx context.Context, id roachpb.NodeID) {
+	ctx = n.AnnotateCtx(ctx)
 	if id < 0 {
 		log.Fatalf(ctx, "NodeID must not be negative")
 	}
@@ -361,7 +360,7 @@ func (n *Node) start(
 			n.initialBoot = true
 			// This node has no initialized stores and no way to connect to
 			// an existing cluster, so we bootstrap it.
-			clusterID, err := bootstrapCluster(n.storeCfg, engines, n.txnMetrics)
+			clusterID, err := bootstrapCluster(ctx, n.storeCfg, engines, n.txnMetrics)
 			if err != nil {
 				return err
 			}
@@ -379,7 +378,7 @@ func (n *Node) start(
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
 
 	n.startComputePeriodicMetrics(n.stopper, n.storeCfg.MetricsSampleInterval)
-	n.startGossip(n.stopper)
+	n.startGossip(ctx, n.stopper)
 
 	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, engines, attrs.Attrs)
 	return nil
@@ -454,7 +453,7 @@ func (n *Node) initStores(
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.
-	if err := n.validateStores(); err != nil {
+	if err := n.validateStores(ctx); err != nil {
 		return err
 	}
 	log.Event(ctx, "validated stores")
@@ -493,7 +492,7 @@ func (n *Node) initStores(
 	// If no NodeID has been assigned yet, allocate a new node ID by
 	// supplying 0 to initNodeID.
 	if n.Descriptor.NodeID == 0 {
-		n.initNodeID(0)
+		n.initNodeID(ctx, 0)
 		n.initialBoot = true
 		log.Eventf(ctx, "allocated node ID %d", n.Descriptor.NodeID)
 	}
@@ -518,11 +517,11 @@ func (n *Node) addStore(store *storage.Store) {
 // validateStores iterates over all stores, verifying they agree on
 // cluster ID and node ID. The node's ident is initialized based on
 // the agreed-upon cluster and node IDs.
-func (n *Node) validateStores() error {
+func (n *Node) validateStores(ctx context.Context) error {
 	return n.stores.VisitStores(func(s *storage.Store) error {
 		if n.ClusterID == (uuid.UUID{}) {
 			n.ClusterID = s.Ident.ClusterID
-			n.initNodeID(s.Ident.NodeID)
+			n.initNodeID(ctx, s.Ident.NodeID)
 			n.storeCfg.Gossip.SetClusterID(s.Ident.ClusterID)
 		} else if n.ClusterID != s.Ident.ClusterID {
 			return errors.Errorf("store %s cluster ID doesn't match node cluster %q", s, n.ClusterID)
@@ -557,7 +556,7 @@ func (n *Node) bootstrapStores(
 		StoreID:   firstID,
 	}
 	for _, s := range bootstraps {
-		if err := s.Bootstrap(sIdent); err != nil {
+		if err := s.Bootstrap(ctx, sIdent); err != nil {
 			log.Fatal(ctx, err)
 		}
 		if err := s.Start(ctx, stopper); err != nil {
@@ -615,8 +614,8 @@ func (n *Node) connectGossip(ctx context.Context) error {
 
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Starts a goroutine to loop until the node is closed.
-func (n *Node) startGossip(stopper *stop.Stopper) {
-	ctx := n.AnnotateCtx(context.Background())
+func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
+	ctx = n.AnnotateCtx(ctx)
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		// This should always return immediately and acts as a sanity check that we
 		// don't try to gossip before we're connected.

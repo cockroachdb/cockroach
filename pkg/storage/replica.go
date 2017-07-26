@@ -2919,7 +2919,6 @@ func (r *Replica) isSoloReplicaRLocked() bool {
 }
 
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
-
 	data, err := protoutil.Marshal(&p.command)
 	if err != nil {
 		return err
@@ -2940,8 +2939,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		// EndTransactionRequest with a ChangeReplicasTrigger is special
 		// because raft needs to understand it; it cannot simply be an
 		// opaque command.
-		log.Infof(p.ctx, "proposing %s %+v: %+v",
-			crt.ChangeType, crt.Replica, crt.UpdatedReplicas)
+		log.Infof(p.ctx, "proposing %s", crt)
 
 		// Ensure that we aren't trying to remove ourselves from the range without
 		// having previously given up our lease, since the range won't be able
@@ -2949,12 +2947,9 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		// leases can stay in such a state for a very long time when using epoch-
 		// based range leases). This shouldn't happen often, but has been seen
 		// before (#12591).
-		if crt.ChangeType == roachpb.REMOVE_REPLICA &&
-			crt.Replica.ReplicaID == r.mu.replicaID {
-			log.Errorf(p.ctx, "received invalid ChangeReplicasTrigger %+v to remove leaseholder replica %+v",
-				crt, r.mu.state)
-			return errors.Errorf("%s: invalid ChangeReplicasTrigger %+v to remove leaseholder replica",
-				r, crt)
+		if crt.ChangeType == roachpb.REMOVE_REPLICA && crt.Replica.ReplicaID == r.mu.replicaID {
+			log.Errorf(p.ctx, "received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
+			return errors.Errorf("%s: received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", r, crt)
 		}
 
 		confChangeCtx := ConfChangeContext{
@@ -3156,7 +3151,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			r.store.mu.Lock()
 			defer r.store.mu.Unlock()
 
-			if r.store.removePlaceholderLocked(r.RangeID) {
+			if r.store.removePlaceholderLocked(ctx, r.RangeID) {
 				atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
 			}
 			if err := r.store.processRangeDescriptorUpdateLocked(ctx, r); err != nil {
@@ -4114,7 +4109,7 @@ func (r *Replica) processRaftCommand(
 	} else {
 		log.Event(ctx, "applying command")
 
-		if splitMergeUnlock := r.maybeAcquireSplitMergeLock(raftCmd); splitMergeUnlock != nil {
+		if splitMergeUnlock := r.maybeAcquireSplitMergeLock(ctx, raftCmd); splitMergeUnlock != nil {
 			// Close over raftCmd to capture its value at execution time; we clear
 			// ReplicatedEvalResult on certain errors.
 			defer func() {
@@ -4242,10 +4237,10 @@ func (r *Replica) processRaftCommand(
 // which will release any lock acquired (or nil) and use the result of
 // applying the command to perform any necessary cleanup.
 func (r *Replica) maybeAcquireSplitMergeLock(
-	raftCmd storagebase.RaftCommand,
+	ctx context.Context, raftCmd storagebase.RaftCommand,
 ) func(storagebase.ReplicatedEvalResult) {
 	if split := raftCmd.ReplicatedEvalResult.Split; split != nil {
-		return r.acquireSplitLock(&split.SplitTrigger)
+		return r.acquireSplitLock(ctx, &split.SplitTrigger)
 	} else if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
 		return r.acquireMergeLock(&merge.MergeTrigger)
 	}
@@ -4253,9 +4248,9 @@ func (r *Replica) maybeAcquireSplitMergeLock(
 }
 
 func (r *Replica) acquireSplitLock(
-	split *roachpb.SplitTrigger,
+	ctx context.Context, split *roachpb.SplitTrigger,
 ) func(storagebase.ReplicatedEvalResult) {
-	rightRng, created, err := r.store.getOrCreateReplica(split.RightDesc.RangeID, 0, nil)
+	rightRng, created, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID, 0, nil)
 	if err != nil {
 		return nil
 	}

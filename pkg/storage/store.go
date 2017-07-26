@@ -1123,6 +1123,8 @@ func ReadStoreIdent(ctx context.Context, eng engine.Engine) (roachpb.StoreIdent,
 
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
+	ctx = s.AnnotateCtx(ctx)
+
 	s.stopper = stopper
 
 	// Read the store ident if not already initialized. "NodeID != 0" implies
@@ -1216,7 +1218,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Start Raft processing goroutines.
 	s.cfg.Transport.Listen(s.StoreID(), s)
-	s.processRaft()
+	s.processRaft(ctx)
 
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
@@ -1497,11 +1499,11 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func (s *Store) Bootstrap(ident roachpb.StoreIdent) error {
+func (s *Store) Bootstrap(ctx context.Context, ident roachpb.StoreIdent) error {
 	if (s.Ident != roachpb.StoreIdent{}) {
 		return errors.Errorf("store %s is already bootstrapped", s)
 	}
-	ctx := s.AnnotateCtx(context.Background())
+	ctx = s.AnnotateCtx(ctx)
 	if err := checkEngineEmpty(ctx, s.engine); err != nil {
 		return errors.Wrap(err, "cannot verify empty engine for bootstrap")
 	}
@@ -2091,15 +2093,15 @@ func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 // removePlaceholder removes a placeholder for the specified range if it
 // exists, returning true if a placeholder was present and removed and false
 // otherwise. Requires that Replica.raftMu is held.
-func (s *Store) removePlaceholder(rngID roachpb.RangeID) bool {
+func (s *Store) removePlaceholder(ctx context.Context, rngID roachpb.RangeID) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.removePlaceholderLocked(rngID)
+	return s.removePlaceholderLocked(ctx, rngID)
 }
 
 // removePlaceholderLocked removes the specified placeholder. Requires that
 // Store.mu and Replica.raftMu are held.
-func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
+func (s *Store) removePlaceholderLocked(ctx context.Context, rngID roachpb.RangeID) bool {
 	placeholder, ok := s.mu.replicaPlaceholders[rngID]
 	if !ok {
 		return false
@@ -2109,10 +2111,8 @@ func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
 		delete(s.mu.replicaPlaceholders, rngID)
 		return true
 	case nil:
-		ctx := s.AnnotateCtx(context.TODO())
 		log.Fatalf(ctx, "r%d: placeholder not found", rngID)
 	default:
-		ctx := s.AnnotateCtx(context.TODO())
 		log.Fatalf(ctx, "r%d: expected placeholder, got %T", rngID, exRng)
 	}
 	return false // appease the compiler
@@ -2934,7 +2934,11 @@ func (s *Store) processRaftRequest(
 ) (pErr *roachpb.Error) {
 	// Lazily create the replica.
 	r, _, err := s.getOrCreateReplica(
-		req.RangeID, req.ToReplica.ReplicaID, &req.FromReplica)
+		ctx,
+		req.RangeID,
+		req.ToReplica.ReplicaID,
+		&req.FromReplica,
+	)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
@@ -3001,7 +3005,7 @@ func (s *Store) processRaftRequest(
 			removePlaceholder = true
 			defer func() {
 				if removePlaceholder {
-					if s.removePlaceholder(req.RangeID) {
+					if s.removePlaceholder(ctx, req.RangeID) {
 						atomic.AddInt32(&s.counts.removedPlaceholders, 1)
 					}
 				}
@@ -3034,7 +3038,7 @@ func (s *Store) processRaftRequest(
 			// applied successfully or not.
 			if addedPlaceholder {
 				// Clear the replica placeholder; we are about to swap it with a real replica.
-				if !s.removePlaceholderLocked(req.RangeID) {
+				if !s.removePlaceholderLocked(ctx, req.RangeID) {
 					log.Fatalf(ctx, "could not remove placeholder after preemptive snapshot")
 				}
 				if pErr == nil {
@@ -3212,14 +3216,14 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				repl.cancelPendingCommandsLocked()
 			}
 			repl.mu.Unlock()
-			ctx = repl.AnnotateCtx(ctx)
+			replCtx := repl.AnnotateCtx(ctx)
 			added, err := s.replicaGCQueue.Add(
 				repl, replicaGCPriorityRemoved,
 			)
 			if err != nil {
-				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
+				log.Errorf(replCtx, "unable to add to replica GC queue: %s", err)
 			} else if added {
-				log.Infof(ctx, "added to replica GC queue (peer suggestion)")
+				log.Infof(replCtx, "added to replica GC queue (peer suggestion)")
 			}
 		case *roachpb.StoreNotFoundError:
 			log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
@@ -3505,7 +3509,7 @@ func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.scheduler.EnqueueRaftReady(rangeID)
 }
 
-func (s *Store) processRequestQueue(rangeID roachpb.RangeID) {
+func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID) {
 	value, ok := s.replicaQueues.Load(rangeID)
 	if !ok {
 		return
@@ -3529,16 +3533,13 @@ func (s *Store) processRequestQueue(rangeID roachpb.RangeID) {
 			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
 				// Seems excessive to log this on every occurrence as the other side
 				// might have closed.
-				if log.V(1) {
-					ctx := s.AnnotateCtx(context.TODO())
-					log.Info(ctx, errors.Wrap(err, "error sending error"))
-				}
+				log.VEventf(ctx, 1, "error sending error: %s", err)
 			}
 		}
 	}
 }
 
-func (s *Store) processReady(rangeID roachpb.RangeID) {
+func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	value, ok := s.mu.replicas.Load(rangeID)
 	if !ok {
 		return
@@ -3548,7 +3549,7 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	r := value.(*Replica)
 	stats, err := r.handleRaftReady(IncomingSnapshot{})
 	if err != nil {
-		log.Fatal(r.AnnotateCtx(context.Background()), err) // TODO(bdarnell)
+		log.Fatal(ctx, err) // TODO(bdarnell)
 	}
 	elapsed := timeutil.Since(start)
 	s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
@@ -3557,7 +3558,6 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	// processing time means we'll have starved local replicas of ticks and
 	// remote replicas will likely start campaigning.
 	if elapsed >= defaultReplicaRaftMuWarnThreshold {
-		ctx := r.AnnotateCtx(context.TODO())
 		log.Warningf(ctx, "handle raft ready: %.1fs [processed=%d]",
 			elapsed.Seconds(), stats.processed)
 	}
@@ -3571,14 +3571,14 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 		// We need to hold raftMu here to prevent removing a placeholder that is
 		// actively being used by Store.processRaftRequest.
 		r.raftMu.Lock()
-		if s.removePlaceholder(r.RangeID) {
+		if s.removePlaceholder(ctx, r.RangeID) {
 			atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
 		}
 		r.raftMu.Unlock()
 	}
 }
 
-func (s *Store) processTick(rangeID roachpb.RangeID) bool {
+func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	value, ok := s.mu.replicas.Load(rangeID)
 	if !ok {
 		return false
@@ -3588,81 +3588,73 @@ func (s *Store) processTick(rangeID roachpb.RangeID) bool {
 	r := value.(*Replica)
 	exists, err := r.tick()
 	if err != nil {
-		ctx := s.AnnotateCtx(context.TODO())
 		log.Error(ctx, err)
 	}
 	s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(start).Nanoseconds())
 	return exists // ready
 }
 
-func (s *Store) processRaft() {
+func (s *Store) processRaft(ctx context.Context) {
 	if s.cfg.TestingKnobs.DisableProcessRaft {
 		return
 	}
 
-	s.scheduler.Start(s.stopper)
+	s.scheduler.Start(ctx, s.stopper)
 	// Wait for the scheduler worker goroutines to finish.
-	s.stopper.RunWorker(context.TODO(), s.scheduler.Wait)
+	s.stopper.RunWorker(ctx, s.scheduler.Wait)
 
-	s.raftTickLoop()
-	s.startCoalescedHeartbeatsLoop()
+	s.stopper.RunWorker(ctx, s.raftTickLoop)
+	s.stopper.RunWorker(ctx, s.coalescedHeartbeatsLoop)
 }
 
-func (s *Store) raftTickLoop() {
-	s.stopper.RunWorker(context.TODO(), func(context.Context) {
-		ticker := time.NewTicker(s.cfg.RaftTickInterval)
-		defer func() {
-			ticker.Stop()
-			s.cfg.Transport.Stop(s.StoreID())
-		}()
+func (s *Store) raftTickLoop(context.Context) {
+	defer s.cfg.Transport.Stop(s.StoreID())
 
-		var rangeIDs []roachpb.RangeID
+	ticker := time.NewTicker(s.cfg.RaftTickInterval)
+	defer ticker.Stop()
 
-		for {
-			select {
-			case <-ticker.C:
-				rangeIDs = rangeIDs[:0]
+	var rangeIDs []roachpb.RangeID
 
-				s.mu.replicas.Range(func(k, v interface{}) bool {
-					rangeIDs = append(rangeIDs, k.(roachpb.RangeID))
-					return true
-				})
+	for {
+		select {
+		case <-ticker.C:
+			rangeIDs = rangeIDs[:0]
 
-				s.scheduler.EnqueueRaftTick(rangeIDs...)
-				s.metrics.RaftTicks.Inc(1)
+			s.mu.replicas.Range(func(k, v interface{}) bool {
+				rangeIDs = append(rangeIDs, k.(roachpb.RangeID))
+				return true
+			})
 
-			case <-s.stopper.ShouldStop():
-				return
-			}
+			s.scheduler.EnqueueRaftTick(rangeIDs...)
+			s.metrics.RaftTicks.Inc(1)
+
+		case <-s.stopper.ShouldStop():
+			return
 		}
-	})
+	}
 }
 
 // Since coalesced heartbeats adds latency to heartbeat messages, it is
 // beneficial to have it run on a faster cycle than once per tick, so that
 // the delay does not impact latency-sensitive features such as quiescence.
-func (s *Store) startCoalescedHeartbeatsLoop() {
-	s.stopper.RunWorker(context.TODO(), func(context.Context) {
-		ticker := time.NewTicker(s.cfg.CoalescedHeartbeatsInterval)
-		defer func() {
-			ticker.Stop()
-		}()
+func (s *Store) coalescedHeartbeatsLoop(ctx context.Context) {
+	ticker := time.NewTicker(s.cfg.CoalescedHeartbeatsInterval)
+	defer ticker.Stop()
 
-		for {
-			select {
-			case <-ticker.C:
-				s.sendQueuedHeartbeats()
-			case <-s.stopper.ShouldStop():
-				return
-			}
+	for {
+		select {
+		case <-ticker.C:
+			s.sendQueuedHeartbeats(ctx)
+		case <-s.stopper.ShouldStop():
+			return
 		}
-	})
+	}
 }
 
 // sendQueuedHeartbeatsToNode requires that the s.coalescedMu lock is held. It
 // returns the number of heartbeats that were sent.
 func (s *Store) sendQueuedHeartbeatsToNode(
-	beats, resps []RaftHeartbeat, to roachpb.StoreIdent,
+	ctx context.Context, beats, resps []RaftHeartbeat, to roachpb.StoreIdent,
 ) int {
 	var msgType raftpb.MessageType
 
@@ -3673,7 +3665,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 	} else if len(beats) == 0 {
 		msgType = raftpb.MsgHeartbeatResp
 	} else {
-		log.Fatal(s.AnnotateCtx(context.Background()), "cannot coalesce both heartbeats and responses")
+		log.Fatal(ctx, "cannot coalesce both heartbeats and responses")
 	}
 
 	chReq := &RaftMessageRequest{
@@ -3695,7 +3687,6 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 	}
 
 	if log.V(4) {
-		ctx := s.AnnotateCtx(context.TODO())
 		log.Infof(ctx, "sending raft request (coalesced) %+v", chReq)
 	}
 
@@ -3715,7 +3706,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 	return len(beats) + len(resps)
 }
 
-func (s *Store) sendQueuedHeartbeats() {
+func (s *Store) sendQueuedHeartbeats(ctx context.Context) {
 	s.coalescedMu.Lock()
 	heartbeats := s.coalescedMu.heartbeats
 	heartbeatResponses := s.coalescedMu.heartbeatResponses
@@ -3726,10 +3717,10 @@ func (s *Store) sendQueuedHeartbeats() {
 	var beatsSent int
 
 	for to, beats := range heartbeats {
-		beatsSent += s.sendQueuedHeartbeatsToNode(beats, nil, to)
+		beatsSent += s.sendQueuedHeartbeatsToNode(ctx, beats, nil, to)
 	}
 	for to, resps := range heartbeatResponses {
-		beatsSent += s.sendQueuedHeartbeatsToNode(nil, resps, to)
+		beatsSent += s.sendQueuedHeartbeatsToNode(ctx, nil, resps, to)
 	}
 	s.metrics.RaftCoalescedHeartbeatsPending.Update(int64(beatsSent))
 }
@@ -3741,11 +3732,18 @@ var errRetry = errors.New("retry: orphaned replica")
 // lock. The returned replica has Replica.raftMu locked and it is the caller's
 // responsibility to unlock it.
 func (s *Store) getOrCreateReplica(
-	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+	creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	for {
 		r, created, err := s.tryGetOrCreateReplica(
-			rangeID, replicaID, creatingReplica)
+			ctx,
+			rangeID,
+			replicaID,
+			creatingReplica,
+		)
 		if err == errRetry {
 			continue
 		}
@@ -3763,7 +3761,10 @@ func (s *Store) getOrCreateReplica(
 // tryGetOrCreateReplica will likely succeed, hence the loop in
 // getOrCreateReplica.
 func (s *Store) tryGetOrCreateReplica(
-	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+	creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	// The common case: look up an existing (initialized) replica.
 	if value, ok := s.mu.replicas.Load(rangeID); ok {
@@ -3799,8 +3800,6 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.mu.Unlock()
 		return repl, false, nil
 	}
-
-	ctx := s.AnnotateCtx(context.TODO())
 
 	// No replica currently exists, so we'll try to create one. Before creating
 	// the replica, see if there is a tombstone which would indicate that this is
